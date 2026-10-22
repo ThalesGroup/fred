@@ -9,9 +9,13 @@ FROM ghcr.io/astral-sh/uv:0.13.1 AS uv
 FROM mirror.gcr.io/ubuntu:24.04 AS python-install
 ARG PYTHON_VERSION
 COPY --from=uv /uv /usr/local/bin/uv
-RUN apt-get update && \
+# Behind TLS inspection (e.g. Zscaler), `make docker-build` lends the host's CA
+# bundle as the `ca-bundle` secret; without it, uv keeps its own roots.
+RUN --mount=type=secret,id=ca-bundle \
+    apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates && \
     rm -rf /var/lib/apt/lists/* && \
+    if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle; fi && \
     UV_PYTHON_INSTALL_DIR=/opt/python uv python install ${PYTHON_VERSION}
 
 FROM mirror.gcr.io/ubuntu:24.04 AS python-base
@@ -58,7 +62,9 @@ COPY libs/fred-pod/pyproject.toml /workspace/libs/fred-pod/
 COPY libs/fred-core/pyproject.toml /workspace/libs/fred-core/
 COPY libs/fred-sdk/pyproject.toml /workspace/libs/fred-sdk/
 
-RUN make prod VENV=/app/venv TARGET=/app/target UV_SYNC_ARGS="--no-install-project --no-install-local"
+RUN --mount=type=secret,id=ca-bundle \
+    if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle; fi && \
+    make prod VENV=/app/venv TARGET=/app/target UV_SYNC_ARGS="--no-install-project --no-install-local"
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE
@@ -88,8 +94,10 @@ COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane-backend/control_plane_bac
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-pod /workspace/libs/fred-pod
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /workspace/libs/fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-sdk /workspace/libs/fred-sdk
-RUN cd /workspace/apps/control-plane-backend && \
-    UV_PROJECT_ENVIRONMENT=/app/venv SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
+RUN --mount=type=secret,id=ca-bundle \
+    cd /workspace/apps/control-plane-backend && \
+    if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle; fi && \
+    UV_PROJECT_ENVIRONMENT=/app/venv SSL_CERT_FILE=${SSL_CERT_FILE:-/etc/ssl/certs/ca-certificates.crt} \
     /app/venv/bin/uv sync --locked --no-default-groups --no-cache
 
 # Runtime uses uv; pip and its vendored libraries are only needed during bootstrap.

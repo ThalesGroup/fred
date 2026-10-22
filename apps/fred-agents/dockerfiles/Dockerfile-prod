@@ -9,9 +9,13 @@ FROM ghcr.io/astral-sh/uv:0.13.1 AS uv
 FROM mirror.gcr.io/ubuntu:24.04 AS python-install
 ARG PYTHON_VERSION
 COPY --from=uv /uv /usr/local/bin/uv
-RUN apt-get update && \
+# Behind TLS inspection (e.g. Zscaler), `make docker-build` lends the host's CA
+# bundle as the `ca-bundle` secret; without it, uv keeps its own roots.
+RUN --mount=type=secret,id=ca-bundle \
+    apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates && \
     rm -rf /var/lib/apt/lists/* && \
+    if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle; fi && \
     UV_PYTHON_INSTALL_DIR=/opt/python uv python install ${PYTHON_VERSION}
 
 FROM mirror.gcr.io/ubuntu:24.04 AS python-base
@@ -68,7 +72,9 @@ COPY libs/capabilities/fred-capability-document-access/pyproject.toml /workspace
 COPY libs/capabilities/fred-capability-mcp/pyproject.toml /workspace/libs/capabilities/fred-capability-mcp/
 COPY libs/capabilities/fred-capability-web-research/pyproject.toml /workspace/libs/capabilities/fred-capability-web-research/
 
-RUN make prod VENV=/app/venv TARGET=/app/target UV_SYNC_ARGS="--no-install-project --no-install-local"
+RUN --mount=type=secret,id=ca-bundle \
+    if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle; fi && \
+    make prod VENV=/app/venv TARGET=/app/target UV_SYNC_ARGS="--no-install-project --no-install-local"
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE
@@ -113,8 +119,10 @@ COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-documents 
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-document-access /workspace/libs/capabilities/fred-capability-document-access
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-mcp /workspace/libs/capabilities/fred-capability-mcp
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-web-research /workspace/libs/capabilities/fred-capability-web-research
-RUN cd /workspace/apps/fred-agents && \
-    UV_PROJECT_ENVIRONMENT=/app/venv SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
+RUN --mount=type=secret,id=ca-bundle \
+    cd /workspace/apps/fred-agents && \
+    if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle; fi && \
+    UV_PROJECT_ENVIRONMENT=/app/venv SSL_CERT_FILE=${SSL_CERT_FILE:-/etc/ssl/certs/ca-certificates.crt} \
     /app/venv/bin/uv sync --locked --no-default-groups --no-cache
 
 # pip is only needed for the builder bootstrap; remove it and its vendored

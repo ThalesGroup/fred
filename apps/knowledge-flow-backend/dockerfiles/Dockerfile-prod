@@ -9,9 +9,13 @@ FROM ghcr.io/astral-sh/uv:0.13.1 AS uv
 FROM mirror.gcr.io/ubuntu:24.04 AS python-install
 ARG PYTHON_VERSION
 COPY --from=uv /uv /usr/local/bin/uv
-RUN apt-get update && \
+# Behind TLS inspection (e.g. Zscaler), `make docker-build` lends the host's CA
+# bundle as the `ca-bundle` secret; without it, uv keeps its own roots.
+RUN --mount=type=secret,id=ca-bundle \
+    apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates && \
     rm -rf /var/lib/apt/lists/* && \
+    if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle; fi && \
     UV_PYTHON_INSTALL_DIR=/opt/python uv python install ${PYTHON_VERSION}
 
 FROM mirror.gcr.io/ubuntu:24.04 AS python-base
@@ -59,7 +63,9 @@ COPY apps/knowledge-flow-backend/Makefile ./
 COPY scripts/makefiles /workspace/scripts/makefiles
 COPY libs/fred-pod/pyproject.toml /workspace/libs/fred-pod/
 COPY libs/fred-core/pyproject.toml /workspace/libs/fred-core/
-RUN make prod VENV=/app/venv TARGET=/app/target \
+RUN --mount=type=secret,id=ca-bundle \
+    if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle; fi && \
+    make prod VENV=/app/venv TARGET=/app/target \
     UV_SYNC_ARGS="--no-install-project --no-install-local"
 
 # Prepare local encodings directory
@@ -67,7 +73,9 @@ RUN mkdir -p $TIKTOKEN_CACHE_DIR
 
 # Download encodings for offline usage
 COPY scripts/download_encodings.py /workspace/scripts/
-RUN python /workspace/scripts/download_encodings.py https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken
+RUN --mount=type=secret,id=ca-bundle \
+    if [ -s /run/secrets/ca-bundle ]; then export REQUESTS_CA_BUNDLE=/run/secrets/ca-bundle; fi && \
+    python /workspace/scripts/download_encodings.py https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE: PROD IMAGE
@@ -131,7 +139,10 @@ import duckdb; \
 con = duckdb.connect(database=':memory:'); \
 con.execute('INSTALL httpfs'); \
 con.execute('LOAD httpfs')"
-RUN python -c "\
+# The downloads below run as fred-user, hence the readable secret mount.
+RUN --mount=type=secret,id=ca-bundle,mode=0444 \
+    if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle REQUESTS_CA_BUNDLE=/run/secrets/ca-bundle; fi && \
+    python -c "\
 from sentence_transformers import CrossEncoder; \
 import os; \
 CrossEncoder(model_name_or_path=os.environ['RERANKER_MODEL'], cache_folder=os.environ['RERANKER_MODEL_CACHE'])"
@@ -141,7 +152,9 @@ CrossEncoder(model_name_or_path=os.environ['RERANKER_MODEL'], cache_folder=os.en
 # audio_processor.py reads WHISPER_MODEL_SIZE too, so the baked model and the
 # one requested at runtime cannot drift apart.
 ENV WHISPER_MODEL_SIZE=base
-RUN python -c "\
+RUN --mount=type=secret,id=ca-bundle,mode=0444 \
+    if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle REQUESTS_CA_BUNDLE=/run/secrets/ca-bundle; fi && \
+    python -c "\
 from faster_whisper import download_model; \
 import os; \
 print(download_model(os.environ['WHISPER_MODEL_SIZE']))"
@@ -158,7 +171,9 @@ WORKDIR /app
 # sources below, so a change there does not download them again.
 # HF_HUB_OFFLINE must be unset here — download_models.py fetches docling models from HuggingFace
 COPY --chown=${USER_ID}:${GROUP_ID} scripts/download_models.py /workspace/scripts/download_models.py
-RUN HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0 python /workspace/scripts/download_models.py --models-dir ${PADDLE_MODELS_DIR}
+RUN --mount=type=secret,id=ca-bundle,mode=0444 \
+    if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle REQUESTS_CA_BUNDLE=/run/secrets/ca-bundle; fi && \
+    HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0 python /workspace/scripts/download_models.py --models-dir ${PADDLE_MODELS_DIR}
 
 # The local packages, installed in editable mode from their source roots under
 # /workspace/..., which the image keeps. Only their small install changes when
@@ -171,7 +186,9 @@ COPY --chown=${USER_ID}:${GROUP_ID} scripts /workspace/scripts
 # The builder and the default runtime image never install this extra.
 ARG INSTALL_CHROMA=false
 ARG INSTALL_PYMUPDF=false
-RUN cd /workspace/apps/knowledge-flow-backend && \
+RUN --mount=type=secret,id=ca-bundle,mode=0444 \
+    cd /workspace/apps/knowledge-flow-backend && \
+    if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle; fi && \
     set -- && \
     case "$INSTALL_CHROMA" in \
         true) set -- "$@" --extra chroma ;; \
@@ -183,7 +200,7 @@ RUN cd /workspace/apps/knowledge-flow-backend && \
         false) ;; \
         *) echo "INSTALL_PYMUPDF must be true or false" >&2; exit 1 ;; \
     esac && \
-    UV_PROJECT_ENVIRONMENT=/app/venv SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
+    UV_PROJECT_ENVIRONMENT=/app/venv SSL_CERT_FILE=${SSL_CERT_FILE:-/etc/ssl/certs/ca-certificates.crt} \
     /app/venv/bin/uv sync --locked --no-default-groups --no-cache "$@"
 
 # Runtime uses uv; pip and its vendored libraries are only needed during bootstrap.
