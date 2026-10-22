@@ -69,6 +69,7 @@ function NotificationListItem({ notification, handlers }: { notification: Notifi
         id: action.id,
         label: action.label,
         primary: action.primary,
+        color: action.color,
         onClick: () => handlers.onAction(notification, action),
       }))}
       busy={handlers.isBusy(notification)}

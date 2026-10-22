@@ -15,7 +15,7 @@
 // limitations under the License.
 
 // What these pin: the section shows only to people who can decide and only
-// while requests exist; a pending row offers Accept and Refuse, a refused row
+// while requests exist; a pending row offers Refuse then Accept, a refused row
 // "Accept anyway" while the team takes requests; a failure shows a toast.
 
 import { act } from "react";
@@ -128,6 +128,11 @@ it("lists a pending request with its full message and decides it", () => {
   expect(container.textContent).toContain("rework.teamSettings.members.joinRequests.title");
   expect(container.textContent).toContain("Alice Martin");
   expect(container.querySelector("p")?.textContent).toBe(pending.message);
+  // Refuse on the left, Accept on the right, as on the notification tile.
+  expect([...container.querySelectorAll("li")[0].querySelectorAll("button")].map((node) => node.textContent)).toEqual([
+    "rework.teamSettings.members.joinRequests.refuse",
+    "rework.teamSettings.members.joinRequests.accept",
+  ]);
 
   act(() => button("rework.teamSettings.members.joinRequests.accept")!.click());
   expect(h.accept).toHaveBeenCalledWith({ teamId: "demo", requestId: "r1" });

@@ -15,7 +15,7 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import type { IconType } from "@shared/utils/Type.ts";
+import type { ColorTheme, IconType } from "@shared/utils/Type.ts";
 import styles from "./NotificationTile.module.scss";
 
 export type NotificationCategory = "action_required" | "response" | "information";
@@ -24,6 +24,8 @@ export interface NotificationTileAction {
   id: string;
   label: string;
   primary?: boolean;
+  /** Defaults to `primary`. */
+  color?: ColorTheme;
   onClick: () => void;
 }
 
@@ -94,7 +96,7 @@ export default function NotificationTile({
                 <Button
                   key={action.id}
                   type="button"
-                  color="primary"
+                  color={action.color ?? "primary"}
                   variant={action.primary ? "filled" : "outlined"}
                   size="small"
                   disabled={busy}

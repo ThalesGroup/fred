@@ -19,7 +19,7 @@
 import type { ThunkDispatch, UnknownAction } from "@reduxjs/toolkit";
 import type { TFunction } from "i18next";
 import type { NotificationCategory } from "@shared/molecules/NotificationTile/NotificationTile.tsx";
-import type { IconType } from "@shared/utils/Type.ts";
+import type { ColorTheme, IconType } from "@shared/utils/Type.ts";
 import { enhancedControlPlaneApi } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { NotificationPage } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import { teamAgentsPath } from "../../components/pages/TeamAgentsPage/agentDeepLink.ts";
@@ -31,7 +31,7 @@ export type NotificationDispatch = ThunkDispatch<unknown, unknown, UnknownAction
 
 /** A tile button: either a route, or a call to the domain endpoint that owns the
  *  action (which keeps its own authorization and resolves the group). */
-export type NotificationAction = { id: string; label: string; primary?: boolean } & (
+export type NotificationAction = { id: string; label: string; primary?: boolean; color?: ColorTheme } & (
   | { kind: "navigate"; to: string }
   | { kind: "call"; call: (dispatch: NotificationDispatch) => Promise<unknown> }
 );
@@ -136,19 +136,22 @@ const NOTIFICATION_TYPES: {
     // The requester's message, in full: it is what the admin decides on.
     body: ({ payload }) => payload.message ?? "",
     link: ({ payload }) => teamMembersPath(payload.team_id),
+    // Refuse left, Accept right: the same order as the Members tab.
     actions: (notification, t) => [
+      {
+        id: "refuse",
+        label: t("rework.notifications.actions.refuse"),
+        color: "error",
+        kind: "call",
+        call: decideJoinRequest(notification, "refuse"),
+      },
       {
         id: "accept",
         label: t("rework.notifications.actions.accept"),
         primary: true,
+        color: "success",
         kind: "call",
         call: decideJoinRequest(notification, "accept"),
-      },
-      {
-        id: "refuse",
-        label: t("rework.notifications.actions.refuse"),
-        kind: "call",
-        call: decideJoinRequest(notification, "refuse"),
       },
     ],
     handled: ({ handled_by_name: name, handled_outcome: outcome }, t) => {

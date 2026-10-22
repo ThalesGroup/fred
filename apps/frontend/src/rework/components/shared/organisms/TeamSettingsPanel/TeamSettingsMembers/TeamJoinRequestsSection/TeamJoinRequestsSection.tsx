@@ -84,7 +84,7 @@ export default function TeamJoinRequestsSection({
               {request.status === "pending" ? (
                 <>
                   <Button
-                    color="primary"
+                    color="error"
                     variant="outlined"
                     size="small"
                     disabled={busy}
@@ -93,7 +93,7 @@ export default function TeamJoinRequestsSection({
                     {t("rework.teamSettings.members.joinRequests.refuse")}
                   </Button>
                   <Button
-                    color="primary"
+                    color="success"
                     variant="filled"
                     size="small"
                     disabled={busy}
@@ -104,7 +104,7 @@ export default function TeamJoinRequestsSection({
                 </>
               ) : (
                 <Button
-                  color="primary"
+                  color="success"
                   variant="outlined"
                   size="small"
                   disabled={busy}

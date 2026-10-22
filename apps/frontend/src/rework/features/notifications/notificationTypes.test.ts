@@ -217,17 +217,17 @@ describe("renderNotification", () => {
       "I lead the RFP pipeline and would like to reuse your agents for the next three tenders.",
     );
     expect(rendered.link).toBe("/team/team-1/settings/members");
-    expect(rendered.actions.map((action) => [action.label, action.primary ?? false])).toEqual([
-      ["Accept", true],
-      ["Refuse", false],
+    expect(rendered.actions.map(({ label, primary, color }) => [label, primary ?? false, color])).toEqual([
+      ["Refuse", false, "error"],
+      ["Accept", true, "success"],
     ]);
 
     const { calls, dispatch } = fakeDispatch();
     await callOf(rendered.actions[0])(dispatch);
     await callOf(rendered.actions[1])(dispatch);
     expect(calls).toEqual([
-      { endpoint: "accept", arg: { teamId: "team-1", requestId: "req-1" } },
       { endpoint: "refuse", arg: { teamId: "team-1", requestId: "req-1" } },
+      { endpoint: "accept", arg: { teamId: "team-1", requestId: "req-1" } },
     ]);
   });
 
