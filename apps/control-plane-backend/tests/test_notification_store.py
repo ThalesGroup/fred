@@ -88,7 +88,7 @@ async def test_a_repeat_emission_updates_the_payload_without_rebadging(
 async def test_one_statement_may_carry_the_same_subject_twice(
     store: NotificationStore,
 ) -> None:
-    assert await store.upsert([_draft(editor="Bob"), _draft(editor="Carol")]) == 1
+    await store.upsert([_draft(editor="Bob"), _draft(editor="Carol")])
     assert (await _only(store)).payload == {"editor_name": "Carol"}
 
 
@@ -102,7 +102,7 @@ async def test_a_resolved_group_accepts_a_new_notification(
     )
 
     handled = await _only(store, "alice")
-    assert handled.handled_by == "dave" and handled.handled_by_name == "Dave"
+    assert handled.handled_by_name == "Dave"
     assert handled.handled_outcome == "done"
     # The actor's own row is gone.
     assert (await store.list_page("dave", limit=50))[0] == []

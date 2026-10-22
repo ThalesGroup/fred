@@ -63,7 +63,6 @@ class StoredNotification:
     expires_at: datetime
     seen_at: datetime | None
     handled_at: datetime | None
-    handled_by: str | None
     handled_by_name: str | None
     handled_outcome: str | None
 
@@ -113,7 +112,6 @@ def _to_stored(row: NotificationRow) -> StoredNotification:
         expires_at=_aware(row.expires_at),
         seen_at=row.seen_at and _aware(row.seen_at),
         handled_at=row.handled_at and _aware(row.handled_at),
-        handled_by=row.handled_by,
         handled_by_name=row.handled_by_name,
         handled_outcome=row.handled_outcome,
     )
@@ -145,13 +143,13 @@ class NotificationStore:
             NotificationRow.expires_at > now,
         ]
 
-    async def upsert(self, drafts: Sequence[NotificationDraft]) -> int:
+    async def upsert(self, drafts: Sequence[NotificationDraft]) -> None:
         """Insert in one statement; an open row of the same recipient and group
         gets the new payload and keeps its seen state."""
         # One row per (recipient, group): a statement may not update a row twice.
         unique = list({(d.recipient_id, d.group_key): d for d in drafts}.values())
         if not unique:
-            return 0
+            return
         now = utcnow()
         keys = [(d.group_key, d.recipient_id) for d in unique]
         insert = (
@@ -193,7 +191,6 @@ class NotificationStore:
                 )
             )
             await s.execute(statement)
-        return len(unique)
 
     async def resolve(
         self,
@@ -225,7 +222,6 @@ class NotificationStore:
                 .where(*open_rows)
                 .values(
                     handled_at=utcnow(),
-                    handled_by=actor_uid,
                     handled_by_name=actor_name,
                     handled_outcome=outcome,
                 )

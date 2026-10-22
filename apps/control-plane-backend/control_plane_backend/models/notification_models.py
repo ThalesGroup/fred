@@ -73,7 +73,6 @@ class NotificationRow(Base):
     handled_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    handled_by: Mapped[str | None] = mapped_column(String, nullable=True)
     handled_by_name: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,
