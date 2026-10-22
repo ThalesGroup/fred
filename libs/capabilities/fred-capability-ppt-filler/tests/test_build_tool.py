@@ -1380,3 +1380,16 @@ async def test_a_ragged_table_is_sent_back_with_its_rows_named(monkeypatch):
     assert not result.is_error and "No deck was built" in text
     assert "table.rows[0] has 1 cells for 3 columns" in text
     assert "table.rows[1] has 4 cells for 3 columns" in text
+
+
+@pytest.mark.asyncio
+async def test_characters_xml_refuses_are_dropped_and_the_deck_builds(monkeypatch):
+    workspace = FakeWorkspace()
+    slide = {"title": "bad\x00\x0b title \ud800", "bullets": ["￾ x", "a\x08b"]}
+    text, result = await _build(
+        monkeypatch, workspace=workspace, variety="off", slides=[COVER, slide]
+    )
+    assert not result.is_error and text.startswith(tools_mod._DELIVERED), text
+    deck = Presentation(io.BytesIO(workspace.writes[0]["content"]))
+    title = cast(Any, deck.slides[1].shapes.title).text
+    assert title.split() == ["bad", "title"]

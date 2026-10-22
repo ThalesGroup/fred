@@ -63,6 +63,21 @@ ITEM_FIELDS: Dict[str, str] = {
 # reach the user as an opaque tool failure.
 
 
+# Characters XML 1.0 refuses, lone surrogates included: one would fail the
+# whole render. A vertical tab or form feed is a line break the model meant.
+_XML_ILLEGAL = re.compile("[\x00-\x08\x0e-\x1f\ufffe\uffff\ud800-\udfff]")
+
+
+def _xml_safe(value: Any) -> Any:
+    if isinstance(value, str):
+        return _XML_ILLEGAL.sub("", value.replace("\x0b", "\n").replace("\x0c", "\n"))
+    if isinstance(value, dict):
+        return {k: _xml_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_xml_safe(v) for v in value]
+    return value
+
+
 def _as_text(value: Any) -> Optional[str]:
     if value is None:
         return None
@@ -1194,6 +1209,7 @@ class SlidePlan(BaseModel):
     def _coerce(cls, value: Any) -> Any:
         if not isinstance(value, dict):
             return {"invalid_entry": str(value)[:80]}
+        value = _xml_safe(value)
         renamed = _with_aliases(value, _SLIDE_ALIASES)
         known = set(cls.model_fields) | set(_SLIDE_ALIASES)
         single = bool(value.get("single_columns")) or isinstance(
@@ -1284,6 +1300,11 @@ class DeckPlan(BaseModel):
     delivered: SkipJsonSchema[bool] = False
     # Shown to the user as an outline, waiting for their answer.
     proposed: SkipJsonSchema[bool] = False
+
+    @field_validator("file_name", "audience", "main_message", mode="before")
+    @classmethod
+    def _safe(cls, value: Any) -> Any:
+        return _xml_safe(value)
 
 
 def has_content(slide: SlidePlan) -> bool:
