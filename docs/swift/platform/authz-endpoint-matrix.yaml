@@ -1075,6 +1075,11 @@ operations:
     review_status: approved
     required_permission: can_manage # REASON-01 / RFC MODEL-REASONING-ENABLEMENT §5 — capability#can_manage (can_manage_capabilities from organization). Global activation, not a per-team grant: writes a plain table row, never an FGA tuple (§5.1).
   - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/capabilities/{capability_id}/display-name
+    review_status: approved
+    required_permission: can_manage # capability#can_manage; the target must be an advertised model. The name is platform-wide and does not change access grants.
+  - service: control-plane
     method: GET
     path: /control-plane/v1/admin/platform/model-bindings
     review_status: approved
