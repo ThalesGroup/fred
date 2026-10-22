@@ -1135,38 +1135,31 @@ def _proposal(
     )
 
 
-def _issue_line(report: SlideReport) -> str:
+def _issue_line(report: SlideReport) -> Optional[str]:
+    """What the user should know of one built slide; template example text
+    removed or a font shrunk is not worth telling."""
     parts = []
     if report.truncated:
-        parts.append(
-            f"text cut to fit in {', '.join(report.truncated)} (shorten it to show it whole)"
-        )
-    if report.removed:
-        removed = ", ".join(f"'{t}'" for t in report.removed)
-        parts.append(f"template example text removed: {removed} (nothing to do)")
+        parts.append(f"text cut to fit in {', '.join(report.truncated)}")
     if report.lost:
-        parts.append(
-            f"not placed: {', '.join(report.lost)} (move it to a field this slide shows, "
-            "or drop it)"
-        )
-    parts.extend(f"{s} (nothing to do)" for s in report.shrunk)
-    return f"Slide {report.position}: " + "; ".join(parts) + "."
+        parts.append(f"not placed: {', '.join(report.lost)} (no room on this slide)")
+    return f"Slide {report.position}: " + "; ".join(parts) + "." if parts else None
 
 
 def _build_notes(plan: DeckPlan, issues: List[SlideReport], notes: List[str]) -> str:
-    """What the agent should know about the deck it just built."""
+    """Facts about the delivered deck: the answer is closed then, so the model
+    relays them and the user asks for a fix in their next message."""
     lines = [
-        f"Entry {index} of 'slides' was not a slide object and was skipped: if it was "
-        "meant as a slide, write it as an object (title, bullets…)."
+        f"Entry {index} of the outline was not a slide and was left out."
         for index, slide in enumerate(plan.slides, start=1)
         if slide.invalid_entry is not None
     ]
-    lines += [_issue_line(report) for report in issues] + notes
+    lines += [line for line in map(_issue_line, issues) if line] + notes
     if not lines:
         return ""
     return (
-        "\nTo review (if it matters, call again with `changes` for those slides; the new build "
-        "replaces this one):\n" + "\n".join(lines)
+        "\nTell the user (they can ask for a fix in their next message):\n"
+        + "\n".join(lines)
     )
 
 
@@ -1825,8 +1818,7 @@ def build_builder_tools(
                 ),
             )
             return (
-                f"Delivered: '{file_name}', {result.slide_count} slides. This replaces any deck built earlier "
-                "in this answer. A preview opens beside the chat and a download button is shown "
+                f"Delivered: '{file_name}', {result.slide_count} slides. A preview opens beside the chat and a download button is shown "
                 "automatically; do not write a download link. To change it, send only `changes` numbered "
                 f"on the file's slides (1 to {result.slide_count}, a list continued on two slides counts "
                 "two); every call rebuilds the whole deck. Describe to the user only what the deck "

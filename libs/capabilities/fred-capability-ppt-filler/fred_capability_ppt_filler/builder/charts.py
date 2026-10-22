@@ -567,12 +567,10 @@ def emphasis(chart: PlanChart) -> Optional[Tuple[str, int]]:
 
 
 def _highlight_note(chart: PlanChart) -> Optional[str]:
+    # Told after delivery, when the model can only reply: a fact for the user.
     asked = chart.asked_intents.get("highlight")
     if asked:
-        return (
-            f"chart.highlight '{asked}' names more than one; built without highlight. "
-            "To set it, edit chart.highlight to the one name that matters."
-        )
+        return f"the chart has no emphasis: '{asked}' names more than one item."
     if not chart.highlight or emphasis(chart) is not None:
         return None
     name = chart.highlight
@@ -580,35 +578,30 @@ def _highlight_note(chart: PlanChart) -> Optional[str]:
     if len(series) > 1 and chart.type not in ROUND:
         if lexicon.normalize(name) in _names(chart.categories):
             return (
-                f"chart.highlight '{name}' is a category, and this chart has "
-                f"{len(series)} series: only a series can be emphasised. Built without "
-                f"highlight; edit chart.highlight to one of the series "
-                f"({', '.join(series)}), or keep one series."
+                f"the chart has no emphasis: '{name}' is a category, and with "
+                f"{len(series)} series only a series can stand out "
+                f"({', '.join(series)})."
             )
         return (
-            f"chart.highlight '{name}' matches no series ({', '.join(series)}); built "
-            "without highlight. To set it, edit chart.highlight to one of those (a "
-            "name, never a colour)."
+            f"the chart has no emphasis: '{name}' is not one of its series "
+            f"({', '.join(series)})."
         )
     if chart.type in XY_TYPES:
         labels = [p.label for p in chart.series[0].points if p.label] if series else []
         return (
-            f"chart.highlight '{name}' matches no point label "
-            f"({', '.join(labels) or 'none given'}); built without highlight. To set "
-            "it, edit chart.highlight to one point's label (a name, never a colour)."
+            f"the chart has no emphasis: '{name}' is not one of its point labels "
+            f"({', '.join(labels) or 'none given'})."
         )
     if chart.type in _NO_CATEGORY and lexicon.normalize(name) in _names(
         chart.categories
     ):
         return (
-            f"chart.highlight '{name}' was not applied: {_a(chart.type)} chart cannot "
-            "emphasise one category. Nothing to do; drop chart.highlight, or use type "
-            "'column' to emphasise it."
+            f"the chart has no emphasis on '{name}': {_a(chart.type)} chart cannot "
+            "emphasise one category (a column chart can)."
         )
     return (
-        f"chart.highlight '{name}' matches no category ({', '.join(chart.categories)}); "
-        "built without highlight. To set it, edit chart.highlight to one of those (a "
-        "name, never a colour)."
+        f"the chart has no emphasis: '{name}' is not one of its categories "
+        f"({', '.join(chart.categories)})."
     )
 
 

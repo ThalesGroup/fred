@@ -104,7 +104,8 @@ def _texts(slide) -> list[str]:
 
 def _findings(result) -> list[str]:
     """What the agent reads of a render: one line per slide, then the notes."""
-    return [_issue_line(r) for r in result.report.issues()] + result.report.notes
+    lines = [_issue_line(r) for r in result.report.issues()]
+    return [line for line in lines if line] + result.report.notes
 
 
 def _pictures(slide) -> int:
@@ -1528,7 +1529,8 @@ def test_example_text_left_on_a_duplicated_slide_is_removed_and_reported():
     assert "Go to target" not in texts
     assert "Plan" in texts and _SHARED in texts
     assert result.report.slide(1).removed == ["Go to target"]
-    assert any("'Go to target'" in w for w in _findings(result))
+    # Template example text removed is not worth telling the user.
+    assert not any("'Go to target'" in w for w in _findings(result))
 
 
 def test_each_level_of_a_body_keeps_its_template_formatting():

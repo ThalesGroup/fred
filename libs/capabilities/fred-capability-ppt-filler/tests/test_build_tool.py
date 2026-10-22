@@ -383,7 +383,7 @@ async def test_malformed_plan_from_a_small_model_still_builds(monkeypatch):
     deck = Presentation(io.BytesIO(workspace.writes[0]["content"]))
     assert len(deck.slides) == 4
     assert "4 slides" in text
-    assert "Entry 5 of 'slides' was not a slide object" in text
+    assert "Entry 5 of the outline was not a slide and was left out." in text
 
 
 # --- no silent fallback, repair loop ----------------------------------------------------------
@@ -834,13 +834,14 @@ def test_the_success_notes_name_what_was_cut_per_slide():
     plan = DeckPlan.model_validate({"slides": [COVER, "junk"]})
     report = SlideReport(1, removed=["Lorem"], truncated=["title"], lost=["subtitle"])
     notes = _build_notes(plan, [report], [])
-    assert "Entry 2 of 'slides' was not a slide object" in notes
+    assert "Entry 2 of the outline was not a slide and was left out." in notes
     assert (
-        "Slide 1: text cut to fit in title (shorten it to show it whole); template "
-        "example text removed: 'Lorem' (nothing to do); not placed: subtitle (move it "
-        "to a field this slide shows, or drop it)." in notes
+        "Slide 1: text cut to fit in title; not placed: subtitle (no room on this "
+        "slide)." in notes
     )
-    assert "call again with `changes` for those slides" in notes
+    assert "Lorem" not in notes
+    assert "Tell the user (they can ask for a fix in their next message):" in notes
+    assert _build_notes(plan, [SlideReport(1, removed=["Lorem"])], []).count("\n") == 2
     assert _build_notes(DeckPlan.model_validate({"slides": [COVER]}), [], []) == ""
 
 
@@ -856,7 +857,7 @@ async def test_a_renderer_finding_reaches_the_model_in_the_review_notes(monkeypa
     text, result = await _build(monkeypatch, slides=[COVER, agenda])
     assert not result.is_error, text
     assert tools_mod.deck_delivered(_turn(text))
-    review = text[text.index("\nTo review") :]
+    review = text[text.index("\nTell the user") :]
     assert (
         "Slide 2: the agenda announces 4 parts but only 0 slide(s) follow it. Add the "
         "missing slides or remove those parts from the agenda."
@@ -881,7 +882,7 @@ async def test_a_split_agenda_is_one_agenda_for_the_gap_check(monkeypatch):
     counted after the second part, the parts announced once."""
     text, result = await _build(monkeypatch, slides=[COVER, _agenda(6), *_points(2)])
     assert not result.is_error, text
-    review = text[text.index("\nTo review") :]
+    review = text[text.index("\nTell the user") :]
     assert "Slide 2: its 6 items continue on a second 'agenda' slide (3 + 3" in review
     assert (
         "Slide 2: the agenda announces 6 parts but only 2 slide(s) follow it." in review

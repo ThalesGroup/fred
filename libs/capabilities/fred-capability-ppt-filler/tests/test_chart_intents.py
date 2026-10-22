@@ -262,38 +262,32 @@ def test_a_highlighted_series_takes_the_accent_and_the_others_thin_out(builtin):
     [
         (
             {**REVENUE, "highlight": "Nord"},
-            "Slide 2: chart.highlight 'Nord' matches no category (Q1, Q2, Q3, Q4); "
-            "built without highlight. To set it, edit chart.highlight to one of those "
-            "(a name, never a colour).",
+            "Slide 2: the chart has no emphasis: 'Nord' is not one of its categories "
+            "(Q1, Q2, Q3, Q4).",
         ),
         (
             {**REVENUE, "highlight": "red"},
-            "Slide 2: chart.highlight 'red' matches no category (Q1, Q2, Q3, Q4); "
-            "built without highlight. To set it, edit chart.highlight to one of those "
-            "(a name, never a colour).",
+            "Slide 2: the chart has no emphasis: 'red' is not one of its categories "
+            "(Q1, Q2, Q3, Q4).",
         ),
         (
             {**TWO, "highlight": "Q3"},
-            "Slide 2: chart.highlight 'Q3' is a category, and this chart has 2 series: "
-            "only a series can be emphasised. Built without highlight; edit "
-            "chart.highlight to one of the series (2024, 2025), or keep one series.",
+            "Slide 2: the chart has no emphasis: 'Q3' is a category, and with 2 series "
+            "only a series can stand out (2024, 2025).",
         ),
         (
             {**REVENUE, "highlight": ["Q1", "Q2"]},
-            "Slide 2: chart.highlight 'Q1, Q2' names more than one; built without "
-            "highlight. To set it, edit chart.highlight to the one name that matters.",
+            "Slide 2: the chart has no emphasis: 'Q1, Q2' names more than one item.",
         ),
         (
             {**REVENUE, "type": "area", "highlight": "Q2"},
-            "Slide 2: chart.highlight 'Q2' was not applied: an area chart cannot "
-            "emphasise one category. Nothing to do; drop chart.highlight, or use type "
-            "'column' to emphasise it.",
+            "Slide 2: the chart has no emphasis on 'Q2': an area chart cannot "
+            "emphasise one category (a column chart can).",
         ),
         (
             {**REVENUE, "type": "line", "highlight": "Q2"},
-            "Slide 2: chart.highlight 'Q2' was not applied: a line chart cannot "
-            "emphasise one category. Nothing to do; drop chart.highlight, or use type "
-            "'column' to emphasise it.",
+            "Slide 2: the chart has no emphasis on 'Q2': a line chart cannot "
+            "emphasise one category (a column chart can).",
         ),
     ],
 )
