@@ -15,19 +15,23 @@
 """Offline tests for the shared Office→PDF conversion helper.
 
 These do not invoke the real ``soffice`` binary: they stub ``shutil.which`` and
-``subprocess.run`` so the timeout / missing-binary / success behaviours are asserted
+the ``_run_soffice`` runner so the timeout / missing-binary / success behaviours are asserted
 deterministically without any external dependency. A separate ``integration``-marked
 test exercises the real LibreOffice path when the binary is present.
 """
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess  # nosec B404: only used to construct result/exception stubs in tests
+import sys
+import time
 from pathlib import Path
 
 import pytest
 from fred_core.conversion import convert_office_bytes_to_pdf, convert_office_file_to_pdf
+from fred_core.conversion.office_pdf import _run_soffice
 
 _MODULE = "fred_core.conversion.office_pdf"
 
@@ -43,7 +47,7 @@ async def test_convert_bytes_returns_pdf_on_success(monkeypatch) -> None:
         (outdir / src.with_suffix(".pdf").name).write_bytes(b"%PDF-1.5 fake")
         return subprocess.CompletedProcess(cmd, 0, b"", b"")
 
-    monkeypatch.setattr(f"{_MODULE}.subprocess.run", fake_run)
+    monkeypatch.setattr(f"{_MODULE}._run_soffice", fake_run)
 
     pdf = await convert_office_bytes_to_pdf(b"fake pptx bytes", suffix=".pptx")
 
@@ -67,7 +71,7 @@ async def test_convert_bytes_hands_the_source_suffix_to_libreoffice(
         (outdir / src.with_suffix(".pdf").name).write_bytes(b"%PDF-1.5 fake")
         return subprocess.CompletedProcess(cmd, 0, b"", b"")
 
-    monkeypatch.setattr(f"{_MODULE}.subprocess.run", fake_run)
+    monkeypatch.setattr(f"{_MODULE}._run_soffice", fake_run)
 
     pdf = await convert_office_bytes_to_pdf(b"fake docx bytes", suffix=".docx")
 
@@ -103,7 +107,7 @@ def test_export_filter_follows_the_source_application(
         (outdir / src.with_suffix(".pdf").name).write_bytes(b"%PDF-1.5 fake")
         return subprocess.CompletedProcess(cmd, 0, b"", b"")
 
-    monkeypatch.setattr(f"{_MODULE}.subprocess.run", fake_run)
+    monkeypatch.setattr(f"{_MODULE}._run_soffice", fake_run)
     src = tmp_path / f"source{suffix}"
     src.write_bytes(b"fake")
 
@@ -127,7 +131,7 @@ def test_each_conversion_gets_its_own_libreoffice_profile(
         (outdir / src.with_suffix(".pdf").name).write_bytes(b"%PDF-1.5 fake")
         return subprocess.CompletedProcess(cmd, 0, b"", b"")
 
-    monkeypatch.setattr(f"{_MODULE}.subprocess.run", fake_run)
+    monkeypatch.setattr(f"{_MODULE}._run_soffice", fake_run)
 
     first = tmp_path / "a.docx"
     first.write_bytes(b"fake")
@@ -151,7 +155,7 @@ async def test_convert_bytes_returns_none_on_timeout(monkeypatch) -> None:
         # TimeoutExpired the helper is expected to swallow into a None result.
         raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout", 0))
 
-    monkeypatch.setattr(f"{_MODULE}.subprocess.run", hung_run)
+    monkeypatch.setattr(f"{_MODULE}._run_soffice", hung_run)
 
     pdf = await convert_office_bytes_to_pdf(
         b"fake pptx bytes", suffix=".pptx", timeout_seconds=0.01
@@ -165,9 +169,9 @@ async def test_convert_bytes_returns_none_when_soffice_missing(monkeypatch) -> N
     monkeypatch.setattr(f"{_MODULE}.shutil.which", lambda _: None)
 
     def unexpected_run(cmd, **kwargs):  # pragma: no cover - must not be reached
-        raise AssertionError("subprocess.run must not run when soffice is absent")
+        raise AssertionError("soffice must not run when it is absent")
 
-    monkeypatch.setattr(f"{_MODULE}.subprocess.run", unexpected_run)
+    monkeypatch.setattr(f"{_MODULE}._run_soffice", unexpected_run)
 
     pdf = await convert_office_bytes_to_pdf(b"fake pptx bytes", suffix=".pptx")
 
@@ -180,7 +184,7 @@ async def test_convert_bytes_returns_none_when_no_pdf_produced(monkeypatch) -> N
 
     # soffice exits 0 but writes nothing — a real failure mode worth guarding.
     monkeypatch.setattr(
-        f"{_MODULE}.subprocess.run",
+        f"{_MODULE}._run_soffice",
         lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, 0, b"", b""),
     )
 
@@ -197,12 +201,54 @@ def test_convert_file_returns_none_on_called_process_error(
     def failing_run(cmd, **kwargs):
         raise subprocess.CalledProcessError(1, cmd, stderr=b"boom")
 
-    monkeypatch.setattr(f"{_MODULE}.subprocess.run", failing_run)
+    monkeypatch.setattr(f"{_MODULE}._run_soffice", failing_run)
 
     src = tmp_path / "deck.pptx"
     src.write_bytes(b"fake")
 
     assert convert_office_file_to_pdf(src) is None
+
+
+def _gone(pid: int) -> bool:
+    """Dead: no process, or a zombie only its new parent has left to reap."""
+    try:
+        state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+    except FileNotFoundError:
+        return True
+    return state in ("Z", "X")
+
+
+@pytest.mark.skipif(
+    not hasattr(os, "killpg") or not Path("/proc").is_dir(),
+    reason="needs POSIX process groups and /proc",
+)
+def test_a_timeout_kills_the_whole_process_group(tmp_path) -> None:
+    """soffice forks soffice.bin: killing the direct child alone left it running."""
+    pid_file = tmp_path / "grandchild.pid"
+    script = (
+        "import subprocess, sys, time\n"
+        "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+        f"open({str(pid_file)!r}, 'w').write(str(child.pid))\n"
+        "time.sleep(60)\n"
+    )
+    started = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired):
+        _run_soffice([sys.executable, "-c", script], timeout=1.5)
+    assert time.monotonic() - started < 10
+    grandchild = int(pid_file.read_text())
+    deadline = time.monotonic() + 5
+    while not _gone(grandchild) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert _gone(grandchild)
+
+
+def test_a_failing_command_raises_like_a_checked_run() -> None:
+    with pytest.raises(subprocess.CalledProcessError) as excinfo:
+        _run_soffice(
+            [sys.executable, "-c", "import sys; sys.stderr.write('boom'); sys.exit(3)"],
+            timeout=10,
+        )
+    assert excinfo.value.returncode == 3 and excinfo.value.stderr == b"boom"
 
 
 @pytest.mark.integration
