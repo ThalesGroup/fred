@@ -24,6 +24,8 @@ type DefaultTeam = { team_id: string; name: string };
 
 const h = vi.hoisted(() => ({
   canAdmin: true,
+  canManageTeams: true,
+  canManagePlatformAccess: true,
   admissionEnabled: true,
   admissionFetching: false,
   admissionTeams: [
@@ -99,7 +101,11 @@ vi.mock("@core/hooks/useMutationAction.ts", () => ({
 }));
 
 vi.mock("@core/hooks/useUserCapabilities.ts", () => ({
-  useUserCapabilities: () => ({ canAdmin: h.canAdmin }),
+  useUserCapabilities: () => ({
+    canAdmin: h.canAdmin,
+    canManageTeams: h.canManageTeams,
+    canManagePlatformAccess: h.canManagePlatformAccess,
+  }),
 }));
 
 vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
@@ -174,6 +180,8 @@ const searchInput = () => defaultTeamSection()!.querySelector("input")!;
 
 beforeEach(() => {
   h.canAdmin = true;
+  h.canManageTeams = true;
+  h.canManagePlatformAccess = true;
   h.admissionEnabled = true;
   h.admissionFetching = false;
   h.admissionQuery.mockClear();
@@ -223,13 +231,16 @@ describe("AdminTeamsPage layout", () => {
     );
   });
 
-  it("offers Edit on every row to a platform admin only", () => {
+  it("offers Edit to team managers", () => {
     render();
     expect(editButtons()).toHaveLength(3);
     h.canAdmin = false;
     rerender();
+    expect(editButtons()).toHaveLength(3);
+    h.canManageTeams = false;
+    rerender();
     expect(editButtons()).toHaveLength(0);
-    expect(buttonByText(container, "rework.adminTeams.createTeam.open")).toBeDefined();
+    expect(buttonByText(container, "rework.adminTeams.createTeam.open")).toBeUndefined();
   });
 
   it("marks the admins still awaiting the charter next to the avatars", () => {
@@ -243,6 +254,7 @@ describe("AdminTeamsPage layout", () => {
 describe("AdminTeamsPage Free enrollment", () => {
   it("does not expose controls or request admission authority for ordinary team managers", () => {
     h.canAdmin = false;
+    h.canManagePlatformAccess = false;
     render();
     expect(h.admissionQuery).toHaveBeenLastCalledWith(undefined, { skip: true });
     expect(h.admissionTeamsQuery).toHaveBeenLastCalledWith(undefined, { skip: true });
@@ -279,6 +291,7 @@ describe("AdminTeamsPage Free enrollment", () => {
     expect(dialog.getAttribute("data-team")).toBe("uid-alpha");
     expect(dialog.getAttribute("data-free")).toBe("false");
     h.canAdmin = false;
+    h.canManagePlatformAccess = false;
     act(() => root.render(<AdminTeamsPage />));
     expect(container.querySelector('[role="dialog"]')).toBeNull();
   });
@@ -296,6 +309,15 @@ describe("AdminTeamsPage Free enrollment", () => {
     expect(
       container.querySelector<HTMLInputElement>('input[aria-label="rework.platformAccess.free Gamma"]')!.disabled,
     ).toBe(true);
+  });
+
+  it("lets an access manager manage Free without team registry controls", () => {
+    h.canAdmin = false;
+    h.canManageTeams = false;
+    render();
+    expect(container.textContent).toContain("rework.platformAccess.links.manage");
+    expect(editButtons()).toHaveLength(0);
+    expect(buttonByText(container, "rework.adminTeams.createTeam.open")).toBeUndefined();
   });
 });
 
@@ -479,6 +501,33 @@ describe("AdminTeamsPage team edit", () => {
     expect(h.editTeam).toHaveBeenCalledWith({
       teamId: "uid-alpha",
       editTeamRegistryRequest: { description: "Automates the drafting of every monthly report." },
+    });
+  });
+
+  it("lets a team manager edit details without loading or submitting admins", async () => {
+    h.canAdmin = false;
+    h.canManagePlatformAccess = false;
+    openAlpha();
+    expect(dialog()!.querySelectorAll("input")).toHaveLength(1);
+    type(dialog()!.querySelector("textarea")!, "A new description for the team.");
+    await act(async () => save().click());
+    expect(h.editTeam).toHaveBeenCalledWith({
+      teamId: "uid-alpha",
+      editTeamRegistryRequest: { description: "A new description for the team." },
+    });
+  });
+
+  it("lets a team manager update an orphaned team's details", async () => {
+    h.canAdmin = false;
+    h.canManagePlatformAccess = false;
+    render();
+    act(() => editButtons()[1].click());
+    type(dialog()!.querySelector("textarea")!, "A description for the orphaned team.");
+    expect(save().disabled).toBe(false);
+    await act(async () => save().click());
+    expect(h.editTeam).toHaveBeenCalledWith({
+      teamId: "uid-beta",
+      editTeamRegistryRequest: { description: "A description for the orphaned team." },
     });
   });
 

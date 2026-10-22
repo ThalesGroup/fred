@@ -44,8 +44,7 @@ import type { Team } from "../../../../../slices/controlPlane/controlPlaneOpenAp
 import TeamFormDialog from "./TeamFormDialog";
 import styles from "./AdminTeamsPage.module.css";
 
-// Team managers create teams; only platform admins edit them, set default
-// teams and admission (REBAC.md "Team registry governance").
+// Registry edits and Platform Access controls have separate permissions.
 export default function AdminTeamsPage() {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
@@ -57,8 +56,8 @@ export default function AdminTeamsPage() {
   // The admins column needs each team's roster.
   const { data: allTeams } = useListAllTeamsQuery({ includeMembership: true });
 
-  const { canAdmin } = useUserCapabilities();
-  const admissionEnabled = canAdmin && (getConfig()?.platform_access_enabled ?? false);
+  const { canAdmin, canManageTeams, canManagePlatformAccess } = useUserCapabilities();
+  const admissionEnabled = canManagePlatformAccess && (getConfig()?.platform_access_enabled ?? false);
   const admission = usePlatformAccessStateQuery(undefined, { skip: !admissionEnabled });
   const admissionTeams = usePlatformAccessTeamsQuery(undefined, { skip: !admissionEnabled });
   const [setAdmissionTeam, { isLoading: isSettingAdmissionTeam }] = useSetPlatformTeamMutation();
@@ -201,7 +200,7 @@ export default function AdminTeamsPage() {
             },
           ]
         : []),
-      ...(canAdmin
+      ...(canManageTeams
         ? [
             {
               label: "",
@@ -221,7 +220,7 @@ export default function AdminTeamsPage() {
           ]
         : []),
     ],
-    [t, canAdmin, admissionEnabled, admissionLocked, accessTeams, runMutationAction, setAdmissionTeam, showError],
+    [t, canManageTeams, admissionEnabled, admissionLocked, accessTeams, runMutationAction, setAdmissionTeam, showError],
   );
 
   return (
@@ -229,15 +228,17 @@ export default function AdminTeamsPage() {
       <PageHeader
         title={t("rework.adminTeams.title")}
         actions={
-          <Button
-            color="primary"
-            variant="filled"
-            size="medium"
-            icon={{ category: "outlined", type: "add" }}
-            onClick={() => setTeamForm("create")}
-          >
-            {t("rework.adminTeams.createTeam.open")}
-          </Button>
+          canManageTeams && (
+            <Button
+              color="primary"
+              variant="filled"
+              size="medium"
+              icon={{ category: "outlined", type: "add" }}
+              onClick={() => setTeamForm("create")}
+            >
+              {t("rework.adminTeams.createTeam.open")}
+            </Button>
+          )
         }
       />
       {canAdmin && (
@@ -295,7 +296,11 @@ export default function AdminTeamsPage() {
         )}
       </section>
       {teamForm && (
-        <TeamFormDialog team={teamForm === "create" ? undefined : teamForm} onClose={() => setTeamForm(null)} />
+        <TeamFormDialog
+          team={teamForm === "create" ? undefined : teamForm}
+          canEditAdmins={canAdmin}
+          onClose={() => setTeamForm(null)}
+        />
       )}
       {admissionEnabled && selectedLinkTeam && (
         <PlatformAccessLinkManager team={selectedLinkTeam} onClose={() => setLinkTeam(undefined)} />

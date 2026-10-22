@@ -51,11 +51,12 @@ const REFUSAL_KEYS: Record<string, string> = {
 interface TeamFormDialogProps {
   /** The team to edit; absent to create one. */
   team?: Team;
+  canEditAdmins: boolean;
   onClose: () => void;
 }
 
-/** Create or edit a team's name, description and admins. An edit sends only what changed. */
-export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
+/** Create a team or edit only the fields permitted for the caller. */
+export default function TeamFormDialog({ team, canEditAdmins, onClose }: TeamFormDialogProps) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
   const { notifyApiError } = useApiErrorToast();
@@ -78,7 +79,7 @@ export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
   // `currentData`, not `data`: results of a previous search must not stay selectable while a new one loads.
   const { currentData: candidateAdmins, isFetching: searchingAdmins } = useSearchCandidateTeamAdminsQuery(
     { query: trimmedAdminQuery },
-    { skip: trimmedAdminQuery.length < 2 },
+    { skip: (mode === "edit" && !canEditAdmins) || trimmedAdminQuery.length < 2 },
   );
   const [createTeam, { isLoading: isCreating }] = useCreateTeamMutation();
   const [editTeam, { isLoading: isEditing }] = useEditTeamRegistryMutation();
@@ -103,17 +104,28 @@ export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
     const request: EditTeamRegistryRequest = {};
     if (trimmedName !== team.name) request.name = trimmedName;
     if (!keepsPlaceholder && trimmedDescription !== storedDescription) request.description = trimmedDescription;
-    const added = admins.filter((user) => !initialIds.has(user.id)).map((user) => user.id);
-    const removed = initialAdmins.filter((user) => !currentIds.has(user.id)).map((user) => user.id);
-    if (added.length > 0) request.add_admin_ids = added;
-    if (removed.length > 0) request.remove_admin_ids = removed;
+    if (canEditAdmins) {
+      const added = admins.filter((user) => !initialIds.has(user.id)).map((user) => user.id);
+      const removed = initialAdmins.filter((user) => !currentIds.has(user.id)).map((user) => user.id);
+      if (added.length > 0) request.add_admin_ids = added;
+      if (removed.length > 0) request.remove_admin_ids = removed;
+    }
     return request;
-  }, [team, initialAdmins, admins, trimmedName, trimmedDescription, storedDescription, keepsPlaceholder]);
+  }, [
+    team,
+    initialAdmins,
+    admins,
+    canEditAdmins,
+    trimmedName,
+    trimmedDescription,
+    storedDescription,
+    keepsPlaceholder,
+  ]);
 
   const canSubmit =
     trimmedName.length > 0 &&
     descriptionValid &&
-    admins.length > 0 &&
+    (!team || changes.add_admin_ids?.length || changes.remove_admin_ids?.length ? admins.length > 0 : true) &&
     !isCreating &&
     !isEditing &&
     (!team || Object.keys(changes).length > 0);
@@ -193,53 +205,55 @@ export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
           onBlur={() => setDescriptionTouched(true)}
           required
         />
-        <div className={styles.adminsField}>
-          <span className={styles.adminsLabel}>{t("rework.adminTeams.createTeam.adminsLabel")} *</span>
-          <div className={styles.adminsPicker}>
-            <Autocomplete<UserSummary>
-              textInput={{
-                placeholder: t("rework.adminTeams.createTeam.adminsPlaceholder"),
-                size: "small",
-                icon: { category: "outlined", type: "search" },
-              }}
-              onFieldValueChange={setAdminQuery}
-              minQueryLength={2}
-              noOptionsMessage={t(
-                searchingAdmins
-                  ? "rework.adminTeams.createTeam.adminsSearching"
-                  : "rework.adminTeams.createTeam.adminsNoMatch",
+        {(!team || canEditAdmins) && (
+          <div className={styles.adminsField}>
+            <span className={styles.adminsLabel}>{t("rework.adminTeams.createTeam.adminsLabel")} *</span>
+            <div className={styles.adminsPicker}>
+              <Autocomplete<UserSummary>
+                textInput={{
+                  placeholder: t("rework.adminTeams.createTeam.adminsPlaceholder"),
+                  size: "small",
+                  icon: { category: "outlined", type: "search" },
+                }}
+                onFieldValueChange={setAdminQuery}
+                minQueryLength={2}
+                noOptionsMessage={t(
+                  searchingAdmins
+                    ? "rework.adminTeams.createTeam.adminsSearching"
+                    : "rework.adminTeams.createTeam.adminsNoMatch",
+                )}
+                options={suggestions.map((user) => ({
+                  label: `${user.first_name} ${user.last_name} (${user.username})`,
+                  value: user,
+                  key: user.id,
+                }))}
+                onSelect={(user) => {
+                  setAdmins((previous) => [...previous, user]);
+                  setAdminQuery("");
+                }}
+              />
+              {admins.length > 0 && (
+                <ul className={styles.adminChipList}>
+                  {admins.map((user) => {
+                    const name = `${user.first_name} ${user.last_name}`;
+                    const pending = pendingAdminIds.has(user.id);
+                    return (
+                      <li key={user.id}>
+                        <Chip
+                          label={name}
+                          secondary={pending ? t("rework.adminTeams.pendingAdmin") : undefined}
+                          title={pending ? t("rework.adminTeams.pendingAdminHint", { name }) : undefined}
+                          removeAriaLabel={t("rework.adminTeams.createTeam.adminRemove", { name })}
+                          onRemove={() => setAdmins((previous) => previous.filter((u) => u.id !== user.id))}
+                        />
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
-              options={suggestions.map((user) => ({
-                label: `${user.first_name} ${user.last_name} (${user.username})`,
-                value: user,
-                key: user.id,
-              }))}
-              onSelect={(user) => {
-                setAdmins((previous) => [...previous, user]);
-                setAdminQuery("");
-              }}
-            />
-            {admins.length > 0 && (
-              <ul className={styles.adminChipList}>
-                {admins.map((user) => {
-                  const name = `${user.first_name} ${user.last_name}`;
-                  const pending = pendingAdminIds.has(user.id);
-                  return (
-                    <li key={user.id}>
-                      <Chip
-                        label={name}
-                        secondary={pending ? t("rework.adminTeams.pendingAdmin") : undefined}
-                        title={pending ? t("rework.adminTeams.pendingAdminHint", { name }) : undefined}
-                        removeAriaLabel={t("rework.adminTeams.createTeam.adminRemove", { name })}
-                        onRemove={() => setAdmins((previous) => previous.filter((u) => u.id !== user.id))}
-                      />
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </Dialog>
   );
