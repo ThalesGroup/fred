@@ -45,6 +45,8 @@ export const NOTIFICATIONS_PAGE_SIZE = 50;
 
 interface TileHandlers {
   onOpen: (notification: NotificationItem, to: string | null) => void;
+  /** Follows the link without discarding the notification. */
+  onFollow: (to: string | null) => void;
   onAction: (notification: NotificationItem, action: NotificationAction) => void;
   onDismiss: (notification: NotificationItem) => void;
 }
@@ -52,6 +54,7 @@ interface TileHandlers {
 function NotificationListItem({ notification, handlers }: { notification: NotificationItem; handlers: TileHandlers }) {
   const { t } = useTranslation();
   const rendered = renderNotification(notification, t);
+  const pendingDecision = !rendered.handledLabel && rendered.actions.some((action) => action.kind === "call");
   return (
     <NotificationTile
       icon={rendered.icon}
@@ -70,7 +73,8 @@ function NotificationListItem({ notification, handlers }: { notification: Notifi
         onClick: () => handlers.onAction(notification, action),
       }))}
       dismissLabel={t("rework.notifications.dismiss")}
-      onOpen={() => handlers.onOpen(notification, rendered.link)}
+      dismissible={!pendingDecision}
+      onOpen={() => (pendingDecision ? handlers.onFollow(rendered.link) : handlers.onOpen(notification, rendered.link))}
       onDismiss={() => handlers.onDismiss(notification)}
     />
   );
@@ -165,10 +169,12 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
     // Acting on a tile is done with it: opening or following it dismisses it.
     onOpen: (notification, to) => {
       handlers.onDismiss(notification);
-      if (to) {
-        onClose(false);
-        navigate(to);
-      }
+      handlers.onFollow(to);
+    },
+    onFollow: (to) => {
+      if (!to) return;
+      onClose(false);
+      navigate(to);
     },
     onAction: (notification, action) => {
       if (action.kind === "navigate") {

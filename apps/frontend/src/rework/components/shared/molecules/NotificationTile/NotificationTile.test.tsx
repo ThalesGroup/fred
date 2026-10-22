@@ -115,6 +115,12 @@ describe("NotificationTile", () => {
     expect(props.onOpen).not.toHaveBeenCalled();
   });
 
+  it("has no close button while it waits for a decision", () => {
+    const { el } = renderTile({ dismissible: false });
+
+    expect(el.querySelector('button[aria-label="Dismiss notification"]')).toBeNull();
+  });
+
   it("shows who handled it instead of its buttons", () => {
     const { el } = renderTile({
       handledLabel: "Handled by Bob",

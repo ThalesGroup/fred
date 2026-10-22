@@ -42,6 +42,8 @@ export interface NotificationTileProps {
   handledLabel?: string;
   actions?: NotificationTileAction[];
   dismissLabel: string;
+  /** False for a pending decision: the user answers it, they don't discard it. */
+  dismissible?: boolean;
   onOpen: () => void;
   onDismiss: () => void;
 }
@@ -63,6 +65,7 @@ export default function NotificationTile({
   handledLabel,
   actions = [],
   dismissLabel,
+  dismissible = true,
   onOpen,
   onDismiss,
 }: NotificationTileProps) {
@@ -108,15 +111,17 @@ export default function NotificationTile({
       </div>
       <div className={styles.trail}>
         {unread && <span className={styles.dot} aria-hidden="true" />}
-        <IconButton
-          type="button"
-          variant="icon"
-          size="medium"
-          color="on-surface-retreat"
-          icon={{ category: "outlined", type: "close" }}
-          aria-label={dismissLabel}
-          onClick={onDismiss}
-        />
+        {dismissible && (
+          <IconButton
+            type="button"
+            variant="icon"
+            size="medium"
+            color="on-surface-retreat"
+            icon={{ category: "outlined", type: "close" }}
+            aria-label={dismissLabel}
+            onClick={onDismiss}
+          />
+        )}
       </div>
     </li>
   );
