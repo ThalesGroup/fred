@@ -14,10 +14,13 @@
 
 // Whether slides can be labelled by a vision model for this agent: its
 // resolved chat model or any profile the team may pick must declare vision.
+// The platform template offers the same list, computed without a team.
 
+import { useMemo } from "react";
 import {
   useAvailableModelProfilesQuery,
   useEffectiveChatModelQuery,
+  usePlatformAvailableModelProfilesQuery,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { AvailableModelProfile, EffectiveChatModel } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 
@@ -28,12 +31,20 @@ export interface VisionAvailability {
   visionProfiles: AvailableModelProfile[];
 }
 
+const visionOnly = (profiles: AvailableModelProfile[] | undefined) => (profiles ?? []).filter((p) => p.supports_vision);
+
+/** The platform template's labelling models; the endpoint answers capability managers only. */
+export function usePlatformVisionProfiles(skip: boolean): AvailableModelProfile[] {
+  const { data } = usePlatformAvailableModelProfilesQuery(undefined, { skip });
+  return useMemo(() => visionOnly(data?.profiles), [data]);
+}
+
 export function visionAvailability(
   profiles: AvailableModelProfile[] | undefined,
   effective: EffectiveChatModel | undefined,
   effectiveKnown: boolean,
 ): VisionAvailability {
-  const visionProfiles = (profiles ?? []).filter((p) => p.supports_vision);
+  const visionProfiles = visionOnly(profiles);
   if (visionProfiles.length > 0 || effective?.supports_vision) return { available: true, visionProfiles };
   // Without both answers a missing vision flag proves nothing yet.
   if (profiles === undefined || !effectiveKnown) return { available: null, visionProfiles };

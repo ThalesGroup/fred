@@ -24,7 +24,7 @@ Linked issue: #2987 (first slice). Ships inside the ppt_builder PR (#2679).
 
 ## 4. Control plane
 
-- [x] 4.1 Add `route_base_url` and `vision_profile_ids` to `CapabilityEnablementItem`; verify with control-plane tests, then regenerate `openapi.json` and `controlPlaneOpenApi.ts`.
+- [x] 4.1 Add `route_base_url` to `CapabilityEnablementItem` and the team-free `GET /routing-policy/available-models` (D8); verify with control-plane tests, then regenerate `openapi.json` and `controlPlaneOpenApi.ts`.
 - [x] 4.2 Add a dated `CONTROL-PLANE-PRODUCT-CONTRACT.md` entry for 4.1.
 
 ## 5. Frontend

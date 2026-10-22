@@ -47,6 +47,7 @@ from fred_sdk.contracts.capability import (
 )
 from fred_sdk.contracts.runtime import (
     CapabilityModelPort,
+    CapabilityModelUnavailableError,
     CapabilityTeamAuthorizer,
     RuntimeServices,
     capability_platform_model,
@@ -64,6 +65,10 @@ _BASE = "/capabilities/ppt_builder/platform"
 class _Port(CapabilityModelPort):
     async def ainvoke(self, messages, *, profile_id=None, require_vision=False):
         raise AssertionError("label_inventory is faked here")
+
+    async def require_vision_profile(self, profile_id: str) -> None:
+        if profile_id != "chat.vision":
+            raise CapabilityModelUnavailableError(f"{profile_id!r} is not offered.")
 
 
 PORT = _Port()
@@ -540,3 +545,28 @@ async def test_a_stored_pattern_edit_never_reaches_the_default_template(built_on
     )
     _middleware(overridden)
     assert built_on[-1] is builtin_template()[1]
+
+
+@pytest.mark.asyncio
+async def test_a_vision_model_the_drawer_does_not_offer_is_422(analysis_db):
+    await _uploaded()
+    before = await _rows()
+    async with _client(manager=True) as client:
+        for response in (
+            await _upload(
+                client, OTHER, use_vision=True, vision_profile_id="chat.text"
+            ),
+            await client.post(
+                f"{_BASE}/analysis",
+                json={"use_vision": True, "vision_profile_id": "chat.text"},
+            ),
+        ):
+            assert response.status_code == 422
+        assert await _rows() == before  # no replacement started
+        # Rules labelling never reads the profile: nothing to refuse.
+        rules = await client.post(
+            f"{_BASE}/analysis",
+            json={"use_vision": False, "vision_profile_id": "chat.text"},
+        )
+        assert rules.status_code == 200
+    await drain()

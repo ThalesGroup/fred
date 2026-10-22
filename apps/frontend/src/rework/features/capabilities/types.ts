@@ -205,8 +205,6 @@ export type CapabilityHitlRenderer = ComponentType<CapabilityHitlRendererProps>;
 export interface CapabilityPlatformPanelProps {
   /** This capability's row of the admin catalogue. */
   capability: CapabilityEnablementItem;
-  /** The whole admin catalogue: its model rows feed model pickers. */
-  allCapabilities: readonly CapabilityEnablementItem[];
   /** A platform admin or feature manager: write actions are shown. */
   canManage: boolean;
 }

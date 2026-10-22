@@ -26,6 +26,9 @@ from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
+    RebacReference,
+    Relation,
+    RelationType,
 )
 from fred_core.security.structure import KeycloakUser
 from fred_runtime.app import agent_app as agent_app_module
@@ -439,6 +442,52 @@ def test_platform_port_has_no_team_and_uses_the_pod_default() -> None:
     assert _ask(port) == "text-model"
     assert _ask(port, profile_id=VISION_PROFILE, require_vision=True) == "vision-model"
     assert platform_ports.platform_model_port(port._factory, None) is port
+
+
+class _OrgMarkers:
+    """ReBAC fake answering the org `default_on` read only."""
+
+    enabled = True
+
+    def __init__(self, default_on: set[str]) -> None:
+        self.default_on = default_on
+
+    async def list_direct_relations(self, resource, *, subject=None):
+        if resource.id not in self.default_on:
+            return []
+        return [
+            Relation(
+                subject=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+                relation=RelationType.DEFAULT_ON,
+                resource=resource,
+            )
+        ]
+
+
+def _check(port: RoutedCapabilityModelPort, profile_id: str) -> None:
+    asyncio.run(port.require_vision_profile(profile_id))
+
+
+def test_platform_vision_check_needs_a_vision_model_on_for_every_team() -> None:
+    port = platform_ports.platform_model_port(
+        _factory(),
+        _OrgMarkers({VISION_ID}),  # type: ignore[arg-type]
+    )
+    _check(port, VISION_PROFILE)
+    for refused in (TEXT_PROFILE, "chat.ghost"):
+        with pytest.raises(CapabilityModelUnavailableError):
+            _check(port, refused)
+    off = platform_ports.platform_model_port(_factory(), _OrgMarkers(set()))  # type: ignore[arg-type]
+    with pytest.raises(CapabilityModelUnavailableError, match="every team"):
+        _check(off, VISION_PROFILE)
+
+
+def test_team_vision_check_follows_the_usable_models(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _check(_port(monkeypatch, usable=frozenset({VISION_ID})), VISION_PROFILE)
+    with pytest.raises(CapabilityModelUnavailableError):
+        _check(_port(monkeypatch, usable=frozenset({TEXT_ID})), VISION_PROFILE)
 
 
 @pytest.mark.usefixtures("runtime_context")

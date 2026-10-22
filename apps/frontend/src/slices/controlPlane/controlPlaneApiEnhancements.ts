@@ -837,6 +837,10 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy" as const, id: arg.teamId }],
     },
+    // Model enablement changes refetch it, like the team lists above.
+    getPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGet: {
+      providesTags: [{ type: "ControlPlaneRoutingPolicy" as const, id: "PLATFORM" }],
+    },
     // The composer's model label (#2387). Tagged under the same
     // ControlPlaneRoutingPolicy/teamId entity the policy read and write already
     // use, so saving a routing policy refetches it: without that, the composer
@@ -1053,6 +1057,9 @@ export const {
   // Routing-policy picker option set (#2167).
   useGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery:
     useAvailableModelProfilesQuery,
+  // The same option set for a platform-wide choice (capability managers).
+  useGetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetQuery:
+    usePlatformAvailableModelProfilesQuery,
   // The model a chat turn will actually route to — the composer label (#2387).
   useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery: useEffectiveChatModelQuery,
   useLazyGetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetQuery:

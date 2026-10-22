@@ -52,7 +52,7 @@ export function PptBuilderVisionSettings({ disabled, configValues, onConfigChang
     ...vision.visionProfiles.map((profile) => ({
       value: profile.profile_id,
       key: profile.profile_id,
-      label: t(profile.name, { defaultValue: profile.name }),
+      label: profile.display_name ?? profile.name,
     })),
   ];
   // A stored profile that lost vision (or access) still shows, so the author sees what is saved.

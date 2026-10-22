@@ -27,10 +27,6 @@ import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Confirm
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { selectCapabilityBaseUrl, type CapabilityRoutingState } from "../../../../common/capabilityRoutingSlice";
 import { downloadAuthed } from "../../../../utils/downloadUtils";
-import type {
-  AvailableModelProfile,
-  CapabilityEnablementItem,
-} from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { normalizeApiError } from "../../../core/errors/normalizeApiError";
 import type { CapabilityPlatformPanelProps } from "../types";
 import { useCapabilityRouted } from "../useCapabilityRouted";
@@ -49,6 +45,7 @@ import { effectiveInventory, LABELLING_MODEL_KEY, summarize, upsertOverride, USE
 import type { PatternOverride } from "./types";
 import { TemplateGuideLink } from "./PptBuilderTemplatePanel";
 import { uploadPlatformTemplate } from "./uploadPlatformTemplate";
+import { usePlatformVisionProfiles } from "./useVisionAvailability";
 import styles from "./PptBuilderTemplatePanel.module.css";
 
 const POLL_MS = 3000;
@@ -57,21 +54,7 @@ const K = "capability.ppt_builder.platform";
 const inProgress = (analysis: AnalysisStatusResponse | null | undefined) =>
   analysis?.status === "pending" || analysis?.status === "running";
 
-/** The catalogue's vision-capable model profiles, offered for labelling the platform template. */
-export function platformVisionProfiles(items: readonly CapabilityEnablementItem[]): AvailableModelProfile[] {
-  return items.flatMap((item) => {
-    const ids = item.vision_profile_ids ?? [];
-    const name = item.model_display_name ?? item.name;
-    return ids.map((profileId) => ({
-      profile_id: profileId,
-      capability_id: item.id,
-      name: ids.length > 1 ? `${name} (${profileId})` : name,
-      supports_vision: true,
-    }));
-  });
-}
-
-export function PptBuilderPlatformPanel({ allCapabilities, canManage }: CapabilityPlatformPanelProps) {
+export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelProps) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
   const routed = useCapabilityRouted(CAPABILITY_ID);
@@ -97,7 +80,7 @@ export function PptBuilderPlatformPanel({ allCapabilities, canManage }: Capabili
   const [visionDraft, setVisionDraft] = useState<Record<string, unknown> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const visionProfiles = useMemo(() => platformVisionProfiles(allCapabilities), [allCapabilities]);
+  const visionProfiles = usePlatformVisionProfiles(!canManage);
   const visionValues = visionDraft ?? {
     [USE_VISION_KEY]: platform?.use_vision ?? true,
     [LABELLING_MODEL_KEY]: platform?.vision_profile_id ?? null,

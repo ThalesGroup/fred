@@ -204,14 +204,6 @@ class CapabilityEnablementItem(BaseModel):
     model_context_window_tokens: int | None = Field(default=None, gt=0)
     model_max_input_tokens: int | None = Field(default=None, gt=0)
     model_max_output_tokens: int | None = Field(default=None, gt=0)
-    vision_profile_ids: list[str] = Field(
-        default_factory=list,
-        description=(
-            'For a `kind="model"` row: the profile ids of this model that '
-            "declare `supports_vision`, so a capability's platform settings can "
-            "offer only image-reading models. Always empty for other kinds."
-        ),
-    )
     route_base_url: str | None = Field(
         default=None,
         description=(

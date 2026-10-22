@@ -443,10 +443,8 @@ async def test_failed_app_grant_invalidates_only_the_app_row() -> None:
 
 
 @pytest.mark.asyncio
-async def test_build_enablement_item_carries_route_base_url_and_vision_profiles() -> (
-    None
-):
-    """A capability's platform panel reaches its pod and offers vision models."""
+async def test_build_enablement_item_carries_route_base_url() -> None:
+    """A capability's platform panel reaches its pod."""
     engine = CountingRebacEngine(direct_relations=[])
     tool = await _build_enablement_item(
         _entry("ppt_builder").model_copy(
@@ -459,18 +457,3 @@ async def test_build_enablement_item_carries_route_base_url_and_vision_profiles(
         reasoning_enabled_ids=frozenset(),
     )
     assert tool.route_base_url == "/agents/capabilities/ppt_builder"
-    assert tool.vision_profile_ids == []
-    model = await _build_enablement_item(
-        _entry("model__openai__gpt").model_copy(
-            update={
-                "kind": "model",
-                "model_vision_profile_ids": ("chat.vision",),
-            }
-        ),
-        rebac=engine,
-        total_team_count=1,
-        total_personal_space_count=1,
-        impact={},
-        reasoning_enabled_ids=frozenset(),
-    )
-    assert model.vision_profile_ids == ["chat.vision"] and model.route_base_url is None

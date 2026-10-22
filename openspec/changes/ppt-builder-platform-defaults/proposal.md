@@ -49,7 +49,7 @@ None.
   - new `/platform*` routes;
   - one Alembic revision in its own migrations: nullable `template_filename` and `overrides_json` columns;
   - template resolution in the middleware, through a pod-local snapshot.
-- **Control plane:** `CapabilityEnablementItem` gains `route_base_url` and `vision_profile_ids`, with a `CONTROL-PLANE-PRODUCT-CONTRACT.md` entry and a regenerated `controlPlaneOpenApi.ts`.
+- **Control plane:** `CapabilityEnablementItem` gains `route_base_url`, and the agent form's model list gets a team-free variant for capability managers, with a `CONTROL-PLANE-PRODUCT-CONTRACT.md` entry and a regenerated `controlPlaneOpenApi.ts`.
 - **Frontend:**
   - a platform panel registry for capability plugins;
   - the FeaturesPage settings action;

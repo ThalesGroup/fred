@@ -46,12 +46,17 @@ The platform SHALL always have exactly one default template for ppt_builder. Its
 
 ### Requirement: Platform template vision model
 
-A capability manager SHALL choose the vision model that labels the platform default template, among the vision-capable models of the catalogue, or rules only. Until a manager chooses one, it SHALL be the platform's default model. The choice SHALL apply to the platform template only: agent templates keep their own labelling settings.
+A capability manager SHALL choose the vision model that labels the platform default template, among the vision-capable models the agent form offers, computed without a team (models enabled for every team, chat profiles available on every pod), or rules only. A model outside that list SHALL be refused. Until a manager chooses one, it SHALL be the platform's default model. The choice SHALL apply to the platform template only: agent templates keep their own labelling settings.
 
 #### Scenario: Default choice
 
 - **WHEN** a manager uploads a template without changing the vision model
 - **THEN** its example slides are labelled by the platform's default model, or by rules only when that model cannot read images
+
+#### Scenario: Model outside the list
+
+- **WHEN** a manager uploads or re-runs with a vision model that is not offered
+- **THEN** the request is refused with 422 and no analysis starts
 
 #### Scenario: Manager changes the model
 

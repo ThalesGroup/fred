@@ -528,7 +528,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         `settings`: declining to add it would never reach the model.
         """
         selection = (
-            self._usable_profile_selection(profile_id, binding)
+            self.usable_profile_selection(profile_id, binding)
             if profile_id is not None
             else None
         ) or self.select(
@@ -607,7 +607,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         profile = self._resolver.profile_or_none(selection.profile_id)
         return profile is not None and profile.supports_vision
 
-    def _usable_profile_selection(
+    def usable_profile_selection(
         self, profile_id: str, binding: BoundRuntimeContext
     ) -> ModelSelection | None:
         """An explicitly requested chat profile, or None when it is unknown,

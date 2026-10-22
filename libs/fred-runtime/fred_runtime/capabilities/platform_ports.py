@@ -25,12 +25,15 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 
 from fastapi import Depends, HTTPException, Request, status
 from fred_core.common.team_id import is_personal_team_ref, personal_team_id
-from fred_core.security.models import AuthorizationError
+from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.oidc import get_current_user
+from fred_core.security.rebac.capability_authz import CapabilityEnablementFacts
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
+    RebacDisabledResult,
     RebacEngine,
+    RebacReference,
     TeamPermission,
 )
 from fred_core.security.structure import KeycloakUser
@@ -154,6 +157,26 @@ class RoutedCapabilityModelPort(CapabilityModelPort):
             raise TypeError(f"Chat model returned {type(result).__name__}.")
         return result
 
+    async def require_vision_profile(self, profile_id: str) -> None:
+        """Without a team, the model must also be on for every team: the same
+        rule as control-plane's platform model list, minus the pod coverage
+        only control-plane can see."""
+        factory = self._factory
+        if not isinstance(factory, RoutedChatModelFactory):
+            raise CapabilityModelUnavailableError("No routed chat model on this pod.")
+        binding = await self._usable_binding()
+        selection = factory.usable_profile_selection(profile_id, binding)
+        if selection is None or not factory.supports_vision(selection):
+            raise CapabilityModelUnavailableError(
+                f"Model profile {profile_id!r} is not a vision model this port may use."
+            )
+        if binding.runtime_context.team_id is None and not await _on_for_every_team(
+            self._rebac, selection.capability_id
+        ):
+            raise CapabilityModelUnavailableError(
+                f"Model profile {profile_id!r} is not enabled for every team."
+            )
+
     def _fresh(self) -> BoundRuntimeContext | None:
         if _monotonic() - self._resolved_at < _USABLE_MODELS_TTL_S:
             return self._resolved
@@ -177,6 +200,19 @@ class RoutedCapabilityModelPort(CapabilityModelPort):
             )
             self._resolved, self._resolved_at = resolved, _monotonic()
             return resolved
+
+
+async def _on_for_every_team(rebac: RebacEngine | None, capability_id: str) -> bool:
+    """The org `default_on` marker; without ReBAC nothing is restricted."""
+    if rebac is None or not rebac.enabled:
+        return True
+    relations = await rebac.list_direct_relations(
+        RebacReference(type=Resource.CAPABILITY, id=capability_id),
+        subject=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+    )
+    if isinstance(relations, RebacDisabledResult):
+        return True
+    return CapabilityEnablementFacts.from_relations(relations).default_on
 
 
 async def require_team_permission(

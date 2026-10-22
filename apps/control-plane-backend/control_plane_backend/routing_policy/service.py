@@ -29,7 +29,9 @@ import asyncio
 from fred_core import (
     AuthorizationError,
     KeycloakUser,
+    RebacEngine,
     RebacReference,
+    RelationType,
     Resource,
     TeamPermission,
 )
@@ -54,6 +56,7 @@ from control_plane_backend.capabilities.catalog import (
     model_display_name_overrides,
     universally_available_chat_model_profile_ids,
 )
+from control_plane_backend.capabilities.enablement import has_org_relation
 from control_plane_backend.organization_authz import (
     require_manage_capabilities,
     require_manage_platform_model_binding,
@@ -346,7 +349,7 @@ async def get_team_routing_policy(
 
 async def list_available_model_profiles(
     user: KeycloakUser,
-    team_id: TeamId,
+    team_id: TeamId | None,
     deps: ProductServiceDependencies,
 ) -> AvailableModelProfileList:
     """RFC §13's picker option set: every `kind="model"` profile_id this team
@@ -360,17 +363,30 @@ async def list_available_model_profiles(
     a choice `update_team_routing_policy` would then reject — the two must agree on
     what "available" means, or a team could pick an option here and have the
     save fail.
+
+    Without a team (a platform-wide choice, such as a capability's platform
+    template), the gate is `can_manage_capabilities`, every enabled pod counts,
+    and `can_use` gives way to the model being on for every team.
     """
 
-    team_id = await require_team_access(
-        user, team_id, deps.team_dependencies, [TeamPermission.CAN_READ_MEMEBERS]
-    )
-    await _require_elevated_team_role(user, team_id, deps)
-    source_runtime_ids = await _team_source_runtime_ids(deps, team_id)
-    stored, reasoning_enabled_ids = await asyncio.gather(
-        deps.get_team_routing_policy_store().get(team_id=team_id),
-        deps.get_model_reasoning_store().list_enabled_model_ids(),
-    )
+    rebac = deps.team_dependencies.rebac
+    if team_id is None:
+        await require_manage_capabilities(rebac, user)
+        source_runtime_ids: set[str] = set()
+        stored = None
+        reasoning_enabled_ids = (
+            await deps.get_model_reasoning_store().list_enabled_model_ids()
+        )
+    else:
+        team_id = await require_team_access(
+            user, team_id, deps.team_dependencies, [TeamPermission.CAN_READ_MEMEBERS]
+        )
+        await _require_elevated_team_role(user, team_id, deps)
+        source_runtime_ids = await _team_source_runtime_ids(deps, team_id)
+        stored, reasoning_enabled_ids = await asyncio.gather(
+            deps.get_team_routing_policy_store().get(team_id=team_id),
+            deps.get_model_reasoning_store().list_enabled_model_ids(),
+        )
     # `_pod_catalog_fetch_scope` de-dupes the pod `/agents/models-catalog`
     # fetch across these catalog reads: they are views of one snapshot.
     from control_plane_backend.product.service import _pod_catalog_fetch_scope
@@ -385,7 +401,11 @@ async def list_available_model_profiles(
             if stored is None or stored.chat_default_profile_id is None
             else []
         )
-    usable = await usable_capability_ids(deps.team_dependencies.rebac, team_id)
+    usable = (
+        await _models_on_for_every_team(rebac, catalog)
+        if team_id is None
+        else await usable_capability_ids(rebac, team_id)
+    )
     profiles = [
         AvailableModelProfile(
             profile_id=profile_id,
@@ -412,6 +432,22 @@ async def list_available_model_profiles(
     return AvailableModelProfileList(
         profiles=profiles, effective_default_profile_id=effective_default
     )
+
+
+async def _models_on_for_every_team(
+    rebac: RebacEngine, catalog: dict[str, CapabilityCatalogEntry]
+) -> set[str] | None:
+    """Model ids holding the org `default_on` marker; `None` without ReBAC."""
+    if not rebac.enabled:
+        return None
+    model_ids = [entry.id for entry in catalog.values() if entry.kind == "model"]
+    flags = await asyncio.gather(
+        *(
+            has_org_relation(rebac, model_id, RelationType.DEFAULT_ON)
+            for model_id in model_ids
+        )
+    )
+    return {model_id for model_id, on in zip(model_ids, flags) if on}
 
 
 async def resolve_effective_chat_model(

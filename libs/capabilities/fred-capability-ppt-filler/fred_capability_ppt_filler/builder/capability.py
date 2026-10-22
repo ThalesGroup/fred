@@ -50,6 +50,7 @@ from fred_sdk.contracts.capability import (
 from fred_sdk.contracts.models import FieldSpec, UIHints
 from fred_sdk.contracts.runtime import (
     CapabilityModelPort,
+    CapabilityModelUnavailableError,
     CapabilityTeamAuthorizer,
     capability_platform_model,
     capability_team_authorizer,
@@ -254,6 +255,18 @@ async def _platform_response(*, recover: bool = False) -> PlatformTemplateRespon
     )
 
 
+async def _platform_labelling_key(
+    port: CapabilityModelPort, use_vision: bool, profile_id: Optional[str]
+) -> str:
+    """422 for a vision model the platform drawer would not offer."""
+    if use_vision and profile_id:
+        try:
+            await port.require_vision_profile(profile_id)
+        except CapabilityModelUnavailableError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return labelling_key(use_vision, profile_id or None)
+
+
 def _remember_platform_port(port: CapabilityModelPort) -> None:
     # Both rows: a replacement's job, and the outdated refresh of the current one.
     analysis_job.remember_port(PLATFORM_NEXT_ID, port)
@@ -346,8 +359,8 @@ def _build_router() -> APIRouter:
         """Replace the platform default template; the current one stays in use
         until the replacement's analysis succeeds."""
         await authorizer.require_capability_manager()
+        key = await _platform_labelling_key(port, use_vision, vision_profile_id)
         content = await _readable_upload(file)
-        key = labelling_key(use_vision, vision_profile_id or None)
         store = get_analysis_store()
         current = await store.get(PLATFORM_ID, with_inventory=False)
         if (
@@ -383,8 +396,10 @@ def _build_router() -> APIRouter:
         """Analyse the platform template again, with this vision choice: the
         failed replacement, else the current template, which stays in use."""
         await authorizer.require_capability_manager()
+        key = await _platform_labelling_key(
+            port, body.use_vision, body.vision_profile_id
+        )
         store = get_analysis_store()
-        key = labelling_key(body.use_vision, body.vision_profile_id or None)
         _remember_platform_port(port)
         replacement = await store.get(PLATFORM_NEXT_ID, with_inventory=False)
         if replacement is not None:

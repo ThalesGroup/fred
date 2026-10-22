@@ -7235,4 +7235,12 @@ returns 503. Without a team no usable-models restriction applies, so only routes
 `require_capability_manager()` should use it. `profile_id=None` resolves to the pod's
 default chat profile. A platform chat binding is not applied, as on the save path.
 
+`CapabilityModelPort.require_vision_profile(profile_id)` is a non-abstract method that
+raises `CapabilityModelUnavailableError` unless the profile is a vision chat profile
+the port may use; the SDK default refuses. With a team it follows the team's usable
+models; without one the model must hold the org `default_on` marker (open without
+ReBAC). This is the pod-side half of control-plane's team-free model list
+(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §70), minus pod coverage, which only
+control-plane sees. ppt_builder's `/platform*` writes return 422 on a refusal.
+
 Acceptance scenarios: `openspec/changes/ppt-builder-platform-defaults/`.

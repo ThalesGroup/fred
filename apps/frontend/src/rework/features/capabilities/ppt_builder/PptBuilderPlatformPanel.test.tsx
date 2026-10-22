@@ -34,6 +34,8 @@ const h = vi.hoisted(() => ({
   upload: vi.fn(),
   showSuccess: vi.fn(),
   showError: vi.fn(),
+  platformModels: vi.fn(),
+  selectOptions: undefined as undefined | { label: string; value: string }[],
   review: undefined as
     | undefined
     | { readOnly: boolean; onOverride: (id: string, patch: object) => void; onClose: () => void },
@@ -61,7 +63,15 @@ vi.mock("./uploadPlatformTemplate", () => ({ uploadPlatformTemplate: h.upload })
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showSuccess: h.showSuccess, showError: h.showError }),
 }));
-vi.mock("@shared/molecules/Select/Select.tsx", () => ({ default: () => null }));
+vi.mock("@shared/molecules/Select/Select.tsx", () => ({
+  default: (props: { options: { label: string; value: string }[] }) => {
+    h.selectOptions = props.options;
+    return null;
+  },
+}));
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  usePlatformAvailableModelProfilesQuery: h.platformModels,
+}));
 vi.mock("./PatternReviewDialog", () => ({
   PatternReviewDialog: (props: NonNullable<typeof h.review>) => {
     h.review = props;
@@ -78,7 +88,7 @@ vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialog", () => ({
     ) : null,
 }));
 
-import { platformVisionProfiles, PptBuilderPlatformPanel } from "./PptBuilderPlatformPanel";
+import { PptBuilderPlatformPanel } from "./PptBuilderPlatformPanel";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -120,11 +130,7 @@ function show(platform: PlatformTemplateResponse, canManage = true) {
   act(() =>
     root.render(
       <MemoryRouter>
-        <PptBuilderPlatformPanel
-          capability={CAPABILITY as CapabilityEnablementItem}
-          allCapabilities={[]}
-          canManage={canManage}
-        />
+        <PptBuilderPlatformPanel capability={CAPABILITY as CapabilityEnablementItem} canManage={canManage} />
       </MemoryRouter>,
     ),
   );
@@ -136,7 +142,9 @@ const button = (label: string) =>
 
 beforeEach(() => {
   for (const fn of [h.refetch, h.rerun, h.reset, h.saveOverrides, h.upload, h.showSuccess, h.showError]) fn.mockReset();
+  h.platformModels.mockReset().mockReturnValue({ data: undefined });
   h.review = undefined;
+  h.selectOptions = undefined;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -220,14 +228,28 @@ describe("PptBuilderPlatformPanel", () => {
   });
 });
 
-describe("platformVisionProfiles", () => {
-  it("offers each vision profile of the catalogue's model rows", () => {
-    const rows = [
-      { ...CAPABILITY, id: "m1", name: "M1", model_display_name: "Model one", vision_profile_ids: ["p1"] },
-      { ...CAPABILITY, id: "m2", name: "M2", vision_profile_ids: [] },
-    ] as CapabilityEnablementItem[];
-    expect(platformVisionProfiles(rows)).toEqual([
-      { profile_id: "p1", capability_id: "m1", name: "Model one", supports_vision: true },
+describe("labelling models", () => {
+  it("offers the team-free list's vision profiles, named like the agent form", () => {
+    h.platformModels.mockReturnValue({
+      data: {
+        profiles: [
+          { profile_id: "p1", capability_id: "m1", name: "m1-wire", display_name: "Model one", supports_vision: true },
+          { profile_id: "p2", capability_id: "m2", name: "m2-wire", supports_vision: true },
+          { profile_id: "p3", capability_id: "m3", name: "m3-wire", supports_vision: false },
+        ],
+      },
+    });
+    show({ analysis: analysis(), template_filename: "brand.pptx" });
+    expect(h.platformModels).toHaveBeenLastCalledWith(undefined, { skip: false });
+    expect(h.selectOptions?.map((o) => [o.value, o.label])).toEqual([
+      ["", `${K}.defaultModel`],
+      ["p1", "Model one"],
+      ["p2", "m2-wire"],
     ]);
+  });
+
+  it("does not ask for the list without the capability-manager right", () => {
+    show({ analysis: analysis(), template_filename: "brand.pptx" }, false);
+    expect(h.platformModels).toHaveBeenLastCalledWith(undefined, { skip: true });
   });
 });

@@ -28,11 +28,10 @@ import { capabilityLabel } from "./capabilityEnablement";
 
 interface Props {
   capability: CapabilityEnablementItem | null;
-  allCapabilities: readonly CapabilityEnablementItem[];
   onClose: () => void;
 }
 
-export function CapabilityPlatformDrawer({ capability, allCapabilities, onClose }: Props) {
+export function CapabilityPlatformDrawer({ capability, onClose }: Props) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const { canManageFeatures } = useUserCapabilities();
@@ -53,9 +52,7 @@ export function CapabilityPlatformDrawer({ capability, allCapabilities, onClose 
       }
       width="480px"
     >
-      {capability && Panel && (
-        <Panel capability={capability} allCapabilities={allCapabilities} canManage={canManageFeatures} />
-      )}
+      {capability && Panel && <Panel capability={capability} canManage={canManageFeatures} />}
     </InlineDrawer>
   );
 }

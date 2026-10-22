@@ -966,11 +966,7 @@ export default function FeaturesPage() {
         onCancel={() => setNoDefaultModalOpen(false)}
       />
 
-      <CapabilityPlatformDrawer
-        capability={platformCapability}
-        allCapabilities={allCapabilities}
-        onClose={() => setPlatformCapabilityId(null)}
-      />
+      <CapabilityPlatformDrawer capability={platformCapability} onClose={() => setPlatformCapabilityId(null)} />
 
       <SuspendedInstancesDrawer
         capability={suspendedCapability}

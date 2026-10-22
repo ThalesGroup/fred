@@ -110,18 +110,19 @@ See proposal.md for the motivation. Current state that shapes the approach:
 
 ### D8. Control plane exposes what the admin page needs
 
-**Decision.** `CapabilityEnablementItem` gains two fields:
-- `route_base_url`, from the catalogue entry;
-- `vision_profile_ids`, from `entry.model_vision_profile_ids`, the mirror of `thinking_profile_ids`.
+**Decision.**
+- `CapabilityEnablementItem` gains `route_base_url`, from the catalogue entry. FeaturesPage dispatches the base URLs as `AgentFormBody` does.
+- The vision picker uses the agent form's model list, computed without a team: `list_available_model_profiles` with no team skips `can_use` but keeps models on for every team (`default_on`), chat profiles available on every enabled pod. `GET /routing-policy/available-models` exposes it to capability managers; the drawer filters `supports_vision` like the form. One list, so both selectors offer the same models, labelled `display_name ?? name`.
+- The pod refuses (422) a platform `vision_profile_id` its teamless port would not offer (`CapabilityModelPort.require_vision_profile`).
 
-FeaturesPage dispatches the base URLs as `AgentFormBody` does, and builds the vision picker from the model rows. Dated entry in `CONTROL-PLANE-PRODUCT-CONTRACT.md`, plus a regenerated client.
+Dated entry in `CONTROL-PLANE-PRODUCT-CONTRACT.md`, plus a regenerated client.
 
 ### D9. Frontend: a platform panel registry, not a manifest field
 
 **Decision.**
 - **Plugin field.** `CapabilityUiPlugin` gets an optional `platformPanel`, looked up through `platformPanelFor(id)`, which mirrors `configWidgetRegistry`.
 - **FeaturesPage.** It shows a settings icon button in the row actions only when a panel exists, and mounts the panel in an `InlineDrawer`.
-- **Drawer.** It reuses the template card, the vision selector fed from the admin catalogue, and `PatternReviewDialog` ("Review the slides"), editable for capability managers and saved through `PUT /platform/overrides`. The reset uses `ConfirmationDialog`.
+- **Drawer.** It reuses the template card, the vision selector fed from the team-free model list (D8), and `PatternReviewDialog` ("Review the slides"), editable for capability managers and saved through `PUT /platform/overrides`. The reset uses `ConfirmationDialog`.
 - **Permission.** Writes are shown to capability managers only, from the bootstrap's platform roles.
 - **Agent form.** `usePptBuilderAnalysis` queries `/platform` in its no-template branch and shows "Template set by the administrator" with the file name.
 - **Upload.** The sanctioned raw multipart `fetch` with the generated response type.

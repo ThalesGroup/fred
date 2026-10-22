@@ -26,6 +26,7 @@ from fred_sdk.contracts.runtime import (
     CAPABILITY_PLATFORM_MODEL_STATE,
     CAPABILITY_TEAM_AUTHORIZER_STATE,
     CapabilityModelPort,
+    CapabilityModelUnavailableError,
     CapabilityTeamAuthorizer,
     RuntimeServices,
     capability_platform_model,
@@ -69,6 +70,11 @@ def test_port_is_keyword_only_after_messages() -> None:
         port.ainvoke([HumanMessage(content="hi")], profile_id="p", require_vision=True)
     )
     assert reply.content == "1:p:True"
+
+
+def test_vision_profile_check_refuses_unless_overridden() -> None:
+    with pytest.raises(CapabilityModelUnavailableError):
+        asyncio.run(_EchoPort().require_vision_profile("chat.vision"))
 
 
 def test_team_authorizer_dependency_fails_closed_when_unbound() -> None:

@@ -67,7 +67,7 @@ function mount(manager: boolean) {
   h.canManageFeatures = manager;
   h.panelProps = undefined;
   const root = createRoot(document.createElement("div"));
-  act(() => root.render(<CapabilityPlatformDrawer capability={capability} allCapabilities={[]} onClose={() => {}} />));
+  act(() => root.render(<CapabilityPlatformDrawer capability={capability} onClose={() => {}} />));
   act(() => root.unmount());
 }
 

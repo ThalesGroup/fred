@@ -608,6 +608,14 @@ class CapabilityModelPort(ABC):
     ) -> AIMessage:
         """Run one chat completion and return the model's message."""
 
+    async def require_vision_profile(self, profile_id: str) -> None:
+        """Raise `CapabilityModelUnavailableError` unless `profile_id` is a
+        vision chat profile this port may use, without calling the model.
+        Refuses unless an implementer overrides it."""
+        raise CapabilityModelUnavailableError(
+            f"Model profile {profile_id!r} cannot be checked here."
+        )
+
 
 # Request-state keys under which the pod binds the caller's authorizer and the
 # teamless model port before a capability route runs.
