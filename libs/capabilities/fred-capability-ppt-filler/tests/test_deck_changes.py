@@ -348,7 +348,9 @@ async def test_a_flattened_replace_is_built_as_its_slide(monkeypatch, deck_plan_
         changes=[{"op": "replace", "slide": 2, "title": "Plan", "bullets": ["A", "B"]}]
     )
     assert not result.is_error, text
-    stored = DeckPlan.model_validate_json(deck_plan_store.plans[("sess-9", "inst-7")])
+    stored = DeckPlan.model_validate_json(
+        deck_plan_store.plans[("sess-9", "00000000-0000-4000-8000-000000000007")]
+    )
     assert (stored.slides[1].title, stored.slides[1].bullets) == ("Plan", ["A", "B"])
 
 
@@ -386,7 +388,7 @@ async def test_a_text_replace_keeps_the_replaced_slides_design(
     ]
     text, result = await _Turn(monkeypatch, workspace).build(slides=deck)
     assert not result.is_error, text
-    key = ("sess-9", "inst-7")
+    key = ("sess-9", "00000000-0000-4000-8000-000000000007")
     stored = DeckPlan.model_validate_json(deck_plan_store.plans[key])
     built_on = stored.slides[1].built_on
     assert built_on in ("layout:2", "layout:5")
@@ -428,7 +430,9 @@ async def test_a_later_turn_edit_keeps_every_other_slide_identical(
     text, result = await first.build(slides=deck, file_name="Kick off")
     assert not result.is_error, text
     (delivered,) = first.rendered
-    assert list(deck_plan_store.plans) == [("sess-9", "inst-7")]
+    assert list(deck_plan_store.plans) == [
+        ("sess-9", "00000000-0000-4000-8000-000000000007")
+    ]
 
     # The next turn is another tool instance, possibly on another pod: the base
     # comes from the store.
@@ -806,7 +810,9 @@ async def test_a_deck_without_session_keeps_its_base_for_the_turn_only(monkeypat
     monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     config, _ = _configured()
     ctx = CapabilityContext(
-        identity=CapabilityIdentity(user_id="u-1", agent_instance_id="inst-7"),
+        identity=CapabilityIdentity(
+            user_id="u-1", agent_instance_id="00000000-0000-4000-8000-000000000007"
+        ),
         config=config,
         turn_options=EmptyModel(),
         services=RuntimeServices(workspace_fs=FakeWorkspace()),
@@ -937,14 +943,18 @@ async def test_a_split_list_part_left_alone_drops_its_part_number(
     }
     text, result = await _Turn(monkeypatch, workspace).build(changes=[inserted])
     assert not result.is_error, text
-    stored = DeckPlan.model_validate_json(deck_plan_store.plans[("sess-9", "inst-7")])
+    stored = DeckPlan.model_validate_json(
+        deck_plan_store.plans[("sess-9", "00000000-0000-4000-8000-000000000007")]
+    )
     titles = [s.title for s in stored.slides]
     assert titles == ["Kick-off", "Method", "Aside", "Method", "Contact"]
     # Dropped, a part number never comes back: the titles are the slides' own.
     moved = {"op": "move", "slide": 3, "after": 4}
     text, result = await _Turn(monkeypatch, workspace).build(changes=[moved])
     assert not result.is_error, text
-    stored = DeckPlan.model_validate_json(deck_plan_store.plans[("sess-9", "inst-7")])
+    stored = DeckPlan.model_validate_json(
+        deck_plan_store.plans[("sess-9", "00000000-0000-4000-8000-000000000007")]
+    )
     assert [s.title for s in stored.slides][1:4] == ["Method", "Method", "Aside"]
 
 
@@ -965,7 +975,9 @@ async def test_a_split_list_is_stored_as_the_delivered_deck(
     (rendered,) = first.rendered
     titles = ["Kick-off", "Method (1/2)", "Method (2/2)", "Contact"]
     assert [s.title for s in rendered.slides] == titles
-    stored = DeckPlan.model_validate_json(deck_plan_store.plans[("sess-9", "inst-7")])
+    stored = DeckPlan.model_validate_json(
+        deck_plan_store.plans[("sess-9", "00000000-0000-4000-8000-000000000007")]
+    )
     assert _dumps(stored) == _dumps(rendered)
     assert [s.kind for s in stored.slides[1:3]] == ["process", "process"]
 
@@ -998,7 +1010,9 @@ async def test_a_continuation_is_numbered_at_render_from_its_first_part(
     text, result = await _Turn(monkeypatch, workspace).build(slides=[COVER, method])
     assert not result.is_error, text
     assert (numbers(2), numbers(3)) == (["1", "2", "3"], ["4", "5"])
-    stored = DeckPlan.model_validate_json(deck_plan_store.plans[("sess-9", "inst-7")])
+    stored = DeckPlan.model_validate_json(
+        deck_plan_store.plans[("sess-9", "00000000-0000-4000-8000-000000000007")]
+    )
     assert [i.number for i in stored.slides[2].items] == [None, None]
     text, result = await _Turn(monkeypatch, workspace).build(
         changes=[{"op": "edit", "slide": 2, "field": "items[0]", "value": None}]
@@ -1190,7 +1204,9 @@ async def test_like_gives_a_slide_the_design_of_another(monkeypatch, deck_plan_s
     )
     assert not result.is_error and text.startswith(tools_mod._DELIVERED), text
     assert used[-1][6] == used[-1][4]
-    stored = DeckPlan.model_validate_json(deck_plan_store.plans[("sess-9", "inst-7")])
+    stored = DeckPlan.model_validate_json(
+        deck_plan_store.plans[("sess-9", "00000000-0000-4000-8000-000000000007")]
+    )
     assert stored.slides[6].built_on == stored.slides[4].built_on
     assert stored.slides[6].asked_design is None and stored.slides[6].asked_from is None
 
@@ -1298,7 +1314,9 @@ async def test_design_fields_sent_by_the_model_are_ignored(
     )
     assert not result.is_error, text
     assert used[-1][1] != "layout:5"
-    stored = DeckPlan.model_validate_json(deck_plan_store.plans[("sess-9", "inst-7")])
+    stored = DeckPlan.model_validate_json(
+        deck_plan_store.plans[("sess-9", "00000000-0000-4000-8000-000000000007")]
+    )
     assert stored.slides[1].built_on == used[-1][1]
 
 

@@ -221,14 +221,14 @@ async def test_a_rerun_takes_the_vision_choice_and_leaves_agents_alone(
 ):
     store = get_analysis_store()
     await store.start(
-        instance_id="inst-7",
+        instance_id="00000000-0000-4000-8000-000000000007",
         team_id="team-42",
         saved_by="u-1",
         template_sha256=SHA,
         labelling_key="rules",
         template=TEMPLATE,
     )
-    agent_before = await store.get("inst-7")
+    agent_before = await store.get("00000000-0000-4000-8000-000000000007")
     await _uploaded()
     async with _client(manager=True) as client:
         body = (
@@ -248,7 +248,7 @@ async def test_a_rerun_takes_the_vision_choice_and_leaves_agents_alone(
         await drain()
     assert offline_conversion[1] == (PORT, "chat.vision", True)
     assert offline_conversion[2][2] is False
-    assert await store.get("inst-7") == agent_before
+    assert await store.get("00000000-0000-4000-8000-000000000007") == agent_before
 
 
 @pytest.mark.asyncio
@@ -423,7 +423,9 @@ async def test_fred_template_edits_wait_under_a_platform_template_and_reset_clea
 def _middleware(config: PptBuilderConfig | None = None) -> Any:
     ctx = CapabilityContext(
         identity=CapabilityIdentity(
-            user_id="u-1", team_id="team-42", agent_instance_id="inst-7"
+            user_id="u-1",
+            team_id="team-42",
+            agent_instance_id="00000000-0000-4000-8000-000000000007",
         ),
         config=config or PptBuilderConfig(),
         turn_options=EmptyModel(),
@@ -480,7 +482,10 @@ async def test_a_first_replacement_pending_or_failed_leaves_agents_on_the_fred_t
     await _first_model_call(_middleware())
     assert built_on[-1] is builtin
     verdict = await PptBuilderCapability().readiness(
-        PptBuilderConfig(), CapabilityIdentity(user_id="u", agent_instance_id="i")
+        PptBuilderConfig(),
+        CapabilityIdentity(
+            user_id="u", agent_instance_id="00000000-0000-4000-8000-000000000002"
+        ),
     )
     assert verdict.state == "ready"
 
@@ -543,7 +548,7 @@ async def test_the_agent_template_wins_over_the_platform_default(analysis_db, bu
     await _first_model_call(_middleware())
     platform = built_on[-1]
     own = await get_analysis_store().start(
-        instance_id="inst-7",
+        instance_id="00000000-0000-4000-8000-000000000007",
         team_id="team-42",
         saved_by="u-1",
         template_sha256=SHA,
@@ -551,7 +556,12 @@ async def test_the_agent_template_wins_over_the_platform_default(analysis_db, bu
         template=TEMPLATE,
     )
     await analysis_job.run_analysis(
-        get_analysis_store(), "inst-7", own, TEMPLATE, None, "rules"
+        get_analysis_store(),
+        "00000000-0000-4000-8000-000000000007",
+        own,
+        TEMPLATE,
+        None,
+        "rules",
     )
     middleware = _middleware(PptBuilderConfig(template_sha256=SHA, use_vision=False))
     await _first_model_call(middleware)

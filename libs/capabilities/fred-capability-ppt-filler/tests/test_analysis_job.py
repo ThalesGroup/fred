@@ -55,7 +55,7 @@ from port_fakes import FakeAssets
 
 TEMPLATE = build_showcase_template()
 SHA = hashlib.sha256(TEMPLATE).hexdigest()
-INSTANCE = "inst-7"
+INSTANCE = "00000000-0000-4000-8000-000000000007"
 IDENTITY = CapabilityIdentity(
     user_id="u-1", team_id="team-42", agent_instance_id=INSTANCE
 )
@@ -615,3 +615,72 @@ async def test_uploading_the_same_file_again_keeps_its_analysis(analysis_db):
     after = await store.get(INSTANCE)
     assert after is not None and after.status == "succeeded"
     assert after.job_id == before.job_id
+
+
+def _other_team_ctx(instance_id: str, assets: FakeAssets | None = None) -> SaveContext:
+    return SaveContext(
+        identity=CapabilityIdentity(
+            user_id="u-9", team_id="team-other", agent_instance_id=instance_id
+        ),
+        services=RuntimeServices(
+            agent_assets=assets or FakeAssets(), capability_model=PORT
+        ),
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "instance_id",
+    [analysis_job.PLATFORM_ID, analysis_job.PLATFORM_NEXT_ID, "__builtin__", "inst-7"],
+)
+async def test_a_team_save_never_reaches_a_platform_row_or_a_non_agent_id(
+    analysis_db, instance_id
+):
+    assets = FakeAssets()
+    with pytest.raises(ValueError, match="does not name a saved agent"):
+        await PptBuilderCapability().validate_config(
+            PptBuilderConfig(), _uploads(), _other_team_ctx(instance_id, assets)
+        )
+    assert assets.blobs == {}
+    assert await get_analysis_store().get(instance_id) is None
+
+
+@pytest.mark.asyncio
+async def test_another_team_cannot_rewrite_an_agent_s_template(analysis_db):
+    await _save(PptBuilderConfig(use_vision=False), _uploads())
+    await drain()
+    store = get_analysis_store()
+    before = await store.get(INSTANCE)
+    assert before is not None and before.team_id == "team-42"
+
+    with pytest.raises(analysis_job.AnalysisOwnershipError):
+        await store.start(
+            instance_id=INSTANCE,
+            team_id="team-other",
+            saved_by="u-9",
+            template_sha256="other",
+            labelling_key="rules",
+            template=b"another team's deck",
+        )
+    theirs = FakeAssets()
+    with pytest.raises(ValueError, match="another team"):
+        await PptBuilderCapability().validate_config(
+            PptBuilderConfig(use_vision=False),
+            _uploads(),
+            _other_team_ctx(INSTANCE, theirs),
+        )
+    assert theirs.blobs == {}
+    with pytest.raises(ValueError, match="another team"):
+        await PptBuilderCapability().validate_config(
+            PptBuilderConfig(use_vision=False, template_sha256=SHA),
+            {},
+            _other_team_ctx(INSTANCE),
+        )
+    await drain()
+    after = await store.get(INSTANCE)
+    assert after is not None
+    assert (after.team_id, after.job_id, after.template_sha256) == (
+        "team-42",
+        before.job_id,
+        SHA,
+    )

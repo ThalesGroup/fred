@@ -86,7 +86,9 @@ async def build_tool(
     config = PptBuilderConfig(validate_plan=validate_plan, variety_check="off")
     ctx = CapabilityContext(
         identity=CapabilityIdentity(
-            user_id="u-1", session_id="sess-9", agent_instance_id="inst-7"
+            user_id="u-1",
+            session_id="sess-9",
+            agent_instance_id="00000000-0000-4000-8000-000000000007",
         ),
         config=config,
         turn_options=EmptyModel(),

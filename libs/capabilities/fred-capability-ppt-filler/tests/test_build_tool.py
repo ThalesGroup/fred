@@ -84,7 +84,9 @@ def _ctx(
 ):
     return CapabilityContext(
         identity=CapabilityIdentity(
-            user_id="u-1", session_id="sess-9", agent_instance_id="inst-7"
+            user_id="u-1",
+            session_id="sess-9",
+            agent_instance_id="00000000-0000-4000-8000-000000000007",
         ),
         config=config,
         turn_options=EmptyModel(),
@@ -114,7 +116,10 @@ def _configured(
         {"template_sha256": "sha-test", "variety_check": variety}
     )
     analysis_job.remember_inventory(
-        "inst-7", "sha-test", config.labelling_key(), inventory
+        "00000000-0000-4000-8000-000000000007",
+        "sha-test",
+        config.labelling_key(),
+        inventory,
     )
     analysis_job.remember_template("sha-test", TEMPLATE)
     assets = FakeAssets({PPT_BUILDER_TEMPLATE_KEY: TEMPLATE})

@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Annotated, Any, List, Optional, get_args
@@ -66,6 +67,7 @@ from fred_capability_ppt_filler.builder.analysis_job import (
     BUILTIN_ID,
     PLATFORM_ID,
     PLATFORM_NEXT_ID,
+    AnalysisOwnershipError,
     AnalysisRecord,
     AnalysisRow,
     AnalysisStatusResponse,
@@ -186,6 +188,26 @@ _STORE_UNAVAILABLE = (
     "The template cannot be stored right now. Try again later; if it keeps "
     "failing, contact your administrator."
 )
+
+
+def _require_agent_instance(instance_id: Optional[str]) -> None:
+    """A team save names a real agent: an instance id is a UUID, so the
+    platform rows (``__platform__``…) are never reachable from it."""
+    if not instance_id:
+        return
+    try:
+        canonical = str(uuid.UUID(instance_id)) == instance_id
+    except ValueError:
+        canonical = False
+    if not canonical:
+        logger.warning("[PPTBUILD] template save refused for a non-agent id")
+        raise ValueError("This save does not name a saved agent.")
+
+
+def _require_own_row(record: Optional[AnalysisRecord], team_id: Optional[str]) -> None:
+    if record is not None and record.team_id != team_id:
+        logger.warning("[PPTBUILD] template save refused: the row is another team's")
+        raise AnalysisOwnershipError("This agent's template belongs to another team.")
 
 
 def _check_readable(content: bytes) -> bytes:
@@ -330,6 +352,7 @@ async def start_analysis(
     sha = hashlib.sha256(content).hexdigest()
     store = get_analysis_store()
     current = await store.get(instance_id, with_inventory=False)
+    _require_own_row(current, team_id)
     if (
         current is not None
         and current.status == "succeeded"
@@ -914,6 +937,7 @@ class PptBuilderCapability(
     ) -> PptBuilderConfig:
         """Store the template and start its analysis in the background; never
         waits for it. A re-validation without an instance has no side effect."""
+        _require_agent_instance(ctx.identity.agent_instance_id)
         template_uploads = list(uploads.get(TEMPLATE_SLOT, ()))
         if template_uploads:
             return await self._accept_upload(config, template_uploads[0].content, ctx)
@@ -925,6 +949,7 @@ class PptBuilderCapability(
 
         store = get_analysis_store()
         record = await store.get(instance)
+        _require_own_row(record, ctx.identity.team_id)
         key = config.labelling_key()
         if record is None or record.template_sha256 != config.template_sha256:
             # The stored file is what gets analysed, whatever sha the client sent.
@@ -973,6 +998,10 @@ class PptBuilderCapability(
             content = await asyncio.to_thread(_check_readable, content)
         finally:
             release_heavy_job_slot()
+        instance = ctx.identity.agent_instance_id
+        if instance:  # before anything is stored
+            record = await get_analysis_store().get(instance, with_inventory=False)
+            _require_own_row(record, ctx.identity.team_id)
         assets = ctx.services.agent_assets
         if assets is None:
             logger.error("[PPTBUILD] no agent_assets port on this save path")

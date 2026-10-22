@@ -61,7 +61,10 @@ from pptx import Presentation
 TEMPLATE = build_showcase_template()
 SHA = hashlib.sha256(TEMPLATE).hexdigest()
 IDENTITY = CapabilityIdentity(
-    user_id="u-1", session_id="s-1", team_id="team-42", agent_instance_id="inst-7"
+    user_id="u-1",
+    session_id="s-1",
+    team_id="team-42",
+    agent_instance_id="00000000-0000-4000-8000-000000000007",
 )
 
 
@@ -126,13 +129,17 @@ async def test_unreadable_or_oversized_upload_rejects_without_storing(
             PptBuilderConfig(), _uploads(TEMPLATE), _save_ctx(assets)
         )
     assert assets.blobs == {}
-    assert await get_analysis_store().get("inst-7") is None
+    assert (
+        await get_analysis_store().get("00000000-0000-4000-8000-000000000007") is None
+    )
 
 
 @pytest.mark.asyncio
 async def test_overrides_are_pruned_once_the_analysis_is_known(analysis_db):
     stored = await _analysed()
-    first = (await get_analysis_store().get("inst-7")).inventory()  # type: ignore[union-attr]
+    first = (
+        await get_analysis_store().get("00000000-0000-4000-8000-000000000007")
+    ).inventory()  # type: ignore[union-attr]
     assert first is not None
     config = stored.model_copy(
         update={
@@ -170,7 +177,9 @@ async def test_a_revalidation_without_an_instance_has_no_side_effect(analysis_db
         config, {}, _save_ctx(identity=anonymous)
     )
     assert stored == config
-    assert await get_analysis_store().get("inst-7") is None
+    assert (
+        await get_analysis_store().get("00000000-0000-4000-8000-000000000007") is None
+    )
 
 
 # --- Copy to another scope ---------------------------------------------------------
@@ -208,7 +217,9 @@ async def test_copy_to_another_scope_recreates_the_template_and_its_analysis(
 
     target_assets = FakeAssets()
     target = CapabilityIdentity(
-        user_id="u-2", team_id="team-99", agent_instance_id="inst-copy"
+        user_id="u-2",
+        team_id="team-99",
+        agent_instance_id="00000000-0000-4000-8000-0000000000c0",
     )
     copied = await PptBuilderCapability().validate_config(
         PptBuilderConfig.model_validate(reset.model_dump(mode="json")),
@@ -226,7 +237,7 @@ async def test_copy_to_another_scope_recreates_the_template_and_its_analysis(
 
     assert target_assets.blobs == {PPT_BUILDER_TEMPLATE_KEY: TEMPLATE}
     assert copied.template_sha256 == SHA
-    record = await get_analysis_store().get("inst-copy")
+    record = await get_analysis_store().get("00000000-0000-4000-8000-0000000000c0")
     assert record is not None and record.team_id == "team-99"
     assert record.template_sha256 == SHA
 
@@ -262,7 +273,7 @@ def _async_client(editor_of: set[str]) -> httpx.AsyncClient:
     )
 
 
-_BASE = "/capabilities/ppt_builder/analysis/inst-7"
+_BASE = "/capabilities/ppt_builder/analysis/00000000-0000-4000-8000-000000000007"
 
 
 @pytest.mark.asyncio
@@ -313,7 +324,7 @@ def _middleware(ctx: CapabilityContext) -> Any:
 async def test_the_tool_refuses_while_the_analysis_is_pending(analysis_db):
     stored = PptBuilderConfig(template_sha256=SHA, use_vision=False)
     await get_analysis_store().start(
-        instance_id="inst-7",
+        instance_id="00000000-0000-4000-8000-000000000007",
         team_id="team-42",
         saved_by="u-1",
         template_sha256=SHA,
@@ -324,7 +335,7 @@ async def test_the_tool_refuses_while_the_analysis_is_pending(analysis_db):
     text, result = await tools[BUILD_TOOL_NAME].coroutine(slides=[{"title": "Hi"}])
     assert result.is_error and "still being analysed" in text
 
-    await age_row(analysis_db, "inst-7", status="failed")
+    await age_row(analysis_db, "00000000-0000-4000-8000-000000000007", status="failed")
     tools = {t.name: t for t in _middleware(_turn_ctx(stored)).tools}
     text, result = await tools[BUILD_TOOL_NAME].coroutine(slides=[{"title": "Hi"}])
     assert result.is_error and "re-run the analysis" in text
@@ -400,11 +411,11 @@ async def test_a_turn_never_renders_a_template_other_than_the_analysed_one(
     stored = await _analysed()
     plan = {"slides": [{"title": "Kick-off"}, {"title": "Plan", "bullets": ["a"]}]}
     newer = builtin_template()[0]  # a valid deck: rendering it would succeed
-    record = await get_analysis_store().get("inst-7")
+    record = await get_analysis_store().get("00000000-0000-4000-8000-000000000007")
     inventory = record.inventory() if record else None
     assert inventory is not None
     await get_analysis_store().start(
-        instance_id="inst-7",
+        instance_id="00000000-0000-4000-8000-000000000007",
         team_id="team-42",
         saved_by="u-1",
         template_sha256="sha-of-a-newer-upload",
@@ -412,7 +423,9 @@ async def test_a_turn_never_renders_a_template_other_than_the_analysed_one(
         template=newer,
     )
     analysis_job.clear_caches()
-    analysis_job.remember_inventory("inst-7", SHA, "rules", inventory)
+    analysis_job.remember_inventory(
+        "00000000-0000-4000-8000-000000000007", SHA, "rules", inventory
+    )
     assets = FakeAssets({PPT_BUILDER_TEMPLATE_KEY: newer})
     tools = {t.name: t for t in _middleware(_turn_ctx(stored, assets)).tools}
     text, result = await tools[BUILD_TOOL_NAME].coroutine(**plan)

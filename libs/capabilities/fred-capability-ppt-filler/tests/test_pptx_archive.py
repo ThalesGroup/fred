@@ -73,7 +73,11 @@ def _uploads(content: bytes):
 
 def _ctx() -> SaveContext:
     return SaveContext(
-        identity=CapabilityIdentity(user_id="u", team_id="t", agent_instance_id="inst"),
+        identity=CapabilityIdentity(
+            user_id="u",
+            team_id="t",
+            agent_instance_id="00000000-0000-4000-8000-000000000001",
+        ),
         services=RuntimeServices(agent_assets=FakeAssets()),
     )
 
@@ -191,7 +195,9 @@ def test_a_clean_template_is_left_byte_for_byte():
 
 
 @pytest.mark.asyncio
-async def test_the_builder_stores_and_analyses_the_sanitised_template(monkeypatch):
+async def test_the_builder_stores_and_analyses_the_sanitised_template(
+    monkeypatch, analysis_db
+):
     from fred_capability_ppt_filler.builder import capability as builder
 
     launched: list[bytes] = []

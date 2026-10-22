@@ -114,6 +114,15 @@ _MISSING_DETAIL = (
 )
 
 
+class AnalysisOwnershipError(ValueError):
+    """The analysis row of this agent id belongs to another team."""
+
+
+_OWNED_ELSEWHERE = (
+    "This agent's template belongs to another team; the template was not changed."
+)
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -284,7 +293,8 @@ class AnalysisStore(ABC):
         template_filename: Optional[str] = None,
     ) -> str:
         """Make the row a fresh pending analysis and return its job id.
-        ``template=None`` keeps the stored bytes and file name (a re-run)."""
+        ``template=None`` keeps the stored bytes and file name (a re-run).
+        Raises :class:`AnalysisOwnershipError` when the row is another team's."""
 
     @abstractmethod
     async def delete(self, instance_id: str) -> None:
@@ -445,8 +455,13 @@ class SqlAnalysisStore(AnalysisStore):
         if template is not None:
             values["template_pptx"] = template
             values["template_filename"] = template_filename
-        if await self._update(instance_id, **values):
+        # Only the row's own team rewrites it: an id sent by another team's save
+        # must not replace its template.
+        mine = AnalysisRow.team_id == team_id
+        if await self._update(instance_id, mine, **values):
             return job_id
+        if await self._scalar(AnalysisRow.team_id, instance_id) is not None:
+            raise AnalysisOwnershipError(_OWNED_ELSEWHERE)
         if template is None:
             raise LookupError(f"No stored template for {instance_id}.")
         try:
@@ -461,7 +476,8 @@ class SqlAnalysisStore(AnalysisStore):
                         )
                     )
         except IntegrityError:  # a concurrent save inserted it first
-            await self._update(instance_id, **values)
+            if not await self._update(instance_id, mine, **values):
+                raise AnalysisOwnershipError(_OWNED_ELSEWHERE) from None
         return job_id
 
     async def delete(self, instance_id: str) -> None:
