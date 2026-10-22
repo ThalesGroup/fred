@@ -2,13 +2,12 @@
 {{- if ne (env "ENV") "secondary" }}
 {{- fail "This development profile requires ENV=secondary; the default environment is unchanged" }}
 {{- end }}
-{{- $factory := requiredEnv "K3D_FACTORY_ROOT" }}
 releases:
   - name: fred-app
     chart: ../charts/fred
     values:
       - base-values.yaml.gotmpl
-      - {{ printf "%s/k3d-apps/fred/secondary.yaml.gotmpl" $factory | quote }}
+      - secondary-values.yaml.gotmpl
       - values.yaml.gotmpl
       {{- with env "K3D_IMAGE_VALUES" }}
       - {{ . | quote }}

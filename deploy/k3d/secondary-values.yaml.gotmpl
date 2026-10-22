@@ -1,0 +1,10 @@
+{{- /* The factory's secondary URLs and frontend settings, rendered here so that its
+control-plane configuration can be dropped: values.yaml.gotmpl owns that configuration. */ -}}
+{{- $text := readFile (printf "%s/k3d-apps/fred/secondary.yaml.gotmpl" (requiredEnv "K3D_FACTORY_ROOT")) -}}
+{{- $secondary := tpl $text . | fromYaml -}}
+{{- range $name := list "control-plane-backend" "control-plane-worker" -}}
+  {{- with index $secondary.applications $name -}}
+    {{- $_ := unset . "configuration" -}}
+  {{- end -}}
+{{- end -}}
+{{ $secondary | toYaml }}

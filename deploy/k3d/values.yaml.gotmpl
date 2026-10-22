@@ -69,6 +69,15 @@ applications:
       requests: {cpu: "250m", memory: 256Mi, ephemeral-storage: 1Gi}
       limits: {cpu: "2", memory: 1Gi, ephemeral-storage: 2Gi}
     configuration:
+      # The chart defaults plus these k3d addresses; the factory supplies none of it.
+      security:
+        m2m: {realm_url: {{ requiredEnv "K3D_REALM_URL" | quote }}}
+        user: {realm_url: {{ requiredEnv "K3D_REALM_URL" | quote }}}
+        authorized_origins: [{{ requiredEnv "K3D_PUBLIC_URL" | quote }}]
+        rebac: {api_url: http://openfga:9080}
+      scheduler:
+        lifecycle:
+          temporal: {host: "temporal:7233"}
       storage:
         content:
           # address/choice: the Swift documents bucket and input/output roots.

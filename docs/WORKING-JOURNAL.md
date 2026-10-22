@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F21](#f21-profil-k3d-propriétaire-de-la-configuration-du-control-plane) | Profil k3d propriétaire de la configuration du control-plane | Tests ciblés validés ; validation finale du lot | 08, README k3d |
 | [F14](#f14-ouverture-de-lespace-personnel-à-coût-constant) | Espace personnel trouvé en SQL, coût constant | Tests ciblés validés ; validation finale du lot | 04, 09, A2, A3 |
 | [F06](#f06-clés-jwks-pendant-une-panne-du-fournisseur) | Clés JWKS connues servies 1 h au plus pendant une panne | Tests ciblés validés ; validation finale du lot | 03 |
 | [F05](#f05-sujet-des-grants-et-erreurs-openfga) | Grants vers un sujet connu ; erreurs OpenFGA classées | Tests ciblés validés ; validation finale du lot | 03, 03a, A2, 09 (I27) |
@@ -84,6 +85,21 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F21 Profil k3d propriétaire de la configuration du control-plane
+
+- 2026-10-22 : révélé par F08, sur demande de Dimi (la factory reste agnostique ; tout est
+  corrigé dans ce dépôt). Le profil k3d importait de `fred-deployment-factory` une
+  configuration du control-plane écrite pour le Python (`observability`, `platform`,
+  `knowledge_bases`, `storage.opensearch`/`log_store`/`content_storage`, `pool_*`, tailles
+  de stockage, délégation), ignorée par Rust. `base-values.yaml.gotmpl` et le nouveau
+  `secondary-values.yaml.gotmpl` (rendu par `tpl`) retirent toute configuration factory du
+  control-plane ; `values.yaml.gotmpl` déclare les adresses k3d (realm, origine, OpenFGA
+  9080, Temporal). Rendu helmfile comparé à HEAD : seules les clés Python disparaissent,
+  aucune valeur lue par Rust ne change, seul le checksum de ConfigMap varie. Test du chart
+  remplacé par un rendu du vrai profil (`test_k3d_profile_owns_manager_configuration_with_unchanged_factory_values`),
+  en échec sur les fichiers de HEAD. Trois tests du chart échouaient déjà sur HEAD (topologie
+  par défaut, spool, rollout du worker) : hors fiche. Arc42 08, README k3d.
 
 ## F14 Ouverture de l'espace personnel à coût constant
 

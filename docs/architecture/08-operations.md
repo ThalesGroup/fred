@@ -5,7 +5,9 @@
 The checkout-owned [k3d profile](../../deploy/k3d/README.md) deploys
 `control-plane-backend`, `knowledge-flow-worker` and `frontend` in the secondary
 cluster. The deployment factory supplies infrastructure and the generic application
-build/import/sync sequence. The frontend forwards `/control-plane/v1` to port 8222.
+build/import/sync sequence. The control-plane configuration comes only from the chart
+defaults and this profile, which declares the k3d service addresses; any factory
+configuration for it is discarded. The frontend forwards `/control-plane/v1` to port 8222.
 
 Rust configuration is validated against its generated schema. Credentials are
 references to Secrets, never literal values in application configuration.

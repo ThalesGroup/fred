@@ -8,7 +8,10 @@ Flow runs only its worker; its HTTP API and the separate manager worker are disa
 This checkout owns the complete profile in `deploy/k3d/helmfile.yaml.gotmpl`,
 `values.yaml.gotmpl` and its `prepare` hook. `base-values.yaml.gotmpl` imports
 the shared factory values while removing the worker's legacy MinIO storage
-blocks before Helm merges the local worker configuration. The factory supplies infrastructure,
+blocks before Helm merges the local worker configuration. `secondary-values.yaml.gotmpl`
+renders the factory's secondary URLs. Both drop any factory control-plane
+configuration: the control-plane gets the chart defaults plus the k3d addresses in
+`values.yaml.gotmpl`. The factory supplies infrastructure,
 URLs, its shared base values and the generic build/import/sync sequence. Its
 `APP=fred DIR=...` command selects the checkout's Helmfile when present.
 No Rust-specific profile is added to the factory.
