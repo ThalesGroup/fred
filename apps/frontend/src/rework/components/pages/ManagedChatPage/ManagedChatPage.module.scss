@@ -309,6 +309,10 @@
   width: 100%;
 }
 
+.initialComposer > :first-child {
+  background: none;
+}
+
 /* ── Composer footer — in-flow, keeps its intrinsic height ─────────────── */
 .inputOverlay {
   position: relative;

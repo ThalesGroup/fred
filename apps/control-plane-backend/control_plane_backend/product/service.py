@@ -346,12 +346,13 @@ class _RuntimeTemplatePayload:
 
 
 # One OpenFGA check per platform role. `platform_admin` goes through
-# `can_manage_platform` (its own named capability); the delegated roles have no
-# single capability standing for them, so they check the raw relation.
+# `can_manage_platform`; delegated roles check their raw relation so the
+# bootstrap summary reports membership in each role's OpenFGA union.
 _PLATFORM_ROLE_CHECKS: dict[PlatformRoleRelation, OrganizationPermission] = {
     PlatformRoleRelation.PLATFORM_ADMIN: OrganizationPermission.CAN_MANAGE_PLATFORM,
     PlatformRoleRelation.PLATFORM_OBSERVER: OrganizationPermission.IS_PLATFORM_OBSERVER,
     PlatformRoleRelation.TEAM_MANAGER: OrganizationPermission.IS_TEAM_MANAGER,
+    PlatformRoleRelation.PLATFORM_ACCESS_MANAGER: OrganizationPermission.IS_PLATFORM_ACCESS_MANAGER,
     PlatformRoleRelation.FEATURE_MANAGER: OrganizationPermission.IS_FEATURE_MANAGER,
     PlatformRoleRelation.PROMPT_EDITOR: OrganizationPermission.IS_PROMPT_EDITOR,
 }

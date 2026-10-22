@@ -1157,23 +1157,31 @@ async def test_applications_feature_flag_keeps_contract_mounted_but_fails_closed
 
 
 @pytest.mark.asyncio
-async def test_frontend_bootstrap_permission_summary_derives_platform_admin_from_rebac(
+@pytest.mark.parametrize(
+    ("held_permission", "expected_role"),
+    [
+        (
+            OrganizationPermission.CAN_MANAGE_PLATFORM,
+            PlatformRoleRelation.PLATFORM_ADMIN,
+        ),
+        (
+            OrganizationPermission.IS_PLATFORM_ACCESS_MANAGER,
+            PlatformRoleRelation.PLATFORM_ACCESS_MANAGER,
+        ),
+    ],
+)
+async def test_frontend_bootstrap_permission_summary_derives_roles_from_rebac(
     monkeypatch: pytest.MonkeyPatch,
+    held_permission: OrganizationPermission,
+    expected_role: PlatformRoleRelation,
 ) -> None:
-    """AUTHZ-05 review item 4: the admin role must come from the OpenFGA
-    `platform_admin` relation (via `CAN_MANAGE_PLATFORM`), not from the
-    caller's Keycloak roles. A user with no Keycloak `admin` role but an
-    OpenFGA `platform_admin` relation must still see `platform_admin` in
-    `platform_roles`, and each other role is driven by its own independent
-    check — a fake that answers only `CAN_MANAGE_PLATFORM` yields exactly one
-    role, never the schema union the real engine would resolve.
-    """
+    """The bootstrap reports the independently checked OpenFGA role."""
 
     class _FakePlatformAdminRebac:
         async def has_user_permission(
             self, _user, permission, _resource_id, *, consistency_token=None
         ) -> bool:
-            return permission == OrganizationPermission.CAN_MANAGE_PLATFORM
+            return permission == held_permission
 
         # AUTHZ-05 review item 9: `_list_teams` (called from bootstrap's team
         # listing) now also touches these collaborators.
@@ -1212,7 +1220,7 @@ async def test_frontend_bootstrap_permission_summary_derives_platform_admin_from
 
     assert resp.status_code == 200
     permissions = resp.json()["permissions"]
-    assert permissions["platform_roles"] == [PlatformRoleRelation.PLATFORM_ADMIN.value]
+    assert permissions["platform_roles"] == [expected_role.value]
 
 
 @pytest.mark.asyncio

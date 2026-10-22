@@ -3839,6 +3839,7 @@ export type PlatformRoleRelation =
   | "platform_admin"
   | "platform_observer"
   | "team_manager"
+  | "platform_access_manager"
   | "feature_manager"
   | "prompt_editor";
 export type PlatformRoleHolder = {

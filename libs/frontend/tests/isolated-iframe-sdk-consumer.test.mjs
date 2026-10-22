@@ -56,7 +56,7 @@ test(
     assert.deepEqual(evidence.dependencyGraph, {
       [sdkManifest.name]: sdkManifest.version,
       typescript: "5.9.3",
-      vite: "6.4.3",
+      vite: "6.4.4",
     });
     assert.equal(evidence.network, "npm offline mode");
     assert(evidence.outputFiles.includes("child.html"));

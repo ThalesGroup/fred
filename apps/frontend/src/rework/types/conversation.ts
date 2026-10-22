@@ -75,9 +75,10 @@ export interface UserCapabilities {
   canAdmin: boolean;
   canObservePlatform: boolean;
   /** Delegated admin-tier roles, one per admin surface. A `platform_admin`
-   * holds all three (the backend resolves the schema union), so a narrower
+   * holds all four (the backend resolves the schema union), so a narrower
    * flag never takes a surface away from an admin. */
   canManageTeams: boolean;
+  canManagePlatformAccess: boolean;
   canManageFeatures: boolean;
   canEditPlatformPrompt: boolean;
   canEditSessions: boolean;

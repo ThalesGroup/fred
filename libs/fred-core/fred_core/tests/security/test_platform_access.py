@@ -84,7 +84,7 @@ class MembershipEngine(NoopRebacEngine):
     async def _has_permission_raw(self, subject, permission, resource, **kwargs):
         if self.unavailable:
             raise RuntimeError("unavailable")
-        if permission == OrganizationPermission.CAN_MANAGE_PLATFORM:
+        if permission == OrganizationPermission.CAN_MANAGE_PLATFORM_ACCESS:
             return subject.id in self.admins
         return resource.id in self.members.get(subject.id, set())
 
