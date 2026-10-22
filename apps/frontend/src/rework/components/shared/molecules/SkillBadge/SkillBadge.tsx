@@ -19,7 +19,7 @@ export function SkillBadge({ name, description, onOpen }: SkillBadgeProps) {
   const content = (
     <>
       <Icon category="outlined" type="customPlatformSkill" />
-      <span className={styles.name} data-skill-name={name}>
+      <span className={styles.name} data-invocation-name={name}>
         {name}
       </span>
     </>

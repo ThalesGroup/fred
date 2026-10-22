@@ -34,6 +34,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 import { UserMessage } from "../UserMessage/UserMessage";
+import { selectedSkillText } from "@rework/utils/skillInvocation";
 
 const PROMPT_TEXT = "Résume le document et rédige une synthèse de : 33 lignes";
 
@@ -68,8 +69,17 @@ describe("UserMessage with a command descriptor", () => {
 
     // One string, separated by a real space rather than by a flex gap: the two
     // parts are one sentence and have to reflow as one when the bubble narrows.
-    expect(container.textContent).toContain("/summary 33 lignes");
+    expect(container.textContent).toContain("summary 33 lignes");
     expect(container.textContent).not.toContain("Résume le document");
+    const label = container.querySelector("[data-invocation-name]")!;
+    const range = document.createRange();
+    range.selectNodeContents(label);
+    expect(selectedSkillText(range, container)).toBe("/summary");
+    range.setStart(label.firstChild!, 0);
+    range.setEnd(container.querySelector("[class*=appended]")!.lastChild!, "33 lignes".length);
+    expect(selectedSkillText(range, container)).toBe("/summary 33 lignes");
+    range.setStart(label.firstChild!, 3);
+    expect(selectedSkillText(range, container)).toBe("mary 33 lignes");
   });
 
   it("renders a plain text turn when there is no descriptor", () => {

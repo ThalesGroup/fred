@@ -815,35 +815,38 @@ A completed prompt command token in the composer SHALL be a control that opens a
 - **WHEN** the user hovers a personal prompt token and a team prompt token in a team named "Finance"
 - **THEN** the hints read the personal-space heading and the "Finance" team heading, as in the menu
 
-### Requirement: Invoked prompts and skills are shown as small containers
+### Requirement: Invoked prompts and skills share the animated spectrum
 
-A completed prompt command or platform skill SHALL be shown as a small filled container holding its icon and its name, in the composer and in sent or reopened user messages. A command name SHALL always be displayed with its leading `/`, for prompts and platform skills alike, in the command menu rows, in composer tokens and in sent-message badges; the slash SHALL NOT be doubled, and the legacy `/skill <name>` form SHALL be displayed as `/<name>`. Displaying the slash SHALL NOT change the stored text, what is copied, or how a command is recognised. Every container SHALL use the same colour pair, the secondary container one, for a platform skill and for a prompt whether it comes from the team or from the personal space, so that a prompt and a skill differ by their icon only; icon and name SHALL take the container's content colour. The container SHALL have a small corner radius and light horizontal padding and SHALL NOT change the height of the line it sits on. In the user's sent message, whose bubble has the same colour as the container, the container SHALL carry a thin outline that keeps it distinguishable without changing its size. Clickable containers SHALL keep their hover and keyboard-focus indication.
+A completed prompt command or platform skill SHALL be shown inline with its icon and complete name, in the composer and in sent or reopened user messages. Team and personal prompts SHALL share the same presentation as skills: a transparent background without a persistent outline, with the shared brand spectrum moving slowly from left to right through both the name and icon. Selected badges SHALL omit the leading slash visually, while menu entries SHALL retain it for discovery. Stored text, recognition, copying within one user message, editing and submission SHALL preserve the canonical `/<name>` invocation without duplicating the slash. The badge SHALL keep light horizontal padding and SHALL NOT change its line's height. Clickable badges SHALL retain hover, press and keyboard-focus indication. Reduced motion SHALL stop the animation and forced colours SHALL preserve readable system-colour text and icons.
 
 #### Scenario: Tokens in the composer
 
 - **GIVEN** a draft holding a completed prompt command and a completed platform skill among ordinary text
 - **WHEN** the composer shows the draft
-- **THEN** the prompt and the skill each appear in a container of the same colour, with their own icon and their name preceded by `/`
+- **THEN** both names and their respective icons use the animated spectrum without a filled background, persistent outline or visible slash
 - **AND** the line is exactly as tall as a line of plain text
 
 #### Scenario: Badges in a sent message
 
 - **GIVEN** a sent message that invoked a prompt command and a platform skill
 - **WHEN** the conversation shows the message
-- **THEN** both appear as containers with the same colours as in the composer
-- **AND** each container is visibly outlined against the message bubble, whose height per line is unchanged
+- **THEN** both use the same spectrum presentation as in the composer, without an outline against the message bubble
+- **AND** the height per line is unchanged
 
-#### Scenario: Every command name shows its slash
+#### Scenario: Command labels omit the slash after selection
 
 - **GIVEN** a prompt command `summary` and a platform skill `review`
-- **WHEN** they are listed in the command menu, completed in the composer and shown in a sent message
-- **THEN** they read `/summary` and `/review` in all three places
-- **AND** copying a sent message that invoked the skill gives `/review` once, not `//review`
+- **WHEN** they are listed in the command menu
+- **THEN** they read `/summary` and `/review`
+- **WHEN** they are completed in the composer or shown in a sent message
+- **THEN** their badges read `summary` and `review`
+- **AND** copying or editing either invocation restores its canonical slash exactly once
 
 #### Scenario: Team and personal prompts look the same
 
 - **WHEN** a team prompt and a personal prompt are each completed in the composer
-- **THEN** both use the same container, with the prompt icon
+- **THEN** both use the shared animated spectrum in the command name and prompt icon
+- **AND** each retains the source hint and preview of the prompt that was selected
 
 ### Requirement: The composer caret stays visible in the empty field
 

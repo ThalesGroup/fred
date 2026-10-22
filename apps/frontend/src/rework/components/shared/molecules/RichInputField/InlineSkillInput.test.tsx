@@ -363,7 +363,7 @@ it("shows two prompt tokens, each one block with its own hint, label and preview
     root.render(<Host twoPrompts />);
   });
   const tokens = () => Array.from(container.querySelectorAll<HTMLButtonElement>("[data-kind=prompt]"));
-  expect(tokens().map((token) => token.textContent)).toEqual(["edit_note/hello", "edit_note/bye"]);
+  expect(tokens().map((token) => token.textContent)).toEqual(["edit_notehello", "edit_notebye"]);
   expect(tokens().map((token) => token.title)).toEqual([
     "Hello\nchatbot.commandMenu.sections.personal\nSay hello",
     "Goodbye\nchatbot.commandMenu.sections.team\nSay goodbye",
@@ -406,7 +406,7 @@ it("shows two prompt tokens, each one block with its own hint, label and preview
   act(() => editor().dispatch({ selection: { anchor: 20 } }));
   pressKey("Backspace");
   expect(editor().state.doc.toString()).toBe("/hello and then Notes more");
-  expect(tokens().map((token) => token.textContent)).toEqual(["edit_note/hello"]);
+  expect(tokens().map((token) => token.textContent)).toEqual(["edit_notehello"]);
 });
 
 it("routes modified arrow keys to recall and lets a consumed recall stop the editor", () => {

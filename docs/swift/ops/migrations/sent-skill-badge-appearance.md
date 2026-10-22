@@ -1,9 +1,9 @@
 ---
 schema: 1
-title: "Distinguish skill badges with animated spectrum text"
+title: "Animate skill and prompt badges with the shared spectrum"
 impact: none
 configuration: none
-configuration_reason: "Only skill badge presentation, visible labels and selection-copy serialization change; configuration keys and defaults are unchanged."
+configuration_reason: "Only skill and prompt badge presentation, visible labels and selection-copy serialization change; configuration keys and defaults are unchanged."
 no_action_reason: "Stored invocations and APIs are unchanged; the badge appearance takes effect with normal frontend deployment."
 ---
 ## Applicability
@@ -24,7 +24,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-Send a selected skill in chat. Confirm the shared spectrum moves from left to right through the skill name and icon without a filled background, outline or leading slash. Open its preview by mouse and keyboard and confirm it still copies as a canonical /name invocation. With reduced motion enabled, confirm the spectrum remains still.
+Select and send a skill, a team prompt and a personal prompt in chat. Confirm the shared spectrum moves from left to right through each name and icon without a filled background, outline or leading slash. Open its preview by mouse and keyboard and confirm it still copies as a canonical /name invocation. With reduced motion enabled, confirm the spectrum remains still.
 
 ## Rollback
 

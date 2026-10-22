@@ -121,9 +121,9 @@ describe("UserTurn copy affordance (#2359)", () => {
         />,
       );
       const body = container.querySelector("[data-skill-message]")!;
-      expect(body.textContent).toBe(`edit_note/${command} Before mermaid middle verify-answer after`);
+      expect(body.textContent).toBe(`edit_note${command} Before mermaid middle verify-answer after`);
       expect(container.textContent).not.toContain("PRIVATE EXPANDED PROMPT");
-      expect(body.querySelectorAll("[data-skill-name]")).toHaveLength(2);
+      expect(body.querySelectorAll("[data-invocation-name]")).toHaveLength(3);
       expect(
         Array.from(body.querySelectorAll<HTMLElement>("[data-surface=bubble]")).map((badge) => badge.dataset.kind),
       ).toEqual(["prompt", "skill", "skill"]);
@@ -177,15 +177,15 @@ describe("UserTurn copy affordance (#2359)", () => {
     const setData = vi.fn();
     const copy = new Event("copy", { bubbles: true, cancelable: true });
     Object.defineProperty(copy, "clipboardData", { value: { setData } });
-    body.querySelector("[data-skill-name]")!.dispatchEvent(copy);
+    body.querySelector("[data-invocation-name]")!.dispatchEvent(copy);
     expect(copy.defaultPrevented).toBe(true);
     expect(setData).toHaveBeenCalledWith("text/plain", "/meeting-minutes");
     range.selectNodeContents(body);
     expect(selectedSkillText(range, container)).toBe("Before /meeting-minutes after\nAction");
     // Copying the label alone restores the slash hidden from its display.
-    range.selectNodeContents(body.querySelector("[data-skill-name]")!);
+    range.selectNodeContents(body.querySelector("[data-invocation-name]")!);
     expect(selectedSkillText(range, container)).toBe("/meeting-minutes");
-    const labelText = body.querySelector("[data-skill-name]")!.firstChild!;
+    const labelText = body.querySelector("[data-invocation-name]")!.firstChild!;
     range.setStart(labelText, 0);
     range.setEnd(body.lastChild!, 6);
     expect(selectedSkillText(range, container)).toBe("/meeting-minutes after");
@@ -225,8 +225,8 @@ describe("UserTurn copy affordance (#2359)", () => {
         />,
       );
       const body = container.querySelector("[data-skill-message]")!;
-      expect(body.textContent).toBe(`Before review middle edit_note/${command} after mermaid Notes`);
-      expect(body.querySelectorAll("[data-skill-name]")).toHaveLength(2);
+      expect(body.textContent).toBe(`Before review middle edit_note${command} after mermaid Notes`);
+      expect(body.querySelectorAll("[data-invocation-name]")).toHaveLength(3);
       const prompt = body.querySelector("button[class*=command]") as HTMLButtonElement;
       await click(prompt);
       expect(onOpenCommand).toHaveBeenCalledOnce();
@@ -259,7 +259,7 @@ describe("UserTurn copy affordance (#2359)", () => {
     it("shows one badge per prompt at its position, with the skill badge, and never the prompt text", () => {
       render(<UserTurn text={sent.text} command={sent.command} skillNames={["verify-answer"]} />);
       const body = container.querySelector("[data-skill-message]")!;
-      expect(body.textContent).toBe("First edit_note/summary then edit_note/tone please verify-answer");
+      expect(body.textContent).toBe("First edit_notesummary then edit_notetone please verify-answer");
       expect(
         Array.from(body.querySelectorAll<HTMLElement>("[data-surface=bubble]")).map((badge) => badge.dataset.kind),
       ).toEqual(["prompt", "prompt", "skill"]);
@@ -300,7 +300,7 @@ describe("UserTurn copy affordance (#2359)", () => {
       ]);
       render(<UserTurn text={twice.text} command={twice.command} />);
       expect(container.querySelector("[data-skill-message]")!.textContent).toBe(
-        "edit_note/summary of A, edit_note/summary of B",
+        "edit_notesummary of A, edit_notesummary of B",
       );
     });
 
@@ -312,7 +312,7 @@ describe("UserTurn copy affordance (#2359)", () => {
       };
       render(<UserTurn text={sent.text} command={command} onOpenCommand={onOpenCommand} />);
       expect(container.querySelector("[data-skill-message]")!.textContent).toBe(
-        "First edit_note/summary then /tone please /verify-answer",
+        "First edit_notesummary then /tone please /verify-answer",
       );
       expect(promptBadges()).toHaveLength(1);
       await click(promptBadges()[0]);
@@ -324,7 +324,7 @@ describe("UserTurn copy affordance (#2359)", () => {
       const { prompts: _prompts, ...single } = sent.command;
       render(<UserTurn text={sent.text} command={single} />);
       expect(container.querySelector("[data-skill-message]")!.textContent).toBe(
-        "First edit_note/summary then /tone please /verify-answer",
+        "First edit_notesummary then /tone please /verify-answer",
       );
     });
   });

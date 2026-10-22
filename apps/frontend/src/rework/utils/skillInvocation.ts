@@ -159,7 +159,7 @@ export function skillInvocationsText(
 }
 
 /** Restore canonical slash invocations and omit icon glyphs when copying
- * a selection within a skill message. */
+ * a selection within one user invocation message. */
 export function selectedSkillText(range: Range, container: HTMLElement): string | null {
   if (!container.contains(range.commonAncestorContainer)) return null;
   const regionOf = (node: Node) =>
@@ -174,14 +174,14 @@ export function selectedSkillText(range: Range, container: HTMLElement): string 
     range.startContainer.nodeType === Node.ELEMENT_NODE
       ? (range.startContainer as Element)
       : range.startContainer.parentElement;
-  const startsInLabel = startElement?.closest("[data-skill-name]");
-  fragment.querySelectorAll("[data-skill-name]").forEach((label, index) => {
+  const startsInLabel = startElement?.closest("[data-invocation-name]");
+  fragment.querySelectorAll("[data-invocation-name]").forEach((label, index) => {
     if (index || !startsInLabel || range.startOffset === 0) label.prepend("/");
   });
   if (range.startOffset === 0 && startsInLabel && fragment.firstChild?.nodeType === Node.TEXT_NODE)
     fragment.prepend("/");
   const text = fragment.textContent ?? "";
-  const touchesBadge = Array.from(region.querySelectorAll("[data-skill-name]")).some((label) =>
+  const touchesBadge = Array.from(region.querySelectorAll("[data-invocation-name]")).some((label) =>
     range.intersectsNode(label),
   );
   return touchesBadge || text !== range.toString() ? text : null;
