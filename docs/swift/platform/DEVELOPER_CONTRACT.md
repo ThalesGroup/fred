@@ -134,14 +134,14 @@ once already (`mcp` 2.0.0, 2026-08-01, #2194 — `langchain-mcp-adapters`
 declared `mcp>=1.24.0` unbounded, and `mcp` 2.0.0 broke import at boot
 before any upstream release supported it).
 
+Fred now requires `langchain[mcp]` 1.4.6+, FastMCP 4.1.3+, and MCP SDK 2.3+
+within their current major versions. The former `mcp<2` cap and
+`langchain-mcp-adapters` dependency have been removed.
+
 - If a module's `pyproject.toml` needs to cap a **transitive** dependency
   (one it doesn't import directly), add it as an explicit direct dependency
-  with the bound, not a comment-only note — the resolver only respects
-  declared constraints. Example, `libs/fred-runtime/pyproject.toml`:
-  ```
-  "langchain-mcp-adapters>=0.2.1",
-  "mcp>=1.24.0,<2.0.0",  # caps the unbounded transitive constraint above
-  ```
+  with the bound, not a comment-only note - the resolver only respects
+  declared constraints. Check the current package manifests before adding a cap.
 - State the reason and link the tracking issue/upstream issue in a comment
   directly above the pin — the next reader (human or assistant) must be able
   to tell whether the cap is still needed without archaeology.

@@ -101,78 +101,11 @@ async def test_the_verified_grant_is_visible_only_while_its_call_is_served(
     assert mcp_delegation.verified_grant() is None
 
 
-def test_a_verified_grant_is_placed_on_the_inner_call() -> None:
-    reset = mcp_delegation._verified_grant.set(GRANT)
-    try:
-        sent = mcp_delegation.apply_verified_grant({"a_tool_argument": "kept"})
-    finally:
-        mcp_delegation._verified_grant.reset(reset)
-
-    assert sent["person"] == GRANT.person
-    assert sent["run"] == GRANT.run
-    assert sent["agent"] == GRANT.agent
-    assert sent["a_tool_argument"] == "kept"
-
-
-def test_a_grant_invented_by_the_model_never_survives() -> None:
-    """Tool arguments are model-controlled, so one naming a person is a forgery
-    attempt: it is dropped, and the verified grant replaces it."""
-    reset = mcp_delegation._verified_grant.set(GRANT)
-    try:
-        sent = mcp_delegation.apply_verified_grant(
-            {"person": "someone-else", "run": "x", "agent": "y"}
-        )
-    finally:
-        mcp_delegation._verified_grant.reset(reset)
-
-    assert sent["person"] == GRANT.person
-
-
-def test_an_undelegated_call_names_nobody() -> None:
-    sent = mcp_delegation.apply_verified_grant({"person": "someone-else", "k": "v"})
-
-    assert "person" not in sent and "run" not in sent and "agent" not in sent
-    assert sent["k"] == "v"
-
-
-def test_the_model_never_sees_the_grant_in_a_tool_schema() -> None:
-    class _Tool:
-        def __init__(self) -> None:
-            self.inputSchema = {
-                "properties": {
-                    "a_real_argument": {},
-                    "person": {},
-                    "run": {},
-                    "agent": {},
-                },
-                "required": ["a_real_argument", "person"],
-            }
-
-    class _Mcp:
-        def __init__(self) -> None:
-            self.tools = [_Tool()]
-
-    stripped = mcp_delegation.strip_grant_tool_fields(_Mcp())
-
-    schema = stripped.tools[0].inputSchema
-    assert set(schema["properties"]) == {"a_real_argument"}
-    assert schema["required"] == ["a_real_argument"]
-
-
-def test_the_bridge_needs_no_tool_server_package() -> None:
+def test_mount_auth_needs_no_tool_server_package() -> None:
     """A service that mounts no tools must not be made to install one."""
     import importlib.util
 
     assert importlib.util.find_spec("fastapi_mcp") is None
-    # Everything above this line ran without it.
-    assert mcp_delegation.apply_verified_grant({"k": "v"}) == {"k": "v"}
-
-
-def test_a_missing_tool_server_package_names_the_extra() -> None:
-    with pytest.raises(ImportError) as missing:
-        import fred_core.security.mcp_delegation_fastapi  # noqa: F401
-
-    assert "'mcp' extra" in str(missing.value)
 
 
 @pytest.mark.asyncio

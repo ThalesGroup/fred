@@ -74,6 +74,13 @@ isn't structurally regressed before that comparison lands.
 
 ### Three fixes found and shipped this round
 
+This section records the pre-MCP-v2 runtime. The MCP v2 migration removes the
+client/tool cache described below and opts into the SDK's principal-partitioned
+response cache where servers advertise a positive TTL. Knowledge Flow's tool
+catalog now advertises five minutes and the runtime partitions the cache by
+credential. Legacy peers do not use that cache, and every turn still negotiates
+a connection. The warm-cache measurements below are historical.
+
 1. **Redundant MCP tool-discovery round trip.** `get_connected_mcp_client_for_agent`
    (`libs/fred-runtime/fred_runtime/common/mcp_utils.py`) already fetches each server's tools once
    while validating the connection; `MCPRuntime._run_lifecycle`
