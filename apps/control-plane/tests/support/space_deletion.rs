@@ -104,7 +104,7 @@ async fn lifecycle_authority_retirement_documents_and_durable_receipts() {
         spaces::grant(
             &e.pool,
             &e.fga,
-            None,
+            &e.subjects(),
             "alice",
             team.id,
             Role::Member,
@@ -501,9 +501,18 @@ async fn lifecycle_waiters_recheck_retirement_and_authority_and_accept_once() {
         spaces::create_folder(&pool, &auth, "alice", id, None, "late".into()).await
     });
     let pool = e.pool.clone();
-    let grant_fga = e.fga.clone();
+    let (grant_fga, open) = (e.fga.clone(), e.open_directory());
     let grant = tokio::spawn(async move {
-        spaces::grant(&pool, &grant_fga, None, "alice", id, Role::Analyst, "alice").await
+        spaces::grant(
+            &pool,
+            &grant_fga,
+            &control_plane::users::Directory::Keycloak(Some(&open)),
+            "alice",
+            id,
+            Role::Analyst,
+            "alice",
+        )
+        .await
     });
     let pool = e.pool.clone();
     let import_fga = e.fga.clone();

@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F05](#f05-sujet-des-grants-et-erreurs-openfga) | Grants vers un sujet connu ; erreurs OpenFGA classées | Tests ciblés validés ; validation finale du lot | 03, 03a, A2, 09 (I27) |
 | [F18](#f18-audit-des-révocations-effectives) | Audit des seules révocations effectives, sans doublon | Tests ciblés validés ; validation finale du lot | 09 (I16), A3 |
 | [F15](#f15-une-seule-liste-de-routes) | Une seule liste de routes HTTP | Tests automatisés validés | A1, carte des sources |
 | [F20](#f20-migration-sql-unique) | Une seule migration 0001, sans en-tête contradictoire | Tests automatisés validés ; réinstallation k3d par Dimi | A2, A3, AGENTS, README du composant |
@@ -81,6 +82,21 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F05 Sujet des grants et erreurs OpenFGA
+
+- 2026-10-22 : vérification sur HEAD `086f24a99` : confirmé. Seul l'owner était vérifié dans
+  Keycloak ; un admin d'organisation pouvait accorder member à n'importe quelle chaîne.
+  `write_guarded` traduisait tout 400/409 en 409. OpenFGA v1.15.1 mesuré : garde consommé
+  = 400 `write_failed_due_to_invalid_input`, tuple invalide = 400 `validation_error` ;
+  sujet vide, avec blanc, `:` ou `#` refusé. Correction : `domain::valid_subject`,
+  `users::Directory::exists` (Keycloak par sujet, local par `user_identity`) après
+  autorisation pour tout grant, 422 sinon (décision de Dimi) ; `InvalidTuple` → 422,
+  garde consommé ou 409 → `Conflict`. OpenAPI du grant : 422 et 503 ajoutés ; client RTK
+  inchangé (réponses d'erreur non générées). Tests : annuaire de fixtures ouvert dans
+  `Env`, test `grants_require_a_known_valid_subject_and_classify_openfga_errors` (I27),
+  vérifié en échec par mutation (204 puis Conflict au lieu d'InvalidTuple) ; owner inconnu
+  404 → 422. `make test` et intégration complète (111) réussis. Arc42 03, 03a, A2, 09.
 
 ## F18 Audit des révocations effectives
 

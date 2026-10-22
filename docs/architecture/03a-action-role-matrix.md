@@ -104,6 +104,8 @@ Conditions are part of these rights:
   owner. Removing a person's last direct content role is refused while dependent
   child roles or personal-space eligibility remain. No replacement member grant is
   synthesized. Personal roles are removed from their organization, not self-managed.
+- Every grant names a subject usable as an OpenFGA user and known to the configured
+  user directory, checked after authorization; otherwise 422 (I27).
 - Owner changes are platform operations and do not require the actor to belong to
   the target organization. A new owner must exist in the configured Keycloak realm;
   removal can clean up a deleted identity. The other space-role routes require the

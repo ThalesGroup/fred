@@ -38,6 +38,14 @@ pub(crate) fn canonical_name(raw: &str, max: usize) -> Option<String> {
         .then(|| name.to_owned())
 }
 
+/// An identity usable as an OpenFGA `user:<id>`: no whitespace, `:` or `#`.
+pub(crate) fn valid_subject(subject: &str) -> bool {
+    (1..=255).contains(&subject.chars().count())
+        && !subject
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || c == ':' || c == '#')
+}
+
 /// Space labels keep inner spaces and slashes; they are not paths.
 pub(crate) fn space_name(raw: &str) -> Option<String> {
     canonical_name(raw, 180)

@@ -35,6 +35,9 @@ use crate::{
 
 const PARENT_REQUIRED: &str = "the user must first be a member of the parent space";
 const SIBLING_NAME: &str = "a space with this name already exists here";
+const INVALID_SUBJECT: &str =
+    "the subject must contain 1..255 characters without whitespace, ':' or '#'";
+const UNKNOWN_SUBJECT: &str = "the subject is not a known identity of the user directory";
 const OWNER_ON_ORGANIZATIONS: &str = "only an organization has owners";
 const PERSONAL_FIXED: &str = "a personal space has a fixed single member";
 const CHILDREN_FIRST: &str = "remove dependent child roles and personal-space eligibility first";
@@ -561,15 +564,20 @@ pub async fn create_personal_space(
     Ok((space, true))
 }
 
+/// The target must be a known identity of the configured directory, checked after
+/// authorization so that an unauthorized caller cannot probe which subjects exist.
 pub async fn grant(
     pool: &PgPool,
     fga: &Fga,
-    directory: Option<&crate::keycloak::Directory>,
+    directory: &crate::users::Directory<'_>,
     caller: &str,
     space_id: Uuid,
     role: Role,
     target: &str,
 ) -> AppResult<()> {
+    if !domain::valid_subject(target) {
+        return Err(AppError::Unprocessable(INVALID_SUBJECT.into()));
+    }
     let space = load(pool, space_id).await?;
     if space.personal_owner.is_some() {
         return Err(AppError::Conflict(PERSONAL_FIXED.into()));
@@ -579,12 +587,8 @@ pub async fn grant(
         require_context(&mut *tx, fga, caller, space.organization).await?;
     }
     may_change(fga, caller, &space, role).await?;
-    if role == Role::OrganizationOwner {
-        let directory = directory
-            .ok_or_else(|| AppError::Unavailable("Keycloak directory is not configured".into()))?;
-        if !directory.exists(target).await? {
-            return Err(AppError::NotFound);
-        }
+    if !directory.exists(target).await? {
+        return Err(AppError::Unprocessable(UNKNOWN_SUBJECT.into()));
     }
     if let Some(parent) = space.parent_id
         && !holds_parent_content(fga, target, parent).await?

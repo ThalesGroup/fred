@@ -323,8 +323,16 @@ pub async fn member_organization(
         return Err((status, body));
     }
     let id = uuid::Uuid::parse_str(body["id"].as_str().unwrap()).unwrap();
-    spaces::grant(pool, fga, None, admin, id, Role::Member, admin)
-        .await
-        .unwrap();
+    spaces::grant(
+        pool,
+        fga,
+        &control_plane::users::Directory::Keycloak(Some(&identity.directory())),
+        admin,
+        id,
+        Role::Member,
+        admin,
+    )
+    .await
+    .unwrap();
     Ok(db::space(pool, id).await.unwrap().into())
 }

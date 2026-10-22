@@ -12,6 +12,63 @@ pub struct Env {
     pub fga: Fga,
     pub openfga: String,
     pub store: String,
+    subjects: OpenDirectory,
+}
+
+impl Env {
+    /// A directory in which every fixture subject exists. Tests about unknown
+    /// identities use their own strict identity server instead.
+    pub fn subjects(&self) -> control_plane::users::Directory<'_> {
+        control_plane::users::Directory::Keycloak(Some(&self.subjects.directory))
+    }
+
+    /// The same directory, owned, for spawned tasks.
+    pub fn open_directory(&self) -> control_plane::keycloak::Directory {
+        self.subjects.directory.clone()
+    }
+}
+
+struct OpenDirectory {
+    directory: control_plane::keycloak::Directory,
+    task: tokio::task::JoinHandle<()>,
+}
+impl Drop for OpenDirectory {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
+async fn open_directory() -> OpenDirectory {
+    use axum::{
+        Json, Router,
+        extract::Path,
+        routing::{get, post},
+    };
+    let app = Router::new()
+        .route(
+            "/realms/app/protocol/openid-connect/token",
+            post(|| async {
+                Json(serde_json::json!({"access_token":"fixture", "expires_in":300}))
+            }),
+        )
+        .route(
+            "/admin/realms/app/users/{id}",
+            get(|Path(id): Path<String>| async move {
+                Json(serde_json::json!({"id":id, "username":id}))
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let realm = format!("http://{}/realms/app", listener.local_addr().unwrap());
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    OpenDirectory {
+        directory: control_plane::keycloak::Directory::new(
+            &realm,
+            "control-plane",
+            "fixture".into(),
+        )
+        .unwrap(),
+        task,
+    }
 }
 
 pub async fn env() -> Env {
@@ -47,6 +104,7 @@ pub async fn env() -> Env {
         fga,
         openfga,
         store: name,
+        subjects: open_directory().await,
     }
 }
 

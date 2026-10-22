@@ -80,9 +80,18 @@ impl Scope {
 #[error("authorization changed; retry with fresh authorization checks")]
 pub struct Conflict;
 
+/// OpenFGA rejected a tuple itself, for example a malformed subject.
 #[derive(Debug, thiserror::Error)]
-#[error("openfga request failed ({0})")]
-struct RequestFailure(reqwest::StatusCode);
+#[error("invalid authorization tuple")]
+pub struct InvalidTuple;
+
+/// Only the status and OpenFGA's error code are kept; the message can echo input.
+#[derive(Debug, thiserror::Error)]
+#[error("openfga request failed ({status})")]
+struct RequestFailure {
+    status: reqwest::StatusCode,
+    code: Option<String>,
+}
 
 pub struct Tuple<'a> {
     pub user: &'a str,
@@ -195,7 +204,8 @@ impl Fga {
         let status = resp.status();
         let body: Value = resp.json().await.unwrap_or(Value::Null);
         if !status.is_success() {
-            return Err(RequestFailure(status).into());
+            let code = body["code"].as_str().map(String::from);
+            return Err(RequestFailure { status, code }.into());
         }
         Ok(body)
     }
@@ -341,13 +351,15 @@ impl Fga {
             .post(&format!("/stores/{}/write", self.store), body)
             .await
         {
-            if error
-                .downcast_ref::<RequestFailure>()
-                .is_some_and(|e| matches!(e.0.as_u16(), 400 | 409))
-            {
-                return Err(Conflict.into());
-            }
-            return Err(error);
+            // A consumed guard is a missing delete; anything else malformed is the input.
+            return Err(match error.downcast_ref::<RequestFailure>() {
+                Some(e) if e.status.as_u16() == 409 => Conflict.into(),
+                Some(e) if e.code.as_deref() == Some("write_failed_due_to_invalid_input") => {
+                    Conflict.into()
+                }
+                Some(e) if e.code.as_deref() == Some("validation_error") => InvalidTuple.into(),
+                _ => error,
+            });
         }
         guard.versions = Some(next);
         Ok(())

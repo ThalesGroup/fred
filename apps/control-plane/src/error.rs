@@ -69,6 +69,8 @@ impl From<anyhow::Error> for AppError {
     fn from(error: anyhow::Error) -> Self {
         if error.is::<crate::fga::Conflict>() {
             Self::Conflict(error.to_string())
+        } else if error.is::<crate::fga::InvalidTuple>() {
+            Self::Unprocessable(error.to_string())
         } else {
             Self::Internal(error)
         }

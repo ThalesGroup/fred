@@ -117,9 +117,12 @@ read; reuse requires current organization and personal read, with no role writes
 Administration is business, ownership is technical. Each organization also has an
 `organization_owner` role: it names and removes the organization's admins and holds no content,
 management or descending permission (I21). Platform owners name organization owners,
-and an organization always keeps one (I14). New owner grants verify the subject in
-the configured Keycloak realm; an unavailable directory prevents the grant. This
-also applies to import. Revocation accepts a
+and an organization always keeps one (I14). Every direct space-role grant checks,
+after authorization, that its subject is usable as an OpenFGA user (1..255 characters
+without whitespace, `:` or `#`) and known to the configured user directory: Keycloak by
+subject, or the local directory of observed profiles. Otherwise it answers 422; an
+unavailable directory prevents the grant (I27). Owner grants additionally require
+Keycloak subjects in the configured realm, which import also verifies. Revocation accepts a
 deleted identity so stale grants can be removed. The check proves existence at
 lookup time; external IAM deletion is not transactional with OpenFGA. Teams and
 projects have no owner.

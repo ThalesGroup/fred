@@ -84,7 +84,7 @@ async fn org_and_team(e: &Env) -> (Space, Space) {
     spaces::grant(
         &e.pool,
         &e.fga,
-        None,
+        &e.subjects(),
         "alice",
         team.id,
         Role::Member,
@@ -96,7 +96,7 @@ async fn org_and_team(e: &Env) -> (Space, Space) {
 }
 
 async fn grant(e: &Env, space: Uuid, role: Role, user: &str) {
-    spaces::grant(&e.pool, &e.fga, None, "alice", space, role, user)
+    spaces::grant(&e.pool, &e.fga, &e.subjects(), "alice", space, role, user)
         .await
         .unwrap();
 }
@@ -162,11 +162,12 @@ async fn concurrent_grant_and_revoke_keep_the_invariant() {
     grant(&e, org.id, Role::Member, "bob").await;
     for round in 0..10 {
         grant(&e, team.id, Role::Member, "bob").await;
+        let subjects = e.subjects();
         let _ = tokio::join!(
             spaces::grant(
                 &e.pool,
                 &e.fga,
-                None,
+                &subjects,
                 "alice",
                 project.id,
                 Role::Member,
@@ -195,9 +196,18 @@ async fn a_revoked_admin_cannot_finish_a_waiting_request() {
 
     let held = hold_organization_lock(&e, org.id).await;
     let pending = {
-        let (pool, fga) = (e.pool.clone(), e.fga.clone());
+        let (pool, fga, open) = (e.pool.clone(), e.fga.clone(), e.open_directory());
         tokio::spawn(async move {
-            spaces::grant(&pool, &fga, None, "bob", team.id, Role::Admin, "bob").await
+            spaces::grant(
+                &pool,
+                &fga,
+                &control_plane::users::Directory::Keycloak(Some(&open)),
+                "bob",
+                team.id,
+                Role::Admin,
+                "bob",
+            )
+            .await
         })
     };
     // Let bob's request reach the lock, then revoke him while it waits.
@@ -224,7 +234,7 @@ async fn a_member_with_a_personal_space_can_leave_the_organization() {
     spaces::grant(
         &e.pool,
         &e.fga,
-        None,
+        &e.subjects(),
         "alice",
         org.id,
         Role::PersonalSpaceCreator,
@@ -242,7 +252,7 @@ async fn a_member_with_a_personal_space_can_leave_the_organization() {
     let widened = spaces::grant(
         &e.pool,
         &e.fga,
-        None,
+        &e.subjects(),
         "alice",
         personal.id,
         Role::Member,
@@ -605,7 +615,7 @@ async fn analyst_membership_is_content_and_personal_roles_remain_fixed() {
     spaces::grant(
         &e.pool,
         &e.fga,
-        None,
+        &e.subjects(),
         "alice",
         org.id,
         Role::PersonalSpaceCreator,
@@ -621,7 +631,7 @@ async fn analyst_membership_is_content_and_personal_roles_remain_fixed() {
         spaces::grant(
             &e.pool,
             &e.fga,
-            None,
+            &e.subjects(),
             "alice",
             personal.id,
             Role::Analyst,
@@ -883,13 +893,13 @@ async fn revoked_platform_actor_cannot_complete_a_waiting_platform_or_owner_gran
             .execute(&mut *tx)
             .await
             .unwrap();
-        let (pool, fga) = (e.pool.clone(), e.fga.clone());
+        let (pool, fga, open) = (e.pool.clone(), e.fga.clone(), e.open_directory());
         let pending = tokio::spawn(async move {
             if owner_grant {
                 spaces::grant(
                     &pool,
                     &fga,
-                    None,
+                    &control_plane::users::Directory::Keycloak(Some(&open)),
                     "delegate",
                     org.id,
                     Role::OrganizationOwner,
@@ -1908,7 +1918,7 @@ async fn provisioning_batches_large_parent_and_child_grants_and_keeps_personal_s
     spaces::grant(
         &e.pool,
         &e.fga,
-        None,
+        &e.subjects(),
         "user-0",
         org.id,
         Role::PersonalSpaceCreator,
@@ -2722,12 +2732,12 @@ async fn interrupted_child_grant(cancel: bool) {
     .load(&e.pool)
     .await
     .unwrap();
-    let pool = e.pool.clone();
+    let (pool, open) = (e.pool.clone(), e.open_directory());
     let pending = tokio::spawn(async move {
         spaces::grant(
             &pool,
             &delayed_fga,
-            None,
+            &control_plane::users::Directory::Keycloak(Some(&open)),
             "alice",
             team.id,
             Role::Member,
@@ -3224,7 +3234,7 @@ async fn waiting_content_writers_release_the_shared_pool() {
     spaces::grant(
         &e.pool,
         &e.fga,
-        None,
+        &e.subjects(),
         "carol",
         peer.id,
         Role::Editor,
@@ -4052,7 +4062,7 @@ async fn descending_roles_reach_projects_and_member_stays_local() {
     spaces::grant(
         &e.pool,
         &e.fga,
-        None,
+        &e.subjects(),
         "alice",
         org.id,
         Role::PersonalSpaceCreator,
@@ -4095,7 +4105,7 @@ async fn inherited_access_does_not_replace_parent_membership() {
     let refused = spaces::grant(
         &e.pool,
         &e.fga,
-        None,
+        &e.subjects(),
         "alice",
         project.id,
         Role::Member,
@@ -4143,7 +4153,7 @@ async fn memberships_list_inherited_spaces_with_their_paths() {
     spaces::grant(
         &e.pool,
         &e.fga,
-        None,
+        &e.subjects(),
         "alice",
         org.id,
         Role::PersonalSpaceCreator,
@@ -4236,7 +4246,7 @@ async fn scope_follows_ancestors_and_levels_only_narrow_it() {
     spaces::grant(
         &e.pool,
         &e.fga,
-        None,
+        &e.subjects(),
         "alice",
         org.id,
         Role::PersonalSpaceCreator,
@@ -4419,7 +4429,7 @@ async fn hierarchy_reads_have_fixed_request_budgets() {
     spaces::grant(
         &e.pool,
         &e.fga,
-        None,
+        &e.subjects(),
         "alice",
         org.id,
         Role::PersonalSpaceCreator,
@@ -4492,7 +4502,7 @@ async fn organization_owners_name_admins_and_read_nothing() {
     let by_admin = spaces::grant(
         &e.pool,
         &e.fga,
-        None,
+        &e.subjects(),
         "alice",
         org.id,
         Role::OrganizationOwner,
@@ -4503,7 +4513,7 @@ async fn organization_owners_name_admins_and_read_nothing() {
     spaces::grant(
         &e.pool,
         &e.fga,
-        Some(&directory),
+        &control_plane::users::Directory::Keycloak(Some(&directory)),
         "root",
         org.id,
         Role::OrganizationOwner,
@@ -4514,7 +4524,7 @@ async fn organization_owners_name_admins_and_read_nothing() {
     let on_team = spaces::grant(
         &e.pool,
         &e.fga,
-        None,
+        &e.subjects(),
         "root",
         team.id,
         Role::OrganizationOwner,
@@ -4524,9 +4534,17 @@ async fn organization_owners_name_admins_and_read_nothing() {
     assert!(matches!(on_team, Err(AppError::Conflict(_))));
 
     // The owner names admins, whose role descends; the owner reads and manages nothing.
-    spaces::grant(&e.pool, &e.fga, None, "olga", org.id, Role::Admin, "bob")
-        .await
-        .unwrap();
+    spaces::grant(
+        &e.pool,
+        &e.fga,
+        &e.subjects(),
+        "olga",
+        org.id,
+        Role::Admin,
+        "bob",
+    )
+    .await
+    .unwrap();
     assert!(
         e.fga
             .check("bob", Permission::Manage, team.id)
@@ -4542,7 +4560,16 @@ async fn organization_owners_name_admins_and_read_nothing() {
                 .unwrap()
         );
     }
-    let member = spaces::grant(&e.pool, &e.fga, None, "olga", org.id, Role::Member, "carol").await;
+    let member = spaces::grant(
+        &e.pool,
+        &e.fga,
+        &e.subjects(),
+        "olga",
+        org.id,
+        Role::Member,
+        "carol",
+    )
+    .await;
     assert!(matches!(member, Err(AppError::Forbidden)));
     let created = spaces::create_space(
         &e.pool,
@@ -4679,7 +4706,7 @@ async fn owner_grants_require_directory_identity_and_deleted_owners_can_be_revok
         .space_holders(org.id, Role::OrganizationOwner)
         .await
         .unwrap();
-    for (subject, expected) in [("missing", 404), ("unavailable", 500)] {
+    for (subject, expected) in [("missing", 422), ("unavailable", 500)] {
         assert_eq!(
             content_request(
                 app.clone(),
@@ -4703,7 +4730,7 @@ async fn owner_grants_require_directory_identity_and_deleted_owners_can_be_revok
         spaces::grant(
             &e.pool,
             &e.fga,
-            None,
+            &control_plane::users::Directory::Keycloak(None),
             "root",
             org.id,
             Role::OrganizationOwner,
@@ -4738,6 +4765,51 @@ async fn owner_grants_require_directory_identity_and_deleted_owners_can_be_revok
         .await,
         409
     );
+}
+
+// Proves: I27
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn grants_require_a_known_valid_subject_and_classify_openfga_errors() {
+    use control_plane::fga::{Conflict, InvalidTuple, Tuple};
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    let identity = support::IdentityServer::start().await;
+    let app = content_app(&e, &identity).await;
+    let token = identity.token("alice");
+    // Unknown to the configured directory, or unusable as an OpenFGA user: nothing is written.
+    for subject in ["nobody", "a:b", "a%23b", "a%20b"] {
+        let path = format!("/spaces/{}/roles/member/{subject}", org.id);
+        assert_eq!(
+            content_request(app.clone(), &token, "PUT", &path, "").await,
+            422,
+            "{subject}"
+        );
+    }
+    assert!(e.fga.roles_of("nobody").await.unwrap().is_empty());
+    identity
+        .users
+        .lock()
+        .await
+        .insert("known".into(), "known".into());
+    let path = format!("/spaces/{}/roles/member/known", org.id);
+    assert_eq!(content_request(app, &token, "PUT", &path, "").await, 204);
+    // A consumed guard is a conflict; a malformed tuple under a fresh guard is invalid input.
+    let mut stale = e.fga.guard(&[Scope::Organization(org.id)]).await.unwrap();
+    e.fga
+        .fence(&mut e.fga.guard(&[Scope::Organization(org.id)]).await.unwrap())
+        .await
+        .unwrap();
+    let member = |user| Tuple {
+        user,
+        role: Role::Member,
+        space: team.id,
+    };
+    let stale_write = e.fga.write(&mut stale, &[member("bob")], &[]).await;
+    assert!(stale_write.unwrap_err().is::<Conflict>());
+    let mut fresh = e.fga.guard(&[Scope::Organization(org.id)]).await.unwrap();
+    let malformed = e.fga.write(&mut fresh, &[member("a b")], &[]).await;
+    assert!(malformed.unwrap_err().is::<InvalidTuple>());
 }
 
 // Proves: I21
@@ -4846,9 +4918,26 @@ async fn concurrent_attachments_choose_one_organization_and_creation_cannot_bypa
     let b = crate::support::member_organization(&e.pool, &e.fga, "B", "carol")
         .await
         .unwrap();
+    let subjects = e.subjects();
     let (first, second) = tokio::join!(
-        spaces::grant(&e.pool, &e.fga, None, "alice", a.id, Role::Admin, "bob"),
-        spaces::grant(&e.pool, &e.fga, None, "carol", b.id, Role::Member, "bob"),
+        spaces::grant(
+            &e.pool,
+            &e.fga,
+            &subjects,
+            "alice",
+            a.id,
+            Role::Admin,
+            "bob"
+        ),
+        spaces::grant(
+            &e.pool,
+            &e.fga,
+            &subjects,
+            "carol",
+            b.id,
+            Role::Member,
+            "bob"
+        ),
     );
     assert_ne!(first.is_ok(), second.is_ok());
     let (winner, loser) = if first.is_ok() {
@@ -4921,17 +5010,34 @@ async fn a_late_attachment_cannot_publish_after_assignment_elsewhere() {
     .load(&e.pool)
     .await
     .unwrap();
-    let pool = e.pool.clone();
+    let (pool, open) = (e.pool.clone(), e.open_directory());
     let pending = tokio::spawn(async move {
-        spaces::grant(&pool, &delayed, None, "alice", a.id, Role::Member, "bob").await
+        spaces::grant(
+            &pool,
+            &delayed,
+            &control_plane::users::Directory::Keycloak(Some(&open)),
+            "alice",
+            a.id,
+            Role::Member,
+            "bob",
+        )
+        .await
     });
     tokio::time::timeout(Duration::from_secs(3), gate.entered.notified())
         .await
         .unwrap();
     assert!(pending.await.unwrap().is_err());
-    spaces::grant(&e.pool, &e.fga, None, "carol", b.id, Role::Member, "bob")
-        .await
-        .unwrap();
+    spaces::grant(
+        &e.pool,
+        &e.fga,
+        &e.subjects(),
+        "carol",
+        b.id,
+        Role::Member,
+        "bob",
+    )
+    .await
+    .unwrap();
     gate.release.notify_one();
     tokio::time::timeout(Duration::from_secs(3), async {
         while proxy.fault.lock().await.acknowledged.is_empty() {
@@ -5141,9 +5247,17 @@ async fn organization_context_exhausts_pages_and_grant_budget_includes_global_fe
         fault.reads.clear();
         fault.written.clear();
     }
-    spaces::grant(&e.pool, &fga, None, "alice", a.id, Role::Member, "bob")
-        .await
-        .unwrap();
+    spaces::grant(
+        &e.pool,
+        &fga,
+        &e.subjects(),
+        "alice",
+        a.id,
+        Role::Member,
+        "bob",
+    )
+    .await
+    .unwrap();
     {
         let fault = proxy.fault.lock().await;
         // Platform/org guards (2), caller context (3), target context empty (1).
@@ -5297,9 +5411,18 @@ async fn import_rechecks_attachment_after_preflight_against_a_waiting_grant() {
     tokio::time::timeout(Duration::from_secs(3), gate.entered.notified())
         .await
         .unwrap();
-    let (pool, fga) = (e.pool.clone(), e.fga.clone());
+    let (pool, fga, open) = (e.pool.clone(), e.fga.clone(), e.open_directory());
     let grant = tokio::spawn(async move {
-        spaces::grant(&pool, &fga, None, "alice", a.id, Role::Member, "bob").await
+        spaces::grant(
+            &pool,
+            &fga,
+            &control_plane::users::Directory::Keycloak(Some(&open)),
+            "alice",
+            a.id,
+            Role::Member,
+            "bob",
+        )
+        .await
     });
     wait_for_advisory_waiter(&e.pool).await;
     gate.release.notify_one();
@@ -5333,7 +5456,7 @@ async fn personal_open_requires_explicit_eligibility_and_never_repairs_revocatio
         spaces::grant(
             &e.pool,
             &e.fga,
-            None,
+            &e.subjects(),
             "alice",
             org.id,
             Role::PersonalSpaceCreator,
@@ -5346,7 +5469,7 @@ async fn personal_open_requires_explicit_eligibility_and_never_repairs_revocatio
         spaces::grant(
             &e.pool,
             &e.fga,
-            None,
+            &e.subjects(),
             "alice",
             team.id,
             Role::PersonalSpaceCreator,
@@ -5445,7 +5568,7 @@ async fn personal_open_requires_explicit_eligibility_and_never_repairs_revocatio
     spaces::grant(
         &e.pool,
         &e.fga,
-        None,
+        &e.subjects(),
         "carol",
         foreign.id,
         Role::PersonalSpaceCreator,
@@ -5655,7 +5778,7 @@ async fn personal_grant_budget_and_failed_creation_preserve_authority() {
     spaces::grant(
         &e.pool,
         &observed,
-        None,
+        &e.subjects(),
         "alice",
         org.id,
         Role::PersonalSpaceCreator,

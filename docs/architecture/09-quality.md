@@ -33,6 +33,7 @@ explanations move between chapters.
 | I24 | Space retirement is atomic; cleanup starts no earlier than the frozen deadline, preserves retry identifiers and declares completion only after SQL/FGA cleanup. | `lifecycle`, retired consumer gates, bounded activities and receipts |
 | I25 | A published original has verified immutable bytes; pending reservations protect quota/name/targets, and cleanup never removes a published or live pending object. | upload journal, guarded reservation/publication, conditional S3 Put and SQL-checked inventory |
 | I26 | Processing preserves its immutable original and scope; only the current authorized, fenced generation publishes a verified result. | atomic processing intent, stage leases, guarded manifest commit and isolated cleanup |
+| I27 | A direct space-role grant writes only a subject usable as an OpenFGA user that the configured user directory knows; a consumed guard is a conflict, a tuple OpenFGA rejects is invalid input. | `domain::valid_subject`, `users::Directory::exists` after authorization, `fga::write_guarded` error codes |
 
 ## control-plane tests
 
@@ -461,8 +462,9 @@ Before space publication, `K` distinct organization owner subjects add `K` GETs,
 in batches of at most eight concurrent calls while the reconciliation locks are
 held. Each distinct declared owner subject is checked once in that operation; a second
 organization attachment is refused before publication.
-Each platform grant also checks its subject. HTTP owner grants and operator
-organization creation each add one subject GET. Every directory request has a
+Each platform grant also checks its subject. Every direct space-role grant adds one
+subject lookup after authorization, under its locks: a Keycloak GET, or one indexed
+SQL query in the local directory. Organization creation adds one subject GET. Every directory request has a
 five-second timeout and can refresh/retry once on 401; a missing cached service
 token adds its token request. These are existence checks, not permission caches or
 leases across operations. Concurrent external IAM deletion can follow a check.
@@ -505,6 +507,7 @@ Generated from the `// Proves:` markers.
 | I24 | `apps/control-plane/tests/lifecycle_temporal.rs::api_worker_restart_schedule_reconciliation_and_replay`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_authority_retirement_documents_and_durable_receipts`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_partial_link_loss_reserves_name_and_organization`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_retention_personal_scope_and_final_guard_commit_failure`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_filtered_batches_lost_ack_and_unrelated_state`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_waiters_recheck_retirement_and_authority_and_accept_once`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_blocked_scope_is_visible_and_does_not_starve_candidates`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_aborted_creation_graph_does_not_block_cleanup`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_orphan_pages_keep_anchors_through_lost_acknowledgments`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_orphans_cannot_expand_the_committed_manifest_or_depth` |
 | I25 | `apps/control-plane/tests/support/document_processing.rs::processing_admission_fences_publication_and_original_survival`<br>`apps/control-plane/tests/support/document_processing.rs::processing_existing_worker_journey_without_kf_http`<br>`apps/control-plane/tests/support/document_processing.rs::processing_upload_atomic_intent_and_retry_without_new_original`<br>`apps/control-plane/tests/support/document_processing.rs::processing_workload_identity_and_revoked_publication`<br>`apps/control-plane/tests/support/document_storage.rs::document_creation_reads_conflicts_receipts_and_safe_download`<br>`apps/control-plane/tests/support/document_storage.rs::document_revocation_cleanup_and_late_put_recovery`<br>`apps/control-plane/tests/support/document_storage.rs::shared_swift_bucket_cleanup_preserves_foreign_objects_and_reclaims_owned_late_writes`<br>`apps/control-plane/tests/support/document_storage.rs::cleanup_inaccessible_original_does_not_starve_other_objects` |
 | I26 | `apps/control-plane/tests/support/document_processing.rs::processing_admission_fences_publication_and_original_survival`<br>`apps/control-plane/tests/support/document_processing.rs::processing_existing_worker_journey_without_kf_http`<br>`apps/control-plane/tests/support/document_processing.rs::processing_upload_atomic_intent_and_retry_without_new_original`<br>`apps/control-plane/tests/support/document_processing.rs::processing_workload_identity_and_revoked_publication` |
+| I27 | `apps/control-plane/tests/integration.rs::grants_require_a_known_valid_subject_and_classify_openfga_errors` |
 <!-- end generated -->
 
 Provisioning tests inject failures before/after real FGA writes, fail deferred SQL commits,

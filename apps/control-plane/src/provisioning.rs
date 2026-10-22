@@ -44,6 +44,8 @@ impl Failure {
         use axum::http::StatusCode as S;
         let status = if error.is::<crate::fga::Conflict>() {
             S::CONFLICT
+        } else if error.is::<crate::fga::InvalidTuple>() {
+            S::UNPROCESSABLE_ENTITY
         } else if let Some(e) = error.downcast_ref::<AppError>() {
             match e {
                 AppError::Forbidden | AppError::Denied(_) => S::FORBIDDEN,

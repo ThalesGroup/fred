@@ -417,7 +417,9 @@ fn parse_role(role: &str) -> AppResult<Role> {
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Request failed", body = crate::error::ErrorBody),
         (status = 409, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 422, description = "Malformed subject, or not a known identity of the user directory", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 503, description = "User directory unavailable", body = crate::error::ErrorBody),
     )
 )]
 async fn grant(
@@ -439,7 +441,7 @@ async fn grant(
     spaces::grant(
         &s.pool,
         &s.fga,
-        s.directory.as_ref(),
+        &organization_directory(&s)?,
         &user,
         id,
         role,

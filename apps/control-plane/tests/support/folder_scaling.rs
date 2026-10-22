@@ -358,7 +358,7 @@ async fn folder_scaling() {
         spaces::grant(
             &e.pool,
             &e.fga,
-            None,
+            &e.subjects(),
             &owner,
             space.id,
             Role::Editor,

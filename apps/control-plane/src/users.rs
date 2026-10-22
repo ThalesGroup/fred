@@ -147,6 +147,25 @@ impl Directory<'_> {
         }
     }
 
+    /// Whether a subject is a known identity of this directory; not a lease on it.
+    pub async fn exists(&self, subject: &str) -> AppResult<bool> {
+        match self {
+            Self::Keycloak(Some(directory)) => Ok(directory.exists(subject).await?),
+            Self::Keycloak(None) => Err(AppError::Unavailable(
+                "user directory is not configured".into(),
+            )),
+            Self::Local(pool) => match Uuid::parse_str(subject) {
+                Ok(id) => Ok(sqlx::query_scalar(
+                    "select exists(select 1 from user_identity where id = $1)",
+                )
+                .bind(id)
+                .fetch_one(*pool)
+                .await?),
+                Err(_) => Ok(false),
+            },
+        }
+    }
+
     pub async fn find_username(&self, username: &str) -> AppResult<Option<keycloak::User>> {
         match self {
             Self::Keycloak(Some(directory)) => Ok(directory.find_username(username).await?),

@@ -11,7 +11,10 @@ and the unique organization context described in [Organizations](04-organization
 `/me` remains platform-role metadata; `/me/spaces` validates business context and
 returns 409 for contradictory attachments. No organization request parameter
 selects a tenant. Business authorization probes return `allowed: false` for a missing or
-foreign context, and 409 for ambiguity.
+foreign context, and 409 for ambiguity. A role grant answers 422 for a malformed subject,
+one unknown to the user directory or a tuple OpenFGA rejects as invalid, 409 when its
+OpenFGA guard was consumed (retry with fresh checks), and 503 when the directory is
+unavailable.
 
 <!-- generated: routes apps/control-plane/src/api.rs /control-plane/v1 -->
 | Method | Path | Handler |
