@@ -6,7 +6,7 @@ An active person holding the current `organization#can_manage_platform_access` p
 
 #### Scenario: Administrator is outside every configured source
 
-- **GIVEN** filtering is active and a platform access administrator matches no saved rule or exception
+- **GIVEN** filtering is active and a platform administrator matches no saved rule or exception
 - **WHEN** that administrator makes a direct or delegated human request
 - **THEN** platform admission SHALL pass while ordinary authorization remains enforced
 
@@ -23,7 +23,7 @@ An active person holding the current `organization#can_manage_platform_access` p
 
 ### Requirement: Administrators can inspect successful Free-link joiners
 
-Each Free-team link SHALL retain a bounded, paginated history of distinct people who successfully became members by enrolling through that link. Only callers holding `organization#can_manage_team_free` SHALL read the history. Each entry SHALL expose that person's current first name, last name and username while the account is active, or the last recorded values with a deleted marker after account deletion, plus the time of the successful join. This history SHALL remain visible if the person later leaves the team, the account is deleted, or the link is suspended, revoked or expired. An explicit deletion of the link history SHALL delete its joiner entries. Opening, previewing, accepting terms, unsuccessful enrollment and a repeated enrollment while already a member SHALL NOT create a joiner entry or change the page-opening aggregate.
+Each Free-team link SHALL retain a bounded, paginated history of distinct people who successfully became members by enrolling through that link. Only callers holding `organization#can_manage_platform_access` SHALL read the history. Each entry SHALL expose that person's current first name, last name and username while the account is active, or the last recorded values with a deleted marker after account deletion, plus the time of the successful join. This history SHALL remain visible if the person later leaves the team, the account is deleted, or the link is suspended, revoked or expired. An explicit deletion of the link history SHALL delete its joiner entries. Opening, previewing, accepting terms, unsuccessful enrollment and a repeated enrollment while already a member SHALL NOT create a joiner entry or change the page-opening aggregate.
 
 #### Scenario: Two links have different joiners
 
@@ -50,11 +50,9 @@ Each Free-team link SHALL retain a bounded, paginated history of distinct people
 
 #### Scenario: Joiner history is restricted and paginated
 
-- **WHEN** an ordinary person requests a link's joiner history
+- **WHEN** an ordinary team manager or person requests a link's joiner history
 - **THEN** no joiner identity SHALL be returned
-- **WHEN** a team manager opens a link for an existing team
-- **THEN** its joiners SHALL be visible through bounded pages
-- **WHEN** a platform access administrator opens a link with more joiners than one page
+- **WHEN** a platform administrator opens a link with more joiners than one page
 - **THEN** the complete history SHALL be reachable through bounded pages for that link only
 
 #### Scenario: Explicit link-history cleanup
@@ -88,7 +86,7 @@ When filtering is active, the system SHALL admit a non-suspended person if their
 
 ### Requirement: Platform administrators manage live exceptions
 
-Only people holding the `organization#can_manage_platform_access` permission SHALL read or modify filtering, policy, user exceptions, team-wide authorization, T0 and other platform access administration. The separate `organization#can_manage_team_free` permission SHALL allow Free flags and Free-link administration only. It SHALL provide paginated individual exception management using the configured user directory for identity lookup and Fred for admission state, team authorization and Free-team controls, filtering state, effective admission sources displayed by type and team name without team UIDs, own-session claim selection, rule editing and draft preview. In `user_directory: keycloak`, both federated identities known to Keycloak and identities created directly there SHALL be selectable before their first Fred request; in `user_directory: local`, identities SHALL come from Fred's `users` table. Team administrators SHALL NOT obtain these authorities through their team roles; team managers SHALL obtain Free administration but not the rest of platform access administration. Removing an individual exception SHALL NOT remove an identity or revoke independent team sources. Rule updates SHALL be explicit, atomic and versioned; stale concurrent saves SHALL return a conflict without overwriting another administrator's changes. Preview SHALL NOT change filtering, policy, T0, membership or evidence selected only by the proposed rule.
+Only people holding the `organization#can_manage_platform_access` permission SHALL read or modify the platform access administration surface. It SHALL provide paginated individual exception management using the configured user directory for identity lookup and Fred for admission state, team authorization and Free-team controls, filtering state, effective admission sources displayed by type and team name without team UIDs, own-session claim selection, rule editing and draft preview. In `user_directory: keycloak`, both federated identities known to Keycloak and identities created directly there SHALL be selectable before their first Fred request; in `user_directory: local`, identities SHALL come from Fred's `users` table. Team administrators and team managers SHALL NOT obtain this authority through their existing roles. Removing an individual exception SHALL NOT remove an identity or revoke independent team sources. Rule updates SHALL be explicit, atomic and versioned; stale concurrent saves SHALL return a conflict without overwriting another administrator's changes. Preview SHALL NOT change filtering, policy, T0, membership or evidence selected only by the proposed rule.
 
 #### Scenario: Administrator authorizes a Fred user or team
 
@@ -97,9 +95,9 @@ Only people holding the `organization#can_manage_platform_access` permission SHA
 
 #### Scenario: Administrator authorizes a selected user list
 
-- **WHEN** a platform access administrator selects any nonempty list of existing directory identities and grants admission
+- **WHEN** a platform administrator selects any nonempty list of existing directory identities and grants admission
 - **THEN** the operation SHALL atomically add removable manual exceptions without overwriting existing sources
-- **WHEN** the list includes an unknown identity or is submitted by a non-platform access administrator
+- **WHEN** the list includes an unknown identity or is submitted by a non-platform administrator
 - **THEN** no exceptions SHALL be granted
 
 #### Scenario: Keycloak identity has not visited Fred
@@ -175,7 +173,7 @@ User rows SHALL show identifier, first name and last name using the team-member 
 
 ### Requirement: Free-team links admit only their authenticated caller
 
-A platform access administrator or team manager SHALL be able to enable Free enrollment and generate multiple independent opaque revocable links for one existing non-personal team. Each link SHALL have an optional note and optional timezone-aware expiry; omitted expiry SHALL mean no time limit. Generating a link SHALL NOT invalidate earlier links. Revocation SHALL be individual and irreversible; expired or revoked links SHALL fail preview, legal acceptance and enrollment. Only generation and an explicit own-human Free-link-manager recovery action SHALL return the plaintext token, with no-store response headers. A signed-in person otherwise denied by admission filtering SHALL be able to use that link to join that team. A successful enrollment SHALL grant only the existing member relation to the caller, retain CGU and suspension checks, and expose the Free-team admission source in administration. The enrollment surface SHALL not reveal directories, normal product bootstrap or arbitrary private-team data.
+A caller holding `organization#can_manage_platform_access` SHALL be able to enable Free enrollment and generate multiple independent opaque revocable links for one existing non-personal team. Each link SHALL have an optional note and optional timezone-aware expiry; omitted expiry SHALL mean no time limit. Generating a link SHALL NOT invalidate earlier links. Revocation SHALL be individual and irreversible; expired or revoked links SHALL fail preview, legal acceptance and enrollment. Only generation and an explicit own-human authorized recovery action SHALL return the plaintext token, with no-store response headers. A signed-in person otherwise denied by admission filtering SHALL be able to use that link to join that team. A successful enrollment SHALL grant only the existing member relation to the caller, retain CGU and suspension checks, and expose the Free-team admission source in administration. The enrollment surface SHALL not reveal directories, normal product bootstrap or arbitrary private-team data.
 
 #### Scenario: Denied external person joins a Free team
 
@@ -199,7 +197,7 @@ A platform access administrator or team manager SHALL be able to enable Free enr
 
 ### Requirement: Administrators manage independent Free-link history
 
-Only callers holding `organization#can_manage_team_free` SHALL create, list, reveal and revoke Free-team links. The platform administration Teams registry SHALL expose the Free toggle and Manage links action for each eligible team; team managers SHALL see those controls but SHALL NOT access policy, exception, T0 or team-wide authorization queries. Platform access SHALL group individual exceptions and independent team authorization in its Whitelist panel and SHALL NOT duplicate Free/link controls. The bounded paginated history SHALL expose the link identifier, note, creation and expiry dates, revocation state, suspension state and authenticated opening count, without reusable tokens or visitor identity. Administrators SHALL be able to inspect and revoke links while Free is disabled. Manage links SHALL open on the bounded invitation list with a Create link action; note and expiry inputs SHALL appear only in a separate creation view. That view SHALL place the optional note before optional expiration and reuse the platform KPI selector presentation, with a single future date/time input, future duration shortcuts, a No expiration option and Apply. The date draft SHALL prevent creation until applied or dismissed; Escape SHALL close only the selector and restore trigger focus. Empty expiration SHALL mean no expiry; invalid or past expiration SHALL prevent creation without losing the note. Generation success SHALL show the original URL in the platform's monospace font and an immediately available Copy URL action, and SHALL attempt to copy that URL to the clipboard automatically.
+Only callers holding `organization#can_manage_platform_access` SHALL create, list and revoke Free-team links. The platform administration Teams registry SHALL expose the Free toggle and Manage links action for each eligible team; ordinary team managers SHALL NOT see these controls or issue admission administration queries. Platform access SHALL group individual exceptions and independent team authorization in its Whitelist panel and SHALL NOT duplicate Free/link controls. The bounded paginated history SHALL expose the link identifier, note, creation and expiry dates, revocation state, suspension state and authenticated opening count, without reusable tokens or visitor identity. Administrators SHALL be able to inspect and revoke links while Free is disabled. Manage links SHALL open on the bounded invitation list with a Create link action; note and expiry inputs SHALL appear only in a separate creation view. That view SHALL place the optional note before optional expiration and reuse the platform KPI selector presentation, with a single future date/time input, future duration shortcuts, a No expiration option and Apply. The date draft SHALL prevent creation until applied or dismissed; Escape SHALL close only the selector and restore trigger focus. Empty expiration SHALL mean no expiry; invalid or past expiration SHALL prevent creation without losing the note. Generation success SHALL show the original URL in the platform's monospace font and an immediately available Copy URL action, and SHALL attempt to copy that URL to the clipboard automatically.
 
 History SHALL use an explicit Copy URL action that recovers the original token and attempts clipboard writing without generating another link. Clipboard success SHALL be announced only after the write succeeds through temporary feedback on the corresponding Copy URL button and a screen-reader status, without changing the dialog layout. If clipboard writing is unavailable or rejected, the UI SHALL retain the usable URL with a clear manual-copy fallback; a copy failure SHALL NOT be presented as generation failure or cause another invitation to be created. Creation/recovery URL state SHALL remain transient and clear on manager dismissal, without logging URLs or retaining reusable mutation payloads.
 
@@ -213,14 +211,12 @@ The opening-count column SHALL use the short localized label Accesses (Accès) w
 
 #### Scenario: Ordinary team manager attempts link administration
 
-- **WHEN** a team manager uses their own human credential to create, list, recover or revoke a Free link for a collaborative team
-- **THEN** the operation SHALL follow the same lifecycle and audit rules as for a platform access administrator
-- **WHEN** a person without `organization#can_manage_team_free` calls link administration
+- **WHEN** a person without platform-management authority calls link administration
 - **THEN** no link history, reusable token or mutation SHALL be granted
 
 #### Scenario: Copy a previously generated invitation
 
-- **WHEN** an own-human platform access administrator requests a usable invitation URL from history
+- **WHEN** an own-human platform administrator requests a usable invitation URL from history
 - **THEN** the original token SHALL be returned without changing its validity or opening count
 - **AND** ordinary listing and workload/delegated requests SHALL NOT expose that token
 
@@ -251,7 +247,7 @@ The opening-count column SHALL use the short localized label Accesses (Accès) w
 
 #### Scenario: Copy from invitation history
 
-- **WHEN** an own-human platform access administrator chooses Copy URL on a recoverable row
+- **WHEN** an own-human platform administrator chooses Copy URL on a recoverable row
 - **THEN** the existing original URL SHALL be recovered and written to the clipboard
 - **AND** successful copy feedback SHALL appear only after clipboard confirmation, without changing link validity or counts
 
@@ -278,7 +274,7 @@ The opening-count column SHALL use the short localized label Accesses (Accès) w
 
 ### Requirement: Administrators filter invitation history by lifecycle status
 
-Platform access administrators SHALL be able to filter one team's complete invitation history by All, Active, Revoked or Expired. All SHALL be the default. Results and pagination totals SHALL reflect the selected status across the entire history, not only loaded rows. Revoked SHALL take precedence over Expired, which SHALL take precedence over Suspended; unrevoked, unexpired links SHALL be Active when Link access is enabled and Suspended otherwise. Changing the filter SHALL start at the first page and SHALL NOT display rows from the previous filter as current results. Filtering SHALL NOT change validity, membership, counters or access settings. The history table SHALL have a bounded fixed height with internal row scrolling, while its header, pagination and surrounding controls remain visible. When Link access is disabled, the invitation manager SHALL state that link sharing is disabled and valid links are suspended until it is enabled again.
+Callers holding `organization#can_manage_platform_access` SHALL be able to filter one team's complete invitation history by All, Active, Revoked or Expired. All SHALL be the default. Results and pagination totals SHALL reflect the selected status across the entire history, not only loaded rows. Revoked SHALL take precedence over Expired, which SHALL take precedence over Suspended; unrevoked, unexpired links SHALL be Active when Link access is enabled and Suspended otherwise. Changing the filter SHALL start at the first page and SHALL NOT display rows from the previous filter as current results. Filtering SHALL NOT change validity, membership, counters or access settings. The history table SHALL have a bounded fixed height with internal row scrolling, while its header, pagination and surrounding controls remain visible. When Link access is disabled, the invitation manager SHALL state that link sharing is disabled and valid links are suspended until it is enabled again.
 
 #### Scenario: Filter beyond the first page
 
@@ -305,7 +301,7 @@ Platform access administrators SHALL be able to filter one team's complete invit
 
 ### Requirement: Administrators delete obsolete invitation history explicitly
 
-Only callers holding `organization#can_manage_team_free` SHALL permanently delete a team's revoked or expired invitation records. The administration surface SHALL offer one bulk cleanup action with an explicit confirmation identifying the team in its title, eligible count and loss of link notes and counters. The team history SHALL remain visible behind cleanup confirmation without accepting interaction or keyboard dismissal until confirmation closes. Eligibility SHALL include the entire selected team's history independently of the displayed filter or page and SHALL be checked using server time at execution. The action SHALL preserve active links, valid suspended links, other teams' links, memberships, admission exceptions and team settings. Deletion SHALL be atomic and return the actual deleted count; repeating it with no eligible records SHALL succeed with zero. Deleted URLs SHALL remain invalid. Cleanup SHALL be available when Link access is disabled. The UI SHALL disable cleanup when no eligible records are known, hide stale history during refresh, and refresh totals/results after success. Cancellation and failed deletion SHALL NOT announce success. Audit records SHALL identify the actor, team and deleted count without reusable tokens or visitor identities.
+Only callers holding `organization#can_manage_platform_access` SHALL permanently delete a team's revoked or expired invitation records. The administration surface SHALL offer one bulk cleanup action with an explicit confirmation identifying the team in its title, eligible count and loss of link notes and counters. The team history SHALL remain visible behind cleanup confirmation without accepting interaction or keyboard dismissal until confirmation closes. Eligibility SHALL include the entire selected team's history independently of the displayed filter or page and SHALL be checked using server time at execution. The action SHALL preserve active links, valid suspended links, other teams' links, memberships, admission exceptions and team settings. Deletion SHALL be atomic and return the actual deleted count; repeating it with no eligible records SHALL succeed with zero. Deleted URLs SHALL remain invalid. Cleanup SHALL be available when Link access is disabled. The UI SHALL disable cleanup when no eligible records are known, hide stale history during refresh, and refresh totals/results after success. Cancellation and failed deletion SHALL NOT announce success. Audit records SHALL identify the actor, team and deleted count without reusable tokens or visitor identities.
 
 #### Scenario: Confirm cleanup from a filtered page
 
@@ -330,31 +326,27 @@ Only callers holding `organization#can_manage_team_free` SHALL permanently delet
 
 #### Scenario: Ordinary team manager attempts cleanup
 
-- **WHEN** a team manager requests cleanup for an existing collaborative team's revoked or expired Free links
-- **THEN** the cleanup SHALL follow the same eligibility, audit and preservation rules as for a platform access administrator
-- **WHEN** a person without `organization#can_manage_team_free` requests cleanup
+- **WHEN** a person without platform-access-management permission requests cleanup
 - **THEN** the request SHALL be refused without removing history or changing admission
 
 ## ADDED Requirements
 
-### Requirement: Delegated administration remains scoped
+### Requirement: Platform access administration is delegable without team management
 
-The `platform_access_manager` role SHALL grant `organization#can_manage_platform_access`, Free administration and read-only team registry access needed to locate Free controls, without granting unrelated platform administration, user administration, platform role assignment, team registry editing or team resource permissions. The `team_manager` role SHALL grant Free administration for collaborative teams without granting team-wide authorization, policy, filtering, individual exceptions, T0, platform role assignment or team resource permissions. `platform_admin` SHALL retain both authorities. A Free flag change by a team manager SHALL preserve that team's independent authorization flag atomically and SHALL follow existing actor lockout and audit rules. Free enrollment itself SHALL keep its current caller-only membership and admission behavior.
+The `platform_access_manager` role SHALL hold `organization#can_manage_platform_access`, covering all Platform Access administration: filtering, claim rules, user and team whitelist entries, T0, Free enrollment and Free links. It SHALL have read-only team registry access needed to locate Free controls, but SHALL NOT grant unrelated platform administration, user administration, platform role assignment, team registry mutation or team resource permissions. The existing `platform_admin` SHALL retain the complete Platform Access authority. The `team_manager` role alone SHALL NOT grant any Platform Access or Free enrollment authority. A Free enrollment link created by a platform access manager SHALL retain its caller-only membership and Free admission behavior.
 
-#### Scenario: Platform access manager is isolated
+#### Scenario: Platform access manager administers all admission controls
 
 - **WHEN** a caller holds only `platform_access_manager`
 - **THEN** they SHALL be able to manage filtering, rules, individual and team whitelist entries, T0, Free settings and Free links
-- **AND** an unrelated platform reset, user-administration, role-assignment or team-registry action SHALL be refused
+- **AND** an unrelated platform reset, user-administration, role-assignment or team-registry mutation SHALL be refused
 
-#### Scenario: Team manager changes Free only
+#### Scenario: Team manager cannot administer admission
 
-- **WHEN** a caller holds only `team_manager` and changes Free for an existing collaborative team
-- **THEN** the Free flag SHALL change and that team's independent authorization flag SHALL remain unchanged
-- **WHEN** the same caller tries to change team-wide authorization, filtering, policy, an individual exception or T0
-- **THEN** the request SHALL be refused without changing admission state
+- **WHEN** a caller holds only `team_manager` and tries to change Free, create or inspect a Free link, change a team whitelist entry, filtering, policy, an individual exception or T0
+- **THEN** the request SHALL be refused without changing admission state or disclosing link history or a reusable token
 
-#### Scenario: Free enrollment retains its scope
+#### Scenario: Delegated Free enrollment retains its scope
 
-- **WHEN** a person uses a valid Free link created by a team manager
+- **WHEN** a person uses a valid Free link created by a platform access manager
 - **THEN** only that person SHALL gain team membership and the existing Free admission source
