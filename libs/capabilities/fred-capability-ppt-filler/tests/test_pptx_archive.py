@@ -22,6 +22,7 @@ import io
 import re
 import struct
 import zipfile
+from typing import Any
 
 import pytest
 from builder_decks import build_showcase_template
@@ -125,12 +126,13 @@ def _linked_template(base: bytes | None = None) -> bytes:
     slide = presentation.slides[0]
     layout = slide.slide_layout
     picture = slide.shapes.add_picture(io.BytesIO(_PNG), Inches(1), Inches(1))
-    blip = picture._element.blipFill.find("{*}blip")
+    element: Any = picture._element
+    blip = element.blipFill.find("{*}blip")
     del blip.attrib[_R + "embed"]
     blip.set(
         _R + "link", slide.part.rels.get_or_add_ext_rel(_IMAGE_REL, "http://x/s.png")
     )
-    on_layout = copy.deepcopy(picture._element)
+    on_layout = copy.deepcopy(element)
     on_layout.blipFill.find("{*}blip").set(
         _R + "link", layout.part.rels.get_or_add_ext_rel(_IMAGE_REL, "http://x/l.png")
     )

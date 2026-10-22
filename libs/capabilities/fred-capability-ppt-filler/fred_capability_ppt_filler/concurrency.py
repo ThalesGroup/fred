@@ -33,7 +33,7 @@ import asyncio
 import gc
 import traceback
 from collections.abc import Callable
-from typing import TypeVar
+from typing import Any, TypeVar
 
 T = TypeVar("T")
 
@@ -65,7 +65,7 @@ async def in_slot_thread(operation: Callable[..., T], *args: object) -> T:
     return await asyncio.shield(work)
 
 
-def _slot_thread_ended(work: asyncio.Future[object]) -> None:
+def _slot_thread_ended(work: asyncio.Future[Any]) -> None:
     release_heavy_job_slot()
     if not work.cancelled():
         work.exception()  # retrieved: an abandoned thread's error is not re-logged
