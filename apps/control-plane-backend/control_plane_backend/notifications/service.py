@@ -91,7 +91,6 @@ def _to_view(stored: StoredNotification) -> Any:
             "created_at": stored.created_at,
             "expires_at": stored.expires_at,
             "seen_at": stored.seen_at,
-            "read_at": stored.read_at,
             "handled_at": stored.handled_at,
             "handled_by_name": stored.handled_by_name,
             "handled_outcome": stored.handled_outcome,
@@ -315,10 +314,6 @@ class NotificationService:
         if not await self._store.mark_seen(user.uid, up_to):
             raise NotificationNotFound(up_to)
         return await self.summary(user)
-
-    async def mark_read(self, user: KeycloakUser, notification_id: str) -> None:
-        if not await self._store.mark_read(user.uid, notification_id):
-            raise NotificationNotFound(notification_id)
 
     async def delete(self, user: KeycloakUser, notification_id: str) -> None:
         if not await self._store.delete(user.uid, notification_id):

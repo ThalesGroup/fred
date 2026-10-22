@@ -74,14 +74,13 @@ async def test_a_repeat_emission_updates_the_payload_without_rebadging(
     await store.upsert([_draft(editor="Bob")])
     first = await _only(store)
     assert await store.mark_seen("alice", first.id)
-    assert await store.mark_read("alice", first.id)
 
     await store.upsert([_draft(editor="Carol")])
 
     again = await _only(store)
     assert again.id == first.id
     assert again.payload == {"editor_name": "Carol"}
-    assert again.seen_at is not None and again.read_at is not None
+    assert again.seen_at is not None
     assert await store.unseen_count("alice") == 0
 
 
@@ -132,13 +131,12 @@ async def test_every_caller_query_is_scoped_to_the_recipient(
     await store.upsert([_draft("alice"), _draft("bob")])
     alice = await _only(store, "alice")
 
-    assert not await store.mark_read("bob", alice.id)
     assert not await store.mark_seen("bob", alice.id)
     assert not await store.delete("bob", alice.id)
     await store.delete_all("bob")
 
     still = await _only(store, "alice")
-    assert still.read_at is None and still.seen_at is None
+    assert still.seen_at is None
     assert await store.unseen_count("alice") == 1
 
 
@@ -152,7 +150,7 @@ async def test_expired_rows_are_neither_listed_counted_nor_changed(
 
     assert (await store.list_page("alice", limit=50))[0] == []
     assert await store.unseen_count("alice") == 0
-    assert not await store.mark_read("alice", row.id)
+    assert not await store.mark_seen("alice", row.id)
     assert not await store.delete("alice", row.id)
 
 
@@ -208,19 +206,6 @@ async def test_seen_stops_at_the_listed_notification(store: NotificationStore) -
         "arrived-later": True,
         "old": False,
     }
-
-
-@pytest.mark.asyncio
-async def test_reading_a_notification_also_marks_it_seen(
-    store: NotificationStore,
-) -> None:
-    await store.upsert([_draft()])
-    row = await _only(store)
-
-    assert await store.mark_read("alice", row.id)
-
-    read = await _only(store)
-    assert read.read_at is not None and read.seen_at is not None
 
 
 @pytest.mark.asyncio

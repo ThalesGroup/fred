@@ -108,23 +108,6 @@ async def mark_notifications_seen(
         raise _not_found() from exc
 
 
-@router.post(
-    "/notifications/{notification_id}/read",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Mark one of the caller's notifications read.",
-)
-async def mark_notification_read(
-    notification_id: str,
-    notifications: Notifications,
-    user: KeycloakUser = Depends(get_current_user),
-) -> Response:
-    try:
-        await notifications.mark_read(user, notification_id)
-    except NotificationNotFound as exc:
-        raise _not_found() from exc
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
 @router.delete(
     "/notifications/{notification_id}",
     status_code=status.HTTP_204_NO_CONTENT,

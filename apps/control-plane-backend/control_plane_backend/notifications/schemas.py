@@ -128,9 +128,6 @@ class _NotificationBase(BaseModel):
     created_at: datetime
     expires_at: datetime
     seen_at: datetime | None = None
-    read_at: datetime | None = Field(
-        default=None, description="Null while the tile keeps its unread style."
-    )
     handled_at: datetime | None = Field(
         default=None,
         description="Set once someone else acted on the subject; the tile then "

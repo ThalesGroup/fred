@@ -70,9 +70,6 @@ class NotificationRow(Base):
     seen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    read_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
     handled_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

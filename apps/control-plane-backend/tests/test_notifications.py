@@ -328,7 +328,7 @@ async def client(
 
 
 @pytest.mark.asyncio
-async def test_routes_list_see_read_delete_and_clear(
+async def test_routes_list_see_delete_and_clear(
     service: NotificationService, client
 ) -> None:
     http, _ = client
@@ -346,7 +346,6 @@ async def test_routes_list_see_read_delete_and_clear(
 
     seen = await http.post("/notifications/seen", json={"up_to": newest})
     assert seen.status_code == 200 and seen.json() == {"unseen_count": 0}
-    assert (await http.post(f"/notifications/{newest}/read")).status_code == 204
     assert (await http.delete(f"/notifications/{newest}")).status_code == 204
     assert len((await http.get("/notifications")).json()["items"]) == 1
     assert (await http.delete("/notifications")).status_code == 204
@@ -367,7 +366,6 @@ async def test_another_users_notification_answers_404(
     assert (await http.get("/notifications")).json()["items"] == []
     assert (await http.get("/notifications/summary")).json() == {"unseen_count": 0}
     for response in (
-        await http.post(f"/notifications/{notification.id}/read"),
         await http.delete(f"/notifications/{notification.id}"),
         await http.post("/notifications/seen", json={"up_to": notification.id}),
     ):
@@ -375,7 +373,7 @@ async def test_another_users_notification_answers_404(
     assert (await http.delete("/notifications")).status_code == 204
 
     page = await service.list_page(_user("alice"), limit=50, before=None)
-    assert [item.read_at for item in page.items] == [None]
+    assert [item.seen_at for item in page.items] == [None]
 
 
 @pytest.mark.asyncio
@@ -408,13 +406,12 @@ async def test_notification_routes_reject_an_unauthenticated_caller(
             await http.get(f"{base}/summary"),
             await http.get(base),
             await http.post(f"{base}/seen", json={"up_to": "x"}),
-            await http.post(f"{base}/x/read"),
             await http.delete(f"{base}/x"),
             await http.delete(base),
             await http.get("/control-plane/v1/admin/platform/notification-types"),
         ]
 
-    assert [response.status_code for response in responses] == [401] * 7
+    assert [response.status_code for response in responses] == [401] * 6
 
 
 # --- platform switch per type ---------------------------------------------------

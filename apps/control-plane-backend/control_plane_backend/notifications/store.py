@@ -62,7 +62,6 @@ class StoredNotification:
     created_at: datetime
     expires_at: datetime
     seen_at: datetime | None
-    read_at: datetime | None
     handled_at: datetime | None
     handled_by: str | None
     handled_by_name: str | None
@@ -113,7 +112,6 @@ def _to_stored(row: NotificationRow) -> StoredNotification:
         created_at=_aware(row.created_at),
         expires_at=_aware(row.expires_at),
         seen_at=row.seen_at and _aware(row.seen_at),
-        read_at=row.read_at and _aware(row.read_at),
         handled_at=row.handled_at and _aware(row.handled_at),
         handled_by=row.handled_by,
         handled_by_name=row.handled_by_name,
@@ -149,7 +147,7 @@ class NotificationStore:
 
     async def upsert(self, drafts: Sequence[NotificationDraft]) -> int:
         """Insert in one statement; an open row of the same recipient and group
-        gets the new payload and keeps its seen and read state."""
+        gets the new payload and keeps its seen state."""
         # One row per (recipient, group): a statement may not update a row twice.
         unique = list({(d.recipient_id, d.group_key): d for d in drafts}.values())
         if not unique:
@@ -302,22 +300,6 @@ class NotificationStore:
                 .values(seen_at=now)
             )
             return True
-
-    async def mark_read(self, recipient_id: str, notification_id: str) -> bool:
-        now = utcnow()
-        async with use_session(self._sessions) as s:
-            result = await s.execute(
-                update(NotificationRow)
-                .where(
-                    *self._mine(recipient_id, now),
-                    NotificationRow.id == notification_id,
-                )
-                .values(
-                    read_at=func.coalesce(NotificationRow.read_at, now),
-                    seen_at=func.coalesce(NotificationRow.seen_at, now),
-                )
-            )
-            return _rowcount(result) > 0
 
     async def delete(self, recipient_id: str, notification_id: str) -> bool:
         async with use_session(self._sessions) as s:
