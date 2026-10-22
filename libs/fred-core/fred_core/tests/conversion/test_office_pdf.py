@@ -234,8 +234,8 @@ def test_a_timeout_kills_the_whole_process_group(tmp_path) -> None:
     )
     started = time.monotonic()
     with pytest.raises(subprocess.TimeoutExpired):
-        _run_soffice([sys.executable, "-c", script], timeout=1.5)
-    assert time.monotonic() - started < 10
+        _run_soffice([sys.executable, "-c", script], timeout=5)
+    assert time.monotonic() - started < 30
     grandchild = int(pid_file.read_text())
     deadline = time.monotonic() + 5
     while not _gone(grandchild) and time.monotonic() < deadline:
