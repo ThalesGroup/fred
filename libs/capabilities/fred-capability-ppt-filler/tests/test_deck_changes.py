@@ -1546,3 +1546,15 @@ def test_list_indexes_in_one_call_are_the_base_slides():
             ],
         )
     assert "'items[1]'" in caught.value.problems[0]
+
+
+@pytest.mark.asyncio
+async def test_changes_that_remove_every_slide_say_so(monkeypatch, deck_plan_store):
+    turn = _Turn(monkeypatch, FakeWorkspace())
+    text, result = await turn.build(slides=[COVER, {"title": "Contact"}])
+    assert text.startswith(tools_mod._DELIVERED), text
+    text, result = await turn.build(
+        changes=[{"op": "remove", "slide": 1}, {"op": "remove", "slide": 2}]
+    )
+    assert result.is_error and "remove every slide of the deck" in text
+    assert not turn.rendered[1:]

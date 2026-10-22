@@ -46,6 +46,7 @@ from fred_capability_ppt_filler.builder.models import Zone
 from fred_capability_ppt_filler.builder.plan import (
     MAX_SERIES,
     MAX_SLICES,
+    POINT_AXES,
     STACKED_TYPES,
     XY_TYPES,
     PlanChart,
@@ -197,6 +198,10 @@ def _title_room(zone: Zone, size: Tuple[int, int]) -> int:
     return text_metrics.chars_per_line(width, chart_pt(zone) * 1.2, None, True)
 
 
+# Past this, a value is a unit mistake, and the axis labels overflow.
+MAX_MAGNITUDE = 1e15
+
+
 def named(found: List[Tuple[str, str]], at: str) -> List[Tuple[str, str]]:
     """Problems of one chart of several, each naming it (``charts[1].title …``)."""
     if at == "chart":
@@ -296,6 +301,11 @@ def data_problems(chart: PlanChart) -> List[Tuple[str, str]]:
                     "write a number, or drop that category",
                 )
             )
+        found += [
+            _too_large(f"{at}.values[{i}]", v)
+            for i, v in enumerate(series.values)
+            if v is not None and abs(v) > MAX_MAGNITUDE
+        ]
         if len(chart.series) > 1 and not series.name:
             found.append((f"{at} has no name", "name each series: the legend shows it"))
     if chart.type in ROUND:
@@ -385,10 +395,22 @@ def _point_problems(chart: PlanChart) -> List[Tuple[str, str]]:
     return found
 
 
+def _too_large(at: str, value: float) -> Tuple[str, str]:
+    return (
+        f"{at} is {value:.3g}, too large to chart",
+        "write the values in a larger unit (millions, billions) and say it in the unit",
+    )
+
+
 def _point_problem(at: str, point: PlanPoint, kind: str) -> List[Tuple[str, str]]:
     found = [
         (f"{at}.{axis} '{text}' is not a number", "write a number, or drop that point")
         for axis, text in sorted(point.unread.items())
+    ]
+    found += [
+        _too_large(f"{at}.{axis}", v)
+        for axis in POINT_AXES
+        if (v := getattr(point, axis)) is not None and abs(v) > MAX_MAGNITUDE
     ]
     missing = [
         a for a in ("x", "y") if getattr(point, a) is None and a not in point.unread

@@ -536,6 +536,7 @@ _TREND_NAMES: Dict[str, Trend] = {
     ),
 }
 _NUMBER = re.compile(r"^([^\d+\-.,]*?)\s*([+\-]?\d[\d\s.,']*)\s*(\D*)$")
+_SCIENTIFIC = re.compile(r"^[+\-]?\d+(\.\d+)?[eE][+\-]?\d+$")
 
 
 def _chart_type(value: Any) -> Tuple[str, Optional[str]]:
@@ -614,6 +615,9 @@ def read_number(value: Any, mark: Optional[str] = None) -> Tuple[Optional[float]
     if isinstance(value, (int, float)):
         return (float(value), "") if math.isfinite(value) else (None, "")
     text = str(value).strip()
+    if _SCIENTIFIC.match(text):
+        number = float(text)
+        return (number, "") if math.isfinite(number) else (None, "")
     match = _match_number(text)
     if match is None:
         return None, ""

@@ -1594,6 +1594,12 @@ def build_builder_tools(
             if base is None:
                 turn_base[:] = [stored]
 
+        if base is not None and not plan.slides:
+            return _error(
+                "No deck was built: these changes remove every slide of the deck "
+                "(nothing was changed). Keep at least one slide, or to start a new "
+                "deck send it whole in `slides`."
+            )
         if not any(has_content(s) for s in plan.slides if s.invalid_entry is None):
             return _error(
                 "No deck was built: every slide of the plan is empty. Write each slide's "

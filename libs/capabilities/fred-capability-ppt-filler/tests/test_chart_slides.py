@@ -30,7 +30,7 @@ from builder_decks import (
     build_layouts_only_template,
     build_slides,
 )
-from fred_capability_ppt_filler.builder import tools
+from fred_capability_ppt_filler.builder import charts, tools
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.assign import Assignment, assign, infer_kinds
 from fred_capability_ppt_filler.builder.builtin import builtin_template
@@ -1525,7 +1525,17 @@ def test_the_designs_line_says_a_chart_built_as_another_type(builtin):
         (["3.141", "2"], [3141.0, 2.0]),  # ambiguous on its own: thousands
         (["1.234.567", "2.5"], [1234567.0, 2.5]),
         (["1,234.5", "3,141"], [1234.5, 3141.0]),
+        (["1e3", "2.5E-1"], [1000.0, 0.25]),
     ],
 )
 def test_a_series_reads_its_separators_together(values, read):
     assert PlanSeries.model_validate({"values": values}).values == read
+
+
+def test_an_absurd_magnitude_is_refused_with_a_unit_hint():
+    chart = PlanChart.model_validate(
+        {"type": "column", "categories": ["a", "b"], "series": [{"values": [1e300, 2]}]}
+    )
+    (what, fix), *_ = charts.data_problems(chart)
+    assert what == "chart.series[0].values[0] is 1e+300, too large to chart"
+    assert "larger unit" in fix
