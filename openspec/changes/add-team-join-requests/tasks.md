@@ -51,7 +51,8 @@
 
 ## 7. Verification
 
-- [ ] 7.1 Control-plane `make code-quality`, `make test`, `ruff check --select I` and basedpyright on touched files.
+- [x] 7.1 Control-plane `make code-quality`, `make test`, `ruff check --select I` and basedpyright on touched files.
+  - Done (final, after rebase): see `add-in-app-notifications/verification.md` (2096 passed, 10 skipped, 14 deselected; basedpyright 0 errors).
 - [ ] 7.2 Run the `fred-performance-reviewer` skill on the notification emission and decision paths.
 - [ ] 7.3 Live check with the owner (two browser users, a public team): opt in, ask with a message, see the badge within 15 s, accept from the tile, second admin sees "Handled by", requester gets the answer and finds the team under "Your teams"; repeat with refuse and with cancel; switch the team private and check the mode.
 - [ ] 7.4 Record the evidence in `verification.md`, reconcile divergences in `design.md`, then archive after `add-in-app-notifications`.

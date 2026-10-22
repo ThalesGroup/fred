@@ -1,14 +1,11 @@
-## Offline evidence (2026-10-22, branch `feat/notifications`)
+## Final verification (2026-10-22, branch `feat/notifications`)
 
-Proven (counts below predate the refactor):
-- Refactor re-verification: pending
-- `apps/control-plane-backend`: `make test` 2055 passed, 10 skipped, 13 deselected; `make code-quality` green (ruff, `ruff check --select I`, format, bandit, detect-secrets, basedpyright 0 errors, 0 warnings); `make db-check-heads` (one head) and `make db-check-sqlite` green (task 9.1).
-- `apps/frontend`, in the worktree's own `node_modules` with no Vite running: `make code-quality` (tsc, prettier, eslint) green after ordering one SCSS property; `make test` 363 files passed, 1 skipped; 4464 tests passed, 8 skipped.
-- `openspec validate add-in-app-notifications --strict` valid.
-
-## Migration round trip (task 1.3)
-
-Run on the pre-squash revisions (2026-10-22, scratch copy `fred_notif` of the local `fred` database, upgrade / downgrade / upgrade, `alembic current` after each). The squashed revision `83b81adf7450` is covered by the refactor re-verification, still pending.
+Branch rebased on `origin/swift` (merge base `9d85f3ae7`); covers the squashed revision `83b81adf7450` and the quality refactor (section 11).
+- `apps/control-plane-backend`: `ruff check`, `ruff check --select I`, `ruff format --check` clean; basedpyright with baseline, 0 errors; `pytest -m "not integration"`: 2096 passed, 10 skipped, 14 deselected; `alembic heads`: single head `83b81adf7450`.
+- Postgres (owner-run, throwaway database `fred_migcheck`): `alembic upgrade head` from empty, `alembic check` clean, `alembic downgrade c9acb7dd3ad0`, `alembic upgrade head` again; `tests/test_notification_store_postgres_integration.py -m integration_postgres`: 1 passed.
+- `apps/frontend`: `tsc --noEmit` clean; eslint and prettier clean on the changed files; full `vitest run`: 366 files passed (1 skipped), 4547 tests passed, 8 skipped.
+- Owner live checks on two users (Vite :5174 + test control plane) through the review rounds.
+- `openspec validate add-in-app-notifications --strict` and `openspec validate add-team-join-requests --strict` valid.
 
 ## Live check (task 9.4, 2026-10-22, owner-run)
 
