@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [DOC-2](#doc-2-contrat-de-lespace-personnel-à-sa-place) | Contrat de l'espace personnel déplacé hors du catalogue SQL | À jour | A2 |
 | [DOC-1](#doc-1-carte-des-sources-exacte) | Carte des sources exacte pour Resources et l'autorisation | À jour | Carte des sources, README d'arc42 |
 | [F16](#f16-noms-et-usage-cli-exacts) | Noms, commentaires et usage CLI exacts | Tests ciblés validés ; validation finale | README du composant, 09 (bloc généré) |
 | [F09](#f09-lectures-openfga-bornées) | Lectures OpenFGA concurrentes bornées | Tests ciblés validés ; validation finale | 09 |
@@ -101,6 +102,15 @@ fiche plutôt que d'effacer les résultats précédents.
   (`entries`/`summary`, `create_folder`, `rename_folder`/`delete_folder`), test frontend du
   workspace, et nouvelle ligne de l'autorisation métier (`spaces::authorize`, F11) reprise
   dans le tableau « Find a function ». `make -C docs/architecture check` réussi.
+
+## DOC-2 Contrat de l'espace personnel à sa place
+
+- 2026-10-22 : les deux paragraphes en fin de catalogue SQL d'A2 vérifiés contre `spaces.rs`,
+  `api.rs` et `domain.rs`. Le premier (« Manager enforces… ») répétait le paragraphe
+  précédent et était inexact depuis F14 (unicité de l'espace personnel garantie par l'index
+  `space_personal_owner`, déjà dans le tableau) : supprimé. Le second, contrat HTTP écrit en
+  deltas, réécrit au présent dans la section HTTP d'A2 avec les statuts réels (200, 201, 403,
+  404, 409) ; les rôles, déjà décrits dans 03, retirés. `make -C docs/architecture check` réussi.
 
 ## F16 Noms et usage CLI exacts
 

@@ -25,6 +25,13 @@ their type answer 422 `invalid_fields`; an oversized JSON body answers 413
 `request_too_large`. These rejections use fixed messages that never echo input, and
 the contract declares them on every route that takes parameters or a body.
 
+`POST /me/personal-space` takes `{organization_id}` and returns a `Space`: 201 when it
+creates the caller's personal space, 200 when it reuses it under current authority.
+Another organization than the caller's gives 404; missing eligibility on creation, or
+missing organization or personal read on reuse, gives 403; a personal space without its
+organization link gives 409. An inaccessible existing space is never replaced. `MySpace`
+carries the space's `organization_id` from SQL placement.
+
 <!-- generated: routes apps/control-plane/src/api.rs /control-plane/v1 -->
 | Method | Path | Handler |
 | --- | --- | --- |
@@ -358,18 +365,6 @@ application; foreign keys guarantee existence, not those domain rules. Sibling
 space names and membership eligibility are enforced by the application. See [security](03-security.md) and [organizations](04-organizations.md).
 For deployment and schema inspection, see
 [SQLx schema evolution](A3-manager-operations.md#sqlx-schema-evolution).
-
-Manager enforces under the organization lock using SQL placement: a team's parent
-is an organization and a project's parent a non-personal team; sibling names are
-unique; one personal space per owner and organization.
-
-
-`POST /me/personal-space` retains `{organization_id}` and returns a `Space`: 201
-for creation, 200 for current-authority reuse. The identifier must match the caller's
-unique organization; another organization gives 404. Missing eligibility on creation,
-organization read or personal read on reuse gives 403. Inaccessible existing spaces are not replaced.
-`MySpace` adds required `organization_id` from placement, without changing personal
-paths. `Role` adds `personal_space_creator`; `SpacePermission` adds `create_personal_space`.
 
 ## OpenFGA model
 
