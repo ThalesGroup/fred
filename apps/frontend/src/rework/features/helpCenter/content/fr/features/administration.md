@@ -52,8 +52,9 @@ n'accèdent donc pas nécessairement à la même page.
   disponibles pour les utilisateurs.
 - **Annonces** — les bandeaux et les patch notes affichés aux utilisateurs.
 - **Notifications** — les notifications que la plateforme envoie, chacune
-  activable ou désactivable pour tout le monde. Désactiver un type supprime
-  aussi les notifications de ce type déjà reçues ; l'action d'origine reste
+  activable ou désactivable pour tout le monde. Désactiver un type masque ses
+  notifications pour tout le monde, y compris celles déjà reçues, jusqu'à ce
+  qu'il soit réactivé ; l'action d'origine reste
   disponible ailleurs (par exemple les demandes d'adhésion dans **Membres**).
 - **Marketplaces** — qui peut publier des agents dans la marketplace, et
   combien.

@@ -25,8 +25,7 @@ retour.
 - **Vue** : ouvrir la cloche marque comme vu tout ce qu'elle affiche, et le
   nombre disparaît. Une notification arrivée pendant que la liste est ouverte
   compte encore sur la cloche ensuite.
-- **Traitée** : chaque notification reste mise en avant, avec un point, tant
-  que vous n'avez rien fait. Dès que vous cliquez dessus ou sur l'un de ses
+- **Traitée** : dès que vous cliquez sur une notification ou sur l'un de ses
   boutons, elle vous emmène là où elle pointe (en général la page **Agents**
   de l'équipe) et disparaît de votre liste. **Accepter** et **Refuser** ne la
   retirent qu'une fois la réponse enregistrée : en cas d'échec, elle reste.
@@ -75,8 +74,8 @@ Les deux concernent un agent que vous avez publié sur la
 ## Les notifications de demandes d'adhésion
 
 - **… demande à rejoindre …** : envoyée aux Admins d'une équipe quand quelqu'un
-  demande à la rejoindre, avec son message en entier. **Accepter** en fait un
-  membre, **Refuser** décline la demande. La notification disparaît alors pour
+  demande à la rejoindre, avec son message en entier. **Refuser**, à gauche,
+  décline la demande ; **Accepter**, à droite, en fait un membre. La notification disparaît alors pour
   vous, et affiche **Acceptée par** ou **Refusée par** suivi de votre nom pour
   les autres Admins. Si la demande a été retirée ou a déjà reçu une réponse, la
   notification disparaît simplement.

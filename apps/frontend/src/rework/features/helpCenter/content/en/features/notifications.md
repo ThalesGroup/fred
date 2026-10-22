@@ -24,9 +24,8 @@ whole screen, with a back arrow.
 - **Seen**: opening the bell marks everything it shows as seen, and the number
   goes away. A notification that arrives while the list is open still counts
   on the bell afterwards.
-- **Handled**: each notification stays highlighted, with a dot, until you do
-  something with it. As soon as you click it or one of its buttons, it takes
-  you where it points (usually the team's **Agents** page) and leaves your
+- **Handled**: as soon as you click a notification or one of its buttons, it
+  takes you where it points (usually the team's **Agents** page) and leaves your
   list. **Accept** and **Refuse** remove it only once the answer is saved: if
   it fails, the notification stays.
 
@@ -72,8 +71,8 @@ Both concern an agent you published on the
 ## Join request notifications
 
 - **… asks to join …**: sent to a team's Admins when someone asks to join it,
-  with their message in full. **Accept** makes the person a member, **Refuse**
-  declines. The notification then goes away for you, and shows **Accepted by**
+  with their message in full. **Refuse**, on the left, declines; **Accept**, on
+  the right, makes the person a member. The notification then goes away for you, and shows **Accepted by**
   or **Refused by** followed by your name for the other Admins. If the request
   was withdrawn or already answered, the notification simply disappears.
 - **You joined …** / **Request to join … declined**: the answer to your own
