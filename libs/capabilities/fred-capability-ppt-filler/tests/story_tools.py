@@ -70,7 +70,7 @@ class _Request:
         return self
 
 
-async def _pdf(_bytes: bytes, *, suffix: str, timeout_seconds: float = 0):
+async def _pdf(_bytes: bytes, *, suffix: str, **_options):
     return b"%PDF-fake"
 
 

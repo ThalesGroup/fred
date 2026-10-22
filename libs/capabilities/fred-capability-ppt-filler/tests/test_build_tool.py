@@ -71,11 +71,11 @@ def preview_union():
     rebuild_ui_part_union(())
 
 
-async def _pdf(_bytes: bytes, *, suffix: str, timeout_seconds: float = 0):
+async def _pdf(_bytes: bytes, *, suffix: str, **_options):
     return b"%PDF-fake"
 
 
-async def _no_pdf(_bytes: bytes, *, suffix: str, timeout_seconds: float = 0):
+async def _no_pdf(_bytes: bytes, *, suffix: str, **_options):
     return None
 
 

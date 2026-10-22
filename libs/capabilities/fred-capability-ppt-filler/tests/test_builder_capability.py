@@ -76,11 +76,11 @@ def _uploads(content: bytes):
     return {TEMPLATE_SLOT: [UploadedFile(filename="template.pptx", content=content)]}
 
 
-async def _pdf(_bytes: bytes, *, suffix: str, timeout_seconds: float = 0):
+async def _pdf(_bytes: bytes, *, suffix: str, **_options):
     return b"%PDF-fake"
 
 
-async def _no_pdf(_bytes: bytes, *, suffix: str, timeout_seconds: float = 0):
+async def _no_pdf(_bytes: bytes, *, suffix: str, **_options):
     return None
 
 
@@ -454,7 +454,7 @@ def test_builtin_patterns_returns_pdf_or_503(monkeypatch):
 def test_builtin_patterns_are_converted_once_per_process(monkeypatch):
     calls = []
 
-    async def _counting(_bytes: bytes, *, suffix: str, timeout_seconds: float = 0):
+    async def _counting(_bytes: bytes, *, suffix: str, **_options):
         calls.append(suffix)
         return b"%PDF-builtin"
 
