@@ -1230,7 +1230,7 @@ async def edit_team_registry(
     request: EditTeamRegistryRequest,
     deps: TeamServiceDependencies,
 ) -> TeamWithPermissions:
-    """Rename, describe and change the admins of any team (platform admin).
+    """Rename and describe teams; platform admins may also change admins.
 
     Admins change as a diff. Every check (name free, at least one active
     admin left) runs before any write, so a refusal changes nothing. Full
@@ -1239,10 +1239,17 @@ async def edit_team_registry(
     rebac = deps.rebac
     await rebac.check_user_permission_or_raise(
         user,
-        OrganizationPermission.CAN_EDIT_TEAM_REGISTRY,
+        OrganizationPermission.CAN_EDIT_TEAM_INFO,
         ORGANIZATION_ID,
         consistency_token=RebacEngine.HIGHER_CONSISTENCY,
     )
+    if request.add_admin_ids or request.remove_admin_ids:
+        await rebac.check_user_permission_or_raise(
+            user,
+            OrganizationPermission.CAN_EDIT_TEAM_REGISTRY,
+            ORGANIZATION_ID,
+            consistency_token=RebacEngine.HIGHER_CONSISTENCY,
+        )
     store = deps.get_team_metadata_store()
     metadata = await store.get_by_team_id(team_id)
     if metadata is None:
