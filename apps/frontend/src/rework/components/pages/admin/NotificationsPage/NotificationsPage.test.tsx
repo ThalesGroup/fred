@@ -13,8 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// One row per type the backend lists, named from its value; a switch saves at
-// once and a failure is reported in a toast.
+// One row per type the backend lists, named from its value; switching on saves at
+// once, switching off asks first; a failure is reported in a toast.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -35,6 +35,7 @@ const h = vi.hoisted(() => ({
   },
   save: vi.fn(),
   showError: vi.fn(),
+  confirm: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -46,6 +47,9 @@ vi.mock("react-i18next", () => ({
 }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showSuccess: vi.fn(), showError: h.showError }),
+}));
+vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
+  useConfirmationDialog: () => ({ showConfirmationDialog: h.confirm }),
 }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useNotificationTypesQuery: () => h.query,
@@ -69,6 +73,7 @@ const switchOf = (row: Element) => row.querySelector('input[type="checkbox"]') a
 beforeEach(() => {
   h.save.mockReset();
   h.showError.mockReset();
+  h.confirm.mockReset();
   h.save.mockReturnValue({ unwrap: () => Promise.resolve({}) });
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -91,13 +96,32 @@ describe("NotificationsPage", () => {
     expect(rows().map((row) => switchOf(row).checked)).toEqual([true, false, true]);
   });
 
-  it("saves a switch at once", async () => {
+  it("switches a type on at once", async () => {
+    await act(async () => switchOf(rows()[1]).click());
+    expect(h.confirm).not.toHaveBeenCalled();
+    expect(h.save).toHaveBeenCalledWith({
+      notificationType: "team.join_requested",
+      setNotificationTypeRequest: { enabled: true },
+    });
+    expect(h.showError).not.toHaveBeenCalled();
+  });
+
+  it("asks before switching a type off, saving only once confirmed", async () => {
     await act(async () => switchOf(rows()[0]).click());
+    expect(h.save).not.toHaveBeenCalled();
+    expect(h.confirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "rework.notificationSettings.turnOff.title",
+        message: "rework.notificationSettings.turnOff.message",
+        criticalAction: true,
+      }),
+    );
+
+    await act(async () => h.confirm.mock.calls[0][0].onConfirm());
     expect(h.save).toHaveBeenCalledWith({
       notificationType: "agent.republish_needed",
       setNotificationTypeRequest: { enabled: false },
     });
-    expect(h.showError).not.toHaveBeenCalled();
   });
 
   it("reports a failed save in a toast", async () => {

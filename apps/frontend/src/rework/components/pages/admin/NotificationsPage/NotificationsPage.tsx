@@ -15,6 +15,7 @@
 import { useTranslation } from "react-i18next";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
+import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
@@ -33,16 +34,32 @@ import styles from "./NotificationsPage.module.css";
 export default function NotificationsPage() {
   const { t } = useTranslation();
   const { showError } = useToast();
+  const { showConfirmationDialog } = useConfirmationDialog();
   const { data, isLoading, isFetching, isError } = useNotificationTypesQuery();
   const [setType, { isLoading: isSaving }] = useSetNotificationTypeMutation();
   const locked = isFetching || isSaving;
 
-  const toggle = async (type: NotificationType, enabled: boolean) => {
+  const save = async (type: NotificationType, enabled: boolean) => {
     try {
       await setType({ notificationType: type, setNotificationTypeRequest: { enabled } }).unwrap();
     } catch (error: unknown) {
       showError({ summary: t("rework.notificationSettings.saveFailed"), detail: normalizeApiError(error).detail });
     }
+  };
+
+  // Off deletes the notifications already sent, for everyone: confirm it first.
+  const toggle = (type: NotificationType, name: string, enabled: boolean) => {
+    if (enabled) {
+      void save(type, true);
+      return;
+    }
+    showConfirmationDialog({
+      title: t("rework.notificationSettings.turnOff.title", { name }),
+      message: t("rework.notificationSettings.turnOff.message"),
+      confirmButtonLabel: t("rework.notificationSettings.turnOff.confirm"),
+      criticalAction: true,
+      onConfirm: () => void save(type, false),
+    });
   };
 
   return (
@@ -73,7 +90,7 @@ export default function NotificationsPage() {
                 size="small"
                 checked={enabled}
                 disabled={locked}
-                onChange={(event) => void toggle(type, event.target.checked)}
+                onChange={(event) => toggle(type, name, event.target.checked)}
                 aria-label={t("rework.notificationSettings.toggleLabel", { name })}
               />
             </li>

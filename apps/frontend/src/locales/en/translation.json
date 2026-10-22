@@ -4392,6 +4392,11 @@
       "loadFailed": "The notification settings could not be loaded.",
       "saveFailed": "The notification setting could not be saved.",
       "toggleLabel": "Send “{{name}}” notifications",
+      "turnOff": {
+        "title": "Turn off “{{name}}”?",
+        "message": "The notifications of this type already sent will be deleted, for everyone. Turning it back on only affects new events.",
+        "confirm": "Turn off"
+      },
       "types": {
         "agent": {
           "republish_needed": {
