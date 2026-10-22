@@ -51,6 +51,10 @@ n'accèdent donc pas nécessairement à la même page.
 - **Interface utilisateur** — le thème proposé par défaut et les thèmes
   disponibles pour les utilisateurs.
 - **Annonces** — les bandeaux et les patch notes affichés aux utilisateurs.
+- **Notifications** — les notifications que la plateforme envoie, chacune
+  activable ou désactivable pour tout le monde. Désactiver un type supprime
+  aussi les notifications de ce type déjà reçues ; l'action d'origine reste
+  disponible ailleurs (par exemple les demandes d'adhésion dans **Membres**).
 - **Marketplaces** — qui peut publier des agents dans la marketplace, et
   combien.
 - **Analytiques** — les indicateurs d'usage à l'échelle de la plateforme.

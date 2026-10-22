@@ -99,6 +99,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "PlatformAccessJoiners",
     "ControlPlaneAnnouncement",
     "ControlPlaneNotification",
+    "ControlPlaneNotificationTypes",
     "ControlPlaneTeamJoinRequest",
   ],
   endpoints: {
@@ -214,6 +215,13 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     clearNotificationsControlPlaneV1NotificationsDelete: {
       invalidatesTags: ["ControlPlaneNotification"],
+    },
+    // Turning a type off deletes its sent rows, so the caller's own list refreshes too.
+    listNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGet: {
+      providesTags: ["ControlPlaneNotificationTypes"],
+    },
+    setNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePut: {
+      invalidatesTags: ["ControlPlaneNotificationTypes", "ControlPlaneNotification"],
     },
     // Team wiki (WIKI-01/02). One tag per team carries the tree; one per PAGE ID
     // carries a page's content and its history.
@@ -1240,6 +1248,9 @@ export const {
   useMarkNotificationReadControlPlaneV1NotificationsNotificationIdReadPostMutation: useMarkNotificationReadMutation,
   useDeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteMutation: useDeleteNotificationMutation,
   useClearNotificationsControlPlaneV1NotificationsDeleteMutation: useClearNotificationsMutation,
+  useListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetQuery: useNotificationTypesQuery,
+  useSetNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePutMutation:
+    useSetNotificationTypeMutation,
   // Team administrator charter acceptance.
   useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation: useAcceptTeamAdminCharterMutation,
   useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery: useGetTeamAdminCharterAcceptanceQuery,

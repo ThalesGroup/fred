@@ -17,8 +17,10 @@ Tracking: GitHub issue #3232. Design and catalogue: `docs/swift/rfc/NOTIFICATION
   - `agent.marketplace_removed`: the entry entered the Removed state (platform admin or automatic rule) without the publisher causing it; sent to its publisher.
 - **`published_by` on marketplace entries**, written on every publish and republish. Older entries have none and notify nobody until republished.
 - **Help Center** fr+en page on notifications.
+- **Platform switch per type** (owner decision, 2026-10-22): a platform admin page "Notifications" lists every type the backend knows, each with a sentence on when it is sent and to whom and an on/off switch. Platform-wide only; every type on by default. Turning a type off stops sending it and deletes its sent notifications for everyone; turning it back on only affects new events. The underlying actions stay where they are (e.g. Members > Pending requests).
+- **Failed tile actions are reported**: an Accept/Refuse that fails with anything but a 404 shows the app's error toast instead of failing silently.
 
-Out of scope: join requests (slice 2, through a new opt-in "on request" team access mode) and quota boost requests (slice 3, sent to the admins of the requester's teams), email or any other channel, per-category preferences, toasts.
+Out of scope: join requests (slice 2, through a new opt-in "on request" team access mode) and quota boost requests (slice 3, sent to the admins of the requester's teams), email or any other channel, per-user or per-team preferences, toasts announcing a notification.
 
 ## Capabilities
 
@@ -33,5 +35,6 @@ None. The marketplace triggers are specified in `notifications`; the marketplace
 ## Impact
 
 - Backend (control-plane): new `notifications` package (`api`, `service`, `store`, `schemas`) and `models/notification_models.py`; one linear Alembic revision on the current head (table + `agent_marketplace_entries.published_by`); hooks in `product/service.py` (`update_agent_instance`) and `agent_marketplace/` (publish, removal); expiry step in the Temporal `LifecycleManagerWorkflow`; cleanup in user and team deletion; `authz-endpoint-matrix.yaml`.
+- Platform switch: `disabled_notification_types` table (Alembic `83b81adf7450`), `GET /admin/platform/notification-types`, `PUT /admin/platform/notification-types/{notification_type}` (`can_manage_platform`), admin page `NotificationsPage` at `/admin/notifications`.
 - Frontend: regenerated `controlPlaneOpenApi.ts`, aliases in `controlPlaneApiEnhancements.ts`; bell in `MainNavBar`; new `NotificationsPopover` and `NotificationTile`; fr+en strings; Help Center fr+en.
 - Docs: `CONTROL-PLANE-PRODUCT-CONTRACT.md` dated entry, `COMPONENT-UX.md`, migration note (minor: schema migration, no operator action).

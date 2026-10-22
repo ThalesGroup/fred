@@ -242,11 +242,11 @@ describe("renderNotification", () => {
     expect(calls[1].arg).toEqual({ notificationId: "n1" });
   });
 
-  it("keeps the tile on any other failure", async () => {
+  it("keeps the tile and rejects on any other failure", async () => {
     const [accept] = renderNotification(joinRequested, instances.en.t).actions;
     const { calls, dispatch } = fakeDispatch({ accept: Object.assign(new Error("down"), { status: 500 }) });
 
-    await callOf(accept)(dispatch);
+    await expect(callOf(accept)(dispatch)).rejects.toThrow("down");
 
     expect(calls.map((call) => call.endpoint)).toEqual(["accept"]);
   });

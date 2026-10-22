@@ -22,6 +22,8 @@ import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import NotificationTile from "@shared/molecules/NotificationTile/NotificationTile.tsx";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
 import { relativeTime } from "../tasks/taskLabels";
 import {
   enhancedControlPlaneApi,
@@ -132,6 +134,7 @@ interface NotificationsPopoverProps {
 export default function NotificationsPopover({ id, onClose }: NotificationsPopoverProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { showError } = useToast();
   const dispatch = useDispatch<NotificationDispatch>();
   // Focus lands on the title on opening and whenever the focused tile goes away.
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -173,9 +176,12 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
         return;
       }
       // On success the domain endpoint resolves the group and deletes the actor's
-      // own row; on failure the tile stays.
+      // own row; on failure the tile stays and a toast says why.
       void action
         .call(dispatch)
+        .catch((error: unknown) =>
+          showError({ summary: t("rework.notifications.actionFailed"), detail: normalizeApiError(error).detail }),
+        )
         .finally(() => dispatch(enhancedControlPlaneApi.util.invalidateTags(["ControlPlaneNotification"])));
     },
     onDismiss: (notification) => {

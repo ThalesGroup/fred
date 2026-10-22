@@ -84,6 +84,15 @@
   - Done: new section "Notifications: bell, `NotificationsPopover`, `NotificationTile`" and `NotificationsPopover` listed as a `MenuPopover` instance.
 - [ ] 8.5 Update `docs/swift/rfc/NOTIFICATIONS-RFC.md` status: slice 1 shipped, folded into the `notifications` spec.
 
+## 10. Platform switch per notification type
+
+- [x] 10.1 Add `DisabledNotificationTypeRow` (`disabled_notification_types`) and one linear Alembic revision on `77cd5dc306cf`; verify `alembic heads` shows one head and `alembic upgrade head` on the scratch database.
+- [x] 10.2 `NotificationStore.disabled_types/disable_type/enable_type`; `notify_many` drops drafts of a disabled type; `list_type_settings`/`set_type_enabled` gated by `can_manage_platform`, audit `platform.notification_type.updated`; verify `tests/test_notifications.py`.
+- [x] 10.3 Routes `GET /admin/platform/notification-types` and `PUT /admin/platform/notification-types/{notification_type}`; `authz-endpoint-matrix.yaml`; §69 of `CONTROL-PLANE-PRODUCT-CONTRACT.md`; regenerate `controlPlaneOpenApi.ts`.
+- [x] 10.4 Admin page `NotificationsPage` (`/admin/notifications`, AdminNavbar entry, `requires="admin"`): one row per listed type with name, description and `Switch`; fr+en `rework.notificationSettings.*`; Help Center administration line fr+en; verify `NotificationsPage.test.tsx`.
+- [x] 10.5 A failed Accept/Refuse (non-404) shows the error toast; verify `notificationTypes.test.ts` and `NotificationsPopover.test.tsx`.
+- [ ] 10.6 Owner live check: turn `team.join_requested` off, ask to join an on_request team → no notification and existing ones gone; the request is still in Members > Pending requests; turn it back on → the next request notifies.
+
 ## 9. Verification
 
 - [x] 9.1 control-plane: `make test && make code-quality && make db-check-heads && make db-check-sqlite`, plus `ruff check --select I` and basedpyright, all green.

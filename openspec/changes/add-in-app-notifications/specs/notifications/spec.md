@@ -167,3 +167,38 @@ When a published entry enters the Removed state (removed by a platform admin, or
 
 - **WHEN** a team editor removes the entry from the marketplace
 - **THEN** no removal notification is created
+
+### Requirement: A platform admin turns each notification type on or off
+
+The platform SHALL offer a platform admin, and only a holder of `can_manage_platform`, the list of every notification type the backend knows, each with whether it is sent. Every type SHALL be on until a platform admin turns it off. The setting SHALL be platform-wide, with no per-team or per-user override. While a type is off, no notification of that type SHALL be created. Turning a type off SHALL delete every notification of that type already sent, for every recipient. Turning it back on SHALL affect only events after the change; deleted notifications MUST NOT come back. The action a notification points to SHALL stay available where it lives. Each change SHALL be audited.
+
+#### Scenario: Every type is on by default
+
+- **WHEN** a platform admin opens the Notifications page on a platform where nothing was changed
+- **THEN** every notification type is listed with its name, a sentence on when it is sent and to whom, and its switch on
+
+#### Scenario: Turning a type off
+
+- **GIVEN** Alice and Bob each hold a `team.join_requested` notification
+- **WHEN** a platform admin turns `team.join_requested` off
+- **THEN** both notifications are deleted, a new join request notifies nobody, and the requests stay in the team's Members > Pending requests
+
+#### Scenario: Turning a type back on
+
+- **WHEN** a platform admin turns a type back on
+- **THEN** the next event of that type notifies its recipients, and the notifications deleted when it was turned off do not come back
+
+#### Scenario: Not a platform admin
+
+- **WHEN** a user without `can_manage_platform` reads or changes the switches
+- **THEN** the request is refused and nothing changes
+
+### Requirement: A failed tile action is reported
+
+When a button that calls a domain endpoint fails for any reason other than the subject being gone (404), the popover SHALL show the application's error toast and keep the tile.
+
+#### Scenario: Accept fails
+
+- **WHEN** a team admin clicks Accept on a join request tile and the endpoint answers 500
+- **THEN** an error toast says the action could not be completed and the tile stays
+

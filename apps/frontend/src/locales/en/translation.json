@@ -2592,7 +2592,8 @@
           "platformPrompt": "Platform prompts",
           "announcements": "Announcements",
           "uiSettings": "User interface",
-          "marketplaces": "Marketplaces"
+          "marketplaces": "Marketplaces",
+          "notifications": "Notifications"
         },
         "title": "Administration spaces"
       },
@@ -4377,6 +4378,37 @@
           "acceptedBody": "A team admin accepted your request.",
           "refusedTitle": "Request to join {{team}} declined",
           "refusedBody": "A team admin declined your request. You can ask again in 24 hours."
+        }
+      },
+      "actionFailed": "The action could not be completed."
+    },
+    "notificationSettings": {
+      "title": "Notifications",
+      "subtitle": "Choose which notifications the platform sends. The choice applies to every team and every user.",
+      "hint": "Turning a type off also deletes the notifications of that type already sent, for everyone. Turning it back on only affects new events.",
+      "loadFailed": "The notification settings could not be loaded.",
+      "saveFailed": "The notification setting could not be saved.",
+      "toggleLabel": "Send “{{name}}” notifications",
+      "types": {
+        "agent": {
+          "republish_needed": {
+            "name": "Published agent changed",
+            "description": "Sent to the person who published an agent to the marketplace when another editor changes it, so they can republish it."
+          },
+          "marketplace_removed": {
+            "name": "Agent removed from the marketplace",
+            "description": "Sent to the person who published an agent when it leaves the marketplace without their action."
+          }
+        },
+        "team": {
+          "join_requested": {
+            "name": "Request to join a team",
+            "description": "Sent to a team’s administrators when someone asks to join it; requests stay in Members > Pending requests."
+          },
+          "join_request_answered": {
+            "name": "Answer to a join request",
+            "description": "Sent to the person who asked to join a team once an administrator accepts or refuses."
+          }
         }
       }
     }

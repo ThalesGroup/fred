@@ -2592,7 +2592,8 @@
           "platformPrompt": "Prompts plateforme",
           "announcements": "Annonces",
           "uiSettings": "Interface utilisateur",
-          "marketplaces": "Marketplaces"
+          "marketplaces": "Marketplaces",
+          "notifications": "Notifications"
         },
         "title": "Espace administration"
       },
@@ -4377,6 +4378,37 @@
           "acceptedBody": "Un administrateur de l'équipe a accepté votre demande.",
           "refusedTitle": "Demande pour rejoindre {{team}} refusée",
           "refusedBody": "Un administrateur de l'équipe a refusé votre demande. Vous pourrez la renouveler dans 24 heures."
+        }
+      },
+      "actionFailed": "L'action n'a pas pu aboutir."
+    },
+    "notificationSettings": {
+      "title": "Notifications",
+      "subtitle": "Choisissez les notifications envoyées par la plateforme. Le choix s'applique à toutes les équipes et à tous les utilisateurs.",
+      "hint": "Désactiver un type supprime aussi, pour tout le monde, les notifications de ce type déjà envoyées. Le réactiver ne concerne que les nouveaux événements.",
+      "loadFailed": "Impossible de charger les réglages des notifications.",
+      "saveFailed": "Impossible d'enregistrer le réglage de la notification.",
+      "toggleLabel": "Envoyer les notifications « {{name}} »",
+      "types": {
+        "agent": {
+          "republish_needed": {
+            "name": "Agent publié modifié",
+            "description": "Envoyée à la personne qui a publié un agent dans la marketplace quand un autre éditeur le modifie, pour qu'elle le republie."
+          },
+          "marketplace_removed": {
+            "name": "Agent retiré de la marketplace",
+            "description": "Envoyée à la personne qui a publié un agent quand il quitte la marketplace sans son intervention."
+          }
+        },
+        "team": {
+          "join_requested": {
+            "name": "Demande pour rejoindre une équipe",
+            "description": "Envoyée aux administrateurs d'une équipe quand quelqu'un demande à la rejoindre ; les demandes restent dans Membres > Demandes en attente."
+          },
+          "join_request_answered": {
+            "name": "Réponse à une demande d'adhésion",
+            "description": "Envoyée à la personne qui a demandé à rejoindre une équipe dès qu'un administrateur accepte ou refuse."
+          }
         }
       }
     }

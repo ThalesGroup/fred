@@ -30,6 +30,7 @@ const dispatch = vi.fn();
 const deleteNotification = vi.fn();
 const clearNotifications = vi.fn();
 const navigate = vi.fn();
+const showError = vi.fn();
 
 vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   enhancedControlPlaneApi: {
@@ -46,6 +47,7 @@ vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useClearNotificationsMutation: () => [clearNotifications, { isLoading: false }],
 }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => navigate }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError }) }));
 vi.mock("react-redux", () => ({ useDispatch: () => dispatch }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
@@ -163,7 +165,7 @@ describe("NotificationsPopover", () => {
     expect(navigate).toHaveBeenCalledWith("/team/team-1/agents?agent=agent-1");
   });
 
-  it("keeps a tile whose domain action fails", async () => {
+  it("keeps a tile whose domain action fails, and reports it in a toast", async () => {
     dispatch.mockReturnValue({ unwrap: () => Promise.reject({ status: 500 }) });
     pages({
       first: {
@@ -187,6 +189,7 @@ describe("NotificationsPopover", () => {
 
     expect(deleteNotification).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalledWith(expect.objectContaining({ summary: "rework.notifications.actionFailed" }));
   });
 
   it("deletes one notification through its close button", () => {

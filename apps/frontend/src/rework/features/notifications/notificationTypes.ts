@@ -59,7 +59,8 @@ const openAgent = (teamId: string, agentInstanceId: string, t: TFunction): Notif
 const teamMembersPath = (teamId: string) => `/team/${teamId}/settings/members`;
 
 /** A join request decision; a 404 means the request is gone (cancelled,
- *  decided, expired), so the tile has nothing left to act on. */
+ *  decided, expired), so the tile has nothing left to act on. Any other
+ *  failure rejects, for the popover to report. */
 function decideJoinRequest(
   notification: NotificationOfType<"team.join_requested">,
   decision: "accept" | "refuse",
@@ -74,7 +75,7 @@ function decideJoinRequest(
           : endpoints.refuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePost.initiate(args),
       ).unwrap();
     } catch (error) {
-      if ((error as { status?: unknown } | undefined)?.status !== 404) return;
+      if ((error as { status?: unknown } | undefined)?.status !== 404) throw error;
       await dispatch(
         endpoints.deleteNotificationControlPlaneV1NotificationsNotificationIdDelete.initiate({
           notificationId: notification.id,
