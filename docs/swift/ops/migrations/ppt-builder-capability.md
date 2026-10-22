@@ -1,6 +1,6 @@
 ---
 schema: 1
-title: "Add the ppt_builder capability with background template analysis and agent readiness"
+title: "Add the ppt_builder capability with background template analysis, agent readiness and a platform default template"
 impact: minor
 configuration: production
 configuration_reason: "The bundled model catalogue in deploy/charts/fred/values.yaml flags multimodal chat profiles with the new optional supports_vision key; ppt_builder only labels template slides with a profile that declares it."
@@ -29,8 +29,13 @@ package, so every fred-agents pod that installs that package registers it.
   slides are labelled by rules only and the agent form says so.
 - Add `supports_vision` to an overlay only once the new fred-agents image is
   rolled out: older pods reject unknown model profile keys and fail to boot.
-- No new secret, endpoint or permission: labelling goes through the agent's
-  own routed chat model, within the team's usable models.
+- No new secret or permission: labelling goes through the agent's own routed
+  chat model, within the team's usable models. The platform default template
+  is labelled through the pod's default chat model, or the model a capability
+  manager picks, with no team restriction.
+- Optional activation: a platform admin or feature manager can replace the
+  default template of agents without their own in Admin > Features, on the
+  "Presentation builder" row. Nothing changes until someone does.
 
 ## Upgrade
 
@@ -67,16 +72,27 @@ package, so every fred-agents pod that installs that package registers it.
    message raise the analysis version once more (re-read in the background,
    no action); they show a slide's takeaway only when the user asks for the
    key messages on the slides, otherwise they are filled as before.
+7. The platform default template is one more row of `cap_ppt_builder_analysis`
+   (its bytes in Postgres, 50 MB at most), and the migration hook adds the
+   nullable column `cap_ppt_builder_analysis.template_filename`. A replacement
+   applies once its analysis has succeeded; meanwhile, or if it fails, agents
+   build on the Fred template. Each fred-agents replica reads it at most every
+   30 s, so replicas may differ for that long after a change.
+8. Pattern edits saved on an agent with no template of its own are no longer
+   applied: they were made for another template. No action.
 
 ## Validation
 
-- `cap_ppt_builder_analysis`, `cap_ppt_builder_deck_plan` and
+- `cap_ppt_builder_analysis` (with `template_filename`), `cap_ppt_builder_deck_plan` and
   `cap_ppt_builder_alembic_version` exist in the fred-agents database; `agent_instance.suspension_detail` exists in the control
   plane database.
 - Create an agent with the "Presentation builder" pack and upload a `.pptx`:
   the save returns at once, the form shows "analysis in progress", the agent is
   unavailable in chat until the analysis succeeds, then a request such as
   "prepare a 6-slide deck on our Q3 results" returns a preview and a download.
+- Optional: as a platform admin, upload a `.pptx` in the "Presentation builder"
+  settings of Admin > Features; once analysed, an agent without its own
+  template builds on it, and "Reset" brings back the Fred template.
 
 ## Rollback
 
