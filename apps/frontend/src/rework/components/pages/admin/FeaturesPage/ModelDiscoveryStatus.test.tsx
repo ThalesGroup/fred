@@ -154,7 +154,7 @@ it("warns about unreachable agent services without claiming discovery failed", (
   expect(html).not.toContain("discovery.none");
 });
 
-it("still reports an unregistered source advertised by a reachable pod", () => {
+it("does not call a source unregistered while another pod is unreachable", () => {
   const html = renderToStaticMarkup(
     <ModelDiscoveryStatus
       data={{ sources: [] }}
@@ -162,13 +162,12 @@ it("still reports an unregistered source advertised by a reachable pod", () => {
       refreshing={false}
       refreshError={false}
       unverifiedRuntimes={[{ runtime_id: "pod-b", base_url: "http://localhost:8013" }]}
-      verifiedSourceIds={["reachable"]}
       refresh={async () => undefined}
     />,
   );
 
-  expect(html).toContain("discovery.unregisteredSourcereachable");
-  expect(html).not.toContain("unknown");
+  expect(html).toContain("discovery.unverifiedRuntimes");
+  expect(html).not.toContain("discovery.unregisteredSource");
 });
 
 it("shows the effective URL without edit controls to a delegated feature manager", () => {

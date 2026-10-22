@@ -126,17 +126,14 @@ export default function FeaturesPage() {
   const [unverifiedModelRuntimes, setUnverifiedModelRuntimes] = useState<{ runtime_id: string; base_url: string }[]>(
     [],
   );
-  const [verifiedModelSourceIds, setVerifiedModelSourceIds] = useState<string[]>([]);
   const refreshModels = useCallback(async () => {
     try {
       const result = await refreshDiscovery().unwrap();
       setModelRefreshError(result.refresh_error ?? null);
       setUnverifiedModelRuntimes(result.unverified_runtimes ?? []);
-      setVerifiedModelSourceIds(result.verified_source_ids ?? []);
     } catch {
       setModelRefreshError(t("rework.admin.capabilities.discovery.refreshFailed"));
       setUnverifiedModelRuntimes([]);
-      setVerifiedModelSourceIds([]);
     }
     await Promise.all([refetchCapabilities(), refetchDiscoveryStatus()]);
   }, [refreshDiscovery, refetchCapabilities, refetchDiscoveryStatus, t]);
@@ -685,7 +682,6 @@ export default function FeaturesPage() {
           refreshError={discoveryRefresh.isError || Boolean(modelRefreshError)}
           refreshErrorMessage={modelRefreshError}
           unverifiedRuntimes={unverifiedModelRuntimes}
-          verifiedSourceIds={verifiedModelSourceIds}
           refresh={refreshModels}
         />
       )}

@@ -101,7 +101,6 @@ export function ModelDiscoveryStatus({
   refreshError,
   refreshErrorMessage,
   unverifiedRuntimes = [],
-  verifiedSourceIds = [],
   refresh,
 }: {
   data: Status | undefined;
@@ -110,15 +109,13 @@ export function ModelDiscoveryStatus({
   refreshError: boolean;
   refreshErrorMessage?: string | null;
   unverifiedRuntimes?: { runtime_id: string; base_url: string }[];
-  verifiedSourceIds?: string[];
   refresh: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
   const sources = data?.sources ?? [];
   const registeredSourceIds = new Set(sources.map((source) => source.source_id));
   const missingSourceIds = [...new Set(discoveredSourceIds)].filter((id) => !registeredSourceIds.has(id));
-  const visibleMissingSourceIds =
-    unverifiedRuntimes.length > 0 ? missingSourceIds.filter((id) => verifiedSourceIds.includes(id)) : missingSourceIds;
+  const visibleMissingSourceIds = unverifiedRuntimes.length > 0 ? [] : missingSourceIds;
   const failedSourceIds = sources.filter((source) => source.last_error).map((source) => source.source_id);
   const newCount = sources.reduce((count, source) => count + (source.new_ids?.length ?? 0), 0);
   const removed = sources.flatMap((source) =>
