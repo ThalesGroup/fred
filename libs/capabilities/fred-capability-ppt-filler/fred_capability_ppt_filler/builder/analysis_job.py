@@ -41,6 +41,7 @@ from sqlalchemy import (
     String,
     Text,
     case,
+    delete,
     select,
     update,
 )
@@ -84,6 +85,10 @@ OUTDATED_RECHECK_SECONDS = 60.0
 
 RULES_KEY = "rules"
 _AGENT_DEFAULT = "agent-default"
+# The platform default template's row: instance ids are UUIDs, so no collision.
+PLATFORM_ID = "__platform__"
+# How long a pod builds on its last read of the platform default.
+PLATFORM_REFRESH_SECONDS = 30.0
 
 RowStatus = Literal["pending", "running", "succeeded", "failed"]
 ViewStatus = Literal["pending", "running", "succeeded", "failed", "interrupted"]
@@ -153,6 +158,7 @@ class AnalysisRow(PptBuilderBase):
     inventory_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     patterns_pdf: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    template_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
@@ -178,6 +184,7 @@ class AnalysisRecord:
     has_thumbnails: bool
     updated_at: datetime
     inventory_json: Optional[str] = None
+    template_filename: Optional[str] = None
 
     def matches(self, sha: str, key: str) -> bool:
         # A vision run without the model port labels and stores `rules`: it
@@ -239,9 +246,14 @@ class AnalysisStore(ABC):
         template_sha256: str,
         labelling_key: str,
         template: Optional[bytes],
+        template_filename: Optional[str] = None,
     ) -> str:
         """Make the row a fresh pending analysis and return its job id.
-        ``template=None`` keeps the stored bytes (a re-run)."""
+        ``template=None`` keeps the stored bytes and file name (a re-run)."""
+
+    @abstractmethod
+    async def delete(self, instance_id: str) -> None:
+        """Remove the row; a job still running on it is superseded."""
 
     @abstractmethod
     async def claim_interrupted(self, instance_id: str) -> Optional[str]:
@@ -292,6 +304,7 @@ class SqlAnalysisStore(AnalysisStore):
             row.error,
             row.patterns_pdf.is_not(None),
             row.updated_at,
+            row.template_filename,
         ]
         if with_inventory:
             columns.append(row.inventory_json)
@@ -316,7 +329,8 @@ class SqlAnalysisStore(AnalysisStore):
             error=found[8],
             has_thumbnails=bool(found[9]),
             updated_at=_aware(found[10]),
-            inventory_json=found[11] if with_inventory else None,
+            template_filename=found[11],
+            inventory_json=found[12] if with_inventory else None,
         )
 
     async def _scalar(self, column: Any, instance_id: str, *where: Any) -> Any:
@@ -357,6 +371,7 @@ class SqlAnalysisStore(AnalysisStore):
         template_sha256: str,
         labelling_key: str,
         template: Optional[bytes],
+        template_filename: Optional[str] = None,
     ) -> str:
         job_id = str(uuid.uuid4())
         now = _utcnow()
@@ -377,6 +392,7 @@ class SqlAnalysisStore(AnalysisStore):
             values["saved_by"] = saved_by
         if template is not None:
             values["template_pptx"] = template
+            values["template_filename"] = template_filename
         if await self._update(instance_id, **values):
             return job_id
         if template is None:
@@ -395,6 +411,15 @@ class SqlAnalysisStore(AnalysisStore):
         except IntegrityError:  # a concurrent save inserted it first
             await self._update(instance_id, **values)
         return job_id
+
+    async def delete(self, instance_id: str) -> None:
+        async with self._sessionmaker() as session:
+            async with session.begin():
+                await session.execute(
+                    delete(AnalysisRow).where(
+                        AnalysisRow.agent_instance_id == instance_id
+                    )
+                )
 
     async def claim_interrupted(self, instance_id: str) -> Optional[str]:
         job_id = str(uuid.uuid4())
@@ -520,7 +545,7 @@ _inventories: ThreadSafeLRUCache[
 # The last save's model port per instance: only a save carries one, so a job
 # this pod starts later (refresh, recovery) labels with vision only while cached.
 _ports: ThreadSafeLRUCache[str, CapabilityModelPort] = ThreadSafeLRUCache(max_size=256)
-_running: set[asyncio.Task[None]] = set()
+_running: set[asyncio.Task[Any]] = set()
 _background_slots = 0
 # Template bytes by sha are immutable too; only a few, they are large.
 _templates: ThreadSafeLRUCache[str, bytes] = ThreadSafeLRUCache(max_size=4)
@@ -552,16 +577,19 @@ def remember_inventory(
     _inventories.set((instance_id, sha, key), (inventory, recheck))
 
 
-def _forget_inventories(instance_id: str) -> None:
+def forget_inventories(instance_id: str) -> None:
     for cache_key in _inventories.keys():
         if cache_key[0] == instance_id:
             _inventories.delete(cache_key)
+    if instance_id == PLATFORM_ID:
+        forget_platform_default()
 
 
 def clear_caches() -> None:
     _inventories.clear()
     _ports.clear()
     _templates.clear()
+    forget_platform_default()
 
 
 def remember_template(sha: str, content: bytes) -> None:
@@ -598,6 +626,87 @@ async def ready_inventory(
         await _refresh_quietly(store, record)
     remember_inventory(instance_id, sha, key, inventory, outdated=record.outdated())
     return inventory
+
+
+# --- Platform default template: one snapshot per pod --------------------------------
+
+
+@dataclass(frozen=True)
+class PlatformDefault:
+    """The platform default template in effect: its analysis succeeded."""
+
+    sha: str
+    inventory: TemplateInventory
+
+
+# (monotonic expiry, value) of this pod's last read; None until the first one.
+_platform: Optional[Tuple[float, Optional[PlatformDefault]]] = None
+_platform_read: Optional[asyncio.Task[Optional[PlatformDefault]]] = None
+# Bumped by a write: a read started before it does not store its stale value.
+_platform_generation = 0
+
+
+def platform_snapshot() -> Tuple[bool, Optional[PlatformDefault]]:
+    """``(known, value)`` with no I/O. Once expired, the value still serves and a
+    background read replaces it: a turn never waits on the platform row."""
+    snapshot = _platform
+    if snapshot is None:
+        return False, None
+    if time.monotonic() >= snapshot[0]:
+        _start_platform_read()
+    return True, snapshot[1]
+
+
+def forget_platform_default() -> None:
+    """A write on this pod: its next turn reads the row again."""
+    global _platform, _platform_generation, _platform_read
+    _platform = None
+    _platform_generation += 1
+    _platform_read = None
+
+
+def _start_platform_read() -> Optional[asyncio.Task[Optional[PlatformDefault]]]:
+    global _platform_read
+    if _platform_read is None or _platform_read.done():
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return None
+        _platform_read = loop.create_task(_read_platform_default(_platform_generation))
+        _running.add(_platform_read)  # held until it ends
+        _platform_read.add_done_callback(_running.discard)
+    return _platform_read
+
+
+async def refresh_platform_default() -> Optional[PlatformDefault]:
+    """Read the platform default now, sharing a read already in flight."""
+    task = _start_platform_read()
+    if task is None:  # pragma: no cover - always called from a running loop
+        return await _read_platform_default(_platform_generation)
+    return await asyncio.shield(task)
+
+
+async def _read_platform_default(generation: int) -> Optional[PlatformDefault]:
+    """One primary-key read; the inventory comes from the LRU once known. Only a
+    succeeded analysis is in effect, else the built-in template, on every pod."""
+    global _platform
+    previous = _platform[1] if _platform is not None else None
+    value: Optional[PlatformDefault] = None
+    try:
+        store = get_analysis_store()
+        record = await store.get(PLATFORM_ID, with_inventory=False)
+        if record is not None and record.status == "succeeded":
+            inventory = await ready_inventory(
+                store, PLATFORM_ID, record.template_sha256, record.labelling_key
+            )
+            if inventory is not None:
+                value = PlatformDefault(record.template_sha256, inventory)
+    except Exception:  # the last value serves until the next read
+        logger.warning("Platform default template unreadable", exc_info=True)
+        value = previous
+    if generation == _platform_generation:
+        _platform = (time.monotonic() + PLATFORM_REFRESH_SECONDS, value)
+    return value
 
 
 # --- Job ---------------------------------------------------------------------------
@@ -709,7 +818,7 @@ async def run_analysis(
         if not work.done():
             work.cancel()
     if await store.finish(instance_id, job_id, inventory, pdf, key):
-        _forget_inventories(instance_id)
+        forget_inventories(instance_id)
         logger.info(
             "Template analysis of %s done in %.0fs",
             instance_id,

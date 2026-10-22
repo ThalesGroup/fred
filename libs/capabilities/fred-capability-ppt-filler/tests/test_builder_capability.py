@@ -147,7 +147,9 @@ async def test_overrides_are_pruned_once_the_analysis_is_known(analysis_db):
 
 
 @pytest.mark.asyncio
-async def test_no_template_prunes_against_the_built_in_template(analysis_db):
+async def test_no_template_drops_every_pattern_edit(analysis_db):
+    """Pattern ids are positional: edits made on the agent's own template would
+    hit unrelated slides of whichever default template is in effect."""
     inventory = builtin_template()[1]
     config = PptBuilderConfig(
         overrides=[
@@ -157,7 +159,7 @@ async def test_no_template_prunes_against_the_built_in_template(analysis_db):
     )
     stored = await PptBuilderCapability().validate_config(config, {}, _save_ctx())
     assert stored.template_sha256 is None
-    assert [o.pattern_id for o in stored.overrides] == [inventory.patterns[0].id]
+    assert stored.overrides == []
 
 
 @pytest.mark.asyncio

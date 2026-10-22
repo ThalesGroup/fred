@@ -30,7 +30,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Annotated, Any, List, Optional, get_args
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from fred_core import convert_office_bytes_to_pdf
 from fred_sdk.contracts.capability import (
@@ -49,7 +49,9 @@ from fred_sdk.contracts.capability import (
 )
 from fred_sdk.contracts.models import FieldSpec, UIHints
 from fred_sdk.contracts.runtime import (
+    CapabilityModelPort,
     CapabilityTeamAuthorizer,
+    capability_platform_model,
     capability_team_authorizer,
 )
 from langchain.agents.middleware import AgentMiddleware, ToolCallRequest
@@ -60,13 +62,16 @@ from pydantic import BaseModel, Field, model_validator
 
 from fred_capability_ppt_filler.builder import analysis_job
 from fred_capability_ppt_filler.builder.analysis_job import (
+    PLATFORM_ID,
     AnalysisRecord,
     AnalysisRow,
     AnalysisStatusResponse,
+    PlatformDefault,
     analysed_template,
     analysis_readiness,
     get_analysis_store,
     labelling_key,
+    parse_labelling_key,
     ready_inventory,
     refresh_outdated,
     restart_from_stored,
@@ -80,6 +85,7 @@ from fred_capability_ppt_filler.builder.models import (
     AnalysisError,
     AnalyzeResult,
     PatternOverride,
+    TemplateInventory,
 )
 from fred_capability_ppt_filler.builder.overrides import (
     apply_overrides,
@@ -180,15 +186,182 @@ def _check_readable(content: bytes) -> None:
 async def _authorised_record(
     instance_id: str, authorizer: CapabilityTeamAuthorizer
 ) -> AnalysisRecord:
-    record = await get_analysis_store().get(instance_id)
+    # The platform row has its own routes: its team id is no team to check.
+    record = (
+        None
+        if instance_id == PLATFORM_ID
+        else await get_analysis_store().get(instance_id)
+    )
     if record is None:
         raise HTTPException(status_code=404, detail="No template analysis.")
     await authorizer.require_agent_editor(record.team_id)
     return record
 
 
+class PlatformTemplateResponse(BaseModel):
+    """The platform default template. ``analysis`` is None while the Fred
+    template is in effect; a replacement is in effect once it succeeded."""
+
+    analysis: Optional[AnalysisStatusResponse] = None
+    template_filename: Optional[str] = None
+    use_vision: bool = True
+    # None: the platform's default model.
+    vision_profile_id: Optional[str] = None
+
+
+class PlatformAnalysisRequest(BaseModel):
+    """The vision choice a platform analysis runs with."""
+
+    use_vision: bool = True
+    vision_profile_id: Optional[str] = None
+
+
+async def _platform_response() -> PlatformTemplateResponse:
+    record = await get_analysis_store().get(PLATFORM_ID)
+    if record is None:
+        return PlatformTemplateResponse()
+    use_vision, profile_id = parse_labelling_key(record.labelling_key)
+    return PlatformTemplateResponse(
+        analysis=status_response(record),
+        template_filename=record.template_filename,
+        use_vision=use_vision,
+        vision_profile_id=profile_id,
+    )
+
+
+async def _readable_upload(file: UploadFile) -> bytes:
+    """The agent save's gates: size, then a cheap readability check."""
+    content = await file.read(MAX_TEMPLATE_UPLOAD_BYTES + 1)
+    early = _bounded_analysis(content)
+    if early is not None:
+        raise HTTPException(status_code=413, detail=early.errors[0].message)
+    if not acquire_heavy_job_slot():
+        raise HTTPException(status_code=503, detail=_BUSY_MESSAGE)
+    try:
+        await asyncio.to_thread(_check_readable, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        release_heavy_job_slot()
+    return content
+
+
+async def start_analysis(
+    *,
+    instance_id: str,
+    team_id: str,
+    saved_by: Optional[str],
+    content: bytes,
+    key: str,
+    port: Optional[CapabilityModelPort],
+    filename: Optional[str] = None,
+) -> str:
+    """Store the template as a pending analysis and run it in the background."""
+    sha = hashlib.sha256(content).hexdigest()
+    store = get_analysis_store()
+    current = await store.get(instance_id, with_inventory=False)
+    if (
+        current is not None
+        and current.status == "succeeded"
+        and not current.outdated()
+        and (current.template_sha256, current.labelling_key) == (sha, key)
+    ):
+        return sha  # the same file again: its analysis stands
+    job_id = await store.start(
+        instance_id=instance_id,
+        team_id=team_id,
+        saved_by=saved_by,
+        template_sha256=sha,
+        labelling_key=key,
+        template=content,
+        template_filename=filename,
+    )
+    analysis_job.remember_port(instance_id, port)
+    spawn_analysis(store, instance_id, job_id, content, key)
+    return sha
+
+
 def _build_router() -> APIRouter:
     router = APIRouter(tags=["ppt_builder"])
+
+    @router.get(
+        "/platform",
+        response_model=PlatformTemplateResponse,
+        operation_id="getPptBuilderPlatform",
+    )
+    async def platform() -> PlatformTemplateResponse:
+        """The platform default template and its analysis (any signed-in user)."""
+        return await _platform_response()
+
+    @router.get("/platform/patterns.pdf", operation_id="getPptBuilderPlatformPatterns")
+    async def platform_patterns() -> Response:
+        pdf = await get_analysis_store().patterns_pdf(PLATFORM_ID)
+        if pdf is None:
+            raise HTTPException(status_code=404, detail="No thumbnails.")
+        return Response(content=pdf, media_type=_PDF_CONTENT_TYPE)
+
+    @router.put(
+        "/platform/template",
+        response_model=PlatformTemplateResponse,
+        operation_id="putPptBuilderPlatformTemplate",
+    )
+    async def put_platform_template(
+        file: UploadFile = File(...),
+        use_vision: bool = Form(True),
+        vision_profile_id: Optional[str] = Form(None),
+        authorizer: CapabilityTeamAuthorizer = Depends(capability_team_authorizer),
+        port: CapabilityModelPort = Depends(capability_platform_model),
+    ) -> PlatformTemplateResponse:
+        """Replace the platform default template; it applies once analysed."""
+        await authorizer.require_capability_manager()
+        content = await _readable_upload(file)
+        await start_analysis(
+            instance_id=PLATFORM_ID,
+            team_id=PLATFORM_ID,
+            saved_by=None,
+            content=content,
+            key=labelling_key(use_vision, vision_profile_id or None),
+            port=port,
+            filename=(file.filename or "")[:255] or None,
+        )
+        analysis_job.forget_platform_default()
+        return await _platform_response()
+
+    @router.post(
+        "/platform/analysis",
+        response_model=PlatformTemplateResponse,
+        operation_id="rerunPptBuilderPlatformAnalysis",
+    )
+    async def rerun_platform_analysis(
+        body: PlatformAnalysisRequest,
+        authorizer: CapabilityTeamAuthorizer = Depends(capability_team_authorizer),
+        port: CapabilityModelPort = Depends(capability_platform_model),
+    ) -> PlatformTemplateResponse:
+        """Analyse the platform template again, with this vision choice."""
+        await authorizer.require_capability_manager()
+        store = get_analysis_store()
+        record = await store.get(PLATFORM_ID, with_inventory=False)
+        if record is None:
+            raise HTTPException(status_code=404, detail="No platform template.")
+        analysis_job.remember_port(PLATFORM_ID, port)
+        key = labelling_key(body.use_vision, body.vision_profile_id or None)
+        await restart_from_stored(store, record, labelling_key=key)
+        analysis_job.forget_platform_default()
+        return await _platform_response()
+
+    @router.delete(
+        "/platform/template",
+        response_model=PlatformTemplateResponse,
+        operation_id="deletePptBuilderPlatformTemplate",
+    )
+    async def reset_platform_template(
+        authorizer: CapabilityTeamAuthorizer = Depends(capability_team_authorizer),
+    ) -> PlatformTemplateResponse:
+        """Back to the Fred template, which itself cannot be removed."""
+        await authorizer.require_capability_manager()
+        await get_analysis_store().delete(PLATFORM_ID)
+        analysis_job.forget_inventories(PLATFORM_ID)
+        return PlatformTemplateResponse()
 
     @router.get(
         "/builtin", response_model=AnalyzeResult, operation_id="getPptBuilderBuiltin"
@@ -267,7 +440,7 @@ async def builtin_patterns_pdf() -> Optional[bytes]:
 # Where the deck's look comes from: the tool cannot switch template, so a
 # request for another one is answered with where it is set.
 _TEMPLATES = {
-    True: "Fred's built-in template (this agent has no template of its own)",
+    True: "the platform's default template (this agent has no template of its own)",
     False: "the template uploaded in this agent's settings",
 }
 
@@ -340,7 +513,8 @@ class _PptBuilderMiddleware(AgentMiddleware):
 
     With a template, the analysis is read on the first model call (one DB read
     per template per pod, then cached); the registered build tool delegates to
-    the template's tool and refuses while the analysis has not succeeded."""
+    the template's tool and refuses while the analysis has not succeeded.
+    Without one, the platform default comes from the pod's snapshot."""
 
     def __init__(self, ctx: CapabilityContext[PptBuilderConfig, EmptyModel]) -> None:
         super().__init__()
@@ -359,20 +533,14 @@ class _PptBuilderMiddleware(AgentMiddleware):
         self._key = config.labelling_key()
 
         if self._sha is None:
-            builtin_bytes, builtin_inventory = builtin_template()
-
-            async def load_builtin() -> bytes:
-                return builtin_bytes
-
-            effective, _ = apply_overrides(builtin_inventory, config.overrides)
-            self.tools = build_builder_tools(
-                ctx, load_builtin, effective, self._messages
-            )
-            self._resolved = self.tools
-            return
+            known, platform = analysis_job.platform_snapshot()
+            if known:  # the usual turn: no DB read
+                self.tools = self._default_tools(platform)
+                self._resolved = self.tools
+                return
         cached = (
             analysis_job.cached_inventory(self._instance, self._sha, self._key)
-            if self._instance
+            if self._instance and self._sha is not None
             else None
         )
         if cached is not None:  # the usual turn: no DB read, no indirection
@@ -399,6 +567,24 @@ class _PptBuilderMiddleware(AgentMiddleware):
     def _messages(self) -> Sequence[BaseMessage]:
         return self._history
 
+    def _default_tools(self, platform: Optional[PlatformDefault]) -> List[BaseTool]:
+        """Tools on the platform default, else the built-in template. Pattern
+        edits are never applied: they belong to the agent's own template."""
+        inventory: TemplateInventory
+        if platform is None:
+            content, inventory = builtin_template()
+
+            async def load() -> bytes:
+                return content
+
+        else:
+            sha, inventory = platform.sha, platform.inventory
+
+            async def load() -> bytes:
+                return await analysed_template(PLATFORM_ID, sha)
+
+        return build_builder_tools(self._ctx, load, inventory, self._messages)
+
     async def _load_template(self) -> bytes:
         # The analysed bytes, not the asset: a save rewrites the asset first.
         if self._sha is None or not self._instance:
@@ -406,7 +592,12 @@ class _PptBuilderMiddleware(AgentMiddleware):
         return await analysed_template(self._instance, self._sha)
 
     async def _resolve(self) -> Optional[List[BaseTool]]:
-        if self._resolved is not None or self._sha is None:
+        if self._resolved is not None:
+            return self._resolved
+        if self._sha is None:  # the pod's first read of the platform default
+            self._resolved = self._default_tools(
+                await analysis_job.refresh_platform_default()
+            )
             return self._resolved
         if not self._instance:
             return None
@@ -598,9 +789,8 @@ class PptBuilderCapability(
         template_uploads = list(uploads.get(TEMPLATE_SLOT, ()))
         if template_uploads:
             return await self._accept_upload(config, template_uploads[0].content, ctx)
-        if config.template_sha256 is None:
-            kept, _ = prune_overrides(config.overrides, builtin_template()[1])
-            return config.model_copy(update={"overrides": kept})
+        if config.template_sha256 is None:  # pattern edits belong to a template
+            return config.model_copy(update={"overrides": []})
         instance = ctx.identity.agent_instance_id
         if not instance or not ctx.identity.team_id:
             return config
@@ -697,28 +887,14 @@ class PptBuilderCapability(
             raise RuntimeError(
                 "ppt_builder: a template can only be analysed for a saved agent of a team."
             )
-        sha = hashlib.sha256(content).hexdigest()
-        key = config.labelling_key()
-        store = get_analysis_store()
-        current = await store.get(instance, with_inventory=False)
-        if (
-            current is not None
-            and current.status == "succeeded"
-            and not current.outdated()
-            and (current.template_sha256, current.labelling_key) == (sha, key)
-        ):
-            return sha  # the same file again: its analysis stands
-        job_id = await store.start(
+        return await start_analysis(
             instance_id=instance,
             team_id=team,
             saved_by=ctx.identity.user_id,
-            template_sha256=sha,
-            labelling_key=key,
-            template=content,
+            content=content,
+            key=config.labelling_key(),
+            port=ctx.services.capability_model,
         )
-        analysis_job.remember_port(instance, ctx.services.capability_model)
-        spawn_analysis(store, instance, job_id, content, key)
-        return sha
 
     async def readiness(
         self, stored: PptBuilderConfig, identity: CapabilityIdentity

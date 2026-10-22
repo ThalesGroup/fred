@@ -44,6 +44,15 @@ def deck_plan_store() -> Iterator[deck_plans.MemoryDeckPlanStore]:
     deck_plans.clear_deck_plan_store_provider()
 
 
+@pytest.fixture(autouse=True)
+def no_platform_default() -> Iterator[None]:
+    """The Fred template as the platform default, known without a read: a turn
+    never reaches the pod's Postgres in tests. ``analysis_db`` clears it."""
+    analysis_job._platform = (float("inf"), None)
+    yield
+    analysis_job.forget_platform_default()
+
+
 @pytest_asyncio.fixture
 async def analysis_db() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
