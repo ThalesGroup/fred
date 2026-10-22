@@ -5163,49 +5163,56 @@ control-plane services compute the recipients.
 | `GET /notifications/summary`             | —                                     | `NotificationSummary` |
 | `GET /notifications`                     | `limit` 1-50 (default 50), `before`   | `NotificationPage`    |
 | `POST /notifications/seen`               | `MarkNotificationsSeenRequest.up_to`  | `NotificationSummary` |
-| `POST /notifications/{notification_id}/read` | —                                 | 204                   |
 | `DELETE /notifications/{notification_id}` | —                                    | 204                   |
 | `DELETE /notifications`                  | —                                     | 204 (clear all)       |
 
-Clear all keeps the caller's open rows of a decision type (`DECISION_TYPES`:
-`team.join_requested` not yet handled); everything else goes. The summary route
-emits no per-request KPI event (badge poll), only its response.
+Clear all keeps the caller's open rows of a decision type (`DECISION = True` on
+its payload class: `team.join_requested` not yet handled); everything else goes.
+The summary route emits no per-request KPI event (badge poll): fred-core
+`KPIMiddleware` takes `skip_suffixes` (default: the probes) and control-plane
+adds `/notifications/summary`.
 
 `NotificationPage.items` is a union discriminated by `type`
 (`agent.republish_needed`, `agent.marketplace_removed`,
 `team.join_requested`, `team.join_request_answered`, see §70), each with its own
 payload model; `next_cursor` is opaque and goes back as `before` (a malformed
 one is 422). `seen` marks the caller's rows created at or before `up_to`, so a
-later arrival still badges; `read` also marks the row seen. A handled row
+later arrival still badges. Rows have no read state. A handled row
 carries `handled_at`, `handled_by_name` and `handled_outcome`
 (`republished`, `removed`, `accepted`, `refused`). Rows are never text: the frontend renders type and
 payload.
 
-**Emission.** `NotificationService.notify`/`notify_many`/`resolve`, called
-after the triggering commit, best effort: a failure logs ids only and counts
-`notifications.emit_failed_total`, never failing the action. An open row of the
-same recipient and `group_key` gets the new payload and keeps its seen and
-read state. `resolve` deletes the actor's own open rows and marks the others
-handled. The disabled-type check runs before the insert, outside its
-transaction: a type turned off during an emission may leave that one row (best
-effort). Rows are indexed by `team_id` and by `group_key` for the team and
-group deletes.
+**Emission.** `NotificationService.notify(drafts)`/`resolve`/`delete_groups`,
+called after the triggering commit, best effort and returning nothing: a
+failure logs ids only and counts `notifications.emit_failed_total`, never
+failing the action. A `NotificationDraft` carries a typed payload; the payload
+class declares the type's rules as ClassVars: `TYPE`, `PERMISSION` (team
+permission needed, or `None`) and `DECISION`. Adding a type is an enum value, a
+payload class and a view in the union. Group keys are
+`group_key(type, subject_id)` = `"<type value>:<subject>"`. An open row of the
+same recipient and `group_key` only gets the new payload (type and team never
+change) and keeps its seen state. `resolve` deletes the actor's own open rows
+and marks the others handled (`handled_by_name` only). Rows are indexed by
+`team_id` and by `group_key` for the team and group deletes.
 
 **Marketplace.** `agent_marketplace_entry.published_by` (nullable uid) is
 written on every publish and republish; older entries have none and notify
 nobody. A save by another editor that leaves a Published entry Modified sends
-`agent.republish_needed` to the publisher (group `agent_republish:<entry_id>`),
+`agent.republish_needed` to the publisher (group `agent.republish_needed:<entry_id>`),
 resolved by a republish or any removal. Entering the Removed state (platform
 admin, deactivation, suspension, team made private, switch-off) sends
 `agent.marketplace_removed` with the reason and message, unless the actor is
-the publisher; a removal by the team (Dismissed) sends nothing.
+the publisher (group `agent.marketplace_removed:<entry_id>:<removed_at>`); a
+removal by the team (Dismissed) sends nothing.
 
 **Retention.** `expires_at = created_at + 30 days`; every read filters it. The
 lifecycle tick (Temporal `LifecycleManagerWorkflow` and memory
-`POST /lifecycle/run-once`) deletes expired rows in batches of 1000 within 30
-s; `LifecycleManagerResult.notifications` reports `deleted` and `batches`.
-Deleting a user deletes their rows; deleting a team deletes the rows carrying
-its `team_id`. Full behavior: OpenSpec `add-in-app-notifications`.
+`POST /lifecycle/run-once`) runs one bounded delete per tick
+(`expire_notifications_and_join_requests`: at most
+`NOTIFICATION_EXPIRY_BATCH_SIZE` = 1000 rows of each table);
+`LifecycleManagerResult.notifications` reports `deleted`. Deleting a user
+deletes their rows; deleting a team deletes the rows carrying its `team_id`
+(`NotificationService.delete_for_user`/`delete_for_team`/`delete_for_member`). Full behavior: OpenSpec `add-in-app-notifications`.
 
 **Platform switch per type.** `can_manage_platform`, as the UI theme settings.
 
@@ -5217,11 +5224,12 @@ its `team_id`. Full behavior: OpenSpec `add-in-app-notifications`.
 The list is every `NotificationType`, in declaration order, with `enabled` and,
 when off, `disabled_by`/`disabled_at`; the frontend names each type from its
 value. Storage is `disabled_notification_types` (one row per type turned off; no
-row means on). `notify_many` drops drafts of a disabled type with one read of
-that table. Turning a type off deletes every row of it for every recipient in
-the same transaction; turning it back on only affects new events. Platform-wide
-only; the underlying actions (e.g. Members > Pending requests) stay available.
-Audit event `platform.notification_type.updated` (type, enabled, deleted count).
+row means on). Turning a type off hides it: producers still store its rows,
+but the list, the unseen count and Clear all only see enabled types; turning it
+back on shows every row still there (dismissed or acted-on rows were deleted,
+expiry still applies). Platform-wide only; the underlying actions (e.g. Members
+> Pending requests) stay available. Audit event
+`platform.notification_type.updated` (type, enabled).
 
 ## 70. Contract Notes — team join requests (2026-10-22, #3232)
 
@@ -5250,7 +5258,7 @@ cancelled or expired), 409 `team_not_on_request`, `already_team_member`,
 `join_request_refused`. A private or unknown team answers 404 like any
 unreadable team.
 
-**Lifecycle.** Table `team_join_requests` (revision `77cd5dc306cf`), one row
+**Lifecycle.** Table `team_join_requests` (revision `83b81adf7450`), one row
 per team and requester. Pending: expires 30 days after asking; asking again
 returns it and emits nothing. Refused: kept 7 days after the refusal
 (`expires_at = decided_at + 7 days`); `MyTeamJoinRequest.can_ask_again_at` is
@@ -5260,21 +5268,22 @@ refused row ("Accept anyway"), only while the team is public and `on_request`
 (else 409 `team_not_on_request`); it grants `team_member` only, then deletes the
 row, so a failed grant leaves the request to decide again. Refusing a refused
 row is a no-op. Accept or refuse on a requester who is already a member only
-deletes the request and its notifications. Any other membership grant (Members
-tab, team invite link, default teams, registry, rescue, open join) also deletes
-the person's request and its notifications, with no answer sent. Cancel deletes
+deletes the request and its notifications. Every grant or revoke runs one
+membership hook (`_on_team_access_changed`): it deletes the person's request to
+that team and its notification groups, with no answer sent, and drops the
+notifications they can no longer act on. Cancel deletes
 the caller's pending row. The second of two concurrent decisions answers 404. Deleting a team deletes its requests; deleting a user deletes
 theirs. The lifecycle notification step also deletes expired requests (counted
 in `LifecycleManagerResult.notifications.deleted`).
 
 **Notifications.** `team.join_requested` (`TeamJoinRequestedPayload`: team,
 request and requester ids, names, message) goes to the team's `team_admin`
-holders with `team_id` set, action permission `can_administer_members`, group
-`join_request:<request_id>`; a decision resolves it (`accepted`/`refused`),
+holders with `team_id` set, `PERMISSION` `can_administer_members`, group
+`team.join_requested:<request_id>`; a decision resolves it (`accepted`/`refused`),
 a cancel or the requester's deletion deletes it. `team.join_request_answered`
 (`TeamJoinRequestAnsweredPayload`: team id and name, `outcome`) goes to the
-requester with no action permission, group
-`join_request_outcome:<request_id>`; it never names the admin. It carries
+requester with no `PERMISSION`, group
+`team.join_request_answered:<request_id>`; it never names the admin. It carries
 `team_id` when `accepted` (leaving or deleting the team removes it) and none
 when `refused`. Accepting a refused request deletes the refusal answer first.
 
