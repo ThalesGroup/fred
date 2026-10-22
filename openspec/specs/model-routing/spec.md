@@ -143,7 +143,7 @@ Every discovered model SHALL enter the existing model capability catalog without
 
 ### Requirement: Administrators can distinguish manual and discovered models
 
-The Models admin view SHALL separate manually declared models from models returned by discovery in two selectable pill tabs. The source of each model SHALL come from profiles actually added by the pod's discovery resolution and SHALL be included in the control-plane admin response. Each model SHALL identify all advertising runtime pods. Both tabs SHALL retain the same activation and team controls and support text filtering. The Discovery tab SHALL offer a compact manual refresh. If an advertised discovery source lacks registered state for URL management, the discovery status SHALL name that source rather than claiming no discovery is configured.
+The Models admin view SHALL separate manually declared models from models returned by discovery in two selectable pill tabs. The source of each model SHALL come from profiles actually added by the pod's discovery resolution and SHALL be included in the control-plane admin response. Each model SHALL identify all advertising runtime pods. Both tabs SHALL retain the same activation and team controls and support text filtering. The Discovered models tab SHALL offer a compact manual refresh. If an advertised discovery source lacks registered state for URL management, the discovery status SHALL name that source rather than claiming no discovery is configured.
 
 #### Scenario: Mixed model list
 

@@ -2,7 +2,7 @@
 
 ### Requirement: A model catalog can discover chat models from a compatible endpoint
 
-The catalog SHALL combine static YAML profiles and one or more named OpenAI-compatible discovery sources. The existing single-source YAML form SHALL remain valid. Source IDs SHALL be unique, and at most one chat default SHALL be declared across manual and discovered profiles. By default, each configured source SHALL request `GET {base_url}/models` and read identifiers from `data[].id`. An administrator MAY override each URL; the effective URL MUST end in `/models`, and its parent SHALL become the inference base for that source's generated profiles. The pod SHALL produce stable identities for valid identifiers. Static-only catalogs SHALL retain existing behavior.
+The catalog SHALL combine static YAML profiles and one or more named OpenAI-compatible discovery sources. The existing single-source YAML form SHALL remain valid. Source IDs SHALL be unique, and at most one chat default SHALL be declared across manual and discovered profiles. By default, each configured source SHALL request `GET {base_url}/models` and read identifiers from `data[].id`. A platform administrator MAY override each URL; the effective URL MUST end in `/models`, and its parent SHALL become the inference base for that source's generated profiles. The pod SHALL produce stable identities for valid identifiers. Static-only catalogs SHALL retain existing behavior.
 
 #### Scenario: Mixed catalog
 
@@ -123,7 +123,7 @@ The pod SHALL preserve each upstream model identifier as its wire name. It SHALL
 
 ### Requirement: Administrators can distinguish manual and discovered models
 
-The Models admin view SHALL separate manually declared models from models returned by discovery in two selectable pill tabs. The source of each model SHALL come from profiles actually added by the pod's discovery resolution and SHALL be included in the control-plane admin response. Each model SHALL identify all advertising runtime pods. Both tabs SHALL retain the same activation and team controls and support text filtering. The Discovery tab SHALL offer a compact manual refresh. If an advertised discovery source lacks registered state for URL management, the discovery status SHALL name that source rather than claiming no discovery is configured.
+The Models admin view SHALL separate manually declared models from models returned by discovery in two selectable pill tabs. The source of each model SHALL come from profiles actually added by the pod's discovery resolution and SHALL be included in the control-plane admin response. Each model SHALL identify all advertising runtime pods. Both tabs SHALL retain the same activation and team controls and support text filtering. The Discovered models tab SHALL offer a compact manual refresh. If an advertised discovery source lacks registered state for URL management, the discovery status SHALL name that source rather than claiming no discovery is configured.
 
 #### Scenario: Mixed model list
 
