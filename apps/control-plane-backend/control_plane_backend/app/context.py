@@ -474,6 +474,7 @@ class ApplicationContext:
             self._notification_service = NotificationService(
                 NotificationStore(engine=self.get_pg_async_engine()),
                 get_kpi_writer=self.get_kpi_writer,
+                get_rebac=self.get_rebac_engine,
             )
         return self._notification_service
 

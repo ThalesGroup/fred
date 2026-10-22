@@ -337,6 +337,16 @@ class NotificationStore:
     async def delete_for_user(self, recipient_id: str) -> None:
         await self.delete_all(recipient_id)
 
+    async def delete_for_member(self, recipient_id: str, team_id: str) -> None:
+        """What `recipient_id` was told about a team they no longer belong to."""
+        async with use_session(self._sessions) as s:
+            await s.execute(
+                delete(NotificationRow).where(
+                    NotificationRow.recipient_id == recipient_id,
+                    NotificationRow.team_id == team_id,
+                )
+            )
+
     async def delete_for_team(self, team_id: str) -> None:
         async with use_session(self._sessions) as s:
             await s.execute(

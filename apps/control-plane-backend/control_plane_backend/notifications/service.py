@@ -20,6 +20,7 @@ effort: a failure is logged with ids only and counted, never raised.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -27,6 +28,12 @@ from typing import Any
 from fred_core import KeycloakUser
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.security.rebac.rebac_engine import (
+    RebacEngine,
+    RebacReference,
+    Resource,
+    TeamPermission,
+)
 from pydantic import BaseModel, TypeAdapter
 
 from control_plane_backend.notifications.schemas import (
@@ -87,9 +94,12 @@ class NotificationService:
         self,
         store: NotificationStore,
         get_kpi_writer: Callable[[], BaseKPIWriter] | None = None,
+        get_rebac: Callable[[], RebacEngine] | None = None,
     ) -> None:
         self._store = store
         self._get_kpi_writer = get_kpi_writer
+        # None = no membership filter (tests that do not model teams).
+        self._get_rebac = get_rebac
 
     @property
     def store(self) -> NotificationStore:
@@ -140,6 +150,9 @@ class NotificationService:
         try:
             for draft in drafts:
                 validate_payload(draft.type, draft.payload)
+            drafts = await self._members_only(drafts)
+            if not drafts:
+                return True
             await self._store.upsert(drafts)
         except Exception:
             logger.warning(
@@ -155,6 +168,33 @@ class NotificationService:
                 "notifications.created_total", {"notification_type": draft.type}
             )
         return True
+
+    async def _members_only(
+        self, drafts: Sequence[NotificationDraft]
+    ) -> Sequence[NotificationDraft]:
+        """A team's notification only reaches who is still in that team."""
+        if self._get_rebac is None:
+            return drafts
+        rebac = self._get_rebac()
+        pairs = sorted(
+            {(d.recipient_id, d.team_id) for d in drafts if d.team_id is not None}
+        )
+        allowed = await asyncio.gather(
+            *(
+                rebac.has_permission(
+                    RebacReference(Resource.USER, uid),
+                    TeamPermission.CAN_READ_MEMEBERS,
+                    RebacReference(Resource.TEAM, team_id),
+                )
+                for uid, team_id in pairs
+            )
+        )
+        members = {pair for pair, ok in zip(pairs, allowed) if ok}
+        return [
+            d
+            for d in drafts
+            if d.team_id is None or (d.recipient_id, d.team_id) in members
+        ]
 
     async def resolve(
         self,

@@ -27,6 +27,9 @@
 - [x] 3.3 Delete a user's notifications in `delete_user` (`users/api.py`, next to `delete_seen_for_user`) and a team's in team deletion; verify a test for each.
   - Done: `delete_user` (`tests/test_user_delete_route.py` call order) and `delete_team`, before the team row (`test_team_deletion_deletes_the_teams_notifications`).
 
+- [x] 3.4 Send a team's notifications only to its current members and delete a member's notifications about a team they leave or are removed from; verify tests for both.
+  - Done: `NotificationService(get_rebac=...)` filters drafts by `can_read_members`; `remove_team_member` calls `store.delete_for_member`. Tests: `test_a_team_notification_skips_who_left_the_team`, `test_a_publisher_who_left_the_team_is_told_nothing`, `test_leaving_a_team_removes_only_that_members_rows_about_it`, `test_remove_team_member_self_removal_skips_permission_check`.
+
 ## 4. Expiry
 
 - [x] 4.1 Add `run_notification_expiry_once` to `scheduler/lifecycle_runner.py` (batches of 1000, 30 s budget), an activity in `scheduler/temporal/activities.py`, a step in `LifecycleManagerWorkflow` and in the memory runner (`POST /lifecycle/run-once`); verify tests: rows past `expires_at` deleted, others kept, the budget stops the loop.
@@ -59,6 +62,7 @@
 - [x] 7.3 Add the `NotificationsPopover` following the `UserProfile` popover pattern (anchored to the rail, over the nav panel, outside click and Escape close it): header with "Clear all", tiles newest first, load more, empty state; opening it fetches the list and posts `seen` up to the newest listed id; verify vitest for open, seen call, clear all, empty state, Escape.
   - Done: `rework/features/notifications/NotificationsPopover.tsx` on `MenuPopover` (`role="dialog"`), `PageEmptyState` for the empty state, "Show more" by `next_cursor`, full-screen sheet with a back arrow at 600px and below; `seen` is posted once per opening, only from an answer fetched since the opening. Escape and outside click live in the bell entry (`NotificationsEntry.tsx`). `NotificationsPopover.test.tsx` (10 tests: seen up_to newest, not from a stale cache, not when all seen, read + navigate, no second read, delete, clear all, empty state, load more, focus on open).
 - [x] 7.4 Add the bell entry to `MainNavBar.tsx` with `IconButton badgeCount` from `useNotificationSummaryQuery` polled every 15 s while the tab is visible (paused when hidden, refetched on focus and visibility change); the count goes into the `aria-label`; verify vitest for badge shown, hidden at 0, aria-label, no polling while hidden.
+  - Badge cap: `IconButton badgeMax` (default 999), set to 99 on the bell; tests in `IconButton.test.tsx` and `NotificationsEntry.test.tsx`.
   - Done: `NotificationsEntry` rendered last in `MainNavBar.tsx`; `useNotificationSummary` polls every 15 s while visible, 0 while hidden, refetches on visibility return and on focus (`useRefetchOnWindowFocus`), and a tab opened hidden sends nothing until shown. `NotificationsEntry.test.tsx` (8 tests: badge, none at 0, aria-label, 15 s interval, hidden pause + catch-up, focus, background tab, Escape onto the bell, outside click).
 - [x] 7.5 Add fr + en strings (`rework.notifications.*`, `rework.mainNav.notifications`); verify `npx tsc --noEmit` and no missing-key warnings in touched tests.
   - Done: `rework.notifications.*`, `rework.mainNav.notifications`, `rework.mainNav.notificationsUnseen_{one,other}` in fr and en; removal reasons reuse `rework.agentMarketplace.removed.reasons.*`. Missing-key check in `notificationTypes.test.ts`.

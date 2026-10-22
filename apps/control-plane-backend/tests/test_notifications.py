@@ -32,10 +32,14 @@ from control_plane_backend.notifications.schemas import (
     validate_payload,
 )
 from control_plane_backend.notifications.service import NotificationService
-from control_plane_backend.notifications.store import NotificationStore
+from control_plane_backend.notifications.store import (
+    NotificationDraft,
+    NotificationStore,
+)
 from fastapi import FastAPI
 from fred_core import KeycloakUser, get_current_user
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
+from fred_core.security.rebac.rebac_engine import RebacEngine, TeamPermission
 from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -125,6 +129,39 @@ async def test_notify_creates_one_row_per_recipient_and_counts_it(
         ]
         * 2
     )
+
+
+@pytest.mark.asyncio
+async def test_a_team_notification_skips_who_left_the_team(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    class _Rebac:
+        async def has_permission(self, subject, permission, resource, **_) -> bool:
+            assert permission == TeamPermission.CAN_READ_MEMEBERS
+            return (subject.id, resource.id) == ("alice", "alpha")
+
+    service = NotificationService(
+        NotificationStore(control_plane_sql_engine),
+        get_rebac=lambda: cast(RebacEngine, _Rebac()),
+    )
+
+    assert await _notify(service, "alice", "dave")
+    await service.notify_many(
+        [
+            NotificationDraft(
+                recipient_id="dave",
+                type=NotificationType.AGENT_REPUBLISH_NEEDED.value,
+                group_key="no-team",
+                payload=_PAYLOAD.model_dump(),
+            )
+        ]
+    )
+
+    alice = await service.list_page(_user("alice"), limit=50, before=None)
+    dave = await service.list_page(_user("dave"), limit=50, before=None)
+    assert len(alice.items) == 1
+    # Not a member of alpha any more: only the notification with no team reaches him.
+    assert [item.team_id for item in dave.items] == [None]
 
 
 @pytest.mark.asyncio

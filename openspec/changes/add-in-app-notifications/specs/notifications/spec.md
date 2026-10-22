@@ -25,7 +25,7 @@ A notification SHALL carry a registered type and a payload of ids plus a display
 
 ### Requirement: Badge counts unseen notifications
 
-The far-left app bar SHALL show a Notifications entry with a bell icon. Its badge SHALL show the number of the caller's unseen, unexpired notifications and SHALL be hidden at zero; the count SHALL also be in the entry's accessible name. Opening the popover SHALL mark as seen every notification up to the newest one it listed, so the badge resets; a notification created after that point SHALL stay unseen.
+The far-left app bar SHALL show a Notifications entry with a bell icon. Its badge SHALL show the number of the caller's unseen, unexpired notifications and SHALL be hidden at zero; above 99 it SHALL read "99+"; the count SHALL also be in the entry's accessible name. Opening the popover SHALL mark as seen every notification up to the newest one it listed, so the badge resets; a notification created after that point SHALL stay unseen.
 
 #### Scenario: Opening resets the badge
 
@@ -96,6 +96,20 @@ A notification SHALL expire 30 days after its creation. Expired notifications MU
 
 - **WHEN** a notification is 31 days old
 - **THEN** it is neither listed nor counted, and the next lifecycle run deletes it
+
+### Requirement: A team's notifications reach only its current members
+
+A notification about a team SHALL be sent only to recipients who are still members of that team when it is emitted. When a member leaves or is removed from a team, their notifications about that team SHALL be deleted.
+
+#### Scenario: The publisher left the team
+
+- **WHEN** Alice published an agent, then left its team, and Bob saves a change to it or a platform admin removes it
+- **THEN** Alice receives no notification
+
+#### Scenario: Leaving a team
+
+- **WHEN** Alice leaves a team while holding notifications about it
+- **THEN** those notifications are deleted; her notifications about other teams are kept
 
 ### Requirement: Emitting never fails the triggering action
 

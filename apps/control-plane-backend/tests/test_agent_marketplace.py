@@ -25,7 +25,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import control_plane_backend.agent_marketplace.service as marketplace
 import control_plane_backend.product.agent_copy as agent_copy
@@ -124,7 +124,13 @@ class _Rebac:
     def _has(self, uid: str, permission: Any, resource_id: str) -> bool:
         if isinstance(permission, OrganizationPermission):
             return uid in self.platform_admins
-        return permission in self.perms.get(resource_id, {}).get(uid, set())
+        held = self.perms.get(resource_id, {}).get(uid, set())
+        if permission == TeamPermission.CAN_READ_MEMEBERS:
+            return bool(held)  # any team permission makes a member here
+        return permission in held
+
+    async def has_permission(self, subject, permission, resource, **_) -> bool:
+        return self._has(subject.id, permission, resource.id)
 
     async def has_user_permission(self, user, permission, resource_id, **_) -> bool:
         return self._has(user.uid, permission, resource_id)
@@ -233,10 +239,12 @@ async def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[
     await settings.set(
         agents_publishing_enabled=True, agents_publish_quota=2, updated_by=None
     )
-    notifications = NotificationService(NotificationStore(engine))
+    rebac = _Rebac()
+    notifications = NotificationService(
+        NotificationStore(engine), get_rebac=lambda: cast(Any, rebac)
+    )
     agents = AgentInstanceStore(engine, notifications=notifications)
     market = AgentMarketplaceStore(engine)
-    rebac = _Rebac()
     pod = _Pod()
     client = httpx.AsyncClient(transport=httpx.MockTransport(pod.handle))
     usable: dict[str, set[str] | None] = {}
@@ -1619,6 +1627,19 @@ async def test_platform_admin_removal_tells_the_publisher_with_the_reason(
     assert removed.message == "Duplicate entry"
     assert removed.team_name == "Alpha"
     assert by_type["agent.republish_needed"].handled_outcome == "removed"
+
+
+@pytest.mark.asyncio
+async def test_a_publisher_who_left_the_team_is_told_nothing(editors) -> None:
+    env = editors
+    await _agent(env)
+    await _publish(env)
+    del env.rebac.perms[_TEAM][_EDITOR]
+
+    await _save(env, _EDITOR_2, "A change")
+    await _unpublish(env, 1, uid=_PLATFORM, reason="Duplicate entry")
+
+    assert await _inbox(env, _EDITOR) == []
 
 
 @pytest.mark.asyncio

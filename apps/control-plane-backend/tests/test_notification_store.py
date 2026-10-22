@@ -261,3 +261,23 @@ async def test_user_and_team_deletion_remove_their_rows(
 
     await store.delete_for_user("alice")
     assert await store.unseen_count("alice") == 0
+
+
+@pytest.mark.asyncio
+async def test_leaving_a_team_removes_only_that_members_rows_about_it(
+    store: NotificationStore,
+) -> None:
+    await store.upsert(
+        [
+            _draft("alice", "a", team="alpha"),
+            _draft("alice", "b", team="beta"),
+            _draft("bob", "c", team="alpha"),
+        ]
+    )
+
+    await store.delete_for_member("alice", "alpha")
+
+    assert [row.group_key for row in (await store.list_page("alice", limit=50))[0]] == [
+        "b"
+    ]
+    assert (await _only(store, "bob")).group_key == "c"

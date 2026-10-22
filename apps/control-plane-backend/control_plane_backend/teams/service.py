@@ -1764,6 +1764,10 @@ async def remove_team_member(
         await forget_free_joins(team_id, user_id)
         # Favorites are personal data about this team's prompts: they go with the access.
         await deps.get_prompt_store().delete_favorites_for_team(user_id, team_id)
+        if deps.get_notification_service is not None:
+            await deps.get_notification_service().store.delete_for_member(
+                user_id, team_id
+            )
 
     policy = evaluate_policy_for_request(
         PolicyResolutionRequest(

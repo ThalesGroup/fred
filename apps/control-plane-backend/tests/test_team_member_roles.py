@@ -31,7 +31,9 @@ primitives directly (no HTTP layer) so the invariants are unambiguous:
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
@@ -1115,11 +1117,22 @@ async def test_remove_team_member_self_removal_skips_permission_check(
             matched_rule_specificity=0,
         ),
     )
-    deps = _deps(
-        rebac,
-        "fredlab",
-        get_session_store=lambda: _FakeSessionStore(),
-        get_purge_queue_store=lambda: _FakePurgeQueueStore(),
+    notifications_cleared: list[tuple[str, str]] = []
+
+    class _FakeNotificationStore:
+        async def delete_for_member(self, user_id: str, team_id: str) -> None:
+            notifications_cleared.append((user_id, str(team_id)))
+
+    deps = dataclasses.replace(
+        _deps(
+            rebac,
+            "fredlab",
+            get_session_store=lambda: _FakeSessionStore(),
+            get_purge_queue_store=lambda: _FakePurgeQueueStore(),
+        ),
+        get_notification_service=cast(
+            Any, lambda: SimpleNamespace(store=_FakeNotificationStore())
+        ),
     )
 
     _NoFavoritesPromptStore.cleared.clear()
@@ -1127,8 +1140,9 @@ async def test_remove_team_member_self_removal_skips_permission_check(
 
     assert rebac.team_permission_checks == []
     assert rebac.roles["caller"] == set()
-    # Leaving takes the member's favorites on this team's prompts with it.
+    # Leaving takes the member's favorites and notifications about this team with it.
     assert _NoFavoritesPromptStore.cleared == [("caller", "fredlab")]
+    assert notifications_cleared == [("caller", "fredlab")]
 
 
 @pytest.mark.asyncio
