@@ -124,7 +124,7 @@ Any other grant of a role on the team (an admin adding the person from the Membe
 
 ### Requirement: Admins see pending requests in the Members tab
 
-The Members tab SHALL show a "Pending requests" section to holders of `can_administer_members` while the team has pending requests or requests refused in the last 7 days, each with the requester's name, message and date; a pending one SHALL offer Accept and Refuse, a refused one Accept anyway while the team is public and `on_request` (refused rows are hidden otherwise). A failed decision SHALL show the error toast. The section SHALL be absent when there is none.
+The Members tab SHALL show a "Pending requests" section to holders of `can_administer_members` while the team has pending requests or requests refused in the last 7 days, each with the requester's name, message and date; a pending one SHALL offer Refuse (left) and Accept (right), a refused one Accept anyway while the team is public and `on_request` (refused rows are hidden otherwise). A failed decision SHALL show the error toast. The section SHALL be absent when there is none. It SHALL stay fresh across sessions on its own (periodic refresh and refetch on focus), never through notifications.
 
 #### Scenario: Admin promoted after the request
 
