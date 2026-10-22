@@ -2,7 +2,8 @@
 
 **Status:** Owner decisions recorded 2026-10-22; no open question left.
 GitHub issue #3232. Slice 1 is scoped as the OpenSpec change
-`add-in-app-notifications`; slices 2 and 3 get their own changes.
+`add-in-app-notifications`, slice 2 as `add-team-join-requests` (same
+branch and PR); slice 3 gets its own change.
 
 ## 1. Problem
 
@@ -238,11 +239,14 @@ None. The three questions this section held are closed by the owner
    badge, popover, tile, clear all / delete, seen/read, 15 s badge polling,
    action-button framework, expiry step, `published_by`, types 1 and 2,
    Help Center fr+en, migration note (minor).
-2. **Team join requests:** the opt-in "on request" access mode, join-request
-   record and endpoints, types 3 and 4.
+2. **Team join requests** (OpenSpec `add-team-join-requests`): the opt-in
+   `on_request` access mode for public teams, join-request record and
+   endpoints, "Ask to join" on the team card, a Members-tab pending list,
+   types 3 and 4.
 3. **Quota boost requests:** after #3223 slices (b) and (c); types 5 and 6.
 
-Each later slice is its own OpenSpec change.
+Each slice is its own OpenSpec change. Once slice 3 is scoped, this RFC has
+nothing left open and folds into the archived specs.
 
 ## 7. Alternatives considered
 
