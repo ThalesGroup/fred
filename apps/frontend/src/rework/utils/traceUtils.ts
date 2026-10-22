@@ -1283,13 +1283,8 @@ export function traceRows(entries: TraceEntry[]): TraceRow[] {
 }
 
 /**
- * Curated discriminator for a tool step, so two calls to the same tool are
- * distinguishable ("Reading query" ×2 was byte-identical before).
- *
- * Only volume and partial-result metadata are derived — never raw arguments or raw result content,
- * which stay redacted per the rule enforced in {@link primaryTextForEntry}.
- * Returns null when the result shape is unrecognized, still running, or failed
- * (the red status dot already carries the failure).
+ * Safe result metadata distinguishes repeated calls without exposing raw arguments.
+ * Returns null for unrecognized, running, or failed results.
  */
 export function toolDiscriminator(
   entry: TraceEntry,

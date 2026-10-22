@@ -327,8 +327,8 @@ describe("entryLabel localization", () => {
   };
 
   it.each([
-    ["Reading query", "Reading query"],
-    ["Lecture de la requête", "Lecture de la requête"],
+    ["Reading data", "Reading data"],
+    ["Consultation des données", "Consultation des données"],
   ])("uses the active language label %s", (translation, expected) => {
     expect(entryLabel(entry, () => translation)).toBe(expected);
   });

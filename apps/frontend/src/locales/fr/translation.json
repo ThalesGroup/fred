@@ -1882,7 +1882,7 @@
       "toolLabels": {
         "askUser": "Demande d'information à l'utilisateur",
         "readSkillFile": "Lecture d’un fichier du skill",
-        "readQuery": "Lecture de la requête",
+        "readQuery": "Consultation des données",
         "documents": "Liste des documents tabulaires",
         "markdown": "Lecture du catalogue du classeur",
         "schemas": "Lecture des schémas tabulaires",

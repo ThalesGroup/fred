@@ -36,7 +36,7 @@ vi.mock("react-i18next", () => ({
       if (key === "rework.chatTrace.tables")
         return `${options?.count ?? 0} ${options?.count === 1 ? "table" : "tables"}`;
       if (key === "rework.chatTrace.tabular.tableNumber") return `Table ${options?.number ?? 0}`;
-      if (key === "rework.chatTrace.toolLabels.readQuery") return "Reading query";
+      if (key === "rework.chatTrace.toolLabels.readQuery") return "Reading data";
       if (key === "rework.chatTrace.toolLabels.documents") return "Listing tabular documents";
       if (key === "rework.chatTrace.toolLabels.markdown") return "Reading the workbook catalog";
       if (key === "rework.chatTrace.toolLabels.schemas") return "Reading tabular schemas";
@@ -145,7 +145,7 @@ describe("TraceDetailDrawer read_query failure", () => {
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
 
     expect(html).toMatch(
-      /<header>Reading query<span[^>]*>Failed<\/span><span[^>]*aria-label="Execution time: 42ms"[^>]*>42ms<\/span><\/header>/,
+      /<header>Reading data<span[^>]*>Failed<\/span><span[^>]*aria-label="Execution time: 42ms"[^>]*>42ms<\/span><\/header>/,
     );
     expect(html).toContain("Query");
     expect(html).toContain("SELECT\n  amount_typo\nFROM\n  d_sales");
@@ -200,7 +200,7 @@ describe("TraceDetailDrawer read_query failure", () => {
     expect(html).toContain('data-copy-text="SELECT * FROM d_sales WHERE 1 = 0"');
     expect(html).toContain("Response");
     expect(html).toMatch(
-      /<header>Reading query<span[^>]*>Success<\/span><span[^>]*aria-label="Execution time: 12ms"[^>]*>12ms<\/span><\/header>/,
+      /<header>Reading data<span[^>]*>Success<\/span><span[^>]*aria-label="Execution time: 12ms"[^>]*>12ms<\/span><\/header>/,
     );
     expect(html).toContain("0 rows");
     expect(html).toContain('<pre data-language="json">[]</pre>');
