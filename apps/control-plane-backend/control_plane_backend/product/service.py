@@ -982,10 +982,25 @@ async def _model_capabilities_for_source_uncached(
             exc,
         )
         return None
+    raw_discovery_source_id = payload.get("discovery_source_id")
+    discovery_source_id = (
+        raw_discovery_source_id
+        if isinstance(raw_discovery_source_id, str) and raw_discovery_source_id
+        else None
+    )
+    discovered_ids = payload.get("discovered_model_ids")
+    discovered = (
+        {item for item in discovered_ids if isinstance(item, str)}
+        if discovery_source_id is not None and isinstance(discovered_ids, list)
+        else set()
+    )
     entries = [
         CapabilityCatalogEntry(
             id=entry["id"],
             source_id=entry["id"],
+            model_discovery_source_id=(
+                discovery_source_id if entry["id"] in discovered else None
+            ),
             # No runtime_id on purpose: several pods can serve the same model,
             # and the catalog unions their entries below. A single pod id would
             # be whichever one merged last — arbitrary, and read as fact.

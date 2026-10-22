@@ -28,6 +28,8 @@ async def test_model_metadata_is_projected_from_pod(monkeypatch) -> None:
         return httpx.Response(
             200,
             json={
+                "discovery_source_id": "gateway",
+                "discovered_model_ids": ["model__openai__discovered.gateway.abc"],
                 "models": [
                     {
                         "id": "model__openai__discovered.gateway.abc",
@@ -47,7 +49,7 @@ async def test_model_metadata_is_projected_from_pod(monkeypatch) -> None:
                         "context_window_tokens": "invalid",
                         "max_input_tokens": 0,
                     },
-                ]
+                ],
             },
         )
 
@@ -62,6 +64,8 @@ async def test_model_metadata_is_projected_from_pod(monkeypatch) -> None:
 
     assert catalog is not None
     first, second = catalog.entries
+    assert first.model_discovery_source_id == "gateway"
+    assert second.model_discovery_source_id is None
     assert first.model_display_name == "Chat A"
     assert first.model_context_window_tokens == 32768
     assert first.model_max_input_tokens == 30000

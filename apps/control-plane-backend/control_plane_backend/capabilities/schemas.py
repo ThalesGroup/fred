@@ -186,6 +186,10 @@ class CapabilityEnablementItem(BaseModel):
         default=None,
         description="The platform administrator's saved label, if any. Clear to restore the pod label.",
     )
+    model_discovery_source_id: str | None = Field(
+        default=None,
+        description="The pod-advertised discovery source for this model, if any.",
+    )
     model_context_window_tokens: int | None = Field(default=None, gt=0)
     model_max_input_tokens: int | None = Field(default=None, gt=0)
     model_max_output_tokens: int | None = Field(default=None, gt=0)

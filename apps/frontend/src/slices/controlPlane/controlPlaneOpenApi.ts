@@ -4284,6 +4284,7 @@ export type CapabilityCatalogEntry = {
   route_base_url?: string | null;
   default_capability_ids?: string[];
   model_profile_ids?: string[];
+  model_discovery_source_id?: string | null;
   model_chat_profile_ids?: string[];
   model_thinking_profile_ids?: string[];
   model_reasoning_efforts?: {
@@ -4983,6 +4984,8 @@ export type CapabilityEnablementItem = {
   model_display_name?: string | null;
   /** The platform administrator's saved label, if any. Clear to restore the pod label. */
   model_display_name_override?: string | null;
+  /** The pod-advertised discovery source for this model, if any. */
+  model_discovery_source_id?: string | null;
   model_context_window_tokens?: number | null;
   model_max_input_tokens?: number | null;
   model_max_output_tokens?: number | null;

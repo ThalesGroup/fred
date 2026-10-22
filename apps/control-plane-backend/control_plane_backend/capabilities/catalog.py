@@ -248,6 +248,10 @@ async def aggregate_capability_catalog(
                         "model_display_name": (
                             entry.model_display_name or existing.model_display_name
                         ),
+                        "model_discovery_source_id": (
+                            entry.model_discovery_source_id
+                            or existing.model_discovery_source_id
+                        ),
                         "model_context_window_tokens": (
                             entry.model_context_window_tokens
                             or existing.model_context_window_tokens

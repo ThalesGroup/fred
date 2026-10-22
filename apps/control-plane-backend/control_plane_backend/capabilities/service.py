@@ -411,6 +411,7 @@ async def _build_enablement_item(
         ),
         model_display_name=entry.model_display_name,
         model_display_name_override=(display_name_overrides or {}).get(entry.id),
+        model_discovery_source_id=entry.model_discovery_source_id,
         model_context_window_tokens=entry.model_context_window_tokens,
         model_max_input_tokens=entry.model_max_input_tokens,
         model_max_output_tokens=entry.model_max_output_tokens,

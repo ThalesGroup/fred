@@ -415,6 +415,8 @@ class CapabilityCatalogEntry(BaseModel):
     # policy consumers use the explicit subset below. Always empty for
     # kind="tool"/"agent" entries — only `kind="model"` populates it.
     model_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
+    # Set from the pod's discovery inventory; absent for YAML-only models.
+    model_discovery_source_id: str | None = None
     # The chat-capable subset of `model_profile_ids`. Team routing is a
     # chat-only contract, so its picker and write validation consume this
     # explicit projection instead of guessing from profile-id conventions.
