@@ -26,13 +26,13 @@ from fred_core.kpi.http_middleware import KPIMiddleware
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 
 
-def _make_app(kpi=None) -> tuple[FastAPI, MagicMock]:
+def _make_app(kpi=None, **options) -> tuple[FastAPI, MagicMock]:
     """Return a minimal FastAPI app with KPIMiddleware and a mock api_call spy."""
     app = FastAPI()
     writer = kpi or NoOpKPIWriter()
     spy = MagicMock(wraps=writer.api_call)
     writer.api_call = spy
-    app.add_middleware(KPIMiddleware, kpi=writer)
+    app.add_middleware(KPIMiddleware, kpi=writer, **options)
 
     @app.get("/ok")
     def ok():
@@ -46,13 +46,9 @@ def _make_app(kpi=None) -> tuple[FastAPI, MagicMock]:
     def ready():
         return {"ready": True}
 
-    @app.get("/control-plane/v1/notifications/summary")
-    def notification_summary():
-        return {"unseen_count": 0}
-
-    @app.get("/control-plane/v1/notifications")
-    def notifications():
-        return {"items": []}
+    @app.get("/api/v1/poll")
+    def poll():
+        return {}
 
     @app.get("/error")
     def error():
@@ -125,11 +121,13 @@ class TestKPIMiddlewareSkipPaths:
         self.client.get("/api/v1/ready")
         self.spy.assert_not_called()
 
-    def test_notification_badge_poll_not_emitted(self) -> None:
-        self.client.get("/control-plane/v1/notifications/summary")
-        self.spy.assert_not_called()
-        self.client.get("/control-plane/v1/notifications")
-        self.spy.assert_called_once()
+    def test_skip_suffixes_replace_the_defaults(self) -> None:
+        app, spy = _make_app(skip_suffixes=("/poll",))
+        client = TestClient(app)
+        client.get("/api/v1/poll")
+        spy.assert_not_called()
+        client.get("/healthz")
+        spy.assert_called_once()
 
 
 class TestKPIMiddlewareFailSafe:

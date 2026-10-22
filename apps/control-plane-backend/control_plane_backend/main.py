@@ -38,6 +38,7 @@ from fred_core.common.fastapi_handlers import (
 )
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware
+from fred_core.kpi.http_middleware import DEFAULT_SKIP_SUFFIXES
 from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingFastAPI
 from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel
@@ -344,7 +345,12 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type", "Authorization"],
         expose_headers=REFERENCE_HEADERS,
     )
-    app.add_request_middleware(KPIMiddleware, kpi=container.get_kpi_writer)
+    # The notification badge polls every 15 s from every open tab: no analytics value.
+    app.add_request_middleware(
+        KPIMiddleware,
+        kpi=container.get_kpi_writer,
+        skip_suffixes=(*DEFAULT_SKIP_SUFFIXES, "/notifications/summary"),
+    )
 
     router = APIRouter(prefix=configuration.app.base_url)
 
