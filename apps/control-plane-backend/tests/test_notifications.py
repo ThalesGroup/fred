@@ -112,6 +112,13 @@ def test_every_type_declares_the_permission_to_act_on_it() -> None:
     assert ACTION_PERMISSION[NotificationType.AGENT_MARKETPLACE_REMOVED] == (
         TeamPermission.CAN_UPDATE_AGENTS
     )
+    assert ACTION_PERMISSION[NotificationType.TEAM_JOIN_REQUESTED] == (
+        TeamPermission.CAN_ADMINISTER_MEMBERS
+    )
+    # No permission only for a type sent outside any team: the requester's answer.
+    assert {t for t, p in ACTION_PERMISSION.items() if p is None} == {
+        NotificationType.TEAM_JOIN_REQUEST_ANSWERED
+    }
 
 
 # --- emission -------------------------------------------------------------------
@@ -183,8 +190,12 @@ async def test_losing_the_right_to_act_drops_those_notifications(
             return True
 
         async def has_permissions(self, subject, permissions, resource, **_):
-            assert list(permissions) == [TeamPermission.CAN_UPDATE_AGENTS]
-            return [held[subject.id]]
+            # Types without a permission are never checked nor dropped.
+            assert list(permissions) == [
+                TeamPermission.CAN_ADMINISTER_MEMBERS,
+                TeamPermission.CAN_UPDATE_AGENTS,
+            ]
+            return [True, held[subject.id]]
 
     service = NotificationService(
         NotificationStore(control_plane_sql_engine),
@@ -200,6 +211,44 @@ async def test_losing_the_right_to_act_drops_those_notifications(
     assert len(alice.items) == 1
     assert dave.items == []
     assert (await service.summary(_user("dave"))).unseen_count == 0
+
+
+@pytest.mark.asyncio
+async def test_a_type_without_permission_reaches_a_non_member(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    class _Rebac:
+        async def has_permission(self, *_args, **_kwargs) -> bool:
+            raise AssertionError("an answer sent outside a team is never checked")
+
+    service = NotificationService(
+        NotificationStore(control_plane_sql_engine),
+        get_rebac=lambda: cast(RebacEngine, _Rebac()),
+    )
+
+    assert await service.notify(
+        recipients=["alice"],
+        type=NotificationType.TEAM_JOIN_REQUEST_ANSWERED,
+        payload={"team_id": "alpha", "team_name": "Alpha", "outcome": "refused"},
+        group_key="join_request_outcome:r1",
+    )
+
+    [answer] = (await service.list_page(_user("alice"), limit=50, before=None)).items
+    assert answer.team_id is None and answer.payload.outcome == "refused"
+
+
+@pytest.mark.asyncio
+async def test_delete_groups_removes_every_recipients_rows(
+    service: NotificationService,
+) -> None:
+    await _notify(service, "alice", "dave", group="g1")
+    await _notify(service, "alice", group="g2")
+
+    assert await service.delete_groups(["g1"])
+
+    page = await service.list_page(_user("alice"), limit=50, before=None)
+    assert len(page.items) == 1
+    assert (await service.list_page(_user("dave"), limit=50, before=None)).items == []
 
 
 @pytest.mark.asyncio

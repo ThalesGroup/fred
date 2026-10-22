@@ -58,7 +58,7 @@ _SYSTEM = KPIActor(type="system")
 _VIEW: TypeAdapter[Any] = TypeAdapter(NotificationView)
 
 
-def _required_permission(type_: str) -> TeamPermission:
+def _required_permission(type_: str) -> TeamPermission | None:
     return ACTION_PERMISSION[NotificationType(type_)]
 
 
@@ -183,9 +183,10 @@ class NotificationService:
         rebac = self._get_rebac()
         checks = sorted(
             {
-                (d.recipient_id, d.team_id, _required_permission(d.type))
+                (d.recipient_id, d.team_id, permission)
                 for d in drafts
                 if d.team_id is not None
+                and (permission := _required_permission(d.type)) is not None
             }
         )
         allowed = await asyncio.gather(
@@ -203,6 +204,7 @@ class NotificationService:
             d
             for d in drafts
             if d.team_id is None
+            or _required_permission(d.type) is None
             or (d.recipient_id, d.team_id, _required_permission(d.type)) in granted
         ]
 
@@ -213,7 +215,9 @@ class NotificationService:
             return
         try:
             rebac = self._get_rebac()
-            permissions = sorted(set(ACTION_PERMISSION.values()))
+            permissions = sorted(
+                {p for p in ACTION_PERMISSION.values() if p is not None}
+            )
             held = await rebac.has_permissions(
                 RebacReference(Resource.USER, recipient_id),
                 permissions,
@@ -252,6 +256,19 @@ class NotificationService:
                 exc_info=True,
             )
             self._count("notifications.emit_failed_total", {"status": "error"})
+            return False
+        return True
+
+    async def delete_groups(self, group_keys: Sequence[str]) -> bool:
+        """Every row of these groups goes, for every recipient (the subject is gone)."""
+        try:
+            await self._store.delete_groups(group_keys)
+        except Exception:
+            logger.warning(
+                "Failed to delete notifications group_keys=%s",
+                sorted(group_keys),
+                exc_info=True,
+            )
             return False
         return True
 

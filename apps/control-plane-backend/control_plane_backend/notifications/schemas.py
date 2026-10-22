@@ -34,6 +34,8 @@ MAX_PAGE_SIZE = 50
 class NotificationType(str, Enum):
     AGENT_REPUBLISH_NEEDED = "agent.republish_needed"
     AGENT_MARKETPLACE_REMOVED = "agent.marketplace_removed"
+    TEAM_JOIN_REQUESTED = "team.join_requested"
+    TEAM_JOIN_REQUEST_ANSWERED = "team.join_request_answered"
 
 
 class _Payload(BaseModel):
@@ -67,18 +69,41 @@ class AgentMarketplaceRemovedPayload(_Payload):
     )
 
 
+class TeamJoinRequestedPayload(_Payload):
+    """A non-member asks to join a team the recipient administers."""
+
+    team_id: str
+    team_name: str
+    request_id: str
+    requester_id: str
+    requester_name: str
+    message: str | None = None
+
+
+class TeamJoinRequestAnsweredPayload(_Payload):
+    """An admin decided on the recipient's request; never names the admin."""
+
+    team_id: str
+    team_name: str
+    outcome: Literal["accepted", "refused"]
+
+
 PAYLOAD_MODELS: dict[NotificationType, type[_Payload]] = {
     NotificationType.AGENT_REPUBLISH_NEEDED: AgentRepublishNeededPayload,
     NotificationType.AGENT_MARKETPLACE_REMOVED: AgentMarketplaceRemovedPayload,
+    NotificationType.TEAM_JOIN_REQUESTED: TeamJoinRequestedPayload,
+    NotificationType.TEAM_JOIN_REQUEST_ANSWERED: TeamJoinRequestAnsweredPayload,
 }
 
 
-#: The right a recipient needs, on the notification's team, to act on it. Every
-#: type declares one: it is checked per recipient at send time, and a loss of
-#: it deletes the recipient's open notifications of that type.
-ACTION_PERMISSION: dict[NotificationType, TeamPermission] = {
+#: The right a recipient needs, on the notification's team, to act on it. It is
+#: checked per recipient at send time, and a loss of it deletes the recipient's
+#: open notifications of that type. `None` only for types sent without a team.
+ACTION_PERMISSION: dict[NotificationType, TeamPermission | None] = {
     NotificationType.AGENT_REPUBLISH_NEEDED: TeamPermission.CAN_UPDATE_AGENTS,
     NotificationType.AGENT_MARKETPLACE_REMOVED: TeamPermission.CAN_UPDATE_AGENTS,
+    NotificationType.TEAM_JOIN_REQUESTED: TeamPermission.CAN_ADMINISTER_MEMBERS,
+    NotificationType.TEAM_JOIN_REQUEST_ANSWERED: None,
 }
 
 
@@ -119,8 +144,23 @@ class AgentMarketplaceRemovedNotification(_NotificationBase):
     payload: AgentMarketplaceRemovedPayload
 
 
+class TeamJoinRequestedNotification(_NotificationBase):
+    type: Literal["team.join_requested"]
+    payload: TeamJoinRequestedPayload
+
+
+class TeamJoinRequestAnsweredNotification(_NotificationBase):
+    type: Literal["team.join_request_answered"]
+    payload: TeamJoinRequestAnsweredPayload
+
+
 NotificationView = Annotated[
-    Union[AgentRepublishNeededNotification, AgentMarketplaceRemovedNotification],
+    Union[
+        AgentRepublishNeededNotification,
+        AgentMarketplaceRemovedNotification,
+        TeamJoinRequestedNotification,
+        TeamJoinRequestAnsweredNotification,
+    ],
     Field(discriminator="type"),
 ]
 

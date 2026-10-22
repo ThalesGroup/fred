@@ -226,6 +226,16 @@ class NotificationStore:
                 )
             )
 
+    async def delete_groups(self, group_keys: Sequence[str]) -> None:
+        if not group_keys:
+            return
+        async with use_session(self._sessions) as s:
+            await s.execute(
+                delete(NotificationRow).where(
+                    NotificationRow.group_key.in_(list(group_keys))
+                )
+            )
+
     async def unseen_count(self, recipient_id: str) -> int:
         async with use_session(self._sessions) as s:
             return (
