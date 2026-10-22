@@ -30,12 +30,6 @@
   height: 100%;
 }
 
-/* No top padding: the nav bar above already ends with its own bottom padding. */
-.rail-divider {
-  padding: 0 var(--spacing-s) var(--spacing-xs);
-  width: 100%;
-}
-
 .main-nav-bar-container {
   flex: 1;
   min-height: 0;
