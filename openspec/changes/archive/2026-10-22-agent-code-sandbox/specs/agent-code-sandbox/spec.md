@@ -16,7 +16,7 @@ The system SHALL offer an admin-gated agent capability that accepts only a langu
 - **THEN** the tool rejects the request before creating a sandbox
 
 ### Requirement: Isolation is explicit and mandatory
-The system MUST start each invocation with an operator-selected, non-default isolation runtime. It MUST reject execution when the configured runtime is missing, unsupported, or unverifiable and MUST NOT fall back to the host process or default OCI runtime.
+The system MUST run every sandbox workload with an operator-selected, non-default isolation runtime. It MUST reject execution when the configured runtime is missing, unsupported, or unverifiable and MUST NOT fall back to the host process or default OCI runtime.
 
 #### Scenario: Runtime is unavailable
 - **WHEN** the selected runtime cannot be resolved on the target Kubernetes cluster or Docker daemon

@@ -19,7 +19,7 @@
 
 - [x] 4.1 Add a selectable SandboxClaim backend with template, pool and isolation preflight, single-use claim lifecycle, expiry and cleanup tests.
 - [x] 4.2 Add operator manifests and document upstream controller installation, pool sizing, and admission limitations.
-- [ ] 4.3 Measure cold and ready request-to-result latency in the same k3d environment as the Job backend, review the diff, run the quality gate, and leave PR checks green.
+- [x] 4.3 Measure cold and ready request-to-result latency in the same k3d environment as the Job backend, review the diff, run the quality gate, and leave PR checks green.
 
 ## 5. Conversation retention and admin controls
 
@@ -27,4 +27,4 @@
 - [x] 5.2 Add SIG claim expiry renewal and bounded cleanup for Docker/Job workloads; verify no workload is shared across conversations or users.
 - [x] 5.3 Persist idle, active-capacity and warm-capacity settings behind platform-admin authorization; apply changes in the broker without redeploy, constrained by operator limits.
 - [x] 5.4 Add an admin surface showing the approved isolation profile and these three controls; verify the API and UI with focused tests and captures.
-- [ ] 5.5 Re-run targeted tests, root quality gate, full branch review and CI; document deployment limits and observed session behavior.
+- [x] 5.5 Re-run targeted tests, root quality gate, full branch review and CI; document deployment limits and observed session behavior.
