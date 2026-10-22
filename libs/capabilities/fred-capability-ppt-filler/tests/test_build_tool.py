@@ -1351,3 +1351,21 @@ def test_the_designs_line_names_look_alike_template_slides_once():
         inventory, [SlidePlan(title="a"), SlidePlan(title="b")], [first, twin]
     )
     assert f"1 '{first.label}' · 2 '{first.label}'." in line
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_plan_is_logged_without_its_text(monkeypatch, caplog):
+    from pydantic import BaseModel
+
+    class _Slide(BaseModel):
+        title: int
+
+    def _unreadable(_validated):
+        return _Slide.model_validate({"title": "confidential figures"})
+
+    monkeypatch.setattr(tools_mod, "_to_plan", _unreadable)
+    text, result = await _build(monkeypatch, slides=[COVER])
+    assert result.is_error, text
+    logged = [r.getMessage() for r in caplog.records if "unreadable plan" in r.msg]
+    assert logged == ["[PPTBUILD][TOOL] unreadable plan: title: int_parsing"]
+    assert "confidential" not in " ".join(r.getMessage() for r in caplog.records)

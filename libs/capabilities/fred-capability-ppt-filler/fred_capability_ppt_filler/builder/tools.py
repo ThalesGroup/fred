@@ -68,6 +68,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    ValidationError,
     ValidationInfo,
     create_model,
     field_validator,
@@ -1099,6 +1100,15 @@ def _merged(
     return [by_index[i] for i in sorted(by_index)]
 
 
+def _shape_of(exc: Exception) -> str:
+    """Where a plan failed, never its values: they are the user's text."""
+    if isinstance(exc, ValidationError):
+        return "; ".join(
+            f"{'.'.join(map(str, e['loc']))}: {e['type']}" for e in exc.errors()
+        )
+    return type(exc).__name__
+
+
 def _evaluate(
     inventory: TemplateInventory,
     plan: DeckPlan,
@@ -1512,7 +1522,7 @@ def build_builder_tools(
             plan = _to_plan(validated)
             changes = None if validated.changes is None else _to_changes(validated)
         except Exception as exc:  # noqa: BLE001 - coercion makes this unexpected
-            logger.warning("[PPTBUILD][TOOL] unreadable plan: %s", exc)
+            logger.warning("[PPTBUILD][TOOL] unreadable plan: %s", _shape_of(exc))
             return _error(
                 "No deck was built: the slide plan could not be read. Call build_presentation "
                 "again with 'slides' as a list of objects, each with its content (title, "
