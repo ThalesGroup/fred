@@ -90,7 +90,7 @@ export default function TeamJoinRequestsSection({
                 <>
                   <Button
                     color="error"
-                    variant="outlined"
+                    variant="filled"
                     size="small"
                     disabled={busy}
                     onClick={() => decide(request, "refuse")}
