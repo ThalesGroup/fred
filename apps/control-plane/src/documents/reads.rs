@@ -1,11 +1,12 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-use super::{Storage, authorized, conflict, invalid, models::*, unavailable, upload};
+use super::{Storage, conflict, dependency_error, invalid, models::*, unavailable, upload};
 use crate::{
     db,
     domain::{Document, Folder, Permission, Space},
     error::{AppError, AppResult},
+    spaces,
 };
 use axum::{
     body::{Body, Bytes},
@@ -24,7 +25,9 @@ impl Storage {
                 .bind(key)
                 .fetch_one(&self.pool)
                 .await?;
-        authorized(&self.pool, &self.fga, actor, row.space_id, Permission::Read).await?;
+        spaces::authorize(&self.pool, &self.fga, actor, row.space_id, Permission::Read)
+            .await
+            .map_err(dependency_error)?;
         if let Some(id) = row.document_id {
             row.processing = crate::processing::store::summaries(&self.pool, &[id])
                 .await?
@@ -39,7 +42,9 @@ impl Storage {
         space: Uuid,
         query: ReceiptQuery,
     ) -> AppResult<Vec<UploadReceipt>> {
-        authorized(&self.pool, &self.fga, actor, space, Permission::Read).await?;
+        spaces::authorize(&self.pool, &self.fga, actor, space, Permission::Read)
+            .await
+            .map_err(dependency_error)?;
         if query.before.is_some() != query.before_key.is_some() {
             return Err(invalid("Both receipt cursor fields are required"));
         }
@@ -79,7 +84,9 @@ impl Storage {
     }
 
     pub async fn summary(&self, actor: &str, id: Uuid) -> AppResult<StorageSummary> {
-        let space = authorized(&self.pool, &self.fga, actor, id, Permission::Read).await?;
+        let space = spaces::authorize(&self.pool, &self.fga, actor, id, Permission::Read)
+            .await
+            .map_err(dependency_error)?;
         self.usage(&space).await
     }
 
@@ -114,14 +121,15 @@ impl Storage {
         input: Preflight,
     ) -> AppResult<PreflightResult> {
         let folder = db::folder(&self.pool, id).await?;
-        let space = authorized(
+        let space = spaces::authorize(
             &self.pool,
             &self.fga,
             actor,
             folder.space_id,
             Permission::Write,
         )
-        .await?;
+        .await
+        .map_err(dependency_error)?;
         if input.files.is_empty() || input.files.len() > 200 {
             return Err(invalid("Preflight accepts 1..200 files"));
         }
@@ -158,7 +166,9 @@ impl Storage {
         {
             return Err(invalid("Directory search exceeds 255 characters"));
         }
-        authorized(pool, fga, actor, space, Permission::Read).await?;
+        spaces::authorize(pool, fga, actor, space, Permission::Read)
+            .await
+            .map_err(dependency_error)?;
         let can_write = fga
             .check(actor, Permission::Write, space)
             .await
@@ -236,14 +246,15 @@ impl Storage {
     /// Hold one chunk until EOF/checksum verification so corruption cannot look complete.
     pub async fn content(&self, actor: &str, id: Uuid) -> AppResult<Response> {
         let document = db::document(&self.pool, id).await?;
-        authorized(
+        spaces::authorize(
             &self.pool,
             &self.fga,
             actor,
             document.space_id,
             Permission::Read,
         )
-        .await?;
+        .await
+        .map_err(dependency_error)?;
         self.stream_original(document).await
     }
 

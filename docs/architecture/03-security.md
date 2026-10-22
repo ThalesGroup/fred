@@ -175,12 +175,21 @@ revocation does not roll back already dispatched effects. A read-only permission
 check describes evaluation time, not a lease. The [runtime reference](A1-manager-runtime.md#role-and-space-mutations)
 and [invariants](09-quality.md#invariants) give the mechanisms and proofs.
 
+## Business authorization answer
+
+Every business route on a space, including folder, document, processing, scope,
+team/project and personal-space routes, answers one way (`spaces::authorize`): a
+missing space, or one outside the caller's organization, returns 404; then a retired
+space returns 409 `space_pending_deletion`; then a missing permission returns 403.
+Writes evaluate the same rule on the connection that holds the organization lock.
+Role grants and revocations keep their own role rules and report retirement only
+after them. Authorization probes answer `allowed: false` for each of these refusals.
+
 ## Original-document boundary
 
-Directory, receipts and downloads use private/no-store responses.
-A foreign organization or missing target returns 404; a known target in the caller's
-organization without the required permission returns 403. Provider and authorization
-dependency failures return a safe 503 rather than granting access.
+Directory, receipts and downloads use private/no-store responses and follow the
+business authorization answer above. Provider and authorization dependency failures
+return a safe 503 rather than granting access.
 
 An upload checks space write permission before consuming its body, then checks
 current organization, permission, token expiry and CGU under the organization lock

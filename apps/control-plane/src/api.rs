@@ -607,13 +607,31 @@ async fn authorize_document(
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     ApiJson(req): ApiJson<AuthorizeDocument>,
 ) -> AppResult<Json<Allowed>> {
-    let document = db::document(&s.pool, req.document_id).await?;
-    let space = spaces::load(&s.pool, document.space_id).await?;
-    let allowed = spaces::in_organization(&s.pool, &s.fga, &user, space.organization).await?
-        && s.fga
-            .check(&user, req.permission, document.space_id)
-            .await?;
-    Ok(Json(Allowed { allowed }))
+    let document = match db::document(&s.pool, req.document_id).await {
+        Err(sqlx::Error::RowNotFound) => return Ok(Json(Allowed { allowed: false })),
+        document => document?,
+    };
+    let decision = spaces::authorize(&s.pool, &s.fga, &user, document.space_id, req.permission)
+        .await
+        .map(|_| true);
+    Ok(Json(Allowed {
+        allowed: probe(decision)?,
+    }))
+}
+
+/// A business refusal is `allowed: false`: a missing, foreign or retired space, or a
+/// missing permission. An ambiguous context or a dependency failure stays an error.
+fn probe(decision: AppResult<bool>) -> AppResult<bool> {
+    match decision {
+        Ok(allowed) => Ok(allowed),
+        Err(AppError::NotFound | AppError::Forbidden) => Ok(false),
+        Err(AppError::Problem { code, .. })
+            if code == crate::lifecycle::store::PENDING_DELETION =>
+        {
+            Ok(false)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -796,12 +814,18 @@ async fn authorize_space(
     AdmittedUser(user): AdmittedUser,
     ApiJson(req): ApiJson<SpaceCheck>,
 ) -> AppResult<Json<Allowed>> {
-    let space = spaces::load(&s.pool, req.space_id).await?;
-    Ok(Json(Allowed {
-        allowed: spaces::in_organization(&s.pool, &s.fga, &user.uid, space.organization).await?
+    let decision = async {
+        let space = spaces::load(&s.pool, req.space_id).await?;
+        let allowed = spaces::in_organization(&s.pool, &s.fga, &user.uid, space.organization)
+            .await?
             && s.fga
                 .check_space(&user.uid, req.permission, req.space_id)
-                .await?,
+                .await?;
+        crate::lifecycle::store::require_active(&s.pool, space.id).await?;
+        Ok(allowed)
+    };
+    Ok(Json(Allowed {
+        allowed: probe(decision.await)?,
     }))
 }
 #[derive(Deserialize, utoipa::ToSchema)]

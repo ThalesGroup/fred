@@ -22,7 +22,7 @@ use std::{
     time::Duration,
 };
 
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{PgConnection, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::{
@@ -50,10 +50,50 @@ async fn require(fga: &Fga, user: &str, permission: Permission, space: Uuid) -> 
     }
 }
 
-/// Business access excludes retired spaces before checking OpenFGA permissions.
+/// The space row only: retirement is reported after authorization, never before.
 pub async fn load(pool: &PgPool, id: Uuid) -> AppResult<Space> {
-    crate::lifecycle::store::require_active(pool, id).await?;
     Ok(db::space(pool, id).await?.into())
+}
+
+/// The business authorization of every route: a missing space, or one outside the
+/// caller's organization, is 404; then a retired space is 409; then a missing
+/// permission is 403. Full rule: 03-security.md.
+pub async fn authorize(
+    pool: &PgPool,
+    fga: &Fga,
+    caller: &str,
+    id: Uuid,
+    permission: Permission,
+) -> AppResult<Space> {
+    let space = load(pool, id).await?;
+    in_context(in_organization(pool, fga, caller, space.organization).await?)?;
+    crate::lifecycle::store::require_active(pool, id).await?;
+    require(fga, caller, permission, id).await?;
+    Ok(space)
+}
+
+/// The same rule on the connection that already holds the organization lock.
+async fn authorize_locked(
+    conn: &mut PgConnection,
+    fga: &Fga,
+    caller: &str,
+    id: Uuid,
+    permission: Permission,
+) -> AppResult<Space> {
+    let space: Space = db::space(&mut *conn, id).await?.into();
+    in_context(in_organization(&mut *conn, fga, caller, space.organization).await?)?;
+    crate::lifecycle::store::require_active(&mut *conn, id).await?;
+    require(fga, caller, permission, id).await?;
+    Ok(space)
+}
+
+/// Outside the caller's organization, a space does not exist for them.
+fn in_context(inside: bool) -> AppResult<()> {
+    if inside {
+        Ok(())
+    } else {
+        Err(AppError::NotFound)
+    }
 }
 
 /// I23: all direct roles count, including governance and roles on retired spaces.
@@ -135,9 +175,7 @@ pub async fn scope(
     space_id: Uuid,
     levels: Option<&[SpaceKind]>,
 ) -> AppResult<Vec<Uuid>> {
-    let space = load(pool, space_id).await?;
-    require_context(pool, fga, user, space.organization).await?;
-    require(fga, user, Permission::Read, space.id).await?;
+    let space = authorize(pool, fga, user, space_id, Permission::Read).await?;
     let kinds: &[SpaceKind] = if space.personal_owner.is_some() {
         &[SpaceKind::Team]
     } else {
@@ -301,7 +339,6 @@ async fn lock_for(
 ) -> AppResult<(Transaction<'static, Postgres>, Guard)> {
     let mut tx = bootstrap::locked(pool).await?;
     lock_organization(&mut tx, space).await?;
-    crate::lifecycle::store::require_active(&mut *tx, space.id).await?;
     let scopes = vec![Scope::Platform, Scope::Organization(space.organization)];
     let guard = fga.guard(&scopes).await?;
     Ok((tx, guard))
@@ -459,12 +496,10 @@ pub async fn create_space(
     domain::check_parent(kind, Some(&parent))?;
     let mut tx = pool.begin().await?;
     lock_organization(&mut tx, &parent).await?;
-    crate::lifecycle::store::require_active(&mut *tx, parent.id).await?;
     let mut guard = fga
         .guard(&[Scope::Organization(parent.organization)])
         .await?;
-    require_context(&mut *tx, fga, caller, parent.organization).await?;
-    require(fga, caller, Permission::Manage, parent.id).await?;
+    authorize_locked(&mut tx, fga, caller, parent.id, Permission::Manage).await?;
     if !holds_parent_content(fga, admin, parent.id).await? {
         return Err(AppError::Conflict(PARENT_REQUIRED.into()));
     }
@@ -516,10 +551,8 @@ pub async fn create_personal_space(
     domain::check_parent(SpaceKind::Team, Some(&org))?;
     let mut tx = pool.begin().await?;
     lock_organization(&mut tx, &org).await?;
-    crate::lifecycle::store::require_active(&mut *tx, org.id).await?;
     let mut guard = fga.guard(&[Scope::Organization(org.id)]).await?;
-    require_context(&mut *tx, fga, caller, org.id).await?;
-    require(fga, caller, Permission::Read, org.id).await?;
+    authorize_locked(&mut tx, fga, caller, org.id, Permission::Read).await?;
     // SQL finds the one candidate; its OpenFGA link must still place it in this organization.
     if let Some(row) = db::personal_space(&mut *tx, org.id, caller).await? {
         if fga.link_of(row.id, true).await? != Some(org.id) {
@@ -588,6 +621,8 @@ pub async fn grant(
         require_context(&mut *tx, fga, caller, space.organization).await?;
     }
     may_change(fga, caller, &space, role).await?;
+    // Retirement is reported only once the caller is authorized.
+    crate::lifecycle::store::require_active(&mut *tx, space.id).await?;
     if !directory.exists(target).await? {
         return Err(AppError::Unprocessable(UNKNOWN_SUBJECT.into()));
     }
@@ -650,6 +685,7 @@ pub async fn revoke(
     } else {
         may_change(fga, caller, &space, role).await?;
     }
+    crate::lifecycle::store::require_active(&mut *tx, space.id).await?;
     let held = fga.roles_of(target).await?;
     let on_space: Vec<Role> = held
         .iter()
@@ -737,12 +773,10 @@ pub async fn authorized_write(
     sqlx::query("set local statement_timeout = '15s'")
         .execute(&mut *tx)
         .await?;
-    crate::lifecycle::store::require_active(&mut *tx, space.id).await?;
     let mut guard = fga
         .guard(&[Scope::Organization(space.organization)])
         .await?;
-    require_context(&mut *tx, fga, caller, space.organization).await?;
-    require(fga, caller, Permission::Write, space_id).await?;
+    authorize_locked(&mut tx, fga, caller, space_id, Permission::Write).await?;
     fga.fence(&mut guard).await?;
     Ok(tx)
 }

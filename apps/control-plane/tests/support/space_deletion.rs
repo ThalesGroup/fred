@@ -94,7 +94,14 @@ async fn lifecycle_authority_retirement_documents_and_durable_receipts() {
             .id,
         receipt.id
     );
-    assert!(spaces::load(&e.pool, project.id).await.is_err());
+    // Retirement is reported once the caller is authorized.
+    assert!(matches!(
+        spaces::authorize(&e.pool, &e.fga, "alice", project.id, Permission::Read).await,
+        Err(AppError::Problem {
+            code: control_plane::lifecycle::store::PENDING_DELETION,
+            ..
+        })
+    ));
     assert!(
         spaces::create_folder(&e.pool, &e.fga, "alice", team.id, None, "blocked".into())
             .await
@@ -538,8 +545,21 @@ async fn lifecycle_waiters_recheck_retirement_and_authority_and_accept_once() {
     wait_for_write_retry(&e.pool, since).await;
     gate.release.notify_one();
     let accepted = accept.await.unwrap().unwrap();
-    assert!(matches!(create.await.unwrap(), Err(AppError::Conflict(_))));
-    assert!(matches!(grant.await.unwrap(), Err(AppError::Conflict(_))));
+    let create = create.await.unwrap();
+    assert!(matches!(
+        create,
+        Err(AppError::Problem {
+            code: control_plane::lifecycle::store::PENDING_DELETION,
+            ..
+        })
+    ));
+    assert!(matches!(
+        grant.await.unwrap(),
+        Err(AppError::Problem {
+            code: control_plane::lifecycle::store::PENDING_DELETION,
+            ..
+        })
+    ));
     assert_eq!(
         import
             .await

@@ -10,8 +10,11 @@ Health and frontend configuration are public. Other routes require a bearer toke
 and the unique organization context described in [Organizations](04-organizations.md#one-person-one-organization).
 `/me` remains platform-role metadata; `/me/spaces` validates business context and
 returns 409 for contradictory attachments. No organization request parameter
-selects a tenant. Business authorization probes return `allowed: false` for a missing or
-foreign context, and 409 for ambiguity. A role grant answers 422 for a malformed subject,
+selects a tenant. Business routes answer a missing or foreign space with 404, then a
+retired one with 409 `space_pending_deletion`, then a missing permission with 403
+([security](03-security.md#business-authorization-answer)). Authorization probes return
+`allowed: false` for each of these refusals and for a missing document, and 409 for
+an ambiguous context. A role grant answers 422 for a malformed subject,
 one unknown to the user directory or a tuple OpenFGA rejects as invalid, 409 when its
 OpenFGA guard was consumed (retry with fresh checks), and 503 when the directory is
 unavailable.
@@ -363,8 +366,8 @@ unique; one personal space per owner and organization.
 
 `POST /me/personal-space` retains `{organization_id}` and returns a `Space`: 201
 for creation, 200 for current-authority reuse. The identifier must match the caller's
-unique organization. Missing eligibility on creation, organization read or personal
-read on reuse gives 403. Inaccessible existing spaces are not replaced.
+unique organization; another organization gives 404. Missing eligibility on creation,
+organization read or personal read on reuse gives 403. Inaccessible existing spaces are not replaced.
 `MySpace` adds required `organization_id` from placement, without changing personal
 paths. `Role` adds `personal_space_creator`; `SpacePermission` adds `create_personal_space`.
 

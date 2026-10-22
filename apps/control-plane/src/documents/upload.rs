@@ -10,7 +10,7 @@ use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
 
 use super::{
-    Storage, authorized, conflict, invalid,
+    Storage, conflict, dependency_error, invalid,
     models::{UploadQuery, UploadReceipt, UploadRow, UploadStatus},
     unavailable,
 };
@@ -115,14 +115,15 @@ impl Storage {
             )
         })?;
         let folder = db::folder(&self.pool, folder_id).await?;
-        let space = authorized(
+        let space = spaces::authorize(
             &self.pool,
             &self.fga,
             &user.uid,
             folder.space_id,
             Permission::Write,
         )
-        .await?;
+        .await
+        .map_err(dependency_error)?;
         if profile.is_some() {
             Box::pin(
                 processing

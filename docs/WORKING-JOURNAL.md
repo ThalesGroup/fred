@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F11](#f11-une-seule-réponse-dautorisation) | Une seule réponse d'autorisation métier | Tests ciblés validés ; validation finale du lot | 03, 03a, A2 |
 | [F12](#f12-un-seul-format-derreur) | Un seul module d'extracteurs, erreurs toujours en JSON | Tests ciblés validés ; validation finale du lot | A2, carte des sources |
 | [F13](#f13-recherche-locale-par-préfixe-littéral) | Recherche de candidats locale par préfixe littéral indexé | Tests ciblés validés ; validation finale du lot | 02, 04, 09, A2, A3 |
 | [F08](#f08-configuration-stricte) | Clés de configuration inconnues refusées | Tests ciblés validés ; validation finale du lot | A3, schémas |
@@ -88,6 +89,23 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F11 Une seule réponse d'autorisation
+
+- 2026-10-22 : vérification sur HEAD `29c0d4737` : confirmé. Organisation étrangère : 404 pour
+  documents, 403 pour dossiers, scope, équipes et espace personnel ; `spaces::load` renvoyait
+  409 « pending deletion » à tout appelant authentifié, avant tout contrôle, y compris dans
+  grant/revoke et les sondes. Correction : `spaces::authorize` (et sa variante sous verrou)
+  avec un ordre unique : inexistant ou étranger → 404, puis retiré → 409
+  `space_pending_deletion`, puis sans permission → 403 (un espace retiré refuse déjà la
+  permission dans OpenFGA, d'où cet ordre). `documents::authorized` supprimé ; dossiers,
+  documents, processing, scope, création d'équipe/projet et espace personnel migrés ;
+  grant/revoke gardent `may_change` et signalent le retrait après autorisation ; sondes :
+  `allowed:false` pour chaque refus et document inexistant, 409 d'ambiguïté conservé.
+  OpenAPI : 409 ajouté aux lectures processing ; client inchangé. Test
+  `business_routes_share_one_authorization_answer` (table de vérité dossiers, documents,
+  sonde), en échec sur HEAD ; sept attentes existantes 403 → 404 ou Conflict → code dédié.
+  `make test` et intégration complète (114) réussis. Arc42 03, 03a, A2.
 
 ## F12 Un seul format d'erreur
 

@@ -11,10 +11,9 @@ mod reads;
 mod upload;
 
 use crate::{
-    domain::{Permission, Space, SpaceKind},
+    domain::{Space, SpaceKind},
     error::{AppError, AppResult},
     fga::Fga,
-    spaces,
 };
 use anyhow::{Context, Result, ensure};
 use axum::http::StatusCode;
@@ -157,30 +156,6 @@ impl Storage {
         }
         Some(id)
     }
-}
-
-pub(crate) async fn authorized(
-    pool: &PgPool,
-    fga: &Fga,
-    actor: &str,
-    id: Uuid,
-    permission: Permission,
-) -> AppResult<Space> {
-    let space = spaces::load(pool, id).await.map_err(dependency_error)?;
-    if !spaces::in_organization(pool, fga, actor, space.organization)
-        .await
-        .map_err(dependency_error)?
-    {
-        return Err(AppError::NotFound);
-    }
-    if !fga
-        .check(actor, permission, id)
-        .await
-        .map_err(|_| unavailable())?
-    {
-        return Err(AppError::Forbidden);
-    }
-    Ok(space)
 }
 
 pub(crate) fn unavailable() -> AppError {

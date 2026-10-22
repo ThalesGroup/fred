@@ -218,14 +218,15 @@ impl Processing {
     }
     pub(crate) async fn authorize_actor(&self, r: &Row) -> AppResult<()> {
         onboarding::require_accepted(&self.pool, self.terms.as_deref(), &r.actor).await?;
-        crate::documents::authorized(
+        crate::spaces::authorize(
             &self.pool,
             &self.fga,
             &r.actor,
             r.space_id,
             Permission::Write,
         )
-        .await?;
+        .await
+        .map_err(crate::documents::dependency_error)?;
         Ok(())
     }
     pub async fn history(
@@ -235,8 +236,9 @@ impl Processing {
         before: Option<Uuid>,
     ) -> AppResult<Vec<Summary>> {
         let d = db::document(&self.pool, id).await?;
-        crate::documents::authorized(&self.pool, &self.fga, actor, d.space_id, Permission::Read)
-            .await?;
+        crate::spaces::authorize(&self.pool, &self.fga, actor, d.space_id, Permission::Read)
+            .await
+            .map_err(crate::documents::dependency_error)?;
         Ok(sqlx::query_as("select * from document_processing where document_id=$1 and ($2::uuid is null or (created_at,id)<(select created_at,id from document_processing where id=$2 and document_id=$1)) order by created_at desc,id desc limit 50").bind(id).bind(before).fetch_all(&self.pool).await?)
     }
     pub async fn claim(&self, c: Claim) -> AppResult<Descriptor> {

@@ -71,13 +71,20 @@ pub async fn status(pool: &PgPool, fga: &Fga, actor: &str, id: Uuid) -> AppResul
 }
 
 /// Use after mutation locks, and before any permission decision for reads.
+/// Error code of a retired space, which authorization probes answer as not allowed.
+pub const PENDING_DELETION: &str = "space_pending_deletion";
+
 pub async fn require_active<'e>(ex: impl sqlx::PgExecutor<'e>, id: Uuid) -> AppResult<()> {
     let deletion: Option<Uuid> = sqlx::query_scalar("select deletion_id from space where id = $1")
         .bind(id)
         .fetch_one(ex)
         .await?;
     if deletion.is_some() {
-        return Err(AppError::Conflict("space is pending deletion".into()));
+        return Err(AppError::problem(
+            axum::http::StatusCode::CONFLICT,
+            PENDING_DELETION,
+            "space is pending deletion",
+        ));
     }
     Ok(())
 }

@@ -85,7 +85,7 @@ pub struct History {
     #[param(nullable)]
     pub before: Option<Uuid>,
 }
-#[utoipa::path(get,path="/documents/{id}/processing",params(("id"=Uuid,Path),History),responses((status=200,body=Vec<Summary>),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
+#[utoipa::path(get,path="/documents/{id}/processing",params(("id"=Uuid,Path),History),responses((status=200,body=Vec<Summary>),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
 async fn history(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
@@ -170,7 +170,7 @@ async fn original(
         .stream_original(crate::db::document(&p.pool, r.summary.document_id).await?)
         .await
 }
-#[utoipa::path(get,path="/documents/{id}/preview",params(("id"=Uuid,Path),super::preview::PreviewQuery),responses((status=200,body=String,content_type="text/plain"),(status=206,body=String,content_type="text/plain"),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody),(status=416,body=crate::error::ErrorBody)))]
+#[utoipa::path(get,path="/documents/{id}/preview",params(("id"=Uuid,Path),super::preview::PreviewQuery),responses((status=200,body=String,content_type="text/plain"),(status=206,body=String,content_type="text/plain"),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody),(status=416,body=crate::error::ErrorBody)))]
 async fn preview(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,

@@ -493,18 +493,25 @@ async fn folder_creation_governance_contract_and_request_budget() {
             .0,
         422
     );
-    for user in ["reader", "analyst", "admin", "alice", "outsider"] {
+    // Same organization without write: 403; outside the organization: 404.
+    for (user, status) in [
+        ("reader", 403),
+        ("analyst", 403),
+        ("admin", 403),
+        ("alice", 403),
+        ("outsider", 404),
+    ] {
         assert_eq!(
             create(&app, &identity.token(user), team.id, None, "forbidden")
                 .await
                 .0,
-            403,
+            status,
             "{user}"
         );
     }
     assert_eq!(
         create(&app, &token, other.id, None, "foreign-org").await.0,
-        403
+        404
     );
     assert_eq!(
         create(

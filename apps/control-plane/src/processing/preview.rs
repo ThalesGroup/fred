@@ -35,14 +35,15 @@ pub async fn preview(
     headers: HeaderMap,
 ) -> AppResult<Response> {
     let document = db::document(&state.pool, id).await?;
-    crate::documents::authorized(
+    crate::spaces::authorize(
         &state.pool,
         &state.fga,
         actor,
         document.space_id,
         Permission::Read,
     )
-    .await?;
+    .await
+    .map_err(crate::documents::dependency_error)?;
     let storage = state.content.as_ref().ok_or_else(unavailable)?;
     if query.artifact == "native" && document.name.to_lowercase().ends_with(".pdf") {
         let key: String = sqlx::query_scalar("select object_key from document where id=$1")

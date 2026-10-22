@@ -702,7 +702,8 @@ async fn teams_are_created_by_organization_admins_only() {
         "alice",
     )
     .await;
-    assert!(matches!(by_root, Err(AppError::Forbidden)));
+    // The platform owner is outside the organization: the parent is not found for them.
+    assert!(matches!(by_root, Err(AppError::NotFound)));
     let created = spaces::create_space(
         &e.pool,
         &e.fga,
@@ -726,7 +727,7 @@ async fn teams_are_created_by_organization_admins_only() {
             "alice"
         )
         .await,
-        Err(AppError::Forbidden)
+        Err(AppError::NotFound)
     ));
     assert!(matches!(
         spaces::create_space(
@@ -4266,7 +4267,7 @@ async fn scope_follows_ancestors_and_levels_only_narrow_it() {
             .is_empty()
     );
     let denied = spaces::scope(&e.pool, &e.fga, "eve", project.id, None).await;
-    assert!(matches!(denied, Err(AppError::Forbidden)));
+    assert!(matches!(denied, Err(AppError::NotFound)));
 }
 
 // Proves: I1
@@ -4628,6 +4629,140 @@ async fn content_app(e: &Env, identity: &support::IdentityServer) -> axum::Route
         "/control-plane/v1",
         &[],
     )
+}
+
+// Proves: I23
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn business_routes_share_one_authorization_answer() {
+    use serde_json::{Value, json};
+    use tower::ServiceExt;
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Editor, "writer").await;
+    grant(&e, org.id, Role::Member, "bystander").await;
+    crate::support::member_organization(&e.pool, &e.fga, "Other", "carol")
+        .await
+        .unwrap();
+    let folder = spaces::create_folder(&e.pool, &e.fga, "writer", team.id, None, "kept".into())
+        .await
+        .unwrap();
+    let retired = spaces::create_space(
+        &e.pool,
+        &e.fga,
+        "alice",
+        SpaceKind::Team,
+        org.id,
+        "Retired".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    let retired_folder =
+        spaces::create_folder(&e.pool, &e.fga, "writer", retired.id, None, "old".into())
+            .await
+            .unwrap();
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
+    lifecycle.config.enabled = true;
+    lifecycle
+        .accept(&e.pool, &e.fga, "root", retired.id)
+        .await
+        .unwrap();
+
+    let identity = support::IdentityServer::start().await;
+    let app = content_app(&e, &identity).await;
+    let call = |user: &str, method: &str, path: String, body: serde_json::Value| {
+        let request = axum::http::Request::builder()
+            .method(method)
+            .uri(format!("/control-plane/v1{path}"))
+            .header("authorization", format!("Bearer {}", identity.token(user)))
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(body.to_string()))
+            .unwrap();
+        let app = app.clone();
+        async move {
+            let response = app.oneshot(request).await.unwrap();
+            let status = response.status().as_u16();
+            let bytes = axum::body::to_bytes(response.into_body(), 65536)
+                .await
+                .unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&bytes).unwrap_or_default(),
+            )
+        }
+    };
+    let missing = Uuid::new_v4();
+    // (case, user, space, folder, expected status)
+    let table = [
+        ("missing space", "writer", missing, None, 404),
+        (
+            "foreign organization",
+            "carol",
+            team.id,
+            Some(folder.id),
+            404,
+        ),
+        ("no permission", "bystander", team.id, Some(folder.id), 403),
+        (
+            "retired space",
+            "writer",
+            retired.id,
+            Some(retired_folder.id),
+            409,
+        ),
+    ];
+    for (case, user, space, folder, expected) in table {
+        let created = call(
+            user,
+            "POST",
+            "/folders".into(),
+            json!({"space_id": space, "name": "new"}),
+        )
+        .await;
+        let listed = call(user, "GET", format!("/spaces/{space}/entries"), Value::Null).await;
+        let mut answers = vec![("create folder", created), ("list documents", listed)];
+        if let Some(folder) = folder {
+            let renamed = call(
+                user,
+                "PATCH",
+                format!("/folders/{folder}"),
+                json!({"name": "renamed"}),
+            )
+            .await;
+            answers.push(("rename folder", renamed));
+        }
+        for (route, (status, body)) in answers {
+            assert_eq!(status, expected, "{case}: {route}: {body}");
+            if expected == 409 {
+                assert_eq!(body["code"], "space_pending_deletion", "{case}: {route}");
+            }
+        }
+        // Probes answer the same refusals as a boolean.
+        let (status, body) = call(
+            user,
+            "POST",
+            "/authorize/space".into(),
+            json!({"space_id": space, "permission": "read"}),
+        )
+        .await;
+        assert_eq!(
+            (status, &body["allowed"]),
+            (200, &json!(false)),
+            "{case}: probe"
+        );
+    }
+    let (status, body) = call(
+        "writer",
+        "POST",
+        "/authorize/space".into(),
+        json!({"space_id": team.id, "permission": "write"}),
+    )
+    .await;
+    assert_eq!((status, &body["allowed"]), (200, &json!(true)));
 }
 
 #[tokio::test]
@@ -5718,7 +5853,7 @@ async fn personal_open_requires_explicit_eligibility_and_never_repairs_revocatio
     assert_eq!(private.organization, foreign.id);
     assert!(matches!(
         spaces::create_personal_space(&e.pool, &e.fga, "priya", foreign.id).await,
-        Err(AppError::Forbidden)
+        Err(AppError::NotFound)
     ));
     let listed = spaces::memberships(&e.pool, &e.fga, "carol").await.unwrap();
     assert!(listed.iter().all(|m| m.space.organization == foreign.id));

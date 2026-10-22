@@ -153,11 +153,11 @@ additive; its global authority is distinct from the ordinary space-role routes.
 | Own platform-role metadata - `GET /me` | Yes | Yes | Authenticated and CGU; returns own effective platform roles |
 | Own spaces - `GET /me/spaces` | Yes | Yes | Authenticated and CGU; own direct/inherited roles; empty allowed; contradictory organization attachment, or a space role without its parent membership, returns 409 |
 | Probe own platform permission - `POST /authorize/platform` | Yes | Yes | Authenticated and CGU; result may be false |
-| Probe own space permission - `POST /authorize/space` | Yes | Yes | Authenticated and CGU; known target; mismatched/no organization gives false; contradictory context gives 409 |
-| Probe own document permission - `POST /authorize/document` | Yes | Yes | Authenticated and CGU; known document; owning-space context and requested read/write/manage determine true/false |
+| Probe own space permission - `POST /authorize/space` | Yes | Yes | Authenticated and CGU; a missing, foreign or retired target, or a missing permission, gives false; contradictory context gives 409 |
+| Probe own document permission - `POST /authorize/document` | Yes | Yes | Authenticated and CGU; a missing document, or the owning space's refusal, gives false; requested read/write/manage determines true/false |
 
 Calling a probe is not performing the requested action. Probes never accept a
-replacement user id. Missing targets return 404; dependency failures are errors,
+replacement user id. Missing targets give false; dependency failures are errors,
 not positive authorization decisions.
 
 ## Permission answers beyond the content and governance actions
