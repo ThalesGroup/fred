@@ -1,6 +1,5 @@
--- Manager schema. Rights never live here: OpenFGA holds direct roles and the space tree.
--- Before the first production release this baseline is rewritten in place; a local
--- installation created from an earlier baseline is reset, never upgraded.
+-- Manager schema. Rights never live here: OpenFGA holds direct roles and the links
+-- that evaluate inherited permissions; SQL records each space's immutable placement.
 
 create type space_kind as enum ('organization', 'team', 'project');
 
@@ -29,19 +28,23 @@ create table space_deletion (
 create index space_deletion_due on space_deletion (last_visit nulls first, due_at, id) where status <> 'completed';
 create index space_deletion_overlap on space_deletion (organization_id, target_parent_id) where status <> 'completed';
 
--- Identity and kind only. Sibling names and one personal space per organization are
--- enforced under the organization lock, since the tree lives in OpenFGA.
+-- Sibling names and one personal space per organization are enforced under the
+-- organization lock. Placement is written once, before the matching OpenFGA links.
 create table space (
-    id             uuid primary key,
-    kind           space_kind not null,
-    name           text not null,
-    personal_owner text,          -- set only for a personal space: a one-member team
-    created_at     timestamptz not null default now(),
-    deletion_id    uuid references space_deletion (id),
+    id              uuid primary key,
+    kind            space_kind not null,
+    name            text not null,
+    personal_owner  text,          -- set only for a personal space: a one-member team
+    created_at      timestamptz not null default now(),
+    deletion_id     uuid references space_deletion (id),
+    organization_id uuid not null references space (id),
+    parent_id       uuid references space (id),
     check (personal_owner is null or kind = 'team')
 );
 create unique index space_organization_name on space (name) where kind = 'organization';
 create index space_deletion_manifest on space (deletion_id, kind, id) where deletion_id is not null;
+create index space_organization on space (organization_id);
+create index space_parent on space (parent_id);
 
 create table folder (
     id         uuid primary key,
@@ -77,7 +80,8 @@ create index document_quota_owner on document (quota_owner) include (size);
 -- Placement is immutable: chunks and storage keys copy it. Only names change.
 create function forbid_space_move() returns trigger language plpgsql as $$
 begin
-    if (new.kind, new.personal_owner) is distinct from (old.kind, old.personal_owner) then
+    if (new.kind, new.personal_owner, new.organization_id, new.parent_id)
+        is distinct from (old.kind, old.personal_owner, old.organization_id, old.parent_id) then
         raise exception 'space placement is immutable';
     end if;
     return new;
@@ -128,6 +132,18 @@ create table terms_acceptance (
     version text not null check (length(version) between 1 and 128),
     accepted_at timestamptz not null default now()
 );
+
+-- Profiles observed after authentication, as in Python's local user directory.
+-- No grants or membership live here. Usernames are not unique at the provider.
+create table user_identity (
+    id uuid primary key,
+    username text not null,
+    email text,
+    first_name text,
+    last_name text,
+    last_seen_at timestamptz not null default now()
+);
+create index user_identity_username on user_identity (username, id);
 
 -- Namespace and inventory progress have a different lifetime from any upload.
 create table document_storage (

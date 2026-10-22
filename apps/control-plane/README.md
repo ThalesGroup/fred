@@ -213,11 +213,9 @@ or uninitialized database. The k3d factory profile enables the chart's
 pre-install/pre-upgrade migration Job. Rebuilding the Rust
 image embeds new migration files; no manual SQL command is needed for this upgrade.
 
-Migration `0002_user_identity.sql` adds the local identity directory and its index.
-It does not modify existing tables or data. Fresh databases apply both migrations.
-Do not edit applied files or replace stored checksums. The historical reset comment
-in `0001_manager_schema.sql` is retained only to preserve its deployed checksum;
-it no longer describes the SQL evolution policy.
+`0001_manager_schema.sql` creates the complete schema. A database whose recorded
+versions or checksums differ from the embedded files is refused by the API and by
+`migrate`; recreate it explicitly. Do not edit applied files or replace stored checksums.
 
 The OpenFGA model still follows its separate pre-release replacement policy.
 The [deployment chapter](../../docs/architecture/A3-manager-operations.md#authorization-store-publication)

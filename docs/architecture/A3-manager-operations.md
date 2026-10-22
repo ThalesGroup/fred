@@ -282,18 +282,13 @@ the control-plane tables and their responsibilities. Ordered files in
 schema source of truth. SQLx embeds them in the Rust binary and records applied
 versions and checksums in `_sqlx_migrations`.
 
-`0001_manager_schema.sql` defines the initial schema; `0002_user_identity.sql`
-adds the local identity directory and its index without altering existing tables.
-`0003_space_placement.sql` adds immutable organization/parent metadata. It targets
-fresh installations and refuses any existing space rows before changing the schema.
-It performs no FGA backfill and deletes no data. A populated installation needs a
-separately prepared backfill before upgrading; pointing the migration Job at it
-does not reset it.
-A fresh installation applies the whole chain; an existing installation applies
-only pending files. Applied files are immutable, including comments and whitespace.
-The historical reset comment in `0001` is superseded by this policy and remains in
-place only to preserve the deployed checksum. Do not repair a changed file by
-editing the database's stored checksum.
+`0001_manager_schema.sql` defines the complete schema, including immutable
+organization/parent placement and the local identity directory. A fresh installation
+applies the whole chain; an existing installation applies only pending files.
+Applied files are immutable, including comments and whitespace. A database whose
+recorded versions or checksums differ from the embedded files is refused by the API
+and by `migrate`; it is recreated explicitly, never reset automatically. Do not repair
+a changed file by editing the database's stored checksum.
 
 The `control-plane migrate` command connects using `DATABASE_URL` without loading
 the application configuration. When enabled, the chart's pre-install/pre-upgrade

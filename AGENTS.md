@@ -233,8 +233,7 @@ numbered SQL file in `apps/control-plane/migrations/`. Preserve existing data;
 prefer additive changes and describe any required data transformation before applying
 it. Never alter `_sqlx_migrations` checksums to bypass validation. Before changing an
 existing installation, inspect its migration history and take a backup. A fresh
-installation applies the complete migration chain. Historical reset instructions
-in the immutable first migration are superseded by this policy.
+installation applies the complete migration chain.
 Before the first production release, the OpenFGA model is still replaced rather
 than upgraded; this separate policy does not require resetting SQL for additive changes.
 

@@ -81,6 +81,14 @@ erDiagram
   text version
   timestamp_with_time_zone accepted_at
 }
+"user_identity" {
+  uuid id
+  text username
+  text email
+  text first_name
+  text last_name
+  timestamp_with_time_zone last_seen_at
+}
 "document_storage" {
   boolean singleton
   uuid namespace
@@ -159,12 +167,4 @@ erDiagram
   bigint rows
   bigint reserved_bytes
   timestamp_with_time_zone cleanup_due_at
-}
-"user_identity" {
-  uuid id
-  text username
-  text email
-  text first_name
-  text last_name
-  timestamp_with_time_zone last_seen_at
 }

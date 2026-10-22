@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F20](#f20-migration-sql-unique) | Une seule migration 0001, sans en-tête contradictoire | Tests automatisés validés ; réinstallation k3d par Dimi | A2, A3, AGENTS, README du composant |
 | [F17](#f17-noms-despaces-et-de-dossiers-canoniques) | Noms d'espaces et de dossiers en NFC sans espaces de bord | Tests automatisés validés | 02, 04, 05 |
 | [F10](#f10-import-zip-et-jeton-de-lopérateur) | Import ZIP sans borne par le jeton de l'opérateur | Tests automatisés validés | 04, A1, 09 |
 | [F07](#f07-validation-jwt-toujours-stricte) | Issuer et audience JWT toujours vérifiés | Tests automatisés validés | 03, I10 (09), A3 |
@@ -78,6 +79,26 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F20 Migration SQL unique
+
+- 2026-10-22 : vérification sur HEAD `ea8c0fb97`, verdict partiel : en-tête de 0001
+  contradictoire, déjà déclaré caduc par AGENTS et A3. Les migrations n'existent que sur
+  cette branche (aucun tag, absentes de swift) ; la seule installation connue
+  (k3d-fred-secondary, deux migrations et des espaces) ne pouvait déjà pas appliquer 0003.
+  Dimi choisit B : aucune installation à préserver, solution neuve, réinstallation complète
+  de k3d par ses soins. 0002 et 0003 fusionnées dans une 0001 sans l'en-tête ni le garde de
+  table vide. Schémas `pg_dump --schema-only` de l'ancienne chaîne et de la fusion
+  identiques (PostgreSQL 15 jetable). Toute base issue de l'ancienne chaîne est refusée par
+  l'API et `migrate` et doit être recréée explicitement. AGENTS, README du composant, A2
+  (tableau, ER régénéré) et A3 mis à jour. `cargo check --all-targets` exécuté ; tests et
+  qualité non exécutés ; aucun commit.
+- 2026-10-22 : intention de Dimi, non planifiée : à la première vraie release, documenter
+  précisément la conception et les critères de PR de tout changement de base ; plus tard,
+  prévoir une migration des données Swift vers le modèle organisation/équipe/projet/ReBAC.
+  Piste discutée : commande ou import explicite et rejouable, dans le prolongement du bundle
+  `source_platform: swift`, distinct de la chaîne SQLx (qui ne crée pas de tuples OpenFGA).
+- 2026-10-22 : Dimi confirme que tout est bon et autorise le commit et le push de F20.
 
 ## F17 Noms d'espaces et de dossiers canoniques
 
