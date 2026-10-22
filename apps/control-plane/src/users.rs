@@ -141,9 +141,15 @@ impl Directory<'_> {
         match self {
             Self::Keycloak(Some(directory)) => Ok(directory.search(query).await?),
             Self::Keycloak(None) => Ok(Vec::new()),
+            // A literal, case-insensitive prefix of one field, served by the prefix indexes.
+            // Unnamed statements are planned with the pattern, so the indexes stay usable.
             Self::Local(pool) => Ok(sqlx::query_as(
-                "select id::text as id, username, email, first_name, last_name, null::text as avatar_image_url from user_identity where username ilike $1 or email ilike $1 or first_name ilike $1 or last_name ilike $1 order by username, id limit 20"
-            ).bind(format!("%{query}%")).fetch_all(*pool).await?),
+                "select id::text as id, username, email, first_name, last_name, null::text as avatar_image_url from user_identity where lower(username) like lower($1) escape '\\' or lower(email) like lower($1) escape '\\' or lower(first_name) like lower($1) escape '\\' or lower(last_name) like lower($1) escape '\\' order by username, id limit 20"
+            )
+            .persistent(false)
+            .bind(format!("{}%", like_literal(query)))
+            .fetch_all(*pool)
+            .await?),
         }
     }
 
@@ -187,6 +193,13 @@ impl Directory<'_> {
             }
         }
     }
+}
+
+/// `LIKE` treats `%`, `_` and the escape character as syntax; search them literally.
+fn like_literal(text: &str) -> String {
+    text.replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
 }
 
 // Same bounded ten-minute snapshot cache as Python. No network/SQL awaits under the mutex.
@@ -235,5 +248,14 @@ pub async fn snapshot(admission: &AdmissionState, user: &CurrentUser) {
             .await
             .retain(|(db, uid, _)| db != &database || *uid != id);
         tracing::warn!("[AUTH] Local identity snapshot failed");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn like_wildcards_and_the_escape_are_literal() {
+        assert_eq!(super::like_literal(r"50%_a\b"), r"50\%\_a\\b");
+        assert_eq!(super::like_literal("dim"), "dim");
     }
 }

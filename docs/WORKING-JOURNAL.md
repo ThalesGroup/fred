@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F13](#f13-recherche-locale-par-préfixe-littéral) | Recherche de candidats locale par préfixe littéral indexé | Tests ciblés validés ; validation finale du lot | 02, 04, 09, A2, A3 |
 | [F08](#f08-configuration-stricte) | Clés de configuration inconnues refusées | Tests ciblés validés ; validation finale du lot | A3, schémas |
 | [F21](#f21-profil-k3d-propriétaire-de-la-configuration-du-control-plane) | Profil k3d propriétaire de la configuration du control-plane | Tests ciblés validés ; validation finale du lot | 08, README k3d |
 | [F14](#f14-ouverture-de-lespace-personnel-à-coût-constant) | Espace personnel trouvé en SQL, coût constant | Tests ciblés validés ; validation finale du lot | 04, 09, A2, A3 |
@@ -86,6 +87,19 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F13 Recherche locale par préfixe littéral
+
+- 2026-10-22 : vérification sur HEAD `9d0d25d15` : confirmé. `ilike '%q%'` sur quatre
+  colonnes, jokers non échappés (« %% » listait 20 profils), parcours complet de
+  `user_identity`. Décision de Dimi : préfixe indexé. Correction : `like lower($1) escape`
+  avec `%`, `_` et `\\` échappés, préfixe insensible à la casse sur username, prénom, nom,
+  e-mail ; requête non persistante pour un plan construit avec le motif ; migration
+  `0003_user_identity_prefix_search.sql` (quatre index `lower(...) text_pattern_ops`).
+  EXPLAIN sur 20 000 profils : BitmapOr des quatre index. Tests : unitaire de l'échappement,
+  intégration `local_candidate_search_matches_a_literal_prefix_in_order_with_a_limit`
+  (champs, casse, jokers littéraux, préfixe, ordre, limite 20), en échec avec l'ancienne
+  requête. La recherche Keycloak est inchangée. Arc42 02, 04, 09, A2, A3.
 
 ## F08 Configuration stricte
 

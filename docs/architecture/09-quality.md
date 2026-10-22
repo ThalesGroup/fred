@@ -462,6 +462,9 @@ Before space publication, `K` distinct organization owner subjects add `K` GETs,
 in batches of at most eight concurrent calls while the reconciliation locks are
 held. Each distinct declared owner subject is checked once in that operation; a second
 organization attachment is refused before publication.
+Local candidate search is one SQL query: the four prefix indexes are combined by a
+bitmap OR (checked by `EXPLAIN` on 20 000 profiles), then at most 20 rows are sorted;
+the statement is planned with its pattern so that the indexes stay usable.
 Each platform grant also checks its subject. Every direct space-role grant adds one
 subject lookup after authorization, under its locks: a Keycloak GET, or one indexed
 SQL query in the local directory. Organization creation adds one subject GET. Every directory request has a

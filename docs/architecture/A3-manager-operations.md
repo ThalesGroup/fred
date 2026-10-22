@@ -285,7 +285,8 @@ versions and checksums in `_sqlx_migrations`.
 
 `0001_manager_schema.sql` defines the initial schema, including immutable
 organization/parent placement and the local identity directory;
-`0002_personal_space_owner.sql` adds the unique index of active personal spaces. A
+`0002_personal_space_owner.sql` adds the unique index of active personal spaces and
+`0003_user_identity_prefix_search.sql` the local search indexes. A
 fresh installation
 applies the whole chain; an existing installation applies only pending files.
 Applied files are immutable, including comments and whitespace. A database whose

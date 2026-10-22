@@ -58,7 +58,9 @@ An alternative to declaring an organization in the ZIP is the Organizations form
 The candidates come from the configured directory. In Keycloak mode, Fred searches
 accounts in the realm. In local-directory mode with an OIDC
 provider, Fred searches profiles previously observed after successful authentication;
-it does not enumerate accounts that have never signed in. Local snapshots exclude service and delegated identities. Keycloak candidate
+it does not enumerate accounts that have never signed in. Local search matches the
+typed text literally, without wildcards, as a case-insensitive prefix of the username,
+first name, last name or email, and returns at most 20 profiles ordered by username. Local snapshots exclude service and delegated identities. Keycloak candidate
 search returns the directory results without that additional local filtering. A search failure is not an empty successful search.
 The server resolves the selected usernames again when creating the organization.
 

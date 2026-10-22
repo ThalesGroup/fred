@@ -4767,6 +4767,58 @@ async fn owner_grants_require_directory_identity_and_deleted_owners_can_be_revok
     );
 }
 
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn local_candidate_search_matches_a_literal_prefix_in_order_with_a_limit() {
+    let e = env().await;
+    let profiles = [
+        ("pat", "pat@x.org", "Patricia", "Smith"),
+        ("50%off", "deals@x.org", "Fifty", "Percent"),
+        ("a_b", "ab@x.org", "Under", "Score"),
+        ("axb", "axb@x.org", "Ex", "Bee"),
+        ("olivia", "o@x.org", "Olivia", "Patel"),
+    ];
+    for (username, email, first, last) in profiles {
+        sqlx::query("insert into user_identity (id, username, email, first_name, last_name) values ($1,$2,$3,$4,$5)")
+            .bind(Uuid::new_v4()).bind(username).bind(email).bind(first).bind(last)
+            .execute(&e.pool).await.unwrap();
+    }
+    for n in 0..25 {
+        sqlx::query("insert into user_identity (id, username) values ($1, $2)")
+            .bind(Uuid::new_v4())
+            .bind(format!("user{n:02}"))
+            .execute(&e.pool)
+            .await
+            .unwrap();
+    }
+    let directory = control_plane::users::Directory::Local(&e.pool);
+    let names = |query: &'static str| {
+        let directory = &directory;
+        async move {
+            directory
+                .search(query)
+                .await
+                .unwrap()
+                .into_iter()
+                .filter_map(|u| u.username)
+                .collect::<Vec<_>>()
+        }
+    };
+    // Any field's prefix, case-insensitively: username, first or last name, email.
+    assert_eq!(names("PA").await, ["olivia", "pat"]);
+    assert_eq!(names("deal").await, ["50%off"]);
+    // Wildcards are literal: "%" and "_" no longer match everything.
+    assert_eq!(names("50%").await, ["50%off"]);
+    assert!(names("%%").await.is_empty());
+    assert_eq!(names("a_").await, ["a_b"]);
+    // A prefix, not a substring.
+    assert!(names("tricia").await.is_empty());
+    let page = names("user").await;
+    assert_eq!(page.len(), 20);
+    assert_eq!(page.first().map(String::as_str), Some("user00"));
+    assert!(page.windows(2).all(|w| w[0] < w[1]));
+}
+
 // Proves: I27
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
