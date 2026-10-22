@@ -11,7 +11,7 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const h = vi.hoisted(() => ({ canAdministerMembers: true, platformAccess: true, dialog: vi.fn() }));
+const h = vi.hoisted(() => ({ canAdministerMembers: true, platformAccess: true, dialog: vi.fn(), section: vi.fn() }));
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({
@@ -20,6 +20,12 @@ vi.mock("@hooks/useTeamCapabilities.ts", () => ({
 vi.mock("./TeamSettingsMembersTable/TeamSettingsMembersTable.tsx", () => ({ default: () => null }));
 vi.mock("./TeamSettingsMembersMenu/TeamSettingsMembersMenu.tsx", () => ({ default: () => null }));
 vi.mock("./AddTeamMembersDialog/AddTeamMembersDialog.tsx", () => ({ default: () => null }));
+vi.mock("./TeamJoinRequestsSection/TeamJoinRequestsSection.tsx", () => ({
+  default: (props: { teamId: string; canAdministerMembers: boolean }) => {
+    h.section(props);
+    return null;
+  },
+}));
 vi.mock("../../../../../../common/config", () => ({
   getConfig: () => ({ platform_access_enabled: h.platformAccess }),
 }));
@@ -53,6 +59,13 @@ afterEach(() => {
   h.canAdministerMembers = true;
   h.platformAccess = true;
   h.dialog.mockClear();
+  h.section.mockClear();
+});
+
+it("hands the pending requests section the team and the caller's right to decide", () => {
+  h.canAdministerMembers = false;
+  render();
+  expect(h.section).toHaveBeenCalledWith({ teamId: "demo", canAdministerMembers: false });
 });
 
 it("opens the team's invite link dialog next to Add members", () => {

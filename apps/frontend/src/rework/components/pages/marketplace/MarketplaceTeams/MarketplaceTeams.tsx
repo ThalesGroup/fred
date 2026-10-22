@@ -18,7 +18,10 @@ import type { TFunction } from "i18next";
 import { teamDescriptionText } from "@core/utils/teamFields.ts";
 import TeamCard from "@shared/organisms/TeamCard/TeamCard.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
-import { useListTeamsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import {
+  useListTeamsQuery,
+  useMyTeamJoinRequestsQuery,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { Link, Navigate } from "react-router-dom";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
@@ -89,6 +92,10 @@ export default function MarketplaceTeams() {
   const yourTeams = teams && teams.filter((t) => t.is_member && !isPersonalTeamId(t.id));
   const otherTeams = teams && teams.filter((t) => !t.is_member && !isPersonalTeamId(t.id) && t.visibility === "public");
 
+  // The caller's own join requests, fetched once for every on_request card.
+  const hasOnRequestTeam = !!otherTeams?.some((team) => team.joining_mode === "on_request");
+  const { data: myJoinRequests } = useMyTeamJoinRequestsQuery(undefined, { skip: !hasOnRequestTeam });
+
   const filteredYourTeams = useMemo(() => filterTeams(yourTeams, search, t), [yourTeams, search, t]);
   const filteredOtherTeams = useMemo(() => filterTeams(otherTeams, search, t), [otherTeams, search, t]);
 
@@ -116,7 +123,14 @@ export default function MarketplaceTeams() {
           <TeamCard team={team} onJoined={refetch} />
         </Link>
       );
-    return <TeamCard key={team.id} team={team} onJoined={refetch} />;
+    return (
+      <TeamCard
+        key={team.id}
+        team={team}
+        onJoined={refetch}
+        joinRequest={myJoinRequests?.find((request) => request.team_id === team.id)}
+      />
+    );
   };
 
   return (

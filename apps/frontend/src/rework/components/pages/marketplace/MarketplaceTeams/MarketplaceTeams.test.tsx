@@ -21,10 +21,16 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
-import type { Team, TeamWithPermissions } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type {
+  MyTeamJoinRequest,
+  Team,
+  TeamWithPermissions,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 const h = vi.hoisted(() => ({
   teams: { data: [] as Team[] } as { data?: Team[] },
+  mine: [] as MyTeamJoinRequest[],
+  mineSkipped: [] as boolean[],
   bootstrap: {
     activeTeam: { id: "personal-me" } as TeamWithPermissions | undefined,
     availableTeams: [{ id: "personal-me" }, { id: "fredlab" }] as Team[],
@@ -53,6 +59,10 @@ vi.mock("react-router-dom", () => ({
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useListTeamsQuery: () => h.teams,
+  useMyTeamJoinRequestsQuery: (_arg: unknown, options: { skip: boolean }) => {
+    h.mineSkipped.push(options.skip);
+    return { data: options.skip ? undefined : h.mine };
+  },
 }));
 
 vi.mock("../../../../../hooks/useFrontendBootstrap", () => ({
@@ -60,8 +70,8 @@ vi.mock("../../../../../hooks/useFrontendBootstrap", () => ({
 }));
 
 vi.mock("@shared/organisms/TeamCard/TeamCard.tsx", () => ({
-  default: ({ team }: { team: Team }) => (
-    <div data-testid={`team-card-${team.id}`}>
+  default: ({ team, joinRequest }: { team: Team; joinRequest?: MyTeamJoinRequest }) => (
+    <div data-testid={`team-card-${team.id}`} data-request={joinRequest?.status}>
       {team.id}
       {team.description}
     </div>
@@ -235,5 +245,39 @@ describe("MarketplaceTeams descriptions", () => {
     const html = render();
     expect(html).toContain("Prepare board briefs.");
     expect(html).toContain("Answer IT questions.");
+  });
+});
+
+describe("MarketplaceTeams join requests", () => {
+  beforeEach(() => {
+    h.bootstrap = {
+      activeTeam: { id: "personal-me" } as TeamWithPermissions,
+      availableTeams: [{ id: "personal-me" }, { id: "fredlab" }] as Team[],
+      bootstrap: undefined,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    h.mine = [];
+    h.mineSkipped = [];
+  });
+
+  it("skips the caller's requests while no listed team is on request", () => {
+    h.teams = { data: [{ id: "acme", is_member: false, visibility: "public", joining_mode: "open" } as Team] };
+    render();
+    expect(h.mineSkipped).toEqual([true]);
+  });
+
+  it("hands each on_request card the caller's own request to that team", () => {
+    h.teams = {
+      data: [
+        { id: "acme", is_member: false, visibility: "public", joining_mode: "on_request" } as Team,
+        { id: "beta", is_member: false, visibility: "public", joining_mode: "on_request" } as Team,
+      ],
+    };
+    h.mine = [{ id: "r1", team_id: "acme", status: "pending", created_at: "2026-10-22T08:00:00Z" }];
+    const html = render();
+    expect(h.mineSkipped).toEqual([false]);
+    expect(html).toContain('data-testid="team-card-acme" data-request="pending"');
+    expect(html).not.toContain('data-testid="team-card-beta" data-request');
   });
 });
