@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [DOC-1](#doc-1-carte-des-sources-exacte) | Carte des sources exacte pour Resources et l'autorisation | À jour | Carte des sources, README d'arc42 |
 | [F16](#f16-noms-et-usage-cli-exacts) | Noms, commentaires et usage CLI exacts | Tests ciblés validés ; validation finale | README du composant, 09 (bloc généré) |
 | [F09](#f09-lectures-openfga-bornées) | Lectures OpenFGA concurrentes bornées | Tests ciblés validés ; validation finale | 09 |
 | [F11](#f11-une-seule-réponse-dautorisation) | Une seule réponse d'autorisation métier | Tests ciblés validés ; validation finale du lot | 03, 03a, A2 |
@@ -91,6 +92,15 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## DOC-1 Carte des sources exacte
+
+- 2026-10-22 : vérification de chaque chemin et symbole de `apps/control-plane/src/README.md` :
+  tous résolus (frontend et Rust). F03 avait déjà corrigé l'attribution du listage à
+  `documents/`. Reste corrigé : chemin complet de `CreateFolderModal`, propriétaires exacts
+  (`entries`/`summary`, `create_folder`, `rename_folder`/`delete_folder`), test frontend du
+  workspace, et nouvelle ligne de l'autorisation métier (`spaces::authorize`, F11) reprise
+  dans le tableau « Find a function ». `make -C docs/architecture check` réussi.
 
 ## F16 Noms et usage CLI exacts
 
