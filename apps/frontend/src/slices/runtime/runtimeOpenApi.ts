@@ -152,6 +152,16 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/pod/v1/agents/models-catalog` }),
     }),
+    refreshModelsCatalogPodV1AgentsModelsCatalogRefreshPost: build.mutation<
+      RefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostApiResponse,
+      RefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/models-catalog/refresh`,
+        method: "POST",
+        body: queryArg.modelCatalogRefreshRequest,
+      }),
+    }),
     getPlatformPromptFilePodV1AgentsPlatformPromptGet: build.query<
       GetPlatformPromptFilePodV1AgentsPlatformPromptGetApiResponse,
       GetPlatformPromptFilePodV1AgentsPlatformPromptGetApiArg
@@ -367,6 +377,11 @@ export type GetMcpCatalogPodV1AgentsMcpCatalogGetApiArg = void;
 export type GetModelsCatalogPodV1AgentsModelsCatalogGetApiResponse =
   /** status 200 Successful Response */ ModelCatalogResponse;
 export type GetModelsCatalogPodV1AgentsModelsCatalogGetApiArg = void;
+export type RefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostApiResponse =
+  /** status 200 Successful Response */ ModelCatalogResponse;
+export type RefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostApiArg = {
+  modelCatalogRefreshRequest: ModelCatalogRefreshRequest;
+};
 export type GetPlatformPromptFilePodV1AgentsPlatformPromptGetApiResponse =
   /** status 200 Successful Response */ PlatformPromptFileResponse;
 export type GetPlatformPromptFilePodV1AgentsPlatformPromptGetApiArg = void;
@@ -1011,11 +1026,25 @@ export type ModelCatalogEntry = {
   thinking_profile_ids?: string[];
 };
 export type ModelCatalogResponse = {
+  active_revision?: number;
   agent_chat_profile_overrides?: {
     [key: string]: string;
   };
   default_chat_profile_id?: string | null;
+  discovered_model_ids?: string[];
+  discovery_default_profile_id?: string | null;
+  discovery_effective_url?: string | null;
+  discovery_source_id?: string | null;
+  discovery_yaml_url?: string | null;
   models: ModelCatalogEntry[];
+  preparation_token?: string | null;
+};
+export type ModelCatalogRefreshRequest = {
+  models_url?: string | null;
+  preparation_token?: string | null;
+  prepare?: boolean;
+  revision?: number | null;
+  rollback_token?: string | null;
 };
 export type PlatformPromptFileResponse = {
   creation_assistant_prompt: string;
@@ -1414,6 +1443,7 @@ export const {
   useLazyGetMcpCatalogPodV1AgentsMcpCatalogGetQuery,
   useGetModelsCatalogPodV1AgentsModelsCatalogGetQuery,
   useLazyGetModelsCatalogPodV1AgentsModelsCatalogGetQuery,
+  useRefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostMutation,
   useGetPlatformPromptFilePodV1AgentsPlatformPromptGetQuery,
   useLazyGetPlatformPromptFilePodV1AgentsPlatformPromptGetQuery,
   useListSessionsPodV1AgentsSessionsGetQuery,

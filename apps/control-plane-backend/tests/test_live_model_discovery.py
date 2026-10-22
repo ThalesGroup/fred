@@ -198,6 +198,7 @@ async def test_failed_preparation_does_not_activate_or_remove_models(
         yaml_url="https://models.example/v1/models",
         override_url=None,
         active_url="https://models.example/v1/models",
+        revision=1,
         inventory=[_model("a")],
         removed=[],
         new_ids=[],
@@ -278,3 +279,102 @@ async def test_failed_preparation_does_not_activate_or_remove_models(
     assert all(post.get("prepare") is True for post in posts)
     assert result.sources[0].available_models[0].name == "a"
     assert result.sources[0].last_error == "Discovery refresh failed"
+
+
+@pytest.mark.asyncio
+async def test_refresh_recovers_when_a_pod_revision_is_ahead(monkeypatch) -> None:
+    async def allowed(*args, **kwargs) -> None:
+        return None
+
+    async def no_names(*args, **kwargs) -> dict[str, str]:
+        return {}
+
+    monkeypatch.setattr(service, "require_manage_capabilities", allowed)
+    monkeypatch.setattr(service, "model_display_name_overrides", no_names)
+    row = StoredDiscoverySourceState(
+        source_id="gateway",
+        yaml_url="https://models.example/v1/models",
+        override_url=None,
+        active_url="https://models.example/v1/models",
+        revision=1,
+        inventory=[_model("a")],
+        removed=[],
+        new_ids=[],
+        last_success_at=None,
+        last_attempt_at=None,
+        last_error=None,
+    )
+    saved_revision = None
+
+    class Store:
+        async def get(self, source_id: str) -> StoredDiscoverySourceState:
+            return row
+
+        async def list_all(self) -> list[StoredDiscoverySourceState]:
+            return [row]
+
+        async def record_failure(self, **kwargs) -> StoredDiscoverySourceState:
+            pytest.fail("Recovery should succeed")
+
+        async def save_success(self, **kwargs) -> StoredDiscoverySourceState:
+            nonlocal row, saved_revision
+            saved_revision = kwargs["applied_revision"]
+            row = replace(row, revision=saved_revision, inventory=[_model("b")])
+            return row
+
+    activations: list[int] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        ahead = request.url.host == "pod-a.example"
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "models": [_model("a")],
+                    "discovery_source_id": "gateway",
+                    "discovery_yaml_url": row.yaml_url,
+                },
+            )
+        body = json.loads(request.content)
+        if body.get("prepare"):
+            return httpx.Response(
+                200,
+                json={
+                    "models": [_model("b")],
+                    "discovered_model_ids": ["model__openai__b"],
+                    "discovery_source_id": "gateway",
+                    "discovery_effective_url": row.yaml_url,
+                    "preparation_token": "token-a" if ahead else "token-b",
+                    "active_revision": 3 if ahead else 1,
+                },
+            )
+        activations.append(body["revision"])
+        return httpx.Response(200, json={"discovered_model_ids": ["model__openai__b"]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        deps = cast(
+            ProductServiceDependencies,
+            SimpleNamespace(
+                team_dependencies=SimpleNamespace(rebac=object()),
+                configuration=SimpleNamespace(
+                    platform=SimpleNamespace(
+                        runtime_catalog_sources=[
+                            SimpleNamespace(
+                                base_url="https://pod-a.example", enabled=True
+                            ),
+                            SimpleNamespace(
+                                base_url="https://pod-b.example", enabled=True
+                            ),
+                        ]
+                    )
+                ),
+                get_model_discovery_state_store=lambda: Store(),
+                get_runtime_http_client=lambda: client,
+            ),
+        )
+        result = await service.refresh(
+            cast(object, object()), deps, authorization="Bearer test"
+        )
+    assert activations == [4, 4]
+    assert saved_revision == 4
+    assert result.sources[0].available_models[0].name == "b"

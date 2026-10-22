@@ -3750,6 +3750,9 @@ async def get_runtime_binding_for_team(
             state.source_id: state.active_url or state.yaml_url
             for state in discovery_states
         },
+        model_discovery_revisions={
+            state.source_id: state.revision for state in discovery_states
+        },
         confirmed_removed_chat_profiles=confirmed_removed_chat_profiles,
         platform_prompt=platform_prompt,
     )

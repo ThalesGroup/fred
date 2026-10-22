@@ -20,7 +20,15 @@ import { capabilityLabel } from "./capabilityEnablement";
 import { ModelDisplayNameEditor } from "./ModelDisplayNameEditor";
 import styles from "./FeaturesPage.module.css";
 
-export function ModelIdentityCell({ capability, dimmed }: { capability: CapabilityEnablementItem; dimmed: boolean }) {
+export function ModelIdentityCell({
+  capability,
+  dimmed,
+  isNew = false,
+}: {
+  capability: CapabilityEnablementItem;
+  dimmed: boolean;
+  isNew?: boolean;
+}) {
   const { t } = useTranslation();
   return (
     <div className={styles.modelCell}>
@@ -32,6 +40,7 @@ export function ModelIdentityCell({ capability, dimmed }: { capability: Capabili
         version={capability.public_version}
         dimmed={dimmed}
       />
+      {isNew && <span className={styles.newModelBadge}>{t("rework.admin.capabilities.discovery.new")}</span>}
       {(capability.model_context_window_tokens ||
         capability.model_max_input_tokens ||
         capability.model_max_output_tokens) && (

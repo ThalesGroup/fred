@@ -53,6 +53,11 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useAdminCapabilitiesQuery: () => h.list,
+  useModelDiscoveryQuery: () => ({ data: { sources: [] } }),
+  useRefreshModelDiscoveryMutation: () => [
+    () => ({ unwrap: async () => ({ sources: [] }) }),
+    { isLoading: false, isError: false },
+  ],
   useListAllTeamsQuery: (arg: unknown) => {
     h.allTeamsArg = arg;
     return h.allTeams;
@@ -71,6 +76,10 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   }),
   useSetPlatformModelBindingMutation: () => [vi.fn(), { isLoading: false }],
   useDeletePlatformModelBindingMutation: () => [vi.fn(), { isLoading: false }],
+  usePlatformModelFallbackQuery: () => ({ data: { binding: null }, isLoading: false, isError: false }),
+  useSetPlatformModelFallbackMutation: () => [vi.fn(), { isLoading: false }],
+  useDeletePlatformModelFallbackMutation: () => [vi.fn(), { isLoading: false }],
+  useSetModelDiscoveryUrlMutation: () => [vi.fn(), { isLoading: false }],
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({

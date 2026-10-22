@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, String, Text
+from sqlalchemy import CheckConstraint, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from control_plane_backend.models.base import Base, utcnow
@@ -29,6 +29,7 @@ class ModelDiscoverySourceStateRow(Base):
     yaml_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     override_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     active_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     inventory_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     removed_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     new_ids_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")

@@ -1155,6 +1155,7 @@ class ManagedAgentRuntimeBinding(BaseModel):
     platform_chat_model_binding: ModelBinding | None = None
     platform_chat_model_fallback: ModelBinding | None = None
     model_discovery_urls: dict[str, str] = Field(default_factory=dict)
+    model_discovery_revisions: dict[str, int] = Field(default_factory=dict)
     confirmed_removed_chat_profiles: dict[str, str] = Field(default_factory=dict)
     # Platform-wide platform prompt, resolved fresh on this same per-turn call —
     # same trust boundary as the two fields above: it becomes the FIRST block

@@ -187,6 +187,15 @@ async def refresh(
         if isinstance(source_id, str) and isinstance(yaml_url, str):
             grouped.setdefault(source_id, []).append((source.base_url, payload))
 
+    for source_id in (proposed_urls or {}).keys() - grouped.keys():
+        existing = await store.get(source_id)
+        if existing is not None:
+            await store.record_failure(
+                source_id=source_id,
+                yaml_url=existing.yaml_url,
+                error="Discovery source is not advertised by an enabled runtime pod",
+            )
+
     for source_id, pods in grouped.items():
         yaml_url = pods[0][1]["discovery_yaml_url"]
         if any(payload.get("discovery_yaml_url") != yaml_url for _, payload in pods):
@@ -195,6 +204,7 @@ async def refresh(
             )
             continue
         existing = await store.get(source_id)
+        current_revision = existing.revision if existing else 0
         changing_url = proposed_urls is not None and source_id in proposed_urls
         proposed_override = proposed_urls.get(source_id) if proposed_urls else None
         effective_url = (
@@ -229,6 +239,7 @@ async def refresh(
             continue
         inventories: list[dict[str, dict]] = []
         preparation_tokens: list[str] = []
+        pod_revisions: list[int] = []
         try:
             for response in responses:
                 if isinstance(response, BaseException):
@@ -244,6 +255,10 @@ async def refresh(
                 if not isinstance(token, str) or not token:
                     raise ValueError("Pod did not prepare a catalog")
                 preparation_tokens.append(token)
+                pod_revision = payload.get("active_revision")
+                if type(pod_revision) is not int or pod_revision < 0:
+                    raise ValueError("Pod did not report its catalog revision")
+                pod_revisions.append(pod_revision)
                 ids = payload.get("discovered_model_ids")
                 items = payload.get("models")
                 if not isinstance(ids, list) or not isinstance(items, list):
@@ -289,11 +304,12 @@ async def refresh(
                 return_exceptions=True,
             )
 
+        next_revision = max(current_revision, *pod_revisions) + 1
         activated = await asyncio.gather(
             *(
                 client.post(
                     f"{base_url.rstrip('/')}/agents/models-catalog/refresh",
-                    json={"preparation_token": token},
+                    json={"preparation_token": token, "revision": next_revision},
                     headers=headers,
                     timeout=5.0,
                     follow_redirects=False,
@@ -352,6 +368,8 @@ async def refresh(
             override_url=proposed_override,
             expected_override_url=existing.override_url if existing else None,
             updated_by=user.uid if changing_url else None,
+            expected_revision=current_revision,
+            applied_revision=next_revision,
         )
         if saved is None:
             await rollback()

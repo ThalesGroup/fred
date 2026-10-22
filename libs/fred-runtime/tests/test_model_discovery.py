@@ -245,6 +245,100 @@ async def test_concurrent_turns_share_one_discovery_refresh(
     assert all(result is factory.catalog for result in results)
 
 
+@pytest.mark.asyncio
+async def test_cancelled_turn_does_not_cancel_shared_refresh(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    path = tmp_path / "models_catalog.yaml"
+    path.write_text(yaml.safe_dump(_catalog().model_dump(mode="json")))
+    initial = _catalog().resolve_discovery(
+        transport=_transport({"data": [{"id": "chat-a"}]})
+    )
+    factory = RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(initial.to_policy()), catalog=initial
+    )
+    started = asyncio.Event()
+    release = asyncio.Event()
+    calls = 0
+
+    async def respond(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        started.set()
+        await release.wait()
+        return httpx.Response(200, json={"data": [{"id": "chat-b"}]})
+
+    transport = httpx.MockTransport(respond)
+    first = asyncio.create_task(
+        factory.refresh_catalog(
+            str(path),
+            models_url="https://other.example/v1/models",
+            revision=1,
+            transport=transport,
+        )
+    )
+    await started.wait()
+    first.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    second = asyncio.create_task(
+        factory.refresh_catalog(
+            str(path),
+            models_url="https://other.example/v1/models",
+            revision=1,
+            transport=transport,
+        )
+    )
+    release.set()
+    assert {profile.model.name for profile in (await second).profiles} == {"chat-b"}
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_older_turn_cannot_replace_newer_admin_catalog(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    path = tmp_path / "models_catalog.yaml"
+    path.write_text(yaml.safe_dump(_catalog().model_dump(mode="json")))
+    initial = _catalog().resolve_discovery(
+        transport=_transport({"data": [{"id": "chat-a"}]})
+    )
+    factory = RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(initial.to_policy()), catalog=initial
+    )
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def old_response(request: httpx.Request) -> httpx.Response:
+        started.set()
+        await release.wait()
+        return httpx.Response(200, json={"data": [{"id": "chat-old"}]})
+
+    old = asyncio.create_task(
+        factory.refresh_catalog(
+            str(path),
+            models_url="https://old.example/v1/models",
+            revision=1,
+            transport=httpx.MockTransport(old_response),
+        )
+    )
+    await started.wait()
+    newer = await factory.refresh_catalog(
+        str(path),
+        models_url="https://new.example/v1/models",
+        revision=2,
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"data": [{"id": "chat-new"}]})
+        ),
+    )
+    release.set()
+    assert await old is newer
+    assert factory.catalog is newer
+    assert {profile.model.name for profile in newer.profiles} == {"chat-new"}
+
+
 def test_models_url_override_changes_inference_base(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
 

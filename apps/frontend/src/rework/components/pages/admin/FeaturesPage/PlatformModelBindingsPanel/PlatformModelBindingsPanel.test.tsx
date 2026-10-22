@@ -36,6 +36,7 @@ const h = vi.hoisted(() => ({
   binding: undefined as PlatformModelBinding | undefined,
   setBinding: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
   deleteBinding: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
+  setFallback: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -55,6 +56,9 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
   usePlatformModelBindingQuery: () => ({ data: h.binding, isLoading: false, isError: false }),
   useSetPlatformModelBindingMutation: () => [h.setBinding, { isLoading: false }],
   useDeletePlatformModelBindingMutation: () => [h.deleteBinding, { isLoading: false }],
+  usePlatformModelFallbackQuery: () => ({ data: { binding: null }, isLoading: false, isError: false }),
+  useSetPlatformModelFallbackMutation: () => [h.setFallback, { isLoading: false }],
+  useDeletePlatformModelFallbackMutation: () => [vi.fn(), { isLoading: false }],
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
@@ -82,6 +86,7 @@ afterEach(() => {
   container.remove();
   h.setBinding.mockClear();
   h.deleteBinding.mockClear();
+  h.setFallback.mockClear();
   h.binding = undefined;
 });
 
@@ -124,14 +129,45 @@ describe("PlatformModelBindingsPanel chat-only surface", () => {
     expect(container.textContent).not.toContain("rework.admin.platformModelBindings.capability.language");
     expect(container.textContent).not.toContain("rework.admin.platformModelBindings.capability.embedding");
     expect(container.textContent).not.toContain("rework.admin.platformModelBindings.capability.image");
-    expect(buttons().filter((b) => b.textContent === "rework.admin.platformModelBindings.editAction")).toHaveLength(1);
+    expect(buttons().filter((b) => b.textContent === "rework.admin.platformModelBindings.editAction")).toHaveLength(2);
   });
 
   it("renders the single row even when the backend response is not yet loaded", () => {
     h.binding = undefined;
     render(<PlatformModelBindingsPanel open onClose={() => {}} />);
 
-    expect(buttons().filter((b) => b.textContent === "rework.admin.platformModelBindings.editAction")).toHaveLength(1);
+    expect(buttons().filter((b) => b.textContent === "rework.admin.platformModelBindings.editAction")).toHaveLength(2);
+  });
+});
+
+describe("PlatformModelBindingsPanel fallback", () => {
+  it("keeps fallback editing separate from the forced binding", async () => {
+    h.binding = { model_capability: "chat", binding: null };
+    render(<PlatformModelBindingsPanel open onClose={() => {}} />);
+    expect(container.textContent).toContain("rework.admin.platformModelBindings.noFallback");
+    const editButtons = buttons().filter(
+      (button) => button.textContent === "rework.admin.platformModelBindings.editAction",
+    );
+    click(editButtons[1]);
+    const inputs = Array.from(container.querySelectorAll("input"));
+    typeInto(inputs[0], "openai");
+    typeInto(inputs[1], "chat-backup");
+    const textarea = container.querySelector("textarea");
+    expect(textarea).not.toBeNull();
+    typeInto(textarea!, '{"base_url":"https://gateway.example/v1"}');
+    await act(async () => {
+      findButton("rework.admin.platformModelBindings.form.save").click();
+    });
+    expect(h.setFallback).toHaveBeenCalledWith({
+      setPlatformModelFallbackRequest: {
+        binding: {
+          provider: "openai",
+          name: "chat-backup",
+          settings: { base_url: "https://gateway.example/v1" },
+        },
+      },
+    });
+    expect(h.setBinding).not.toHaveBeenCalled();
   });
 });
 

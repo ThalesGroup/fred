@@ -91,6 +91,22 @@ The platform binding is absolute. Without it, a pod static override is the
 operator's local escape hatch. Team per-agent selection then wins over the team
 default. No scoring or rule ordering is involved.
 
+To set a platform default in either static or discovery mode, open
+**Capabilities > Models > Default chat model**. Enter the provider, the model's
+wire ID, and any connection settings. For Mistral via the OpenAI-compatible
+client, use `openai`, the Mistral model ID, and
+`{"base_url": "https://api.mistral.ai/v1"}`. This binding takes precedence over
+the pod and team defaults. The Models table's `default_on` switch controls
+team access to a model; it does not select the chat default. Remove the platform
+binding to restore team and pod routing.
+
+The same panel has a separate **Fallback chat model**. It is used only when a
+saved choice names a discovered model confirmed absent by a successful refresh.
+It does not override a valid choice or the forced platform binding. Configure
+it to a reachable chat model, including a static YAML model if desired.
+Without a usable fallback, that turn fails explicitly. A discovery outage
+does not trigger this fallback.
+
 The four profile-valued levels have **one** implementation,
 `fred_sdk.contracts.context.resolve_effective_chat_profile`, shared by the pod
 runtime (which resolves it per turn to build the chat client) and the control
@@ -113,9 +129,9 @@ Two things it deliberately does:
 - It flags a model that is not enabled for the team. That turn will fail before
   the LLM call, and saying so beats an opaque error later.
 
-It shows nothing at all when nothing resolves — an unreachable pod, a pod
-declaring no chat default with no team policy, or a stored team profile the pod
-no longer advertises. Guessing a model would be worse than naming none.
+It shows nothing when nothing resolves, such as an unreachable pod or a pod
+declaring no chat default with no team policy. For a confirmed removed
+discovered choice, it shows the configured platform fallback.
 
 ## Platform administration
 
@@ -151,7 +167,7 @@ incomplete deployment view.
 
 ### Discover chat models from a gateway
 
-An operator can replace manually listed chat profiles with a discovery source:
+An operator can add discovery alongside manually listed chat profiles:
 
 ```yaml
 version: v1
@@ -162,13 +178,16 @@ discovery:
   include_model_ids: [chat-small, chat-large]
 ```
 
-At pod startup, Fred sends an authenticated `GET https://gateway.example/v1/models`
-and reads the OpenAI-compatible JSON shape `{"data": [{"id": "chat-small"}]}`.
+At pod startup and on administrator refresh, Fred sends an authenticated
+`GET https://gateway.example/v1/models` and reads the OpenAI-compatible JSON
+shape `{"data": [{"id": "chat-small"}]}`. The administrator can edit the
+`/models` URL in **Capabilities > Models**; the YAML URL remains the reset
+value. A successful refresh updates the active pod catalog immediately.
 `base_url` is also used for chat inference. Set `OPENAI_API_KEY` in the pod
 environment; never put the key in YAML. `source_id` is a stable operator-chosen
 identity. Changing it creates new model capability and profile ids, which need
 new admin grants. `include_model_ids` is optional; when supplied, every listed
-id must be returned. A discovered default must be in the selected list. A
+id must be returned at startup. A discovered default must be in the selected list. A
 static chat default and `discovery.default_model_id` cannot coexist.
 
 The standard `/models` response does not identify chat models or define their
@@ -179,14 +198,20 @@ upstream `id` in the admin Models table and uses it for inference. A nonblank
 `context_length` or `max_model_len`, `max_input_tokens`, and
 `max_output_tokens` are shown when present. These optional values are
 informational; they do not change routing, grants, or reasoning controls.
+Fred does not parse vendor-specific fields such as Mistral's
+`max_context_length` or infer chat capability from vendor-specific metadata.
+Use `include_model_ids` to exclude embedding and other non-chat models.
 
-Discovery runs once when the pod starts. The admin inventory and runtime use
-that same snapshot. Restart the pod to add or remove gateway models. New models
-start without a team grant and must be enabled in the existing admin Models
-view. A removed model in a saved team choice follows the existing drift error
-on the next restart. Discovery fails startup on an unavailable, invalid, or
-empty selected inventory; a catalog without `discovery` makes no network call.
-Static profiles can coexist with discovery for a gradual migration.
+Opening **Capabilities > Models** refreshes the discovered inventory before
+listing models. New models are highlighted and start without a team grant.
+Removed models remain visible as unavailable in the discovery summary, while
+static profiles continue to appear in the regular Models list. A failed
+refresh preserves the last verified inventory and displays an error. If the
+YAML endpoint is unavailable at startup, the pod starts with its static
+profiles; the first managed turn can apply a saved administrator URL. Until a
+discovery URL responds successfully, a discovery-only pod has no chat model
+for direct pod-local turns. A catalog without `discovery` makes no network
+call.
 
 ### Static profiles
 

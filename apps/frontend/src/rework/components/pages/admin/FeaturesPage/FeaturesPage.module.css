@@ -77,6 +77,45 @@
   min-width: 0;
 }
 
+.newModelBadge {
+  align-self: flex-start;
+  margin-left: var(--spacing-xl);
+  border: 1px solid var(--outline-variant);
+  border-radius: 999px;
+  padding: var(--spacing-3xs) var(--spacing-xs);
+  font: var(--font-label-small);
+}
+
+.discoveryStatus {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  padding: var(--spacing-m);
+}
+
+.discoveryHeading,
+.discoveryActions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.discoverySource {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  border-top: 1px solid var(--outline-variant);
+  padding-top: var(--spacing-s);
+}
+
+.discoveryRemoved {
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
 .modelSpecs {
   display: flex;
   flex-wrap: wrap;

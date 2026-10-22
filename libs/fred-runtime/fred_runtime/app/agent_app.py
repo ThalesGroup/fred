@@ -519,6 +519,7 @@ def _build_chat_model_factory(config: AgentPodConfig) -> ChatModelFactoryPort:
         )
 
     catalog = load_model_catalog(catalog_path)
+    catalog_verified = True
     try:
         catalog = catalog.resolve_discovery()
     except ValueError as exc:
@@ -528,6 +529,7 @@ def _build_chat_model_factory(config: AgentPodConfig) -> ChatModelFactoryPort:
             "[fred-runtime] startup model discovery failed; managed turns can apply the saved URL: %s",
             exc,
         )
+        catalog_verified = False
     policy = catalog.to_policy()
     logger.info(
         "[fred-runtime] model routing from catalog=%s profiles=%d agent_overrides=%d",
@@ -536,7 +538,9 @@ def _build_chat_model_factory(config: AgentPodConfig) -> ChatModelFactoryPort:
         len(policy.agent_profile_overrides),
     )
     return RoutedChatModelFactory(
-        resolver=ModelRoutingResolver(policy), catalog=catalog
+        resolver=ModelRoutingResolver(policy),
+        catalog=catalog,
+        catalog_verified=catalog_verified,
     )
 
 
@@ -1453,6 +1457,7 @@ def _platform_prompt_file_field(config: AgentPodConfig, field: str) -> str | Non
 class _ModelCatalogResponse(BaseModel):
     models: list[_ModelCatalogEntry]
     preparation_token: str | None = None
+    active_revision: int = 0
     discovery_source_id: str | None = None
     discovery_yaml_url: str | None = None
     discovery_effective_url: str | None = None
@@ -1625,6 +1630,7 @@ class _ModelCatalogRefreshRequest(BaseModel):
     prepare: bool = False
     preparation_token: str | None = None
     rollback_token: str | None = None
+    revision: int | None = None
 
 
 class _ResolvedAgentInstance(BaseModel):
@@ -1655,6 +1661,7 @@ class _ResolvedAgentInstance(BaseModel):
     platform_chat_model_binding: ModelBinding | None = None
     platform_chat_model_fallback: ModelBinding | None = None
     model_discovery_urls: dict[str, str] = Field(default_factory=dict)
+    model_discovery_revisions: dict[str, int] = Field(default_factory=dict)
     confirmed_removed_chat_profiles: dict[str, str] = Field(default_factory=dict)
     # Platform-wide platform prompt, resolved fresh by control-plane on this same
     # call — same trust boundary again: it becomes the FIRST block of the
@@ -1994,7 +2001,11 @@ async def _resolve_agent_instance(
             if effective_url is not None:
                 try:
                     await factory.refresh_catalog(
-                        runtime_config.models_catalog_path, models_url=effective_url
+                        runtime_config.models_catalog_path,
+                        models_url=effective_url,
+                        revision=resolution.model_discovery_revisions.get(
+                            source.source_id, 0
+                        ),
                     )
                 except ValueError as exc:
                     logger.warning(
@@ -5463,6 +5474,8 @@ def _build_agent_router(
             ),
         )
         result = _project_model_catalog_response(catalog)
+        if isinstance(factory, RoutedChatModelFactory):
+            result.active_revision = factory.active_revision
         if catalog.discovery is not None:
             from ..model_routing import load_model_catalog
 
@@ -5499,7 +5512,7 @@ def _build_agent_router(
                 token = None
             elif body.preparation_token is not None:
                 catalog = await factory.activate_prepared_catalog(
-                    body.preparation_token
+                    body.preparation_token, revision=body.revision
                 )
                 token = None
             elif body.models_url is not None and body.prepare:
@@ -5520,6 +5533,7 @@ def _build_agent_router(
             raise HTTPException(status_code=502, detail=str(exc)) from None
         result = _project_model_catalog_response(catalog)
         result.preparation_token = token
+        result.active_revision = factory.active_revision
         from ..model_routing import load_model_catalog
 
         source = load_model_catalog(config.models_catalog_path).discovery

@@ -37,6 +37,7 @@ class StoredDiscoverySourceState:
     yaml_url: str
     override_url: str | None
     active_url: str | None
+    revision: int
     inventory: list[dict[str, Any]]
     removed: list[dict[str, Any]]
     new_ids: list[str]
@@ -55,6 +56,7 @@ def _source_record(row: ModelDiscoverySourceStateRow) -> StoredDiscoverySourceSt
         yaml_url=row.yaml_url,
         override_url=row.override_url,
         active_url=row.active_url,
+        revision=row.revision,
         inventory=json.loads(row.inventory_json),
         removed=json.loads(row.removed_json),
         new_ids=json.loads(row.new_ids_json),
@@ -95,6 +97,8 @@ class ModelDiscoveryStateStore:
         override_url: str | None = None,
         expected_override_url: str | None = None,
         updated_by: str | None = None,
+        expected_revision: int | None = None,
+        applied_revision: int | None = None,
     ) -> StoredDiscoverySourceState | None:
         async with use_session(self._sessions) as s:
             row = await s.get(
@@ -105,12 +109,17 @@ class ModelDiscoveryStateStore:
                     source_id=source_id,
                     yaml_url=yaml_url,
                     override_url=None,
+                    revision=0,
                     inventory_json="[]",
                     removed_json="[]",
                     new_ids_json="[]",
                 )
                 s.add(row)
             if override_update and row.override_url != expected_override_url:
+                return None
+            if expected_revision is not None and row.revision != expected_revision:
+                return None
+            if applied_revision is not None and applied_revision <= row.revision:
                 return None
             if not override_update and (row.override_url or yaml_url) != effective_url:
                 return None
@@ -128,6 +137,9 @@ class ModelDiscoveryStateStore:
                 removed.pop(key, None)
             row.yaml_url = yaml_url
             row.active_url = effective_url
+            row.revision = (
+                applied_revision if applied_revision is not None else row.revision + 1
+            )
             row.inventory_json = json.dumps(list(current.values()))
             row.removed_json = json.dumps(list(removed.values()))
             row.new_ids_json = json.dumps(
@@ -150,6 +162,7 @@ class ModelDiscoveryStateStore:
                     source_id=source_id,
                     yaml_url=yaml_url,
                     override_url=None,
+                    revision=0,
                     inventory_json="[]",
                     removed_json="[]",
                     new_ids_json="[]",

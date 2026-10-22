@@ -1069,6 +1069,50 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setModelReasoningRequest,
       }),
     }),
+    getModelDiscoveryControlPlaneV1AdminModelDiscoveryGet: build.query<
+      GetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetApiResponse,
+      GetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/model-discovery` }),
+    }),
+    refreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPost: build.mutation<
+      RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiResponse,
+      RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/model-discovery/refresh`, method: "POST" }),
+    }),
+    putModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPut: build.mutation<
+      PutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutApiResponse,
+      PutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/model-discovery/${queryArg.sourceId}/url`,
+        method: "PUT",
+        body: queryArg.setDiscoveryUrlRequest,
+      }),
+    }),
+    getPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGet: build.query<
+      GetPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGetApiResponse,
+      GetPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform-model-fallback` }),
+    }),
+    putPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackPut: build.mutation<
+      PutPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackPutApiResponse,
+      PutPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform-model-fallback`,
+        method: "PUT",
+        body: queryArg.setPlatformModelFallbackRequest,
+      }),
+    }),
+    deletePlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackDelete: build.mutation<
+      DeletePlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackDeleteApiResponse,
+      DeletePlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackDeleteApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform-model-fallback`, method: "DELETE" }),
+    }),
     publishKnowledgeBaseDefinition: build.mutation<
       PublishKnowledgeBaseDefinitionApiResponse,
       PublishKnowledgeBaseDefinitionApiArg
@@ -2842,6 +2886,29 @@ export type PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdR
   capabilityId: string;
   setModelReasoningRequest: SetModelReasoningRequest;
 };
+export type GetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetApiResponse =
+  /** status 200 Successful Response */ ModelDiscoveryStatus;
+export type GetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetApiArg = void;
+export type RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiResponse =
+  /** status 200 Successful Response */ ModelDiscoveryStatus;
+export type RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiArg = void;
+export type PutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutApiResponse =
+  /** status 200 Successful Response */ DiscoverySourceStatus;
+export type PutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutApiArg = {
+  sourceId: string;
+  setDiscoveryUrlRequest: SetDiscoveryUrlRequest;
+};
+export type GetPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGetApiResponse =
+  /** status 200 Successful Response */ PlatformModelFallback;
+export type GetPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGetApiArg = void;
+export type PutPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackPutApiResponse =
+  /** status 200 Successful Response */ PlatformModelFallback;
+export type PutPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackPutApiArg = {
+  setPlatformModelFallbackRequest: SetPlatformModelFallbackRequest;
+};
+export type DeletePlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackDeleteApiResponse =
+  /** status 200 Successful Response */ PlatformModelFallback;
+export type DeletePlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackDeleteApiArg = void;
 export type PublishKnowledgeBaseDefinitionApiResponse =
   /** status 200 Successful Response */ KnowledgeBasePublicationResult;
 export type PublishKnowledgeBaseDefinitionApiArg = {
@@ -4695,6 +4762,16 @@ export type ManagedAgentRuntimeBinding = {
   reasoning_enabled_model_ids?: string[];
   team_disabled_model_ids?: string[];
   platform_chat_model_binding?: ModelBinding | null;
+  platform_chat_model_fallback?: ModelBinding | null;
+  model_discovery_urls?: {
+    [key: string]: string;
+  };
+  model_discovery_revisions?: {
+    [key: string]: number;
+  };
+  confirmed_removed_chat_profiles?: {
+    [key: string]: string;
+  };
   platform_prompt?: string | null;
 };
 export type SessionListItem = {
@@ -4970,6 +5047,42 @@ export type ModelReasoningResult = {
 };
 export type SetModelReasoningRequest = {
   reasoning_enabled: boolean;
+};
+export type DiscoveredModel = {
+  id: string;
+  name: string;
+  provider: string;
+  display_name?: string | null;
+  profile_ids?: string[];
+  chat_profile_ids?: string[];
+  context_window_tokens?: number | null;
+  max_input_tokens?: number | null;
+  max_output_tokens?: number | null;
+};
+export type DiscoverySourceStatus = {
+  source_id: string;
+  yaml_url: string;
+  override_url?: string | null;
+  effective_url: string;
+  available_models?: DiscoveredModel[];
+  removed_models?: DiscoveredModel[];
+  new_ids?: string[];
+  last_success_at?: string | null;
+  last_attempt_at?: string | null;
+  last_error?: string | null;
+};
+export type ModelDiscoveryStatus = {
+  sources?: DiscoverySourceStatus[];
+  refresh_error?: string | null;
+};
+export type SetDiscoveryUrlRequest = {
+  url?: string | null;
+};
+export type PlatformModelFallback = {
+  binding?: ModelBinding | null;
+};
+export type SetPlatformModelFallbackRequest = {
+  binding: ModelBinding;
 };
 export type KnowledgeBasePublicationResult = {
   id: string;
@@ -6068,6 +6181,14 @@ export const {
   usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation,
   usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation,
   usePatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchMutation,
+  useGetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetQuery,
+  useLazyGetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetQuery,
+  useRefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostMutation,
+  usePutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutMutation,
+  useGetPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGetQuery,
+  useLazyGetPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGetQuery,
+  usePutPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackPutMutation,
+  useDeletePlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackDeleteMutation,
   usePublishKnowledgeBaseDefinitionMutation,
   useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
   useLazyListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,

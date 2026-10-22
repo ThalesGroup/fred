@@ -55,6 +55,7 @@ def upgrade() -> None:
         sa.Column("yaml_url", sa.String(length=2048), nullable=False),
         sa.Column("override_url", sa.String(length=2048), nullable=True),
         sa.Column("active_url", sa.String(length=2048), nullable=True),
+        sa.Column("revision", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("inventory_json", sa.Text(), nullable=False),
         sa.Column("removed_json", sa.Text(), nullable=False),
         sa.Column("new_ids_json", sa.Text(), nullable=False),

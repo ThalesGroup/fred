@@ -45,6 +45,9 @@ import {
   useDeletePlatformModelBindingMutation,
   usePlatformModelBindingQuery,
   useSetPlatformModelBindingMutation,
+  usePlatformModelFallbackQuery,
+  useSetPlatformModelFallbackMutation,
+  useDeletePlatformModelFallbackMutation,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { ModelBinding, ModelBindingSettings } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./PlatformModelBindingsPanel.module.css";
@@ -78,19 +81,30 @@ export function PlatformModelBindingsPanel({ open, onClose }: PlatformModelBindi
   const { data, isLoading, isError } = usePlatformModelBindingQuery();
   const [setBinding, { isLoading: isSaving }] = useSetPlatformModelBindingMutation();
   const [deleteBinding, { isLoading: isDeleting }] = useDeletePlatformModelBindingMutation();
-  const busy = isSaving || isDeleting;
+  const { data: fallbackData, isLoading: fallbackLoading, isError: fallbackError } = usePlatformModelFallbackQuery();
+  const [setFallback, { isLoading: isSavingFallback }] = useSetPlatformModelFallbackMutation();
+  const [deleteFallback, { isLoading: isDeletingFallback }] = useDeletePlatformModelFallbackMutation();
+  const busy = isSaving || isDeleting || isSavingFallback || isDeletingFallback;
 
   const binding = data?.binding ?? null;
+  const fallback = fallbackData?.binding ?? null;
 
   const [isEditing, setIsEditing] = useState(false);
   const [provider, setProvider] = useState("");
   const [name, setName] = useState("");
   const [settingsText, setSettingsText] = useState("{}");
+  const [isEditingFallback, setIsEditingFallback] = useState(false);
+  const [fallbackProvider, setFallbackProvider] = useState("");
+  const [fallbackName, setFallbackName] = useState("");
+  const [fallbackSettingsText, setFallbackSettingsText] = useState("{}");
 
   // Editing state does not survive the drawer closing — reopening always
   // starts from the current server state, never a stale in-progress edit.
   useEffect(() => {
-    if (!open) setIsEditing(false);
+    if (!open) {
+      setIsEditing(false);
+      setIsEditingFallback(false);
+    }
   }, [open]);
 
   const startEdit = () => {
@@ -105,6 +119,44 @@ export function PlatformModelBindingsPanel({ open, onClose }: PlatformModelBindi
   const parsedSettings = parseSettingsObject(settingsText);
   const settingsInvalid = "error" in parsedSettings;
   const canSave = provider.trim() !== "" && name.trim() !== "" && !settingsInvalid;
+  const parsedFallbackSettings = parseSettingsObject(fallbackSettingsText);
+  const fallbackSettingsInvalid = "error" in parsedFallbackSettings;
+  const canSaveFallback = fallbackProvider.trim() !== "" && fallbackName.trim() !== "" && !fallbackSettingsInvalid;
+
+  const startFallbackEdit = () => {
+    setIsEditingFallback(true);
+    setFallbackProvider(fallback?.provider ?? "");
+    setFallbackName(fallback?.name ?? "");
+    setFallbackSettingsText(JSON.stringify(fallback?.settings ?? {}, null, 2));
+  };
+
+  const handleFallbackSave = async () => {
+    if (!canSaveFallback || "error" in parsedFallbackSettings) return;
+    try {
+      await setFallback({
+        setPlatformModelFallbackRequest: {
+          binding: {
+            provider: fallbackProvider.trim() as ModelBinding["provider"],
+            name: fallbackName.trim(),
+            settings: parsedFallbackSettings.value as ModelBindingSettings,
+          },
+        },
+      }).unwrap();
+      showSuccess({ summary: t("rework.admin.platformModelBindings.fallbackSaveToast") });
+      setIsEditingFallback(false);
+    } catch {
+      showError({ summary: t("rework.admin.platformModelBindings.fallbackError") });
+    }
+  };
+
+  const handleFallbackDelete = async () => {
+    try {
+      await deleteFallback().unwrap();
+      showSuccess({ summary: t("rework.admin.platformModelBindings.fallbackDeleteToast") });
+    } catch {
+      showError({ summary: t("rework.admin.platformModelBindings.fallbackError") });
+    }
+  };
 
   const handleSave = async () => {
     if (!canSave || "error" in parsedSettings) return;
@@ -149,6 +201,7 @@ export function PlatformModelBindingsPanel({ open, onClose }: PlatformModelBindi
 
         {!isLoading && !isError && (
           <div className={styles.row}>
+            <strong>{t("rework.admin.platformModelBindings.forcedLabel")}</strong>
             <div className={styles.rowHeader}>
               <div className={styles.rowMain}>
                 <span className={styles.capabilityLabel}>
@@ -224,6 +277,107 @@ export function PlatformModelBindingsPanel({ open, onClose }: PlatformModelBindi
             )}
           </div>
         )}
+
+        <div className={styles.row}>
+          <strong>{t("rework.admin.platformModelBindings.fallbackLabel")}</strong>
+          <p className={styles.hint}>{t("rework.admin.platformModelBindings.fallbackHint")}</p>
+          {fallbackLoading && <p className={styles.hint}>{t("rework.admin.platformModelBindings.loading")}</p>}
+          {fallbackError && <p className={styles.statusError}>{t("rework.admin.platformModelBindings.loadError")}</p>}
+          {!fallbackLoading && !fallbackError && (
+            <>
+              <div className={styles.rowHeader}>
+                <span className={styles.stateText}>
+                  {fallback
+                    ? t("rework.admin.platformModelBindings.boundState", {
+                        provider: fallback.provider,
+                        name: fallback.name,
+                      })
+                    : t("rework.admin.platformModelBindings.noFallback")}
+                </span>
+                <div className={styles.rowActions}>
+                  {fallback && !isEditingFallback && (
+                    <DeleteIconButton
+                      size="small"
+                      aria-label={t("rework.admin.platformModelBindings.clearFallback")}
+                      onClick={() => void handleFallbackDelete()}
+                      disabled={busy}
+                    />
+                  )}
+                  {!isEditingFallback && (
+                    <Button
+                      color="on-surface"
+                      variant="outlined"
+                      size="small"
+                      onClick={startFallbackEdit}
+                      disabled={busy}
+                    >
+                      {t("rework.admin.platformModelBindings.editAction")}
+                    </Button>
+                  )}
+                </div>
+              </div>
+              {isEditingFallback && (
+                <form
+                  className={styles.editForm}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void handleFallbackSave();
+                  }}
+                >
+                  <TextInput
+                    label={t("rework.admin.platformModelBindings.form.provider")}
+                    value={fallbackProvider}
+                    onChange={(event) => setFallbackProvider(event.target.value)}
+                    disabled={busy}
+                    required
+                  />
+                  <TextInput
+                    label={t("rework.admin.platformModelBindings.form.name")}
+                    value={fallbackName}
+                    onChange={(event) => setFallbackName(event.target.value)}
+                    disabled={busy}
+                    required
+                  />
+                  <TextArea
+                    label={t("rework.admin.platformModelBindings.form.settingsTitle")}
+                    value={fallbackSettingsText}
+                    onChange={(event) => setFallbackSettingsText(event.target.value)}
+                    rows={8}
+                    disabled={busy}
+                    error={
+                      fallbackSettingsInvalid
+                        ? t("rework.admin.platformModelBindings.form.settingsInvalidJson")
+                        : undefined
+                    }
+                    explanation={
+                      fallbackSettingsInvalid ? undefined : t("rework.admin.platformModelBindings.form.settingsHint")
+                    }
+                  />
+                  <div className={styles.formActions}>
+                    <Button
+                      color="on-surface"
+                      variant="text"
+                      size="small"
+                      onClick={() => setIsEditingFallback(false)}
+                      disabled={busy}
+                    >
+                      {t("rework.admin.platformModelBindings.form.cancel")}
+                    </Button>
+                    <Button
+                      color="primary"
+                      variant="filled"
+                      size="small"
+                      type="submit"
+                      disabled={busy || !canSaveFallback}
+                    >
+                      {t("rework.admin.platformModelBindings.form.save")}
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </InlineDrawer>
   );

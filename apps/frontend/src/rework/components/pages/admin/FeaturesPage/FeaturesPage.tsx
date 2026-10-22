@@ -30,7 +30,7 @@ import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx"
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { toIconType } from "@shared/utils/Type.ts";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
 import {
@@ -39,6 +39,8 @@ import {
   useListAllTeamsQuery,
   useSetCapabilityDefaultOnMutation,
   useSetModelReasoningMutation,
+  useModelDiscoveryQuery,
+  useRefreshModelDiscoveryMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./FeaturesPage.module.css";
@@ -58,6 +60,7 @@ import {
   requiresTeamSettings,
 } from "./capabilityEnablement";
 import { ModelIdentityCell } from "./ModelIdentityCell";
+import { ModelDiscoveryStatus } from "./ModelDiscoveryStatus";
 
 // "tool" (MCP servers, etc.) vs "agent" (a control-plane-side projection of
 // an agent template into this same catalog, CAPAB-01 RFC §8.6) vs "model" (a
@@ -78,7 +81,7 @@ export default function FeaturesPage() {
   const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications");
   const kindFilters: CapabilityKind[] = applicationsEnabled ? [...CORE_KIND_FILTERS, "app"] : CORE_KIND_FILTERS;
 
-  const { data, isLoading, isError } = useAdminCapabilitiesQuery();
+  const { data, isLoading, isError, refetch: refetchCapabilities } = useAdminCapabilitiesQuery();
   // The full registry (`can_list_all_teams`), not the caller-scoped `/teams`: an admin
   // must see teams they don't belong to. The drawer only needs ids and names, so the
   // per-team membership reads are skipped.
@@ -110,6 +113,32 @@ export default function FeaturesPage() {
   const [showAffected, setShowAffected] = useState(false);
   const [kindFilter, setKindFilter] = useState<CapabilityKind>("tool");
   const activeKindFilter: CapabilityKind = !applicationsEnabled && kindFilter === "app" ? "tool" : kindFilter;
+  const { data: discoveryStatus, refetch: refetchDiscoveryStatus } = useModelDiscoveryQuery(undefined, {
+    skip: activeKindFilter !== "model",
+  });
+  const [refreshDiscovery, discoveryRefresh] = useRefreshModelDiscoveryMutation();
+  const [modelInventoryReady, setModelInventoryReady] = useState(false);
+  const refreshModels = useCallback(async () => {
+    await refreshDiscovery().unwrap();
+    await Promise.all([refetchCapabilities(), refetchDiscoveryStatus()]);
+  }, [refreshDiscovery, refetchCapabilities, refetchDiscoveryStatus]);
+  useEffect(() => {
+    if (activeKindFilter !== "model") return;
+    let mounted = true;
+    setModelInventoryReady(false);
+    void refreshModels().then(
+      () => {
+        if (mounted) setModelInventoryReady(true);
+      },
+      () => {
+        if (mounted) setModelInventoryReady(true);
+      },
+    );
+    return () => {
+      mounted = false;
+    };
+  }, [activeKindFilter, refreshModels]);
+  const newModelIds = new Set((discoveryStatus?.sources ?? []).flatMap((source) => source.new_ids ?? []));
   // Which row's mutation is in flight — NOT just a boolean. Disabling every
   // switch off `isTogglingDefault` used to include the one the admin just
   // clicked, which still holds native focus at that instant: yanking
@@ -405,7 +434,7 @@ export default function FeaturesPage() {
       size: "2.4fr",
       cellRenderer: (cap) =>
         cap.kind === "model" ? (
-          <ModelIdentityCell capability={cap} dimmed={rowIsUnused(cap)} />
+          <ModelIdentityCell capability={cap} dimmed={rowIsUnused(cap)} isNew={newModelIds.has(cap.id)} />
         ) : (
           <EntityIdentity
             name={capabilityLabel(t, cap)}
@@ -604,7 +633,16 @@ export default function FeaturesPage() {
       {isLoading && <p className={styles.status}>{t("rework.admin.capabilities.loading")}</p>}
       {isError && <p className={styles.statusError}>{t("rework.admin.capabilities.loadError")}</p>}
 
-      {!isLoading && !isError && capabilities.length === 0 && (
+      {activeKindFilter === "model" && (
+        <ModelDiscoveryStatus
+          data={discoveryStatus}
+          refreshing={discoveryRefresh.isLoading || !modelInventoryReady}
+          refreshError={discoveryRefresh.isError}
+          refresh={refreshModels}
+        />
+      )}
+
+      {!isLoading && !isError && (activeKindFilter !== "model" || modelInventoryReady) && capabilities.length === 0 && (
         <PageEmptyState
           icon="tune"
           message={t(
@@ -621,7 +659,7 @@ export default function FeaturesPage() {
         />
       )}
 
-      {!isLoading && !isError && capabilities.length > 0 && (
+      {!isLoading && !isError && (activeKindFilter !== "model" || modelInventoryReady) && capabilities.length > 0 && (
         <DataTable columns={columns} data={capabilities} rowKey={(capability) => capability.id} size="medium" />
       )}
 

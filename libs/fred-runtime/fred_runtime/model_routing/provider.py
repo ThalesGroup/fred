@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import TYPE_CHECKING, Protocol
 from uuid import uuid4
 
@@ -145,23 +146,30 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         resolver: ModelRoutingResolver,
         provider: ModelProvider | None = None,
         catalog: ModelCatalog | None = None,
+        catalog_verified: bool = True,
     ) -> None:
         self._snapshot = (resolver, catalog)
         self._provider = provider or FredCoreModelProvider()
         self._refresh_lock = asyncio.Lock()
-        self._failed_url: str | None = None
-        self._pending_refresh: tuple[str | None, asyncio.Task[ModelCatalog]] | None = (
-            None
-        )
+        self._catalog_verified = catalog_verified
+        self._active_revision = 0
+        self._failed_url: tuple[str | None, float] | None = None
+        self._pending_refresh: (
+            tuple[str | None, int | None, asyncio.Task[ModelCatalog]] | None
+        ) = None
         self._prepared: dict[str, tuple[ModelRoutingResolver, ModelCatalog]] = {}
         self._activation_backups: dict[
-            str, tuple[ModelRoutingResolver, ModelCatalog]
+            str, tuple[ModelRoutingResolver, ModelCatalog, int, bool]
         ] = {}
         self._active_preparation_token: str | None = None
 
     @property
     def catalog(self) -> ModelCatalog | None:
         return self._snapshot[1]
+
+    @property
+    def active_revision(self) -> int:
+        return self._active_revision
 
     @property
     def _resolver(self) -> ModelRoutingResolver:
@@ -172,6 +180,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         path: str,
         *,
         models_url: str | None = None,
+        revision: int | None = None,
         force: bool = False,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> ModelCatalog:
@@ -184,13 +193,35 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                 if current is not None and current.discovery is not None
                 else None
             )
-            if not force and models_url == active_url and current is not None:
+            if (
+                not force
+                and revision is not None
+                and revision < self._active_revision
+                and current is not None
+            ):
                 return current
-            if not force and models_url == self._failed_url and current is not None:
+            if (
+                not force
+                and models_url == active_url
+                and current is not None
+                and self._catalog_verified
+            ):
+                return current
+            if (
+                not force
+                and self._failed_url is not None
+                and models_url == self._failed_url[0]
+                and time.monotonic() < self._failed_url[1]
+                and current is not None
+            ):
                 return current
             pending = self._pending_refresh
-            if pending is not None and pending[0] == models_url:
-                task = pending[1]
+            if (
+                pending is not None
+                and pending[0] == models_url
+                and pending[1] == revision
+            ):
+                task = pending[2]
             else:
                 task = asyncio.create_task(
                     load_model_catalog(path).resolve_discovery_async(
@@ -199,22 +230,37 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                         transport=transport,
                     )
                 )
-                self._pending_refresh = (models_url, task)
+                self._pending_refresh = (models_url, revision, task)
         try:
-            catalog = await task
+            catalog = await asyncio.shield(task)
             resolver = ModelRoutingResolver(catalog.to_policy())
-        except ValueError:
+        except asyncio.CancelledError:
+            if task.cancelled():
+                async with self._refresh_lock:
+                    if (
+                        self._pending_refresh is not None
+                        and self._pending_refresh[2] is task
+                    ):
+                        self._pending_refresh = None
+            raise
+        except Exception:
             async with self._refresh_lock:
                 if (
                     self._pending_refresh is not None
-                    and self._pending_refresh[1] is task
+                    and self._pending_refresh[2] is task
                 ):
                     self._pending_refresh = None
-                    self._failed_url = models_url
+                    self._failed_url = (models_url, time.monotonic() + 5)
             raise
         async with self._refresh_lock:
-            if self._pending_refresh is not None and self._pending_refresh[1] is task:
+            if self._pending_refresh is not None and self._pending_refresh[2] is task:
+                if revision is not None and revision < self._active_revision:
+                    self._pending_refresh = None
+                    return self.catalog or catalog
                 self._snapshot = (resolver, catalog)
+                self._catalog_verified = True
+                if revision is not None:
+                    self._active_revision = revision
                 self._active_preparation_token = None
                 self._failed_url = None
                 self._pending_refresh = None
@@ -236,18 +282,29 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             self._prepared[token] = (resolver, catalog)
         return token, catalog
 
-    async def activate_prepared_catalog(self, token: str) -> ModelCatalog:
+    async def activate_prepared_catalog(
+        self, token: str, *, revision: int | None
+    ) -> ModelCatalog:
         async with self._refresh_lock:
+            if revision is None or revision <= self._active_revision:
+                raise ValueError("Prepared catalog revision is stale")
             prepared = self._prepared.pop(token, None)
             if prepared is None:
                 raise ValueError("Prepared model catalog is no longer available")
             current = self.catalog
             if current is None:
                 raise ValueError("No active model catalog")
-            self._activation_backups[token] = (self._resolver, current)
+            self._activation_backups[token] = (
+                self._resolver,
+                current,
+                self._active_revision,
+                self._catalog_verified,
+            )
             if len(self._activation_backups) > 16:
                 self._activation_backups.pop(next(iter(self._activation_backups)))
             self._snapshot = prepared
+            self._catalog_verified = True
+            self._active_revision = revision
             self._active_preparation_token = token
             self._failed_url = None
             self._pending_refresh = None
@@ -257,7 +314,9 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         async with self._refresh_lock:
             previous = self._activation_backups.pop(token, None)
             if previous is not None and self._active_preparation_token == token:
-                self._snapshot = previous
+                self._snapshot = (previous[0], previous[1])
+                self._active_revision = previous[2]
+                self._catalog_verified = previous[3]
                 self._active_preparation_token = None
                 self._pending_refresh = None
             current = self.catalog
@@ -268,7 +327,10 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
     def with_provider(self, provider: ModelProvider) -> RoutedChatModelFactory:
         """Same routing, models built by `provider` (a pod serving extra providers)."""
         return RoutedChatModelFactory(
-            resolver=self._resolver, provider=provider, catalog=self.catalog
+            resolver=self._resolver,
+            provider=provider,
+            catalog=self.catalog,
+            catalog_verified=self._catalog_verified,
         )
 
     def _chat_profile(

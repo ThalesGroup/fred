@@ -84,6 +84,8 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlanePrompt",
     "ControlPlaneAgentInstance",
     "ControlPlanePlatformModelBinding",
+    "ControlPlaneModelDiscovery",
+    "ControlPlanePlatformModelFallback",
     "ControlPlanePlatformPrompt",
     "ControlPlaneCreationAssistantSettings",
     "ControlPlanePlatformUiSettings",
@@ -847,6 +849,30 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     deletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDelete: {
       invalidatesTags: [{ type: "ControlPlanePlatformModelBinding", id: "LIST" }],
     },
+    getModelDiscoveryControlPlaneV1AdminModelDiscoveryGet: {
+      providesTags: [{ type: "ControlPlaneModelDiscovery" as const, id: "LIST" }],
+    },
+    refreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPost: {
+      invalidatesTags: [
+        { type: "ControlPlaneModelDiscovery", id: "LIST" },
+        { type: "ControlPlaneCapability", id: "LIST" },
+      ],
+    },
+    putModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPut: {
+      invalidatesTags: [
+        { type: "ControlPlaneModelDiscovery", id: "LIST" },
+        { type: "ControlPlaneCapability", id: "LIST" },
+      ],
+    },
+    getPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGet: {
+      providesTags: [{ type: "ControlPlanePlatformModelFallback" as const, id: "LIST" }],
+    },
+    putPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackPut: {
+      invalidatesTags: [{ type: "ControlPlanePlatformModelFallback", id: "LIST" }],
+    },
+    deletePlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackDelete: {
+      invalidatesTags: [{ type: "ControlPlanePlatformModelFallback", id: "LIST" }],
+    },
     // Platform-wide platform prompt — a single row, so one LIST tag covers it,
     // same shape as the platform model binding above.
     getPlatformPromptControlPlaneV1AdminPlatformPromptGet: {
@@ -1089,6 +1115,13 @@ export const {
   usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation: useSetPlatformModelBindingMutation,
   useDeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteMutation:
     useDeletePlatformModelBindingMutation,
+  useGetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetQuery: useModelDiscoveryQuery,
+  useRefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostMutation: useRefreshModelDiscoveryMutation,
+  usePutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutMutation: useSetModelDiscoveryUrlMutation,
+  useGetPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGetQuery: usePlatformModelFallbackQuery,
+  usePutPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackPutMutation: useSetPlatformModelFallbackMutation,
+  useDeletePlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackDeleteMutation:
+    useDeletePlatformModelFallbackMutation,
   // Platform-wide platform prompt — the first block of every agent's system prompt.
   useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery: usePlatformPromptQuery,
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation: useSetPlatformPromptMutation,
