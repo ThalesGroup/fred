@@ -145,8 +145,6 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
   const [openedAt] = useState(() => Date.now());
   const [morePages, setMorePages] = useState(0);
   const seenPosted = useRef(false);
-  // The ref guards a double click before the re-render; the state disables the buttons.
-  const inFlight = useRef(new Set<string>());
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set());
 
   const firstPage = useNotificationsQuery({ limit: NOTIFICATIONS_PAGE_SIZE }, { refetchOnMountOrArgChange: true });
@@ -184,12 +182,14 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
       // On success the domain endpoint resolves the group and deletes the actor's
       // own row. A 404 or 403 leaves nothing to act on, so the tile goes; any other
       // failure keeps it usable and a toast says why.
-      if (inFlight.current.has(notification.id)) return;
-      const setBusy = (busy: boolean) => {
-        if (busy) inFlight.current.add(notification.id);
-        else inFlight.current.delete(notification.id);
-        setBusyIds(new Set(inFlight.current));
-      };
+      if (busyIds.has(notification.id)) return;
+      const setBusy = (busy: boolean) =>
+        setBusyIds((ids) => {
+          const next = new Set(ids);
+          if (busy) next.add(notification.id);
+          else next.delete(notification.id);
+          return next;
+        });
       setBusy(true);
       void action
         .call(dispatch)
