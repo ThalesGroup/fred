@@ -153,9 +153,6 @@ discovery:
   base_url: https://gateway.example/v1
   default_model_id: chat-small
   include_model_ids: [chat-small, chat-large]
-  model_display_names:
-    chat-small: Small Chat
-    chat-large: Large Chat
 ```
 
 At pod startup, Fred sends an authenticated `GET https://gateway.example/v1/models`
@@ -167,19 +164,12 @@ new admin grants. `include_model_ids` is optional; when supplied, every listed
 id must be returned. A discovered default must be in the selected list. A
 static chat default and `discovery.default_model_id` cannot coexist.
 
-`model_display_names` is optional. Key each label by the exact upstream model
-`id`; this changes the label in the admin Models view and chat model picker,
-while inference still sends the original `id`. These operator labels take
-priority over gateway metadata. Labels must be nonblank, and when
-`include_model_ids` is set, every label key must be in that list. Changing a
-label takes effect after restarting the pod.
-
 The standard `/models` response does not identify chat models or define their
 context sizes. Configure a gateway that lists chat models only, or use the
 allowlist to exclude embeddings and other modalities. Fred shows the exact
 upstream `id` in the admin Models table and uses it for inference. A nonblank
-`name` or `display_name` may provide a label when no operator label is set.
-Positive integer `context_length` or `max_model_len`, `max_input_tokens`, and
+`name` or `display_name` may provide a label. Positive integer
+`context_length` or `max_model_len`, `max_input_tokens`, and
 `max_output_tokens` are shown when present. These optional values are
 informational; they do not change routing, grants, or reasoning controls.
 

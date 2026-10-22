@@ -15,7 +15,7 @@ The gateway must serve an authenticated `GET /models` under its inference base U
 
 ## Configuration
 
-Set `applications.fred-agents.models_catalog.discovery` in the Fred chart values with a stable `source_id`, the gateway's `base_url`, and optionally `default_model_id`, `include_model_ids`, and `model_display_names`. The last field maps exact upstream ids to operator-chosen labels for the admin Models view and chat picker; it does not change inference ids. Operator labels take priority over gateway names. Provide `OPENAI_API_KEY` in the agent pod environment through the deployment's secret mechanism. When using a discovered default, remove the static `default_profile_by_capability.chat` value. Existing static profiles can remain during a gradual move.
+Set `applications.fred-agents.models_catalog.discovery` in the Fred chart values with a stable `source_id`, the gateway's `base_url`, and optionally `default_model_id` and `include_model_ids`. Provide `OPENAI_API_KEY` in the agent pod environment through the deployment's secret mechanism. When using a discovered default, remove the static `default_profile_by_capability.chat` value. Existing static profiles can remain during a gradual move.
 
 ## Upgrade
 

@@ -967,9 +967,6 @@ applications:
       #   base_url: https://gateway.example/v1
       #   default_model_id: chat-small
       #   include_model_ids: [chat-small, chat-large]
-      #   model_display_names:
-      #     chat-small: Small Chat
-      #     chat-large: Large Chat
       # Set OPENAI_API_KEY in the pod environment. Remove the static chat
       # default below when using discovery.default_model_id.
       common_model_settings:
