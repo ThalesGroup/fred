@@ -28,29 +28,25 @@ export function SandboxSettingsPanel({ visible }: Props) {
   const [save, { isLoading: isSaving }] = usePutSandboxSettingsControlPlaneV1AdminPlatformSandboxSettingsPutMutation();
   const [idle, setIdle] = useState("20");
   const [active, setActive] = useState("8");
-  const [warm, setWarm] = useState("0");
   const [validationError, setValidationError] = useState(false);
 
   useEffect(() => {
     if (!data) return;
     setIdle(String(data.idle_minutes));
     setActive(String(data.max_active_sessions));
-    setWarm(String(data.warm_capacity));
   }, [data]);
 
   if (!visible) return null;
 
   const submit = async () => {
-    const values = [Number(idle), Number(active), Number(warm)];
+    const values = [Number(idle), Number(active)];
     if (
-      [idle, active, warm].some((value) => value.trim() === "") ||
+      [idle, active].some((value) => value.trim() === "") ||
       values.some((value) => !Number.isInteger(value)) ||
       values[0] < 1 ||
       values[0] > 120 ||
       values[1] < 1 ||
-      values[1] > 1000 ||
-      values[2] < 0 ||
-      values[2] > 1000
+      values[1] > 1000
     ) {
       setValidationError(true);
       return;
@@ -61,7 +57,6 @@ export function SandboxSettingsPanel({ visible }: Props) {
         sandboxSettingsUpdate: {
           idle_minutes: values[0],
           max_active_sessions: values[1],
-          warm_capacity: values[2],
         },
       }).unwrap();
       await refetch();
@@ -104,15 +99,6 @@ export function SandboxSettingsPanel({ visible }: Props) {
             max={1000}
             value={active}
             onChange={(event) => setActive(event.target.value)}
-          />
-          <TextInput
-            label={t("rework.admin.sandboxSettings.warm")}
-            explanation={t("rework.admin.sandboxSettings.warmHelp")}
-            type="number"
-            min={0}
-            max={1000}
-            value={warm}
-            onChange={(event) => setWarm(event.target.value)}
           />
           {validationError && <p role="alert">{t("rework.admin.sandboxSettings.invalid")}</p>}
           <Button color="primary" variant="filled" size="small" onClick={submit} disabled={isSaving}>

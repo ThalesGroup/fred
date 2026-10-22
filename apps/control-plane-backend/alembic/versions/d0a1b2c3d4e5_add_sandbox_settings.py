@@ -25,7 +25,6 @@ def upgrade() -> None:
         sa.Column(
             "max_active_sessions", sa.Integer(), nullable=False, server_default="8"
         ),
-        sa.Column("warm_capacity", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("updated_by", sa.String(), nullable=True),
         sa.Column(
             "updated_at",
@@ -38,7 +37,6 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "max_active_sessions BETWEEN 1 AND 1000", name="ck_sandbox_active"
         ),
-        sa.CheckConstraint("warm_capacity BETWEEN 0 AND 1000", name="ck_sandbox_warm"),
     )
 
 

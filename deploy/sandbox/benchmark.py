@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Measure ready or on-demand broker request-to-result latency."""
+"""Measure first-use or retained-conversation broker latency."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import secrets
 import time
 from urllib.request import Request, urlopen
 
@@ -15,9 +16,7 @@ def broker_state(base_url: str) -> dict[str, int]:
         return json.load(response)
 
 
-def capacity_available(state: dict[str, int], mode: str) -> bool:
-    if mode == "ready":
-        return state.get("ready", 0) > 0
+def capacity_available(state: dict[str, int]) -> bool:
     return state.get("allocated", 0) < state.get("limit", 0)
 
 
@@ -25,7 +24,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--samples", type=int, default=30)
     parser.add_argument("--capacity-timeout", type=float, default=120)
-    parser.add_argument("--mode", choices=("ready", "cold"), default="cold")
+    parser.add_argument("--mode", choices=("reuse", "cold"), default="cold")
     parser.add_argument("--target-p95", type=float)
     args = parser.parse_args()
     if args.samples < 20:
@@ -35,27 +34,21 @@ def main() -> int:
     base_url = os.environ["FRED_SANDBOX_BROKER_URL"].rstrip("/")
     token = os.environ["FRED_SANDBOX_BROKER_TOKEN"]
     initial_state = broker_state(base_url)
-    warm_target = initial_state.get("warm_target")
-    if (args.mode == "cold" and warm_target != 0) or (
-        args.mode == "ready" and (warm_target is None or warm_target == 0)
-    ):
-        parser.error("benchmark mode does not match the broker warm-pool configuration")
-    if args.mode == "ready" and initial_state.get("cold_on_miss") != 0:
-        parser.error("ready mode requires SANDBOX_COLD_START_ON_MISS=false")
-    samples: list[float] = []
-    for _ in range(args.samples):
-        deadline = time.monotonic() + args.capacity_timeout
-        while not capacity_available(broker_state(base_url), args.mode):
-            if time.monotonic() >= deadline:
-                raise TimeoutError("sandbox capacity did not become available")
-            time.sleep(0.1)
+    if initial_state.get("warm_target") != 0:
+        parser.error("benchmark requires on-demand provisioning")
+    session_key = secrets.token_hex(32) if args.mode == "reuse" else None
+
+    def execute() -> float:
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+        if session_key:
+            headers["X-Fred-Sandbox-Session"] = session_key
         request = Request(
             f"{base_url}/v1/execute",
             data=json.dumps({"language": "python", "code": "print('ok')"}).encode(),
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-            },
+            headers=headers,
             method="POST",
         )
         start = time.perf_counter()
@@ -64,7 +57,19 @@ def main() -> int:
         elapsed = time.perf_counter() - start
         if result.get("exit_code") != 0 or result.get("stdout") != "ok\n":
             raise RuntimeError("sandbox benchmark returned an unexpected result")
-        samples.append(elapsed)
+        return elapsed
+
+    if session_key:
+        execute()
+    samples: list[float] = []
+    for _ in range(args.samples):
+        if not session_key:
+            deadline = time.monotonic() + args.capacity_timeout
+            while not capacity_available(broker_state(base_url)):
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("sandbox capacity did not become available")
+                time.sleep(0.1)
+        samples.append(execute())
     ordered = sorted(samples)
     p50 = ordered[(len(ordered) - 1) // 2]
     p95 = ordered[(95 * len(ordered) + 99) // 100 - 1]

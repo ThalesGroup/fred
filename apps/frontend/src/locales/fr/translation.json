@@ -1114,7 +1114,7 @@
     "admin": {
       "sandboxSettings": {
         "title": "Sandbox de code",
-        "description": "Une sandbox isolée par conversation active. Les brokers connectés appliquent les changements sous 30 secondes. Le runtime, l'image et la politique de sécurité sont approuvés par l'opérateur.",
+        "description": "Une sandbox démarre à la première exécution de code et reste disponible pour sa conversation jusqu'à expiration après inactivité. Les brokers connectés appliquent les changements sous 30 secondes. Le runtime, l'image et la politique de sécurité sont approuvés par l'opérateur.",
         "profile": "Profil approuvé",
         "profileUnconfigured": "L'opérateur n'a pas encore nommé de profil approuvé.",
         "loading": "Chargement des réglages de la sandbox...",
@@ -1123,8 +1123,6 @@
         "idleHelp": "20 minutes par défaut. Les fichiers temporaires sont supprimés à l'expiration.",
         "active": "Conversations actives maximum",
         "activeHelp": "Plafonné par la limite fixée par l'opérateur.",
-        "warm": "Sandboxes prêtes non attribuées",
-        "warmHelp": "Gardez zéro sauf si la latence à froid mesurée justifie le coût au repos.",
         "invalid": "Saisissez des nombres entiers dans les limites autorisées.",
         "save": "Enregistrer les réglages",
         "saved": "Réglages de la sandbox enregistrés",

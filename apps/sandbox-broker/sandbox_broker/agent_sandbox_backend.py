@@ -37,7 +37,7 @@ class AgentSandboxBackend:
         target = pool_spec.get("replicas", 1)
         if (
             not isinstance(target, int)
-            or not 0 <= target <= self.settings.max_sandboxes
+            or target != 0
         ):
             raise SandboxError("policy_unavailable")
         template = await self._get("sandboxtemplate", template_name)
@@ -99,7 +99,7 @@ class AgentSandboxBackend:
         generation = pool.get("metadata", {}).get("generation", 1)
         if (
             not isinstance(desired, int)
-            or not 0 <= desired <= self.settings.max_sandboxes
+            or desired != 0
             or not isinstance(ready, int)
             or observed < generation
         ):
@@ -215,25 +215,6 @@ class AgentSandboxBackend:
                 "patch",
                 "sandboxclaim",
                 lease.id,
-                "--type=merge",
-                "-p",
-                json.dumps(patch),
-            ),
-            timeout=15,
-        )
-        if result.returncode != 0:
-            raise SandboxError("backend_failed")
-
-    async def set_warm_capacity(self, target: int) -> None:
-        if not 0 <= target <= self.settings.max_sandboxes:
-            raise ValueError("Warm capacity exceeds the operator limit")
-        await self.preflight()
-        patch = {"spec": {"replicas": target}}
-        result = await self.runner.run(
-            self.kubernetes._kubectl(
-                "patch",
-                "sandboxwarmpool",
-                self.settings.agent_pool_name,
                 "--type=merge",
                 "-p",
                 json.dumps(patch),

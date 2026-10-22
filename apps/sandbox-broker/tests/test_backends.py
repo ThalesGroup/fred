@@ -399,22 +399,17 @@ async def test_agent_sandbox_rejects_injected_secret_on_claimed_pod() -> None:
 
 
 @pytest.mark.asyncio
-async def test_agent_sandbox_ready_mode_rejects_cold_fallback() -> None:
-    runner = AgentRunner(ready_replicas=1, cold_fallback=True)
-    backend = AgentSandboxBackend(
-        settings("agent_sandbox", cold_start_on_miss=False), runner
-    )
-    with pytest.raises(SandboxError, match="busy"):
-        await backend.prepare()
-    assert "delete" in runner.calls[-1]
+async def test_agent_sandbox_rejects_preloaded_replicas() -> None:
+    runner = AgentRunner(ready_replicas=1)
+    backend = AgentSandboxBackend(settings("agent_sandbox"), runner)
+    with pytest.raises(SandboxError, match="policy_unavailable"):
+        await backend.preflight()
 
 
 @pytest.mark.asyncio
-async def test_agent_sandbox_ready_mode_accepts_preexisting_pod() -> None:
-    runner = AgentRunner(ready_replicas=1)
-    backend = AgentSandboxBackend(
-        settings("agent_sandbox", cold_start_on_miss=False), runner
-    )
+async def test_agent_sandbox_accepts_on_demand_claim() -> None:
+    runner = AgentRunner(ready_replicas=0)
+    backend = AgentSandboxBackend(settings("agent_sandbox"), runner)
     lease = await backend.prepare()
     assert lease.target == runner.claim_name
     await backend.dispose(lease)

@@ -17,7 +17,7 @@ No action is required for deployments that leave code execution disabled. To ena
 
 The Fred chart now references `control-plane-sandbox-settings` key `token` in the control-plane namespace with `optional: true`. Its absence leaves the internal settings endpoint disabled. The chart sets `FRED_SANDBOX_PROFILE_ID=unconfigured`; set it to the exact operator-approved profile identifier when enabling code execution. For live admin settings, create that Secret with a random 32+ character token, create `fred-sandbox-settings` with the same token in `fred-sandbox-system`, then configure the broker's HTTPS settings URL and token using `deploy/sandbox/admin-settings.patch.yaml`. Use a different token for the broker execution API. The control-plane certificate must cover the settings URL and the broker must trust its CA. There is no default network access from the sandbox namespace.
 
-The operator configures the broker's backend (`kubernetes`, `agent_sandbox`, or `docker`), isolation (`kata` or `gvisor`), runtime name, image digest, maximum sandbox count, network and PID verification flags, and TLS credentials. The three admin controls are conversation idle expiry (default 20 minutes), active conversation cap, and clean warm capacity. The broker clamps admin capacity to its operator cap. Zero warm capacity requires on-demand provisioning. These values do not permit changing the runtime, image, or network policy from the admin UI.
+The operator configures the broker's backend (`kubernetes`, `agent_sandbox`, or `docker`), isolation (`kata` or `gvisor`), runtime name, image digest, maximum sandbox count, network and PID verification flags, and TLS credentials. The two admin controls are conversation idle expiry (default 20 minutes) and active conversation cap. The broker clamps active capacity to its operator cap and provisions workloads only on demand. These values do not permit changing the runtime, image, or network policy from the admin UI.
 
 ## Upgrade
 
@@ -25,7 +25,7 @@ Run the normal control-plane Alembic upgrade before starting the new control-pla
 
 ## Validation
 
-Confirm the admin Capabilities page shows the approved profile and 20-minute default. Save a different idle expiry and verify `/healthz` on the broker reflects it within 30 seconds. Run Bash to create a file under `/tmp`, read it with Python in the same conversation, and confirm a second conversation cannot read it. Check `kubectl -n fred-sandbox get sandboxclaims,sandboxwarmpools,pods` when using SIG Agent Sandbox. A cluster with no code calls should have no claimed workloads; unassigned warm Pods follow the selected warm capacity.
+Confirm the admin Capabilities page shows the approved profile and 20-minute default. Save a different idle expiry and verify `/healthz` on the broker reflects it within 30 seconds. Run Bash to create a file under `/tmp`, read it with Python in the same conversation, and confirm a second conversation cannot read it. Check `kubectl -n fred-sandbox get sandboxclaims,sandboxwarmpools,pods` when using SIG Agent Sandbox. A cluster with no code calls should have no sandbox workloads. The SIG pool must stay at zero replicas.
 
 ## Rollback
 
@@ -33,4 +33,4 @@ Disable the capability gate, stop new code calls, and let active conversations e
 
 ## Limitations
 
-This pilot uses one broker replica with process-local admission and session state. A broker restart loses conversation leases; SIG claim shutdown times and Job/Docker hard lifetimes clean up orphaned workloads. The measured k3d gVisor latency is not a Kata or production SLO. Operators must size namespace quota and node capacity for active claims plus warm Pods.
+This pilot uses one broker replica with process-local admission and session state. A broker restart loses conversation leases; SIG claim shutdown times and Job/Docker hard lifetimes clean up orphaned workloads. The measured k3d gVisor latency is not a Kata or production SLO. Operators must size namespace quota and node capacity for active claims only.

@@ -5296,7 +5296,6 @@ export type SetPlatformUiSettingsRequest = {
 export type SandboxSettingsView = {
   idle_minutes: number;
   max_active_sessions: number;
-  warm_capacity: number;
   profile_id?: string;
   updated_by?: string | null;
   updated_at?: string | null;
@@ -5304,7 +5303,6 @@ export type SandboxSettingsView = {
 export type SandboxSettingsUpdate = {
   idle_minutes: number;
   max_active_sessions: number;
-  warm_capacity: number;
 };
 export type AgentsMarketplaceDefault = {
   agents_publishing_enabled: boolean;

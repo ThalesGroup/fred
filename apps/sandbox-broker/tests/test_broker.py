@@ -1,5 +1,4 @@
 import asyncio
-from dataclasses import replace
 from time import monotonic
 
 import httpx
@@ -21,9 +20,9 @@ def settings(**overrides):
         runtime_name="kata",
         image="python@sha256:" + "a" * 64,
         token="x" * 32,
-        warm_pool_size=1,
+        warm_pool_size=0,
         max_sandboxes=1,
-        cold_start_on_miss=False,
+        cold_start_on_miss=True,
         pid_limit_verified=True,
     )
     data.update(overrides)
@@ -178,7 +177,7 @@ async def test_admin_policy_applies_without_redeploy_with_operator_cap() -> None
         seen.append(request)
         return httpx.Response(
             200,
-            json={"idle_minutes": 30, "max_active_sessions": 20, "warm_capacity": 1},
+            json={"idle_minutes": 30, "max_active_sessions": 20},
         )
 
     sync = SettingsSync(config, pool, sessions, httpx.MockTransport(handler))
@@ -186,13 +185,13 @@ async def test_admin_policy_applies_without_redeploy_with_operator_cap() -> None
     assert seen[0].headers["Authorization"] == "Bearer " + "y" * 32
     assert sessions.idle_seconds == 1800
     assert sessions.max_sessions == 2
-    assert pool.target_size == 1
+    assert pool.target_size == 0
     await sync.close()
     await pool.close()
 
 
 @pytest.mark.asyncio
-async def test_admin_policy_cannot_disable_all_strict_ready_capacity() -> None:
+async def test_admin_policy_does_not_prepare_idle_sandbox() -> None:
     fake = FakeBackend()
     config = settings(
         settings_url="https://control-plane.local/control-plane/v1/internal/sandbox-settings",
@@ -205,13 +204,14 @@ async def test_admin_policy_cannot_disable_all_strict_ready_capacity() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
-            json={"idle_minutes": 30, "max_active_sessions": 1, "warm_capacity": 0},
+            json={"idle_minutes": 30, "max_active_sessions": 1},
         )
 
     sync = SettingsSync(config, pool, sessions, httpx.MockTransport(handler))
     await sync.refresh()
-    assert pool.target_size == 1
-    assert pool.ready_count == 1
+    assert pool.target_size == 0
+    assert pool.ready_count == 0
+    assert fake.prepared == []
     assert sessions.idle_seconds == 1800
     await sync.close()
     await pool.close()
@@ -274,36 +274,7 @@ async def test_reducing_active_limit_retires_inflight_conversation() -> None:
 
 
 @pytest.mark.asyncio
-async def test_warm_capacity_zero_disposes_inflight_preparation() -> None:
-    class SlowBackend(FakeBackend):
-        def __init__(self):
-            super().__init__()
-            self.started = asyncio.Event()
-            self.continue_prepare = asyncio.Event()
-
-        async def prepare(self):
-            self.started.set()
-            await self.continue_prepare.wait()
-            return await super().prepare()
-
-    fake = SlowBackend()
-    pool = WarmPool(fake, settings(warm_pool_size=0, cold_start_on_miss=True))
-    await pool.start()
-    await pool.configure_warm_capacity(1)
-    await fake.started.wait()
-    await pool.configure_warm_capacity(0)
-    fake.continue_prepare.set()
-    for _ in range(100):
-        if fake.disposed:
-            break
-        await asyncio.sleep(0.01)
-    assert len(fake.disposed) == 1
-    assert pool.ready_count == 0
-    await pool.close()
-
-
-@pytest.mark.asyncio
-async def test_warm_lease_is_single_use_and_pool_is_bounded() -> None:
+async def test_on_demand_lease_is_single_use_and_pool_is_bounded() -> None:
     fake = FakeBackend()
     pool = WarmPool(fake, settings())
     await pool.start()
@@ -312,33 +283,12 @@ async def test_warm_lease_is_single_use_and_pool_is_bounded() -> None:
         await pool.acquire()
     assert len(fake.prepared) == 1
     await pool.release(first)
-    for _ in range(20):
-        if pool.ready_count:
-            break
-        await asyncio.sleep(0.01)
+    assert pool.ready_count == 0
     second = await pool.acquire()
     assert second != first
     await pool.release(second)
     await pool.close()
-    assert len(fake.prepared) <= 3
-
-
-@pytest.mark.asyncio
-async def test_idle_lease_is_replaced_before_workload_deadline() -> None:
-    fake = FakeBackend()
-    pool = WarmPool(fake, settings())
-    await pool.start()
-    old = pool._ready.get_nowait()
-    expired = replace(old, prepared_at=monotonic() - 3001)
-    pool._ready.put_nowait(expired)
-    pool._wake.set()
-    for _ in range(100):
-        if expired in fake.disposed and pool.ready_count:
-            break
-        await asyncio.sleep(0.01)
-    assert expired in fake.disposed
-    assert (await pool.acquire()).id != old.id
-    await pool.close()
+    assert len(fake.prepared) == 2
 
 
 @pytest.mark.asyncio
@@ -413,68 +363,6 @@ async def test_failed_disposal_retries_before_releasing_capacity() -> None:
     await pool.close()
 
 
-@pytest.mark.asyncio
-async def test_agent_sandbox_uses_external_ready_capacity() -> None:
-    class ExternalPoolBackend(FakeBackend):
-        ready = 0
-
-        async def warm_state(self):
-            return self.ready, 1
-
-    fake = ExternalPoolBackend()
-    pool = WarmPool(
-        fake,
-        settings(
-            backend="agent_sandbox",
-            warm_pool_size=0,
-            cold_start_on_miss=False,
-            network_policy_verified=True,
-        ),
-    )
-    await pool.start()
-    with pytest.raises(SandboxError, match="busy"):
-        await pool.acquire()
-    assert fake.prepared == []
-    fake.ready = 1
-    lease = await pool.acquire()
-    assert len(fake.prepared) == 1
-    await pool.release(lease)
-    await pool.close()
-
-
-@pytest.mark.asyncio
-async def test_external_ready_probe_reserves_capacity_before_await() -> None:
-    class SlowExternalPool(FakeBackend):
-        def __init__(self):
-            super().__init__()
-            self.probing = asyncio.Event()
-            self.continue_probe = asyncio.Event()
-
-        async def warm_state(self):
-            self.probing.set()
-            await self.continue_probe.wait()
-            return 1, 1
-
-    fake = SlowExternalPool()
-    pool = WarmPool(
-        fake,
-        settings(
-            backend="agent_sandbox",
-            warm_pool_size=0,
-            cold_start_on_miss=False,
-            network_policy_verified=True,
-        ),
-    )
-    await pool.start()
-    first = asyncio.create_task(pool.acquire())
-    await fake.probing.wait()
-    with pytest.raises(SandboxError, match="busy"):
-        await pool.acquire()
-    fake.continue_probe.set()
-    await pool.release(await first)
-    await pool.close()
-
-
 def test_kubernetes_requires_operator_network_verification() -> None:
     with pytest.raises(ValueError, match="NetworkPolicy enforcement"):
         settings(backend="kubernetes", runtime_name="kata-qemu")
@@ -488,3 +376,10 @@ def test_kubernetes_requires_operator_pid_limit_verification() -> None:
             network_policy_verified=True,
             pid_limit_verified=False,
         )
+
+
+def test_broker_rejects_preloaded_capacity() -> None:
+    with pytest.raises(ValueError, match="provisioned on demand"):
+        settings(warm_pool_size=1)
+    with pytest.raises(ValueError, match="provisioned on demand"):
+        settings(cold_start_on_miss=False)

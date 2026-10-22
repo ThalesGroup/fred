@@ -18,7 +18,6 @@ from control_plane_backend.models.sandbox_settings_models import SandboxSettings
 class StoredSandboxSettings:
     idle_minutes: int
     max_active_sessions: int
-    warm_capacity: int
     updated_by: str | None = None
     updated_at: datetime | None = None
 
@@ -39,7 +38,6 @@ class SandboxSettingsStore:
         *,
         idle_minutes: int,
         max_active_sessions: int,
-        warm_capacity: int,
         updated_by: str,
     ) -> StoredSandboxSettings:
         async with use_session(self._sessions) as session:
@@ -51,7 +49,6 @@ class SandboxSettingsStore:
                 session.add(row)
             row.idle_minutes = idle_minutes
             row.max_active_sessions = max_active_sessions
-            row.warm_capacity = warm_capacity
             row.updated_by = updated_by
             row.updated_at = utcnow()
             await session.flush()
@@ -60,11 +57,10 @@ class SandboxSettingsStore:
     @staticmethod
     def _stored(row: SandboxSettingsRow | None) -> StoredSandboxSettings:
         if row is None:
-            return StoredSandboxSettings(20, 8, 0)
+            return StoredSandboxSettings(20, 8)
         return StoredSandboxSettings(
             row.idle_minutes,
             row.max_active_sessions,
-            row.warm_capacity,
             row.updated_by,
             row.updated_at,
         )

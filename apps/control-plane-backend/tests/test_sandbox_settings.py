@@ -25,28 +25,22 @@ async def test_settings_store_defaults_and_round_trip(
 ) -> None:
     store = SandboxSettingsStore(control_plane_sql_engine)
     assert (await store.get()).idle_minutes == 20
-    await store.set(
-        idle_minutes=30, max_active_sessions=12, warm_capacity=2, updated_by="u"
-    )
+    await store.set(idle_minutes=30, max_active_sessions=12, updated_by="u")
     saved = await store.get()
-    assert (saved.idle_minutes, saved.max_active_sessions, saved.warm_capacity) == (
-        30,
-        12,
-        2,
-    )
+    assert (saved.idle_minutes, saved.max_active_sessions) == (30, 12)
     assert saved.updated_by == "u"
 
 
 @pytest.mark.parametrize(
     "payload",
     [
-        {"idle_minutes": 0, "max_active_sessions": 8, "warm_capacity": 0},
-        {"idle_minutes": 121, "max_active_sessions": 8, "warm_capacity": 0},
-        {"idle_minutes": 20, "max_active_sessions": 0, "warm_capacity": 0},
+        {"idle_minutes": 0, "max_active_sessions": 8},
+        {"idle_minutes": 121, "max_active_sessions": 8},
+        {"idle_minutes": 20, "max_active_sessions": 0},
+        {"idle_minutes": 20, "max_active_sessions": 8, "warm_capacity": 1},
         {
             "idle_minutes": 20,
             "max_active_sessions": 8,
-            "warm_capacity": 0,
             "runtime": "runc",
         },
     ],
@@ -78,7 +72,6 @@ class _Store:
         return SimpleNamespace(
             idle_minutes=20,
             max_active_sessions=8,
-            warm_capacity=0,
             updated_by=None,
             updated_at=None,
         )
@@ -105,20 +98,14 @@ def _user() -> KeycloakUser:
 @pytest.mark.asyncio
 async def test_only_platform_admin_can_change_settings() -> None:
     store = _Store()
-    request = SandboxSettingsUpdate(
-        idle_minutes=30, max_active_sessions=9, warm_capacity=1
-    )
+    request = SandboxSettingsUpdate(idle_minutes=30, max_active_sessions=9)
     with pytest.raises(AuthorizationError):
         await get_sandbox_settings(_deps(False, store), _user())
     with pytest.raises(AuthorizationError):
         await put_sandbox_settings(request, _deps(False, store), _user())
     assert store.writes == 0
     saved = await put_sandbox_settings(request, _deps(True, store), _user())
-    assert (saved.idle_minutes, saved.max_active_sessions, saved.warm_capacity) == (
-        30,
-        9,
-        1,
-    )
+    assert (saved.idle_minutes, saved.max_active_sessions) == (30, 9)
 
 
 @pytest.mark.asyncio

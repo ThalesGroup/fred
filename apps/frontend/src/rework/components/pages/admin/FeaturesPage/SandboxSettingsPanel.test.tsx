@@ -25,7 +25,6 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
     data: {
       idle_minutes: 20,
       max_active_sessions: 8,
-      warm_capacity: 0,
       profile_id: "gvisor-approved",
     },
     isLoading: false,
@@ -47,13 +46,13 @@ afterEach(() => {
   h.refetch.mockClear();
 });
 
-it("shows only approved profile and three controls, then saves bounded settings", async () => {
+it("shows only approved profile and two controls, then saves bounded settings", async () => {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => root.render(<SandboxSettingsPanel visible />));
   expect(container.textContent).toContain("gvisor-approved");
-  expect(container.querySelectorAll('input[type="number"]')).toHaveLength(3);
+  expect(container.querySelectorAll('input[type="number"]')).toHaveLength(2);
   expect(container.querySelector('input[name="runtime"]')).toBeNull();
   const saveButton = Array.from(container.querySelectorAll("button")).find((button) =>
     button.textContent?.includes("rework.admin.sandboxSettings.save"),
@@ -66,7 +65,6 @@ it("shows only approved profile and three controls, then saves bounded settings"
     sandboxSettingsUpdate: {
       idle_minutes: 20,
       max_active_sessions: 8,
-      warm_capacity: 0,
     },
   });
 });

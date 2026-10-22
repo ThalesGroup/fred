@@ -42,7 +42,6 @@ def _view(stored: StoredSandboxSettings) -> SandboxSettingsView:
     return SandboxSettingsView(
         idle_minutes=stored.idle_minutes,
         max_active_sessions=stored.max_active_sessions,
-        warm_capacity=stored.warm_capacity,
         profile_id=os.getenv("FRED_SANDBOX_PROFILE_ID", "unconfigured"),
         updated_by=stored.updated_by,
         updated_at=stored.updated_at,
@@ -73,7 +72,6 @@ async def put_sandbox_settings(
     stored = await _store(deps).set(
         idle_minutes=request.idle_minutes,
         max_active_sessions=request.max_active_sessions,
-        warm_capacity=request.warm_capacity,
         updated_by=user.uid,
     )
     emit_audit_log(
@@ -81,7 +79,6 @@ async def put_sandbox_settings(
         actor_uid=user.uid,
         idle_minutes=request.idle_minutes,
         max_active_sessions=request.max_active_sessions,
-        warm_capacity=request.warm_capacity,
     )
     return _view(stored)
 

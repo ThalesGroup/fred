@@ -62,21 +62,10 @@ class BrokerSettings:
             and not self.pid_limit_verified
         ):
             raise ValueError("Kubernetes pod PID limit must be verified")
-        if (
-            not 0 <= self.warm_pool_size <= self.max_sandboxes <= 1000
-            or self.max_sandboxes < 1
-        ):
-            raise ValueError("Sandbox pool size must fit within max_sandboxes")
-        if self.backend == "agent_sandbox" and self.warm_pool_size != 0:
-            raise ValueError(
-                "Agent Sandbox warm capacity is configured on SandboxWarmPool"
-            )
-        if (
-            self.backend != "agent_sandbox"
-            and self.warm_pool_size == 0
-            and not self.cold_start_on_miss
-        ):
-            raise ValueError("Zero warm sandboxes requires on-demand provisioning")
+        if not 1 <= self.max_sandboxes <= 1000:
+            raise ValueError("Sandbox capacity must be 1-1000")
+        if self.warm_pool_size != 0 or not self.cold_start_on_miss:
+            raise ValueError("Sandboxes must be provisioned on demand")
         if not 1 <= self.execution_timeout_seconds <= 120:
             raise ValueError("Sandbox execution timeout must be 1-120 seconds")
         if not 1024 <= self.output_limit_bytes <= 16_384:

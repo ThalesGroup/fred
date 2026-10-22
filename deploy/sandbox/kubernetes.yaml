@@ -152,10 +152,6 @@ spec:
               value: "false"
             - name: SANDBOX_MAX_SANDBOXES
               value: "8"
-            - name: SANDBOX_WARM_POOL_SIZE
-              value: "0"
-            - name: SANDBOX_COLD_START_ON_MISS
-              value: "true"
             - name: SANDBOX_BROKER_TOKEN
               valueFrom:
                 secretKeyRef:

@@ -13,7 +13,6 @@ class SandboxSettingsUpdate(BaseModel):
 
     idle_minutes: int = Field(ge=1, le=120)
     max_active_sessions: int = Field(ge=1, le=1000)
-    warm_capacity: int = Field(ge=0, le=1000)
 
 
 class SandboxSettingsView(SandboxSettingsUpdate):

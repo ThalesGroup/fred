@@ -95,10 +95,8 @@ class WarmPool:
         task.add_done_callback(self._cleanup_tasks.discard)
 
     async def configure_warm_capacity(self, target: int) -> None:
-        if not 0 <= target <= self.settings.max_sandboxes:
-            raise ValueError("Warm capacity exceeds the operator limit")
-        if target == 0 and not self.settings.cold_start_on_miss:
-            raise ValueError("Zero warm capacity requires on-demand provisioning")
+        if target != 0:
+            raise ValueError("Sandboxes must be provisioned on demand")
         self.target_size = target
         while self._ready.qsize() > target:
             self.schedule_release(self._ready.get_nowait())
