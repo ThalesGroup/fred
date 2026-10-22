@@ -16,21 +16,21 @@ Fred already has complete theme tokens, local fonts, DOMPurify usage and per-com
 
 Add beautiful-mermaid and load rendering engines on demand from the existing effect, with cancellation for superseded source. Keep layout work outside React's render function. The local adapter owns renderer selection and output preparation; avoid a general plugin registry.
 
-Try the original source with the preferred renderer when compatible, then with official Mermaid when unsupported or rendering fails. Only after raw-source attempts fail, reuse the existing syntax repair and retry. Cover supported constructs with actual renderer fixtures; do not accept a partial SVG that silently drops unsupported statements. Known unsupported constructs use the compatibility renderer directly. Keep Mermaid's strict security behavior.
+Try the original source with the preferred renderer when compatible, then with official Mermaid when unsupported or rendering fails. Only after raw-source attempts fail, reuse the existing syntax repair and retry. A conservative syntax gate also routes late/revised node or participant labels, unsupported ER cardinalities and combined ER key constraints to official Mermaid, because the preferred parser silently loses information in those cases. Cover supported constructs with actual renderer fixtures. Keep Mermaid's strict security behavior and serialize its global initialization with each render.
 
 Removing Mermaid entirely would regress diagram families and existing syntax. Adding a second user-selectable renderer would duplicate UI and leave existing consumers on the old path.
 
 ### Bind renderer defaults to Fred tokens
 
-| Diagram role | Existing token |
-| --- | --- |
-| Background | `--surface-container` |
-| Main labels | `--on-surface` |
-| Secondary labels and connectors | `--on-surface-retreat` |
-| Accent and arrowheads | `--primary` |
-| Node surfaces | `--surface-container-high` |
-| Node borders | `--outline-variant` |
-| Font | `--font-family-base` |
+| Diagram role                    | Existing token             |
+| ------------------------------- | -------------------------- |
+| Background                      | `--surface-container`      |
+| Main labels                     | `--on-surface`             |
+| Secondary labels and connectors | `--on-surface-retreat`     |
+| Accent and arrowheads           | `--primary`                |
+| Node surfaces                   | `--surface-container-high` |
+| Node borders                    | `--outline-variant`        |
+| Font                            | `--font-family-base`       |
 
 Use CSS-variable references in beautiful-mermaid so color changes follow the cascade. For Mermaid's compatibility configuration, resolve effective token values and refresh when theme or mode changes. Recompute layout when the active font changes. Renderer-controlled defaults must not depend on library theme presets; explicitly authored diagram styling remains content.
 
@@ -38,11 +38,13 @@ Preserve the existing body/header surface hierarchy, copy behavior and FullPageM
 
 ### Prepare SVG at the shared boundary
 
-Use the existing DOMPurify dependency family, declaring direct imports in package.json, to prevent script-bearing output. Preserve required diagram geometry, labels and local references. Remove generated remote font imports and use Fred's local font tokens. Isolate embedded rules under a view-specific SVG root and prefix internal IDs and references separately for each inline or enlarged view. Do not install global SVG/text styles or weaken Markdown sanitization.
+Declare beautiful-mermaid, DOMPurify and css-tree as direct dependencies. Parse CSS to remove remote font rules, scope selectors and animations, and rewrite references without changing path data. Use Fred's local font tokens. Prefix internal IDs and local or absolute same-document references separately for each inline or enlarged view. Scope the inert template before sanitizing so legitimate IDs such as `title` survive DOM clobber protection. Enable DOMPurify's documented HTML integration point only within these SVGs to retain Mermaid's foreignObject labels while sanitizing their HTML. Do not install global SVG/text styles or change Markdown sanitization.
+
+Retain the SVG's natural minimum width with horizontal scrolling on narrow screens so labels stay legible. The enlarged view overrides Mermaid's generated maximum width. Preserve an open modal while theme rendering refreshes, with focus entering its close button and returning to the enlargement trigger.
 
 ### Validate the replacement on existing surfaces
 
-Add co-located fixtures for the six supported families, a semicolon header, pie/Gantt compatibility, repaired labels and invalid/untrusted input. Test the real preferred renderer and SVG preparation, then component behavior for copy, modal, cancellation, theme updates and simultaneous diagrams. Use existing chat/Help Center Markdown consumers for browser validation, including a narrow viewport and a deployment theme override. No additional demo page is needed to demonstrate the implementation.
+Add co-located fixtures for the six supported families, a semicolon header, pie/Gantt compatibility, repaired labels and invalid/untrusted input. Test the real preferred renderer and SVG preparation, then component behavior for copy, modal, cancellation, theme updates and simultaneous diagrams. Validate the actual shared MarkdownRenderer in the browser, including a narrow viewport and a deployment theme override. Trace chat/Help Center callers and record any unverified authenticated routes. No additional product demo page is needed. Keep the existing COMPONENT-UX.md example as the reproducible usage sample.
 
 ## Risks / Trade-offs
 
