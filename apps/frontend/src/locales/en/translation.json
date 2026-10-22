@@ -2733,6 +2733,7 @@
         "platform_admin": "Platform admin",
         "platform_observer": "Platform observer",
         "team_manager": "Team manager",
+        "platform_access_manager": "Platform access manager",
         "feature_manager": "Feature manager",
         "prompt_editor": "Prompt editor"
       },
@@ -2740,6 +2741,7 @@
         "platform_admin": "Full platform administration: every admin page, import/export and platform reset.",
         "platform_observer": "Read-only access to platform-wide analytics.",
         "team_manager": "Create teams and see every team on the platform.",
+        "platform_access_manager": "Manage filtering, whitelists, team admission, Free settings and Free links.",
         "feature_manager": "Enable or disable capabilities, agent templates and models.",
         "prompt_editor": "Edit the platform prompt prepended to every agent."
       },
@@ -3970,7 +3972,7 @@
         "accessLost": "With filtering on, you would lose access to the platform.",
         "accessSource": {
           "rule": "the rule",
-          "admin": "your platform administrator role",
+          "admin": "your platform access management role",
           "manual": "the user whitelist",
           "team": "the authorized team {{team}}",
           "teamUnnamed_one": "an authorized team",
@@ -4125,7 +4127,7 @@
         "unnamedTeam": "unnamed team",
         "label": "Other access",
         "attribute": "Rule",
-        "admin": "Platform administrator",
+        "admin": "Platform access management",
         "team_one": "Authorized team: {{teams}}",
         "team_other": "Authorized teams: {{teams}}",
         "free_one": "Link access: {{teams}}",

@@ -17,7 +17,7 @@ Fred supports relationship-aware authorization so users can keep resources priva
 > **Keycloak authenticates, Fred/OpenFGA authorizes — no exceptions.** Keycloak
 > app roles (`admin`/`editor`/`viewer`) do not exist. Keycloak manages only user
 > accounts (login, JWT, stable `sub`) — nothing about teams or platform roles.
-> Every platform role (`platform_admin`/`platform_observer`/`team_manager`/
+> Every platform role (`platform_admin`/`platform_observer`/`team_manager`/`platform_access_manager`/
 > `feature_manager`/`prompt_editor`) and every team role
 > (`team_admin`/`team_editor`/`team_analyst`/`team_member`) is a stored OpenFGA
 > relation, granted through the root bootstrap endpoint (a one-time,
@@ -52,7 +52,7 @@ Concrete examples:
 ## Technical Summary In 90 Seconds
 
 1. **Identity source**: Keycloak manages user accounts (login, JWT, stable `sub`) — nothing about teams or platform roles.
-2. **Platform roles (ReBAC)**: `platform_admin` / `platform_observer` / `team_manager` / `feature_manager` / `prompt_editor` are relations on `organization:fred`, stored tuples only, granted via the root bootstrap endpoint (`POST /bootstrap/platform-admin`, AUTHZ-07) or the platform-role endpoints (contract §43 and §51): every role is managed by any `platform_admin`, `platform_admin` itself by the bootstrap root only.
+2. **Platform roles (ReBAC)**: `platform_admin` / `platform_observer` / `team_manager` / `platform_access_manager` / `feature_manager` / `prompt_editor` are relations on `organization:fred`, stored tuples only, granted via the root bootstrap endpoint (`POST /bootstrap/platform-admin`, AUTHZ-07) or the platform-role endpoints (contract §43 and §51): every role is managed by any `platform_admin`, `platform_admin` itself by the bootstrap root only.
 3. **Team roles (ReBAC)**: `team_admin` / `team_editor` / `team_analyst` / `team_member` are relations on each `team:<id>`. A person may hold more than one simultaneously — each is granted/revoked as its own independent action, never a bulk replace.
 4. **Team registry**: a team is a `team_metadata` row (id, name) plus its OpenFGA relations — nothing about a team lives in Keycloak.
 5. **Bridge object**: Fred uses one organization object (`organization:fred`) for platform-wide context, without implicit team privilege escalation.
@@ -336,14 +336,14 @@ per-caller special-casing.
 
 ### Team registry governance — existence only
 
-Four narrow capabilities govern the team *registry* (which teams exist and
-who runs them) — none of them grant the caller a team relation. Three are
-`platform_admin`-only; the read-only listing is delegable:
+Five narrow capabilities govern the team *registry* (which teams exist and
+who runs them) - none of them grant the caller a team relation. The read-only
+listing and team-information edits are delegable:
 
 - **`can_list_all_teams`** → `GET /teams/all`: every team in the registry,
-  regardless of the caller's own membership. The only one of the four that is
-  delegable — `team_manager` and `feature_manager` both need the roster to
-  render their own page (see below). Read-only, and it reaches no team
+  regardless of the caller's own membership. `team_manager`,
+  `platform_access_manager` and `feature_manager` need the roster to render
+  their own pages (see below). Read-only, and it reaches no team
   *content* — but it is not just names and ids: the route returns the full
   `Team` DTO, so a holder sees every private team's description, visibility,
   member count, storage usage and `admins` roster (`UserSummary`, email
@@ -368,24 +368,29 @@ who runs them) — none of them grant the caller a team relation. Three are
   writes one `team.registry.edited` audit event (actor, team, fields, ids
   added and removed).
 
-### Delegated admin roles — `team_manager`, `feature_manager`, `prompt_editor`
+### Delegated admin roles - `team_manager`, `platform_access_manager`, `feature_manager`, `prompt_editor`
 
 The `platform_admin` tier is all-or-nothing, so appointing someone to create
 teams also handed them import/export, platform reset and user administration.
-Three narrower roles own one admin surface each, and every one of them is
+Four narrower roles own one admin surface each, and every one of them is
 `[user] or platform_admin` so an admin never loses a surface:
 
 - **`team_manager`** → `can_create_team` and `can_list_all_teams`
   (`/admin/teams`). `can_delete_team`, `can_rescue_team_admin` and
-  `can_edit_team_registry` are deliberately excluded and stay
-  `platform_admin`-only: creating and listing teams is not the same authority
-  as destroying one or reassigning its admins.
+  `can_edit_team_registry` stay `platform_admin`-only. It has no Platform
+  Access authority, including Free settings and Free links.
   `can_list_all_teams` is included because without it the page renders empty
   for the very role that owns it. `can_create_team` also gates `GET
   /teams/candidate-admins`, the bounded user search that fills the new team's
   `initial_team_admin_ids`: the org-wide `GET /users` directory stays on
   `can_administer_users` (`platform_admin`-only), so without that search the
   page was reachable but its form could never be submitted.
+- **`platform_access_manager`** → `can_manage_platform_access`: filtering,
+  rules, individual and team exceptions, T0, Free settings and all Free-link
+  administration. `can_list_all_teams` lets the role reach Free controls on
+  `/admin/teams`; it cannot create or edit team registry entries. Its current
+  role also supplies platform admission while filtering is active, subject to
+  suspension and ordinary resource checks.
 - **`feature_manager`** → `can_manage_capabilities` — enable/disable
   capabilities, agent templates and models, platform-wide or per team
   (`/admin/features`: the capability enablement endpoints and the platform
@@ -401,14 +406,14 @@ Three narrower roles own one admin surface each, and every one of them is
   per-turn read of the platform prompt is a server-side assertion, never
   gated on the caller.
 
-The last two relations exist because `can_manage_platform` is a catch-all
+These narrow relations exist because `can_manage_platform` is a catch-all
 shared with import/export, tasks and platform reset: a narrow surface cannot
 be delegated through it without handing over all of them. `can_manage_platform`
 itself is unchanged.
 
 Because every one of these relations unions in `platform_admin`, any read that
 wants *who was actually granted what* must use direct tuples — an expanded
-read (ListUsers) reports every admin as a holder of all five. See contract §43.
+read (ListUsers) reports every admin as a holder of all six. See contract §43.
 
 ### Platform observability — `can_observe_platform`
 

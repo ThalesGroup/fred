@@ -134,6 +134,7 @@ class PlatformRoleRelation(str, Enum):
     PLATFORM_ADMIN = RelationType.PLATFORM_ADMIN.value
     PLATFORM_OBSERVER = RelationType.PLATFORM_OBSERVER.value
     TEAM_MANAGER = RelationType.TEAM_MANAGER.value
+    PLATFORM_ACCESS_MANAGER = RelationType.PLATFORM_ACCESS_MANAGER.value
     FEATURE_MANAGER = RelationType.FEATURE_MANAGER.value
     PROMPT_EDITOR = RelationType.PROMPT_EDITOR.value
 

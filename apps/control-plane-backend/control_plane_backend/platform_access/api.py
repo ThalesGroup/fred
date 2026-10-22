@@ -71,7 +71,7 @@ async def require_access_admin(
 ) -> KeycloakUser:
     await access.rebac.check_user_permission_or_raise(
         user,
-        OrganizationPermission.CAN_MANAGE_PLATFORM,
+        OrganizationPermission.CAN_MANAGE_PLATFORM_ACCESS,
         ORGANIZATION_ID,
         consistency_token=access.rebac.HIGHER_CONSISTENCY,
     )

@@ -146,6 +146,7 @@ jobs:
               - 'agentic-backend/**'
             deploy-chart:
               - 'deploy/charts/**'
+              - 'scripts/check_chart_registrations.py'
             knowledge-flow:
               - 'apps/knowledge-flow-backend/**'
             fred-pod:
@@ -558,6 +559,9 @@ jobs:
 
       - name: Check chart - knowledge-flow ingestion worker groups
         run: make check-chart-ingestion-workers
+
+      - name: Check chart - registrations
+        run: make check-chart-registrations
 
       - name: Check charts - agent-pod and knowledge-base
         run: make pod-chart-tests

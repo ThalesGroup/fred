@@ -382,7 +382,7 @@ async def users_page(
         async with slots:
             uid = profile.id
             sources: list[AdmissionSource] = []
-            if await access.platform_admin_uid(uid):
+            if await access.access_manager_uid(uid):
                 sources.append(AdmissionSource(kind="admin"))
             if await asyncio.to_thread(access.observed_match, row, policy):
                 sources.append(AdmissionSource(kind="attribute"))
@@ -472,7 +472,7 @@ async def activation_preview(
             except AccountStatusError as error:
                 outcome = "unknown" if error.unavailable else "blocked"
             else:
-                if await access.platform_admin_uid(uid):
+                if await access.access_manager_uid(uid):
                     sources.append(AdmissionSource(kind="admin"))
                 exception = exceptions.get(UUID(uid))
                 if exception:

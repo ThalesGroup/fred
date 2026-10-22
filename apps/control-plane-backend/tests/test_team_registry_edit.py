@@ -215,6 +215,14 @@ async def test_team_manager_cannot_edit_a_team(audit: list) -> None:
             _deps(rebac, store),
         )
 
+    with pytest.raises(AuthorizationError):
+        await edit_team_registry(
+            _team_manager(),
+            TeamId("t1"),
+            EditTeamRegistryRequest(name="Mine"),
+            _deps(rebac, store),
+        )
+
     assert store.teams["t1"].name == "Northbridge"
     assert rebac.added_relations == []
     assert audit == []
