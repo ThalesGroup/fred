@@ -72,18 +72,20 @@ package, so every fred-agents pod that installs that package registers it.
    message raise the analysis version once more (re-read in the background,
    no action); they show a slide's takeaway only when the user asks for the
    key messages on the slides, otherwise they are filled as before.
-7. The platform default template is one more row of `cap_ppt_builder_analysis`
-   (its bytes in Postgres, 50 MB at most), and the migration hook adds the
-   nullable column `cap_ppt_builder_analysis.template_filename`. A replacement
-   applies once its analysis has succeeded; meanwhile, or if it fails, agents
-   build on the Fred template. Each fred-agents replica reads it at most every
+7. The platform default template takes up to two rows of `cap_ppt_builder_analysis`
+   (the one in use and a replacement being analysed, their bytes in Postgres,
+   50 MB at most each), and the migration hook adds the nullable columns
+   `cap_ppt_builder_analysis.template_filename` and `overrides_json` (the
+   manager's slide edits). A replacement applies once its analysis has
+   succeeded; meanwhile, or if it fails, agents keep the previous platform
+   template (the Fred template when there was none). Each fred-agents replica reads it at most every
    30 s, so replicas may differ for that long after a change.
 8. Pattern edits saved on an agent with no template of its own are no longer
    applied: they were made for another template. No action.
 
 ## Validation
 
-- `cap_ppt_builder_analysis` (with `template_filename`), `cap_ppt_builder_deck_plan` and
+- `cap_ppt_builder_analysis` (with `template_filename` and `overrides_json`), `cap_ppt_builder_deck_plan` and
   `cap_ppt_builder_alembic_version` exist in the fred-agents database; `agent_instance.suspension_detail` exists in the control
   plane database.
 - Create an agent with the "Presentation builder" pack and upload a `.pptx`:

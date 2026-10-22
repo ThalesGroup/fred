@@ -27,13 +27,13 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, Optional, Tuple
+from typing import Any, List, Literal, Optional, Tuple
 
 from fred_core import convert_office_bytes_to_pdf
 from fred_core.common import ThreadSafeLRUCache
 from fred_sdk.contracts.capability import CapabilityReadiness
 from fred_sdk.contracts.runtime import CapabilityModelPort
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 from sqlalchemy import (
     DateTime,
     Integer,
@@ -56,7 +56,12 @@ from fred_capability_ppt_filler.builder.analysis import (
 from fred_capability_ppt_filler.builder.labelling import label_inventory
 from fred_capability_ppt_filler.builder.models import (
     AnalysisSummary,
+    PatternOverride,
     TemplateInventory,
+)
+from fred_capability_ppt_filler.builder.overrides import (
+    apply_overrides,
+    prune_overrides,
 )
 from fred_capability_ppt_filler.builder.preview import build_patterns_deck
 from fred_capability_ppt_filler.concurrency import (
@@ -85,8 +90,11 @@ OUTDATED_RECHECK_SECONDS = 60.0
 
 RULES_KEY = "rules"
 _AGENT_DEFAULT = "agent-default"
-# The platform default template's row: instance ids are UUIDs, so no collision.
+# The platform default template's rows: instance ids are UUIDs, so no collision.
+# The first is in effect (always succeeded); a replacement is analysed in the
+# second and moved onto the first when it succeeds, so agents keep the previous one.
 PLATFORM_ID = "__platform__"
+PLATFORM_NEXT_ID = "__platform_next__"
 # How long a pod builds on its last read of the platform default.
 PLATFORM_REFRESH_SECONDS = 30.0
 
@@ -159,6 +167,8 @@ class AnalysisRow(PptBuilderBase):
     patterns_pdf: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     template_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # The platform template's pattern edits; an agent's live in its config.
+    overrides_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
@@ -185,6 +195,7 @@ class AnalysisRecord:
     updated_at: datetime
     inventory_json: Optional[str] = None
     template_filename: Optional[str] = None
+    overrides_json: Optional[str] = None
 
     def matches(self, sha: str, key: str) -> bool:
         # A vision run without the model port labels and stores `rules`: it
@@ -213,6 +224,26 @@ class AnalysisRecord:
                 "Stored analysis of %s no longer validates", self.agent_instance_id
             )
             return None
+
+    def overrides(self) -> List[PatternOverride]:
+        return parse_overrides(self.overrides_json)
+
+
+def parse_overrides(raw: Optional[str]) -> List[PatternOverride]:
+    if not raw:
+        return []
+    try:
+        return _OVERRIDES.validate_json(raw)
+    except ValidationError:
+        logger.warning("Stored platform pattern edits no longer validate")
+        return []
+
+
+def dump_overrides(overrides: List[PatternOverride]) -> Optional[str]:
+    return _OVERRIDES.dump_json(overrides).decode() if overrides else None
+
+
+_OVERRIDES: TypeAdapter[List[PatternOverride]] = TypeAdapter(List[PatternOverride])
 
 
 # --- Store ---------------------------------------------------------------------------
@@ -275,8 +306,17 @@ class AnalysisStore(ABC):
         inventory: TemplateInventory,
         patterns_pdf: Optional[bytes],
         labelling_key: Optional[str] = None,
+        promote_to: Optional[str] = None,
     ) -> bool:
-        """Store the result; ``labelling_key``, when given, is the one used."""
+        """Store the result; ``labelling_key``, when given, is the one used.
+        ``promote_to`` moves the row onto that id in the same transaction,
+        replacing it and keeping its pattern edits for the same file."""
+
+    @abstractmethod
+    async def set_overrides(
+        self, instance_id: str, overrides_json: Optional[str]
+    ) -> bool:
+        """Store the platform template's pattern edits on a succeeded row."""
 
     @abstractmethod
     async def fail(self, instance_id: str, job_id: str, error: str) -> bool: ...
@@ -305,6 +345,7 @@ class SqlAnalysisStore(AnalysisStore):
             row.patterns_pdf.is_not(None),
             row.updated_at,
             row.template_filename,
+            row.overrides_json,
         ]
         if with_inventory:
             columns.append(row.inventory_json)
@@ -330,7 +371,8 @@ class SqlAnalysisStore(AnalysisStore):
             has_thumbnails=bool(found[9]),
             updated_at=_aware(found[10]),
             template_filename=found[11],
-            inventory_json=found[12] if with_inventory else None,
+            overrides_json=found[12],
+            inventory_json=found[13] if with_inventory else None,
         )
 
     async def _scalar(self, column: Any, instance_id: str, *where: Any) -> Any:
@@ -474,17 +516,65 @@ class SqlAnalysisStore(AnalysisStore):
         inventory: TemplateInventory,
         patterns_pdf: Optional[bytes],
         labelling_key: Optional[str] = None,
+        promote_to: Optional[str] = None,
     ) -> bool:
         key = {} if labelling_key is None else {"labelling_key": labelling_key}
-        return await self._update(
-            instance_id,
-            AnalysisRow.job_id == job_id,
-            **key,
+        values = dict(
+            key,
+            updated_at=_utcnow(),
             status="succeeded",
             analysis_version=ANALYSIS_VERSION,
             inventory_json=inventory.model_dump_json(),
             patterns_pdf=patterns_pdf,
             error=None,
+        )
+        row = AnalysisRow
+        async with self._sessionmaker() as session:
+            async with session.begin():
+                result = await session.execute(
+                    update(row)
+                    .where(row.agent_instance_id == instance_id, row.job_id == job_id)
+                    .values(**values)
+                )
+                if not getattr(result, "rowcount", 0) or promote_to is None:
+                    return bool(getattr(result, "rowcount", 0))
+                previous = (
+                    await session.execute(
+                        select(row.template_sha256, row.overrides_json).where(
+                            row.agent_instance_id == promote_to
+                        )
+                    )
+                ).first()
+                kept: List[PatternOverride] = []
+                sha = (
+                    await session.execute(
+                        select(row.template_sha256).where(
+                            row.agent_instance_id == instance_id
+                        )
+                    )
+                ).scalar_one()
+                if previous is not None and previous[0] == sha:
+                    kept, _ = prune_overrides(parse_overrides(previous[1]), inventory)
+                await session.execute(
+                    delete(row).where(row.agent_instance_id == promote_to)
+                )
+                await session.execute(
+                    update(row)
+                    .where(row.agent_instance_id == instance_id)
+                    .values(
+                        agent_instance_id=promote_to,
+                        overrides_json=dump_overrides(kept),
+                    )
+                )
+        return True
+
+    async def set_overrides(
+        self, instance_id: str, overrides_json: Optional[str]
+    ) -> bool:
+        return await self._update(
+            instance_id,
+            AnalysisRow.status == "succeeded",
+            overrides_json=overrides_json,
         )
 
     async def fail(self, instance_id: str, job_id: str, error: str) -> bool:
@@ -586,6 +676,8 @@ def forget_inventories(instance_id: str) -> None:
 
 
 def clear_caches() -> None:
+    global _platform_inventory
+    _platform_inventory = None
     _inventories.clear()
     _ports.clear()
     _templates.clear()
@@ -633,7 +725,7 @@ async def ready_inventory(
 
 @dataclass(frozen=True)
 class PlatformDefault:
-    """The platform default template in effect: its analysis succeeded."""
+    """The platform default template in effect, with its pattern edits applied."""
 
     sha: str
     inventory: TemplateInventory
@@ -644,6 +736,8 @@ _platform: Optional[Tuple[float, Optional[PlatformDefault]]] = None
 _platform_read: Optional[asyncio.Task[Optional[PlatformDefault]]] = None
 # Bumped by a write: a read started before it does not store its stale value.
 _platform_generation = 0
+# (job id, inventory) of the row last read: a job id names one analysis result.
+_platform_inventory: Optional[Tuple[str, TemplateInventory]] = None
 
 
 def platform_snapshot() -> Tuple[bool, Optional[PlatformDefault]]:
@@ -686,9 +780,22 @@ async def refresh_platform_default() -> Optional[PlatformDefault]:
     return await asyncio.shield(task)
 
 
+async def _platform_row_inventory(
+    store: AnalysisStore, record: AnalysisRecord
+) -> Optional[TemplateInventory]:
+    global _platform_inventory
+    if _platform_inventory is not None and _platform_inventory[0] == record.job_id:
+        return _platform_inventory[1]
+    full = await store.get(PLATFORM_ID)
+    inventory = full.inventory() if full is not None else None
+    if full is not None and inventory is not None:
+        _platform_inventory = (full.job_id, inventory)
+    return inventory
+
+
 async def _read_platform_default(generation: int) -> Optional[PlatformDefault]:
-    """One primary-key read; the inventory comes from the LRU once known. Only a
-    succeeded analysis is in effect, else the built-in template, on every pod."""
+    """One primary-key read; the inventory is re-read only for a new result.
+    Only the row in effect counts, never a replacement being analysed."""
     global _platform
     previous = _platform[1] if _platform is not None else None
     value: Optional[PlatformDefault] = None
@@ -696,11 +803,12 @@ async def _read_platform_default(generation: int) -> Optional[PlatformDefault]:
         store = get_analysis_store()
         record = await store.get(PLATFORM_ID, with_inventory=False)
         if record is not None and record.status == "succeeded":
-            inventory = await ready_inventory(
-                store, PLATFORM_ID, record.template_sha256, record.labelling_key
-            )
+            inventory = await _platform_row_inventory(store, record)
+            if record.outdated():
+                await _refresh_quietly(store, record)
             if inventory is not None:
-                value = PlatformDefault(record.template_sha256, inventory)
+                effective, _ = apply_overrides(inventory, record.overrides())
+                value = PlatformDefault(record.template_sha256, effective)
     except Exception:  # the last value serves until the next read
         logger.warning("Platform default template unreadable", exc_info=True)
         value = previous
@@ -817,8 +925,11 @@ async def run_analysis(
     finally:
         if not work.done():
             work.cancel()
-    if await store.finish(instance_id, job_id, inventory, pdf, key):
+    promote_to = PLATFORM_ID if instance_id == PLATFORM_NEXT_ID else None
+    if await store.finish(instance_id, job_id, inventory, pdf, key, promote_to):
         forget_inventories(instance_id)
+        if promote_to is not None:
+            forget_inventories(promote_to)
         logger.info(
             "Template analysis of %s done in %.0fs",
             instance_id,

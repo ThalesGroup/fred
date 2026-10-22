@@ -63,16 +63,19 @@ from pydantic import BaseModel, Field, model_validator
 from fred_capability_ppt_filler.builder import analysis_job
 from fred_capability_ppt_filler.builder.analysis_job import (
     PLATFORM_ID,
+    PLATFORM_NEXT_ID,
     AnalysisRecord,
     AnalysisRow,
     AnalysisStatusResponse,
     PlatformDefault,
     analysed_template,
     analysis_readiness,
+    dump_overrides,
     get_analysis_store,
     labelling_key,
     parse_labelling_key,
     ready_inventory,
+    recover_interrupted,
     refresh_outdated,
     restart_from_stored,
     spawn_analysis,
@@ -186,10 +189,10 @@ def _check_readable(content: bytes) -> None:
 async def _authorised_record(
     instance_id: str, authorizer: CapabilityTeamAuthorizer
 ) -> AnalysisRecord:
-    # The platform row has its own routes: its team id is no team to check.
+    # The platform rows have their own routes: their team id is no team to check.
     record = (
         None
-        if instance_id == PLATFORM_ID
+        if instance_id in (PLATFORM_ID, PLATFORM_NEXT_ID)
         else await get_analysis_store().get(instance_id)
     )
     if record is None:
@@ -199,14 +202,23 @@ async def _authorised_record(
 
 
 class PlatformTemplateResponse(BaseModel):
-    """The platform default template. ``analysis`` is None while the Fred
-    template is in effect; a replacement is in effect once it succeeded."""
+    """The platform default template. ``analysis`` is the template in effect,
+    None while it is the Fred template; ``replacement`` is one being analysed
+    or failed, which agents do not use until it succeeds."""
 
     analysis: Optional[AnalysisStatusResponse] = None
     template_filename: Optional[str] = None
+    # The manager's pattern edits, applied for every agent on this template.
+    overrides: List[PatternOverride] = []
+    replacement: Optional[AnalysisStatusResponse] = None
+    replacement_filename: Optional[str] = None
+    # The replacement's choice, else the current one's. None: the platform's default model.
     use_vision: bool = True
-    # None: the platform's default model.
     vision_profile_id: Optional[str] = None
+
+
+class PlatformOverridesRequest(BaseModel):
+    overrides: List[PatternOverride] = []
 
 
 class PlatformAnalysisRequest(BaseModel):
@@ -216,17 +228,36 @@ class PlatformAnalysisRequest(BaseModel):
     vision_profile_id: Optional[str] = None
 
 
-async def _platform_response() -> PlatformTemplateResponse:
-    record = await get_analysis_store().get(PLATFORM_ID)
-    if record is None:
+async def _platform_response(*, recover: bool = False) -> PlatformTemplateResponse:
+    store = get_analysis_store()
+    current = await store.get(PLATFORM_ID)
+    replacement = await store.get(PLATFORM_NEXT_ID, with_inventory=False)
+    if (
+        recover
+        and replacement is not None
+        and replacement.interrupted(analysis_job._utcnow())
+        and await recover_interrupted(store, PLATFORM_NEXT_ID)
+    ):
+        replacement = await store.get(PLATFORM_NEXT_ID, with_inventory=False)
+    latest = replacement or current
+    if latest is None:
         return PlatformTemplateResponse()
-    use_vision, profile_id = parse_labelling_key(record.labelling_key)
+    use_vision, profile_id = parse_labelling_key(latest.labelling_key)
     return PlatformTemplateResponse(
-        analysis=status_response(record),
-        template_filename=record.template_filename,
+        analysis=status_response(current) if current else None,
+        template_filename=current.template_filename if current else None,
+        overrides=current.overrides() if current else [],
+        replacement=status_response(replacement) if replacement else None,
+        replacement_filename=replacement.template_filename if replacement else None,
         use_vision=use_vision,
         vision_profile_id=profile_id,
     )
+
+
+def _remember_platform_port(port: CapabilityModelPort) -> None:
+    # Both rows: a replacement's job, and the outdated refresh of the current one.
+    analysis_job.remember_port(PLATFORM_NEXT_ID, port)
+    analysis_job.remember_port(PLATFORM_ID, port)
 
 
 async def _readable_upload(file: UploadFile) -> bytes:
@@ -291,7 +322,7 @@ def _build_router() -> APIRouter:
     )
     async def platform() -> PlatformTemplateResponse:
         """The platform default template and its analysis (any signed-in user)."""
-        return await _platform_response()
+        return await _platform_response(recover=True)
 
     @router.get("/platform/patterns.pdf", operation_id="getPptBuilderPlatformPatterns")
     async def platform_patterns() -> Response:
@@ -312,19 +343,31 @@ def _build_router() -> APIRouter:
         authorizer: CapabilityTeamAuthorizer = Depends(capability_team_authorizer),
         port: CapabilityModelPort = Depends(capability_platform_model),
     ) -> PlatformTemplateResponse:
-        """Replace the platform default template; it applies once analysed."""
+        """Replace the platform default template; the current one stays in use
+        until the replacement's analysis succeeds."""
         await authorizer.require_capability_manager()
         content = await _readable_upload(file)
+        key = labelling_key(use_vision, vision_profile_id or None)
+        store = get_analysis_store()
+        current = await store.get(PLATFORM_ID, with_inventory=False)
+        if (
+            current is not None
+            and not current.outdated()
+            and current.template_sha256 == hashlib.sha256(content).hexdigest()
+            and current.labelling_key == key
+        ):
+            await store.delete(PLATFORM_NEXT_ID)  # the same file: its analysis stands
+            return await _platform_response()
+        _remember_platform_port(port)
         await start_analysis(
-            instance_id=PLATFORM_ID,
+            instance_id=PLATFORM_NEXT_ID,
             team_id=PLATFORM_ID,
             saved_by=None,
             content=content,
-            key=labelling_key(use_vision, vision_profile_id or None),
+            key=key,
             port=port,
             filename=(file.filename or "")[:255] or None,
         )
-        analysis_job.forget_platform_default()
         return await _platform_response()
 
     @router.post(
@@ -337,15 +380,51 @@ def _build_router() -> APIRouter:
         authorizer: CapabilityTeamAuthorizer = Depends(capability_team_authorizer),
         port: CapabilityModelPort = Depends(capability_platform_model),
     ) -> PlatformTemplateResponse:
-        """Analyse the platform template again, with this vision choice."""
+        """Analyse the platform template again, with this vision choice: the
+        failed replacement, else the current template, which stays in use."""
         await authorizer.require_capability_manager()
         store = get_analysis_store()
-        record = await store.get(PLATFORM_ID, with_inventory=False)
-        if record is None:
-            raise HTTPException(status_code=404, detail="No platform template.")
-        analysis_job.remember_port(PLATFORM_ID, port)
         key = labelling_key(body.use_vision, body.vision_profile_id or None)
-        await restart_from_stored(store, record, labelling_key=key)
+        _remember_platform_port(port)
+        replacement = await store.get(PLATFORM_NEXT_ID, with_inventory=False)
+        if replacement is not None:
+            await restart_from_stored(store, replacement, labelling_key=key)
+            return await _platform_response()
+        current = await store.get(PLATFORM_ID, with_inventory=False)
+        content = await store.template(PLATFORM_ID) if current else None
+        if current is None or content is None:
+            raise HTTPException(status_code=404, detail="No platform template.")
+        job_id = await store.start(
+            instance_id=PLATFORM_NEXT_ID,
+            team_id=PLATFORM_ID,
+            saved_by=None,
+            template_sha256=current.template_sha256,
+            labelling_key=key,
+            template=content,
+            template_filename=current.template_filename,
+        )
+        spawn_analysis(store, PLATFORM_NEXT_ID, job_id, content, key)
+        return await _platform_response()
+
+    @router.put(
+        "/platform/overrides",
+        response_model=PlatformTemplateResponse,
+        operation_id="putPptBuilderPlatformOverrides",
+    )
+    async def put_platform_overrides(
+        body: PlatformOverridesRequest,
+        authorizer: CapabilityTeamAuthorizer = Depends(capability_team_authorizer),
+    ) -> PlatformTemplateResponse:
+        """The manager's pattern edits of the template in effect."""
+        await authorizer.require_capability_manager()
+        store = get_analysis_store()
+        current = await store.get(PLATFORM_ID)
+        inventory = current.inventory() if current else None
+        if inventory is None:
+            raise HTTPException(status_code=404, detail="No platform template.")
+        kept, _ = prune_overrides(body.overrides, inventory)
+        if not await store.set_overrides(PLATFORM_ID, dump_overrides(kept)):
+            raise HTTPException(status_code=404, detail="No platform template.")
         analysis_job.forget_platform_default()
         return await _platform_response()
 
@@ -359,7 +438,9 @@ def _build_router() -> APIRouter:
     ) -> PlatformTemplateResponse:
         """Back to the Fred template, which itself cannot be removed."""
         await authorizer.require_capability_manager()
-        await get_analysis_store().delete(PLATFORM_ID)
+        store = get_analysis_store()
+        await store.delete(PLATFORM_NEXT_ID)
+        await store.delete(PLATFORM_ID)
         analysis_job.forget_inventories(PLATFORM_ID)
         return PlatformTemplateResponse()
 

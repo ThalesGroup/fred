@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""add template_filename to cap_ppt_builder_analysis
+"""add template_filename and overrides_json to cap_ppt_builder_analysis
 
-The uploaded file's name, shown for the platform default template. Nullable:
-existing rows keep none.
+The uploaded file's name, shown for the platform default template, and the
+platform template's pattern edits. Nullable: existing rows keep none.
 
 Revision ID: r9d3f4a5b6c7
 Revises: q8c2e3b4d5f6
@@ -43,9 +43,14 @@ def upgrade() -> None:
         "cap_ppt_builder_analysis",
         sa.Column("template_filename", sa.String(length=255), nullable=True),
     )
+    op.add_column(
+        "cap_ppt_builder_analysis",
+        sa.Column("overrides_json", sa.Text(), nullable=True),
+    )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
     with op.batch_alter_table("cap_ppt_builder_analysis") as batch:
+        batch.drop_column("overrides_json")
         batch.drop_column("template_filename")

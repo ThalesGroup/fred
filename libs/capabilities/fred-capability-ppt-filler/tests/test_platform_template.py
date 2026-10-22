@@ -30,6 +30,7 @@ from fred_capability_ppt_filler.builder import analysis_job
 from fred_capability_ppt_filler.builder import capability as capability_mod
 from fred_capability_ppt_filler.builder.analysis_job import (
     PLATFORM_ID,
+    PLATFORM_NEXT_ID,
     get_analysis_store,
     platform_snapshot,
 )
@@ -55,6 +56,8 @@ from port_fakes import FakeWorkspace
 
 TEMPLATE = build_showcase_template()
 SHA = hashlib.sha256(TEMPLATE).hexdigest()
+OTHER = builtin_template()[0]
+OTHER_SHA = hashlib.sha256(OTHER).hexdigest()
 _BASE = "/capabilities/ppt_builder/platform"
 
 
@@ -114,10 +117,28 @@ async def _upload(client: httpx.AsyncClient, content: bytes = TEMPLATE, **form):
     )
 
 
-async def _uploaded() -> None:
+async def _uploaded(content: bytes = TEMPLATE) -> None:
     async with _client(manager=True) as client:
-        assert (await _upload(client)).status_code == 200
+        assert (await _upload(client, content)).status_code == 200
     await drain()
+
+
+async def _pending_replacement(content: bytes = OTHER) -> None:
+    """A replacement row with no job running: it stays pending."""
+    await get_analysis_store().start(
+        instance_id=PLATFORM_NEXT_ID,
+        team_id=PLATFORM_ID,
+        saved_by=None,
+        template_sha256=hashlib.sha256(content).hexdigest(),
+        labelling_key="rules",
+        template=content,
+        template_filename="next.pptx",
+    )
+
+
+async def _rows() -> tuple[Any, Any]:
+    store = get_analysis_store()
+    return await store.get(PLATFORM_ID), await store.get(PLATFORM_NEXT_ID)
 
 
 # --- routes ------------------------------------------------------------------------------------
@@ -136,16 +157,18 @@ async def test_the_fred_template_is_the_default_until_a_manager_replaces_it(
 @pytest.mark.asyncio
 async def test_a_non_manager_is_refused_every_write(analysis_db):
     await _uploaded()
-    before = await get_analysis_store().get(PLATFORM_ID)
+    await _pending_replacement()
+    before = await _rows()
     async with _client(manager=False) as client:
         for response in (
-            await _upload(client),
+            await _upload(client, OTHER),
             await client.post(f"{_BASE}/analysis", json={"use_vision": False}),
+            await client.put(f"{_BASE}/overrides", json={"overrides": []}),
             await client.delete(f"{_BASE}/template"),
         ):
             assert response.status_code == 403
     await drain()
-    assert await get_analysis_store().get(PLATFORM_ID) == before
+    assert await _rows() == before
 
 
 @pytest.mark.asyncio
@@ -155,11 +178,15 @@ async def test_a_manager_upload_is_analysed_with_the_platform_model(
     async with _client(manager=True) as client:
         response = await _upload(client)
         assert response.status_code == 200
-        assert response.json()["template_filename"] == "brand.pptx"
+        pending = response.json()
+        assert pending["analysis"] is None  # the Fred template until it succeeds
+        assert pending["replacement_filename"] == "brand.pptx"
         await drain()
         body = (await client.get(_BASE)).json()
         assert body["analysis"]["status"] == "succeeded"
         assert body["analysis"]["template_sha256"] == SHA
+        assert body["template_filename"] == "brand.pptx"
+        assert body["replacement"] is None
         assert body["use_vision"] is True and body["vision_profile_id"] is None
         assert (await client.get(f"{_BASE}/patterns.pdf")).content == b"%PDF-thumbs"
     # The platform's default model: the teamless port with no profile.
@@ -177,8 +204,9 @@ async def test_an_invalid_upload_keeps_the_current_default(analysis_db, monkeypa
         monkeypatch.setattr(capability_mod, "MAX_TEMPLATE_UPLOAD_BYTES", 10)
         oversized = await _upload(client)
         assert oversized.status_code == 413 and "MB limit" in oversized.json()["detail"]
-    record = await get_analysis_store().get(PLATFORM_ID)
-    assert record is not None and record.status == "succeeded"
+    current, replacement = await _rows()
+    assert current is not None and current.status == "succeeded"
+    assert replacement is None
 
 
 @pytest.mark.asyncio
@@ -204,8 +232,11 @@ async def test_a_rerun_takes_the_vision_choice_and_leaves_agents_alone(
             )
         ).json()
         assert body["vision_profile_id"] == "chat.vision"
-        assert body["template_filename"] == "brand.pptx"  # a re-run keeps the name
+        # The current analysis stays in use while the re-run is the replacement.
+        assert body["analysis"]["status"] == "succeeded"
+        assert body["replacement_filename"] == "brand.pptx"  # a re-run keeps the name
         await drain()
+        assert (await client.get(_BASE)).json()["template_filename"] == "brand.pptx"
         rules = await client.post(f"{_BASE}/analysis", json={"use_vision": False})
         assert rules.json()["use_vision"] is False
         await drain()
@@ -222,24 +253,109 @@ async def test_a_rerun_without_a_platform_template_is_404(analysis_db):
 
 
 @pytest.mark.asyncio
+async def test_a_failed_replacement_is_rerun_in_place(analysis_db, offline_conversion):
+    await _uploaded()
+    await _pending_replacement()
+    await age_row(analysis_db, PLATFORM_NEXT_ID, status="failed", error="Broken.")
+    async with _client(manager=True) as client:
+        failed = (await client.get(_BASE)).json()
+        assert failed["replacement"]["status"] == "failed"
+        assert failed["analysis"]["template_sha256"] == SHA
+        await client.post(f"{_BASE}/analysis", json={"use_vision": False})
+        await drain()
+        body = (await client.get(_BASE)).json()
+    assert body["analysis"]["template_sha256"] == OTHER_SHA
+    assert body["template_filename"] == "next.pptx" and body["replacement"] is None
+
+
+@pytest.mark.asyncio
+async def test_an_interrupted_replacement_restarts_on_a_read(analysis_db):
+    await _uploaded()
+    await _pending_replacement()
+    await age_row(analysis_db, PLATFORM_NEXT_ID)  # its job died
+    async with _client(manager=False) as client:
+        await client.get(_BASE)
+    await drain()
+    current, replacement = await _rows()
+    assert current.template_sha256 == OTHER_SHA and replacement is None
+
+
+@pytest.mark.asyncio
 async def test_reset_returns_to_the_fred_template(analysis_db):
     await _uploaded()
+    await _pending_replacement()
     async with _client(manager=True) as client:
         response = await client.delete(f"{_BASE}/template")
         assert response.status_code == 200 and response.json()["analysis"] is None
-        assert (await client.get(_BASE)).json()["analysis"] is None
-    assert await get_analysis_store().get(PLATFORM_ID) is None
+        body = (await client.get(_BASE)).json()
+        assert body["analysis"] is None and body["replacement"] is None
+    assert await _rows() == (None, None)
 
 
 @pytest.mark.asyncio
 async def test_the_agent_routes_never_serve_the_platform_row(analysis_db):
     await _uploaded()
+    await _pending_replacement()
     async with _client(manager=True) as client:
-        for path in ("", "/patterns.pdf"):
-            response = await client.get(
-                f"/capabilities/ppt_builder/analysis/{PLATFORM_ID}{path}"
-            )
-            assert response.status_code == 404
+        for row in (PLATFORM_ID, PLATFORM_NEXT_ID):
+            for path in ("", "/patterns.pdf"):
+                response = await client.get(
+                    f"/capabilities/ppt_builder/analysis/{row}{path}"
+                )
+                assert response.status_code == 404
+
+
+# --- pattern edits ----------------------------------------------------------------------------
+
+
+def _first_pattern() -> str:
+    from fred_capability_ppt_filler.builder.analysis import analyze_template
+
+    inventory = analyze_template(TEMPLATE).inventory
+    assert inventory is not None
+    return inventory.patterns[0].id
+
+
+async def _edit(client: httpx.AsyncClient, *overrides: dict) -> httpx.Response:
+    return await client.put(f"{_BASE}/overrides", json={"overrides": list(overrides)})
+
+
+@pytest.mark.asyncio
+async def test_a_manager_edits_the_platform_slides_for_every_agent(
+    analysis_db, built_on
+):
+    async with _client(manager=True) as client:
+        assert (await _edit(client)).status_code == 404  # nothing to edit yet
+    await _uploaded()
+    pattern = _first_pattern()
+    async with _client(manager=True) as client:
+        response = await _edit(
+            client,
+            {"pattern_id": pattern, "included": False},
+            {"pattern_id": "slide:999", "label": "Gone"},
+        )
+    assert response.status_code == 200
+    assert response.json()["overrides"] == [
+        {"pattern_id": pattern, "label": None, "kind": None, "included": False}
+    ]
+    await _first_model_call(_middleware())
+    effective = built_on[-1]
+    assert effective.pattern(pattern).included is False
+
+
+@pytest.mark.asyncio
+async def test_a_rerun_keeps_the_edits_and_another_file_drops_them(analysis_db):
+    await _uploaded()
+    pattern = _first_pattern()
+    async with _client(manager=True) as client:
+        await _edit(client, {"pattern_id": pattern, "label": "Kept"})
+        await client.post(f"{_BASE}/analysis", json={"use_vision": False})
+        await drain()
+        assert (await client.get(_BASE)).json()["overrides"][0]["label"] == "Kept"
+        await _upload(client, OTHER)
+        assert (await client.get(_BASE)).json()["overrides"]  # until it succeeds
+        await drain()
+        assert (await client.get(_BASE)).json()["overrides"] == []
 
 
 # --- resolution --------------------------------------------------------------------------------
@@ -291,23 +407,16 @@ async def _first_model_call(middleware: Any) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_pending_or_failed_platform_template_leaves_agents_on_the_fred_template(
+async def test_a_first_replacement_pending_or_failed_leaves_agents_on_the_fred_template(
     analysis_db, built_on
 ):
-    await get_analysis_store().start(
-        instance_id=PLATFORM_ID,
-        team_id=PLATFORM_ID,
-        saved_by=None,
-        template_sha256=SHA,
-        labelling_key="rules",
-        template=TEMPLATE,
-    )
+    await _pending_replacement(TEMPLATE)
     builtin = builtin_template()[1]
     middleware = _middleware()
     await _first_model_call(middleware)
     assert built_on[-1] is builtin
 
-    await age_row(analysis_db, PLATFORM_ID, status="failed")
+    await age_row(analysis_db, PLATFORM_NEXT_ID, status="failed")
     analysis_job.forget_platform_default()
     await _first_model_call(_middleware())
     assert built_on[-1] is builtin
@@ -315,6 +424,29 @@ async def test_a_pending_or_failed_platform_template_leaves_agents_on_the_fred_t
         PptBuilderConfig(), CapabilityIdentity(user_id="u", agent_instance_id="i")
     )
     assert verdict.state == "ready"
+
+
+@pytest.mark.asyncio
+async def test_agents_keep_the_previous_platform_template_until_a_replacement_succeeds(
+    analysis_db, built_on
+):
+    await _uploaded()
+    await _first_model_call(_middleware())
+    previous = built_on[-1]
+    await _pending_replacement()
+    analysis_job.forget_platform_default()
+    await _first_model_call(_middleware())
+    assert built_on[-1].model_dump() == previous.model_dump()
+
+    await age_row(analysis_db, PLATFORM_NEXT_ID, status="failed")
+    analysis_job.forget_platform_default()
+    await _first_model_call(_middleware())
+    assert built_on[-1].model_dump() == previous.model_dump()
+
+    await _uploaded(OTHER)  # this pod ran the job: it reads the new one at once
+    await _first_model_call(_middleware())
+    snapshot = analysis_job.platform_snapshot()[1]
+    assert snapshot is not None and snapshot.sha == OTHER_SHA
 
 
 @pytest.mark.asyncio
