@@ -63,6 +63,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from fred_capability_ppt_filler.builder import analysis_job
 from fred_capability_ppt_filler.builder.analysis_job import (
+    BUILTIN_ID,
     PLATFORM_ID,
     PLATFORM_NEXT_ID,
     AnalysisRecord,
@@ -83,13 +84,12 @@ from fred_capability_ppt_filler.builder.analysis_job import (
     status_response,
 )
 from fred_capability_ppt_filler.builder.assign import VarietyCheck
-from fred_capability_ppt_filler.builder.builtin import builtin_template
+from fred_capability_ppt_filler.builder.builtin import builtin_template, sha256_of
 from fred_capability_ppt_filler.builder.deck_plans import DeckPlanRow
 from fred_capability_ppt_filler.builder.models import (
     AnalysisError,
     AnalyzeResult,
     PatternOverride,
-    TemplateInventory,
 )
 from fred_capability_ppt_filler.builder.overrides import (
     apply_overrides,
@@ -193,7 +193,7 @@ async def _authorised_record(
     # The platform rows have their own routes: their team id is no team to check.
     record = (
         None
-        if instance_id in (PLATFORM_ID, PLATFORM_NEXT_ID)
+        if instance_id in (PLATFORM_ID, PLATFORM_NEXT_ID, BUILTIN_ID)
         else await get_analysis_store().get(instance_id)
     )
     if record is None:
@@ -209,7 +209,8 @@ class PlatformTemplateResponse(BaseModel):
 
     analysis: Optional[AnalysisStatusResponse] = None
     template_filename: Optional[str] = None
-    # The manager's pattern edits, applied for every agent on this template.
+    # The manager's pattern edits of the template in effect (the Fred template's
+    # while ``analysis`` is None), applied for every agent on it.
     overrides: List[PatternOverride] = []
     replacement: Optional[AnalysisStatusResponse] = None
     replacement_filename: Optional[str] = None
@@ -240,19 +241,29 @@ async def _platform_response(*, recover: bool = False) -> PlatformTemplateRespon
         and await recover_interrupted(store, PLATFORM_NEXT_ID)
     ):
         replacement = await store.get(PLATFORM_NEXT_ID, with_inventory=False)
+    overrides = current.overrides() if current else await _builtin_overrides()
     latest = replacement or current
     if latest is None:
-        return PlatformTemplateResponse()
+        return PlatformTemplateResponse(overrides=overrides)
     use_vision, profile_id = parse_labelling_key(latest.labelling_key)
     return PlatformTemplateResponse(
         analysis=status_response(current) if current else None,
         template_filename=current.template_filename if current else None,
-        overrides=current.overrides() if current else [],
+        overrides=overrides,
         replacement=status_response(replacement) if replacement else None,
         replacement_filename=replacement.template_filename if replacement else None,
         use_vision=use_vision,
         vision_profile_id=profile_id,
     )
+
+
+async def _builtin_overrides() -> List[PatternOverride]:
+    """The manager's edits of the Fred template, pruned against the shipped one."""
+    record = await get_analysis_store().get(BUILTIN_ID, with_inventory=False)
+    if record is None:
+        return []
+    kept, _ = prune_overrides(record.overrides(), builtin_template()[1])
+    return kept
 
 
 async def _platform_labelling_key(
@@ -430,11 +441,18 @@ def _build_router() -> APIRouter:
         body: PlatformOverridesRequest,
         authorizer: CapabilityTeamAuthorizer = Depends(capability_team_authorizer),
     ) -> PlatformTemplateResponse:
-        """The manager's pattern edits of the template in effect."""
+        """The manager's pattern edits of the template in effect: the platform
+        template, else the Fred template."""
         await authorizer.require_capability_manager()
         store = get_analysis_store()
         current = await store.get(PLATFORM_ID)
-        inventory = current.inventory() if current else None
+        if current is None:
+            content, builtin = builtin_template()
+            kept, _ = prune_overrides(body.overrides, builtin)
+            await store.set_builtin_overrides(sha256_of(content), dump_overrides(kept))
+            analysis_job.forget_platform_default()
+            return await _platform_response()
+        inventory = current.inventory()
         if inventory is None:
             raise HTTPException(status_code=404, detail="No platform template.")
         kept, _ = prune_overrides(body.overrides, inventory)
@@ -451,11 +469,13 @@ def _build_router() -> APIRouter:
     async def reset_platform_template(
         authorizer: CapabilityTeamAuthorizer = Depends(capability_team_authorizer),
     ) -> PlatformTemplateResponse:
-        """Back to the Fred template, which itself cannot be removed."""
+        """Back to the Fred template, which itself cannot be removed, without
+        the manager's edits of it."""
         await authorizer.require_capability_manager()
         store = get_analysis_store()
         await store.delete(PLATFORM_NEXT_ID)
         await store.delete(PLATFORM_ID)
+        await store.delete(BUILTIN_ID)
         analysis_job.forget_inventories(PLATFORM_ID)
         return PlatformTemplateResponse()
 
@@ -664,20 +684,17 @@ class _PptBuilderMiddleware(AgentMiddleware):
         return self._history
 
     def _default_tools(self, platform: Optional[PlatformDefault]) -> List[BaseTool]:
-        """Tools on the platform default, else the built-in template. Pattern
-        edits are never applied: they belong to the agent's own template."""
-        inventory: TemplateInventory
-        if platform is None:
-            content, inventory = builtin_template()
+        """Tools on the platform default, else the built-in template, with the
+        manager's edits from the snapshot; the agent's own never apply here."""
+        content, inventory = builtin_template()
+        if platform is not None:
+            inventory = platform.inventory
+        sha = platform.sha if platform is not None else None
 
-            async def load() -> bytes:
+        async def load() -> bytes:
+            if sha is None:
                 return content
-
-        else:
-            sha, inventory = platform.sha, platform.inventory
-
-            async def load() -> bytes:
-                return await analysed_template(PLATFORM_ID, sha)
+            return await analysed_template(PLATFORM_ID, sha)
 
         return build_builder_tools(self._ctx, load, inventory, self._messages)
 

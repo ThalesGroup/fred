@@ -15,6 +15,7 @@
 // Admin > Features drawer of "Generate a presentation": the platform default
 // template agents without their own build on. A replacement is analysed while
 // the current one stays in use; only capability managers see the write actions.
+// Without a platform template, the manager reviews and corrects the Fred template.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -33,6 +34,7 @@ import { useCapabilityRouted } from "../useCapabilityRouted";
 import { CAPABILITY_ID } from "./api/pptBuilderCapabilityApi";
 import {
   useDeletePptBuilderPlatformTemplateMutation,
+  useGetPptBuilderBuiltinQuery,
   useGetPptBuilderPlatformQuery,
   usePutPptBuilderPlatformOverridesMutation,
   useRerunPptBuilderPlatformAnalysisMutation,
@@ -67,6 +69,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
   const current = platform?.analysis ?? null;
   const replacement = platform?.replacement ?? null;
   const analysing = inProgress(replacement) || current?.refreshing === true;
+  const { data: builtin } = useGetPptBuilderBuiltinQuery(undefined, { skip: !routed || !platform || current !== null });
   useEffect(() => setPollingInterval(analysing ? POLL_MS : 0), [analysing]);
 
   const [rerun, { isLoading: rerunning }] = useRerunPptBuilderPlatformAnalysisMutation();
@@ -91,9 +94,11 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
   };
 
   const savedOverrides = (platform?.overrides ?? []) as PatternOverride[];
+  // The overrides edit the template in effect: the platform one, else the Fred template.
+  const inventory = current ? (current.inventory ?? null) : (builtin?.inventory ?? null);
   const effective = useMemo(
-    () => (current?.inventory ? effectiveInventory(current.inventory, draft ?? savedOverrides) : null),
-    [current, draft, savedOverrides],
+    () => (inventory ? effectiveInventory(inventory, draft ?? savedOverrides) : null),
+    [inventory, draft, savedOverrides],
   );
   const summary = effective ? summarize(effective) : null;
   const busy = uploading || rerunning || resetting;
@@ -256,18 +261,20 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
             vision={{ available: true, visionProfiles }}
             defaultModelLabel={t(`${K}.defaultModel`)}
           />
-          {hasTemplate && (
+          {(hasTemplate || savedOverrides.length > 0) && (
             <div className={styles.uploadRow}>
-              <Button
-                color="on-surface"
-                variant="outlined"
-                size="small"
-                disabled={busy || inProgress(replacement)}
-                icon={{ category: "outlined", type: "refresh" }}
-                onClick={() => void handleRerun()}
-              >
-                {t(`${K}.rerun`)}
-              </Button>
+              {hasTemplate && (
+                <Button
+                  color="on-surface"
+                  variant="outlined"
+                  size="small"
+                  disabled={busy || inProgress(replacement)}
+                  icon={{ category: "outlined", type: "refresh" }}
+                  onClick={() => void handleRerun()}
+                >
+                  {t(`${K}.rerun`)}
+                </Button>
+              )}
               <Button
                 color="error"
                 variant="outlined"
@@ -286,7 +293,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
         <PatternReviewDialog
           open={reviewOpen}
           inventory={effective}
-          previewSource={current?.has_thumbnails ? { kind: "platform" } : null}
+          previewSource={current ? (current.has_thumbnails ? { kind: "platform" } : null) : { kind: "builtin" }}
           readOnly={!canManage}
           onOverride={(patternId, patch) => setDraft(upsertOverride(draft ?? savedOverrides, patternId, patch))}
           onClose={() => void handleReviewClose()}

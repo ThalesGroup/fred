@@ -53,6 +53,7 @@ from fred_capability_ppt_filler.builder.analysis import (
     ANALYSIS_VERSION,
     analyze_template,
 )
+from fred_capability_ppt_filler.builder.builtin import builtin_template
 from fred_capability_ppt_filler.builder.labelling import label_inventory
 from fred_capability_ppt_filler.builder.models import (
     AnalysisSummary,
@@ -95,6 +96,9 @@ _AGENT_DEFAULT = "agent-default"
 # second and moved onto the first when it succeeds, so agents keep the previous one.
 PLATFORM_ID = "__platform__"
 PLATFORM_NEXT_ID = "__platform_next__"
+# The manager's edits of the Fred template: a row holding only overrides_json,
+# used whenever no platform template is in effect.
+BUILTIN_ID = "__builtin__"
 # How long a pod builds on its last read of the platform default.
 PLATFORM_REFRESH_SECONDS = 30.0
 
@@ -317,6 +321,12 @@ class AnalysisStore(ABC):
         self, instance_id: str, overrides_json: Optional[str]
     ) -> bool:
         """Store the platform template's pattern edits on a succeeded row."""
+
+    @abstractmethod
+    async def set_builtin_overrides(
+        self, template_sha256: str, overrides_json: Optional[str]
+    ) -> None:
+        """Store the Fred template's pattern edits; ``None`` removes them."""
 
     @abstractmethod
     async def fail(self, instance_id: str, job_id: str, error: str) -> bool: ...
@@ -577,6 +587,39 @@ class SqlAnalysisStore(AnalysisStore):
             overrides_json=overrides_json,
         )
 
+    async def set_builtin_overrides(
+        self, template_sha256: str, overrides_json: Optional[str]
+    ) -> None:
+        if overrides_json is None:
+            await self.delete(BUILTIN_ID)
+            return
+        values = {"template_sha256": template_sha256, "overrides_json": overrides_json}
+        if await self._update(BUILTIN_ID, **values):
+            return
+        now = _utcnow()
+        try:
+            async with self._sessionmaker() as session:
+                async with session.begin():
+                    session.add(
+                        AnalysisRow(
+                            agent_instance_id=BUILTIN_ID,
+                            team_id=PLATFORM_ID,
+                            saved_by="unknown",
+                            labelling_key=RULES_KEY,
+                            analysis_version=ANALYSIS_VERSION,
+                            status="succeeded",
+                            job_id=str(uuid.uuid4()),
+                            attempts=1,
+                            lease_until=now,
+                            template_pptx=b"",
+                            created_at=now,
+                            updated_at=now,
+                            **values,
+                        )
+                    )
+        except IntegrityError:  # a concurrent write inserted it first
+            await self._update(BUILTIN_ID, **values)
+
     async def fail(self, instance_id: str, job_id: str, error: str) -> bool:
         # A failed refresh keeps the old result and is not retried automatically.
         refresh = AnalysisRow.status == "succeeded"
@@ -725,9 +768,10 @@ async def ready_inventory(
 
 @dataclass(frozen=True)
 class PlatformDefault:
-    """The platform default template in effect, with its pattern edits applied."""
+    """The platform default template in effect, with its pattern edits applied.
+    ``sha`` is None for the Fred template carrying the manager's edits."""
 
-    sha: str
+    sha: Optional[str]
     inventory: TemplateInventory
 
 
@@ -794,7 +838,8 @@ async def _platform_row_inventory(
 
 
 async def _read_platform_default(generation: int) -> Optional[PlatformDefault]:
-    """One primary-key read; the inventory is re-read only for a new result.
+    """One primary-key read (two without a platform template: the Fred
+    template's edits); the inventory is re-read only for a new result.
     Only the row in effect counts, never a replacement being analysed."""
     global _platform
     previous = _platform[1] if _platform is not None else None
@@ -809,6 +854,11 @@ async def _read_platform_default(generation: int) -> Optional[PlatformDefault]:
             if inventory is not None:
                 effective, _ = apply_overrides(inventory, record.overrides())
                 value = PlatformDefault(record.template_sha256, effective)
+        else:
+            edits = await store.get(BUILTIN_ID, with_inventory=False)
+            if edits is not None and edits.overrides():
+                effective, _ = apply_overrides(builtin_template()[1], edits.overrides())
+                value = PlatformDefault(None, effective)
     except Exception:  # the last value serves until the next read
         logger.warning("Platform default template unreadable", exc_info=True)
         value = previous

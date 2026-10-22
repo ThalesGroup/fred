@@ -76,7 +76,8 @@ package, so every fred-agents pod that installs that package registers it.
    (the one in use and a replacement being analysed, their bytes in Postgres,
    50 MB at most each), and the migration hook adds the nullable columns
    `cap_ppt_builder_analysis.template_filename` and `overrides_json` (the
-   manager's slide edits). A replacement applies once its analysis has
+   manager's slide edits; those of the Fred template sit in a third row,
+   `__builtin__`, used while no platform template is in effect). A replacement applies once its analysis has
    succeeded; meanwhile, or if it fails, agents keep the previous platform
    template (the Fred template when there was none). Each fred-agents replica reads it at most every
    30 s, so replicas may differ for that long after a change.

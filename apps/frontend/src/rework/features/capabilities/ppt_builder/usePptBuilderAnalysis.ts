@@ -165,8 +165,14 @@ export function usePptBuilderAnalysis({
       : usesBuiltin
         ? (platform?.analysis?.inventory ?? builtin?.inventory ?? null)
         : null;
-  // The administrator's slide edits apply to the platform template, never the agent's own.
-  const appliedOverrides = usesBuiltin ? (platform?.overrides ?? NO_OVERRIDES) : overrides;
+  // The administrator's slide edits apply to the default template in effect (the platform
+  // one, else the Fred template), never to the agent's own.
+  const defaultOverrides = platform
+    ? platform.overrides
+    : platformQuery.data?.analysis
+      ? undefined
+      : platformQuery.data?.overrides;
+  const appliedOverrides = usesBuiltin ? (defaultOverrides ?? NO_OVERRIDES) : overrides;
   const effective = useMemo(
     () => (inventory ? effectiveInventory(inventory, appliedOverrides) : null),
     [inventory, appliedOverrides],

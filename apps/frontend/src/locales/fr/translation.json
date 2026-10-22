@@ -574,7 +574,7 @@
         "resetError": "Le template n'a pas pu être réinitialisé.",
         "resetConfirm": {
           "title": "Revenir au template Fred ?",
-          "message": "Le template de la plateforme et vos corrections de slides seront supprimés. Les agents sans template à eux reviendront au template Fred.",
+          "message": "Le template de la plateforme et toutes vos corrections de slides, y compris celles du template Fred, seront supprimés. Les agents sans template à eux reviendront au template Fred.",
           "confirm": "Réinitialiser",
           "cancel": "Annuler"
         },

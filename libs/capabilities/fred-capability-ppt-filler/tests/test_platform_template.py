@@ -29,6 +29,7 @@ from fastapi import FastAPI, HTTPException
 from fred_capability_ppt_filler.builder import analysis_job
 from fred_capability_ppt_filler.builder import capability as capability_mod
 from fred_capability_ppt_filler.builder.analysis_job import (
+    BUILTIN_ID,
     PLATFORM_ID,
     PLATFORM_NEXT_ID,
     get_analysis_store,
@@ -302,7 +303,7 @@ async def test_the_agent_routes_never_serve_the_platform_row(analysis_db):
     await _uploaded()
     await _pending_replacement()
     async with _client(manager=True) as client:
-        for row in (PLATFORM_ID, PLATFORM_NEXT_ID):
+        for row in (PLATFORM_ID, PLATFORM_NEXT_ID, BUILTIN_ID):
             for path in ("", "/patterns.pdf"):
                 response = await client.get(
                     f"/capabilities/ppt_builder/analysis/{row}{path}"
@@ -329,8 +330,6 @@ async def _edit(client: httpx.AsyncClient, *overrides: dict) -> httpx.Response:
 async def test_a_manager_edits_the_platform_slides_for_every_agent(
     analysis_db, built_on
 ):
-    async with _client(manager=True) as client:
-        assert (await _edit(client)).status_code == 404  # nothing to edit yet
     await _uploaded()
     pattern = _first_pattern()
     async with _client(manager=True) as client:
@@ -361,6 +360,61 @@ async def test_a_rerun_keeps_the_edits_and_another_file_drops_them(analysis_db):
         assert (await client.get(_BASE)).json()["overrides"]  # until it succeeds
         await drain()
         assert (await client.get(_BASE)).json()["overrides"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_manager_edits_the_fred_template_slides_for_every_agent(
+    analysis_db, built_on
+):
+    pattern = builtin_template()[1].patterns[0].id
+    async with _client(manager=False) as client:
+        assert (await _edit(client)).status_code == 403
+    async with _client(manager=True) as client:
+        response = await _edit(
+            client,
+            {"pattern_id": pattern, "label": "Opening"},
+            {"pattern_id": "slide:999", "included": False},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["analysis"] is None
+        assert [o["pattern_id"] for o in body["overrides"]] == [pattern]
+        assert (await client.get(_BASE)).json()["overrides"] == body["overrides"]
+
+    middleware = _middleware()
+    await _first_model_call(middleware)
+    assert built_on[-1].pattern(pattern).label == "Opening"
+    snapshot = platform_snapshot()[1]
+    assert snapshot is not None and snapshot.sha is None
+    _middleware()  # the next turn: from the snapshot, with the edit
+    assert built_on[-1].pattern(pattern).label == "Opening"
+
+    async with _client(manager=True) as client:
+        await _edit(client)  # no edits left: the row goes
+    assert await get_analysis_store().get(BUILTIN_ID) is None
+
+
+@pytest.mark.asyncio
+async def test_fred_template_edits_wait_under_a_platform_template_and_reset_clears_them(
+    analysis_db, built_on
+):
+    pattern = builtin_template()[1].patterns[0].id
+    async with _client(manager=True) as client:
+        await _edit(client, {"pattern_id": pattern, "included": False})
+    await _uploaded()
+    async with _client(manager=True) as client:
+        assert (await client.get(_BASE)).json()["overrides"] == []
+    await _first_model_call(_middleware())
+    snapshot = platform_snapshot()[1]
+    assert snapshot is not None and snapshot.sha == SHA
+    assert await get_analysis_store().get(BUILTIN_ID) is not None  # kept, unused
+
+    async with _client(manager=True) as client:
+        assert (await client.delete(f"{_BASE}/template")).status_code == 200
+        assert (await client.get(_BASE)).json()["overrides"] == []
+    assert await get_analysis_store().get(BUILTIN_ID) is None
+    await _first_model_call(_middleware())
+    assert built_on[-1] is builtin_template()[1]
 
 
 # --- resolution --------------------------------------------------------------------------------

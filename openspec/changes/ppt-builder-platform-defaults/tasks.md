@@ -15,6 +15,7 @@ Linked issue: #2987 (first slice). Ships inside the ppt_builder PR (#2679).
 
 - [x] 2.4 Keep the previous platform template while a replacement is analysed or failed: uploads and re-runs analyse the `__platform_next__` row, promoted onto `__platform__` in `finish`'s transaction on success; reset deletes both; `GET /platform` reports both and restarts an interrupted replacement (D1, D2); verify with route and job tests (pending and failed replacements keep the previous template for agents, success promotes it, a re-run keeps the current one in use, reset clears both).
 - [x] 2.5 Store the manager's pattern edits on the platform row (`overrides_json`, amended into `r9d3f4a5b6c7`, never applied) with `PUT /platform/overrides`, pruned against the template in effect; a promotion keeps them pruned for the same file and drops them for another (D7); verify with route tests (manager-only, pruning, kept on re-run, dropped on a new file, applied to agents through the snapshot), a single head and a real SQLite upgrade/downgrade/check.
+- [x] 2.6 Let the manager edit the Fred template's slides when no platform template is in effect: `PUT /platform/overrides` stores them, pruned against the shipped inventory, in a reserved `__builtin__` row (no schema change), `GET /platform` returns them as `overrides`, reset deletes them, and the snapshot applies them (D7); verify with route and resolution tests (manager-only, pruning, applied to agents from the snapshot, unused under an uploaded template, cleared by reset, the agent routes reject the reserved id).
 
 ## 3. Resolution
 
@@ -34,6 +35,7 @@ Linked issue: #2987 (first slice). Ships inside the ppt_builder PR (#2679).
 - [x] 5.3 Build the platform drawer: current template, upload, status (the previous template stays in use while a replacement is pending or failed), vision choice, re-run, patterns PDF, "Review the slides" (editable for managers, saved as the platform's pattern edits), reset behind a `ConfirmationDialog`; writes shown to capability managers only; verify with drawer tests (states, permission gating, reset confirmation, the error on an invalid upload).
 - [x] 5.4 Agent form: the no-template branch reads `/platform` and shows "Template set by the administrator" with the file name plus the platform slides in the read-only review; upload still overrides it; verify with tests for set and unset defaults.
 - [x] 5.5 Add fr/en i18n keys; verify `tsc` and the i18n key checks pass.
+- [x] 5.6 Drawer: "Review the slides" on the Fred template too (built-in previews), reset offered when only its edits exist; the agent form applies them in its read-only review; verify with drawer and `usePptBuilderAnalysis` tests.
 
 ## 6. Docs and close-out
 

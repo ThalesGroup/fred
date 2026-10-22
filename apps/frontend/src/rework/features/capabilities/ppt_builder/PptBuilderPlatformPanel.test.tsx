@@ -27,6 +27,7 @@ import type { AnalysisStatusResponse, PlatformTemplateResponse } from "./api/ppt
 
 const h = vi.hoisted(() => ({
   platform: undefined as PlatformTemplateResponse | undefined,
+  builtin: undefined as { inventory: AnalysisStatusResponse["inventory"] } | undefined,
   refetch: vi.fn(),
   rerun: vi.fn(),
   reset: vi.fn(),
@@ -38,7 +39,12 @@ const h = vi.hoisted(() => ({
   selectOptions: undefined as undefined | { label: string; value: string }[],
   review: undefined as
     | undefined
-    | { readOnly: boolean; onOverride: (id: string, patch: object) => void; onClose: () => void },
+    | {
+        readOnly: boolean;
+        previewSource: unknown;
+        onOverride: (id: string, patch: object) => void;
+        onClose: () => void;
+      },
 }));
 
 const ok = (fn: (arg?: unknown) => void) =>
@@ -55,6 +61,9 @@ vi.mock("../useCapabilityRouted", () => ({ useCapabilityRouted: () => true }));
 vi.mock("./api/pptBuilderCapabilityApi", () => ({ CAPABILITY_ID: "ppt_builder" }));
 vi.mock("./api/pptBuilderCapabilityOpenApi", () => ({
   useGetPptBuilderPlatformQuery: () => ({ data: h.platform, isError: false, refetch: h.refetch }),
+  useGetPptBuilderBuiltinQuery: (_arg: unknown, options: { skip?: boolean }) => ({
+    data: options.skip ? undefined : h.builtin,
+  }),
   useRerunPptBuilderPlatformAnalysisMutation: () => [ok(h.rerun), { isLoading: false }],
   useDeletePptBuilderPlatformTemplateMutation: () => [ok(h.reset), { isLoading: false }],
   usePutPptBuilderPlatformOverridesMutation: () => [ok(h.saveOverrides)],
@@ -144,6 +153,7 @@ beforeEach(() => {
   for (const fn of [h.refetch, h.rerun, h.reset, h.saveOverrides, h.upload, h.showSuccess, h.showError]) fn.mockReset();
   h.platformModels.mockReset().mockReturnValue({ data: undefined });
   h.review = undefined;
+  h.builtin = { inventory: analysis().inventory };
   h.selectOptions = undefined;
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -219,6 +229,23 @@ describe("PptBuilderPlatformPanel", () => {
     expect(h.saveOverrides).toHaveBeenCalledWith({
       platformOverridesRequest: { overrides: [{ pattern_id: "slide:1", included: false }] },
     });
+  });
+
+  it("lets a manager correct the Fred template's slides, cleared by the reset", async () => {
+    show({ analysis: null, overrides: [] });
+    expect(text()).not.toContain(`${K}.reset`);
+    act(() => button("capability.ppt_builder.form.review").click());
+    expect(h.review?.readOnly).toBe(false);
+    expect(h.review?.previewSource).toEqual({ kind: "builtin" });
+    act(() => h.review?.onOverride("slide:1", { label: "Opening" }));
+    await act(async () => h.review?.onClose());
+    expect(h.saveOverrides).toHaveBeenCalledWith({
+      platformOverridesRequest: { overrides: [{ pattern_id: "slide:1", label: "Opening" }] },
+    });
+
+    show({ analysis: null, overrides: [{ pattern_id: "slide:1", label: "Opening" }] });
+    expect(text()).toContain(`${K}.reset`);
+    expect(text()).not.toContain(`${K}.rerun`);
   });
 
   it("shows the review read only to someone who is not a capability manager", () => {

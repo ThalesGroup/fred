@@ -108,9 +108,10 @@ Fred template until changed):
 - **Review slides** — rename a slide, change its kind or set it aside. The
   edits are saved when the review closes and apply to every agent using this
   template. A new reading of the same file keeps them; another file starts
-  without edits.
-- **Reset to the Fred template** — deletes the template and its edits, after
-  a confirmation.
+  without edits. With no uploaded template, you edit the Fred template's
+  slides the same way.
+- **Reset to the Fred template** — deletes the template and every edit, the
+  Fred template's included, after a confirmation.
 
 A change reaches every agent within a minute.
 

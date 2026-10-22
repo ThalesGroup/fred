@@ -574,7 +574,7 @@
         "resetError": "The template could not be reset.",
         "resetConfirm": {
           "title": "Go back to the Fred template?",
-          "message": "The platform template and your slide edits will be deleted. Agents without a template of their own will go back to the Fred template.",
+          "message": "The platform template and all your slide edits, including those of the Fred template, will be deleted. Agents without a template of their own will go back to the Fred template.",
           "confirm": "Reset",
           "cancel": "Cancel"
         },

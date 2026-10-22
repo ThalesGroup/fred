@@ -120,9 +120,10 @@ qui n'en ont pas à eux (le template Fred tant que rien n'est changé) :
 - **Vérifier les slides** — renommez une slide, changez son type ou
   mettez-la de côté. Les corrections s'enregistrent à la fermeture et valent
   pour tous les agents qui utilisent ce template. Une nouvelle lecture du même
-  fichier les garde ; un autre fichier repart sans corrections.
-- **Réinitialiser au template Fred** — supprime le template et ses corrections,
-  après confirmation.
+  fichier les garde ; un autre fichier repart sans corrections. Sans template
+  téléversé, vous corrigez de la même façon les slides du template Fred.
+- **Réinitialiser au template Fred** — supprime le template et toutes les
+  corrections, celles du template Fred comprises, après confirmation.
 
 Un changement atteint tous les agents en moins d'une minute.
 

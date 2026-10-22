@@ -34,6 +34,7 @@ const analysis = vi.hoisted(() => ({
   readinessCheck: vi.fn(),
   platform: { data: undefined, isLoading: false } as { data?: unknown; isLoading: boolean },
   builtinOptions: [] as { skip?: boolean }[],
+  builtin: undefined as unknown,
   configValues: { template_sha256: "abc" } as Record<string, unknown>,
 }));
 
@@ -44,7 +45,7 @@ vi.mock("./api/pptBuilderCapabilityOpenApi", () => ({
   },
   useGetPptBuilderBuiltinQuery: (_arg: unknown, options: { skip?: boolean }) => {
     analysis.builtinOptions.push(options);
-    return { data: undefined };
+    return { data: options.skip ? undefined : analysis.builtin };
   },
   useGetPptBuilderPlatformQuery: () => analysis.platform,
 }));
@@ -108,6 +109,7 @@ const polling = () => analysis.options[analysis.options.length - 1].pollingInter
 beforeEach(() => {
   analysis.options = [];
   analysis.builtinOptions = [];
+  analysis.builtin = undefined;
   analysis.platform = { data: undefined, isLoading: false };
   analysis.configValues = { template_sha256: SHA };
   analysis.readinessCheck.mockReset().mockReturnValue(Promise.resolve());
@@ -208,5 +210,16 @@ describe("usePptBuilderAnalysis", () => {
     expect(result.platformTemplate).toBeNull();
     expect(result.previewSource).toEqual({ kind: "builtin" });
     expect(analysis.builtinOptions[analysis.builtinOptions.length - 1].skip).toBe(false);
+  });
+
+  it("applies the administrator's edits of the built-in template", () => {
+    analysis.configValues = {};
+    analysis.builtin = { inventory: { slide_width: 1, slide_height: 1, patterns: [PATTERN] } };
+    analysis.platform = {
+      isLoading: false,
+      data: { analysis: null, overrides: [{ pattern_id: "slide:1", label: "Admin edit" }] },
+    };
+    show({});
+    expect(result.effective?.patterns?.[0].label).toBe("Admin edit");
   });
 });

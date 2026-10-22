@@ -104,6 +104,7 @@ See proposal.md for the motivation. Current state that shapes the approach:
 **Decision.**
 - **Agent.** `validate_config` drops overrides when `template_sha256 is None`, instead of pruning them against the built-in inventory, and the middleware ignores any stored ones in that state. This also fixes the existing collision when an agent goes back to no template.
 - **Platform.** The manager's edits are stored on the `__platform__` row (`overrides_json`) and apply to every agent that builds on it; agents without their own template have none of their own (owner, 2026-10-22).
+- **Fred template.** With no platform template in effect, the manager reviews and edits the Fred template's slides through the same `PUT /platform/overrides`. The edits live in a reserved `__builtin__` row of the same table holding only `overrides_json` (no schema change, empty template bytes), pruned against the shipped inventory on write and on read. The pod snapshot applies them on its 30 s read (one more primary-key read only while no platform template is in effect), so a turn still does no I/O. An uploaded template leaves them stored but unused; "Reset" deletes them with the platform rows (owner, 2026-10-22).
 - **Re-analysis.** A promotion keeps the current edits pruned against the new inventory when the file is the same (a re-run), and drops them for another file: positional ids would hit unrelated slides.
 
 **Alternative: binding overrides to a template sha.** That means more code, and the agent form never allows editing in the no-template state.

@@ -27,7 +27,7 @@ The platform SHALL always have exactly one default template for ppt_builder. Its
 #### Scenario: Reset to the Fred template
 
 - **WHEN** the manager chooses "Reset"
-- **THEN** after a confirmation, the replacement, any replacement being analysed and the pattern edits are deleted, the Fred template becomes the default template again, and agents without a template of their own build on it
+- **THEN** after a confirmation, the replacement, any replacement being analysed and the pattern edits, those of the Fred template included, are deleted, the Fred template becomes the default template again, and agents without a template of their own build on it
 
 #### Scenario: No removal
 
@@ -65,12 +65,18 @@ A capability manager SHALL choose the vision model that labels the platform defa
 
 ### Requirement: Platform template pattern edits
 
-A capability manager SHALL review the slides of the platform default template in effect and adjust them as an author does for an agent template: rename a pattern, include or exclude it, change its type. These pattern edits SHALL be stored with the platform template and SHALL apply to every agent that builds on it. They SHALL be pruned against the template's analysis like an agent's: a re-analysis of the same file keeps the edits whose patterns still exist, and another file starts without edits.
+A capability manager SHALL review the slides of the platform default template in effect, the Fred template included, and adjust them as an author does for an agent template: rename a pattern, include or exclude it, change its type. These pattern edits SHALL be stored with the platform template and SHALL apply to every agent that builds on it. They SHALL be pruned against the template's analysis like an agent's: a re-analysis of the same file keeps the edits whose patterns still exist, and another file starts without edits.
 
 #### Scenario: Manager edits a slide
 
 - **WHEN** a capability manager excludes a pattern of the platform template in the review dialog and saves
 - **THEN** agents without a template of their own no longer use that pattern, within the propagation bound
+
+#### Scenario: Manager edits a slide of the Fred template
+
+- **WHEN** no platform template is in effect and a capability manager renames or excludes a pattern of the Fred template in the review dialog and saves
+- **THEN** agents without a template of their own build on the Fred template with that edit, within the propagation bound
+- **AND** while an uploaded platform template is in effect the Fred template's edits are kept but not applied, and "Reset" deletes them
 
 #### Scenario: Re-analysis keeps valid edits
 
