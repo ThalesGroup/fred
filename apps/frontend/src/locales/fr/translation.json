@@ -651,6 +651,15 @@
       "arguments": "Arguments :"
     }
   },
+  "mermaid": {
+    "diagram": "Diagramme Mermaid",
+    "copySource": "Copier le code du diagramme",
+    "enlarge": "Agrandir le diagramme",
+    "close": "Fermer le diagramme agrandi",
+    "loading": "Rendu du diagramme...",
+    "error": "Erreur du diagramme",
+    "renderError": "Le diagramme n'a pas pu être affiché."
+  },
   "common": {
     "cancel": "Annuler",
     "close": "Fermer",

@@ -103,7 +103,17 @@ const baseConfig = defineConfig({
     // react-dropzone is pre-bundled because it is lazy-loaded by MigrationPage;
     // this avoids the same mid-session re-optimize + 504 "Outdated Optimize Dep"
     // reload dance when that route is first visited.
-    include: ["react-dropzone", "@braintree/sanitize-url", "dompurify", "khroma", "dayjs"],
+    include: [
+      "react-dropzone",
+      "@braintree/sanitize-url",
+      "dompurify",
+      "khroma",
+      "dayjs",
+      "dayjs/plugin/advancedFormat.js",
+      "dayjs/plugin/customParseFormat.js",
+      "dayjs/plugin/isoWeek.js",
+      "dayjs/plugin/duration.js",
+    ],
     exclude: ["mermaid"],
     esbuildOptions: {
       loader: {

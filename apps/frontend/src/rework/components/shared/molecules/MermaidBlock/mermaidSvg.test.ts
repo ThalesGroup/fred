@@ -1,0 +1,78 @@
+// @vitest-environment jsdom
+// Copyright Thales 2026
+// SPDX-License-Identifier: Apache-2.0
+
+import { describe, expect, it } from "vitest";
+import { prepareMermaidSvg } from "./mermaidSvg";
+
+const example = `<svg id="raw" aria-labelledby="title"><title id="title">Example</title>
+<style>@import url('https://fonts.googleapis.com/css?family=Inter');
+@font-face {font-family:remote;src:url(https://example.com/font.woff2)}
+svg {--bg:var(--surface-container)} text {font-family:Inter;fill:var(--on-surface)}
+#raw .node {animation:pulse 1s} @keyframes pulse {from {opacity:.5} to {opacity:1}}
+</style><defs><marker id="arrow"><path d="M0,0 L4,2"/></marker></defs>
+<g id="node" class="node"><text>Question</text></g>
+<path marker-end="url(#arrow)" style="stroke:var(--primary);filter:url('#arrow')"/>
+<use href="#node"/></svg>`;
+
+describe("SVG view isolation", () => {
+  it("gives every inline/enlarged view its own IDs, references, styles and keyframes", () => {
+    const host = document.createElement("div");
+    host.innerHTML = ["firstInline", "firstEnlarged", "secondInline"]
+      .map((scope) => `<div id="${scope}">${prepareMermaidSvg(example, scope)}</div>`)
+      .join("");
+    const ids = [...host.querySelectorAll("[id]")].map((node) => node.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const wrapper of [...host.children]) {
+      const svg = wrapper.querySelector("svg")!;
+      for (const attr of ["marker-end", "style"]) {
+        const value = svg.querySelector("path[marker-end]")!.getAttribute(attr)!;
+        for (const match of value.matchAll(/url\(["']?#([^)'"\s]+)/g))
+          expect(wrapper.querySelector(`[id="${match[1]}"]`)).not.toBeNull();
+      }
+      expect(wrapper.querySelector(`[id="${svg.getAttribute("aria-labelledby")}"]`)).not.toBeNull();
+      expect(svg.querySelector("style")!.textContent).toContain(`#${wrapper.id} text`);
+      expect(svg.querySelector("style")!.textContent).toContain(`@keyframes ${wrapper.id}-animation-0`);
+      expect(svg.innerHTML).not.toContain("https://");
+    }
+  });
+
+  it("sanitizes script-bearing markup, URLs and handlers while keeping labels and paths", () => {
+    const raw =
+      '<svg onload="alert(1)"><script>alert(1)</script><a href="javascript:alert(1)"><text>Safe label</text></a><path d="M0 0L10 10"/></svg>';
+    const output = prepareMermaidSvg(raw, "safe");
+    expect(output).not.toMatch(/<script|onload|javascript:/i);
+    expect(output).toContain("Safe label");
+    expect(output).toContain('d="M0 0L10 10"');
+  });
+
+  it("keeps absolute same-document references inside each renamed view", () => {
+    const absolute = new URL("#arrow", document.URL).href;
+    const source = example
+      .replaceAll("url(#arrow)", `url(${absolute})`)
+      .replace('<use href="#node"/>', `<a href="${new URL("#node", document.URL).href}"><text>Link</text></a>`);
+    for (const scope of ["absoluteInline", "absoluteEnlarged"]) {
+      const host = document.createElement("div");
+      host.innerHTML = prepareMermaidSvg(source, scope);
+      const reference = host.querySelector("[marker-end]")!.getAttribute("marker-end")!;
+      expect(reference).toBe(`url(#${host.querySelector("marker")!.id})`);
+      expect(host.querySelector("a")!.getAttribute("href")).toBe(`#${host.querySelector("g")!.id}`);
+    }
+  });
+
+  it("rejects invalid renderer output", () => {
+    expect(() => prepareMermaidSvg("<div>not a diagram</div>", "bad")).toThrow("Invalid diagram output");
+  });
+
+  it("preserves Mermaid's HTML labels while sanitizing their contents", () => {
+    const output = prepareMermaidSvg(
+      '<svg><foreignObject width="100" height="24"><div xmlns="http://www.w3.org/1999/xhtml"><span>Question</span><script>alert(1)</script><img src="x" onerror="alert(1)"></div></foreignObject></svg>',
+      "htmlLabel",
+    );
+    const host = document.createElement("div");
+    host.innerHTML = output;
+    expect(host.querySelector("foreignObject")!.textContent).toBe("Question");
+    expect(output).not.toMatch(/<script|onerror|alert\(1\)/i);
+    expect(host.querySelector("foreignObject")!.getAttribute("width")).toBe("100");
+  });
+});

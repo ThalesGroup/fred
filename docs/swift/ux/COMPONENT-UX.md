@@ -975,6 +975,38 @@ _(none — streaming indicator resolved 2026-05-18)_
 
 ---
 
+### `MermaidBlock`
+
+**Location:** `src/rework/components/shared/molecules/MermaidBlock/`
+**Status:** `Functional`
+
+Completed Mermaid fences use beautiful-mermaid for its supported subset, with official Mermaid
+as a compatibility renderer for other syntax (including one-line semicolon headers, pie and
+Gantt). The original source is attempted before the existing syntax repair. Open fences remain
+source previews until they close.
+
+Both the inline diagram and enlarged view follow Fred's current theme: `surface-container` canvas,
+`surface-container-high` nodes, `on-surface` labels, `on-surface-retreat` connectors/secondary labels,
+`primary` accent and `outline-variant` borders. Diagram fonts are local application fonts; SVG styles,
+IDs, references and animations are isolated per view. Theme and mode changes update mounted diagrams.
+The compact header retains source copy and enlargement actions, with translated labels. Escape closes
+the enlarged view and returns focus to its trigger. Rendering errors retain the source-copy action.
+
+For a representative example, paste this completed block into an existing Markdown surface:
+
+````markdown
+```mermaid
+flowchart LR
+  Q[Question] --> A[Agent]
+  A --> D[Documents]
+  A --> W[Recherche web]
+  D --> R[Réponse]
+  W --> R
+```
+````
+
+---
+
 ### `CodeBlock`
 
 **Location:** `src/rework/components/shared/molecules/CodeBlock/CodeBlock.tsx`
