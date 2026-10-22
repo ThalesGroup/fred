@@ -4397,13 +4397,13 @@
     "notificationSettings": {
       "title": "Notifications",
       "subtitle": "Choisissez les notifications envoyées par la plateforme. Le choix s'applique à toutes les équipes et à tous les utilisateurs.",
-      "hint": "Désactiver un type supprime aussi, pour tout le monde, les notifications de ce type déjà envoyées. Le réactiver ne concerne que les nouveaux événements.",
+      "hint": "Désactiver un type masque ses notifications pour tout le monde, jusqu'à ce qu'il soit réactivé.",
       "loadFailed": "Impossible de charger les réglages des notifications.",
       "saveFailed": "Impossible d'enregistrer le réglage de la notification.",
       "toggleLabel": "Envoyer les notifications « {{name}} »",
       "turnOff": {
         "title": "Désactiver « {{name}} » ?",
-        "message": "Les notifications de ce type déjà envoyées seront supprimées, pour tout le monde. Le réactiver ne concerne que les nouveaux événements.",
+        "message": "Les notifications de ce type seront masquées pour tout le monde jusqu'à ce que le type soit réactivé. Rien n'est supprimé.",
         "confirm": "Désactiver"
       }
     }

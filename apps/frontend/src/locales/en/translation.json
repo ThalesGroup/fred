@@ -4397,13 +4397,13 @@
     "notificationSettings": {
       "title": "Notifications",
       "subtitle": "Choose which notifications the platform sends. The choice applies to every team and every user.",
-      "hint": "Turning a type off also deletes the notifications of that type already sent, for everyone. Turning it back on only affects new events.",
+      "hint": "Turning a type off hides the notifications of that type for everyone, until it is turned back on.",
       "loadFailed": "The notification settings could not be loaded.",
       "saveFailed": "The notification setting could not be saved.",
       "toggleLabel": "Send “{{name}}” notifications",
       "turnOff": {
         "title": "Turn off “{{name}}”?",
-        "message": "The notifications of this type already sent will be deleted, for everyone. Turning it back on only affects new events.",
+        "message": "The notifications of this type will be hidden for everyone until the type is turned back on. Nothing is deleted.",
         "confirm": "Turn off"
       }
     }

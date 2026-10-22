@@ -212,7 +212,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     clearNotificationsControlPlaneV1NotificationsDelete: {
       invalidatesTags: ["ControlPlaneNotification"],
     },
-    // Turning a type off deletes its sent rows, so the caller's own list refreshes too.
+    // Turning a type off hides its rows, so the caller's own list refreshes too.
     listNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGet: {
       providesTags: ["ControlPlaneNotificationTypes"],
     },

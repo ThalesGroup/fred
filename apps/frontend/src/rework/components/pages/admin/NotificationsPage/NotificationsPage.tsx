@@ -47,7 +47,7 @@ export default function NotificationsPage() {
     }
   };
 
-  // Off deletes the notifications already sent, for everyone: confirm it first.
+  // Off hides the type's notifications for everyone: confirm it first.
   const toggle = (type: NotificationType, name: string, enabled: boolean) => {
     if (enabled) {
       void save(type, true);
