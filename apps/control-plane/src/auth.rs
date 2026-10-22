@@ -43,6 +43,9 @@ use uuid::Uuid;
 // most one refetch every thirty seconds.
 const JWKS_LIFESPAN: Duration = Duration::from_secs(300);
 const JWKS_COOLDOWN: Duration = Duration::from_secs(30);
+// While the provider cannot be reached, known keys keep verifying tokens at most this
+// long after their last successful fetch; a fetched key set always replaces them.
+const JWKS_STALE_LIMIT: Duration = Duration::from_secs(3600);
 const LOCAL_DEV_CLIENT_ID: &str = "local-dev";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -185,39 +188,53 @@ impl Jwks {
         }
     }
 
-    async fn cached(&self, kid: &str) -> Option<DecodingKey> {
+    async fn cached(&self, kid: &str, max_age: Duration) -> Option<DecodingKey> {
         let (fetched, keys) = &*self.cache.read().await;
         fetched
-            .is_some_and(|t| t.elapsed() < JWKS_LIFESPAN)
+            .is_some_and(|t| t.elapsed() < max_age)
             .then(|| keys.get(kid).cloned())
             .flatten()
     }
 
     async fn key(&self, kid: &str) -> Result<DecodingKey> {
-        if let Some(key) = self.cached(kid).await {
+        if let Some(key) = self.cached(kid, JWKS_LIFESPAN).await {
             return Ok(key);
         }
         let mut attempt = self.attempt.lock().await;
         // Another request may have fetched while this one waited.
-        if let Some(key) = self.cached(kid).await {
+        if let Some(key) = self.cached(kid, JWKS_LIFESPAN).await {
             return Ok(key);
         }
+        let stale = self.cached(kid, JWKS_STALE_LIMIT).await;
         if !may_fetch(attempt.map(|t| t.elapsed())) {
-            bail!("unknown kid within the refetch cooldown");
+            return stale.context("unknown kid within the refetch cooldown");
         }
         *attempt = Some(Instant::now());
-        let set: JwkSet = self
+        let set = match self.fetch().await {
+            Ok(set) => set,
+            Err(error) => {
+                if let Some(key) = stale {
+                    tracing::warn!("[AUTH] JWKS refresh failed; serving a known signing key");
+                    return Ok(key);
+                }
+                return Err(error);
+            }
+        };
+        let keys = signing_keys(&set);
+        let found = keys.get(kid).cloned();
+        *self.cache.write().await = (Some(Instant::now()), keys);
+        found.context("no signing key for kid")
+    }
+
+    async fn fetch(&self) -> Result<JwkSet> {
+        Ok(self
             .http
             .get(&self.url)
             .send()
             .await?
             .error_for_status()?
             .json()
-            .await?;
-        let keys = signing_keys(&set);
-        let found = keys.get(kid).cloned();
-        *self.cache.write().await = (Some(Instant::now()), keys);
-        found.context("no signing key for kid")
+            .await?)
     }
 }
 
@@ -784,6 +801,31 @@ mod tests {
         assert!(may_fetch(None));
         assert!(!may_fetch(Some(Duration::from_secs(10))));
         assert!(may_fetch(Some(Duration::from_secs(30))));
+    }
+
+    #[tokio::test]
+    async fn known_keys_survive_an_unreachable_provider_within_the_stale_limit() {
+        // Nothing listens on port 1: every refetch fails.
+        let aged = |age: Duration| {
+            let jwks = Jwks::new("http://127.0.0.1:1/certs".into(), reqwest::Client::new());
+            let fetched = Instant::now()
+                .checked_sub(age)
+                .expect("monotonic clock older than the stale limit");
+            *jwks.cache.try_write().unwrap() = (
+                Some(fetched),
+                HashMap::from([(KID.to_string(), keys().1.clone())]),
+            );
+            jwks
+        };
+        let expired = aged(JWKS_LIFESPAN + Duration::from_secs(1));
+        assert!(
+            expired.key(KID).await.is_ok(),
+            "failed refetch serves a known kid"
+        );
+        assert!(expired.key(KID).await.is_ok(), "so does the cooldown");
+        assert!(expired.key("unknown").await.is_err());
+        let too_old = aged(JWKS_STALE_LIMIT + Duration::from_secs(1));
+        assert!(too_old.key(KID).await.is_err());
     }
 
     #[tokio::test]

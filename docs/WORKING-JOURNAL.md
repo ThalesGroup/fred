@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F06](#f06-clés-jwks-pendant-une-panne-du-fournisseur) | Clés JWKS connues servies 1 h au plus pendant une panne | Tests ciblés validés ; validation finale du lot | 03 |
 | [F05](#f05-sujet-des-grants-et-erreurs-openfga) | Grants vers un sujet connu ; erreurs OpenFGA classées | Tests ciblés validés ; validation finale du lot | 03, 03a, A2, 09 (I27) |
 | [F18](#f18-audit-des-révocations-effectives) | Audit des seules révocations effectives, sans doublon | Tests ciblés validés ; validation finale du lot | 09 (I16), A3 |
 | [F15](#f15-une-seule-liste-de-routes) | Une seule liste de routes HTTP | Tests automatisés validés | A1, carte des sources |
@@ -82,6 +83,16 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F06 Clés JWKS pendant une panne du fournisseur
+
+- 2026-10-22 : vérification sur HEAD `f4e2708e9` : confirmé. Après 300 s, `Jwks::cached` ne
+  rendait plus aucune clé ; un refetch en échec puis le cooldown refusaient tout jeton, même
+  signé par une clé connue. Correction (borne choisie par Dimi) : `JWKS_STALE_LIMIT` = 3600 s ;
+  un kid connu reste servi si le rafraîchissement échoue ou attend son cooldown ; un jeu
+  récupéré remplace toujours le cache ; un kid inconnu suit le cooldown. Test unitaire
+  `known_keys_survive_an_unreachable_provider_within_the_stale_limit` (cache antidaté),
+  en échec avec l'ancienne borne. `make test` réussi. Arc42 03 (Key cache).
 
 ## F05 Sujet des grants et erreurs OpenFGA
 

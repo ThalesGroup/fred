@@ -19,7 +19,7 @@ manager authority, not a universal replacement for every Python security boundar
 | OIDC subjects | A non-UUID configured UID becomes `uuid5(NAMESPACE_URL, "<realm_url>#<identity>")`; an empty UID is refused |
 | Issuer and audience | Always required: exact issuer (user and m2m realms), audience `audience` or, by default, `client_id` |
 | Times | `exp` and an integer `iat` required, `iat` not in the future, `exp - iat` at most `FRED_JWT_MAX_LIFETIME_SECONDS` (3600), leeway `FRED_JWT_CLOCK_SKEW` (0) |
-| Key cache | Keys kept 300 s; an unknown `kid` refetches at most once per 30 s, failures included, one fetch at a time, cached keys readable meanwhile; tokens are verified on every request |
+| Key cache | Keys kept 300 s; an unknown `kid` refetches at most once per 30 s, failures included, one fetch at a time, fresh cached keys readable meanwhile; when a refresh fails or waits for its cooldown, a known `kid` keeps verifying for at most 3600 s after its last successful fetch, and a successfully fetched set always replaces the cache; tokens are verified on every request |
 | Disabled | `security.user.enabled: false`: every caller is the mock `admin`, client `local-dev`; `profile: c3` refuses to start that way |
 
 401 answers carry a `WWW-Authenticate` header:
