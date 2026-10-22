@@ -12,6 +12,7 @@ from fastmcp.server.dependencies import get_http_request
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 from fastmcp.utilities.asgi_transport import StreamingASGITransport
 from fred_runtime.common import mcp_utils
+from fred_runtime.common.mcp_http_auth import MCPHTTPAuth
 from fred_runtime.common.outbound_credentials import (
     OutboundCredentials,
     PersonCredentialProvider,
@@ -19,7 +20,54 @@ from fred_runtime.common.outbound_credentials import (
 from fred_sdk.contracts.context import RuntimeContext
 from fred_sdk.contracts.models import MCPServerConfiguration
 from langchain.mcp import MCPAdapter
+from mcp.shared._httpx_utils import request_within_origin
 from starlette.responses import JSONResponse
+
+
+@pytest.mark.asyncio
+async def test_http_factory_allows_one_expiry_retry_without_following_redirects() -> (
+    None
+):
+    state = {"token": "expired", "refreshes": 0}
+    seen: list[tuple[str, str]] = []
+
+    async def token() -> str:
+        return state["token"]
+
+    async def refresh() -> str:
+        state["refreshes"] += 1
+        state["token"] = "renewed"
+        return "renewed"
+
+    async def receive(request: httpx2.Request) -> httpx2.Response:
+        seen.append((str(request.url), request.headers.get("authorization", "")))
+        if request.url.path == "/redirect":
+            return httpx2.Response(307, headers={"Location": "/elsewhere"})
+        if request.headers.get("authorization") == "Bearer expired":
+            return httpx2.Response(
+                401,
+                headers={"WWW-Authenticate": "Bearer token expired"},
+            )
+        return httpx2.Response(200)
+
+    client = mcp_utils._mcp_http_client_factory(
+        auth=MCPHTTPAuth(PersonCredentialProvider(token), refresh=refresh)
+    )
+    client._transport = httpx2.MockTransport(receive)
+    async with client:
+        response = await client.post(
+            "http://test.invalid/mcp", json={"method": "tools/call"}
+        )
+        with pytest.raises(httpx2.TooManyRedirects, match="redirect refused"):
+            await request_within_origin(client, "GET", "http://test.invalid/redirect")
+
+    assert response.status_code == 200
+    assert state["refreshes"] == 1
+    assert seen == [
+        ("http://test.invalid/mcp", "Bearer expired"),
+        ("http://test.invalid/mcp", "Bearer renewed"),
+        ("http://test.invalid/redirect", "Bearer renewed"),
+    ]
 
 
 @pytest.mark.asyncio

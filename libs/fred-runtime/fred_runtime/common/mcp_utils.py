@@ -122,14 +122,23 @@ def _mcp_http_client_factory(
     auth: httpx2.Auth | None = None,
     follow_redirects: bool = False,
 ) -> httpx2.AsyncClient:
-    # The SDK's default factory follows redirects; Fred's bearer and grant must not.
+    # httpx2 counts one auth retry in redirect history even when redirects are off.
+    # The MCP SDK also follows redirects itself, so reject them before it can.
     return httpx2.AsyncClient(
         headers=headers,
         auth=auth,
         timeout=timeout,
         follow_redirects=False,
-        max_redirects=0,
+        max_redirects=1,
+        event_hooks={"response": [_reject_mcp_redirect]},
     )
+
+
+async def _reject_mcp_redirect(response: httpx2.Response) -> None:
+    if response.has_redirect_location:
+        raise httpx2.TooManyRedirects(
+            "MCP HTTP redirect refused.", request=response.request
+        )
 
 
 def _refusal_status(error: BaseException) -> int | None:

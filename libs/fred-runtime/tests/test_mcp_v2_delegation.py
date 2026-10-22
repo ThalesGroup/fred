@@ -154,4 +154,4 @@ async def test_receiver_refusal_loses_authority(monkeypatch, status: int) -> Non
 def test_mcp_http_client_refuses_redirects() -> None:
     client = mcp_utils._mcp_http_client_factory(follow_redirects=True)
     assert not client.follow_redirects
-    assert client.max_redirects == 0
+    assert client.max_redirects == 1
