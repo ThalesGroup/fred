@@ -1,0 +1,36 @@
+## Context
+
+See proposal.md. The broker currently accepts code only and retains a workload per conversation. Deep already uses a `CompositeBackend` for conversation text files and the physical platform skill directory; ReAct uses a validated skill snapshot. Both runtimes already have document-reading tools. Conversation attachments discard their original bytes after fast ingest. `CompositeBackend` routes agent file operations but does not create an operating-system mount inside Kata or gVisor.
+
+## Goals / Non-Goals
+
+**Goals:** Give code in an isolated workload normal read-only file paths for explicitly authorized sources, without pre-copying their contents into guest scratch. Preserve all existing skill and document behavior when the sandbox capability is disabled. Keep the mount mechanism replaceable across Kubernetes and Docker deployments.
+
+**Non-Goals:** Mounting the entire corpus bucket, sharing a host directory with untrusted code, runtime package installation, or a user skill publishing UI. A source filesystem mount does not prevent code from intentionally copying bytes it can read into its own `/work` directory.
+
+## Decisions
+
+1. **Additive capability.** Existing platform skills, Deep `/skills` discovery, ReAct skill tools, document tools and tabular tools remain the baseline. A published skill can declare `code_sandbox` as a requirement. Without that capability, ordinary skills still run and dependent skills report their unavailable step. The mount is created only for a sandbox workload, never for ordinary document or skill reads. Alternative: replace all document access with the new mount. Rejected because it would make current agents depend on sandbox infrastructure.
+
+2. **Two views with the same path contract.** Deep's `CompositeBackend` is the model-facing logical filesystem. ReAct receives matching path references through capability tools. The guest receives real `/skills` and `/inputs` read-only volume mounts and `/work` writable scratch. `CompositeBackend.execute` delegates only to a sandbox-backed default when the capability is active. A logical route alone cannot make Python `open('/inputs/...')` work in the guest. Alternative: intercept Python file APIs or transfer files before each execution. Rejected because Bash and ordinary Python libraries would not see a real mount, or because it would create guest copies.
+
+3. **Authorized source view.** A trusted Fred file gateway exposes an initially empty, lease-specific namespace. An agent selects a corpus document or conversation attachment; the runtime verifies its current authorization, enabled source and conversation scope, and binds only that file's opaque reference to the lease. The gateway resolves reads lazily from the original content store, enforces read-only operations and byte limits, and never gives storage credentials to guest code. Its mount handle is unique per workload and revoked when the lease ends. A provider interface maps that narrow view to an OS volume: an approved CSI read-only volume in Kubernetes and an approved read-only volume or bind mount in Docker. The broker validates the mounted volume specification before creating or claiming a workload. Alternative: mount S3 or NFS directly. Rejected because a raw bucket or export cannot enforce Fred's per-document authorization.
+
+4. **Operator-owned mount implementation.** Kubernetes's CSI interface is the primary integration point; the first candidate for the gateway's read-only WebDAV view is an operator-approved rclone CSI driver, with a different approved CSI provider allowed behind the same mount contract. A unique per-workload PVC or ephemeral CSI volume resolves a distinct gateway path before the Pod starts. The driver and its credentials live on trusted nodes, not in the guest. Docker can use an operator-provided mounted view bound read-only at container creation. Mount absence or a profile mismatch fails closed for file-backed sandbox execution, while code-only execution and current non-sandbox tools remain available. A production profile must verify Kata and gVisor behavior on its cluster before activation. Alternative: require a privileged FUSE process inside every guest. Rejected because it weakens the workload policy and couples the solution to guest image privileges.
+
+5. **On-demand lifecycle.** No workload is prepared before a conversation requests execution. The broker does not accept a positive ready capacity; the SIG Agent Sandbox warm-pool object remains only because its claim API requires one, with zero replicas enforced at preflight. The first execution creates a workload with an empty, private source mount. Selecting files changes that source view, not the Pod volume list. The source view is never reused across conversations. `/work` remains conversation-local until its 20-minute idle lease expires; the broker revokes the mount handle and destroys the workload together. A new conversation pays a cold-start cost, to be measured rather than hidden by idle VMs.
+
+6. **Attachment originals.** New fast-ingested attachments retain their original uploaded object in existing private content storage rather than discarding it. This is the source object, not a second file staged inside the VM. Retrieval checks uploader ownership and persisted session membership. Attachment and session erasure remove the object. Legacy attachments continue through their current text or tabular paths and report that original bytes are unavailable for mounted analysis.
+
+## Risks / Trade-offs
+
+- [A shared filesystem increases the Kata host/guest interface] -> Expose only a narrow read-only view through an approved volume and verify the selected runtime's volume implementation; never expose a host path or raw bucket.
+- [CSI and filesystem caches can retain blocks] -> Define "no copy" as no application-level pre-copy into guest scratch; use bounded cache settings, revoke handles on lease disposal and document that Linux page cache cannot be eliminated.
+- [Source authorization can change during a lease] -> Revalidate selection and each new file open at the gateway; revoke access and terminate the workload when a bound source is deleted or authorization is withdrawn. Code that already read bytes may have copied them into `/work`.
+- [A CSI driver may not support one runtime or cluster] -> Preflight mount support, provide an operator-approved alternate provider, and fail closed for file-backed execution. Benchmark mounts on the actual cluster.
+- [Retaining attachment originals increases storage and erasure duties] -> Reuse the existing content store and lifecycle cleanup, with failed-ingest cleanup and deletion tests.
+- [Mount setup can slow cold starts] -> Measure first execution and subsequent execution latency with and without the mounted source view; no idle workload is held for latency purposes.
+
+## Migration Plan
+
+Deploy the gateway and approved mount provider before enabling file-backed execution. Existing agents and code-only sandboxes retain their current behavior. New attachment retention applies only to future uploads. Rollback disables the mount profile and dependent skill execution without changing existing skill or document tools; retained originals follow normal attachment erasure.
