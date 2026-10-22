@@ -575,9 +575,10 @@ def _highlight(value: Any) -> Tuple[Optional[str], Optional[str]]:
     return (names[0][:60], None) if names else (None, None)
 
 
-def _decimal(digits: str) -> Optional[float]:
+def _decimal(digits: str, mark: Optional[str] = None) -> Optional[float]:
     """``1 200``, ``12,5``, ``1,200.50``, ``1.200,5``: the last separator
-    followed by other than three digits is the decimal one."""
+    followed by other than three digits is the decimal one, as is ``mark``
+    written once (its series uses it as the decimal one elsewhere)."""
     digits = re.sub(r"[\s']", "", digits)
     separators = [i for i, c in enumerate(digits) if c in ".,"]
     if separators:
@@ -586,7 +587,8 @@ def _decimal(digits: str) -> Optional[float]:
         mixed = len({digits[i] for i in separators}) > 1
         # "0,125" is a decimal: no number is written with a leading 0 group.
         zero = digits[:last].lstrip("+-") == "0"
-        if mixed or (digits.count(digits[last]) == 1 and (decimals != 3 or zero)):
+        once = digits.count(digits[last]) == 1
+        if mixed or (once and (decimals != 3 or zero or digits[last] == mark)):
             digits = re.sub(r"[.,]", "", digits[:last]) + "." + digits[last + 1 :]
         else:
             digits = re.sub(r"[.,]", "", digits)
@@ -597,23 +599,52 @@ def _decimal(digits: str) -> Optional[float]:
     return number if math.isfinite(number) else None
 
 
-def read_number(value: Any) -> Tuple[Optional[float], str]:
+def _match_number(value: str) -> Optional[re.Match[str]]:
+    return _NUMBER.match(
+        value.replace("\u2212", "-").replace("\u00a0", " ").replace("\u202f", " ")
+    )
+
+
+def read_number(value: Any, mark: Optional[str] = None) -> Tuple[Optional[float], str]:
     """A value as a number and the unit written around it (``"45 %"`` →
-    ``(45.0, "%")``); ``(None, "")`` when it does not read as one."""
+    ``(45.0, "%")``); ``(None, "")`` when it does not read as one. ``mark``:
+    the decimal separator the value's series uses (``decimal_mark``)."""
     if isinstance(value, bool) or value is None:
         return None, ""
     if isinstance(value, (int, float)):
         return (float(value), "") if math.isfinite(value) else (None, "")
-    match = _NUMBER.match(
-        str(value).replace("\u2212", "-").replace(" ", " ").replace(" ", " ")
-    )
+    text = str(value).strip()
+    match = _match_number(text)
     if match is None:
         return None, ""
-    number = _decimal(match.group(2))
+    number = _decimal(match.group(2), mark)
     unit = (match.group(3).strip() + match.group(1).strip()).strip()
     if number is None or len(unit) > 6 or re.search(r"\d", unit):
         return None, ""
     return number, unit
+
+
+def decimal_mark(values: Sequence[Any]) -> Optional[str]:
+    """The separator the values use as the decimal one where it cannot be a
+    thousands one ("2.5", "0,125"), when they agree on a single one."""
+    marks: set[str] = set()
+    for value in values:
+        if isinstance(value, float) and math.isfinite(value) and not value.is_integer():
+            marks.add(".")
+        match = _match_number(value) if isinstance(value, str) else None
+        if match is None:
+            continue
+        digits = re.sub(r"[\s']", "", match.group(2))
+        separators = [c for c in digits if c in ".,"]
+        if not separators:
+            continue
+        last = digits.rindex(separators[-1])
+        zero = digits[:last].lstrip("+-") == "0"
+        if len(set(separators)) > 1 or (
+            len(separators) == 1 and (len(digits) - last - 1 != 3 or zero)
+        ):
+            marks.add(separators[-1])
+    return marks.pop() if len(marks) == 1 else None
 
 
 POINT_AXES = ("x", "y", "size")
@@ -712,8 +743,9 @@ class PlanSeries(BaseModel):
         values: List[Optional[float]] = []
         unread: Dict[int, str] = {}
         units: List[str] = []
+        mark = decimal_mark(raw)
         for index, entry in enumerate(raw):
-            number, unit = read_number(entry)
+            number, unit = read_number(entry, mark)
             values.append(number)
             if number is None and (entry is not None or index in carried):
                 unread[index] = carried.get(index) or _quote(entry)[:20]

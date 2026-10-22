@@ -47,6 +47,7 @@ from fred_capability_ppt_filler.builder.models import (
 from fred_capability_ppt_filler.builder.plan import (
     DeckPlan,
     PlanChart,
+    PlanSeries,
     SlidePlan,
     read_number,
 )
@@ -1514,3 +1515,17 @@ def test_the_designs_line_says_a_chart_built_as_another_type(builtin):
     line = tools._designs_line(inventory, [pie, bars], [column, column])
     assert "1 'Charts stay native and edit…', built as a pie chart · " in line
     assert "2 'Charts stay native and edit…'." in line
+
+
+@pytest.mark.parametrize(
+    ("values", "read"),
+    [
+        (["3.141 Md€", "2.5 Md€"], [3.141, 2.5]),  # "2.5" says '.' is the decimal
+        (["1,25", "3,141"], [1.25, 3.141]),
+        (["3.141", "2"], [3141.0, 2.0]),  # ambiguous on its own: thousands
+        (["1.234.567", "2.5"], [1234567.0, 2.5]),
+        (["1,234.5", "3,141"], [1234.5, 3141.0]),
+    ],
+)
+def test_a_series_reads_its_separators_together(values, read):
+    assert PlanSeries.model_validate({"values": values}).values == read
