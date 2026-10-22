@@ -2,6 +2,7 @@ import json
 
 import pytest
 from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest
+from sandbox_broker.agent_sandbox_backend import AgentSandboxBackend
 from sandbox_broker.command import CommandResult, CommandTimeout
 from sandbox_broker.config import BrokerSettings
 from sandbox_broker.docker_backend import DockerBackend
@@ -15,8 +16,8 @@ def settings(backend="docker", **overrides):
         runtime_name="kata-qemu",
         image="python@sha256:" + "a" * 64,
         token="x" * 32,
-        network_policy_verified=backend == "kubernetes",
-        pid_limit_verified=backend == "kubernetes",
+        network_policy_verified=backend != "docker",
+        pid_limit_verified=backend != "docker",
     )
     values.update(overrides)
     return BrokerSettings(**values)
@@ -190,3 +191,207 @@ async def test_kubernetes_rejects_additional_network_policy() -> None:
     backend = KubernetesBackend(settings("kubernetes"), KubeRunner(extra_policy=True))
     with pytest.raises(SandboxError, match="policy_unavailable"):
         await backend.preflight()
+
+
+class AgentRunner(KubeRunner):
+    def __init__(
+        self,
+        *,
+        bad_image=False,
+        wait_fails=False,
+        bad_pod_env=False,
+        template_changes=False,
+        ready_replicas=0,
+        cold_fallback=False,
+    ):
+        super().__init__()
+        self.bad_image = bad_image
+        self.wait_fails = wait_fails
+        self.bad_pod_env = bad_pod_env
+        self.template_changes = template_changes
+        self.ready_replicas = ready_replicas
+        self.cold_fallback = cold_fallback
+        self.template_reads = 0
+        self.claim_name = ""
+
+    async def run(self, args, *, timeout, output_limit=65536, input_data=None):
+        if input_data:
+            self.claim_name = json.loads(input_data)["metadata"]["name"]
+        if "sandboxwarmpool" in args:
+            return CommandResult(
+                0,
+                json.dumps(
+                    {
+                        "metadata": {"generation": 1},
+                        "spec": {
+                            "replicas": self.ready_replicas,
+                            "sandboxTemplateRef": {"name": "fred-code"},
+                            "updateStrategy": {"type": "Recreate"},
+                        },
+                        "status": {
+                            "readyReplicas": self.ready_replicas,
+                            "observedGeneration": 1,
+                        },
+                    }
+                ),
+                "",
+            )
+        if "sandboxtemplate" in args:
+            self.template_reads += 1
+            pod = KubernetesBackend(settings("kubernetes"), self).job_manifest("x")[
+                "spec"
+            ]["template"]["spec"]
+            if self.bad_image:
+                pod["containers"][0]["image"] = "unapproved:latest"
+            if self.template_changes and self.template_reads > 1:
+                pod["containers"][0]["envFrom"] = [
+                    {"secretRef": {"name": "platform-secret"}}
+                ]
+            return CommandResult(
+                0,
+                json.dumps(
+                    {
+                        "spec": {
+                            "networkPolicyManagement": "Unmanaged",
+                            "podTemplate": {"spec": pod},
+                        }
+                    }
+                ),
+                "",
+            )
+        if "wait" in args and self.wait_fails:
+            self.calls.append(list(args))
+            return CommandResult(1, "", "not ready")
+        if "sandboxclaim" in args and "get" in args:
+            return CommandResult(
+                0,
+                json.dumps(
+                    {
+                        "metadata": {"creationTimestamp": "2026-10-22T00:00:01Z"},
+                        "status": {"sandbox": {"name": self.claim_name}},
+                    }
+                ),
+                "",
+            )
+        if "sandbox" in args and "get" in args:
+            launch_type = "cold" if self.cold_fallback else "warm"
+            return CommandResult(
+                0,
+                json.dumps(
+                    {
+                        "metadata": {
+                            "labels": {"agents.x-k8s.io/launch-type": launch_type}
+                        }
+                    }
+                ),
+                "",
+            )
+        if "pod" in args and "get" in args:
+            pod_spec = KubernetesBackend(settings("kubernetes"), self).job_manifest(
+                "x"
+            )["spec"]["template"]["spec"]
+            for omitted_false in ("hostNetwork", "hostPID", "hostIPC"):
+                pod_spec.pop(omitted_false)
+            if self.bad_pod_env:
+                pod_spec["containers"][0]["envFrom"] = [
+                    {"secretRef": {"name": "platform-secret"}}
+                ]
+            return CommandResult(
+                0,
+                json.dumps(
+                    {
+                        "metadata": {
+                            "ownerReferences": [{"name": self.claim_name}],
+                            "creationTimestamp": (
+                                "2026-10-22T00:00:02Z"
+                                if self.cold_fallback
+                                else "2026-10-22T00:00:00Z"
+                            ),
+                        },
+                        "spec": pod_spec,
+                    }
+                ),
+                "",
+            )
+        return await super().run(
+            args, timeout=timeout, output_limit=output_limit, input_data=input_data
+        )
+
+
+@pytest.mark.asyncio
+async def test_agent_sandbox_claim_lifecycle_and_expiry() -> None:
+    runner = AgentRunner()
+    backend = AgentSandboxBackend(settings("agent_sandbox"), runner)
+    await backend.preflight()
+    lease = await backend.prepare()
+    result = await backend.execute(
+        lease, SandboxRequest(language="bash", code="echo ok")
+    )
+    await backend.dispose(lease)
+    assert runner.manifest["kind"] == "SandboxClaim"
+    assert runner.manifest["spec"]["warmPoolRef"]["name"] == "fred-code"
+    assert runner.manifest["spec"]["lifecycle"]["shutdownPolicy"] == "DeleteForeground"
+    assert "shutdownTime" in runner.manifest["spec"]["lifecycle"]
+    assert result.stdout == "ok\n"
+    assert "sandboxclaim" in runner.calls[-1]
+    assert "--cascade=foreground" in runner.calls[-1]
+
+
+@pytest.mark.asyncio
+async def test_agent_sandbox_rejects_template_mismatch() -> None:
+    backend = AgentSandboxBackend(
+        settings("agent_sandbox"), AgentRunner(bad_image=True)
+    )
+    with pytest.raises(SandboxError, match="policy_unavailable"):
+        await backend.preflight()
+
+
+@pytest.mark.asyncio
+async def test_agent_sandbox_cleans_failed_claim() -> None:
+    runner = AgentRunner(wait_fails=True)
+    backend = AgentSandboxBackend(settings("agent_sandbox"), runner)
+    with pytest.raises(SandboxError, match="backend_failed"):
+        await backend.prepare()
+    assert "delete" in runner.calls[-1]
+
+
+@pytest.mark.asyncio
+async def test_agent_sandbox_rechecks_template_before_claim() -> None:
+    runner = AgentRunner(template_changes=True)
+    backend = AgentSandboxBackend(settings("agent_sandbox"), runner)
+    await backend.preflight()
+    with pytest.raises(SandboxError, match="policy_unavailable"):
+        await backend.prepare()
+    assert runner.manifest is None
+
+
+@pytest.mark.asyncio
+async def test_agent_sandbox_rejects_injected_secret_on_claimed_pod() -> None:
+    runner = AgentRunner(bad_pod_env=True)
+    backend = AgentSandboxBackend(settings("agent_sandbox"), runner)
+    with pytest.raises(SandboxError, match="policy_unavailable"):
+        await backend.prepare()
+    assert "delete" in runner.calls[-1]
+    assert "sandboxclaim" in runner.calls[-1]
+
+
+@pytest.mark.asyncio
+async def test_agent_sandbox_ready_mode_rejects_cold_fallback() -> None:
+    runner = AgentRunner(ready_replicas=1, cold_fallback=True)
+    backend = AgentSandboxBackend(
+        settings("agent_sandbox", cold_start_on_miss=False), runner
+    )
+    with pytest.raises(SandboxError, match="busy"):
+        await backend.prepare()
+    assert "delete" in runner.calls[-1]
+
+
+@pytest.mark.asyncio
+async def test_agent_sandbox_ready_mode_accepts_preexisting_pod() -> None:
+    runner = AgentRunner(ready_replicas=1)
+    backend = AgentSandboxBackend(
+        settings("agent_sandbox", cold_start_on_miss=False), runner
+    )
+    lease = await backend.prepare()
+    assert lease.target == runner.claim_name
+    await backend.dispose(lease)

@@ -10,21 +10,21 @@ in the separately pinned `SANDBOX_IMAGE`. Kata Containers or gVisor supplies
 the execution boundary, while this prototype supplies admission and workload
 lifecycle.
 
-For production Kubernetes, evaluate replacing the custom Job and warm-pool
-lifecycle with the [Kubernetes SIG Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/)
-and its SandboxTemplate, SandboxClaim, and optional SandboxWarmPool resources,
-using Kata as the selected RuntimeClass where virtualization is available.
+The optional `agent_sandbox` backend delegates Kubernetes lifecycle to the
+[Kubernetes SIG Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/)
+using SandboxTemplate, SandboxClaim, and SandboxWarmPool resources. Kata remains
+the preferred RuntimeClass where virtualization is available.
 [NVIDIA OpenShell](https://docs.nvidia.com/openshell/latest/kubernetes/setup)
 is a separate candidate when its network, filesystem, and process policies are
 needed; its Kubernetes driver itself uses Agent Sandbox and requires a CNI that
-enforces NetworkPolicy. Neither upstream integration is implemented or
-benchmarked by this prototype.
+enforces NetworkPolicy. OpenShell is not integrated here.
 
 ## Configuration
 
 | Variable | Purpose |
 | --- | --- |
-| `SANDBOX_BACKEND` | `kubernetes` or `docker` |
+| `SANDBOX_BACKEND` | `kubernetes`, `agent_sandbox`, or `docker` |
+| `SANDBOX_AGENT_POOL_NAME` | SandboxWarmPool name for `agent_sandbox`, default `fred-code` |
 | `SANDBOX_ISOLATION` | `kata` or `gvisor` |
 | `SANDBOX_RUNTIME_NAME` | Exact RuntimeClass or Docker runtime name |
 | `SANDBOX_IMAGE` | Approved Python image pinned as `name@sha256:<64 hex chars>` and containing Bash |
@@ -50,6 +50,12 @@ The agent pod needs `FRED_SANDBOX_BROKER_URL`, `FRED_SANDBOX_BROKER_TOKEN`, and 
 
 The broker service account can create and delete Jobs, read Pods and list policies, and execute in Pods only in `fred-sandbox`; it can read RuntimeClasses and the namespace object cluster-wide. Kubernetes 1.31+ WebSocket exec can use GET, so the RBAC grants both `get` and `create` on `pods/exec`. The Job has `activeDeadlineSeconds` and TTL cleanup as backstops if the broker dies.
 
+### SIG Agent Sandbox backend
+
+Install the pinned upstream v1.0.6 `sandbox-with-extensions.yaml` release in the cluster, then apply [agent-sandbox.yaml](../../deploy/sandbox/agent-sandbox.yaml) after replacing the image digest and selecting the approved RuntimeClass. Keep the dedicated namespace and deny-all NetworkPolicy from `kubernetes.yaml`. The template deliberately sets `networkPolicyManagement: Unmanaged`: the upstream managed default permits public internet egress, while this backend requires no network path. Verify CNI enforcement and pod PID limits as above before setting the two attestation flags. Keep template and pool writes restricted to cluster operators.
+
+Set `SANDBOX_BACKEND=agent_sandbox`, `SANDBOX_AGENT_POOL_NAME=fred-code`, and `SANDBOX_WARM_POOL_SIZE=0` on the broker; the latter disables its own pool. Scale `SandboxWarmPool.spec.replicas` from zero for ready capacity. For strict ready measurements, set `SANDBOX_COLD_START_ON_MISS=false`; the broker checks the upstream pool and rejects any claim that the controller labels as a cold fallback. `SANDBOX_MAX_SANDBOXES` caps active claims per broker process; idle upstream warm replicas are additional resources. Run one broker replica until admission is coordinated across replicas. The broker checks the namespace policy and template before every claim, then validates the claimed Pod's runtime, image, credentials, mounts and restrictions before exec. Each claim has an expiry and is deleted with foreground cascading after execution.
+
 ## Docker or local pilot
 
 Run the broker on a dedicated host with a Docker daemon configured with Kata or gVisor, or use [docker-compose.yaml](../../deploy/sandbox/docker-compose.yaml) against a dedicated TLS Docker daemon. Never mount the Docker socket into a Fred agent pod. `docker info --format '{{json .Runtimes}}'` must show the configured runtime backed by the expected Kata or `runsc` binary. Pre-pull the pinned execution image on that daemon; pool preparation uses `--pull never`.
@@ -58,7 +64,18 @@ For local host execution, install this package and its dependencies, set the var
 
 ## Latency and cost
 
-On-demand mode provisions a Job or Docker container when the call arrives, then runs code and destroys it. Kubernetes scheduling, image preparation, and VM startup all contribute to this cold path; a fast VM alone does not imply a fast first call. Run [benchmark.py](../../deploy/sandbox/benchmark.py) with `--mode cold` on the actual cluster, using `FRED_SANDBOX_BROKER_URL` and `FRED_SANDBOX_BROKER_TOKEN`. The script takes at least 20 sequential samples and reports p50 and p95 broker request-to-result latency. If the cold path is too slow for the product, set `SANDBOX_WARM_POOL_SIZE` to the smallest useful value, set `SANDBOX_COLD_START_ON_MISS=false` during the ready-path measurement, and rerun with `--mode ready`. This avoids labeling a concurrent cold fallback as a ready sample. A ready workload runs through `kubectl exec` or `docker exec` without VM creation; idle workloads are retired and replaced before their one-hour deadline. Excess calls receive retryable `busy` at the hard cap. Compare latency with the idle VM cost and burst rejection before choosing a configuration. A pool of 8 Kata VMs is a fixed idle cost for a platform with 2,000 connected users; zero warm Pods avoid that idle VM cost, although the broker Pod and any Kata template remain. This pilot uses one broker replica because its cap is process-local.
+On-demand mode provisions a Job, SandboxClaim, or Docker container when the call arrives, then runs code and destroys it. Kubernetes scheduling, image preparation, and VM startup all contribute to this cold path; a fast VM alone does not imply a fast first call. Run [benchmark.py](../../deploy/sandbox/benchmark.py) with `--mode cold` on the actual cluster, using `FRED_SANDBOX_BROKER_URL` and `FRED_SANDBOX_BROKER_TOKEN`. The script takes at least 20 sequential samples and reports p50 and p95 broker request-to-result latency. For the Job or Docker backend, set `SANDBOX_WARM_POOL_SIZE` to the smallest useful value; for Agent Sandbox, set `SandboxWarmPool.spec.replicas` instead. Set `SANDBOX_COLD_START_ON_MISS=false` during the ready-path measurement, then rerun with `--mode ready`. This avoids labeling a concurrent cold fallback as a ready sample. A ready workload runs through `kubectl exec` or `docker exec` without VM creation. Excess calls receive retryable `busy` at the hard cap. Compare latency with the idle VM cost and burst rejection before choosing a configuration. A pool of 8 Kata VMs is a fixed idle cost for a platform with 2,000 connected users; zero warm Pods avoid that idle VM cost. This pilot uses one broker replica because its cap is process-local.
 
 Code is visible in process arguments and Kubernetes Pod exec requests to administrators with sufficient access. Do not send secrets in source. Untrusted code output is returned as data, never as platform instructions.
 If the agent disconnects after submission, execution may continue until the configured deadline before cleanup. Cancelling the broker request task triggers immediate cleanup. A disconnect during cold provisioning may still complete the bounded preparation step before cleanup.
+
+### k3d comparison (2026-10-22)
+
+The same k3d cluster (Kubernetes 1.31.5), gVisor RuntimeClass, preloaded Python 3.12 image and broker request-to-result script produced 30 sequential samples per mode. Ready mode used one idle workload and disabled cold fallback. These are local measurements, not an s3ns or Kata result.
+
+| Lifecycle | Cold p50 / p95 | Ready p50 / p95 |
+| --- | --- | --- |
+| Broker-managed Kubernetes Job | 1.781s / 2.018s | 0.296s / 0.353s |
+| SIG Agent Sandbox v1.0.6 claim and warm pool | 1.844s / 1.947s | 1.514s / 1.657s |
+
+The SIG controller owns the warm Pod and replenishes it after a claim. The ready path includes policy, template, Pod and upstream warm-label checks before execution. Those checks and claim reconciliation appear to add latency in this setup; this is an inference from the path and measured times, not a component-level trace. Measure again on the intended cluster and selected RuntimeClass before setting an SLO or pool size.

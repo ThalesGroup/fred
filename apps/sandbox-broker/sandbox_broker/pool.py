@@ -56,13 +56,14 @@ class WarmPool:
         try:
             lease = self._ready.get_nowait()
         except asyncio.QueueEmpty:
-            if (
-                not self.settings.cold_start_on_miss
-                or self._total >= self.settings.max_sandboxes
-            ):
+            if self._total >= self.settings.max_sandboxes:
                 raise SandboxError("busy") from None
             self._total += 1
             try:
+                if not self.settings.cold_start_on_miss:
+                    ready_state = getattr(self.backend, "warm_state", None)
+                    if ready_state is None or (await ready_state())[0] < 1:
+                        raise SandboxError("busy") from None
                 lease = await self.backend.prepare()
             except SandboxPrepareLeak as exc:
                 self._leaked.add(exc.lease)

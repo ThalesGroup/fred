@@ -14,3 +14,9 @@
 
 - [x] 3.1 Add Docker and Kubernetes deployment examples, runtime/CNI preflight, and a ready-path latency benchmark; verify manifests parse and the benchmark script validates.
 - [x] 3.2 Run targeted tests and root quality gate, review the full branch against `origin/swift`, obtain independent read-only review, and record any remaining production gaps.
+
+## 4. SIG Agent Sandbox integration
+
+- [x] 4.1 Add a selectable SandboxClaim backend with template, pool and isolation preflight, single-use claim lifecycle, expiry and cleanup tests.
+- [x] 4.2 Add operator manifests and document upstream controller installation, pool sizing, and admission limitations.
+- [ ] 4.3 Measure cold and ready request-to-result latency in the same k3d environment as the Job backend, review the diff, run the quality gate, and leave PR checks green.

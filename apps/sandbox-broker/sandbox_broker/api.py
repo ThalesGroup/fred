@@ -16,6 +16,7 @@ from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest, SandboxResu
 from pydantic import ValidationError
 
 from .backend import SandboxBackend
+from .agent_sandbox_backend import AgentSandboxBackend
 from .command import SubprocessRunner
 from .config import BrokerSettings
 from .docker_backend import DockerBackend
@@ -32,11 +33,14 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         config = settings or BrokerSettings.from_environment()
-        selected_backend = backend or (
-            DockerBackend(config, SubprocessRunner())
-            if config.backend == "docker"
-            else KubernetesBackend(config, SubprocessRunner())
-        )
+        if backend is not None:
+            selected_backend = backend
+        elif config.backend == "docker":
+            selected_backend = DockerBackend(config, SubprocessRunner())
+        elif config.backend == "agent_sandbox":
+            selected_backend = AgentSandboxBackend(config, SubprocessRunner())
+        else:
+            selected_backend = KubernetesBackend(config, SubprocessRunner())
         pool = WarmPool(selected_backend, config)
         await pool.start()
         app.state.settings = config
@@ -50,11 +54,17 @@ def create_app(
 
     @app.get("/healthz")
     async def health() -> dict[str, int]:
+        warm_state = getattr(app.state.pool.backend, "warm_state", None)
+        ready, target = (
+            await warm_state()
+            if warm_state is not None
+            else (app.state.pool.ready_count, app.state.settings.warm_pool_size)
+        )
         return {
-            "ready": app.state.pool.ready_count,
+            "ready": ready,
             "allocated": app.state.pool.allocated_count,
             "limit": app.state.settings.max_sandboxes,
-            "warm_target": app.state.settings.warm_pool_size,
+            "warm_target": target,
             "cold_on_miss": int(app.state.settings.cold_start_on_miss),
         }
 

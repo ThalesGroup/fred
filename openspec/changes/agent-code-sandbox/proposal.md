@@ -10,6 +10,7 @@ Tracking issue: #3226.
 - Add a separately deployed broker with interchangeable Kubernetes Job and Docker backends. The broker selects an explicitly configured Kata or gVisor runtime and refuses to run when its isolation prerequisites are absent.
 - Bound code size, execution time, output, CPU, memory, scratch storage, and concurrent work. Disable network access and remove every execution resource after completion or cancellation.
 - Provide Kubernetes and Docker deployment examples and a cluster preflight. The prototype is not evidence that a particular CNI enforces `NetworkPolicy` or that s3ns nodes support KVM.
+- Add a separately selectable SIG Agent Sandbox backend using SandboxClaim and SandboxWarmPool lifecycle APIs, and compare cold and ready latency on the same test cluster.
 
 ## Capabilities
 

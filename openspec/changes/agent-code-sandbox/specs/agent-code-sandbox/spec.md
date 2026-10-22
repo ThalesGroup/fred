@@ -44,6 +44,14 @@ The system SHALL expose the same request and result contract through Kubernetes 
 - **WHEN** an operator switches the configured backend from Docker to Kubernetes with an available approved isolation runtime
 - **THEN** the agent tool preserves its arguments and result contract
 
+#### Scenario: SIG Agent Sandbox backend
+- **WHEN** the operator selects SIG Agent Sandbox with a matching SandboxTemplate and SandboxWarmPool
+- **THEN** the broker creates a single-use SandboxClaim, executes through the same agent contract, and removes the claim and its workload afterward
+
+#### Scenario: Template or pool mismatch
+- **WHEN** the upstream template or pool does not match the configured image, runtime or deny-all network boundary
+- **THEN** the broker refuses to start
+
 ### Requirement: Fast first execution with optional prewarming
 The broker SHALL support on-demand provisioning with zero idle sandbox Pods and an optional configurable pool of already running, unassigned sandboxes. A sandbox SHALL serve at most one agent execution and SHALL be destroyed afterward; the broker SHALL replenish configured warm capacity without waiting for the next request.
 

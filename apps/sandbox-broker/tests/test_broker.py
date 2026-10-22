@@ -192,6 +192,68 @@ async def test_failed_disposal_retries_before_releasing_capacity() -> None:
     await pool.close()
 
 
+@pytest.mark.asyncio
+async def test_agent_sandbox_uses_external_ready_capacity() -> None:
+    class ExternalPoolBackend(FakeBackend):
+        ready = 0
+
+        async def warm_state(self):
+            return self.ready, 1
+
+    fake = ExternalPoolBackend()
+    pool = WarmPool(
+        fake,
+        settings(
+            backend="agent_sandbox",
+            warm_pool_size=0,
+            cold_start_on_miss=False,
+            network_policy_verified=True,
+        ),
+    )
+    await pool.start()
+    with pytest.raises(SandboxError, match="busy"):
+        await pool.acquire()
+    assert fake.prepared == []
+    fake.ready = 1
+    lease = await pool.acquire()
+    assert len(fake.prepared) == 1
+    await pool.release(lease)
+    await pool.close()
+
+
+@pytest.mark.asyncio
+async def test_external_ready_probe_reserves_capacity_before_await() -> None:
+    class SlowExternalPool(FakeBackend):
+        def __init__(self):
+            super().__init__()
+            self.probing = asyncio.Event()
+            self.continue_probe = asyncio.Event()
+
+        async def warm_state(self):
+            self.probing.set()
+            await self.continue_probe.wait()
+            return 1, 1
+
+    fake = SlowExternalPool()
+    pool = WarmPool(
+        fake,
+        settings(
+            backend="agent_sandbox",
+            warm_pool_size=0,
+            cold_start_on_miss=False,
+            network_policy_verified=True,
+        ),
+    )
+    await pool.start()
+    first = asyncio.create_task(pool.acquire())
+    await fake.probing.wait()
+    with pytest.raises(SandboxError, match="busy"):
+        await pool.acquire()
+    fake.continue_probe.set()
+    await pool.release(await first)
+    await pool.close()
+
+
 def test_kubernetes_requires_operator_network_verification() -> None:
     with pytest.raises(ValueError, match="NetworkPolicy enforcement"):
         settings(backend="kubernetes", runtime_name="kata-qemu")

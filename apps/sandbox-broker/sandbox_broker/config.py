@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-BackendKind = Literal["docker", "kubernetes"]
+BackendKind = Literal["docker", "kubernetes", "agent_sandbox"]
 IsolationKind = Literal["kata", "gvisor"]
 
 
@@ -21,6 +21,7 @@ class BrokerSettings:
     image: str
     token: str
     namespace: str = "fred-sandbox"
+    agent_pool_name: str = "fred-code"
     network_policy_verified: bool = False
     pid_limit_verified: bool = False
     max_sandboxes: int = 8
@@ -31,8 +32,10 @@ class BrokerSettings:
     preparation_timeout_seconds: int = 90
 
     def __post_init__(self) -> None:
-        if self.backend not in {"docker", "kubernetes"}:
-            raise ValueError("Sandbox backend must be docker or kubernetes")
+        if self.backend not in {"docker", "kubernetes", "agent_sandbox"}:
+            raise ValueError(
+                "Sandbox backend must be docker, kubernetes or agent_sandbox"
+            )
         if self.isolation not in {"kata", "gvisor"}:
             raise ValueError("Sandbox isolation must be kata or gvisor")
         if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,62}", self.runtime_name):
@@ -43,16 +46,32 @@ class BrokerSettings:
             raise ValueError("Sandbox broker token must have at least 32 characters")
         if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", self.namespace):
             raise ValueError("Sandbox namespace is invalid")
-        if self.backend == "kubernetes" and not self.network_policy_verified:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", self.agent_pool_name):
+            raise ValueError("Agent Sandbox pool name is invalid")
+        if (
+            self.backend in {"kubernetes", "agent_sandbox"}
+            and not self.network_policy_verified
+        ):
             raise ValueError("Kubernetes NetworkPolicy enforcement must be verified")
-        if self.backend == "kubernetes" and not self.pid_limit_verified:
+        if (
+            self.backend in {"kubernetes", "agent_sandbox"}
+            and not self.pid_limit_verified
+        ):
             raise ValueError("Kubernetes pod PID limit must be verified")
         if (
             not 0 <= self.warm_pool_size <= self.max_sandboxes <= 1000
             or self.max_sandboxes < 1
         ):
             raise ValueError("Sandbox pool size must fit within max_sandboxes")
-        if self.warm_pool_size == 0 and not self.cold_start_on_miss:
+        if self.backend == "agent_sandbox" and self.warm_pool_size != 0:
+            raise ValueError(
+                "Agent Sandbox warm capacity is configured on SandboxWarmPool"
+            )
+        if (
+            self.backend != "agent_sandbox"
+            and self.warm_pool_size == 0
+            and not self.cold_start_on_miss
+        ):
             raise ValueError("Zero warm sandboxes requires on-demand provisioning")
         if not 1 <= self.execution_timeout_seconds <= 120:
             raise ValueError("Sandbox execution timeout must be 1-120 seconds")
@@ -76,6 +95,7 @@ class BrokerSettings:
             image=required("SANDBOX_IMAGE"),
             token=required("SANDBOX_BROKER_TOKEN"),
             namespace=os.getenv("SANDBOX_NAMESPACE", "fred-sandbox"),
+            agent_pool_name=os.getenv("SANDBOX_AGENT_POOL_NAME", "fred-code"),
             network_policy_verified=os.getenv(
                 "SANDBOX_NETWORK_POLICY_VERIFIED", "false"
             ).lower()

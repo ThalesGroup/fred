@@ -23,6 +23,7 @@ The Deep agent's `/scratchpad/` is text-only and deliberately has no executor. F
 5. Kubernetes isolation uses a dedicated namespace with exactly one default-deny ingress and egress policy, no service account token, a non-root container, read-only root filesystem, bounded emptyDir scratch space, dropped capabilities, no privilege escalation, seccomp RuntimeDefault, resource limits, `activeDeadlineSeconds`, and Job TTL. Docker uses `--network none`, explicit `--runtime`, equivalent container restrictions, and forced cleanup. A platform operator must verify CNI policy enforcement and finite kubelet `podPidsLimit`, and govern policy changes, before production admission.
 6. The broker requires a bearer credential delivered outside the agent tool schema. Kubernetes RBAC is scoped to Jobs and Pods in the sandbox namespace. The broker is a separate service; the agent pod receives no Docker socket or Kubernetes API privilege. Production transport must be protected by TLS or a service mesh.
 7. The benchmark measures broker request-to-result time for a trivial program on both cold and ready paths. It reports p50 and p95 on the actual cluster without a fixed acceptance threshold. The operator increases the warm pool from zero only if cold latency is unsuitable for the product and the idle cost is justified. Pool refill and burst admission are measured separately.
+8. A third backend delegates Kubernetes workload lifecycle to SIG Agent Sandbox v1.0.6. It creates single-use SandboxClaims against an operator-managed SandboxWarmPool, waits for claim readiness, executes through the same Kubernetes exec transport, and deletes claims with foreground cascading. A claim expiry is a server-side cleanup backstop. The existing broker retains admission and authentication; it does not create its own warm pool for this backend. The template uses the same pinned image and RuntimeClass as the Job backend. Network policy management is Unmanaged only in the dedicated namespace protected by the existing deny-all policy. The broker checks policy and template again before every claim, then validates the assigned Pod before exec. Strict ready mode checks the upstream `agents.x-k8s.io/launch-type=warm` label and rejects a cold fallback.
 
 ## Risks / Trade-offs
 
@@ -33,7 +34,8 @@ The Deep agent's `/scratchpad/` is text-only and deliberately has no executor. F
 - [One broker process has only local capacity and warm-pool accounting] -> run one replica for the prototype; add distributed admission or a queue before horizontal scaling. Size the pool from measured simultaneous code calls, not total connected users.
 - [Container arguments can expose source to cluster administrators] -> prohibit secrets in code; consider encrypted input delivery in a later slice.
 - [The broker is privileged by design] -> isolate it from agent pods and limit Docker daemon or Kubernetes RBAC access.
-- [The prototype owns Kubernetes Job and pool lifecycle] -> treat it as validation code; for production, evaluate the Kubernetes SIG Agent Sandbox controller and its claim/warm-pool APIs with Kata RuntimeClass before extending the custom lifecycle.
+- [The Job backend owns its workload lifecycle] -> prefer the optional SIG Agent Sandbox backend when upstream controller lifecycle and pool behavior are validated on the target cluster.
+- [Controller installation and cluster CRDs are external dependencies] -> pin and document the upstream release; fail startup if template, pool, or isolation settings differ from broker configuration.
 
 ## Migration Plan
 
