@@ -33,6 +33,7 @@ The Deep agent's `/scratchpad/` is text-only and deliberately has no executor. F
 - [One broker process has only local capacity and warm-pool accounting] -> run one replica for the prototype; add distributed admission or a queue before horizontal scaling. Size the pool from measured simultaneous code calls, not total connected users.
 - [Container arguments can expose source to cluster administrators] -> prohibit secrets in code; consider encrypted input delivery in a later slice.
 - [The broker is privileged by design] -> isolate it from agent pods and limit Docker daemon or Kubernetes RBAC access.
+- [The prototype owns Kubernetes Job and pool lifecycle] -> treat it as validation code; for production, evaluate the Kubernetes SIG Agent Sandbox controller and its claim/warm-pool APIs with Kata RuntimeClass before extending the custom lifecycle.
 
 ## Migration Plan
 

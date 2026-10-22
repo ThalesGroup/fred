@@ -4,6 +4,22 @@ The broker runs short Bash or Python programs in disposable Kata or gVisor workl
 
 This prototype is for a controlled pilot. It has one broker replica and local admission accounting. It has no per-team quota or durable work queue. A cluster's CNI behavior, node virtualization support, image provenance, and actual first-execution latency require operator validation.
 
+The [broker Dockerfile](Dockerfile) packages the trusted API service; it is not
+the image that runs agent code and does not provide isolation. Agent code runs
+in the separately pinned `SANDBOX_IMAGE`. Kata Containers or gVisor supplies
+the execution boundary, while this prototype supplies admission and workload
+lifecycle.
+
+For production Kubernetes, evaluate replacing the custom Job and warm-pool
+lifecycle with the [Kubernetes SIG Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/)
+and its SandboxTemplate, SandboxClaim, and optional SandboxWarmPool resources,
+using Kata as the selected RuntimeClass where virtualization is available.
+[NVIDIA OpenShell](https://docs.nvidia.com/openshell/latest/kubernetes/setup)
+is a separate candidate when its network, filesystem, and process policies are
+needed; its Kubernetes driver itself uses Agent Sandbox and requires a CNI that
+enforces NetworkPolicy. Neither upstream integration is implemented or
+benchmarked by this prototype.
+
 ## Configuration
 
 | Variable | Purpose |
