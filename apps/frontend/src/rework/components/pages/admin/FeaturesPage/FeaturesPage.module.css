@@ -88,6 +88,7 @@
   grid-template-columns: minmax(0, 1fr) 2rem 2rem;
   column-gap: var(--spacing-xs);
   row-gap: var(--spacing-3xs);
+  padding-block: var(--spacing-xs);
   width: 100%;
   min-width: 0;
 }
@@ -210,7 +211,6 @@
   grid-column: 1 / -1;
   flex-wrap: wrap;
   gap: var(--spacing-xs);
-  padding-bottom: var(--spacing-s);
   color: var(--on-surface-muted);
   font: var(--font-label-small);
 }
