@@ -1357,7 +1357,7 @@ def _description(
         "To CHANGE the last deck of this conversation (a fix after needs_revision, or a change the user asks "
         "for, even on several slides), send only `changes`, numbered on that deck's slides: "
         '{"op": "replace", "slide": N, "slides": [...]}, {"op": "insert", "after": N '
-        + "(0 = at the start)"
+        + "(1 = right after the cover; 0 only for a new first slide placed before the cover)"
         + ', "slides": [...]}, {"op": "remove", "slide": N}, {"op": "move", "slide": N, '
         '"after": M}, {"op": "edit", "slide": N, "field": "title" | "bullets[1]" | "items[2].label"'
         + (

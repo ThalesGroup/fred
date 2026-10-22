@@ -125,8 +125,8 @@ class SlideChange(BaseModel):
     after: Optional[int] = Field(
         default=None,
         description=(
-            "insert, move: the slides go after this slide of the previous deck; 0 = at the "
-            "start."
+            "insert, move: after this slide; 1 = after the cover, 0 = before it (a new "
+            "first slide)."
         ),
     )
     slides: List[SlidePlan] = Field(
