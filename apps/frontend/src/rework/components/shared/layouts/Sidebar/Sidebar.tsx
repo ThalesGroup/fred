@@ -36,15 +36,15 @@ export default function Sidebar() {
   return (
     <div className={styles["sidebar-container"]}>
       <div className={styles.rail}>
-        <div className={styles["user-profile-container"]}>
-          <UserProfile />
+        <div className={styles["main-nav-bar-container"]}>
+          <MainNavBar />
         </div>
-        <NotificationsEntry iconStyle={ICON_STYLE} />
         <div className={styles["rail-divider"]}>
           <Separator />
         </div>
-        <div className={styles["main-nav-bar-container"]}>
-          <MainNavBar />
+        <NotificationsEntry iconStyle={ICON_STYLE} />
+        <div className={styles["user-profile-container"]}>
+          <UserProfile />
         </div>
       </div>
       <div className={styles["nav-panel-card"]}>

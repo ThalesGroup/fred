@@ -18,7 +18,7 @@
  * over the nav panel. The surface itself is the shared MenuPopover. */
 .wrap {
   position: absolute;
-  top: 0;
+  bottom: 0;
   left: calc(100% + var(--spacing-xs));
   z-index: 10;
   width: 380px;

@@ -25,14 +25,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding-top: var(--spacing-xs);
+  padding-bottom: var(--spacing-s);
   width: 48px;
   height: 100%;
 }
 
-/* No bottom padding: the nav bar below already starts with its own top padding. */
+/* No top padding: the nav bar above already ends with its own bottom padding. */
 .rail-divider {
-  padding: var(--spacing-xs) var(--spacing-s) 0;
+  padding: 0 var(--spacing-s) var(--spacing-xs);
   width: 100%;
 }
 
