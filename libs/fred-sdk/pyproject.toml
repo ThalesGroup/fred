@@ -1,6 +1,6 @@
 [project]
 name = "fred-sdk"
-version = "4.5.5"
+version = "4.5.6"
 description = "Authoring SDK for Fred agents — graph, ReAct, and team agent primitives."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -27,7 +27,7 @@ urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com
 # plus the fred-core platform behind them. A Knowledge Base pod never needs it.
 agents = [
   "pyyaml>=6.0.1",
-  "fred-core>=4.5.5",
+  "fred-core>=4.5.6",
   "langchain-core>=1.6.5",
   "langchain>=1.4.2",
   "langgraph>=1.2.12",

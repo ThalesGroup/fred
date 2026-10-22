@@ -5,6 +5,7 @@ impact: none
 configuration: none
 configuration_reason: "Frontend rendering fix only; no configuration keys or defaults change."
 no_action_reason: "The chat composer's command menu no longer remounts on each keystroke; nothing to configure or migrate."
+after: [3211-compose-chart-registrations]
 ---
 
 ## Applicability

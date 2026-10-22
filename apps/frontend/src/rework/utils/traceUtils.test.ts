@@ -337,6 +337,11 @@ describe("entryLabel localization", () => {
     const sandboxEntry = { ...entry, call: toolCallMsg("c1", "execute_code") };
     expect(entryLabel(sandboxEntry, (key) => key)).toBe("rework.chatTrace.toolLabels.codeSandbox");
   });
+
+  it("uses the localized label for ask_user", () => {
+    const question = { kind: "combo" as const, call: toolCallMsg("c2", "ask_user") };
+    expect(entryLabel(question, (key) => key)).toBe("rework.chatTrace.toolLabels.askUser");
+  });
 });
 
 // ── statusForEntry ────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ impact: none
 configuration: none
 configuration_reason: "Only frontend query timing and presentation change; no configuration keys or defaults change."
 no_action_reason: "APIs, data and permissions are unchanged; normal frontend deployment applies the fix."
+after: [3211-compose-chart-registrations]
 ---
 
 ## Applicability

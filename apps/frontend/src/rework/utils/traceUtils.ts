@@ -559,6 +559,9 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
       if (toolSlug(toolName(entry.call)) === "execute_code" && translate) {
         return translate("rework.chatTrace.toolLabels.codeSandbox");
       }
+      if (toolName(entry.call) === "ask_user" && translate) {
+        return translate("rework.chatTrace.toolLabels.askUser");
+      }
       if (skillFilePathOf(entry) && translate) {
         return translate("rework.chatTrace.toolLabels.readSkillFile");
       }
