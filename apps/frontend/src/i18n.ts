@@ -55,6 +55,47 @@ function shippedLabels(overrides: unknown, shipped: unknown): Record<string, unk
   return labels;
 }
 
+const LEGACY_TRACE_LABEL_PATHS: Record<string, string> = {
+  askUser: "platform.askUser",
+  readSkillFile: "platform.readSkillFile",
+  readQuery: "mcp.tabular.readQuery",
+  documents: "mcp.tabular.documents",
+  markdown: "mcp.tabular.markdown",
+  schemas: "mcp.tabular.schemas",
+  descriptions: "mcp.tabular.descriptions",
+  search: "mcp.tabular.search",
+  webSearch: "capabilities.webResearch.webSearch",
+  fetchUrl: "capabilities.webResearch.fetchUrl",
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+/** Keep existing theme ZIP label overrides valid after moving trace keys into source groups. */
+function withLegacyTraceLabels(overrides: unknown): unknown {
+  const root = asRecord(overrides);
+  const rework = asRecord(root?.rework);
+  const chatTrace = asRecord(rework?.chatTrace);
+  const toolLabels = asRecord(chatTrace?.toolLabels);
+  if (!root || !rework || !chatTrace || !toolLabels) return overrides;
+
+  const migrated: Record<string, unknown> = { ...toolLabels };
+  for (const [legacyKey, path] of Object.entries(LEGACY_TRACE_LABEL_PATHS)) {
+    if (typeof toolLabels[legacyKey] !== "string") continue;
+    const parts = path.split(".");
+    let target = migrated;
+    for (const segment of parts.slice(0, -1)) {
+      const child = { ...asRecord(target[segment]) };
+      target[segment] = child;
+      target = child;
+    }
+    const finalKey = parts[parts.length - 1];
+    if (typeof target[finalKey] !== "string") target[finalKey] = toolLabels[legacyKey];
+  }
+  return { ...root, rework: { ...rework, chatTrace: { ...chatTrace, toolLabels: migrated } } };
+}
+
 /** Apply optional deployment labels before render; a broken file leaves the shipped text. */
 export async function loadThemeTranslations(): Promise<void> {
   await Promise.all(
@@ -63,7 +104,10 @@ export async function loadThemeTranslations(): Promise<void> {
         const response = await fetch(`/theme-translations/${language}.json`, { cache: "no-cache" });
         if (response.status === 404) return;
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const labels = shippedLabels(await response.json(), i18n.getResourceBundle(language, "translation"));
+        const labels = shippedLabels(
+          withLegacyTraceLabels(await response.json()),
+          i18n.getResourceBundle(language, "translation"),
+        );
         i18n.addResourceBundle(language, "translation", labels, true, true);
       } catch (error) {
         console.warn(`Theme translations for ${language} ignored:`, error);

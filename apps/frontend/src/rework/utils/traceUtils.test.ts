@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { describe, it, expect } from "vitest";
+import i18next, { type i18n as I18n } from "i18next";
+import { beforeAll, describe, it, expect } from "vitest";
 import type { ChatMessage } from "../../slices/runtime/runtimeOpenApi";
 import en from "../../locales/en/translation.json";
 import fr from "../../locales/fr/translation.json";
@@ -346,6 +347,15 @@ describe("categorized tool labels", () => {
   const enLabels = en.rework.chatTrace.toolLabels;
   const frLabels = fr.rework.chatTrace.toolLabels;
   const keyPrefix = "rework.chatTrace.toolLabels.";
+  const instances = {} as Record<"en" | "fr", I18n>;
+
+  beforeAll(async () => {
+    for (const language of ["en", "fr"] as const) {
+      const instance = i18next.createInstance();
+      await instance.init({ lng: language, resources: { en: { translation: en }, fr: { translation: fr } } });
+      instances[language] = instance;
+    }
+  });
 
   const labelPaths = (node: unknown, path = ""): string[] =>
     typeof node === "string"
@@ -354,18 +364,15 @@ describe("categorized tool labels", () => {
           labelPaths(value, path ? `${path}.${name}` : name),
         );
 
-  const translate = (key: string): string => {
-    if (!key.startsWith(keyPrefix)) return key;
-    let value: unknown = frLabels;
-    for (const segment of key.slice(keyPrefix.length).split(".")) {
-      if (!value || typeof value !== "object") return key;
-      value = (value as Record<string, unknown>)[segment];
-    }
-    return typeof value === "string" ? value : key;
-  };
+  const translate = (key: string): string => instances.fr.t(key);
 
   it("has matching French and English labels for each tool source", () => {
     expect(labelPaths(enLabels).sort()).toEqual(labelPaths(frLabels).sort());
+    for (const path of labelPaths(frLabels)) {
+      const key = `${keyPrefix}${path}`;
+      expect(instances.en.t(key)).not.toBe(key);
+      expect(instances.fr.t(key)).not.toBe(key);
+    }
     const groups = [
       frLabels.mcp.text,
       frLabels.mcp.opensearchOps,

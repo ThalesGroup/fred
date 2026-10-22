@@ -3,8 +3,8 @@ schema: 1
 title: "Clarify tool actions in the chat trace"
 impact: none
 configuration: none
-configuration_reason: "Only frontend action labels and their translations change; no configuration keys or defaults change."
-no_action_reason: "Existing conversations, tool execution and APIs are unchanged; the new labels appear after a normal deployment."
+configuration_reason: "Theme override compatibility is preserved; no deployer configuration changes are required."
+no_action_reason: "Existing conversations, tool execution and APIs are unchanged; previous theme ZIP overrides for trace labels remain supported."
 ---
 
 ## Applicability
@@ -17,7 +17,7 @@ No additional prerequisites beyond the normal deployment procedure.
 
 ## Configuration
 
-No configuration changes are required.
+No configuration changes are required. Existing theme ZIP overrides using the previous flat trace label keys still apply. New overrides can use the grouped keys in the shipped translation files.
 
 ## Upgrade
 
