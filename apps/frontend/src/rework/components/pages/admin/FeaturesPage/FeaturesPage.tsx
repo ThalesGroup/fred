@@ -622,7 +622,7 @@ export default function FeaturesPage() {
       )}
 
       {!isLoading && !isError && capabilities.length > 0 && (
-        <DataTable columns={columns} data={capabilities} size="medium" />
+        <DataTable columns={columns} data={capabilities} rowKey={(capability) => capability.id} size="medium" />
       )}
 
       <CapabilityTeamMatrixDrawer

@@ -1130,6 +1130,16 @@
           "input": "Input: {{count}} tokens",
           "output": "Output: {{count}} tokens"
         },
+        "modelName": {
+          "editAction": "Edit display name",
+          "editAria": "Edit display name for {{name}}",
+          "label": "Display name in chat",
+          "saveAction": "Save",
+          "resetAction": "Reset",
+          "cancelAction": "Cancel",
+          "saved": "Model display name saved",
+          "saveError": "Could not save the model display name"
+        },
         "emptyApps": "No applications are installed on this platform yet.",
         "col": {
           "capability": "Feature",

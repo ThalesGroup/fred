@@ -17,6 +17,7 @@ import { toIconType } from "@shared/utils/Type.ts";
 import { useTranslation } from "react-i18next";
 import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { capabilityLabel } from "./capabilityEnablement";
+import { ModelDisplayNameEditor } from "./ModelDisplayNameEditor";
 import styles from "./FeaturesPage.module.css";
 
 export function ModelIdentityCell({ capability, dimmed }: { capability: CapabilityEnablementItem; dimmed: boolean }) {
@@ -50,6 +51,12 @@ export function ModelIdentityCell({ capability, dimmed }: { capability: Capabili
           )}
         </span>
       )}
+      <ModelDisplayNameEditor
+        capabilityId={capability.id}
+        wireName={capability.name}
+        effectiveName={capability.model_display_name}
+        overrideName={capability.model_display_name_override}
+      />
     </div>
   );
 }

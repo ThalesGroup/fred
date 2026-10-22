@@ -86,6 +86,19 @@
   font: var(--font-label-small);
 }
 
+.modelNameForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.modelNameActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-3xs);
+}
+
 /* Pill badge — same visual language as the team-role chips
  * (TeamSettingsMembersTable's .roleChip): outlined pill, label-small type.
  * Static here (no hover/active state) since these are counts, not controls. */

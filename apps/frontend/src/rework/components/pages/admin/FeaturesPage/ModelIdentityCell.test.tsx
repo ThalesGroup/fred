@@ -21,6 +21,10 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string, options?: { count?: number }) => `${key}:${options?.count ?? ""}` }),
 }));
 
+vi.mock("./ModelDisplayNameEditor", () => ({
+  ModelDisplayNameEditor: () => null,
+}));
+
 const capability: CapabilityEnablementItem = {
   id: "model:discovered.gateway.id",
   name: "upstream-chat",

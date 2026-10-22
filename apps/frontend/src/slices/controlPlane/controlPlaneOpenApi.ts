@@ -990,6 +990,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bootstrapPlatformAdminRequest,
       }),
     }),
+    putModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePut: build.mutation<
+      PutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutApiResponse,
+      PutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/display-name`,
+        method: "PUT",
+        body: queryArg.setModelDisplayNameRequest,
+      }),
+    }),
     getAdminCapabilitiesControlPlaneV1AdminCapabilitiesGet: build.query<
       GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiResponse,
       GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiArg
@@ -2782,6 +2792,12 @@ export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiRes
   /** status 200 Successful Response */ BootstrapPlatformAdminResponse;
 export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiArg = {
   bootstrapPlatformAdminRequest: BootstrapPlatformAdminRequest;
+};
+export type PutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutApiResponse =
+  /** status 200 Successful Response */ ModelDisplayNameResult;
+export type PutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutApiArg = {
+  capabilityId: string;
+  setModelDisplayNameRequest: SetModelDisplayNameRequest;
 };
 export type GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiResponse =
   /** status 200 Successful Response */ CapabilityEnablementList;
@@ -4834,6 +4850,13 @@ export type BootstrapPlatformAdminRequest = {
   /** The one-time root-bootstrap secret. */
   token: string;
 };
+export type ModelDisplayNameResult = {
+  capability_id: string;
+  display_name: string | null;
+};
+export type SetModelDisplayNameRequest = {
+  display_name: string | null;
+};
 export type ImpactedInstanceSummary = {
   agent_instance_id: string;
   team_id: string;
@@ -4879,8 +4902,10 @@ export type CapabilityEnablementItem = {
   thinking_profile_ids?: string[];
   /** Whether this model's thinking-capable profiles may run with reasoning on, platform-wide (REASON-01 §5). GLOBAL, with no subject: an activation, not a permission — per-team model access remains the untouched ReBAC `can_use` axis (§5.1/§5.4). No stored row means `false` (§5.6): enabling a model and enabling its reasoning are two separate admin actions, in that order. */
   reasoning_enabled?: boolean;
-  /** For a `kind="model"` row: the ops-authored `model_display_name` from models_catalog.yaml, carried verbatim. `name` is the wire model value, which several models on one gateway can share, so the admin label prefers this when set. Display only. */
+  /** For a `kind="model"` row: the effective label. A saved admin name takes priority over pod catalog metadata. `name` remains the wire model value. Display only. */
   model_display_name?: string | null;
+  /** The platform administrator's saved label, if any. Clear to restore the pod label. */
+  model_display_name_override?: string | null;
   model_context_window_tokens?: number | null;
   model_max_input_tokens?: number | null;
   model_max_output_tokens?: number | null;
@@ -5063,7 +5088,7 @@ export type SelectableChatModel = {
 export type EffectiveChatModel = {
   /** The concrete model name. `capability_id` below identifies the `(provider, name)` pair uniquely for a caller that needs to join against team enablement or the models admin view. */
   name?: string | null;
-  /** The ops-authored `model_display_name` for this model, when the pod catalog names one. `None` leaves the frontend on its name/id prettifying fallback — the same fallback the composer already had. */
+  /** The saved administrator name or pod catalog name for this model. `None` leaves the frontend on its name/id prettifying fallback — the same fallback the composer already had. */
   display_name?: string | null;
   /** The `(provider, name)`-keyed `kind="model"` capability id, so the caller can join this against team enablement and the models admin view. `None` for an unresolved model. */
   capability_id?: string | null;
@@ -6033,6 +6058,7 @@ export const {
   useLazyGetAgentInstanceSkillDetailQuery,
   usePrepareAgentExecutionMutation,
   useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation,
+  usePutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutMutation,
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
   useLazyGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
   useGetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetQuery,

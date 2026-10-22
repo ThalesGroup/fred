@@ -1130,6 +1130,16 @@
           "input": "Entrée : {{count}} tokens",
           "output": "Sortie : {{count}} tokens"
         },
+        "modelName": {
+          "editAction": "Modifier le nom affiché",
+          "editAria": "Modifier le nom affiché de {{name}}",
+          "label": "Nom affiché dans le chat",
+          "saveAction": "Enregistrer",
+          "resetAction": "Réinitialiser",
+          "cancelAction": "Annuler",
+          "saved": "Nom du modèle enregistré",
+          "saveError": "Impossible d'enregistrer le nom du modèle"
+        },
         "emptyApps": "Aucune application n'est encore installée sur cette plateforme.",
         "col": {
           "capability": "Fonctionnalité",
