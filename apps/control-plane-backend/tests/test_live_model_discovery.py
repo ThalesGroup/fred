@@ -21,6 +21,7 @@ from typing import cast
 
 import httpx
 import pytest
+from fred_core import KeycloakUser
 from control_plane_backend.model_discovery import service
 from control_plane_backend.model_discovery.service import validate_models_url
 from control_plane_backend.model_discovery.store import (
@@ -148,9 +149,9 @@ async def test_url_override_and_fallback_persist_independently() -> None:
             expected_override_url=None,
         )
         assert stale is None
-        assert (
-            await ModelDiscoveryStateStore(engine).get("gateway")
-        ).effective_url == saved.effective_url
+        persisted = await ModelDiscoveryStateStore(engine).get("gateway")
+        assert persisted is not None
+        assert persisted.effective_url == saved.effective_url
         binding = ModelBinding.model_validate(
             {
                 "provider": "openai",
@@ -273,7 +274,7 @@ async def test_failed_preparation_does_not_activate_or_remove_models(
             ),
         )
         result = await service.refresh(
-            cast(object, object()), deps, authorization="Bearer test"
+            cast(KeycloakUser, object()), deps, authorization="Bearer test"
         )
     assert len(posts) == 2
     assert all(post.get("prepare") is True for post in posts)
@@ -373,7 +374,7 @@ async def test_refresh_recovers_when_a_pod_revision_is_ahead(monkeypatch) -> Non
             ),
         )
         result = await service.refresh(
-            cast(object, object()), deps, authorization="Bearer test"
+            cast(KeycloakUser, object()), deps, authorization="Bearer test"
         )
     assert activations == [4, 4]
     assert saved_revision == 4

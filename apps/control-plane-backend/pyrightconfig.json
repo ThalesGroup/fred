@@ -3,5 +3,6 @@
   "venvPath": ".",
   "venv": ".venv",
   "extraPaths": ["../../libs/fred-sdk"],
+  "exclude": ["target"],
   "reportUnreachable": "warning"
 }
