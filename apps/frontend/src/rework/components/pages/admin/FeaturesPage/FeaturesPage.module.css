@@ -71,14 +71,21 @@
 }
 
 .modelCell {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
   gap: var(--spacing-3xs);
   min-width: 0;
 }
 
+.modelIdentity {
+  grid-row: 1;
+  grid-column: 1;
+  min-width: 0;
+}
+
 .newModelBadge {
-  align-self: flex-start;
+  grid-column: 1 / -1;
+  justify-self: start;
   margin-left: var(--spacing-xl);
   border: 1px solid var(--outline-variant);
   border-radius: 999px;
@@ -118,6 +125,7 @@
 
 .modelSpecs {
   display: flex;
+  grid-column: 1 / -1;
   flex-wrap: wrap;
   gap: var(--spacing-xs);
   padding-left: var(--spacing-xl);
@@ -127,9 +135,18 @@
 
 .modelNameForm {
   display: flex;
+  grid-column: 1 / -1;
   flex-direction: column;
   gap: var(--spacing-3xs);
+  padding-bottom: var(--spacing-s);
   min-width: 0;
+}
+
+.modelNameEditButton {
+  grid-row: 1;
+  grid-column: 2;
+  align-self: center;
+  justify-self: start;
 }
 
 .modelNameActions {

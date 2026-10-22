@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import Button from "@shared/atoms/Button/Button.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useEffect, useState } from "react";
@@ -33,12 +34,13 @@ export function ModelDisplayNameEditor({ capabilityId, wireName, effectiveName, 
   const { showSuccess, showError } = useToast();
   const [setDisplayName, { isLoading }] = useSetModelDisplayNameMutation();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(overrideName ?? "");
+  const currentName = overrideName ?? effectiveName ?? wireName;
+  const [draft, setDraft] = useState(currentName);
 
-  useEffect(() => setDraft(overrideName ?? ""), [capabilityId, overrideName]);
+  useEffect(() => setDraft(currentName), [capabilityId, currentName]);
 
   const trimmed = draft.trim();
-  const canSave = trimmed.length > 0 && trimmed.length <= 160 && trimmed !== (overrideName ?? "");
+  const canSave = trimmed.length > 0 && trimmed.length <= 160 && trimmed !== currentName.trim();
 
   const save = async (name: string | null) => {
     try {
@@ -58,16 +60,16 @@ export function ModelDisplayNameEditor({ capabilityId, wireName, effectiveName, 
 
   if (!editing) {
     return (
-      <Button
-        color="on-surface"
-        variant="text"
+      <IconButton
+        className={styles.modelNameEditButton}
+        variant="icon"
         size="small"
+        icon={{ category: "outlined", type: "edit" }}
         type="button"
         onClick={() => setEditing(true)}
         aria-label={t("rework.admin.capabilities.modelName.editAria", { name: wireName })}
-      >
-        {t("rework.admin.capabilities.modelName.editAction")}
-      </Button>
+        title={t("rework.admin.capabilities.modelName.editAction")}
+      />
     );
   }
 
@@ -82,7 +84,6 @@ export function ModelDisplayNameEditor({ capabilityId, wireName, effectiveName, 
       <TextInput
         label={t("rework.admin.capabilities.modelName.label")}
         value={draft}
-        placeholder={effectiveName ?? wireName}
         maxLength={160}
         showCharacterCount={false}
         size="small"
@@ -112,7 +113,7 @@ export function ModelDisplayNameEditor({ capabilityId, wireName, effectiveName, 
           type="button"
           disabled={isLoading}
           onClick={() => {
-            setDraft(overrideName ?? "");
+            setDraft(currentName);
             setEditing(false);
           }}
         >

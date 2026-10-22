@@ -61,7 +61,9 @@ function render(overrideName: string | null = null) {
 }
 
 function button(label: string): HTMLButtonElement {
-  const found = Array.from(container.querySelectorAll("button")).find((item) => item.textContent === label);
+  const found = Array.from(container.querySelectorAll("button")).find(
+    (item) => item.textContent === label || item.getAttribute("aria-label") === label,
+  );
   if (!found) throw new Error(`Missing button ${label}`);
   return found;
 }
@@ -89,10 +91,11 @@ afterEach(() => {
 describe("ModelDisplayNameEditor", () => {
   it("saves an administrator label after discovery and can clear it", async () => {
     render();
-    click(button("rework.admin.capabilities.modelName.editAction"));
+    click(button("rework.admin.capabilities.modelName.editAria"));
     const input = container.querySelector("input") as HTMLInputElement;
-    expect(input.value).toBe("");
-    expect(input.placeholder).toBe("Gateway Chat");
+    expect(input.value).toBe("Gateway Chat");
+    expect(input.placeholder).toBe("");
+    expect(button("rework.admin.capabilities.modelName.saveAction").disabled).toBe(true);
     typeInto(input, "  Team Chat  ");
     click(button("rework.admin.capabilities.modelName.saveAction"));
     await act(async () => {});
@@ -102,7 +105,7 @@ describe("ModelDisplayNameEditor", () => {
     });
 
     render("Team Chat");
-    click(button("rework.admin.capabilities.modelName.editAction"));
+    click(button("rework.admin.capabilities.modelName.editAria"));
     expect((container.querySelector("input") as HTMLInputElement).value).toBe("Team Chat");
     click(button("rework.admin.capabilities.modelName.resetAction"));
     await act(async () => {});
@@ -114,7 +117,7 @@ describe("ModelDisplayNameEditor", () => {
 
   it("does not submit a blank name", () => {
     render();
-    click(button("rework.admin.capabilities.modelName.editAction"));
+    click(button("rework.admin.capabilities.modelName.editAria"));
     typeInto(container.querySelector("input") as HTMLInputElement, "  ");
     expect(button("rework.admin.capabilities.modelName.saveAction").disabled).toBe(true);
     expect(h.setName).not.toHaveBeenCalled();

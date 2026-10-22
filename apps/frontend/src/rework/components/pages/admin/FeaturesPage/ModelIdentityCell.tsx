@@ -32,14 +32,16 @@ export function ModelIdentityCell({
   const { t } = useTranslation();
   return (
     <div className={styles.modelCell}>
-      <EntityIdentity
-        name={capabilityLabel(t, capability)}
-        icon={toIconType(capability.icon, "tune")}
-        sourceId={capability.name}
-        runtimeId={capability.runtime_id}
-        version={capability.public_version}
-        dimmed={dimmed}
-      />
+      <div className={styles.modelIdentity}>
+        <EntityIdentity
+          name={capabilityLabel(t, capability)}
+          icon={toIconType(capability.icon, "tune")}
+          sourceId={capability.name}
+          runtimeId={capability.runtime_id}
+          version={capability.public_version}
+          dimmed={dimmed}
+        />
+      </div>
       {isNew && <span className={styles.newModelBadge}>{t("rework.admin.capabilities.discovery.new")}</span>}
       {(capability.model_context_window_tokens ||
         capability.model_max_input_tokens ||
