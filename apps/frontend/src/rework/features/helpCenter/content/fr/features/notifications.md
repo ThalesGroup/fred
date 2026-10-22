@@ -20,22 +20,24 @@ plus récentes en premier. Cliquez ailleurs ou appuyez sur **Échap** pour les
 fermer. Sur un petit écran, elles occupent tout l'écran, avec une flèche de
 retour.
 
-## Vue et lue
+## Vue, puis traitée
 
 - **Vue** : ouvrir la cloche marque comme vu tout ce qu'elle affiche, et le
   nombre disparaît. Une notification arrivée pendant que la liste est ouverte
   compte encore sur la cloche ensuite.
-- **Lue** : chaque notification reste mise en avant, avec un point, jusqu'à ce
-  que vous cliquiez dessus. Le clic vous emmène là où elle pointe, en général
-  la page **Agents** de l'équipe.
+- **Traitée** : chaque notification reste mise en avant, avec un point, tant
+  que vous n'avez rien fait. Dès que vous cliquez dessus ou sur l'un de ses
+  boutons, elle vous emmène là où elle pointe (en général la page **Agents**
+  de l'équipe) et disparaît de votre liste. **Accepter** et **Refuser** ne la
+  retirent qu'une fois la réponse enregistrée : en cas d'échec, elle reste.
 
 La cloche se met à jour toute seule toutes les quelques secondes tant que Fred
 est à l'écran ; inutile de recharger la page.
 
-## Supprimer ou tout effacer
+## Ignorer ou tout effacer
 
-Survolez une notification (ou atteignez-la au clavier) pour faire apparaître
-sa croix, qui la supprime. **Tout effacer**, en haut, supprime toutes les
+La croix, en haut à droite de chaque notification, l'ignore : elle disparaît
+sans rien ouvrir. **Tout effacer**, en haut, supprime toutes les
 notifications d'un coup. Supprimer une notification la retire seulement de
 votre liste : cela ne change rien à l'agent.
 

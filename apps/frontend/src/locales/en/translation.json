@@ -4339,7 +4339,7 @@
       "loadMore": "Show more",
       "loadError": "Your notifications could not be loaded.",
       "unread": "Unread",
-      "delete": "Delete the notification “{{title}}”",
+      "dismiss": "Dismiss notification",
       "empty": {
         "title": "No notifications",
         "description": "You will be told here when something needs you."

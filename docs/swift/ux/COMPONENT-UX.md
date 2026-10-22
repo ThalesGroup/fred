@@ -1093,8 +1093,9 @@ digit after the name.
   floating surface), title, body clamped to 2 lines, relative time, type buttons (small
   filled/outlined), "Handled by" line instead of buttons. The title button stretches over
   the tile; unread = emphasized title, `on-surface` body and a primary dot, with an "Unread"
-  prefix for screen readers. Delete (`close`, medium, `on-surface-retreat`) replaces the dot
-  on hover or focus, always visible on touch screens.
+  prefix for screen readers. The close button ("Dismiss notification", `close`, medium,
+  `on-surface-retreat`) is always visible, with the dot beside it. Clicking the tile or a
+  button acts and dismisses it (a domain call only once it succeeds).
 
 #### Open UX issues
 

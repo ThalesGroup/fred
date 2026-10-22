@@ -53,12 +53,22 @@ While the application tab is visible, the frontend SHALL refresh the unseen coun
 
 ### Requirement: Popover lists, reads and deletes notifications
 
-Clicking the bell SHALL open a popover over the navigation panel, closed by an outside click or Escape. It SHALL list the caller's notifications newest first with an empty state when there are none, and a "Clear all" action deleting all of them. Each tile SHALL keep an unread style until it is clicked; clicking it SHALL mark it read and follow its link if it has one. Each tile SHALL offer its own delete action.
+Clicking the bell SHALL open a popover over the navigation panel, closed by an outside click or Escape. It SHALL list the caller's notifications newest first with an empty state when there are none, and a "Clear all" action deleting all of them. A tile SHALL disappear as soon as its recipient acts on it: clicking the tile, or a button that follows a link, SHALL delete it for the caller and follow its link if it has one; a button calling a domain endpoint SHALL leave the deletion to that endpoint, so the tile goes only when the call succeeds and stays when it fails. Each tile SHALL show an always-visible close button that deletes it. Tiles SHALL keep an unread style until acted on.
 
-#### Scenario: Read on click
+#### Scenario: Dismissed on click
 
-- **WHEN** Alice clicks an unread tile
-- **THEN** the tile loses its unread style, stays read after a reload, and its link opens
+- **WHEN** Alice clicks a tile, or its "Open the agent" button
+- **THEN** its link opens and the notification is deleted for her
+
+#### Scenario: Failed action keeps the tile
+
+- **WHEN** Alice clicks a button that calls a domain endpoint and the call fails
+- **THEN** her tile stays in the list
+
+#### Scenario: Close without hovering
+
+- **WHEN** Alice looks at her list without hovering or focusing a tile
+- **THEN** each tile shows its close button, which deletes it
 
 #### Scenario: Clear all
 

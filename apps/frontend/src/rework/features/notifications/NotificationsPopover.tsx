@@ -27,7 +27,6 @@ import {
   enhancedControlPlaneApi,
   useClearNotificationsMutation,
   useDeleteNotificationMutation,
-  useMarkNotificationReadMutation,
   useMarkNotificationsSeenMutation,
   useNotificationsQuery,
 } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -45,7 +44,7 @@ export const NOTIFICATIONS_PAGE_SIZE = 50;
 interface TileHandlers {
   onOpen: (notification: NotificationItem, to: string | null) => void;
   onAction: (notification: NotificationItem, action: NotificationAction) => void;
-  onDelete: (notification: NotificationItem) => void;
+  onDismiss: (notification: NotificationItem) => void;
 }
 
 function NotificationListItem({ notification, handlers }: { notification: NotificationItem; handlers: TileHandlers }) {
@@ -68,9 +67,9 @@ function NotificationListItem({ notification, handlers }: { notification: Notifi
         primary: action.primary,
         onClick: () => handlers.onAction(notification, action),
       }))}
-      deleteLabel={t("rework.notifications.delete", { title: rendered.title })}
+      dismissLabel={t("rework.notifications.dismiss")}
       onOpen={() => handlers.onOpen(notification, rendered.link)}
-      onDelete={() => handlers.onDelete(notification)}
+      onDismiss={() => handlers.onDismiss(notification)}
     />
   );
 }
@@ -142,7 +141,6 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
 
   const firstPage = useNotificationsQuery({ limit: NOTIFICATIONS_PAGE_SIZE }, { refetchOnMountOrArgChange: true });
   const [markSeen] = useMarkNotificationsSeenMutation();
-  const [markRead] = useMarkNotificationReadMutation();
   const [deleteNotification] = useDeleteNotificationMutation();
   const [clearNotifications, { isLoading: clearing }] = useClearNotificationsMutation();
 
@@ -161,8 +159,9 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
   }, [fresh, items, markSeen]);
 
   const handlers: TileHandlers = {
+    // Acting on a tile is done with it: opening or following it dismisses it.
     onOpen: (notification, to) => {
-      if (!notification.read_at) void markRead({ notificationId: notification.id });
+      handlers.onDismiss(notification);
       if (to) {
         onClose(false);
         navigate(to);
@@ -173,13 +172,14 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
         handlers.onOpen(notification, action.to);
         return;
       }
-      // The domain endpoint resolves the group: the actor's own row is gone.
+      // On success the domain endpoint resolves the group and deletes the actor's
+      // own row; on failure the tile stays.
       void action
         .call(dispatch)
         .finally(() => dispatch(enhancedControlPlaneApi.util.invalidateTags(["ControlPlaneNotification"])));
     },
-    onDelete: (notification) => {
-      // The delete button has focus; hand it to the neighbouring tile.
+    onDismiss: (notification) => {
+      // The clicked button has focus; hand it to the neighbouring tile.
       const tile = document.activeElement?.closest("li");
       const neighbour = (tile?.nextElementSibling ?? tile?.previousElementSibling)?.querySelector("button");
       void deleteNotification({ notificationId: notification.id });

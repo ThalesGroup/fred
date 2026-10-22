@@ -9,7 +9,7 @@ Tracking: GitHub issue #3232. Design and catalogue: `docs/swift/rfc/NOTIFICATION
 - **Notification store in control-plane.** One row per recipient: type, team, group key, payload (ids plus a display snapshot), seen, read, handled and expiry timestamps. Text is rendered by the frontend from type and payload.
 - **Emitter service.** `notify(...)` and `resolve(...)`, called in-process by domain services after their commit, best effort. Re-emitting an open subject updates it without re-badging.
 - **Caller-scoped API.** Unseen count, paginated list (newest first), mark all seen, mark one read, delete one, clear all. No route creates a notification.
-- **Bell in the far-left app bar** with an unseen-count badge, polled every 15 s while the tab is visible. Clicking it opens a popover over the nav panel: "Clear all", tiles newest first, an empty state. Opening it resets the badge; a tile keeps its unread style until clicked.
+- **Bell in the far-left app bar** with an unseen-count badge, polled every 15 s while the tab is visible. Clicking it opens a popover over the nav panel: "Clear all", tiles newest first, an empty state. Opening it resets the badge; a tile disappears once its recipient acts on it (click, button, or its always-visible close button).
 - **Action-button framework.** A type declares its buttons; a button calls the existing domain endpoint or navigates. A handled notification shows "Handled by <name>" instead of buttons.
 - **30-day expiry.** Reads exclude expired rows; the lifecycle workflow deletes them. A deleted user's or team's rows are deleted.
 - **First two types** (triggers already exist):

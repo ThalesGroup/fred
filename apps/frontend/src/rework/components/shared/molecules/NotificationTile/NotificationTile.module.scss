@@ -132,43 +132,16 @@
   display: flex;
   position: relative;
   flex-shrink: 0;
-  flex-direction: column;
   align-items: center;
+  gap: var(--spacing-2xs);
   z-index: 1;
 }
 
 .dot {
-  position: absolute;
-  top: var(--spacing-xs);
-  right: var(--spacing-2xs);
   border-radius: var(--radius-full);
   background: var(--primary);
   width: var(--spacing-xs);
   height: var(--spacing-xs);
-}
-
-.delete {
-  visibility: hidden;
-}
-
-.tile:hover .dot,
-.tile:focus-within .dot {
-  visibility: hidden;
-}
-
-.tile:hover .delete,
-.tile:focus-within .delete {
-  visibility: visible;
-}
-
-@media (hover: none) {
-  .delete {
-    visibility: visible;
-  }
-
-  .dot {
-    visibility: hidden;
-  }
 }
 
 .tile[data-unread] .hit {

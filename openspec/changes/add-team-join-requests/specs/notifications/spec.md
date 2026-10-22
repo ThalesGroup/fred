@@ -2,7 +2,7 @@
 
 ### Requirement: Join requests notify the team's current admins
 
-Creating a join request SHALL send a `team.join_requested` notification, with the team as its team, to every user holding `can_administer_members` on it at that time; its action permission SHALL be `can_administer_members`, so losing that right deletes it. The tile SHALL read "<requester> asks to join <team>", show the message if any, link to the team's Members tab and offer Accept and Refuse, each calling the decision endpoint. The first decision SHALL resolve the group `join_request:<request_id>`: the deciding admin's notification disappears and the other admins see "Handled by <name>". A cancelled request SHALL delete the open notifications of its group. When a decision answers 404, the tile SHALL delete its notification.
+Creating a join request SHALL send a `team.join_requested` notification, with the team as its team, to every user holding `can_administer_members` on it at that time; its action permission SHALL be `can_administer_members`, so losing that right deletes it. The tile SHALL read "<requester> asks to join <team>", show the message if any, link to the team's Members tab and offer Accept and Refuse, each calling the decision endpoint. The first decision SHALL resolve the group `join_request:<request_id>`: the deciding admin's notification disappears once the call succeeds (it stays if the call fails; clicking the tile itself opens the Members tab and deletes it) and the other admins see "Handled by <name>". A cancelled request SHALL delete the open notifications of its group. When a decision answers 404, the tile SHALL delete its notification.
 
 #### Scenario: Two admins
 
@@ -31,7 +31,7 @@ Accepting, refusing or accepting anyway a request, and the automatic refusal whe
 #### Scenario: Accepted
 
 - **WHEN** Bob accepts Alice's request to Atlas
-- **THEN** Alice receives "Your request to join Atlas was accepted" whose button opens Atlas's Agents page
+- **THEN** Alice receives "Your request to join Atlas was accepted" whose button opens Atlas's Agents page and deletes the notification
 
 #### Scenario: Refused
 

@@ -14,9 +14,10 @@
 // limitations under the License.
 
 // What these pin: opening marks seen up to the newest listed notification, and
-// only from an answer fetched for this opening; a click marks read and follows
-// the link; delete and clear all call their routes; the empty state; load more
-// asks for the next page by cursor.
+// only from an answer fetched for this opening; a click on a tile or a navigate
+// action follows the link and deletes it; a domain action deletes nothing itself
+// (its endpoint does, on success); the close button and clear all call their
+// routes; the empty state; load more asks for the next page by cursor.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -25,21 +26,27 @@ import type { NotificationItem } from "./notificationTypes";
 
 const listMock = vi.fn();
 const markSeen = vi.fn();
-const markRead = vi.fn();
+const dispatch = vi.fn();
 const deleteNotification = vi.fn();
 const clearNotifications = vi.fn();
 const navigate = vi.fn();
 
 vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  enhancedControlPlaneApi: { util: { invalidateTags: vi.fn() } },
+  enhancedControlPlaneApi: {
+    util: { invalidateTags: vi.fn() },
+    endpoints: {
+      acceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPost: { initiate: vi.fn() },
+      refuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePost: { initiate: vi.fn() },
+      deleteNotificationControlPlaneV1NotificationsNotificationIdDelete: { initiate: vi.fn() },
+    },
+  },
   useNotificationsQuery: (...args: unknown[]) => listMock(...args),
   useMarkNotificationsSeenMutation: () => [markSeen],
-  useMarkNotificationReadMutation: () => [markRead],
   useDeleteNotificationMutation: () => [deleteNotification],
   useClearNotificationsMutation: () => [clearNotifications, { isLoading: false }],
 }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => navigate }));
-vi.mock("react-redux", () => ({ useDispatch: () => vi.fn() }));
+vi.mock("react-redux", () => ({ useDispatch: () => dispatch }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
@@ -135,34 +142,61 @@ describe("NotificationsPopover", () => {
     expect(markSeen).not.toHaveBeenCalled();
   });
 
-  it("marks an unread tile read on click and follows its link", () => {
+  it("deletes a tile on click and follows its link", () => {
     pages({ first: { items: [notification("n1")] } });
     const el = render();
 
     act(() => el.querySelector<HTMLButtonElement>("li button")!.click());
 
-    expect(markRead).toHaveBeenCalledWith({ notificationId: "n1" });
+    expect(deleteNotification).toHaveBeenCalledExactlyOnceWith({ notificationId: "n1" });
     expect(onClose).toHaveBeenCalledWith(false);
     expect(navigate).toHaveBeenCalledWith("/team/team-1/agents?agent=agent-1");
   });
 
-  it("does not mark a read tile read again", () => {
-    pages({ first: { items: [notification("n1", { read_at: "2026-10-20T11:00:00Z" })] } });
-    const el = render();
-
-    act(() => el.querySelector<HTMLButtonElement>("li button")!.click());
-
-    expect(markRead).not.toHaveBeenCalled();
-    expect(navigate).toHaveBeenCalledWith("/team/team-1/agents?agent=agent-1");
-  });
-
-  it("deletes one notification", () => {
+  it("deletes a tile when its navigate action is clicked, and follows it", () => {
     pages({ first: { items: [notification("n1")] } });
     const el = render();
 
-    act(() => el.querySelector<HTMLButtonElement>('button[aria-label="rework.notifications.delete"]')!.click());
+    act(() => buttonByText(el, "rework.notifications.actions.openAgent").click());
+
+    expect(deleteNotification).toHaveBeenCalledExactlyOnceWith({ notificationId: "n1" });
+    expect(navigate).toHaveBeenCalledWith("/team/team-1/agents?agent=agent-1");
+  });
+
+  it("keeps a tile whose domain action fails", async () => {
+    dispatch.mockReturnValue({ unwrap: () => Promise.reject({ status: 500 }) });
+    pages({
+      first: {
+        items: [
+          notification("n1", {
+            type: "team.join_requested",
+            payload: {
+              team_id: "team-1",
+              team_name: "Ops",
+              request_id: "req-1",
+              requester_id: "u-2",
+              requester_name: "Bob",
+            },
+          } as Partial<NotificationItem>),
+        ],
+      },
+    });
+    const el = render();
+
+    await act(async () => buttonByText(el, "rework.notifications.actions.accept").click());
+
+    expect(deleteNotification).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("deletes one notification through its close button", () => {
+    pages({ first: { items: [notification("n1")] } });
+    const el = render();
+
+    act(() => el.querySelector<HTMLButtonElement>('button[aria-label="rework.notifications.dismiss"]')!.click());
 
     expect(deleteNotification).toHaveBeenCalledWith({ notificationId: "n1" });
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it("clears all notifications", async () => {

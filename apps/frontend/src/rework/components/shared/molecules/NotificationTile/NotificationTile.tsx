@@ -41,15 +41,15 @@ export interface NotificationTileProps {
   /** Replaces the actions once someone acted on the subject. */
   handledLabel?: string;
   actions?: NotificationTileAction[];
-  deleteLabel: string;
+  dismissLabel: string;
   onOpen: () => void;
-  onDelete: () => void;
+  onDismiss: () => void;
 }
 
 /**
  * One notification in a list. The title button stretches over the whole tile, so
- * a click anywhere opens it; the actions and the delete button sit above that
- * hit area. The delete button shows on hover or keyboard focus (always on touch).
+ * a click anywhere opens it; the actions and the always-visible close button sit
+ * above that hit area.
  */
 export default function NotificationTile({
   icon,
@@ -62,9 +62,9 @@ export default function NotificationTile({
   unreadLabel,
   handledLabel,
   actions = [],
-  deleteLabel,
+  dismissLabel,
   onOpen,
-  onDelete,
+  onDismiss,
 }: NotificationTileProps) {
   return (
     <li className={styles.tile} data-unread={unread || undefined}>
@@ -110,13 +110,12 @@ export default function NotificationTile({
         {unread && <span className={styles.dot} aria-hidden="true" />}
         <IconButton
           type="button"
-          className={styles.delete}
           variant="icon"
           size="medium"
           color="on-surface-retreat"
           icon={{ category: "outlined", type: "close" }}
-          aria-label={deleteLabel}
-          onClick={onDelete}
+          aria-label={dismissLabel}
+          onClick={onDismiss}
         />
       </div>
     </li>

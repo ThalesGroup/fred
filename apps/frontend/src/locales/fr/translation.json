@@ -4339,7 +4339,7 @@
       "loadMore": "Afficher plus",
       "loadError": "Impossible de charger vos notifications.",
       "unread": "Non lue",
-      "delete": "Supprimer la notification « {{title}} »",
+      "dismiss": "Ignorer la notification",
       "empty": {
         "title": "Aucune notification",
         "description": "Vous serez prévenu ici quand quelque chose vous concerne."

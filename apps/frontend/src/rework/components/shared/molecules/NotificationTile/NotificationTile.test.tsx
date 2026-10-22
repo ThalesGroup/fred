@@ -14,8 +14,9 @@
 // limitations under the License.
 
 // What these pin: an unread tile says so to sighted and screen-reader users
-// alike; a click on the tile opens it, a click on a button or on delete does
-// not; a handled tile shows who handled it and no buttons.
+// alike; a click on the tile opens it, a click on a button or on the close
+// button does not; the close button is always rendered, not only on hover; a
+// handled tile shows who handled it and no buttons.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -41,9 +42,9 @@ function renderTile(overrides: Partial<NotificationTileProps> = {}) {
     dateTime: "2026-10-20T10:00:00Z",
     unread: true,
     unreadLabel: "Unread",
-    deleteLabel: "Delete",
+    dismissLabel: "Dismiss notification",
     onOpen: vi.fn(),
-    onDelete: vi.fn(),
+    onDismiss: vi.fn(),
     ...overrides,
   };
   container = document.createElement("div");
@@ -102,12 +103,15 @@ describe("NotificationTile", () => {
     expect(props.onOpen).not.toHaveBeenCalled();
   });
 
-  it("deletes through its labelled delete button", () => {
+  it("dismisses through its close button, present without hover", () => {
     const { el, props } = renderTile();
 
-    click(el.querySelector('button[aria-label="Delete"]'));
+    const close = el.querySelector<HTMLButtonElement>('button[aria-label="Dismiss notification"]');
+    expect(close).not.toBeNull();
+    expect(close!.className).not.toMatch(/delete/);
+    click(close);
 
-    expect(props.onDelete).toHaveBeenCalledOnce();
+    expect(props.onDismiss).toHaveBeenCalledOnce();
     expect(props.onOpen).not.toHaveBeenCalled();
   });
 

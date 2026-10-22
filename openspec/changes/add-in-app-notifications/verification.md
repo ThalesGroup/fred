@@ -21,6 +21,10 @@ Two users, worktree frontend on Vite :5174, worktree control-plane on :8223 (`fr
 
 A second user's CGU 403 during the test came from the split setup (fred-agents reads the `fred` database, the test control-plane wrote to `fred_notif`), not from this change.
 
+## Dismiss on action (task 7.6, 2026-10-22)
+
+`npx vitest run src/rework/features/notifications src/rework/components/shared/molecules/NotificationTile`: 4 files, 44 tests passed; `npx tsc --noEmit` and `npx eslint` on the touched files clean. The close button's visibility without hover is a CSS rule (no hover-only `visibility: hidden` left); happy-dom does not compute it, so the test pins the rendered button only.
+
 ## Not proven
 
 - Rows created before a permission is removed by a direct OpenFGA edit (outside the control-plane role and membership routes) stay until they are handled or expire after 30 days.

@@ -19,22 +19,24 @@ Click the bell: your notifications open beside the bar, newest first. Click
 outside or press **Escape** to close them. On a small screen they take the
 whole screen, with a back arrow.
 
-## Seen and read
+## Seen, then handled
 
 - **Seen**: opening the bell marks everything it shows as seen, and the number
   goes away. A notification that arrives while the list is open still counts
   on the bell afterwards.
-- **Read**: each notification stays highlighted, with a dot, until you click
-  it. Clicking it takes you where it points, usually the team's **Agents**
-  page.
+- **Handled**: each notification stays highlighted, with a dot, until you do
+  something with it. As soon as you click it or one of its buttons, it takes
+  you where it points (usually the team's **Agents** page) and leaves your
+  list. **Accept** and **Refuse** remove it only once the answer is saved: if
+  it fails, the notification stays.
 
 The bell refreshes on its own every few seconds while Fred is on screen; no
 need to reload the page.
 
-## Delete or clear
+## Dismiss or clear
 
-Hover a notification (or reach it with the keyboard) to show its cross, which
-deletes it. **Clear all**, at the top, deletes every notification at once.
+The cross at the top right of each notification dismisses it: it goes away
+without opening anything. **Clear all**, at the top, deletes every notification at once.
 Deleting a notification only removes it from your list: it changes nothing on
 the agent.
 
