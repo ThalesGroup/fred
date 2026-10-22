@@ -98,6 +98,7 @@ from control_plane_backend.sessions.store import SessionMetadataStore
 from control_plane_backend.team_wiki.store import TeamWikiStore
 from control_plane_backend.teams.admin_charter_store import TeamAdminCharterStore
 from control_plane_backend.teams.default_team_store import PlatformDefaultTeamStore
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,7 @@ class ApplicationContext:
         self._agent_marketplace_store: AgentMarketplaceStore | None = None
         self._announcement_store: AnnouncementStore | None = None
         self._notification_service: NotificationService | None = None
+        self._team_join_request_store: TeamJoinRequestStore | None = None
         self._knowledge_base_instance_store: KnowledgeBaseInstanceStore | None = None
         self._knowledge_base_definition_store: KnowledgeBaseDefinitionStore | None = (
             None
@@ -480,6 +482,13 @@ class ApplicationContext:
 
     def get_notification_store(self) -> NotificationStore:
         return self.get_notification_service().store
+
+    def get_team_join_request_store(self) -> TeamJoinRequestStore:
+        if self._team_join_request_store is None:
+            self._team_join_request_store = TeamJoinRequestStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._team_join_request_store
 
     def get_knowledge_base_definition_store(self) -> KnowledgeBaseDefinitionStore:
         if self._knowledge_base_definition_store is None:

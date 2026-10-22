@@ -348,6 +348,8 @@ async def delete_team(
         # Before the team row, so a failure here is retried rather than orphaned.
         if deps.get_notification_service is not None:
             await deps.get_notification_service().store.delete_for_team(team_id)
+        if deps.get_team_join_request_store is not None:
+            await deps.get_team_join_request_store().delete_for_team(team_id)
         await store.delete(team_id)
 
     if deleted is not None:
@@ -1138,9 +1140,13 @@ async def update_team(
         # never trusting the client's belief about which field "wins".
         resulting_visibility = patch_data.get("visibility", metadata.visibility)
         resulting_joining_mode = patch_data.get("joining_mode", metadata.joining_mode)
-        if resulting_visibility == TeamVisibility.PRIVATE and resulting_joining_mode in (
-            JoiningMode.OPEN,
-            JoiningMode.ON_REQUEST,
+        if (
+            resulting_visibility == TeamVisibility.PRIVATE
+            and resulting_joining_mode
+            in (
+                JoiningMode.OPEN,
+                JoiningMode.ON_REQUEST,
+            )
         ):
             patch_data["joining_mode"] = JoiningMode.INVITE_ONLY
         patch = TeamMetadataPatch.model_validate(patch_data)
@@ -1169,8 +1175,20 @@ async def update_team(
             actor_name=display_name(user),
         )
         _log_rename(team_id, renamed_from, patch_data, user)
+        left_on_request = (
+            metadata.joining_mode == JoiningMode.ON_REQUEST
+            and updated is not None
+            and updated.joining_mode != JoiningMode.ON_REQUEST
+        )
         if updated is not None:
             metadata = updated
+        if left_on_request:
+            # Imported here: join_requests builds on this module's helpers.
+            from control_plane_backend.teams.join_requests import (
+                refuse_pending_join_requests,
+            )
+
+            await refuse_pending_join_requests(user, metadata, deps)
         if "visibility" in patch_data:
             # Sync the ReBAC `public` relation immediately rather than
             # waiting for the next `_list_teams` lazy backfill — mirrors

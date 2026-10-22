@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from control_plane_backend.scheduler.queue_store import PurgeQueueStore
     from control_plane_backend.sessions.erasure_service import ErasureReceipt
     from control_plane_backend.team_wiki.store import TeamWikiStore
+    from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 
 # Erase one conversation across every store and return its receipt (CTRLP-12 E1).
 # Kept as a callable on the deps bundle so the scheduler layer never imports the
@@ -72,6 +73,8 @@ class LifecycleActionDependencies:
     get_policy_catalog: Callable[[], "ConversationPolicyCatalog"]
     # None = no notification expiry (test bundles).
     get_notification_store: Callable[[], "NotificationStore"] | None = None
+    # None = no join request expiry (test bundles).
+    get_team_join_request_store: Callable[[], "TeamJoinRequestStore"] | None = None
 
 
 def build_lifecycle_action_dependencies(
@@ -116,4 +119,5 @@ def build_lifecycle_action_dependencies(
         get_team_wiki_store=container.get_team_wiki_store,
         get_policy_catalog=container.get_policy_catalog,
         get_notification_store=container.get_notification_store,
+        get_team_join_request_store=container.get_team_join_request_store,
     )

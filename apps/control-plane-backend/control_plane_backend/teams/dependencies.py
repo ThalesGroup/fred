@@ -53,6 +53,7 @@ from control_plane_backend.scheduler.temporal.structures import (
 )
 from control_plane_backend.teams.admin_charter_store import TeamAdminCharterStore
 from control_plane_backend.teams.default_team_store import PlatformDefaultTeamStore
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from control_plane_backend.users.dependencies import build_user_service_dependencies
 from control_plane_backend.users.schemas import UserSummary
 from control_plane_backend.users.service import (
@@ -126,6 +127,8 @@ class TeamServiceDependencies:
     get_kpi_writer: Callable[[], BaseKPIWriter] | None = None
     # None = no notifications (test bundles).
     get_notification_service: Callable[[], NotificationService] | None = None
+    # None = no join requests (test bundles).
+    get_team_join_request_store: Callable[[], TeamJoinRequestStore] | None = None
 
 
 def build_team_service_dependencies(
@@ -252,6 +255,7 @@ def build_team_service_dependencies(
         get_agent_instance_store=container.get_agent_instance_store,
         get_kpi_writer=container.get_kpi_writer,
         get_notification_service=container.get_notification_service,
+        get_team_join_request_store=container.get_team_join_request_store,
     )
 
 

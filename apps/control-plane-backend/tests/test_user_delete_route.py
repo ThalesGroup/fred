@@ -113,6 +113,13 @@ async def _deployment(
     async def no_notifications(_user_id: str) -> None:
         calls.append("delete_notifications")
 
+    async def no_join_requests(_user_id: str) -> list[str]:
+        calls.append("delete_join_requests")
+        return []
+
+    async def no_groups(_group_keys: list[str]) -> None:
+        return None
+
     container = SimpleNamespace(
         get_rebac_engine=lambda: engine_under_test,
         get_pg_async_engine=object,
@@ -122,7 +129,10 @@ async def _deployment(
         ),
         get_announcement_store=lambda: SimpleNamespace(delete_seen_for_user=no_seen),
         get_notification_store=lambda: SimpleNamespace(
-            delete_for_user=no_notifications
+            delete_for_user=no_notifications, delete_groups=no_groups
+        ),
+        get_team_join_request_store=lambda: SimpleNamespace(
+            delete_for_requester=no_join_requests
         ),
     )
     app = FastAPI()
@@ -175,6 +185,7 @@ async def test_delete_bans_before_identity_deletion() -> None:
             "delete_favorites",
             "delete_patch_note_seen",
             "delete_notifications",
+            "delete_join_requests",
             "delete_identity_account",
         ]
         await _assert_banned(deployment.rebac)
@@ -277,6 +288,7 @@ async def test_identity_failure_after_the_ban_leaves_the_person_banned() -> None
             "delete_favorites",
             "delete_patch_note_seen",
             "delete_notifications",
+            "delete_join_requests",
             "delete_identity_account",
         ]
         assert deployment.identity.accounts == {_BYSTANDER}
@@ -295,6 +307,7 @@ async def test_missing_identity_returns_not_found_after_the_ban() -> None:
             "delete_favorites",
             "delete_patch_note_seen",
             "delete_notifications",
+            "delete_join_requests",
             "delete_identity_account",
         ]
         await _assert_banned(deployment.rebac)
@@ -325,6 +338,7 @@ async def test_without_account_status_enforcement_delete_writes_no_ban() -> None
             "delete_favorites",
             "delete_patch_note_seen",
             "delete_notifications",
+            "delete_join_requests",
             "delete_identity_account",
         ]
         assert ban(_PERSON) not in rebac.relations

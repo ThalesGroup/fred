@@ -498,6 +498,36 @@ operations:
     review_status: approved
     required_permission: authenticated_user # TEAM-09 — not a TeamPermission gate; server-side checks the team's stored joining_mode == OPEN and grants team_member to the caller only, never another user or role (see TeamNotOpenForJoiningError)
   - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/join-requests/mine
+    review_status: approved
+    required_permission: authenticated_user # teams.join_requests.list_my_join_requests. Only the caller's own unexpired requests, filtered by requester_id = caller.
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/join-requests
+    review_status: approved
+    required_permission: authenticated_user # teams.join_requests.create_join_request. Not a TeamPermission gate: a public team whose stored joining_mode is on_request, a caller with no role on it, the caller as the only requester. A private team answers 404 like an unknown one.
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/teams/{team_id}/join-requests/mine
+    review_status: approved
+    required_permission: authenticated_user # teams.join_requests.cancel_my_join_request. Deletes only the caller's own pending request.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/join-requests
+    review_status: approved
+    required_permission: can_administer_members
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/join-requests/{request_id}/accept
+    review_status: approved
+    required_permission: can_administer_members # grants team_member only, the role can_administer_members already lets an admin add
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/join-requests/{request_id}/refuse
+    review_status: approved
+    required_permission: can_administer_members
+  - service: control-plane
     method: POST
     path: /control-plane/v1/teams/{team_id}/rescue-admin
     review_status: approved

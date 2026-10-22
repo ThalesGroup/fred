@@ -133,7 +133,7 @@ async def test_notify_creates_one_row_per_recipient_and_counts_it(
     for uid in ("alice", "dave"):
         page = await service.list_page(_user(uid), limit=50, before=None)
         assert [item.type for item in page.items] == ["agent.republish_needed"]
-        assert page.items[0].payload.agent_name == "Analyst"
+        assert page.items[0].payload.model_dump()["agent_name"] == "Analyst"
     assert (
         kpi.counts
         == [
@@ -234,7 +234,9 @@ async def test_a_type_without_permission_reaches_a_non_member(
     )
 
     [answer] = (await service.list_page(_user("alice"), limit=50, before=None)).items
-    assert answer.team_id is None and answer.payload.outcome == "refused"
+    assert (
+        answer.team_id is None and answer.payload.model_dump()["outcome"] == "refused"
+    )
 
 
 @pytest.mark.asyncio

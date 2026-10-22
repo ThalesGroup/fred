@@ -188,14 +188,21 @@ async def delete_expired_notifications(
     input_data: DeleteExpiredNotificationsInput,
     deps: LifecycleActionDependencies | None = None,
 ) -> DeleteExpiredNotificationsResult:
-    """Delete one batch of expired notifications (memory mode and Temporal)."""
+    """Delete one batch of expired notifications and expired team join
+    requests (memory mode and Temporal); `deleted` counts both."""
     if deps is None:
         raise RuntimeError(
             "LifecycleActionDependencies are required for notification expiry."
         )
-    if deps.get_notification_store is None:
-        return DeleteExpiredNotificationsResult()
-    deleted = await deps.get_notification_store().delete_expired(limit=input_data.limit)
+    deleted = 0
+    if deps.get_notification_store is not None:
+        deleted += await deps.get_notification_store().delete_expired(
+            limit=input_data.limit
+        )
+    if deps.get_team_join_request_store is not None:
+        deleted += await deps.get_team_join_request_store().delete_expired(
+            limit=input_data.limit
+        )
     return DeleteExpiredNotificationsResult(deleted=deleted)
 
 
