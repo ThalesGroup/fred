@@ -1495,6 +1495,20 @@ class _ResolutionDeps(_FakeDeps):
 
         return _Store()
 
+    def get_platform_model_fallback_store(self):
+        class _Store:
+            async def get(self, session=None):
+                return None
+
+        return _Store()
+
+    def get_model_discovery_state_store(self):
+        class _Store:
+            async def list_all(self, session=None):
+                return []
+
+        return _Store()
+
     def get_model_display_name_override_store(self):
         overrides = self._display_name_overrides
 
