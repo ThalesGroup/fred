@@ -1091,6 +1091,16 @@ operations:
     required_permission: can_manage_capabilities # organization_authz.require_manage_capabilities. Unsets the binding (row deletion — no off-sentinel) and echoes the now-unset state.
   - service: control-plane
     method: GET
+    path: /control-plane/v1/admin/platform/sandbox-settings
+    review_status: approved
+    required_permission: can_manage_platform # Reads the operator-approved profile and bounded execution settings.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/sandbox-settings
+    review_status: approved
+    required_permission: can_manage_platform # Changes idle and capacity limits; image and runtime remain operator-owned.
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/admin/platform/prompt
     review_status: approved
     required_permission: can_edit_platform_prompt # platform-wide platform prompt — organization_authz.require_edit_platform_prompt (organization#can_edit_platform_prompt = platform_admin or prompt_editor). Read shares the write's gate on purpose: an editor who cannot read what they overwrite is useless, and this was never readable below the admin tier. is_default=true when no row was ever saved.
