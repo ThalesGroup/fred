@@ -254,8 +254,8 @@ resolver before filtering active rows and enumerating descendants.
 | Revoke space role | `Q(caller) + 2 R_g + 1-2 C + P_u Read + P_c(s) Read + W(4 + d)` | Target's direct roles across all spaces; children (an organization adds `P_o(s)` personal-space Reads); the second Check is only for an organization admin change |
 | Revoke a held admin or owner role on a non-personal space | Previous row + `P_a(s) Read` | All direct holders of that role; an owner revocation omits `Q(caller)` and uses the independent platform-owner Check |
 | Create team or project | `Q(caller) + Q(admin) + 1 R_g + 1 C + P_d Read + P_c(parent) Read + W(4)` | Actor manages parent; nominated admin's direct parent roles; sibling names; link and admin in one Write |
-| Create personal space | `Q(caller) + 1 R_g + 2 C + P_o(org) Read + W(5)` | Organization read and explicit eligibility; all personal links; link, member and editor in one Write |
-| Reuse personal space | `Q(caller) + 1 R_g + 2 C + P_o(org) Read` | Organization and personal read; no SQL/FGA mutation |
+| Create personal space | `Q(caller) + 1 R_g + 2 C + W(5)` | Organization read and explicit eligibility; one indexed SQL lookup finds no active personal space; link, member and editor in one Write |
+| Reuse personal space | `Q(caller) + 1 R_g + 2 C + 1 Read` | Organization and personal read; the indexed SQL lookup, then that space's own organization link; no SQL/FGA mutation |
 | Public configuration, personal onboarding and consent | `0` | SQL bootstrap/acceptance reads or consent upsert only |
 | Root bootstrap | `1 R_g + W(3)` | Bearer/secret and SQL marker govern admission |
 
@@ -394,11 +394,11 @@ when content is not declared. Batches publish content before eligibility. The
 fences, verifies content without dangling eligibility, then successfully replays.
 
 Personal opening holds its organization SQL lock from guard capture through context,
-permission reads, link pagination, row reads and creation commit. With three members,
-two existing personal spaces and forced page size 1, creation expects 2 Checks,
-5 Reads and 1 Write (5 tuple operations). Reuse with three personal spaces expects
-2 Checks, 8 Reads and zero Writes. Exact guard: one Read; roles: 2 then 4 pages;
-personal links: 2 then 3 pages; SQL placement adds no FGA Read. Production
+permission reads, the personal-space lookup and creation commit. With forced page size 1,
+creation expects 2 Checks, 3 Reads and 1 Write (5 tuple operations); reuse expects
+2 Checks, 6 Reads and zero Writes, whether two or five other members have personal
+spaces. Exact guard: one Read; roles: 2 then 4 pages; reuse reads its own link: one
+page. The other members' personal spaces never enter the budget. Production
 page size stays unset; all continuation pages are read with higher consistency.
 The two-open race is concurrency 2, not a throughput measurement. Document count
 does not affect lookup. The UI waits for one membership refresh after success.

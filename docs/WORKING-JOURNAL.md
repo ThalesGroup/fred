@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F14](#f14-ouverture-de-lespace-personnel-à-coût-constant) | Espace personnel trouvé en SQL, coût constant | Tests ciblés validés ; validation finale du lot | 04, 09, A2, A3 |
 | [F06](#f06-clés-jwks-pendant-une-panne-du-fournisseur) | Clés JWKS connues servies 1 h au plus pendant une panne | Tests ciblés validés ; validation finale du lot | 03 |
 | [F05](#f05-sujet-des-grants-et-erreurs-openfga) | Grants vers un sujet connu ; erreurs OpenFGA classées | Tests ciblés validés ; validation finale du lot | 03, 03a, A2, 09 (I27) |
 | [F18](#f18-audit-des-révocations-effectives) | Audit des seules révocations effectives, sans doublon | Tests ciblés validés ; validation finale du lot | 09 (I16), A3 |
@@ -83,6 +84,18 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F14 Ouverture de l'espace personnel à coût constant
+
+- 2026-10-22 : vérification sur HEAD `460317562` : confirmé. L'ouverture lisait tous les
+  liens `organization` de l'organisation puis leurs lignes SQL. Correction : recherche
+  `db::personal_space` (organisation, `personal_owner`, actif), puis lecture du seul lien
+  de cet espace ; un espace actif sans lien est refusé (409) plutôt que doublé. Migration
+  `0002_personal_space_owner.sql` : index unique partiel des espaces personnels actifs.
+  Un espace personnel n'est retiré qu'avec son organisation. Test de budget : création
+  3 lectures, réutilisation 6, identiques avec 2 ou 5 autres espaces personnels ; doublon
+  SQL refusé ; course à deux inchangée. Mutation (ancienne recherche) détectée. `make test`
+  et intégration complète (111) réussis. Arc42 04, 09, A2, A3, README du composant.
 
 ## F06 Clés JWKS pendant une panne du fournisseur
 

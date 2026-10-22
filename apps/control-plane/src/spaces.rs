@@ -520,12 +520,13 @@ pub async fn create_personal_space(
     let mut guard = fga.guard(&[Scope::Organization(org.id)]).await?;
     require_context(&mut *tx, fga, caller, org.id).await?;
     require(fga, caller, Permission::Read, org.id).await?;
-    let personal = fga.linked_to(org.id, true).await?;
-    if let Some(row) = db::spaces(&mut *tx, &personal)
-        .await?
-        .into_iter()
-        .find(|s| s.personal_owner.as_deref() == Some(caller))
-    {
+    // SQL finds the one candidate; its OpenFGA link must still place it in this organization.
+    if let Some(row) = db::personal_space(&mut *tx, org.id, caller).await? {
+        if fga.link_of(row.id, true).await? != Some(org.id) {
+            return Err(AppError::Conflict(
+                "the personal space has no organization link; repair it before reuse".into(),
+            ));
+        }
         require(fga, caller, Permission::Read, row.id).await?;
         return Ok((Space::from(row), false));
     }

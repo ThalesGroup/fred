@@ -67,6 +67,22 @@ pub async fn require_initialized(pool: &PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// The caller's active personal space in one organization, unique by index.
+pub async fn personal_space<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    organization: Uuid,
+    owner: &str,
+) -> sqlx::Result<Option<SpaceRow>> {
+    sqlx::query_as(concat!(
+        space!(),
+        " where organization_id = $1 and personal_owner = $2 and deletion_id is null"
+    ))
+    .bind(organization)
+    .bind(owner)
+    .fetch_optional(ex)
+    .await
+}
+
 /// Organizations are the only spaces resolved by name alone.
 pub async fn organization_named<'e>(
     ex: impl sqlx::PgExecutor<'e>,

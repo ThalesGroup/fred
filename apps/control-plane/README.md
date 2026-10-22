@@ -213,7 +213,8 @@ or uninitialized database. The k3d factory profile enables the chart's
 pre-install/pre-upgrade migration Job. Rebuilding the Rust
 image embeds new migration files; no manual SQL command is needed for this upgrade.
 
-`0001_manager_schema.sql` creates the complete schema. A database whose recorded
+`0001_manager_schema.sql` creates the initial schema; later numbered files evolve it.
+A database whose recorded
 versions or checksums differ from the embedded files is refused by the API and by
 `migrate`; recreate it explicitly. Do not edit applied files or replace stored checksums.
 

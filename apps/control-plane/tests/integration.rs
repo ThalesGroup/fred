@@ -5622,7 +5622,15 @@ async fn personal_open_budgets_exhaust_pages_and_recheck_after_lock_wait() {
     .load(&e.pool)
     .await
     .unwrap();
-    for existing in [false, true] {
+    // The other members' personal spaces never enter the budget.
+    for (existing, others) in [(false, 2), (true, 2), (true, 5)] {
+        for user in ["dan", "eve", "fay"].iter().take(others - 2) {
+            grant(&e, org.id, Role::Member, user).await;
+            grant(&e, org.id, Role::PersonalSpaceCreator, user).await;
+            spaces::create_personal_space(&e.pool, &e.fga, user, org.id)
+                .await
+                .unwrap();
+        }
         *proxy.fault.lock().await = support::fga_proxy::Fault {
             read_page_size: Some(1),
             ..Default::default()
@@ -5634,11 +5642,12 @@ async fn personal_open_budgets_exhaust_pages_and_recheck_after_lock_wait() {
         let fault = proxy.fault.lock().await;
         assert_eq!(fault.calls.get("check"), Some(&2));
         assert_eq!(fault.writes, if existing { 0 } else { 1 });
-        // Exact guard: 1 page; roles: 2/4 pages; organization links: 2/3 pages.
-        // SQL placement adds no Read; no empty terminal page.
+        // Exact guard: 1 page; roles: 2 then 4 pages; reuse reads its own link: 1 page.
+        // SQL finds the candidate; no empty terminal page.
         assert_eq!(
             fault.calls.get("read"),
-            Some(&(if existing { 8 } else { 5 }))
+            Some(&(if existing { 6 } else { 3 })),
+            "existing={existing}, others={others}"
         );
         assert!(fault.reads.iter().any(|r| {
             r["continuation_token"]
@@ -5654,6 +5663,14 @@ async fn personal_open_budgets_exhaust_pages_and_recheck_after_lock_wait() {
             );
         }
     }
+    // SQL also refuses a second active personal space for one owner and organization.
+    let duplicate = sqlx::query("insert into space (id, kind, name, personal_owner, organization_id) values ($1, 'team', 'priya', 'priya', $2)")
+        .bind(Uuid::new_v4())
+        .bind(org.id)
+        .execute(&e.pool)
+        .await
+        .unwrap_err();
+    assert!(duplicate.as_database_error().unwrap().is_unique_violation());
     let held = hold_organization_lock(&e, org.id).await;
     let pool = e.pool.clone();
     let fga = observed.clone();
