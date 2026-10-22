@@ -40,6 +40,11 @@ without opening anything. **Clear all**, at the top, deletes every notification 
 Deleting a notification only removes it from your list: it changes nothing on
 the agent.
 
+A request to join your team is the exception: it has no cross and stays in
+your list until someone answers it, even when you choose **Clear all**.
+Clicking it opens the team's members without removing it. Once you or another
+Admin has answered, the cross comes back.
+
 Notifications are deleted on their own **30 days** after they arrive.
 
 ## The marketplace notifications

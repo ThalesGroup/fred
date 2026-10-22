@@ -17,6 +17,11 @@ mode `on_request`; every team keeps its current mode.
 
 Back up the control-plane database, as for any schema migration.
 
+Upgrade control-plane and knowledge-flow together, to the same release. The
+shared team model gained the `on_request` access mode: an older knowledge-flow
+fails to read a team set to On request, so do not let team admins pick that
+mode while an older knowledge-flow still runs.
+
 ## Configuration
 
 No configuration changes are required.
@@ -25,7 +30,8 @@ No configuration changes are required.
 
 Apply the control-plane Alembic head before starting the new control plane and
 its Temporal worker. This contribution's revisions, `fe166447f3d5` (creates
-`notifications`, adds `published_by`), `77cd5dc306cf` (creates
+`notifications` with its indexes, including plain indexes on `team_id` and
+`group_key`, adds `published_by`), `77cd5dc306cf` (creates
 `team_join_requests`) then `83b81adf7450` (creates the empty
 `disabled_notification_types`: every notification type stays on), rewrite no
 existing row. No other

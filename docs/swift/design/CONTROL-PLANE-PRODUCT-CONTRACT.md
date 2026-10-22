@@ -5167,6 +5167,10 @@ control-plane services compute the recipients.
 | `DELETE /notifications/{notification_id}` | —                                    | 204                   |
 | `DELETE /notifications`                  | —                                     | 204 (clear all)       |
 
+Clear all keeps the caller's open rows of a decision type (`DECISION_TYPES`:
+`team.join_requested` not yet handled); everything else goes. The summary route
+emits no per-request KPI event (badge poll), only its response.
+
 `NotificationPage.items` is a union discriminated by `type`
 (`agent.republish_needed`, `agent.marketplace_removed`,
 `team.join_requested`, `team.join_request_answered`, see §70), each with its own
@@ -5182,7 +5186,10 @@ after the triggering commit, best effort: a failure logs ids only and counts
 `notifications.emit_failed_total`, never failing the action. An open row of the
 same recipient and `group_key` gets the new payload and keeps its seen and
 read state. `resolve` deletes the actor's own open rows and marks the others
-handled.
+handled. The disabled-type check runs before the insert, outside its
+transaction: a type turned off during an emission may leave that one row (best
+effort). Rows are indexed by `team_id` and by `group_key` for the team and
+group deletes.
 
 **Marketplace.** `agent_marketplace_entry.published_by` (nullable uid) is
 written on every publish and republish; older entries have none and notify
@@ -5222,8 +5229,9 @@ Audit event `platform.notification_type.updated` (type, enabled, deleted count).
 `invite_only`, set through `PATCH /teams/{team_id}` like the others. A team
 that is private after an update stores `invite_only` instead of `open` or
 `on_request`. When a team leaves `on_request` (explicitly or by becoming
-private), every pending request is refused as the updating admin and each
-requester is notified. No team changes mode on upgrade. Import keeps
+private), every pending request is answered "refused" as the updating admin and
+deleted, so no 24-hour wait follows; this sweep and asking share an advisory
+lock per team, so no pending request survives the switch. No team changes mode on upgrade. Import keeps
 `request_only`/`closed` → `invite_only` and passes `on_request` through.
 
 **Routes.**
@@ -5248,10 +5256,14 @@ returns it and emits nothing. Refused: kept 7 days after the refusal
 (`expires_at = decided_at + 7 days`); `MyTeamJoinRequest.can_ask_again_at` is
 `decided_at + 24 h`, before which asking answers `join_request_refused` and
 after which a new request (new id) replaces it. Accept takes a pending or a
-refused row ("Accept anyway"), grants `team_member` only and deletes the row;
-refusing a refused row is a no-op. Cancel deletes the caller's pending row.
-Decisions are conditional writes: the second of two concurrent decisions
-answers 404. Deleting a team deletes its requests; deleting a user deletes
+refused row ("Accept anyway"), only while the team is public and `on_request`
+(else 409 `team_not_on_request`); it grants `team_member` only, then deletes the
+row, so a failed grant leaves the request to decide again. Refusing a refused
+row is a no-op. Accept or refuse on a requester who is already a member only
+deletes the request and its notifications. Any other membership grant (Members
+tab, team invite link, default teams, registry, rescue, open join) also deletes
+the person's request and its notifications, with no answer sent. Cancel deletes
+the caller's pending row. The second of two concurrent decisions answers 404. Deleting a team deletes its requests; deleting a user deletes
 theirs. The lifecycle notification step also deletes expired requests (counted
 in `LifecycleManagerResult.notifications.deleted`).
 
@@ -5261,9 +5273,10 @@ holders with `team_id` set, action permission `can_administer_members`, group
 `join_request:<request_id>`; a decision resolves it (`accepted`/`refused`),
 a cancel or the requester's deletion deletes it. `team.join_request_answered`
 (`TeamJoinRequestAnsweredPayload`: team id and name, `outcome`) goes to the
-requester without `team_id` and with no action permission, group
-`join_request_outcome:<request_id>`; it never names the admin. Accepting a
-refused request deletes the refusal answer first.
+requester with no action permission, group
+`join_request_outcome:<request_id>`; it never names the admin. It carries
+`team_id` when `accepted` (leaving or deleting the team removes it) and none
+when `refused`. Accepting a refused request deletes the refusal answer first.
 
 **Audit.** `team.join_request.created|cancelled|accepted|refused` with
 `actor_uid`, `team_id`, `request_id`, `requester_uid` on decisions and

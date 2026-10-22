@@ -69,6 +69,7 @@
   - Done: `NotificationsEntry` rendered last in `MainNavBar.tsx`; `useNotificationSummary` polls every 15 s while visible, 0 while hidden, refetches on visibility return and on focus (`useRefetchOnWindowFocus`), and a tab opened hidden sends nothing until shown. `NotificationsEntry.test.tsx` (8 tests: badge, none at 0, aria-label, 15 s interval, hidden pause + catch-up, focus, background tab, Escape onto the bell, outside click).
 - [x] 7.6 Dismiss a tile once its recipient acts on it (owner decision, 2026-10-22): always-visible close button "Dismiss notification" / "Ignorer la notification"; tile click and `navigate` buttons delete then navigate (no `read` call); `call` buttons leave the deletion to the endpoint's success; verify vitest.
   - Done: `NotificationTile` (`dismissLabel`/`onDismiss`, no hover-only rule, dot beside the close button), `NotificationsPopover`; `NotificationTile.test.tsx` (close button present without hover) and `NotificationsPopover.test.tsx` (click deletes + navigates, navigate action deletes + navigates, failed `call` keeps the tile, close deletes). Owner live check pending.
+  - Pending decisions: no close button (`dismissible={false}`), a click follows the link without deleting, the close button returns once handled; "Clear all" keeps them (backend `delete_all`) and is disabled when only they are listed; buttons disabled while a call is in flight (`busy`); 403 deletes the tile like 404. Tests: `NotificationsPopover.test.tsx` (one call per double click, pending tile follows without delete and has no close, clear all disabled), `NotificationTile.test.tsx` (busy), `notificationTypes.test.ts` (403/404, `isPendingDecision`), `tests/test_notification_store.py::test_clear_all_keeps_the_decisions_still_waiting`.
 - [x] 7.5 Add fr + en strings (`rework.notifications.*`, `rework.mainNav.notifications`); verify `npx tsc --noEmit` and no missing-key warnings in touched tests.
   - Done: `rework.notifications.*`, `rework.mainNav.notifications`, `rework.mainNav.notificationsUnseen_{one,other}` in fr and en; removal reasons reuse `rework.agentMarketplace.removed.reasons.*`. Missing-key check in `notificationTypes.test.ts`.
 
@@ -82,7 +83,8 @@
   - Done: `docs/swift/ops/migrations/3232-add-in-app-notifications.md`; `make migration-check`: "Migration notes valid: 1 new declaration(s)".
 - [x] 8.4 Update `docs/swift/ux/COMPONENT-UX.md` for `NotificationTile`, `NotificationsPopover` and the bell entry.
   - Done: new section "Notifications: bell, `NotificationsPopover`, `NotificationTile`" and `NotificationsPopover` listed as a `MenuPopover` instance.
-- [ ] 8.5 Update `docs/swift/rfc/NOTIFICATIONS-RFC.md` status: slice 1 shipped, folded into the `notifications` spec.
+- [x] 8.5 Update `docs/swift/rfc/NOTIFICATIONS-RFC.md` status: slice 1 shipped, folded into the `notifications` spec.
+  - Done: the RFC is trimmed to what is still open (slice 3 and catalogue items 7–9) and points to both OpenSpec changes and contract §69/§70.
 
 ## 10. Platform switch per notification type
 
@@ -91,6 +93,10 @@
 - [x] 10.3 Routes `GET /admin/platform/notification-types` and `PUT /admin/platform/notification-types/{notification_type}`; `authz-endpoint-matrix.yaml`; §69 of `CONTROL-PLANE-PRODUCT-CONTRACT.md`; regenerate `controlPlaneOpenApi.ts`.
 - [x] 10.4 Admin page `NotificationsPage` (`/admin/notifications`, AdminNavbar entry, `requires="admin"`): one row per listed type with name, description and `Switch`; fr+en `rework.notificationSettings.*`; Help Center administration line fr+en; verify `NotificationsPage.test.tsx`.
 - [x] 10.5 A failed Accept/Refuse (non-404) shows the error toast; verify `notificationTypes.test.ts` and `NotificationsPopover.test.tsx`.
+- [x] 10.7 Turning a type off asks for confirmation (critical `ConfirmationDialog`, fr+en `rework.notificationSettings.turnOff.*`); turning it on does not; verify `NotificationsPage.test.tsx`.
+  - Done: `NotificationsPage.test.tsx` (on saves at once, off asks then saves on confirm, failure toast).
+- [x] 10.8 Performance review fixes: plain indexes on `notifications.team_id` and `group_key` in `fe166447f3d5` and the model; `KPIMiddleware` skips `/notifications/summary`; verify `test_table_ownership.py`, `fred_core/tests/kpi/test_http_middleware.py`.
+  - Done: both green; `alembic heads` one head (`83b81adf7450`). The disabled-type race in `notify_many` is accepted as best effort (design.md).
 - [ ] 10.6 Owner live check: turn `team.join_requested` off, ask to join an on_request team → no notification and existing ones gone; the request is still in Members > Pending requests; turn it back on → the next request notifies.
 
 ## 9. Verification

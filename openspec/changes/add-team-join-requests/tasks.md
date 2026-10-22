@@ -22,7 +22,7 @@
 
 - [x] 4.1 In `notifications/schemas.py` add `team.join_requested` (`TeamJoinRequestedPayload`: `team_id`, `team_name`, `request_id`, `requester_id`, `requester_name`, `message`) and `team.join_request_answered` (`TeamJoinRequestAnsweredPayload`: `team_id`, `team_name`, `outcome`), their views in the `NotificationView` union, `ACTION_PERMISSION` typed `TeamPermission | None` with `CAN_ADMINISTER_MEMBERS` and `None`; make `forget_lost_access` skip `None`; update `test_every_type_declares_the_permission_to_act_on_it` so `None` is allowed only for types sent without a team; verify `tests/test_notifications.py`. Done: `tests/test_notifications.py` green.
 - [x] 4.2 Add `NotificationStore.delete_groups(group_keys)` and `NotificationService.delete_groups` (best effort); verify a store test. Done: `test_delete_groups_removes_every_recipients_rows`.
-- [x] 4.3 Wire emission after commit in the service: create → `notify` to the team's `team_admin` users with `team_id` (group `join_request:<id>`); accept/refuse/automatic refusal → `resolve` with outcome and actor, then `notify` the requester without `team_id` (group `join_request_outcome:<id>`; accept anyway deletes that group's refusal first); cancel and user deletion → `delete_groups`; verify tests: an editor and a pending admin get nothing, a demoted admin's row is deleted, the deciding admin's row disappears and the other shows "handled by", the requester's answer reaches a non-member, an emission failure does not fail the decision. Done: tests for editor/pending admin, demoted admin, handled-by, non-member answer, emission failure.
+- [x] 4.3 Wire emission after commit in the service: create → `notify` to the team's `team_admin` users with `team_id` (group `join_request:<id>`); accept/refuse/automatic refusal → `resolve` with outcome and actor, then `notify` the requester with `team_id` when accepted and none when refused (group `join_request_outcome:<id>`; accept anyway deletes that group's refusal first); cancel and user deletion → `delete_groups`; verify tests: an editor and a pending admin get nothing, a demoted admin's row is deleted, the deciding admin's row disappears and the other shows "handled by", the requester's answer reaches a non-member, an emission failure does not fail the decision. Done: tests for editor/pending admin, demoted admin, handled-by, non-member answer, emission failure.
 
 ## 5. Frontend
 
@@ -38,7 +38,16 @@
 - [x] 6.2 `CONTROL-PLANE-PRODUCT-CONTRACT.md`: dated entry after §69 (`on_request`, routes, error codes, record lifecycle, notification types) and a one-line pointer from §29 to it; extend §69's union list. Done: §70, §29 pointer, §69 union.
 - [x] 6.3 `docs/swift/ux/COMPONENT-UX.md`: TeamCard states, three-way access mode, Pending requests section. Done.
 - [x] 6.4 Update `docs/swift/ops/migrations/3232-add-in-app-notifications.md`: title and applicability cover join requests, the second revision in Upgrade and Rollback, a validation step for a request; impact stays minor, configuration none. Done.
-- [ ] 6.5 `NOTIFICATIONS-RFC.md`: mark slice 2 as implemented once done.
+- [x] 6.5 `NOTIFICATIONS-RFC.md`: mark slice 2 as implemented once done. Done: the RFC is trimmed to slice 3 and catalogue items 7–9 and points to this change and §70.
+
+## 8. Review fixes (owner decisions A–F, 2026-10-22)
+
+- [x] 8.1 Close a request when its requester becomes a member another way (design decision 14); accept/refuse on someone already in only clean up. Verify `test_joining_another_way_closes_the_request`, `test_deciding_on_someone_who_joined_another_way_sends_no_answer`.
+- [x] 8.2 Accept grants the membership before deleting the request. Verify `test_a_failed_grant_keeps_the_request_to_decide_again`.
+- [x] 8.3 Serialize asking with the mode-switch sweep (advisory lock); the sweep deletes pending requests so no 24-hour wait follows (decision B). Verify `test_leaving_on_request_refuses_every_pending_request_without_a_wait` (lock taken by each ask and the sweep; no wait after it; an admin refusal keeps its wait).
+- [x] 8.4 "Accept anyway" answers 409 once the team is no longer public and `on_request`, and the Members tab hides it (decision C). Verify `test_accept_anyway_is_refused_once_the_team_stops_taking_requests`, `TeamJoinRequestsSection.test.tsx`.
+- [x] 8.5 Not-a-member screen: loading state until a fresh membership answer, "Ask to join" hidden during the refusal wait; the ask dialog keeps itself open with a toast on failure; the Members tab shows a toast on a failed decision; a team PATCH or an added member refreshes join requests and notifications. Verify `TeamMemberGate.test.tsx`, `TeamCard.test.tsx`, `TeamJoinRequestsSection.test.tsx`, `TeamSettingsMembers.test.tsx`.
+- [x] 8.6 Server-side enforcement of membership for platform admins is out of scope here (decision E): GitHub issue #3260.
 
 ## 7. Verification
 

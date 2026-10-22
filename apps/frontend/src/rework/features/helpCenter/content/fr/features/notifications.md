@@ -41,6 +41,11 @@ sans rien ouvrir. **Tout effacer**, en haut, supprime toutes les
 notifications d'un coup. Supprimer une notification la retire seulement de
 votre liste : cela ne change rien à l'agent.
 
+Une demande pour rejoindre votre équipe fait exception : elle n'a pas de croix
+et reste dans votre liste tant que personne n'y a répondu, même avec **Tout
+effacer**. Cliquer dessus ouvre les membres de l'équipe sans la retirer. Une
+fois que vous ou un autre Admin avez répondu, la croix revient.
+
 Les notifications sont supprimées d'elles-mêmes **30 jours** après leur
 arrivée.
 

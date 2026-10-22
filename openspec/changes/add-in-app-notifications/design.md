@@ -1,6 +1,6 @@
 ## Context
 
-Full rationale, catalogue and alternatives: `docs/swift/rfc/NOTIFICATIONS-RFC.md`. This design covers slice 1 only.
+This design is the full rationale of slice 1; `docs/swift/rfc/NOTIFICATIONS-RFC.md` now keeps only what is still open (slice 3, catalogue items 7–9) and the alternatives considered.
 
 Existing pieces this builds on:
 
@@ -39,13 +39,18 @@ Existing pieces this builds on:
 - The view is a union discriminated by `type` with one payload model per type, so the generated client types each payload instead of a hand-written frontend type. A row of a type this version does not know is skipped by the list.
 - `POST /notifications/seen` answers the new `NotificationSummary`; `before` is an opaque cursor (`next_cursor`), not a notification id.
 - `notification_type` is not in `PROMETHEUS_ALLOWED_LABELS`: per-type counts reach OpenSearch only. Adding the label is an owner decision.
+- Plain indexes on `team_id` (leave/role loss/team deletion) and `group_key` (`delete_groups`, `resolve` with `include_handled`), added to the unreleased revision `fe166447f3d5` itself.
+- The summary poll is skipped by `KPIMiddleware` (`/notifications/summary` in its skip list): the per-request event cost an OpenSearch write per visible tab every 15 s. The middleware feeds the Prometheus histogram and OpenSearch through one call, so the route has neither.
+- `notify_many` reads the disabled types before its insert, not inside the insert's transaction: a type turned off while an emission is in flight may leave that emission's rows. Accepted as best effort; a re-check inside the transaction would not close the window under read committed either.
 
 ## Frontend implementation notes (divergences to confirm)
 
 - The badge reads "99+" above 99 (`IconButton badgeMax`, default 999 for other callers).
-- The bell, its popover, the polling hook and the type registry live in `rework/features/notifications/` (they consume RTK hooks); only `NotificationTile` is a shared molecule, props only. `MainNavBar` renders `NotificationsEntry` after its entries.
+- The bell, its popover, the polling hook and the type registry live in `rework/features/notifications/` (they consume RTK hooks); only `NotificationTile` is a shared molecule, props only. `Sidebar` renders `NotificationsEntry` in the rail between `MainNavBar` and the user profile.
 - "Open the agent" leads to the team's Agents page with `?agent=<agent_instance_id>` (no per-agent route exists, so the page opens that agent's edit form for an editor and drops the param; a member, or an agent gone since, just lands on the page). The tile click follows the same link, so in slice 1 the button repeats the tile click; it is there for the button framework (`navigate` or `call` a domain endpoint, the latter unused until slice 2).
 - Acting on a tile deletes it (owner decision, 2026-10-22): a tile click or a `navigate` button deletes the row then navigates; a `call` button deletes nothing itself, since the domain endpoint's `resolve` already deletes the actor's row on success and a failure must keep the tile. The popover no longer calls `read`; the route stays, unused by the frontend. The close button is always visible, beside the unread dot.
+- Pending decisions (owner decisions, 2026-10-22): `DECISION_TYPES` in `notifications/schemas.py` (`team.join_requested`) and `decision: true` in the frontend registry mark the types asking for a decision. An unhandled one has no close button, a click follows its link without deleting it, and `DELETE /notifications` keeps it (`store.delete_all`; account deletion still removes everything). Once handled, the close button comes back. A tile's buttons are disabled while its call is in flight; a 403 deletes the tile like a 404.
+- Turning a type off asks for confirmation in a critical `ConfirmationDialog` (it deletes sent notifications for everyone); turning it on saves at once.
 - Cache tags: `seen` refreshes the badge only; `read` (which also marks seen), delete and clear refresh both.
 - A tab opened in the background sends no summary request until it is first shown.
 - A handled row without `handled_by_name` (removal by deactivation, suspension, deletion) reads "Resolved: the agent left the marketplace".

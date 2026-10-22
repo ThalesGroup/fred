@@ -1048,8 +1048,9 @@ _(none yet)_
 **Status:** `Functional`
 
 `badgeCount` puts an M3 _large badge_ on the button's top-right corner. Nothing
-renders below 1 — a "0" pill is noise, not information — and counts above 999
-show as `999+`, M3's three-digit cap.
+renders below 1 — a "0" pill is noise, not information — and counts above
+`badgeMax` (default 999, M3's three-digit cap) show as `${badgeMax}+`; the
+notification bell sets 99.
 
 Spec mapped onto existing tokens, no invented values: 16px min box
 (`--spacing-m`), `--radius-full`, 4px side padding (`--spacing-2xs`), Label
@@ -1079,29 +1080,58 @@ digit after the name.
 
 **Status:** `Functional`
 
-- **Bell** — last entry of `MainNavBar`, same medium IconButton and 1.25rem glyph as its
-  neighbours, `badgeCount` = unseen count (the atom's `999+` cap), count repeated in the
+- **Bell** — in `Sidebar`'s rail, between `MainNavBar` and the user profile (nav, bell,
+  profile, no divider), same medium IconButton and 1.25rem glyph as the nav entries,
+  `badgeCount` = unseen count with `badgeMax={99}` ("99+"), count repeated in the
   `aria-label`. Primary and filled while its popover is open, like an active entry.
 - **`NotificationsPopover`** — the `UserProfile` pattern: positioned beside the rail, over the
   nav panel, surface from `MenuPopover` (`role="dialog"`). Header: title + text button
-  "Clear all" (disabled when empty); list newest first, "Show more" by cursor; empty state is
+  "Clear all" (disabled when nothing but pending decisions is listed; those survive it); list newest first, "Show more" by cursor; empty state is
   `PageEmptyState`. Focus goes to the title on opening and back to the bell on Escape. At
   600px and below it becomes a full-screen sheet (no border, radius or shadow) with a back
   arrow.
 - **`NotificationTile`** — props-only molecule: category icon well (`primary-container`
   action, `success-container` response, `surface-container-high` information, as inside a
-  floating surface), title, body clamped to 2 lines, relative time, type buttons (small
-  filled/outlined), "Handled by" line instead of buttons. The title button stretches over
-  the tile; unread = emphasized title, `on-surface` body and a primary dot, with an "Unread"
-  prefix for screen readers. The close button ("Dismiss notification", `close`, medium,
-  `on-surface-retreat`) is always visible, with the dot beside it. Clicking the tile or a
-  button acts and dismisses it (a domain call only once it succeeds).
+  floating surface), title, full body (never clamped), relative time, type buttons (small
+  filled/outlined, disabled while `busy`), "Handled by" line instead of buttons. The title
+  button stretches over the tile; unread = emphasized title, `on-surface` body and a
+  primary dot, with an "Unread" prefix for screen readers. The close button ("Dismiss
+  notification", `close`, medium, `on-surface-retreat`) is always visible, with the dot
+  beside it. Clicking the tile or a button acts and dismisses it (a domain call only once
+  it succeeds).
+- **Pending-decision tile** (`dismissible={false}`, e.g. a join request) — no close button;
+  a click follows its link without dismissing it; Accept/Refuse are disabled while one is in
+  flight. Once someone decides, the "Handled by…" line replaces the buttons and the close
+  button comes back.
 
 #### Open UX issues
 
 - Not design-reviewed. The approved mockup's icon well is 36px; the tile uses
   `--spacing-2xl` (40px) rather than an arbitrary size.
 - `PageEmptyState` keeps its page-sized 3rem icon inside the popover.
+
+---
+
+### `TeamMemberGate`, `JoinRequestDialog`, admin `NotificationsPage` (2026-10-22)
+
+**Location:** `src/rework/components/shared/organisms/TeamMemberGate/`,
+`src/rework/components/shared/organisms/TeamCard/JoinRequestDialog.tsx`,
+`src/rework/components/pages/admin/NotificationsPage/`
+
+**Status:** `Functional`
+
+- **`TeamMemberGate`** — wraps `MainLayout`'s team pages. Shows a `Spinner` until a
+  membership answer fetched since the team was opened arrives, then the pages, or a
+  `PageError` "You are not a member of this team" (platform admins included). Its action is
+  "Ask to join" for a public `on_request` team, otherwise "Browse teams"; a pending request
+  or a refusal still in its 24-hour wait replaces "Ask to join" with a line saying so.
+  UI only: server-side enforcement is tracked in #3260.
+- **`JoinRequestDialog`** — the shared `Dialog` with an optional `TextArea` (280, guidance in
+  `description`). A failure shows the error toast and keeps the dialog open with the
+  message.
+- **Admin `NotificationsPage`** — one `Switch` row per type. Turning a type off opens a
+  critical `ConfirmationDialog` saying its sent notifications will be deleted for everyone;
+  turning it on saves at once.
 
 ---
 
@@ -2370,7 +2400,7 @@ same pattern as the theme/language pickers in `UserSettingsPage.tsx`).
 Selecting an option PATCHes immediately (no separate save step), mirroring
 the retired `is_private` `Switch`'s auto-save behavior this control replaced.
 
-Joining mode is a three-item group Open / On request / Invite only since 2026-10-22 (team join requests); a private team keeps the locked "manual only" button. The admins answer requests in a "Pending requests" section at the top of `TeamSettingsMembers` (`TeamJoinRequestsSection`: rendered only for `can_administer_members` holders while the list has rows; `surface-container` list, `outline-variant` row dividers; Accept / Refuse on a pending row, "Accept anyway" on a row refused in the last 7 days).
+Joining mode is a three-item group Open / On request / Invite only since 2026-10-22 (team join requests); a private team keeps the locked "manual only" button. The admins answer requests in a "Pending requests" section at the top of `TeamSettingsMembers` (`TeamJoinRequestsSection`: rendered only for `can_administer_members` holders while the list has rows; `surface-container` list, `outline-variant` row dividers; Accept / Refuse on a pending row, "Accept anyway" on a row refused in the last 7 days while the team is still public and on request; a failed decision shows the error toast).
 
 Joining mode narrowed to 2 options (`open`, `invite_only`) 2026-07-26 —
 `request_only` and `closed` were dropped from the `JoiningMode` enum
