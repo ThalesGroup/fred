@@ -109,8 +109,8 @@ export default function NotificationTile({
           )
         )}
       </div>
-      <div className={styles.trail}>
-        {dismissible && (
+      {dismissible && (
+        <div className={styles.trail}>
           <IconButton
             type="button"
             variant="icon"
@@ -120,8 +120,8 @@ export default function NotificationTile({
             aria-label={dismissLabel}
             onClick={onDismiss}
           />
-        )}
-      </div>
+        </div>
+      )}
     </li>
   );
 }
