@@ -1065,7 +1065,8 @@ def _data(chart: PlanChart) -> Any:
     data = CategoryChartData(number_format=number_format(chart))
     data.categories = chart.categories
     for series in chart.series:
-        data.add_series(series.name, [v if v is not None else 0 for v in series.values])
+        # None stays None: python-pptx leaves the point out, a gap in the chart.
+        data.add_series(series.name, series.values)
     return data
 
 

@@ -661,7 +661,8 @@ class PlanSeries(BaseModel):
     name: str = Field(default="", description="Series name, shown in the legend.")
     values: List[Optional[float]] = Field(
         default_factory=list,
-        description="One number per category, in the categories' order.",
+        description="One number per category, in the categories' order; null for a "
+        "missing value (a gap in the chart).",
         json_schema_extra=lambda schema: schema.update({"items": {"type": "number"}}),
     )
     # Values that did not read as numbers, by index, with the text sent.
@@ -697,7 +698,7 @@ class PlanSeries(BaseModel):
         for index, entry in enumerate(raw):
             number, unit = read_number(entry)
             values.append(number)
-            if number is None:
+            if number is None and (entry is not None or index in carried):
                 unread[index] = carried.get(index) or _quote(entry)[:20]
             elif isinstance(entry, str):
                 units.append(unit)

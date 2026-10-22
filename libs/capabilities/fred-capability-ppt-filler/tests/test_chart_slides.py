@@ -307,6 +307,30 @@ def test_too_much_for_the_zone_is_measured_never_split(builtin):
     assert any(o.startswith("shorten every category label") for o in found["options"])
 
 
+def test_a_null_value_is_a_missing_point_not_a_problem(builtin):
+    template, inventory = builtin
+    chart = {**REVENUE, "series": [{"name": "Revenue", "values": [12, None, 18, 21]}]}
+    planned = _plan(_chart_slide(chart)).slides[1].chart
+    assert planned is not None
+    (series,) = planned.series
+    assert series.values == [12, None, 18, 21] and series.unread == {}
+    assert not _assigned(inventory, _chart_slide(chart)).problems
+
+
+@pytest.mark.parametrize("kind", ["line", "column"])
+def test_a_null_value_is_drawn_as_a_gap(builtin, kind):
+    template, inventory = builtin
+    chart = {
+        **REVENUE,
+        "type": kind,
+        "series": [{"name": "Revenue", "values": [12, None, 18, 21]}],
+    }
+    built = _chart(_render(template, inventory, _chart_slide(chart)))
+    ser = built.plots[0]._element.find(qn("c:ser"))
+    indexes = [int(pt.get("idx")) for pt in ser.find(qn("c:val")).iter(qn("c:pt"))]
+    assert indexes == [0, 2, 3]
+
+
 # --- where the chart goes ---------------------------------------------------------------
 
 
