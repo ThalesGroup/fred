@@ -1880,6 +1880,7 @@
         "success": "Success"
       },
       "toolLabels": {
+        "askUser": "Requesting information from the user",
         "readSkillFile": "Reading skill file",
         "readQuery": "Reading query",
         "documents": "Listing tabular documents",
