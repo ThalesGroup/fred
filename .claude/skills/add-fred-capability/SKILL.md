@@ -210,6 +210,11 @@ The generated slice + dumped schema (under
 `apps/frontend/src/rework/features/capabilities/<id>/api/`) are `.prettierignore`d — never
 hand-edit them. See `apps/frontend/Makefile` (`update-demo-echo-capability-api`).
 
+Route authorization: `Depends(capability_team_authorizer)` then
+`require_agent_editor(team_id)` for team-scoped rows, or `require_capability_manager()` for
+platform-wide writes; `Depends(capability_platform_model)` gives such a route a model port
+bound to no team. See AUTHORING.md and `RUNTIME-EXECUTION-CONTRACT.md` §8.118/§8.120.
+
 ---
 
 ## Step 6 — Verify (RFC §4)

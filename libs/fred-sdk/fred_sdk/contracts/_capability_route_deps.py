@@ -14,16 +14,22 @@
 
 
 """
-FastAPI dependency for capability routers, kept out of `runtime.py` so fred-sdk
-imports no fastapi until a capability router asks for it. Public path:
-`fred_sdk.contracts.runtime.capability_team_authorizer`.
+FastAPI dependencies for capability routers, kept out of `runtime.py` so fred-sdk
+imports no fastapi until a capability router asks for one. Public paths:
+`fred_sdk.contracts.runtime.capability_team_authorizer` and
+`fred_sdk.contracts.runtime.capability_platform_model`.
 """
 
 from __future__ import annotations
 
 from fastapi import HTTPException, Request
 
-from .runtime import CAPABILITY_TEAM_AUTHORIZER_STATE, CapabilityTeamAuthorizer
+from .runtime import (
+    CAPABILITY_PLATFORM_MODEL_STATE,
+    CAPABILITY_TEAM_AUTHORIZER_STATE,
+    CapabilityModelPort,
+    CapabilityTeamAuthorizer,
+)
 
 
 async def capability_team_authorizer(request: Request) -> CapabilityTeamAuthorizer:
@@ -37,3 +43,16 @@ async def capability_team_authorizer(request: Request) -> CapabilityTeamAuthoriz
             status_code=503, detail="Team authorization is not available."
         )
     return authorizer
+
+
+async def capability_platform_model(request: Request) -> CapabilityModelPort:
+    """FastAPI dependency for capability routers: a model port bound to no team,
+    for platform-wide work a capability manager starts. Without a team, no
+    usable-models restriction applies. Fails closed (503) on a pod without one.
+    """
+    port = getattr(request.state, CAPABILITY_PLATFORM_MODEL_STATE, None)
+    if not isinstance(port, CapabilityModelPort):
+        raise HTTPException(
+            status_code=503, detail="Platform model access is not available."
+        )
+    return port

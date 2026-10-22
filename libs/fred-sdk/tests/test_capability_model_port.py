@@ -23,10 +23,12 @@ from collections.abc import Sequence
 import pytest
 from fastapi import HTTPException
 from fred_sdk.contracts.runtime import (
+    CAPABILITY_PLATFORM_MODEL_STATE,
     CAPABILITY_TEAM_AUTHORIZER_STATE,
     CapabilityModelPort,
     CapabilityTeamAuthorizer,
     RuntimeServices,
+    capability_platform_model,
     capability_team_authorizer,
 )
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -80,6 +82,25 @@ def test_team_authorizer_dependency_returns_the_bound_authorizer() -> None:
     authorizer = _AllowAll()
     setattr(request.state, CAPABILITY_TEAM_AUTHORIZER_STATE, authorizer)
     assert asyncio.run(capability_team_authorizer(request)) is authorizer
+
+
+def test_an_authorizer_without_the_manager_check_refuses_it() -> None:
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(_AllowAll().require_capability_manager())
+    assert exc.value.status_code == 403
+
+
+def test_platform_model_dependency_fails_closed_when_unbound() -> None:
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(capability_platform_model(_request()))
+    assert exc.value.status_code == 503
+
+
+def test_platform_model_dependency_returns_the_bound_port() -> None:
+    request = _request()
+    port = _EchoPort()
+    setattr(request.state, CAPABILITY_PLATFORM_MODEL_STATE, port)
+    assert asyncio.run(capability_platform_model(request)) is port
 
 
 def test_fred_sdk_imports_fastapi_only_in_the_route_dependency_module() -> None:

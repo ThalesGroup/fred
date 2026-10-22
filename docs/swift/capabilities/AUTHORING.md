@@ -116,7 +116,9 @@ For a model call outside a turn (in `validate_config`, or a background job it st
 require_vision)`). It routes to the agent's default model and fails closed with
 `CapabilityModelUnavailableError`, so keep a fallback without the model. A capability route that
 reads team-scoped rows takes `Depends(capability_team_authorizer)` and calls
-`require_agent_editor(row.team_id)` (contract §8.118).
+`require_agent_editor(row.team_id)` (contract §8.118). A route that writes platform-wide state
+calls `require_capability_manager()` instead (the Admin > Features gate), and gets a model port
+bound to no team from `Depends(capability_platform_model)` (contract §8.120).
 
 ---
 

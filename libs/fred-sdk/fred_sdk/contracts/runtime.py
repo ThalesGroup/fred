@@ -69,6 +69,9 @@ if TYPE_CHECKING:
     from langchain_core.messages import AIMessage, BaseMessage
 
     from ._capability_route_deps import (
+        capability_platform_model as capability_platform_model,
+    )
+    from ._capability_route_deps import (
         capability_team_authorizer as capability_team_authorizer,
     )
 
@@ -606,9 +609,10 @@ class CapabilityModelPort(ABC):
         """Run one chat completion and return the model's message."""
 
 
-# Request-state key under which the pod binds the caller's authorizer before a
-# capability route runs.
+# Request-state keys under which the pod binds the caller's authorizer and the
+# teamless model port before a capability route runs.
 CAPABILITY_TEAM_AUTHORIZER_STATE: Final = "fred_capability_team_authorizer"
+CAPABILITY_PLATFORM_MODEL_STATE: Final = "fred_capability_platform_model"
 
 
 class CapabilityTeamAuthorizer(ABC):
@@ -618,14 +622,26 @@ class CapabilityTeamAuthorizer(ABC):
     async def require_agent_editor(self, team_id: str) -> None:
         """Raise HTTP 403 unless the caller may edit the agents of `team_id`."""
 
+    async def require_capability_manager(self) -> None:
+        """Raise HTTP 403 unless the caller may manage capabilities platform-wide
+        (the Admin > Features gate). Refuses unless an implementer overrides it."""
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=403, detail=CAPABILITY_MANAGER_DENIED)
+
+
+CAPABILITY_MANAGER_DENIED: Final = "You cannot manage the platform's capabilities."
+
+_ROUTE_DEPENDENCIES = ("capability_team_authorizer", "capability_platform_model")
+
 
 def __getattr__(name: str) -> Any:
-    # `capability_team_authorizer` loads on first use: fred-sdk does not
-    # depend on fastapi (see `CapabilityManifest`).
-    if name == "capability_team_authorizer":
-        from ._capability_route_deps import capability_team_authorizer
+    # Route dependencies load on first use: fred-sdk does not depend on
+    # fastapi (see `CapabilityManifest`).
+    if name in _ROUTE_DEPENDENCIES:
+        from . import _capability_route_deps
 
-        return capability_team_authorizer
+        return getattr(_capability_route_deps, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 

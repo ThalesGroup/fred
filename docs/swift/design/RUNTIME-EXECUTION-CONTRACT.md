@@ -7218,3 +7218,21 @@ ready. Control-plane maps the answers to the `capability_pending` suspension
 `GET /agents/models-catalog` entries gain `vision_profile_ids`, the subset of
 `profile_ids` declaring `supports_vision`, mirrored on
 `CapabilityCatalogEntry.model_vision_profile_ids`.
+
+### 8.120 Capability manager check and teamless model port on capability routes (2026-10-22)
+
+`CapabilityTeamAuthorizer.require_capability_manager()` is a non-abstract method: it
+returns 403 unless the caller holds `OrganizationPermission.CAN_MANAGE_CAPABILITIES`
+(`platform_admin or feature_manager`, the Admin > Features gate). The SDK default
+refuses, so existing implementers and fakes stay valid. The pod applies the same
+enforce rules as `require_agent_editor`: open with security disabled, 403 without a
+user, identity-only without ReBAC.
+
+`fred_sdk.contracts.runtime.capability_platform_model` is a route dependency returning
+a `CapabilityModelPort` bound to no team and no user token. The pod binds one pod-wide
+port next to the authorizer, with the routing key `capability:platform`; an unbound pod
+returns 503. Without a team no usable-models restriction applies, so only routes behind
+`require_capability_manager()` should use it. `profile_id=None` resolves to the pod's
+default chat profile. A platform chat binding is not applied, as on the save path.
+
+Acceptance scenarios: `openspec/changes/ppt-builder-platform-defaults/`.

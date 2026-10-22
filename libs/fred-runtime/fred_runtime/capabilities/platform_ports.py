@@ -27,11 +27,23 @@ from fastapi import Depends, HTTPException, Request, status
 from fred_core.common.team_id import is_personal_team_ref, personal_team_id
 from fred_core.security.models import AuthorizationError
 from fred_core.security.oidc import get_current_user
-from fred_core.security.rebac.rebac_engine import RebacEngine, TeamPermission
+from fred_core.security.rebac.rebac_engine import (
+    ORGANIZATION_ID,
+    OrganizationPermission,
+    RebacEngine,
+    TeamPermission,
+)
 from fred_core.security.structure import KeycloakUser
-from fred_sdk.contracts.context import BoundRuntimeContext
+from fred_sdk.contracts.context import (
+    BoundRuntimeContext,
+    PortableContext,
+    PortableEnvironment,
+    RuntimeContext,
+)
 from fred_sdk.contracts.models import AgentDefinition, ExecutionCategory
 from fred_sdk.contracts.runtime import (
+    CAPABILITY_MANAGER_DENIED,
+    CAPABILITY_PLATFORM_MODEL_STATE,
     CAPABILITY_TEAM_AUTHORIZER_STATE,
     CapabilityModelPort,
     CapabilityModelUnavailableError,
@@ -215,8 +227,27 @@ class RebacCapabilityTeamAuthorizer(CapabilityTeamAuthorizer):
             denied=AGENT_EDITOR_DENIED,
         )
 
+    async def require_capability_manager(self) -> None:
+        """The Admin > Features gate (`platform_admin or feature_manager`), with
+        the same enforce and ReBAC-disabled rules as the team check."""
+        if not self._enforce:
+            return
+        if self._user is None:
+            raise _forbidden(CAPABILITY_MANAGER_DENIED)
+        if self._rebac is None or not self._rebac.enabled:
+            return
+        try:
+            await self._rebac.check_user_permission_or_raise(
+                self._user,
+                OrganizationPermission.CAN_MANAGE_CAPABILITIES,
+                ORGANIZATION_ID,
+            )
+        except AuthorizationError as exc:
+            raise _forbidden(CAPABILITY_MANAGER_DENIED) from exc
+
 
 AGENT_EDITOR_DENIED = "You cannot edit the agents of this team."
+PLATFORM_MODEL_ROUTING_KEY = "capability:platform"
 
 
 def _forbidden(detail: str) -> HTTPException:
@@ -247,3 +278,38 @@ def _bind(request: Request, user: KeycloakUser | None, enforce: bool) -> None:
     rebac = runtime.config.rebac_engine if runtime is not None else None
     authorizer = RebacCapabilityTeamAuthorizer(user=user, enforce=enforce, rebac=rebac)
     setattr(request.state, CAPABILITY_TEAM_AUTHORIZER_STATE, authorizer)
+    if runtime is not None:
+        port = platform_model_port(runtime.config.chat_model_factory, rebac)
+        setattr(request.state, CAPABILITY_PLATFORM_MODEL_STATE, port)
+
+
+_platform_port: tuple[object, RoutedCapabilityModelPort] | None = None
+
+
+def platform_model_port(
+    factory: object | None, rebac: RebacEngine | None
+) -> RoutedCapabilityModelPort:
+    """One pod-wide port bound to no team and no user: its default is the pod's
+    default chat profile, with no usable-models restriction."""
+    global _platform_port
+    if _platform_port is None or _platform_port[0] is not factory:
+        binding = BoundRuntimeContext(
+            runtime_context=RuntimeContext(),
+            portable_context=PortableContext(
+                request_id="capability-platform",
+                correlation_id="capability-platform",
+                actor=PLATFORM_MODEL_ROUTING_KEY,
+                tenant="default",
+                environment=PortableEnvironment.DEV,
+                agent_id=PLATFORM_MODEL_ROUTING_KEY,
+                agent_name=PLATFORM_MODEL_ROUTING_KEY,
+            ),
+        )
+        port = RoutedCapabilityModelPort(
+            binding=binding,
+            routing_agent_id=PLATFORM_MODEL_ROUTING_KEY,
+            factory=factory,
+            rebac=rebac,
+        )
+        _platform_port = (factory, port)
+    return _platform_port[1]

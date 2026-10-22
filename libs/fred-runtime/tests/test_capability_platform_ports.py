@@ -23,6 +23,10 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from fred_core.common import ModelConfiguration
 from fred_core.security.models import AuthorizationError, Resource
+from fred_core.security.rebac.rebac_engine import (
+    ORGANIZATION_ID,
+    OrganizationPermission,
+)
 from fred_core.security.structure import KeycloakUser
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.capabilities import platform_ports
@@ -50,8 +54,10 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
 )
 from fred_sdk.contracts.runtime import (
+    CapabilityModelPort,
     CapabilityModelUnavailableError,
     CapabilityTeamAuthorizer,
+    capability_platform_model,
     capability_team_authorizer,
 )
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
@@ -303,6 +309,15 @@ class _FakeRebac:
         if not self.allowed:
             raise AuthorizationError(user.uid, "update", Resource.TEAM, "denied")
 
+    async def check_user_permission_or_raise(
+        self, user: KeycloakUser, permission: object, resource_id: str
+    ) -> None:
+        self.calls.append((str(permission), resource_id))
+        if not self.allowed:
+            raise AuthorizationError(
+                user.uid, "manage", Resource.ORGANIZATION, "denied"
+            )
+
 
 def _user(uid: str = "u1") -> KeycloakUser:
     return KeycloakUser(uid=uid, username=uid, roles=[])
@@ -374,3 +389,70 @@ def test_bound_router_reaches_the_authorizer() -> None:
 
 def test_unbound_router_fails_closed() -> None:
     assert _route_app(bind=False).get("/rows/team-1").status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# Capability manager check and teamless model port
+# ---------------------------------------------------------------------------
+
+
+def _manage(authorizer: RebacCapabilityTeamAuthorizer) -> None:
+    asyncio.run(authorizer.require_capability_manager())
+
+
+def test_capability_manager_checks_the_organisation_permission() -> None:
+    rebac = _FakeRebac(allowed=True)
+    authorizer = RebacCapabilityTeamAuthorizer(
+        user=_user(),
+        enforce=True,
+        rebac=rebac,  # type: ignore[arg-type]
+    )
+    _manage(authorizer)
+    assert rebac.calls == [
+        (str(OrganizationPermission.CAN_MANAGE_CAPABILITIES), ORGANIZATION_ID)
+    ]
+
+
+def test_a_non_manager_is_403() -> None:
+    authorizer = RebacCapabilityTeamAuthorizer(
+        user=_user(),
+        enforce=True,
+        rebac=_FakeRebac(allowed=False),  # type: ignore[arg-type]
+    )
+    with pytest.raises(HTTPException) as exc:
+        _manage(authorizer)
+    assert exc.value.status_code == 403
+
+
+def test_manager_check_follows_the_enforce_and_rebac_rules() -> None:
+    _manage(RebacCapabilityTeamAuthorizer(user=None, enforce=False, rebac=None))
+    _manage(RebacCapabilityTeamAuthorizer(user=_user(), enforce=True, rebac=None))
+    with pytest.raises(HTTPException) as exc:
+        _manage(RebacCapabilityTeamAuthorizer(user=None, enforce=True, rebac=None))
+    assert exc.value.status_code == 403
+
+
+def test_platform_port_has_no_team_and_uses_the_pod_default() -> None:
+    port = platform_ports.platform_model_port(_factory(), None)
+    assert port._binding.runtime_context.team_id is None
+    assert port._definition.agent_id == platform_ports.PLATFORM_MODEL_ROUTING_KEY
+    assert _ask(port) == "text-model"
+    assert _ask(port, profile_id=VISION_PROFILE, require_vision=True) == "vision-model"
+    assert platform_ports.platform_model_port(port._factory, None) is port
+
+
+@pytest.mark.usefixtures("runtime_context")
+def test_bound_router_reaches_the_platform_port() -> None:
+    router = APIRouter()
+
+    @router.get("/port")
+    async def read_port(
+        port: CapabilityModelPort = Depends(capability_platform_model),
+    ) -> dict[str, bool]:
+        return {"bound": isinstance(port, RoutedCapabilityModelPort)}
+
+    app = FastAPI()
+    app.include_router(
+        router, dependencies=[Depends(team_authorizer_binder(security_enabled=False))]
+    )
+    assert TestClient(app).get("/port").json() == {"bound": True}
