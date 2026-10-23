@@ -2627,7 +2627,12 @@
     },
     "selftest": {
       "page": {
-        "title": "Self-test"
+        "title": "Self-test",
+        "subtitle": "Each family checks one area of this deployment, as you, on the real services. Everything a run creates carries the run's token and is deleted at the end.",
+        "durationTitle": "A full run takes 5 to 10 minutes",
+        "durationDescription": "Keep this tab open until it ends. Closing it stops the run and leaves its test data behind, named with the run's token.",
+        "runAll": "Run all",
+        "copyAll": "Copy full report"
       },
       "report": {
         "verified": "Verified",
@@ -2635,25 +2640,16 @@
         "running": "Running…",
         "empty": "No run yet.",
         "counts": "{{passed}} passed · {{failed}} failed · {{skipped}} skipped · {{total}} steps",
+        "expand": "Show steps",
+        "collapse": "Hide steps",
         "copy": "Copy report",
         "copied": "Copied"
       },
-      "functional": {
-        "title": "Functional self-test",
-        "subtitle": "Create two folders in your personal space, ingest a marker document into one and a plain document into the other, then ask the real self-test agent a question scoped to each — the marker must come back from the first and be absent from the second. Everything is cleaned up at the end.",
-        "run": "Run campaign"
-      },
-      "web": {
-        "title": "Web research self-test",
-        "subtitle": "Run the deterministic web research agent through the real execution pipeline. It fails first when web research is not enabled on this deployment; otherwise it proves each protection holds — refused schemes, ports and credentials, loopback, private, metadata and encoded addresses, platform service names, redirects to internal destinations, binary content, and a SafeSearch the model cannot weaken — then that search and page reading work. Probes that need an unreachable third-party endpoint are skipped, never passed. The temporary agent is deleted at the end.",
-        "run": "Run web research checks"
-      },
       "authz": {
-        "identityTitle": "JWT authentication self-test",
-        "identityDescription": "Checks authenticated access to the three APIs, rejection of missing or invalid tokens, public routes and personal-space identity. Checks that do not apply to this provider are skipped with a reason.",
-        "title": "Authorization self-test",
-        "subtitle": "Proves the live API honors the authorization model: platform-admin flags match real endpoint access, and nobody — not even a platform admin — gets implicit access to a team they don't belong to.",
-        "runSelf": "Run for myself",
+        "notice": {
+          "title": "Why check authorization?",
+          "description": "This family detects unintended access to protected routes, administration and teams. Run all checks access for your role and rejection of missing or invalid tokens; the foreign-team check skips if no such team exists. Test isolation between two users separately below with a second account; that check creates and removes temporary prompts in both personal spaces. The session-expiry check also runs separately and may take several minutes."
+        },
         "expiry": {
           "title": "Agent access after your session expires",
           "run": "Run session-expiry check",
@@ -2666,15 +2662,73 @@
           "caption": "Uses your current SSO session. The agent checks authenticated metadata access, waits past the captured token's expiry, then repeats the check. No password, Keycloak configuration change, document, or library is needed. Only a temporary agent instance is created and removed; closing the tab mid-run leaves it behind, to delete from your personal agents. Browser refresh stays enabled. The wait is the token's remaining lifetime plus a short margin — from under a minute to several — so keep this page open until it ends; a wait longer than {{maxMinutes}} minutes is skipped."
         },
         "testProfile": {
-          "title": "Test another profile",
           "usernameLabel": "Account",
           "usernamePlaceholder": "Select an account",
           "passwordLabel": "Password",
-          "run": "Run",
-          "caption": "Requires that account's own password and Keycloak direct-grant login enabled for this realm — already on in local/demo realms, test/dev-only by design. This does not grant any new access — it reports what that account can already do.",
-          "disabledInsecure": "Not available in this deployment — there is no real Keycloak realm to authenticate against."
+          "tokenLabel": "Second account API access token",
+          "tokenCaption": "Sign in as the other account in a private browser window, then paste its API access token here, not its ID token. The token is cleared from this field when the run starts and is never included in the report. The test checks both personal spaces without changing your admin session.",
+          "caption": "Requires the dedicated account's password and direct-grant login enabled on the test Keycloak realm. After confirmation, the campaign temporarily changes that account's application roles."
         },
-        "identityRun": "Run checks"
+        "campaign": {
+          "title": "Isolation and role campaign",
+          "description": "Using the credentials above, perform at most 150 actual checks: each platform role alone, representative team profiles, isolation between users and private/public teams, and revocation. The dedicated test account's roles are temporarily changed, then restored; temporary resources are cleaned up. This campaign is separate from Run all.",
+          "limits": "Requires the bootstrap root and its accepted team administrator charter. Use a dedicated account: its platform access changes during the run. The charter determines whether the team administrator role is active or pending. Keep this page open and the test token valid. A local recovery record contains IDs and original roles, never credentials; browser closure requires recovery. Do not run concurrent role administration or campaigns from another browser.",
+          "run": "Test roles and isolation",
+          "confirmation": "Temporarily modify the platform roles of {{account}}, including platform administrator access? This must be a dedicated test account. Original roles will be restored when execution finishes; if interrupted, return here to recover. Existing team roles and identity provider settings are not changed.",
+          "tokenAccount": "the account identified by the supplied API token",
+          "confirm": "Start role campaign",
+          "recoveryNotice": "An interrupted role campaign needs restoration. Use the original bootstrap root in this browser to restore grants and remove temporary teams before starting another campaign.",
+          "recover": "Restore original roles and clean up"
+        }
+      },
+      "family": {
+        "run": "Run"
+      },
+      "families": {
+        "identity": {
+          "title": "Identity and session",
+          "subtitle": "Checks authenticated access to the three APIs, rejection of missing or invalid tokens, public routes and personal-space identity. Checks that do not apply to this provider are skipped with a reason."
+        },
+        "authorization": {
+          "title": "Authorization",
+          "subtitle": "Proves the live API honors the authorization model: platform-admin flags match real endpoint access, protected routes of every backend refuse a missing, malformed or forged token, administration routes follow your platform role, and team content stays closed to a team you do not belong to, even for a platform admin."
+        },
+        "knowledge": {
+          "title": "Documents and knowledge",
+          "subtitle": "Works in your personal space. Checks retrieval scoped to one folder and isolation from another through the self-test agent, direct search under each search policy, one small document per supported format (text, Markdown, JSON Lines, PDF, Word, Excel, PowerPoint), a SQL query on a CSV, linking and unlinking a document between folders, retrievability, the document tree, that deleted documents leave no retrievable chunk and, as an optional step, the corpus audit."
+        },
+        "agents": {
+          "title": "Agents",
+          "subtitle": "Enrolls a temporary self-test agent in your personal space. Checks that its system prompt is delivered, that its chat model is usable, that an updated configuration reaches several following turns, that a disabled agent cannot run, the copy targets, a duplicate under a chosen name and the refusal of a second one, a copy under a free name, and concurrent conversations that each receive only their own context."
+        },
+        "prompts": {
+          "title": "Prompts",
+          "subtitle": "Creates a category and a personal prompt with a command, attaches the prompt to a conversation and checks that the agent receives it, then that an edit reaches the conversation. Checks the command list, favorites, renaming a category, the marketplace listing, and that a deleted prompt can no longer be read."
+        },
+        "web": {
+          "title": "Web research",
+          "subtitle": "Runs the deterministic web research agent through the real execution pipeline. It fails first when web research is not enabled on this deployment; otherwise it proves each protection holds: refused schemes, ports and credentials, loopback, private, metadata and encoded addresses, platform service names, redirects to internal destinations, binary content, and a SafeSearch the model cannot weaken. Then it checks that search and page reading work. Probes that need an unreachable third-party endpoint are skipped, never passed. The temporary agent is deleted at the end."
+        },
+        "platform": {
+          "title": "Platform",
+          "subtitle": "Reads the deployment without changing it: service health and readiness, account status, the identity provider and its token issuer, clocks, agent runtimes and the self-test agent, model profiles, the capability catalog and the main admin settings."
+        },
+        "conversations": {
+          "title": "Conversations",
+          "subtitle": "Creates two conversations in your personal space and runs a turn in one. Checks that both are listed, that a rename is kept, that an attached file is retrievable in its conversation and never from the other one, that a deleted attachment disappears, the inactive-conversation list, and bulk deletion."
+        },
+        "teams": {
+          "title": "Teams",
+          "subtitle": "Creates a disposable team you administer, then deletes it. Skipped until you accept the team-admin charter; the run never accepts it for you. Checks that team admin alone cannot edit content, that the editor role opens and its revocation closes editing, a team prompt, folder and agent, wiki revisions and restore, the join link, model routing, copying the team agent to your personal space, and that nothing of the deleted team stays reachable."
+        },
+        "security": {
+          "title": "Security",
+          "subtitle": "Checks that the platform is served over HTTPS, reports which response-hardening headers the page sets, checks that error responses expose no stack trace, then uploads a harmless SVG to your personal space and checks that its raw download is an attachment and that its inline preview cannot run as a document on this origin."
+        },
+        "observability": {
+          "title": "Observability",
+          "subtitle": "Reads the conversation, message and token usage KPIs over the last day, then checks the health of the search cluster and of every metrics target. A backend this deployment does not run is skipped, never failed."
+        }
       }
     },
     "tasks": {

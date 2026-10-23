@@ -24,6 +24,7 @@ import {
 } from "../actions";
 import { MAX_HOLD_MINUTES, MAX_HOLD_SECONDS, type AgentTurnResult, type Scenario } from "../types";
 import { SELF_TEST_AGENT_ID } from "./corpus";
+import { newRunScope } from "./runScope";
 
 const MARGIN_SECONDS = 15;
 const TOLERANCE_MS = 5_000;
@@ -52,6 +53,7 @@ export function expiryWaitSeconds(secondsLeft: number | null): number | null {
 export function credentialExpiryScenario(input: CredentialExpiryInput = {}): Scenario {
   const now = input.now ?? Date.now;
   return async (deps, report, signal) => {
+    const scope = newRunScope();
     let agentInstanceId: string | null = null;
     try {
       if (signal.aborted) return;
@@ -98,6 +100,7 @@ export function credentialExpiryScenario(input: CredentialExpiryInput = {}): Sce
                 "settings.check_access": true,
               },
               signal,
+              scope.token,
             );
           } catch (err) {
             // A cancelled run must read as cancelled, never as a creation that failed.

@@ -282,10 +282,16 @@ next, not the raw pytest output.
 Everything above proves the API. It says nothing about whether the browser
 actually hides a button it should, or shows a sane error. That layer is:
 
-- **`/admin/self-test`**, as a real `platform_admin` in the browser — a
-  functional self-test (real documents, real agent turns), an
-  authorization self-test (proves the API/UI honor the model for your own
-  session, or for any other account you have the password for), and the
+- **`/admin/self-test`**, as a real `platform_admin` in the browser. Checks
+  are grouped into families, each with its own report, and **Run all** chains
+  them into one combined report: platform, identity, authorization, knowledge,
+  agents, prompts, conversations, teams, web research, security and
+  observability. Every family runs as you on the real services, with
+  run-scoped fixtures deleted at the end, and never writes shared platform
+  settings. The teams family works in a disposable team you administer and is
+  skipped until you accept the team-admin charter. Two authorization checks
+  stay out of Run all: "Test another profile", for any account you have the
+  password for, and the
   "Agent access after your session expires" check (one real agent turn
   whose work outlives the credential it was handed; passes only when the
   authenticated call made as the person *after* that credential expired
