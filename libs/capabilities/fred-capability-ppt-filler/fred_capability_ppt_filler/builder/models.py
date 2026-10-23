@@ -46,11 +46,6 @@ ZoneRole = Literal[
 
 CONTACT_ROLES: frozenset[str] = frozenset({"contact_email", "contact_phone"})
 
-TEXT_ROLES: frozenset[str] = frozenset(
-    {"title", "subtitle", "heading", "body", "caption", "number", "label"}
-    | CONTACT_ROLES
-)
-
 
 class Box(BaseModel):
     """Per-mille geometry on the slide."""

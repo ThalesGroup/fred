@@ -743,10 +743,6 @@ def clear_caches() -> None:
     forget_platform_default()
 
 
-def remember_template(sha: str, content: bytes) -> None:
-    _templates.set(sha, content)
-
-
 async def analysed_template(instance_id: str, sha: str) -> bytes:
     """The template the analysis of ``sha`` was made on, never a newer upload
     that replaced it (the row's sha and bytes are written together)."""

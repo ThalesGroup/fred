@@ -1693,7 +1693,6 @@ class _Renderer:
                 position,
                 seen[source],
                 parts_of[source] or 1,
-                rendered,
             )
             # Nothing to say on it (a "Thank you" slide): keep the template's text.
             filled = pattern.reusable and pattern.fillable and has_content(slide_plan)
@@ -1767,7 +1766,6 @@ class _Renderer:
         number: int,
         part: int,
         parts: int,
-        rendered: int,
     ) -> None:
         """Open the user-facing record of the slide about to be rendered."""
         shown = pattern.reusable and pattern.fillable and has_content(slide_plan)
