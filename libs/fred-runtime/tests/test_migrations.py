@@ -22,6 +22,8 @@ import fred_runtime
 import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+from fred_runtime import migrations
+from fred_runtime.__main__ import main
 from fred_runtime.migrations import RUNTIME_ALEMBIC_DIR, upgrade_sqlite_database
 
 
@@ -87,6 +89,98 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         "agent_instance_id",
     }
     assert revision == ("e5f6a7b8c9d0",)  # pragma: allowlist secret
+
+
+def test_downgrade_selects_only_one_tree(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Registry:
+        def discover(self) -> None:
+            pass
+
+        def migration_locations(self) -> tuple[tuple[str, str], ...]:
+            return (("alpha", "/alpha"), ("beta", "/beta"))
+
+    calls: list[str] = []
+    monkeypatch.setattr(migrations, "CapabilityRegistry", Registry)
+    monkeypatch.setattr(
+        migrations, "_downgrade", lambda location, *, label: calls.append(location)
+    )
+
+    assert migrations.downgrade_migration_tree("capability:beta") == "beta"
+    assert calls == ["/beta"]
+    assert migrations.downgrade_migration_tree("runtime") == "fred-runtime"
+    assert calls == ["/beta", str(RUNTIME_ALEMBIC_DIR)]
+
+
+def test_downgrade_rejects_unknown_tree_without_running_alembic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Registry:
+        def discover(self) -> None:
+            pass
+
+        def migration_locations(self) -> tuple[tuple[str, str], ...]:
+            return (("alpha", "/alpha"), ("beta", "/beta"))
+
+    calls: list[str] = []
+
+    monkeypatch.setattr(migrations, "CapabilityRegistry", Registry)
+    monkeypatch.setattr(
+        migrations, "_downgrade", lambda location, *, label: calls.append(location)
+    )
+
+    for tree in ("", "alpha", "capability:", "capability:missing"):
+        with pytest.raises(ValueError):
+            migrations.downgrade_migration_tree(tree)
+
+    assert calls == []
+
+
+def test_downgrade_propagates_alembic_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail(_location: str, *, label: str) -> None:
+        raise RuntimeError("downgrade failed")
+
+    monkeypatch.setattr(migrations, "_downgrade", fail)
+    with pytest.raises(RuntimeError, match="downgrade failed"):
+        migrations.downgrade_migration_tree("runtime")
+
+
+def test_downgrade_cli_accepts_only_one_revision(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(
+        migrations,
+        "downgrade_migration_tree",
+        lambda tree: calls.append(tree) or "fred-runtime",
+    )
+
+    for argv in (
+        ["downgrade"],
+        ["downgrade", "runtime"],
+        ["downgrade", "runtime", "base"],
+    ):
+        with pytest.raises(SystemExit) as error:
+            main(argv)
+        assert error.value.code == 2
+    assert calls == []
+
+    assert main(["downgrade", "runtime", "-1"]) == 0
+    assert calls == ["runtime"]
+    assert "downgraded: fred-runtime" in capsys.readouterr().out
+
+
+def test_downgrade_cli_reports_unknown_tree(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def reject(_tree: str) -> str:
+        raise migrations.MigrationTreeSelectionError("unknown tree")
+
+    monkeypatch.setattr(migrations, "downgrade_migration_tree", reject)
+
+    assert main(["downgrade", "capability:missing", "-1"]) == 2
+    assert "unknown tree" in capsys.readouterr().err
 
 
 def test_packaged_tree_is_not_excluded_from_the_docker_build_context() -> None:

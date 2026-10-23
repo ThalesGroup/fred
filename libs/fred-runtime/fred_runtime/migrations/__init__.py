@@ -27,6 +27,8 @@ Why this module exists:
 
 How to use:
 - `python -m fred_runtime migrate` (see `fred_runtime.__main__`)
+- `python -m fred_runtime downgrade runtime -1` rolls back only the runtime tree
+- `python -m fred_runtime downgrade capability:<id> -1` rolls back one capability
 - the Helm migration job overrides its `command`/`args` to that CLI, so
   deploying the pod applies both fred-runtime's and every installed
   capability's migrations in one hook
@@ -47,6 +49,10 @@ logger = logging.getLogger(__name__)
 RUNTIME_ALEMBIC_DIR = Path(__file__).resolve().parent
 
 
+class MigrationTreeSelectionError(ValueError):
+    """The requested migration tree is not available for downgrade."""
+
+
 def _upgrade(script_location: str, *, label: str) -> None:
     """Run ``alembic upgrade head`` against one script tree (its env.py owns
     metadata, version table, and DB URL)."""
@@ -59,6 +65,19 @@ def _upgrade(script_location: str, *, label: str) -> None:
     cfg.set_main_option("script_location", script_location)
     command.upgrade(cfg, "head")
     logger.info("[MIGRATE] %s at head", label)
+
+
+def _downgrade(script_location: str, *, label: str) -> None:
+    """Run ``alembic downgrade -1`` against one script tree."""
+
+    from alembic import command
+    from alembic.config import Config
+
+    logger.info("[MIGRATE] downgrading %s (%s)", label, script_location)
+    cfg = Config()
+    cfg.set_main_option("script_location", script_location)
+    command.downgrade(cfg, "-1")
+    logger.info("[MIGRATE] downgraded %s by one revision", label)
 
 
 def run_all_migrations() -> list[str]:
@@ -85,6 +104,32 @@ def run_all_migrations() -> list[str]:
 
     logger.info("[MIGRATE] complete: %s", ", ".join(upgraded))
     return upgraded
+
+
+def downgrade_migration_tree(tree: str) -> str:
+    """Downgrade one explicitly selected migration tree by one revision."""
+
+    if tree == "runtime":
+        _downgrade(str(RUNTIME_ALEMBIC_DIR), label="fred-runtime")
+        return "fred-runtime"
+
+    prefix = "capability:"
+    if not tree.startswith(prefix) or not tree.removeprefix(prefix):
+        raise MigrationTreeSelectionError("tree must be 'runtime' or 'capability:<id>'")
+
+    cap_id = tree.removeprefix(prefix)
+    registry = CapabilityRegistry()
+    registry.discover()
+    locations = dict(registry.migration_locations())
+    if cap_id not in locations:
+        available = ", ".join(locations) or "none"
+        raise MigrationTreeSelectionError(
+            f"capability '{cap_id}' has no installed migration tree "
+            f"(available: {available})"
+        )
+
+    _downgrade(locations[cap_id], label=f"capability '{cap_id}'")
+    return cap_id
 
 
 def upgrade_sqlite_database(sqlite_path: str | Path) -> None:
