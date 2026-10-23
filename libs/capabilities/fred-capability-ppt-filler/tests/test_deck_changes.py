@@ -685,6 +685,24 @@ def test_the_delta_counts_the_points_a_recast_slide_lost():
     )
 
 
+def test_a_table_drawn_as_a_chart_loses_no_points():
+    """Seen in the eval: 'Transforme ce tableau en graphique' read '4 → 0'."""
+    table = {"header": ["Item", "2025"], "rows": [["A", "1"], ["B", "2"]]}
+    before = DeckPlan.model_validate(
+        {"slides": [{"title": "Budget", "table": table, "built_on": "table"}]}
+    )
+    chart = {
+        "type": "bar",
+        "categories": ["A", "B"],
+        "series": [{"name": "2025", "values": [1, 2]}],
+    }
+    after = DeckPlan.model_validate(
+        {"slides": [{"title": "Budget", "chart": chart, "built_on": "chart"}]}
+    )
+    line = deck_delta(before, after, {})
+    assert "changed: 1" in line and "merged or dropped" not in line
+
+
 def test_a_whole_deck_resent_for_a_small_edit_is_pointed_to_changes():
     """Most revisions resent every slide for a one-slide edit: the result says so."""
     after = _apply({"op": "edit", "slide": 2, "field": "title", "value": "Plan"})

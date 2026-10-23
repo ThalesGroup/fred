@@ -612,7 +612,8 @@ def _fewer(
     found = []
     for i, j in pairs:
         old, new = before.slides[i], after.slides[j]
-        if old.built_on == new.built_on:
+        # A table drawn as a chart holds its rows as values, not points.
+        if old.built_on == new.built_on or new.chart or new.charts:
             continue
         group = [j]
         if numbers is not None and len(numbers) == len(after.slides):
