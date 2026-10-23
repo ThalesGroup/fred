@@ -557,6 +557,66 @@ once), or with `DIR` from `apps/fred-agents/config/.env` (`make setup-env` here,
 Fred is then on <http://localhost:8088>. The first time, register on its login page and
 follow the token-retrieval instruction printed by `make k3d-app`: you become `platform_admin`.
 
+## Local image SBOMs
+
+Install Trivy 0.75.0 (the version used by CI) without sudo on Linux or macOS:
+
+```bash
+mkdir -p "$HOME/.local/bin"
+curl -fsSL https://raw.githubusercontent.com/aquasecurity/trivy/v0.75.0/contrib/install.sh -o /tmp/install-trivy.sh
+sh /tmp/install-trivy.sh -b "$HOME/.local/bin" v0.75.0
+export PATH="$HOME/.local/bin:$PATH"
+trivy --version
+```
+
+Add the `export PATH` line to your shell configuration to keep it across sessions.
+Then build the standard production images and the published PyMuPDF variant,
+and generate their SBOMs:
+
+```bash
+make docker-build
+docker build --build-arg INSTALL_PYMUPDF=true \
+  -f apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod \
+  -t ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend-pymupdf:0.2 .
+make sbom
+```
+
+Alternatively, use Trivy in Docker without installing the binary:
+
+```bash
+docker pull aquasec/trivy:0.75.0
+# Build the images with the commands above, then:
+make sbom TRIVY_MODE=docker
+```
+
+To include detected CVEs in the CycloneDX reports, add `CVES=true`:
+
+```bash
+make sbom CVES=true
+# Or with Trivy running in Docker:
+make sbom TRIVY_MODE=docker CVES=true
+```
+
+By default, `CVES=false` generates the package inventory only. Enabling CVEs
+adds Trivy's `--scanners vuln` option and may download/update its vulnerability
+database, increasing run time. Findings appear in the reports' `vulnerabilities`
+section and do not fail the command solely because CVEs were found. Each run
+replaces the same `target/sbom/*.cdx.json` files, with or without CVEs.
+See [Trivy's SBOM documentation](https://trivy.dev/docs/v0.75/guide/supply-chain/sbom/).
+
+The Docker option uses the local socket at `/var/run/docker.sock` and keeps its
+cache in the `fred-trivy-cache` Docker volume. Both options require `jq` and
+access to the local Docker daemon. See the official
+[Trivy installation guide](https://trivy.dev/docs/v0.75/getting-started/installation/)
+for other installation methods.
+
+`make sbom` reads the published image list from `.github/docker-images.json` and
+the local image tags from the application Makefiles, using each manifest entry's
+image name (including variants). It only inspects images
+already present in Docker; it does not rebuild or pull them. The files are in
+`target/sbom/` (ignored by Git). If an image is missing, use the build commands
+above, including the separate PyMuPDF variant build.
+
 ## Production mode
 
 > [!IMPORTANT]
