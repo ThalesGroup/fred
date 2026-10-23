@@ -12,13 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import i18n from "../i18n";
-import { store } from "../common/store";
-import {
-  controlPlaneApi,
-  type PatchUserPreferences,
-  type UserPreferences,
-} from "../slices/controlPlane/controlPlaneOpenApi";
+import type { PatchUserPreferences, UserPreferences } from "../slices/controlPlane/controlPlaneOpenApi";
 
 const PREFIX = "fred.usersPreferences:";
 const IMPORTED_KEY = "fred.usersPreferences.legacyImported";
@@ -46,6 +40,8 @@ export const PANE_KEYS = [
 
 let activeUserId: string | null = null;
 let pendingSave: Promise<unknown> = Promise.resolve();
+let preferenceStore: (typeof import("../common/store"))["store"] | null = null;
+let preferenceApi: (typeof import("../slices/controlPlane/controlPlaneOpenApi"))["controlPlaneApi"] | null = null;
 
 function get(key: string): string | null {
   try {
@@ -125,11 +121,18 @@ async function writeLocalChoices(preferences: UserPreferences): Promise<void> {
     const width = preferences.pane_widths?.[key];
     set(`localHook:${key}`, width === undefined ? null : JSON.stringify(width));
   }
+  const { default: i18n } = await import("../i18n");
   if (preferences.language) await i18n.changeLanguage(preferences.language);
   else await i18n.changeLanguage(navigator.language?.startsWith("fr") ? "fr" : "en");
 }
 
 export async function initializeUserPreferences(userId: string): Promise<void> {
+  const [{ store }, { controlPlaneApi }] = await Promise.all([
+    import("../common/store"),
+    import("../slices/controlPlane/controlPlaneOpenApi"),
+  ]);
+  preferenceStore = store;
+  preferenceApi = controlPlaneApi;
   activeUserId = userId;
   const pendingKey = PENDING_LEGACY_PREFIX + encodeURIComponent(userId);
   const owner = get(LEGACY_OWNER_KEY);
@@ -189,6 +192,9 @@ export async function saveUserPreference(patch: PatchUserPreferences): Promise<v
   const userId = activeUserId;
   const save = pendingSave.then(async () => {
     if (activeUserId !== userId) return;
+    const store = preferenceStore;
+    const controlPlaneApi = preferenceApi;
+    if (!store || !controlPlaneApi) return;
     const request = store.dispatch(
       controlPlaneApi.endpoints.patchMyPreferencesControlPlaneV1UsersMePreferencesPatch.initiate({
         patchUserPreferences: patch,
