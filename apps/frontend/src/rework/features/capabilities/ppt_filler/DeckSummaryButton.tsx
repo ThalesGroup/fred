@@ -119,9 +119,10 @@ export default function DeckSummaryButton({ summary }: { summary?: BuiltSlide[] 
           <p className={styles.count}>{t("capability.ppt_builder.summary.count", { count: summary.length })}</p>
           <ol className={styles.slides}>
             {summary.map((slide, index) => {
+              // Keyed by the note's position: two notes may read the same.
               const notes = slide.notes
-                .map((note) => noteText(t, note, slide))
-                .filter((text): text is string => text !== null);
+                .map((note, position) => ({ position, text: noteText(t, note, slide) }))
+                .filter((note): note is { position: number; text: string } => note.text !== null);
               return (
                 <li key={index} className={styles.slide}>
                   <span className={styles.number}>{index + 1}</span>
@@ -132,8 +133,8 @@ export default function DeckSummaryButton({ summary }: { summary?: BuiltSlide[] 
                     <span className={styles.kind}>{kindLabel(t, slide.kind)}</span>
                     {notes.length > 0 && (
                       <ul className={styles.notes}>
-                        {notes.map((text) => (
-                          <li key={text}>{text}</li>
+                        {notes.map(({ position, text }) => (
+                          <li key={position}>{text}</li>
                         ))}
                       </ul>
                     )}
