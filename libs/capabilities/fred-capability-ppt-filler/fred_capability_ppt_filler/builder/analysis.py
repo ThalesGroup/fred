@@ -75,7 +75,7 @@ from fred_capability_ppt_filler.pptx_archive import (
     open_presentation,
     unreadable_message,
 )
-from fred_capability_ppt_filler.traversal import KEY_PATTERN, walk_shapes
+from fred_capability_ppt_filler.traversal import KEY_PATTERN, PathPart, walk_shapes
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from pptx.shapes.base import BaseShape
@@ -159,7 +159,7 @@ _DECOR_MIN_AREA = 0.02
 @dataclass
 class _Rec:
     key: str
-    path: Tuple[int, ...]
+    path: Tuple[PathPart, ...]
     kind: str  # text | picture | table | chart | group | other
     ph_type: Optional[str]
     ph_idx: Optional[int]
@@ -204,7 +204,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 21
+ANALYSIS_VERSION = 22
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -458,7 +458,7 @@ def _has_chrome_field(shape) -> bool:
     )
 
 
-def _placeholder_key(shape, path: Tuple[int, ...], taken: set[int]) -> str:
+def _placeholder_key(shape, path: Tuple[PathPart, ...], taken: set[int]) -> str:
     """``ph:<idx>``, or the shape path for a second placeholder sharing an idx
     (a copied slot): each slot keeps a key of its own, the first one in
     drawing order keeping the idx, as the renderer's index does."""
@@ -469,7 +469,7 @@ def _placeholder_key(shape, path: Tuple[int, ...], taken: set[int]) -> str:
     return f"ph:{idx}"
 
 
-def _shape_key(path: Tuple[int, ...]) -> str:
+def _shape_key(path: Tuple[PathPart, ...]) -> str:
     return "sp:" + "/".join(str(part) for part in path)
 
 
@@ -1287,16 +1287,18 @@ class _Analyzer:
 
     # -- repeated groups -------------------------------------------------------------
 
-    def _repeat_groups(self, records: List[_Rec]) -> Tuple[List[RepeatGroup], set[int]]:
-        by_group: Dict[int, List[_Rec]] = defaultdict(list)
-        group_recs: Dict[int, _Rec] = {}
+    def _repeat_groups(
+        self, records: List[_Rec]
+    ) -> Tuple[List[RepeatGroup], set[PathPart]]:
+        by_group: Dict[PathPart, List[_Rec]] = defaultdict(list)
+        group_recs: Dict[PathPart, _Rec] = {}
         for rec in records:
             if rec.kind == "group" and len(rec.path) == 1:
                 group_recs[rec.path[0]] = rec
             elif len(rec.path) > 1 and rec.kind in ("text", "picture"):
                 by_group[rec.path[0]].append(rec)
 
-        signatures: Dict[tuple, List[int]] = defaultdict(list)
+        signatures: Dict[tuple, List[PathPart]] = defaultdict(list)
         for group_id, children in by_group.items():
             texts = [c for c in children if c.kind == "text" and c.text]
             if not texts:
@@ -1309,7 +1311,7 @@ class _Analyzer:
             signatures[signature].append(group_id)
 
         groups: List[RepeatGroup] = []
-        grouped: set[int] = set()
+        grouped: set[PathPart] = set()
         for signature, group_ids in signatures.items():
             if len(group_ids) < 3:
                 continue

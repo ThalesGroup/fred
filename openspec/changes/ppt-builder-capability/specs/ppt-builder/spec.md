@@ -706,6 +706,12 @@ The system SHALL build each slide by instantiating a layout or duplicating an ex
 - **WHEN** a slide gives a subtitle and the chosen slide has a body but no subtitle zone, or gives items numbered 1, 2, 3… and the chosen slide has no number zone
 - **THEN** the subtitle leads the body as an unbulleted line and the step numbers are left to the item order, and neither counts as lost content
 
+#### Scenario: Shapes sharing an id
+
+- **GIVEN** a template slide whose text boxes share one shape id
+- **WHEN** it is analysed and filled, with all or only some of its items
+- **THEN** each box is its own zone and receives its own text, and no sample text is left on the slide
+
 #### Scenario: Fewer items than the template shows
 
 - **WHEN** a repeated group is filled with fewer items than its count

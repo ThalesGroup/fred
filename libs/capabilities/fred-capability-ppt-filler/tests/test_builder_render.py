@@ -1552,3 +1552,33 @@ def test_each_level_of_a_body_keeps_its_template_formatting():
     assert [cast(Any, p.runs[0]).font.size.pt for p in paragraphs] == [20, 14, 14, 20]
     margins = [p._p.find(qn("a:pPr")).get("marL") for p in paragraphs]
     assert margins == [None, "457200", "457200", None]
+
+
+def _duplicate_id_cards(count: int) -> bytes:
+    """Card text boxes sharing one shape id, drawn right to left so the first
+    card read is the last drawn."""
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    for i in reversed(range(count)):
+        box = slide.shapes.add_textbox(
+            Inches(0.5 + i * 2.3), Inches(2), Inches(2), Inches(1)
+        )
+        box.text_frame.text = f"Card {i}"
+        box._element.nvSpPr.cNvPr.set("id", "5")
+    buffer = io.BytesIO()
+    presentation.save(buffer)
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize("used", [4, 2])
+def test_text_boxes_sharing_a_shape_id_each_get_a_zone_and_a_fill(used):
+    template = _duplicate_id_cards(4)
+    inventory = analyze_template(template).inventory
+    assert inventory is not None
+    pattern = next(p for p in inventory.patterns if p.groups)
+    keys = pattern.groups[0].item_keys
+    assert len(set(keys)) == 4
+    items = [{"text": f"Item {n}"} for n in range(used)]
+    _, deck = _render(_on(pattern, items=items), template=template, inventory=inventory)
+    texts = _texts(deck.slides[0])
+    assert sorted(texts) == [f"Item {n}" for n in range(used)]

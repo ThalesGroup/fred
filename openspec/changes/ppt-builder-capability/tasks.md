@@ -685,3 +685,9 @@ Owns: `tools.py` (`_deck_fields_lifted`, `deck_conflict`), `render.py` (`_figure
 - [x] 62.2 A one-line key figure shrinks to the floor before it is refused; its room is quoted at the floor. Test: `test_builder_render.py::test_a_key_figure_shrinks_to_fit_its_line_down_to_the_floor`
 - [x] 62.3 Package checks; `openspec validate --strict`
 - [ ] 62.4 Live re-evaluation once fred-agents runs this code (not restarted by this change)
+
+## WP63. Robustness review fixes (owner decision 2026-10-23, design D41)
+
+Owns: `traversal.py` (`walk_shapes` path steps), `analysis.py` (ANALYSIS_VERSION 22), built-in inventory, tests, delta spec.
+
+- [x] 63.1 Shapes sharing an id get a key each, frozen per slide part. Test: `test_builder_render.py::test_text_boxes_sharing_a_shape_id_each_get_a_zone_and_a_fill` (all items, and two of four with the dropped boxes drawn first)
