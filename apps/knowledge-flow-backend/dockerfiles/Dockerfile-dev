@@ -6,7 +6,7 @@ FROM mirror.gcr.io/python:3.12
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
-ARG UV_VERSION=0.7.21
+ARG UV_VERSION=0.13.5
 ARG HF_OFFLINE_STRICT=0
 
 # Install required system dependencies

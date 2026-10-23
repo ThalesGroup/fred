@@ -28,6 +28,8 @@ jobs:
         with:
           python-version: '3.12'
       - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.5"
       - name: Test migration policy
         run: uv run --project libs/fred-pod --locked --no-dev python -m unittest discover -s scripts/tests -p 'test_migration_guides.py' -v
       - name: Validate PR declaration
