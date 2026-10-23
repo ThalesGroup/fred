@@ -549,7 +549,7 @@ def test_the_delta_names_changed_added_and_removed_slides():
     )
     line = deck_delta(BASE, after, {})
     assert "previous deck (4 slides), slides of this file changed: 2; added: 4" in line
-    assert "removed: 3 of the previous deck; 2 unchanged." in line
+    assert "removed: 3 of the previous deck; 2 slides unchanged." in line
     assert "none changed: tell the user the deck is the same" in deck_delta(
         BASE, BASE, {}
     )
@@ -580,7 +580,7 @@ def test_the_delta_names_the_slide_a_resend_dropped():
         }
     )
     line = deck_delta(before, after, {})
-    assert "changed: 2, 3; removed: 2 of the previous deck; 2 unchanged." in line
+    assert "changed: 2, 3; removed: 2 of the previous deck; 2 slides unchanged." in line
 
 
 def test_the_delta_compares_what_the_slides_render():
@@ -607,7 +607,7 @@ def test_the_delta_compares_what_the_slides_render():
             ]
         }
     )
-    assert "changed: 3; 3 unchanged." in deck_delta(before, redrawn, {})
+    assert "changed: 3; 3 slides unchanged." in deck_delta(before, redrawn, {})
 
 
 @pytest.mark.asyncio
@@ -624,7 +624,7 @@ async def test_a_change_only_the_speaker_notes_show_is_said_so(monkeypatch):
     )
     assert (
         "changed in the speaker notes only, the slide itself looks the same: 2; "
-        "2 unchanged." in text
+        "2 slides unchanged." in text
     )
 
 
@@ -638,7 +638,7 @@ async def test_a_moved_slide_is_built_and_listed_as_moved(monkeypatch):
     titles = [s.title for s in turn.rendered[-1].slides]
     assert titles == ["Kick-off", "Part 2", "Part 1", "Part 3"]
     # Two neighbours swapped: one of them is the moved one.
-    assert "slides of this file moved: 2 (was 3); 3 unchanged." in text
+    assert "slides of this file moved: 2 (was 3); 3 slides unchanged." in text
 
 
 @pytest.mark.asyncio
@@ -647,7 +647,10 @@ async def test_a_slide_moved_by_a_removal_renders_unchanged(monkeypatch):
     deck = [COVER, *({"title": f"Part {n}", "bullets": [f"b{n}"]} for n in range(1, 4))]
     await turn.build(slides=deck)
     text, _ = await turn.build(changes=[{"op": "remove", "slide": 2}])
-    assert "slides of this file removed: 2 of the previous deck; 3 unchanged." in text
+    assert (
+        "slides of this file removed: 2 of the previous deck; 3 slides unchanged."
+        in text
+    )
 
 
 def test_the_delta_counts_the_points_a_recast_slide_lost():
@@ -676,7 +679,10 @@ def test_the_delta_counts_the_points_a_recast_slide_lost():
     )
     line = deck_delta(before, after, {}, numbers=[1, 2, 2, 3])
     # Slide 4 keeps its design: one bullet less is an edit, not a recast.
-    assert "; fewer points where the design changed: slide 2 (7 → 6)." in line
+    assert (
+        "Tell the user that points were merged or dropped in the new design of "
+        "slide 2 (7 → 6): that content is not the same as before." in line
+    )
 
 
 def test_a_whole_deck_resent_for_a_small_edit_is_pointed_to_changes():
@@ -703,7 +709,7 @@ async def test_a_revision_result_says_which_slides_changed(monkeypatch):
     text, _ = await turn.build(
         changes=[{"op": "edit", "slide": 2, "field": "title", "value": "Plan"}]
     )
-    assert "slides of this file changed: 2; 1 unchanged." in text
+    assert "slides of this file changed: 2; 1 slide unchanged." in text
 
 
 @pytest.mark.asyncio
@@ -716,7 +722,7 @@ async def test_a_small_edit_resent_as_a_whole_deck_is_built_and_pointed_to_chang
     deck[2] = {"title": "Plan", "bullets": ["a"]}
     text, _ = await turn.build(slides=deck)
     assert text.startswith(tools_mod._DELIVERED), text
-    assert "changed: 3; 4 unchanged." in text and "`changes` next time" in text
+    assert "changed: 3; 4 slides unchanged." in text and "`changes` next time" in text
 
 
 @pytest.mark.asyncio

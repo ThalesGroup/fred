@@ -995,7 +995,7 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 - **THEN** the result lists the slides of the new file that changed or were added, the previous deck's slides removed, the slides found at another place (`moved: 3 (was 2)`), and how many stayed unchanged
 - **AND** slides are compared by what the delivered files show (each slide's XML with the charts and pictures it uses), so an edit that renders the same (a chart setting already in place, a replacement with the same content) is no change; a slide whose speaker notes alone differ is listed as changed in the speaker notes only, the slide itself looking the same
 - **AND** inside a run of differing slides, a before and an after slide are paired by the words they share, in order, so a resend that drops one slide and edits the next names the slide that went
-- **AND** a changed slide on another design holding fewer points (bullets, column bullets, items, table rows; a list continued on the next slides counted whole) is listed with both counts (`fewer points where the design changed: slide 8 (7 → 6)`)
+- **AND** a changed slide on another design holding fewer points (bullets, column bullets, items, table rows; a list continued on the next slides counted whole) is told to the user as a fact with both counts (`Tell the user that points were merged or dropped in the new design of slide 8 (7 → 6): that content is not the same as before.`), and the kept slides are counted as `N slides unchanged`
 - **AND** when no slide differs, the result says so and to tell the user the deck is the same; when a `slides` resend changed, added or removed at most two slides and kept more, the result adds that such an edit is sent as `changes`
 
 #### Scenario: Move a slide

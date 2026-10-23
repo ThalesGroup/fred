@@ -697,13 +697,14 @@ def deck_delta(
     )
     return (
         lead
-        + "; ".join(parts + [f"{kept} unchanged"])
+        + "; ".join(parts + [f"{kept} slide{'' if kept == 1 else 's'} unchanged"])
+        + ". Describe only these changes to the user."
         + (
-            f"; fewer points where the design changed: {', '.join(fewer)}"
+            f" Tell the user that points were merged or dropped in the new design of "
+            f"{', '.join(fewer)}: that content is not the same as before."
             if fewer
             else ""
         )
-        + ". Describe only these changes to the user."
         + hint
     )
 
