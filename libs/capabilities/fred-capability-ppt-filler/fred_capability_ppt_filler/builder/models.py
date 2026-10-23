@@ -39,10 +39,16 @@ ZoneRole = Literal[
     "table",
     "chart",
     "keep",
+    # A closing slide's contact line, filled from the plan's `email` / `phone` only.
+    "contact_email",
+    "contact_phone",
 ]
+
+CONTACT_ROLES: frozenset[str] = frozenset({"contact_email", "contact_phone"})
 
 TEXT_ROLES: frozenset[str] = frozenset(
     {"title", "subtitle", "heading", "body", "caption", "number", "label"}
+    | CONTACT_ROLES
 )
 
 

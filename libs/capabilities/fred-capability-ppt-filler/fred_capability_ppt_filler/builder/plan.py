@@ -45,6 +45,8 @@ SLIDE_FIELDS: Dict[str, str] = {
     "body": "bullets",
     "caption": "bullets",
     "heading": "columns.heading",
+    "contact_email": "email",
+    "contact_phone": "phone",
 }
 ITEM_KEYS = ("number", "heading", "text", "label", "image")
 ITEM_FIELDS: Dict[str, str] = {
@@ -203,6 +205,8 @@ _SLIDE_ALIASES = {
     "key_takeaway": "takeaway",
     "sources": "source",
     "data_source": "source",
+    "mail": "email",
+    "telephone": "phone",
     **{alias: "repeat_layout" for alias in REPEAT_ALIASES},
 }
 
@@ -1181,6 +1185,14 @@ class SlidePlan(BaseModel):
         default=False,
         description=REPEAT_LAYOUT_HINT,
     )
+    email: Optional[str] = Field(
+        default=None,
+        description="Closing slide: the presenter's email, only when the user gives it.",
+    )
+    phone: Optional[str] = Field(
+        default=None,
+        description="Closing slide: the presenter's phone, only when the user gives it.",
+    )
     # Last on purpose: the model writes the content first, then names its kind.
     kind: Optional[SlideKind] = Field(
         default=None,
@@ -1231,6 +1243,8 @@ class SlidePlan(BaseModel):
         "image",
         "source",
         "notes",
+        "email",
+        "phone",
         mode="before",
     )
     @classmethod
@@ -1322,6 +1336,7 @@ def has_content(slide: SlidePlan) -> bool:
         or slide.images
         or (slide.table is not None and slide.table.has_content())
         or bool(slide_charts(slide))
+        or bool(slide.email or slide.phone)
     )
 
 

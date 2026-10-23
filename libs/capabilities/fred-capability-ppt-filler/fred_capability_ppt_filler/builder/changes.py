@@ -71,7 +71,7 @@ _SLIDE_KEYS = frozenset(
         "table",
     )
     + ("chart", "charts", "takeaway", "source")
-    + ("notes", "kind", "body", "text", "pattern", "type")
+    + ("notes", "kind", "body", "text", "pattern", "type", "email", "phone")
 )
 
 
@@ -247,6 +247,8 @@ _FIELDS: Dict[str, Dict[str, _Type]] = {
         "chart": "chart",
         "charts": ("list", "chart"),
         "notes": "text",
+        "email": "text",
+        "phone": "text",
         "kind": "text",
         REPEAT: "flag",
     },

@@ -330,6 +330,23 @@ def is_library_title(title: str) -> bool:
     )
 
 
+_EMAIL_SAMPLE = re.compile(r"@|\b(?:e ?mail|mail|courriel)\b")
+_PHONE_SAMPLE = re.compile(r"\b(?:telephone|phone|tel|mobile|portable)\b|^\+\d")
+
+
+def contact_kind(sample: str) -> str | None:
+    """``contact_email`` / ``contact_phone`` when a designer's sample line
+    reads as one ("email", "xxx@thales.com", "Numéro de téléphone", "+33 …")."""
+    norm = normalize(sample)
+    if not norm or len(norm) > 40:
+        return None
+    if _EMAIL_SAMPLE.search(norm):
+        return "contact_email"
+    if _PHONE_SAMPLE.search(norm) or sum(c.isdigit() for c in norm) >= 9:
+        return "contact_phone"
+    return None
+
+
 def has_contact_words(texts: list[str]) -> bool:
     words = set()
     for text in texts:

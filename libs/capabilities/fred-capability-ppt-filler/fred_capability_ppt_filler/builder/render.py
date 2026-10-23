@@ -66,6 +66,7 @@ from fred_capability_ppt_filler.builder.analysis import (
     theme_fonts,
 )
 from fred_capability_ppt_filler.builder.models import (
+    CONTACT_ROLES,
     TABLE_SLACK_PT,
     Pattern,
     RepeatGroup,
@@ -478,6 +479,37 @@ def _layout_draws_for(slide, kept: Sequence[_Box], dropped: Sequence[_Box]) -> b
         if len(placed.path) == 1 and not cast(Any, placed.shape).is_placeholder
     ]
     return "remove" in _decoration_fate(kept, dropped, boxes)
+
+
+def _beside(icon: _Box, line: _Box) -> bool:
+    """A small mark on the line's row, just left or right of it."""
+    width = icon[2] - icon[0]
+    rows = min(icon[3], line[3]) - max(icon[1], line[1])
+    gap = max(line[0] - icon[2], icon[0] - line[2])
+    return (
+        rows * 2 >= icon[3] - icon[1]
+        and 0 <= gap <= 2 * width
+        and width * 2 <= line[2] - line[0]
+    )
+
+
+def _drop_contact_icons(slide, lines: Sequence[_Box]) -> None:
+    """The phone or mail icon beside a contact line left empty goes with it,
+    lifted off the layout first when the layout draws it."""
+
+    def icons(shapes) -> List[PlacedShape]:
+        return [
+            p
+            for p in walk_shapes(shapes)
+            if len(p.path) == 1
+            and not cast(Any, p.shape).is_placeholder
+            and any(_beside(_box_of(p), line) for line in lines)
+        ]
+
+    if slide._element.get("showMasterSp") != "0" and icons(slide.slide_layout.shapes):
+        _lift_layout_graphics(slide)
+    for placed in icons(slide.shapes):
+        _remove(placed)
 
 
 def _copy_notes(source, dest) -> None:
@@ -1224,6 +1256,10 @@ class _ZoneMap:
         self.labels = _column_order([z for z in zones if z.role == "label"])
         self.images = _reading_order([z for z in zones if z.role == "image"])
         self.all_text = [z for z in zones if z.role != "image"]
+        self.contacts = {
+            role: _reading_order([z for z in zones if z.role == role])
+            for role in CONTACT_ROLES
+        }
 
     def body_like(self) -> List[Zone]:
         return self.bodies or self.captions or self.subtitles
@@ -1231,7 +1267,11 @@ class _ZoneMap:
     def stacked(self) -> List[Zone]:
         """Every non-title text line in reading order (contact cards)."""
         return sorted(
-            (z for z in self.all_text if z.role not in ("title", "number")),
+            (
+                z
+                for z in self.all_text
+                if z.role not in ("title", "number") and z.role not in CONTACT_ROLES
+            ),
             key=lambda z: (z.box.y, z.box.x),
         )
 
@@ -1303,6 +1343,16 @@ def _place_text(
     title = _lines_from_bullets([plan.title], "title") if plan.title else []
     subtitle = _lines_from_bullets([plan.subtitle], "subtitle") if plan.subtitle else []
     bullets = _lines_from_bullets(plan.bullets, "bullets[{}]")
+    # The presenter's contact has its own line; a closing slide without one lists it.
+    for role, name in (("contact_email", "email"), ("contact_phone", "phone")):
+        value = getattr(plan, name)
+        contact = _lines_from_bullets([value], name) if value else []
+        if contact and zmap.contacts[role]:
+            put(zmap.contacts[role][0], contact, name)
+        elif contact and pattern.kind == "closing":
+            bullets += contact
+        elif contact:
+            lost.append(name)
 
     if zmap.titles:
         put(zmap.titles[0], title, "title")
@@ -1926,6 +1976,7 @@ class _Renderer:
         )
         layout_body = _layout_body_props(slide)
         scaled: Dict[str, List[Tuple[Any, Zone, float]]] = {}
+        bare_contacts: List[_Box] = []
         for zone in self._fillable_text_zones(pattern):
             if zone.key in hosted:
                 continue
@@ -1941,6 +1992,8 @@ class _Renderer:
             if not lines:
                 # An empty zone goes: a placeholder would show "Click to add
                 # text", a text box its own fill or outline.
+                if zone.role in CONTACT_ROLES:
+                    bare_contacts.append(_box_of(placed))
                 _remove(placed)
                 continue
             if zone.role == "number":
@@ -1984,6 +2037,9 @@ class _Renderer:
             if truncated:
                 report.truncated.append(zone.role)
                 self.report.note("text_shortened")
+
+        if bare_contacts:
+            _drop_contact_icons(slide, bare_contacts)
 
         # Zones that play the same part on one slide are read as a set: two
         # column headings at 24 pt and 13 pt look like a mistake, even when each

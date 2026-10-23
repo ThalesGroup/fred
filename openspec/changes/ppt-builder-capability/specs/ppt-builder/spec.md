@@ -384,6 +384,13 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 - **WHEN** a plan holds closing content
 - **THEN** a closing pattern is used at most once and only for the last slide
 
+#### Scenario: A contact closing only with the user's contact
+
+- **GIVEN** a template whose closing slides include a contact design (lines whose sample reads as an email or a phone number, analysed as `contact_email` / `contact_phone` zones) and a thank-you design
+- **WHEN** the plan's closing slide has no `email` and no `phone`
+- **THEN** it is never built on the contact design: another closing design holds it, or, when the template's only closing is the contact design, a close kind (`section`) does
+- **AND** when it gives an `email` or a `phone`, a closing design with contact zones holds it, each value in its own line; a contact line left empty is removed with the icon drawn beside it (lifted off the layout when the layout draws it); a closing design without contact zones lists the values with its lines
+
 #### Scenario: Variety
 
 - **WHEN** three consecutive slides would use the same pattern and another fitting pattern exists for one of them

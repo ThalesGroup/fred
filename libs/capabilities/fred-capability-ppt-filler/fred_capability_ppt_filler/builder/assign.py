@@ -44,6 +44,7 @@ from typing import (
 
 from fred_capability_ppt_filler.builder import charts, lexicon, table_intents
 from fred_capability_ppt_filler.builder.models import (
+    CONTACT_ROLES,
     SLIDE_KINDS,
     Pattern,
     SlideKind,
@@ -511,6 +512,16 @@ def misfit(
     return reasons, cost
 
 
+# Its contact icons are drawn by the layout: never shown without the details.
+_NO_CONTACT = Misfit(
+    "this design shows the presenter's email and phone, which the user did not give"
+)
+
+
+def _contact_design(pattern: Pattern) -> bool:
+    return any(z.role in CONTACT_ROLES for z in pattern.zones)
+
+
 def _weigh(
     pattern: Pattern, slide: SlidePlan, size: Tuple[int, int]
 ) -> Tuple[List[Misfit], float, int]:
@@ -528,6 +539,8 @@ def _weigh(
             0.0,
             0,
         )
+    if _contact_design(pattern) and not (slide.email or slide.phone):
+        return [_NO_CONTACT], 0.0, 0
     reasons: List[Misfit] = []
     lost: List[str] = []
     text = _assign_text(pattern, slide, lost, size)
@@ -961,6 +974,9 @@ def _candidates(slide: _Slide) -> List[Tuple[Pattern, float]]:
             for p, reasons, cost in slide.checked
             if not reasons and p.kind in tier and _allowed(p, slide)
         ]
+        if slide.plan.email or slide.plan.phone:
+            # The user's contact goes on a contact design whenever one holds it.
+            found = [c for c in found if _contact_design(c[0])] or found
         if found:
             return found
     return []

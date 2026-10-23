@@ -691,3 +691,13 @@ Owns: `tools.py` (`_deck_fields_lifted`, `deck_conflict`), `render.py` (`_figure
 Owns: `traversal.py` (`walk_shapes` path steps), `analysis.py` (ANALYSIS_VERSION 22), built-in inventory, tests, delta spec.
 
 - [x] 63.1 Shapes sharing an id get a key each, frozen per slide part. Test: `test_builder_render.py::test_text_boxes_sharing_a_shape_id_each_get_a_zone_and_a_fill` (all items, and two of four with the dropped boxes drawn first)
+
+## WP64. Closing slide: contact vs thanks (owner decision 2026-10-23, design D42)
+
+Owns: `lexicon.py` (`contact_kind`), `analysis.py` (`_contact_roles`, ANALYSIS_VERSION 23), `models.py` (contact roles), `plan.py` (`email`, `phone`), `assign.py` (`_NO_CONTACT`, contact preference), `render.py` (contact lines, `_drop_contact_icons`), `changes.py`, built-in inventory, generated ppt_builder client, tests, delta spec.
+
+- [x] 64.1 Closing lines whose sample reads as an email or phone get `contact_email` / `contact_phone`. Tests: `test_closing_contact.py::test_contact_samples_are_recognised`, `::test_the_contact_lines_of_a_closing_slide_get_contact_roles`
+- [x] 64.2 Closing slide `email` / `phone` fields; without them the contact design is never chosen, with them it is preferred. Tests: `test_closing_contact.py::test_a_closing_without_contact_never_takes_the_contact_design`, `::test_a_closing_with_a_contact_takes_the_contact_design`, `::test_with_only_a_contact_design_a_closing_without_contact_uses_another_design`, `::test_reference_template_picks_thanks_or_contact` (Thales v4)
+- [x] 64.3 An empty contact line goes with its icon; a closing without contact lines lists the contact. Tests: `test_closing_contact.py::test_the_contact_fills_its_lines_and_an_empty_one_loses_its_icon`, `::test_a_closing_without_a_contact_line_lists_the_contact`
+- [x] 64.4 Package checks; `openspec validate --strict`; `make builtin-inventory`; ppt_builder client regenerated
+- [ ] 64.5 Live re-evaluation once fred-agents runs this code

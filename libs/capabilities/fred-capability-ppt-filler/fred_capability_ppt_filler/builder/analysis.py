@@ -204,7 +204,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 22
+ANALYSIS_VERSION = 23
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -1018,6 +1018,7 @@ class _Analyzer:
             pattern.included = False
             pattern.exclusion_reason = "no_placeholder"
         _quote_roles(pattern)
+        _contact_roles(pattern)
         mark_takeaway(pattern, {rec.key: [rec.name] for rec in records})
         _mark_framed(pattern, self.frames(layout))
         pattern.reusable = pattern.kind != "other"
@@ -1200,6 +1201,7 @@ class _Analyzer:
             if declared in SLIDE_KINDS:
                 pattern.kind = cast(SlideKind, declared)
         _quote_roles(pattern)
+        _contact_roles(pattern)
         mark_takeaway(pattern, self._names(slide, records))
         if slide._element.get("showMasterSp") != "0":
             _mark_framed(pattern, self.frames(slide.slide_layout))
@@ -1923,6 +1925,18 @@ def _quote_roles(pattern: Pattern) -> None:
     )
     for zone, role in zip(bodies, ("title", "subtitle")):
         zone.role = role  # type: ignore[assignment]
+
+
+def _contact_roles(pattern: Pattern) -> None:
+    """A closing slide's line whose sample reads as an email or a phone number
+    holds the presenter's contact: only the plan's `email` / `phone` fill it."""
+    if pattern.kind != "closing":
+        return
+    for zone in pattern.zones:
+        if zone.role in ("body", "caption", "label", "subtitle"):
+            role = lexicon.contact_kind(zone.sample)
+            if role is not None:
+                zone.role = role  # type: ignore[assignment]
 
 
 # -- slide kind (heuristic; the vision pass refines it) ---------------------------

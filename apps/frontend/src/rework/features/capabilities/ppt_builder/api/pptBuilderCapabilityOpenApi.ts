@@ -127,7 +127,9 @@ export type Zone = {
     | "image"
     | "table"
     | "chart"
-    | "keep";
+    | "keep"
+    | "contact_email"
+    | "contact_phone";
   box: Box;
   sample?: string;
   font_pt?: number | null;
@@ -156,6 +158,8 @@ export type RepeatGroup = {
     | "table"
     | "chart"
     | "keep"
+    | "contact_email"
+    | "contact_phone"
   )[];
   items: Zone[][];
   item_keys: string[];
