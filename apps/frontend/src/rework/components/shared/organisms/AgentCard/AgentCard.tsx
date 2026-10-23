@@ -18,6 +18,7 @@ import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx"
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { resolveAgentIcon } from "@shared/utils/agentIcon.ts";
 import { capabilityPreparingKey } from "@shared/utils/capabilityPreparing.ts";
+import { isPreparing } from "@core/hooks/useTeamAgentInstances.ts";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -98,9 +99,9 @@ export default function AgentCard({
   // chat affordance) and its enable toggle is LOCKED — the fix is in settings.
   const isSuspended = !!instance.suspension_reason;
   const isEnabled = !offline && !isSuspended && instance.status === "enabled";
-  const isPreparing = instance.suspension_reason === "capability_pending" && !instance.suspension_detail;
-  const preparingKey = isPreparing ? capabilityPreparingKey(instance, (key) => i18n.exists(key)) : undefined;
-  const toggleLabel = isPreparing
+  const preparing = isPreparing(instance);
+  const preparingKey = preparing ? capabilityPreparingKey(instance, (key) => i18n.exists(key)) : undefined;
+  const toggleLabel = preparing
     ? t("rework.agentCard.pendingToggleLocked")
     : isSuspended
       ? t("rework.agentCard.suspendedToggleLocked")
@@ -280,7 +281,7 @@ export default function AgentCard({
       <div className={styles.footer}>
         {isSuspended && (
           <div className={styles.suspensionWarning}>
-            {isPreparing
+            {preparing
               ? preparingKey
                 ? t("rework.agentCard.preparingDetail", { detail: t(preparingKey) })
                 : t("rework.agentCard.preparing")
