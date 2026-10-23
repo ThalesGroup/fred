@@ -1581,6 +1581,22 @@ class MetadataService:
             logger.warning("[AUDIT] Failed to count vectors for %s: %s", document_uid, e)
             return None
 
+    def _session_scoped_vector_uids(self, candidate_uids: set[str]) -> set[str]:
+        # Chat attachments are vector-only by design, so they are not corpus orphans.
+        # Only a positive classification hides a UID; unsupported or failed lookups keep it reported.
+        store = self._ensure_vector_store()
+        if store is None:
+            return set()
+
+        session_uids: set[str] = set()
+        for document_uid in sorted(candidate_uids):
+            try:
+                if store.is_session_scoped_document(document_uid):
+                    session_uids.add(document_uid)
+            except Exception as e:
+                logger.warning("[AUDIT] Could not classify %s as a session attachment: %s", document_uid, e)
+        return session_uids
+
     async def audit_stores(self, user: KeycloakUser) -> StoreAuditReport:
         """
         Scan metadata, content, and vector stores to surface orphan or partial data.
@@ -1600,6 +1616,8 @@ class MetadataService:
         vector_ids = self._list_vector_document_uids()
         content_ids = self._list_content_document_uids()
         all_ids = sorted(metadata_ids | vector_ids | content_ids)
+        vector_only_ids = vector_ids - metadata_ids
+        session_ids = await asyncio.to_thread(self._session_scoped_vector_uids, vector_only_ids) if vector_only_ids else set()
 
         anomalies: list[StoreAuditFinding] = []
         for doc_uid in all_ids:
@@ -1610,7 +1628,7 @@ class MetadataService:
             issues: list[str] = []
 
             if not in_metadata:
-                if in_vector:
+                if in_vector and doc_uid not in session_ids:
                     issues.append("orphan_vectors")
                 if in_content:
                     issues.append("orphan_content")

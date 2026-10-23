@@ -21,6 +21,7 @@ metadata row at all) are safe to delete. See service.py's fix_store_anomalies
 docstring for the reasoning; this test file is the regression guard for it.
 """
 
+import logging
 from datetime import datetime, timezone
 
 import pytest
@@ -37,6 +38,7 @@ from fred_core.documents.document_structures import (
     Tagging,
 )
 
+from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore
 from knowledge_flow_backend.features.metadata.service import MetadataService
 
 
@@ -99,11 +101,34 @@ class _FakeContentStore:
         self.deleted.append(document_uid)
 
 
+def _chunk(uid: str, *, session: bool) -> dict:
+    metadata = {"document_uid": uid, "scope": "session", "user_id": "alice"} if session else {"document_uid": uid}
+    return {"chunk_uid": f"{uid}-0", "text": "", "metadata": metadata}
+
+
 class _FakeVectorStore:
-    def __init__(self, uids: set[str], chunk_counts: dict[str, int] | None = None):
+    # The real classification hook, driven by this fake's chunk lookup.
+    is_session_scoped_document = BaseVectorStore.is_session_scoped_document
+
+    def __init__(
+        self,
+        uids: set[str],
+        chunk_counts: dict[str, int] | None = None,
+        chunks: dict[str, list[dict]] | None = None,
+        chunk_error: Exception | None = None,
+    ):
         self.uids = set(uids)
         self.chunk_counts = chunk_counts or {}
+        self.chunks = chunks or {}
+        self.chunk_error = chunk_error
+        self.chunk_lookups: list[str] = []
         self.deleted: list[str] = []
+
+    def get_chunks_for_document(self, document_uid: str) -> list[dict]:
+        self.chunk_lookups.append(document_uid)
+        if self.chunk_error is not None:
+            raise self.chunk_error
+        return self.chunks.get(document_uid, [_chunk(document_uid, session=False)])
 
     def list_document_uids(self) -> set[str]:
         return self.uids
@@ -116,11 +141,11 @@ class _FakeVectorStore:
         self.deleted.append(document_uid)
 
 
-def _build_service(*, docs, content_uids, vector_uids) -> MetadataService:
+def _build_service(*, docs, content_uids, vector_uids, vector_store: _FakeVectorStore | None = None) -> MetadataService:
     service = MetadataService.__new__(MetadataService)
     service.metadata_store = _FakeMetadataStore(docs)
     service.content_store = _FakeContentStore(content_uids)
-    service.vector_store = _FakeVectorStore(vector_uids)
+    service.vector_store = vector_store or _FakeVectorStore(vector_uids)
     service.rebac = _FakeRebac()
     return service
 
@@ -217,3 +242,45 @@ async def test_fix_response_has_no_deletion_fields():
     assert "deleted_vectors" not in StoreAuditFixResponse.model_fields
     assert "deleted_content" not in StoreAuditFixResponse.model_fields
     assert "reset_metadata" in StoreAuditFixResponse.model_fields
+
+
+@pytest.mark.asyncio
+async def test_session_attachment_is_not_reported_beside_a_corpus_orphan():
+    doc = _make_metadata("doc-1", raw_done=True, preview_done=True, vectorized_done=True)
+    vector_store = _FakeVectorStore(
+        {"doc-1", "chat-attachment", "corpus-orphan"},
+        chunks={
+            "chat-attachment": [_chunk("chat-attachment", session=True), _chunk("chat-attachment", session=True)],
+            "corpus-orphan": [_chunk("corpus-orphan", session=False)],
+        },
+    )
+    service = _build_service(docs={"doc-1": doc}, content_uids={"doc-1"}, vector_uids=set(), vector_store=vector_store)
+
+    report = await service.audit_stores(user=object())
+
+    assert [(f.document_uid, f.issues) for f in report.anomalies] == [("corpus-orphan", ["orphan_vectors"])]
+    assert report.vector_count == 3
+    # Metadata-backed documents are never classified.
+    assert sorted(vector_store.chunk_lookups) == ["chat-attachment", "corpus-orphan"]
+
+
+@pytest.mark.asyncio
+async def test_unsupported_session_classification_keeps_the_orphan_reported():
+    vector_store = _FakeVectorStore({"chat-attachment"}, chunk_error=NotImplementedError())
+    service = _build_service(docs={}, content_uids=set(), vector_uids=set(), vector_store=vector_store)
+
+    report = await service.audit_stores(user=object())
+
+    assert [(f.document_uid, f.issues) for f in report.anomalies] == [("chat-attachment", ["orphan_vectors"])]
+
+
+@pytest.mark.asyncio
+async def test_failed_session_classification_keeps_the_orphan_reported(caplog):
+    vector_store = _FakeVectorStore({"chat-attachment"}, chunk_error=RuntimeError("index unavailable"))
+    service = _build_service(docs={}, content_uids=set(), vector_uids=set(), vector_store=vector_store)
+
+    with caplog.at_level(logging.WARNING, logger="knowledge_flow_backend.features.metadata.service"):
+        report = await service.audit_stores(user=object())
+
+    assert [(f.document_uid, f.issues) for f in report.anomalies] == [("chat-attachment", ["orphan_vectors"])]
+    assert any("chat-attachment" in r.getMessage() and "index unavailable" in r.getMessage() for r in caplog.records)
