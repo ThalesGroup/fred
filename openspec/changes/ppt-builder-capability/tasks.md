@@ -103,12 +103,12 @@ Owns: `apps/frontend/src/rework/features/capabilities/ppt_builder/**`, `apps/fro
 
 ## WP10. Agent readiness (control-plane + SDK hook, own PR)
 
-Owns: `libs/fred-sdk/fred_sdk/contracts/capability/base.py` (`readiness` hook), pod readiness endpoint in `libs/fred-runtime/fred_runtime/app/agent_app.py`, `apps/control-plane-backend/control_plane_backend/agent_instances/suspension.py`, `product/{service,schemas}.py` (sweep + post-save check, `suspension_detail`), its Alembic migration, regenerated `controlPlaneOpenApi.ts`, `AgentFormBody.tsx` / `AgentCard.tsx` reason strings, `CONTROL-PLANE-PRODUCT-CONTRACT.md` entry.
+Owns: `libs/fred-sdk/fred_sdk/contracts/capability/base.py` (`readiness` hook), pod readiness endpoint in `libs/fred-runtime/fred_runtime/app/agent_app.py`, `apps/control-plane-backend/control_plane_backend/agent_instances/suspension.py`, `product/{service,schemas}.py` (post-save and listing checks, `suspension_detail`), its Alembic migration, regenerated `controlPlaneOpenApi.ts`, `AgentFormBody.tsx` / `AgentCard.tsx` reason strings, `CONTROL-PLANE-PRODUCT-CONTRACT.md` entry.
 
 - [x] 10.0 validate-config request carries the team routing fields already built for prepare-execution (profile overrides, chat default, usable model ids, platform binding)
 - [x] 10.0b `supports_vision` exposed on `available-models` and `effective-chat-model` responses (regenerated client)
 - [x] 10.1 `SuspensionReason.CAPABILITY_PENDING` + nullable `suspension_detail`; pending is not cleared by a save
-- [x] 10.2 Optional `readiness(stored)` SDK hook and pod endpoint; control-plane applies it after save and in the reconciliation sweep, plus an on-demand re-check the form's poll can trigger
+- [x] 10.2 Optional `readiness(stored)` SDK hook and pod endpoint; control-plane applies it after save and on listings, plus an on-demand re-check the form's poll can trigger
 - [x] 10.3 Form/card strings for pending and failed-with-detail; tests in control-plane, fred-sdk, frontend
 
 ## WP9. Evaluation and verification (last)

@@ -121,6 +121,5 @@ does not know the capability; their stored configs are kept.
 - An analysis interrupted by a pod restart is resumed on the next save, chat
   turn or readiness check, from any replica, up to three attempts; a resumed
   analysis on a replica that did not take the save labels by rules.
-- Until the control plane re-checks readiness (agent listing, form poll or the
-  reconciliation sweep), a freshly analysed agent may stay unavailable for a
+- Until the control plane re-checks readiness (agent listing or form poll), a freshly analysed agent may stay unavailable for a
   short while.

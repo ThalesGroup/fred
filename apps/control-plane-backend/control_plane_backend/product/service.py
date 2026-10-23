@@ -1959,9 +1959,6 @@ async def run_capability_reconciliation_sweep(
     2. config health — an active stored slice that no longer validates through
        the pod (incl. a failing `upgrade_config`) → suspend
        `capability_config_invalid`, via `reconcile_instance_config_health`.
-    3. readiness — a capability still preparing (or failed to prepare) its
-       saved slice → `capability_pending`, cleared once every one is ready,
-       via `reconcile_instance_readiness`.
 
     `dry_run=True` computes the outcome without writing (reporting only).
     """
@@ -2033,19 +2030,6 @@ async def run_capability_reconciliation_sweep(
                     skip_ids=all_mcp,
                     kpi_writer=kpi_writer,
                 )
-                if reason is None:
-                    # Config health wrote nothing on this path; `fresh` holds.
-                    reason = await reconcile_instance_readiness(
-                        instance=fresh,
-                        store=store,
-                        verdict=await _fetch_capability_readiness(
-                            client=deps.get_runtime_http_client(),
-                            base_url=base_url,
-                            instance=fresh,
-                            authorization=None,
-                        ),
-                        kpi_writer=kpi_writer,
-                    )
 
         if reason is not None and not was_suspended:
             summary.newly_suspended += 1

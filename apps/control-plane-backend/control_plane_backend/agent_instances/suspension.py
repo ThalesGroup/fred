@@ -492,7 +492,7 @@ async def settle_readiness_after_save(
     Write the one suspension state a save that re-validated its capability
     slices leads to: `capability_pending` unless the pod answered ready, else
     none. The save resolves any earlier reason, and no verdict fails closed:
-    the listing re-check or the sweep lifts it once the pod answers.
+    the listing or form re-check lifts it once the pod answers.
     """
 
     if verdict is not None and verdict.ready:

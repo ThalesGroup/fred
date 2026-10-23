@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """Capability readiness: the `capability_pending` suspension set and cleared
-from the pod's `readiness` verdicts after a save, in the sweep and on re-check."""
+from the pod's `readiness` verdicts after a save, on listings and on re-check."""
 
 from __future__ import annotations
 
@@ -31,7 +31,6 @@ from control_plane_backend.product import service
 from httpx import ASGITransport, AsyncClient
 from test_capability_selection_1974 import (
     _fake_pod_validate,
-    _product_deps,
     _record_with_selection,
     _setup,
 )
@@ -202,7 +201,7 @@ async def test_fetch_error_gives_no_verdict(monkeypatch: pytest.MonkeyPatch) -> 
     assert verdict is None
 
 
-# --- save, re-check, sweep -------------------------------------------------
+# --- save, re-check -------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -269,26 +268,6 @@ async def test_recheck_unknown_instance_is_404(
             "/control-plane/v1/teams/personal/agent-instances/nope/readiness-check"
         )
     assert resp.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_sweep_sets_pending_after_availability_and_config_health(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    app, store = _setup(monkeypatch, records=[_record_with_selection()])
-
-    async def _available(_deps):
-        return {"runtime-a": frozenset({"demo_echo"})}
-
-    monkeypatch.setattr(service, "_available_capability_ids_by_source", _available)
-    _fake_pod_validate(monkeypatch)
-    _fake_readiness(monkeypatch, _PENDING)
-
-    summary = await service.run_capability_reconciliation_sweep(_product_deps(app))
-
-    assert summary.newly_suspended == 1
-    assert summary.suspended_reasons == {"capability_pending": 1}
-    assert store._records[0].suspension_reason == "capability_pending"
 
 
 @pytest.mark.asyncio

@@ -200,7 +200,7 @@ The system SHALL complete the agent save without waiting for the template analys
 #### Scenario: No readiness answer after a save
 
 - **WHEN** an agent with a capability is saved, created or copied and the pod gives no readiness answer (timeout, error, unreachable)
-- **THEN** the agent is unavailable until a listing, re-check or sweep gets an answer; a save never makes a preparing agent available, even briefly
+- **THEN** the agent is unavailable until a listing or re-check gets an answer; a save never makes a preparing agent available, even briefly
 
 #### Scenario: Readiness hook fails
 

@@ -5188,8 +5188,7 @@ guards apply unchanged (prepare-execution 409, locked toggle, hidden from chat
 pickers, recents and search).
 
 Control-plane asks the pod after an enrol, after a copy and after a save touching
-capabilities, in `run_capability_reconciliation_sweep` after availability and config
-health, and on
+capabilities, on
 `POST /teams/{team_id}/agent-instances/{agent_instance_id}/readiness-check`
 (`CAN_UPDATE_AGENTS`, returns the summary), which the agent form polls, and on
 `GET /teams/{team_id}/agent-instances` for up to 10 `capability_pending` instances

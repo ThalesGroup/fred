@@ -799,9 +799,8 @@ Unit evidence only, no eval rerun (both fixes are deterministic):
   Not proven: against a real pod and Postgres (the compare-and-set is one conditional
   `UPDATE`, checked on SQLite); the readiness route does not bind `agent_instance_id` to the
   named team (the pod has no instance-to-team mapping), so a member of one team can learn
-  another team's instance readiness state by id; the sweep calls the pod without a token, so
-  on a secured pod its config-health and readiness checks get no verdict (unchanged, the
-  sweep has no production host).
+  another team's instance readiness state by id. The reconciliation sweep no longer reads
+  readiness: it had no production host and called the pod without a token.
 - WP25 `fred-performance-reviewer` (25.3, 25.4, 25.6): no blocking finding. No LLM call
   site, KPI or Prometheus label added. 25.4: listing readiness calls now share the
   control-plane runtime client (`app/context.py` `get_runtime_http_client`, httpx default
