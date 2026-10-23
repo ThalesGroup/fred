@@ -59,6 +59,7 @@
 - [x] 7.2 With the plan gate on, the working rules say a proposed plan ends the answer: show the outline and its notes, never call the tool again in that answer to address a note. Test: `test_plan_validation.py::test_a_proposed_plan_ends_the_answer_even_with_notes`
 - [x] 7.3 Package checks; `openspec validate --strict`
 - [x] 7.4 Live A/B (B settings, mistral-medium, reasoning replay, ≤4 parallel): build calls per base turn and turns ending on the call cap, before / after. Result 2026-10-20 (`~/fred-tmp/leak-study/FIX23.md`, 14 valid runs): improved, not fixed. Build calls per base turn median 7.5–8 → 4; base turns on the call cap 15/24 → 6/14; re-call after a proposal with notes 96% → 78%; 0/179 leaked calls; 13/14 decks (1 infra failure). Reasoning still treats the user-facing notes as fixes to make now, so the `tool_choice="none"` guard is still needed. New: 2/14 confirm turns re-built the delivered deck 6–8 times, chasing delivery variety notes
+- [x] 7.5 Superseded (owner decision 2026-10-23): a proposal carries no notes, only the outline; `Assignment.plan_notes` and the "If the user wants" wording deleted; delivery notes unchanged. Tests: `test_plan_validation.py::test_the_outline_carries_no_notes_the_delivery_tells_them`, `::test_a_proposed_plan_ends_the_answer`
 - Not changed (pending owner decision): the turn-scoped cap message (`~/fred-tmp/leak-study/PLAN-REPEAT.md` fix 4); fixes 1 and 5 are section 8
 
 ## 8. A proposal or a delivery ends the answer (owner decision 2026-10-20, design D10)

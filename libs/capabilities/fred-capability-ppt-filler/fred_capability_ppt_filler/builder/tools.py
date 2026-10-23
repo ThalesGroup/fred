@@ -1162,25 +1162,17 @@ def _evaluate(
 
 
 def _proposal(
-    plan: DeckPlan, assignment: Assignment, notes: List[str]
+    plan: DeckPlan, assignment: Assignment
 ) -> tuple[str, ToolInvocationResult]:
-    """The outline with the notes its build would give, so the user validates
-    what would be built."""
+    """The bare outline for the user to validate: no notes, so the model has
+    nothing to relay but the outline; the delivery tells what was adapted."""
     kinds = [p.kind if p else None for p in assignment.patterns]
     payload = {"status": "plan_proposed", "slides": len(plan.slides)}
-    told = (
-        "Notes for the user, with the outline: choices they may want to change. None is "
-        "a fix for you to make now; apply only what the user asks, once they answer:\n"
-        + "\n".join(notes)
-        + "\n"
-        if notes
-        else ""
-    )
     return _answer(
-        f"{_PROPOSED} Show this outline and its notes to the user in their language and ask "
+        f"{_PROPOSED} Show this outline to the user in their language and ask "
         "them to validate or correct it; end your answer; do not call build_presentation "
-        "again in this answer, even for a note. Once they answer, build it: the whole deck "
-        f"in `slides`, or `changes` to this plan.\n{story.outline(plan, kinds)}\n{told}"
+        "again in this answer. Once they answer, build it: the whole deck "
+        f"in `slides`, or `changes` to this plan.\n{story.outline(plan, kinds)}\n"
         + json.dumps(payload, ensure_ascii=False)
     )
 
@@ -1714,14 +1706,7 @@ def build_builder_tools(
             proposed = plan.model_copy(update={"proposed": True, "delivered": False})
             turn_base[:] = [proposed]
             await plans.write(proposed)
-            return _proposal(
-                plan,
-                assignment,
-                unloadable
-                + assignment.plan_notes
-                + _cleared_lines(cleared, plan)
-                + _after_cover_lines(after_cover),
-            )
+            return _proposal(plan, assignment)
 
         # Stored as delivered: a split list's parts become slides of their own,
         # so the file, the model and later `changes` share one numbering.

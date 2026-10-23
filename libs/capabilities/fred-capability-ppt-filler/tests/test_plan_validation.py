@@ -92,10 +92,11 @@ async def test_the_first_build_returns_the_outline_and_stores_the_plan(
 
 
 @pytest.mark.asyncio
-async def test_the_outline_carries_the_notes_its_build_would_give(
+async def test_the_outline_carries_no_notes_the_delivery_tells_them(
     monkeypatch, deck_plan_store
 ):
-    """A cover shown as 'Couverture' was built as a section: one more build."""
+    """Owner decision: a proposal has nothing for the model to relay but the
+    outline; what was adapted is told once the deck is delivered."""
     early = [COVER, {**POINTS, "kind": "closing"}, CHART]
     fact = (
         "Slide 2: built as 'section' instead of 'closing': a closing slide can only "
@@ -106,12 +107,7 @@ async def test_the_outline_carries_the_notes_its_build_would_give(
     direct = await build_tool(monkeypatch, _first_turn())
     delivered, _ = await direct(slides=early)
     assert f"{fact} To make it the closing slide, move it to the end." in delivered
-    # The proposal's notes are the user's to decide: the model shows them and stops.
-    assert (
-        f"{fact} If the user wants it as the closing slide: move it to the end."
-        in proposed
-    )
-    assert "Notes for the user" in proposed and "even for a note" in proposed
+    assert "instead of" not in proposed and "Notes for the user" not in proposed
     assert proposed.startswith("Plan proposed")
 
 
@@ -266,12 +262,12 @@ def test_the_plan_gate_is_visible_to_the_model_only_when_it_is_on():
     assert "skip_plan" in gate["properties"]
 
 
-def test_a_proposed_plan_ends_the_answer_even_with_notes():
-    """Live loop: the plan's notes read as fixes to make now, and the model
-    re-called the tool up to the call cap instead of showing the outline."""
+def test_a_proposed_plan_ends_the_answer():
+    """Live loop: the model re-called the tool up to the call cap instead of
+    showing the outline."""
     gated = capability_mod.build_instructions(True, validate_plan=True)
-    assert "never call the tool again in that answer to address a note" in gated
-    assert "address a note" not in capability_mod.build_instructions(True)
+    assert "never call the tool again in that answer" in gated
+    assert "its notes" not in gated
 
 
 def test_a_refused_call_is_resent_as_its_result_says():
