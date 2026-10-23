@@ -1228,9 +1228,10 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "4.5.7"
+version = "4.5.8"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
+    { name = "aiohttp" },
     { name = "aiosqlite" },
     { name = "asyncpg" },
     { name = "authzed" },
@@ -1269,6 +1270,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.14.5" },
     { name = "aiosqlite", specifier = ">=0.22.1" },
     { name = "alembic", marker = "extra == 'dev'", specifier = ">=1.18.4" },
     { name = "alembic", marker = "extra == 'migration'", specifier = ">=1.18.4" },
@@ -1372,7 +1374,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "4.5.7"
+version = "4.5.8"
 source = { editable = "../../libs/fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -1449,7 +1451,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.5.7"
+version = "4.5.8"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "fred-pod" },
