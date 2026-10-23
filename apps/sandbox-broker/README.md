@@ -1,5 +1,7 @@
 # Fred sandbox broker prototype
 
+For a production cluster, follow the [step-by-step Kubernetes installation guide](../../docs/swift/ops/AGENT_SANDBOX_KUBERNETES.md). This README remains the configuration and backend reference.
+
 The broker runs short Bash or Python programs in isolated Kata or gVisor workloads. Fred agent pods call its authenticated HTTPS API; only the broker has Kubernetes or Docker control credentials. The first code execution creates a workload on demand. One conversation keeps its assigned workload across executions, including files under `/work`, until 20 minutes after its last execution by default. Calls without a conversation identity remain single-use. A different conversation or user never receives that claimed workload. Connected chat users who never run code consume no sandbox.
 
 This prototype is for a controlled pilot. It has one broker replica and local admission accounting. It has no per-team quota, durable work queue, or session recovery after a broker restart. On restart, the broker removes its prior labeled Kubernetes or Docker workloads and mount resources before serving requests; SIG claim shutdown times provide a separate upper bound if it does not restart. Docker workloads have a 24-hour hard lifetime if the broker disappears. A cluster's CNI behavior, node virtualization support, image provenance, and actual first-execution latency require operator validation.
