@@ -1,6 +1,6 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
-"""Read-only WebDAV source view for trusted node-side sandbox mount drivers."""
+"""Read-only WebDAV source view. XML is serialized, never parsed from clients."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from contextlib import closing
 from email.utils import formatdate
 from pathlib import PurePosixPath
 from urllib.parse import quote
-from xml.etree import ElementTree
+from xml.etree import ElementTree  # nosec B405
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
@@ -26,9 +26,9 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.content.content_controller import resolve_range_window
 from knowledge_flow_backend.features.content.sandbox_scope import authorize_corpus_source
 from knowledge_flow_backend.features.content.sandbox_views import (
+    VIEW_KEY_RE,
     MountedSource,
     SandboxViewStore,
-    VIEW_KEY_RE,
 )
 
 DAV = "DAV:"
@@ -213,10 +213,10 @@ class SandboxMountController:
                             allowed = original.name == item.name and original.size == item.size
                         else:
                             allowed = False
-                        if allowed:
-                            visible.append(item)
                     except Exception:
-                        continue
+                        allowed = False
+                    if allowed:
+                        visible.append(item)
                 sources = visible
             source = next((item for item in sources if item.path == path), None)
             directory = path == "" or any(item.path.startswith(f"{path}/") for item in sources)
@@ -230,7 +230,7 @@ class SandboxMountController:
                 if depth not in {"0", "1"}:
                     raise HTTPException(403, "WebDAV depth is unavailable")
                 root = ElementTree.Element(f"{{{DAV}}}multistatus")
-                _dav_entry(root, _href(request, key, path, directory), None if directory else source.size)
+                _dav_entry(root, _href(request, key, path, directory), source.size if source is not None else None)
                 if directory and depth == "1":
                     for child, item in _child_paths(path, sources):
                         _dav_entry(root, _href(request, key, child, item is None), item.size if item else None)
@@ -278,6 +278,8 @@ class SandboxMountController:
                 if source.kind == "corpus":
                     handle = await asyncio.to_thread(content_store.get_content_range, source.uid, start, length)
                 else:
+                    if object_key is None:
+                        raise FileNotFoundError
                     handle = await asyncio.to_thread(content_store.get_object_stream, object_key, start=start, length=length)
             except (FileNotFoundError, PermissionError, ValueError):
                 raise HTTPException(404, "Sandbox file is unavailable") from None

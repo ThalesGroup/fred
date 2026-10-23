@@ -7,8 +7,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
-import httpx
 from pathlib import PurePosixPath
+
+import httpx
 from fred_sdk.contracts.sandbox import (
     SandboxError,
     SandboxInputPort,

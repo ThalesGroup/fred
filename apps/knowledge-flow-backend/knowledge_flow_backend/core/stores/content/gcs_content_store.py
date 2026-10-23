@@ -18,7 +18,7 @@ import os
 import time
 from datetime import timedelta
 from pathlib import Path
-from typing import BinaryIO, List, Optional
+from typing import BinaryIO, List, Optional, cast
 
 import google.auth
 from fred_core.common.gcs_client import build_gcs_client
@@ -289,9 +289,9 @@ class GcsContentStore(BaseContentStore):
         if length <= 0:
             return io.BytesIO()
         blob.reload()
-        stream = blob.open("rb", chunk_size=256 * 1024)
+        stream = cast(BinaryIO, blob.open("rb", chunk_size=256 * 1024))
         stream.seek(start)
-        return _BoundedBlobReader(stream, length)
+        return cast(BinaryIO, _BoundedBlobReader(stream, length))
 
     def get_content(self, document_uid: str) -> BinaryIO:
         blob = self._get_primary_blob(document_uid)
@@ -335,10 +335,10 @@ class GcsContentStore(BaseContentStore):
             raise FileNotFoundError(f"Object not found: {key}")
         if length == 0:
             return io.BytesIO()
-        stream = blob.open("rb", chunk_size=256 * 1024)
+        stream = cast(BinaryIO, blob.open("rb", chunk_size=256 * 1024))
         if start:
             stream.seek(start)
-        return _BoundedBlobReader(stream, length) if length is not None else stream
+        return cast(BinaryIO, _BoundedBlobReader(stream, length)) if length is not None else stream
 
     def stat_object(self, key: str) -> StoredObjectInfo:
         object_name = self._normalize_key(key)

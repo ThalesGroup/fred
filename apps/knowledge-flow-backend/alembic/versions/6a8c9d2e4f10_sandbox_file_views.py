@@ -7,6 +7,7 @@ Revises: 02d556a6f182
 from typing import Sequence, Union
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "6a8c9d2e4f10"  # pragma: allowlist secret

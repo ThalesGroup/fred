@@ -11,7 +11,7 @@ from knowledge_flow_backend.features.content.sandbox_scope import AuthorizedCorp
 from knowledge_flow_backend.features.content.sandbox_views import MountedSource
 
 KEY = "a" * 64
-SECRET = "gateway-secret-" + "x" * 32
+SECRET = "gateway-secret-" + "x" * 32  # pragma: allowlist secret
 
 
 class _Store:

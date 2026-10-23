@@ -63,7 +63,6 @@ from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_kpi_writer, get_rebac_engine
-from knowledge_flow_backend.features.content.sandbox_views import SandboxViewStore
 from knowledge_flow_backend.common.structures import (
     IngestionProcessingProfile,
     Status,
@@ -109,6 +108,7 @@ from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     CHUNK_ID_FIELD,
     BaseVectorStore,
 )
+from knowledge_flow_backend.features.content.sandbox_views import SandboxViewStore
 from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 from knowledge_flow_backend.features.scheduler.activities import output_process
 from knowledge_flow_backend.features.scheduler.push_files_activities import push_input_process

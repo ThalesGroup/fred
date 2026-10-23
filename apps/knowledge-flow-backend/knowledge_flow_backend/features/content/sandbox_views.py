@@ -247,7 +247,17 @@ class SandboxViewStore:
                 expires_at = expires_at.replace(tzinfo=timezone.utc)
             if expires_at - now < timedelta(minutes=30):
                 row.expires_at = now + VIEW_TTL
-            sources = [MountedSource(path=path, kind=item["kind"], uid=item["uid"], name=item["name"], size=int(item["size"])) for path, item in row.sources.items()]
+            sources: list[MountedSource] = []
+            for path, item in row.sources.items():
+                kind, uid, name, size = (
+                    item.get("kind"),
+                    item.get("uid"),
+                    item.get("name"),
+                    item.get("size"),
+                )
+                if not isinstance(kind, str) or not isinstance(uid, str) or not isinstance(name, str) or not isinstance(size, int) or size < 0:
+                    raise FileNotFoundError("Sandbox view has invalid source metadata")
+                sources.append(MountedSource(path=path, kind=kind, uid=uid, name=name, size=size))
             return row, sources
 
     async def revoke(self, key: str) -> None:

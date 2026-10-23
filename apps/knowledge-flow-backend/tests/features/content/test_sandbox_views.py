@@ -1,5 +1,5 @@
-from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
@@ -8,8 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from knowledge_flow_backend.features.content.sandbox_scope import AuthorizedCorpusSource
-from knowledge_flow_backend.features.content.sandbox_views import SandboxViewStore
-from knowledge_flow_backend.features.content.sandbox_views import MAX_VIEW_REQUESTS_PER_MINUTE
+from knowledge_flow_backend.features.content.sandbox_views import MAX_VIEW_REQUESTS_PER_MINUTE, SandboxViewStore
 from knowledge_flow_backend.models.sandbox_view_models import SandboxAttachmentOriginalRow, SandboxViewRow
 
 KEY = "a" * 64
