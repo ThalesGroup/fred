@@ -74,6 +74,7 @@ from pydantic import (
 )
 from pydantic.json_schema import SkipJsonSchema
 
+from fred_capability_ppt_filler.builder import notes as speaker
 from fred_capability_ppt_filler.builder import story
 from fred_capability_ppt_filler.builder.assign import (
     SECTION_RULE,
@@ -1060,48 +1061,117 @@ def _no_history() -> Sequence[BaseMessage]:
 _PROPOSED = "Plan proposed: nothing was built yet."
 
 
-def plan_answered(history: Sequence[BaseMessage]) -> bool:
-    """Whether a user message follows the last plan the tool proposed."""
+# The platform question tool the plan approval goes through, and its one button.
+ASK_USER = "ask_user"
+APPROVE_CHOICE = "approve"
+_APPROVE_LABEL = {"fr": "Approuver", "en": "Approve"}
+
+
+def _tool_results(history: Sequence[BaseMessage], name: str) -> Dict[int, ToolMessage]:
+    """Position → result of each call of tool `name` (matched by call id too:
+    the platform strips message names before the model call)."""
     calls = {
         call.get("id")
         for m in history
         if isinstance(m, AIMessage)
         for call in m.tool_calls
-        if call.get("name") == BUILD_TOOL_NAME
+        if call.get("name") == name
     }
-    proposal_at = -1
-    for position, message in enumerate(history):
-        if (
-            isinstance(message, ToolMessage)
-            and (message.name == BUILD_TOOL_NAME or message.tool_call_id in calls)
-            and _text_of(message.content).startswith(_PROPOSED)
-        ):
-            proposal_at = position
-    return proposal_at >= 0 and any(
-        m.type == "human" for m in history[proposal_at + 1 :]
+    return {
+        position: m
+        for position, m in enumerate(history)
+        if isinstance(m, ToolMessage) and (m.name == name or m.tool_call_id in calls)
+    }
+
+
+def _payload(message: ToolMessage) -> Dict[str, Any]:
+    """The JSON a tool result ends with, or {}."""
+    last = _text_of(message.content).strip().rsplit("\n", 1)[-1]
+    try:
+        value = json.loads(last)
+    except ValueError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _approval(history: Sequence[BaseMessage], after: int) -> Optional[str]:
+    """How the user answered the approval question asked after position
+    `after`: "approved", "skipped" or "revise"; None when none was answered."""
+    answers = [
+        m
+        for position, m in _tool_results(history, ASK_USER).items()
+        if position > after
+    ]
+    if not answers:
+        return None
+    payload = _payload(answers[-1])
+    if payload.get("status") == "skipped":
+        return "skipped"
+    return "approved" if payload.get("choice_id") == APPROVE_CHOICE else "revise"
+
+
+def _last_proposal(history: Sequence[BaseMessage]) -> int:
+    proposals = [
+        position
+        for position, m in _tool_results(history, BUILD_TOOL_NAME).items()
+        if _text_of(m.content).startswith(_PROPOSED)
+    ]
+    return proposals[-1] if proposals else -1
+
+
+def plan_approved(history: Sequence[BaseMessage]) -> bool:
+    """Whether the user approved the last plan the tool proposed: its Approve
+    button only. Where no question was asked (no ask_user), any reply counts."""
+    at = _last_proposal(history)
+    if at < 0:
+        return False
+    asked = any(
+        call.get("name") == ASK_USER
+        for m in history[at + 1 :]
+        if isinstance(m, AIMessage)
+        for call in m.tool_calls
     )
+    if asked:
+        return _approval(history, at) == "approved"
+    return any(m.type == "human" for m in history[at + 1 :])
 
 
-def answer_closed(history: Sequence[BaseMessage]) -> bool:
-    """Whether the build tool proposed a plan or delivered a deck since the
-    user's last message: the answer then only shows it, so no tool is called."""
-    calls = {
-        call.get("id")
-        for m in history
-        if isinstance(m, AIMessage)
-        for call in m.tool_calls
-        if call.get("name") == BUILD_TOOL_NAME
+def answer_stage(history: Sequence[BaseMessage]) -> Optional[str]:
+    """Where the answer stands since the user's last message: "delivered",
+    "proposed" (approval not asked yet), the approval's answer, or None."""
+    last_human = max(
+        (i for i, m in enumerate(history) if m.type == "human"), default=-1
+    )
+    builds = {
+        i: m
+        for i, m in _tool_results(history, BUILD_TOOL_NAME).items()
+        if i > last_human
     }
-    for message in reversed(history):
-        if message.type == "human":
-            return False
-        if (
-            isinstance(message, ToolMessage)
-            and (message.name == BUILD_TOOL_NAME or message.tool_call_id in calls)
-            and _text_of(message.content).startswith((_PROPOSED, *_DELIVERED))
-        ):
-            return True
-    return False
+    if not builds:
+        return None
+    at = max(builds)
+    text = _text_of(builds[at].content)
+    if text.startswith(_DELIVERED):
+        return "delivered"
+    if not text.startswith(_PROPOSED):
+        return None
+    return _approval(history, at) or "proposed"
+
+
+def approval_question(
+    history: Sequence[BaseMessage], args: Mapping[str, Any]
+) -> Dict[str, Any]:
+    """The model's approval question with the fixed choice: Approve, and a free
+    answer for changes."""
+    builds = _tool_results(history, BUILD_TOOL_NAME)
+    at = _last_proposal(history)
+    language = _payload(builds[at]).get("language") if at >= 0 else None
+    label = _APPROVE_LABEL.get(str(language), _APPROVE_LABEL["en"])
+    return {
+        **args,
+        "choices": [{"id": APPROVE_CHOICE, "label": label}],
+        "allow_free_text": True,
+    }
 
 
 def _words(text: str) -> str:
@@ -1163,17 +1233,29 @@ def _evaluate(
 
 
 def _proposal(
-    plan: DeckPlan, assignment: Assignment
+    plan: DeckPlan, assignment: Assignment, can_ask: bool = False
 ) -> tuple[str, ToolInvocationResult]:
     """The bare outline for the user to validate: no notes, so the model has
     nothing to relay but the outline; the delivery tells what was adapted."""
     kinds = [p.kind if p else None for p in assignment.patterns]
-    payload = {"status": "plan_proposed", "slides": len(plan.slides)}
+    payload = {
+        "status": "plan_proposed",
+        "slides": len(plan.slides),
+        "language": speaker.plan_language(plan),
+    }
+    ask = (
+        "Now call ask_user: its `question` shows this outline in the user's language and "
+        "asks whether to build it; the approval button and a free answer for changes are "
+        "added for you. If they approve, build it: the whole deck in `slides`, or `changes` "
+        "to this plan. Any other answer is the changes they want: send them in `changes`, "
+        "and the tool proposes the revised plan."
+        if can_ask
+        else "Show this outline to the user in their language and ask them to validate or "
+        "correct it; end your answer; do not call build_presentation again in this answer. "
+        "Once they answer, build it: the whole deck in `slides`, or `changes` to this plan."
+    )
     return _answer(
-        f"{_PROPOSED} Show this outline to the user in their language and ask "
-        "them to validate or correct it; end your answer; do not call build_presentation "
-        "again in this answer. Once they answer, build it: the whole deck "
-        f"in `slides`, or `changes` to this plan.\n{story.outline(plan, kinds)}\n"
+        f"{_PROPOSED} {ask}\n{story.outline(plan, kinds)}\n"
         + json.dumps(payload, ensure_ascii=False)
     )
 
@@ -1490,12 +1572,14 @@ def build_builder_tools(
     template_bytes_loader,
     inventory: TemplateInventory,
     history: Callable[[], Sequence[BaseMessage]] = _no_history,
+    can_ask: Callable[[], bool] = lambda: False,
 ) -> list[BaseTool]:
     """The build tool bound to one turn's context and effective inventory.
 
     ``template_bytes_loader`` is an async callable returning the template
     bytes (the stored asset, or the built-in template); ``history`` returns the
-    messages of the model call that asked for the tool.
+    messages of the model call that asked for the tool; ``can_ask`` whether
+    that call offered the ask_user tool.
     """
     services = ctx.services
     identity = ctx.identity
@@ -1687,7 +1771,7 @@ def build_builder_tools(
         if repeats and (base is not None or deck_delivered(history())):
             repeats = []
         # The user validated the plan: its slides stay as they agreed.
-        answered = validate_plan and plan_answered(history())
+        answered = validate_plan and plan_approved(history())
         if answered:
             repeats = []
         if assignment.problems:
@@ -1721,7 +1805,7 @@ def build_builder_tools(
             proposed = plan.model_copy(update={"proposed": True, "delivered": False})
             turn_base[:] = [proposed]
             await plans.write(proposed)
-            return _proposal(plan, assignment)
+            return _proposal(plan, assignment, can_ask())
 
         # Stored as delivered: a split list's parts become slides of their own,
         # so the file, the model and later `changes` share one numbering.

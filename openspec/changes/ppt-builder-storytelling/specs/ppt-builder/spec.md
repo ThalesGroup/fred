@@ -54,7 +54,7 @@ The system SHALL write a slide's `source` to its speaker notes: a document name,
 
 ### Requirement: Plan validation before the first build
 
-The capability SHALL offer one setting, "Validate the plan before building", off by default. When it is off, the system SHALL behave as without it. When it is on and the conversation holds no delivered deck, the system SHALL answer a `build_presentation` call whose plan has no problem with a `plan_proposed` result holding an outline written by the code — audience, main message, and per slide its kind, title, takeaway and source, followed by the assignment notes the build of that plan would give (the delivery's notes, each fix worded as the user's choice — "If the user wants …" — never as a call to make now, its slides numbered as the outline numbers them) — SHALL store that plan, and SHALL NOT build a deck until a user message follows that result. After that message, the system SHALL build a whole plan sent in `slides` or apply `changes` to the proposed plan. A plan with problems SHALL get `needs_revision` instead of an outline. The system SHALL build without an outline when the call carries `skip_plan` and its quote appears, word for word, in the user's latest message (ignoring case, spacing, quote marks and punctuation; the system SHALL NOT match the user's words against a word list), and SHALL return the outline when it is left out or quotes words the user did not write. Changes to a delivered deck SHALL NOT wait for validation. With the setting on, the working rules and the `plan_proposed` result SHALL tell the agent to show the outline and its notes, end its answer, and never call `build_presentation` again in that answer to address a note.
+The capability SHALL offer one setting, "Validate the plan before building", off by default. When it is off, the system SHALL behave as without it. When it is on and the conversation holds no delivered deck, the system SHALL answer a `build_presentation` call whose plan has no problem with a `plan_proposed` result holding an outline written by the code — audience, main message, and per slide its kind, title, takeaway and source, followed by the assignment notes the build of that plan would give (the delivery's notes, each fix worded as the user's choice — "If the user wants …" — never as a call to make now, its slides numbered as the outline numbers them) — SHALL store that plan, and SHALL NOT build a deck until the user approved it. Where the model call offers the platform `ask_user` tool, the plan SHALL be approved only by the approval choice of the question that follows the proposal ("Approuver" or "Approve", in the plan's language, beside a free answer); a free answer SHALL be read as the changes the user wants and SHALL never approve the plan. Without `ask_user`, a user message following the result SHALL be the answer. Once approved, the system SHALL build a whole plan sent in `slides` or apply `changes` to the proposed plan. A plan with problems SHALL get `needs_revision` instead of an outline. The system SHALL build without an outline when the call carries `skip_plan` and its quote appears, word for word, in the user's latest message (ignoring case, spacing, quote marks and punctuation; the system SHALL NOT match the user's words against a word list), and SHALL return the outline when it is left out or quotes words the user did not write. Changes to a delivered deck SHALL NOT wait for validation. With the setting on, the working rules and the `plan_proposed` result SHALL tell the agent to ask for approval with `ask_user`, the outline as its question, or, without it, to show the outline, end its answer, and never call `build_presentation` again in that answer.
 
 #### Scenario: Setting off
 
@@ -84,6 +84,20 @@ The capability SHALL offer one setting, "Validate the plan before building", off
 - **WHEN** the model sends `changes` deleting slide 3
 - **THEN** the deck is built from the proposed plan without slide 3
 
+#### Scenario: Approved with the button
+
+- **GIVEN** a `plan_proposed` result and the model call offers `ask_user`
+- **WHEN** the agent's next model call is sent
+- **THEN** it can only call `ask_user`, whose choices are replaced by the one approval choice and a free answer
+- **WHEN** the user picks the approval choice
+- **THEN** the next model call can only call `build_presentation`, and the deck is built
+
+#### Scenario: Free answer to the approval question
+
+- **GIVEN** a `plan_proposed` result and the user's free answer "remove slide 3" to its approval question
+- **WHEN** the model sends `changes` deleting slide 3
+- **THEN** no deck is built and the revised plan is proposed for approval
+
 #### Scenario: User asked to skip the plan
 
 - **GIVEN** the setting is on and the latest user message says "hazlo directamente, sin plan"
@@ -110,11 +124,11 @@ The capability SHALL offer one setting, "Validate the plan before building", off
 
 ### Requirement: A proposal or a delivery ends the answer
 
-After a `build_presentation` result that proposes a plan or delivers a deck, every later model call of the same answer SHALL be sent with `tool_choice="none"`, so the agent can only reply to the user; the user's next message SHALL lift it. A `needs_revision` result or an error SHALL NOT end the answer, so the agent can still call again.
+After a `build_presentation` result that delivers a deck, or proposes a plan without `ask_user` offered, every later model call of the same answer SHALL be sent with `tool_choice="none"`, so the agent can only reply to the user; the user's next message SHALL lift it. A proposal with `ask_user` offered SHALL be followed by its approval question (see Plan validation); a skipped question SHALL end the answer the same way. A `needs_revision` result or an error SHALL NOT end the answer, so the agent can still call again.
 
 #### Scenario: Plan proposed
 
-- **GIVEN** a `plan_proposed` result and no user message after it
+- **GIVEN** a `plan_proposed` result, no `ask_user` offered and no user message after it
 - **WHEN** the agent's next model call is sent
 - **THEN** it carries `tool_choice="none"` and the agent answers with the outline
 

@@ -19,6 +19,7 @@ a skip needs the user's own words, a delivered deck's edits never wait."""
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import pytest
 from fred_capability_ppt_filler.builder import capability as capability_mod
@@ -36,7 +37,7 @@ from fred_sdk.contracts.capability import (
     EmptyModel,
 )
 from fred_sdk.contracts.runtime import RuntimeServices
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from port_fakes import FakeWorkspace
 from story_tools import CHART, COVER, DECK, POINTS, USER, answered, build_tool, deck
 
@@ -183,23 +184,81 @@ async def test_a_skip_quote_the_user_never_wrote_proposes_the_plan(
     assert text.startswith("Delivered"), text
 
 
+def _asked(answer: dict) -> list:
+    """The model's approval question and the user's answer to it."""
+    call = {"id": f"ask-{len(json.dumps(answer))}", "name": "ask_user", "args": {}}
+    return [
+        AIMessage(content="", tool_calls=[call]),
+        ToolMessage(content=json.dumps(answer), tool_call_id=call["id"]),
+    ]
+
+
+APPROVED = {"status": "answered", "choice_id": "approve"}
+REVISED = {"status": "answered", "text": "Enlève la slide 3"}
+SKIPPED = {"status": "skipped", "instruction": "..."}
+
+
 def test_a_proposal_or_a_delivery_closes_the_answer_until_the_user_speaks():
     proposed = answered("Plan proposed: nothing was built yet. Show this outline")
     delivered = answered("Delivered: 'deck.pptx', 3 slides.")
     revision = answered('Not built: needs_revision. {"status": "needs_revision"}')
-    assert tools.answer_closed(proposed) and tools.answer_closed(delivered)
+    assert tools.answer_stage(proposed) == "proposed"
+    assert tools.answer_stage(delivered) == "delivered"
     # A revision or a failure still lets the model call again.
-    assert not tools.answer_closed(revision)
-    assert not tools.answer_closed(
-        answered("No deck was built: the template could not")
+    assert tools.answer_stage(revision) is None
+    assert (
+        tools.answer_stage(answered("No deck was built: the template could not"))
+        is None
     )
-    assert not tools.answer_closed(proposed + [HumanMessage(content="Ok, vas-y")])
-    assert tools.answer_closed(proposed + [AIMessage(content="Voici le plan")])
+    assert tools.answer_stage(proposed + [HumanMessage(content="Ok, vas-y")]) is None
+    assert (
+        tools.answer_stage(proposed + [AIMessage(content="Voici le plan")])
+        == "proposed"
+    )
+    assert tools.answer_stage(proposed + _asked(APPROVED)) == "approved"
+    assert tools.answer_stage(proposed + _asked(REVISED)) == "revise"
+    assert tools.answer_stage(proposed + _asked(SKIPPED)) == "skipped"
+
+
+def test_only_the_approve_button_approves_a_plan():
+    proposed = answered("Plan proposed: nothing was built yet.")
+    assert tools.plan_approved(proposed + _asked(APPROVED))
+    assert not tools.plan_approved(proposed + _asked(REVISED))
+    assert not tools.plan_approved(proposed + _asked(SKIPPED))
+    assert not tools.plan_approved(proposed)
+    # Asked and answered otherwise, a later message is still no approval.
+    later = proposed + _asked(REVISED) + [HumanMessage(content="ok vas-y")]
+    assert not tools.plan_approved(later)
+    # Without the question tool, the user's reply is their answer.
+    assert tools.plan_approved(proposed + [HumanMessage(content="ok")])
+    # A newer proposal needs its own approval.
+    again = (
+        proposed
+        + _asked(APPROVED)
+        + answered("Plan proposed: nothing was built yet.")[1:]
+    )
+    assert not tools.plan_approved(again)
 
 
 @pytest.mark.asyncio
-async def test_the_model_call_after_a_proposal_gets_no_tool():
-    """Live: medium re-called the tool after a proposal up to the call cap."""
+async def test_the_approve_button_builds_and_a_free_answer_revises(monkeypatch):
+    first = await build_tool(monkeypatch, _first_turn(), validate_plan=True)
+    proposed, _ = await first(slides=DECK)
+    for answer, call, expected in (
+        (REVISED, {"changes": [{"op": "remove", "slide": 3}]}, "Plan proposed"),
+        (APPROVED, {"slides": DECK}, "Delivered"),
+    ):
+        build = await build_tool(
+            monkeypatch,
+            answered(proposed) + _asked(answer),
+            validate_plan=True,
+            workspace=FakeWorkspace(),
+        )
+        text, _ = await build(**call)
+        assert text.startswith(expected), text
+
+
+def _middleware():
     ctx = CapabilityContext(
         identity=CapabilityIdentity(
             user_id="u-1", session_id="s", agent_instance_id="i"
@@ -209,26 +268,99 @@ async def test_the_model_call_after_a_proposal_gets_no_tool():
         services=RuntimeServices(workspace_fs=FakeWorkspace()),
     )
     (middleware,) = PptBuilderCapability().middleware(ctx)
+    return middleware
+
+
+class _Tool:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+class _Request:
+    system_prompt = ""
+
+    def __init__(self, messages: list, seen: list, tools: list) -> None:
+        self.messages = messages
+        self.tools = tools
+        self.seen = seen
+
+    def override(self, **update):
+        self.seen.append(update)
+        return self
+
+
+async def _handler(request):
+    return request
+
+
+@pytest.mark.asyncio
+async def test_the_model_call_after_a_proposal_gets_no_tool():
+    """Live: medium re-called the tool after a proposal up to the call cap."""
+    middleware = _middleware()
     seen: list = []
-
-    class _Request:
-        system_prompt = ""
-        tools: list = []
-
-        def __init__(self, messages: list) -> None:
-            self.messages = messages
-
-        def override(self, **update):
-            seen.append(update)
-            return self
-
-    async def _handler(request):
-        return request
-
     proposed = answered("Plan proposed: nothing was built yet.")
     for history in (proposed, _first_turn(), proposed + [HumanMessage(content="ok")]):
-        await middleware.awrap_model_call(_Request(history), _handler)  # type: ignore[arg-type]
+        await middleware.awrap_model_call(_Request(history, seen, []), _handler)  # type: ignore[arg-type]
     assert [u.get("tool_choice") for u in seen] == ["none", None, None]
+
+
+@pytest.mark.asyncio
+async def test_with_ask_user_a_proposal_asks_and_an_approval_builds():
+    middleware = _middleware()
+    ask, build = _Tool("ask_user"), _Tool(tools.BUILD_TOOL_NAME)
+    proposed = answered("Plan proposed: nothing was built yet.")
+    cases = [
+        (proposed, ["ask_user"], "any"),
+        (proposed + _asked(APPROVED), [tools.BUILD_TOOL_NAME], "any"),
+        (proposed + _asked(SKIPPED), None, "none"),
+        (proposed + _asked(REVISED), None, None),
+    ]
+    for history, offered, choice in cases:
+        seen: list = []
+        request: Any = _Request(history, seen, [ask, build])
+        await middleware.awrap_model_call(request, _handler)
+        (update,) = seen
+        names = [t.name for t in update["tools"]] if offered else None
+        assert (names if offered else None, update.get("tool_choice")) == (
+            offered,
+            choice,
+        )
+
+
+@pytest.mark.asyncio
+async def test_the_approval_question_offers_approve_and_a_free_answer():
+    middleware = _middleware()
+    proposed = answered(
+        "Plan proposed: nothing was built yet.\n1. cover\n"
+        + json.dumps({"status": "plan_proposed", "slides": 1, "language": "fr"})
+    )
+    call = {
+        "id": "ask-1",
+        "name": "ask_user",
+        "args": {
+            "question": "On construit ?",
+            "choices": [{"id": "x", "label": "Oui"}],
+        },
+    }
+    history = proposed + [AIMessage(content="", tool_calls=[call])]
+    sent: list = []
+
+    class _Call:
+        tool_call = call
+        state = {"messages": history}
+
+        def override(self, **update):
+            sent.append(update["tool_call"]["args"])
+            return self
+
+    await middleware.awrap_tool_call(_Call(), _handler)  # type: ignore[arg-type]
+    assert sent == [
+        {
+            "question": "On construit ?",
+            "choices": [{"id": "approve", "label": "Approuver"}],
+            "allow_free_text": True,
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -266,7 +398,8 @@ def test_a_proposed_plan_ends_the_answer():
     """Live loop: the model re-called the tool up to the call cap instead of
     showing the outline."""
     gated = capability_mod.build_instructions(True, validate_plan=True)
-    assert "never call the tool again in that answer" in gated
+    assert "show the outline and end your answer" in gated
+    assert "only once the user approved it" in gated
     assert "its notes" not in gated
 
 

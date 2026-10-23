@@ -99,11 +99,13 @@ from fred_capability_ppt_filler.builder.overrides import (
 )
 from fred_capability_ppt_filler.builder.preview import build_patterns_deck
 from fred_capability_ppt_filler.builder.tools import (
+    ASK_USER,
     BUILD_TOOL_NAME,
     PPT_BUILDER_CAPABILITY_ID,
     _answer,
     _error,
-    answer_closed,
+    answer_stage,
+    approval_question,
     build_builder_tools,
     build_list_images_tool,
     round_refusal,
@@ -622,7 +624,7 @@ _BUILD_INSTRUCTIONS = (
     "next message MUST be a new 'build_presentation' call with the fixes applied as its result says, "
     "never a final answer, unless the user must decide something. "
     "Make it as a real tool call: never write the call, its JSON or the planned fixes in your reply text. "
-    "A delivered deck or a proposed plan ends the answer: no tool can be called after it, so tell "
+    "A delivered deck ends the answer: no tool can be called after it, so tell "
     "the user what its result says, cuts and notes included. "
     "When the user asks to change the deck, do only that (propose any "
     "other slide or content instead), with `changes` for the slides concerned; the whole deck in `slides` "
@@ -642,8 +644,9 @@ _OUTLINE = {
     "request does not say what the presentation is about.",
     True: "Ask first only when the request does not say what the presentation is about; never "
     "write an outline in the chat: the tool shows one to the user before the first deck. Building "
-    "directly means calling the tool: when it proposes a plan, your answer shows that outline, "
-    "then ends; the user answers first, so never call the tool again in that answer.",
+    "directly means calling the tool: when it proposes a plan, do what its result says (ask with "
+    "ask_user, or show the outline and end your answer); the deck is built only once the user "
+    "approved it.",
 }
 
 
@@ -681,6 +684,7 @@ class _PptBuilderMiddleware(AgentMiddleware):
         self._refusal = _ANALYSING_MESSAGE
         # The last model call's messages: the build tool reads whether a deck was delivered.
         self._history: Sequence[BaseMessage] = ()
+        self._can_ask = False
         config = ctx.config
         identity = ctx.identity
         self._sha = config.template_sha256
@@ -701,7 +705,7 @@ class _PptBuilderMiddleware(AgentMiddleware):
         if cached is not None:  # the usual turn: no DB read, no indirection
             effective, _ = apply_overrides(cached, config.overrides)
             self.tools = build_builder_tools(
-                ctx, self._load_template, effective, self._messages
+                ctx, self._load_template, effective, self._messages, self._asks
             )
             self._resolved = self.tools
             return
@@ -722,6 +726,9 @@ class _PptBuilderMiddleware(AgentMiddleware):
     def _messages(self) -> Sequence[BaseMessage]:
         return self._history
 
+    def _asks(self) -> bool:
+        return self._can_ask
+
     def _default_tools(self, platform: Optional[PlatformDefault]) -> List[BaseTool]:
         """Tools on the platform default, else the built-in template, with the
         manager's edits from the snapshot; the agent's own never apply here."""
@@ -735,7 +742,9 @@ class _PptBuilderMiddleware(AgentMiddleware):
                 return content
             return await analysed_template(PLATFORM_ID, sha)
 
-        return build_builder_tools(self._ctx, load, inventory, self._messages)
+        return build_builder_tools(
+            self._ctx, load, inventory, self._messages, self._asks
+        )
 
     async def _load_template(self) -> bytes:
         # The analysed bytes, not the asset: a save rewrites the asset first.
@@ -770,7 +779,7 @@ class _PptBuilderMiddleware(AgentMiddleware):
             return None
         effective, _ = apply_overrides(inventory, self._ctx.config.overrides)
         self._resolved = build_builder_tools(
-            self._ctx, self._load_template, effective, self._messages
+            self._ctx, self._load_template, effective, self._messages, self._asks
         )
         return self._resolved
 
@@ -801,9 +810,19 @@ class _PptBuilderMiddleware(AgentMiddleware):
                 real if getattr(t, "name", None) == BUILD_TOOL_NAME else t
                 for t in request.tools
             ]
-        if answer_closed(request.messages):
-            # A proposal or a delivery ends the answer: the model can only reply,
-            # so it cannot loop on the result's notes. The user's next message lifts it.
+        offered = {
+            getattr(t, "name", None): t for t in update.get("tools", request.tools)
+        }
+        self._can_ask = ASK_USER in offered
+        stage = answer_stage(request.messages)
+        if stage == "proposed" and self._can_ask:
+            # The plan is approved by its button only: the model asks, nothing else.
+            update["tools"], update["tool_choice"] = [offered[ASK_USER]], "any"
+        elif stage == "approved" and BUILD_TOOL_NAME in offered:
+            update["tools"], update["tool_choice"] = [offered[BUILD_TOOL_NAME]], "any"
+        elif stage in ("delivered", "proposed", "skipped"):
+            # A delivery or an unanswered plan ends the answer: the model can only
+            # reply, so it cannot loop on the result's notes.
             update["tool_choice"] = "none"
         return await handler(request.override(**update))
 
@@ -815,8 +834,15 @@ class _PptBuilderMiddleware(AgentMiddleware):
         """Builds sent together in one model round: the first one only; the
         others are answered, not failed, as the round still runs one build."""
         call = request.tool_call
+        state = request.state
+        if call.get("name") == ASK_USER:
+            messages = (
+                state.get("messages", ()) if isinstance(state, Mapping) else state
+            )
+            if isinstance(messages, Sequence) and answer_stage(messages) == "proposed":
+                args = approval_question(messages, call.get("args") or {})
+                return await handler(request.override(tool_call={**call, "args": args}))
         if call.get("name") == BUILD_TOOL_NAME:
-            state = request.state
             messages = (
                 state.get("messages", ()) if isinstance(state, Mapping) else state
             )
