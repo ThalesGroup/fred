@@ -18,7 +18,7 @@
 // ends (so the agent leaves "preparing"), and writes the author's overrides.
 // A re-run is a save too: only the save carries the labelling model.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useGetPptBuilderAnalysisQuery,
   useGetPptBuilderBuiltinQuery,
@@ -47,6 +47,9 @@ import {
 export const TEMPLATE_SLOT = "template";
 
 const POLL_MS = 3000;
+// Per agent, the finished analysis last re-checked (or being re-checked): shared by
+// every form mount, so reopening the form never repeats the POST.
+const checkedAnalysis = new Map<string, string>();
 const NO_OVERRIDES: PatternOverride[] = [];
 
 /** What the panel shows about the template. */
@@ -150,13 +153,16 @@ export function usePptBuilderAnalysis({
   // Once the analysis has ended, one re-check lifts (or explains) the agent's
   // "preparing" suspension without waiting for the next listing.
   const [readinessCheck] = useAgentReadinessCheckMutation();
-  const checkedKey = useRef<string | null>(null);
   useEffect(() => {
     if (!teamId || !agentInstanceId || !status || isInProgress(phase) || phase === "unknown") return;
     const key = `${status.template_sha256}:${status.status}:${status.updated_at}`;
-    if (checkedKey.current === key) return;
-    checkedKey.current = key;
-    readinessCheck({ teamId, agentInstanceId }).catch(() => {});
+    if (checkedAnalysis.get(agentInstanceId) === key) return;
+    checkedAnalysis.set(agentInstanceId, key);
+    readinessCheck({ teamId, agentInstanceId })
+      .unwrap()
+      .catch(() => {
+        if (checkedAnalysis.get(agentInstanceId) === key) checkedAnalysis.delete(agentInstanceId);
+      });
   }, [teamId, agentInstanceId, status, phase, readinessCheck]);
 
   const inventory: TemplateInventory | null =

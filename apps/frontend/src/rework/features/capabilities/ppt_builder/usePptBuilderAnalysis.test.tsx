@@ -36,6 +36,7 @@ const analysis = vi.hoisted(() => ({
   builtinOptions: [] as { skip?: boolean }[],
   builtin: undefined as unknown,
   configValues: { template_sha256: "abc" } as Record<string, unknown>,
+  agentInstanceId: "agent",
 }));
 
 vi.mock("./api/pptBuilderCapabilityOpenApi", () => ({
@@ -90,7 +91,7 @@ let result: PptBuilderAnalysis;
 function Harness() {
   result = usePptBuilderAnalysis({
     teamId: "team",
-    agentInstanceId: "agent",
+    agentInstanceId: analysis.agentInstanceId,
     configValues: analysis.configValues,
     onConfigChange: () => {},
     assetFiles: {},
@@ -112,7 +113,8 @@ beforeEach(() => {
   analysis.builtin = undefined;
   analysis.platform = { data: undefined, isLoading: false };
   analysis.configValues = { template_sha256: SHA };
-  analysis.readinessCheck.mockReset().mockReturnValue(Promise.resolve());
+  analysis.readinessCheck.mockReset().mockReturnValue({ unwrap: () => Promise.resolve() });
+  analysis.agentInstanceId = "agent";
   analysis.refetch.mockReset();
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -154,13 +156,18 @@ describe("usePptBuilderAnalysis", () => {
     expect(result.effective).not.toBeNull();
   });
 
-  it("re-checks the agent's readiness once per finished analysis", () => {
+  it("re-checks the agent's readiness once per finished analysis, across form mounts", () => {
+    analysis.agentInstanceId = "agent-readiness";
     show({ data: status({ status: "running" }) });
     expect(analysis.readinessCheck).not.toHaveBeenCalled();
     show({ data: status({ status: "succeeded", updated_at: "t2" }) });
     show({ data: status({ status: "succeeded", updated_at: "t2" }) });
     expect(analysis.readinessCheck).toHaveBeenCalledTimes(1);
-    expect(analysis.readinessCheck).toHaveBeenCalledWith({ teamId: "team", agentInstanceId: "agent" });
+    expect(analysis.readinessCheck).toHaveBeenCalledWith({ teamId: "team", agentInstanceId: "agent-readiness" });
+    act(() => root.unmount());
+    root = createRoot(container);
+    show({ data: status({ status: "succeeded", updated_at: "t2" }) });
+    expect(analysis.readinessCheck).toHaveBeenCalledTimes(1);
     show({ data: status({ status: "failed", updated_at: "t3" }) });
     expect(analysis.readinessCheck).toHaveBeenCalledTimes(2);
   });
