@@ -23,10 +23,10 @@ Record the following before the maintenance window:
 
 | Item | Record for this deployment |
 | --- | --- |
-| Old and new paired Fred code/chart versions | Exact tags and immutable image digests for frontend, control plane, Knowledge Flow API/workers, agent pods and any other Fred workers |
+| Old and new Fred release versions | Exact tags and immutable image digests for frontend, control plane, Knowledge Flow API/workers, agent services and any other Fred workers |
 | Compose inputs | Compose files, project name, profiles, `.env`/secret sources, mounted configuration and reverse proxy routes for both versions |
-| Service map | Actual service names for frontend, control plane, Knowledge Flow API/workers, agent pods, Temporal workers and migration jobs |
-| Dependencies | PostgreSQL database names, Keycloak, OpenFGA store/model ID, object-store buckets, OpenSearch/pgvector, Temporal, external agent pods and persistent volumes |
+| Service map | Actual service names for frontend, control plane, Knowledge Flow API/workers, agent services, Temporal workers and migration jobs |
+| Dependencies | PostgreSQL database names, identity provider, OpenFGA store/model ID, object-store buckets, OpenSearch/pgvector, Temporal, external agent runtimes and persistent volumes |
 | Alembic positions | Current and target revisions of every tree in the table below; all migrations crossed, their `downgrade()` effects and any irreversible data changes |
 | Recovery | Tested backup location, restore command/procedure, encryption/access, recovery point and expected data loss; owner of the go/no-go decision |
 | Validation | Login, authorization, chat, document upload/search, worker completion and any release-specific checks |
@@ -58,10 +58,11 @@ For each affected database, take an application-consistent backup immediately
 before migration. Quiesce new writes first: block ingress or put Fred in
 maintenance mode; stop API, agent and worker writers; drain or pause Temporal
 tasks and scheduled ingestion. Capture PostgreSQL with a tested `pg_dump -Fc`
-or managed snapshot, including the Fred database and separate Keycloak,
-OpenFGA, Temporal or other databases that the release changes. Include roles and
-extensions if the restore method needs them. Capture object-store buckets and
-versions, OpenSearch indexes/snapshots if used, and any local persistent files.
+or managed snapshot, including the Fred database and any separate databases used
+by the identity provider, OpenFGA, Temporal or other affected services. Include
+roles and extensions if the restore method needs them. Capture object-store
+buckets and versions, OpenSearch indexes/snapshots if used, and any local
+persistent files.
 Coordinate the recovery point across stores. A PostgreSQL backup alone cannot
 recover files uploaded to object storage or external authorization changes.
 Verify that backup files are nonempty, readable and restorable on an isolated
@@ -90,10 +91,13 @@ live deployment.
 3. Prepare any OpenFGA model, secrets, storage or external services required
    **before** new readers start, in the order specified by the release guide.
    Stop old readers when the schema change is not backward compatible.
-4. Run each required migration **once**, using a one-off container from its
-   matching new image with the same `CONFIG_FILE`, database connection, secrets
-   and network as the application. For example, after substituting actual
-   service names and Compose options:
+4. Apply each required migration **once**. If the site's Compose deployment
+   already runs an upgrade job, keep application writers stopped, verify that
+   the job uses the new image and finishes before new services start, and do
+   not also run the commands below. Otherwise, use a one-off container from
+   each matching new image with the same `CONFIG_FILE`, database connection,
+   secrets and network as the application. For example, after substituting
+   actual service names and Compose options:
 
    ```bash
    docker compose -f <app-compose> -p <project> run --rm --no-deps --entrypoint alembic <control-plane-service> upgrade head
@@ -101,14 +105,15 @@ live deployment.
    docker compose -f <app-compose> -p <project> run --rm --no-deps --entrypoint python <agent-service> -m fred_runtime migrate
    ```
 
-   The production images contain the migration code and `alembic` CLI. A
-   normal Compose `up` starts application entrypoints; it does not implicitly
-   run these migrations. Do not run concurrent migration containers against
+   The Fred production image entrypoints do not run Alembic by themselves,
+   but a site-owned Compose file can define an upgrade job or make it a
+   dependency of an application service. Inspect the rendered configuration
+   before any `up` command. Do not run concurrent migration containers against
    the same tree. If a migration fails, keep writers stopped, inspect the
    actual schema and version rows, and restore the backup or repair the
    partial change deliberately. Do not use `stamp` to bypass failed SQL.
 5. Check the resulting version rows against the heads in the new images.
-   Start new workers, APIs, agent pods and frontend in the order required by
+   Start new workers, APIs, agent services and frontend in the order required by
    the release guide. Run canaries before reopening traffic. Record the
    cutover time, image digests and observed checks. Do not enable optional
    features until their separate prerequisites and rollback are ready.
@@ -122,10 +127,14 @@ new workers must not keep writing while old readers start. Use one of these path
 
 | Condition | Action |
 | --- | --- |
-| Failure before migration or before any new writes | Restore old application images and configuration; validate revisions and dependencies before reopening traffic. |
+| No migration started and no persistent or external side effect occurred | Restore old application images and configuration; validate revisions and dependencies before reopening traffic. |
 | Migration applied, but release guide and rehearsal prove the old code works with the **current** schema and data | Roll back application images/configuration only. Leave additive tables/columns and Alembic version rows at their new revisions. Do not run old migration jobs. |
 | Old code needs the old schema, and all crossed `downgrade()` functions plus data changes are reviewed and rehearsed | Keep **all** affected readers/writers stopped. Run the exact planned downgrades with new-version migration code, in dependency order, then restore old images/configuration. Confirm no post-cutover data will be destroyed unexpectedly. |
-| Downgrade is missing, destructive, ambiguous, or external stores must be reverted together | Restore the coordinated pre-upgrade snapshot to an isolated target, validate it, then cut over all related stores and old application images as one recovery operation. Accept or reconcile the documented post-backup data loss. |
+| Downgrade is missing, destructive or ambiguous; a failed migration left uncertain state; or external stores must be reverted together | Restore the coordinated pre-upgrade snapshot to an isolated target, validate it, then cut over all related stores and old application images as one recovery operation. Accept or reconcile the documented post-backup data loss. |
+
+If a migration started, the first path does not apply even when no new
+application writes occurred. Inspect actual schema and revision rows after a
+failed migration before choosing a reviewed repair or coordinated restore.
 
 Do not equate `alembic downgrade -1` with a release rollback. One release may
 span multiple revisions in multiple trees. A downgrade can drop columns,
@@ -140,13 +149,15 @@ from the old image against a database stamped at a newer revision.
 
 1. Record the current recovery point and make a **second** snapshot if useful
    for forensic analysis or selective data recovery. Keep the pre-upgrade
-   backup immutable. Stop Fred frontends, APIs, agent pods and **all** relevant
+   backup immutable. Stop Fred frontends, APIs, agent services and **all** relevant
    workers. Keep dependency services running for an in-place downgrade.
 2. For a code-only rollback, set every Fred service to its retained old image
    digest and restore its old configuration, secrets and model catalog. Use
-   `docker compose -f <old-app-compose> -p <project> up -d --no-build` for the
-   selected services after reviewing `config` output. Do not run old migration
-   jobs or an `up` command that silently selects newly built images.
+   `docker compose -f <old-app-compose> -p <project> up -d --no-build --no-deps
+   <fred-service>...` after reviewing `config` output and substituting the
+   actual old application service names. Keep dependencies running, and do not
+   select an old migration job or let one start through `depends_on`. Do not
+   use an `up` command that silently selects newly built images.
 3. For an in-place schema rollback, use the **new** image to run `alembic
    downgrade <recorded-old-revision>` separately for control plane and
    Knowledge Flow. For runtime and each capability, invoke Alembic against
@@ -155,7 +166,7 @@ from the old image against a database stamped at a newer revision.
    exact targets and ordering, not a blanket `base` or `-1`. Check the
    version table and affected data after each tree. Then perform step 2.
 4. For snapshot restoration, keep all application writers stopped. Restore
-   PostgreSQL and any affected Keycloak/OpenFGA/Temporal databases, object
+   PostgreSQL and any affected identity provider/OpenFGA/Temporal databases, object
    storage, OpenSearch and local files from the **same coordinated recovery
    point**, using the rehearsed environment-specific restore procedure.
    Restore into isolated instances or empty targets where possible; validate
@@ -186,16 +197,3 @@ from the old image against a database stamped at a newer revision.
 If the current state does not fit a rehearsed path, keep writers stopped and
 escalate to the release and data owners. Guessing a revision or restoring only
 one store can turn a recoverable failed deployment into data corruption.
-
-## Kubernetes deployments
-
-The same database decision applies to Kubernetes. The Fred chart's migration
-Jobs run on `pre-install,pre-upgrade`, not on rollback, and migration Jobs are
-disabled by default unless the platform overlay enables them. The local k3d
-deployment factory uses Helm's `--rollback-on-failure` or `--atomic`. These
-options can restore an earlier Helm release after a failed rollout, but cannot
-undo SQL or changes in OpenFGA/object storage. Check the **database revisions
-after any automatic Helm rollback** before serving traffic with old pods.
-Do not assume `helm rollback` is a complete Fred rollback. Follow the release
-guide and the same code-only, reviewed downgrade or coordinated snapshot
-decision above; the exact Kubernetes commands depend on the deployment overlay.

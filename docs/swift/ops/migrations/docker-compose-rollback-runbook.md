@@ -1,6 +1,6 @@
 ---
 schema: 1
-title: "Document Docker Compose rollback and Kubernetes migration caveat"
+title: "Document Docker Compose rollback after database migrations"
 impact: none
 configuration: none
 configuration_reason: "Only operator documentation changes; no deployment configuration or defaults change."
@@ -9,7 +9,7 @@ no_action_reason: "Existing deployments and data are unchanged; the new runbook 
 ## Applicability
 
 Operators planning a Fred deployment or rollback with site-owned Docker Compose
-files, and operators using the Fred Helm chart.
+files.
 
 ## Prerequisites
 
@@ -27,7 +27,7 @@ the release-specific migration guide.
 ## Validation
 
 The runbook identifies the separate Alembic version tables, migration commands,
-backup boundary and rollback paths for Compose and the Helm rollback caveat.
+backup boundary and rollback paths for Compose.
 
 ## Rollback
 
