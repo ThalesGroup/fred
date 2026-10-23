@@ -53,7 +53,7 @@ from fred_sdk.contracts.runtime import (
     CapabilityTeamAuthorizer,
 )
 from langchain_core.messages import AIMessage, BaseMessage
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict
 
 from ..model_routing.authz import usable_model_capability_ids
 from ..model_routing.contracts import ModelNotUsableError, TeamRoutingProfileDriftError
@@ -77,19 +77,11 @@ def parse_save_routing(params: Mapping[str, str]) -> CapabilitySaveRouting | Non
     """Parse the routing query parameters; none means pod-local routing."""
     if not any(key in params for key in CapabilitySaveRouting.model_fields):
         return None
-    try:
-        return CapabilitySaveRouting(
-            template_agent_id=params.get("template_agent_id") or None,
-            chat_default_profile_id=params.get("chat_default_profile_id") or None,
-            recommended_chat_profile_id=(
-                params.get("recommended_chat_profile_id") or None
-            ),
-        )
-    except ValidationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"Invalid model routing parameters: {exc}",
-        ) from exc
+    return CapabilitySaveRouting(
+        template_agent_id=params.get("template_agent_id") or None,
+        chat_default_profile_id=params.get("chat_default_profile_id") or None,
+        recommended_chat_profile_id=params.get("recommended_chat_profile_id") or None,
+    )
 
 
 # A port may serve a background job for minutes: re-read the team's usable
