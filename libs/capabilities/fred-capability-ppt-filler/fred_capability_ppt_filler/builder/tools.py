@@ -879,6 +879,17 @@ def _cleared_lines(
     ]
 
 
+def _after_cover_lines(
+    placed: List[int], numbers: Optional[List[int]] = None
+) -> List[str]:
+    """The slides sent before the cover, placed after it, numbered on the file."""
+    return [
+        f"Slide {numbers.index(n) + 1 if numbers else n} was placed after the cover, "
+        "which stays the first slide."
+        for n in placed
+    ]
+
+
 def _numbered(index: int, origins: Optional[Mapping[int, Origin]]) -> Any:
     """A refused slide as the corrected call numbers it: on the deck `changes`
     apply to, or the change that sent it."""
@@ -1554,6 +1565,7 @@ def build_builder_tools(
         base: Optional[DeckPlan] = None
         cleared: Dict[int, List[str]] = {}
         origins: Dict[int, Origin] = {}
+        after_cover: List[int] = []
         if changes is not None and (changes or not plan.slides):
             if plan.slides:
                 has_deck = await delivered_before(None)
@@ -1574,6 +1586,8 @@ def build_builder_tools(
                     lambda slide: unplaced(inventory, slide, slide.kind),
                     cleared,
                     origins,
+                    _kinds(inventory),
+                    after_cover,
                 )
             except ChangeError as exc:
                 return _error(
@@ -1679,7 +1693,9 @@ def build_builder_tools(
                 plan,
                 previous_problems,
                 repeats,
-                unloadable + _cleared_lines(cleared, plan),
+                unloadable
+                + _cleared_lines(cleared, plan)
+                + _after_cover_lines(after_cover),
                 origins if base is not None else None,
             )
         previous_problems.clear()
@@ -1700,7 +1716,10 @@ def build_builder_tools(
             return _proposal(
                 plan,
                 assignment,
-                unloadable + assignment.plan_notes + _cleared_lines(cleared, plan),
+                unloadable
+                + assignment.plan_notes
+                + _cleared_lines(cleared, plan)
+                + _after_cover_lines(after_cover),
             )
 
         # Stored as delivered: a split list's parts become slides of their own,
@@ -1818,7 +1837,8 @@ def build_builder_tools(
             result.report.notes
             + unloadable
             + assignment.notes
-            + _cleared_lines(cleared, plan, numbers),
+            + _cleared_lines(cleared, plan, numbers)
+            + _after_cover_lines(after_cover, numbers),
         )
         notes = delta + _designs_line(inventory, deck.slides, patterns) + notes
 

@@ -477,8 +477,9 @@ async def test_numbers_in_a_revision_are_the_deck_the_changes_apply_to(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_an_insert_at_the_start_opens_the_deck(monkeypatch):
-    """`after` 0 means first: the builder no longer moves it behind the cover."""
+async def test_an_insert_before_the_cover_goes_after_it(monkeypatch):
+    """Seen in replays: an agenda sent at `after` 0 demoted the cover to a
+    section slide, its photo lost. The cover stays first, and the user is told."""
     turn = _Turn(monkeypatch, FakeWorkspace())
     await turn.build(slides=[COVER, {"title": "Agenda", "bullets": ["One", "Two"]}])
     text, result = await turn.build(
@@ -486,8 +487,57 @@ async def test_an_insert_at_the_start_opens_the_deck(monkeypatch):
             {"op": "insert", "after": 0, "slides": [{"title": "Why", "bullets": ["a"]}]}
         ]
     )
-    assert [s.title for s in turn.rendered[-1].slides] == ["Why", "Kick-off", "Agenda"]
-    assert "went after the cover" not in text
+    assert not result.is_error, text
+    assert [s.title for s in turn.rendered[-1].slides] == ["Kick-off", "Why", "Agenda"]
+    assert "Slide 2 was placed after the cover, which stays the first slide." in text
+
+
+_COVERED = BASE.model_copy(
+    update={
+        "slides": [
+            s.model_copy(update={"built_on": f"t{i}"})
+            for i, s in enumerate(BASE.slides, start=1)
+        ]
+    }
+)
+_KINDS = {"t1": "cover", "t2": "agenda", "t3": "kpi", "t4": "closing"}
+
+
+def _covered(*changes: Any, kinds=_KINDS, base=_COVERED):
+    placed: List[int] = []
+    plan = apply_changes(
+        base,
+        [SlideChange.model_validate(c) for c in changes],
+        kinds=kinds,
+        after_cover=placed,
+    )
+    return _titles(plan), placed
+
+
+def test_a_slide_sent_before_the_cover_is_placed_after_it():
+    assert _covered(
+        {"op": "insert", "after": 0, "slides": [{"title": "A"}, {"title": "B"}]},
+        {"op": "move", "slide": 4, "after": 0},
+    ) == (["Kick-off", "A", "B", "Thanks", "Agenda", "Figures"], [2, 3, 4])
+
+
+def test_after_0_opens_the_deck_for_a_new_cover_or_a_deck_without_one():
+    new_cover = {
+        "op": "insert",
+        "after": 0,
+        "slides": [{"title": "N", "kind": "cover"}],
+    }
+    assert _covered(new_cover)[0][:2] == ["N", "Kick-off"]
+    plain = {"op": "insert", "after": 0, "slides": [{"title": "N"}]}
+    assert _covered(plain, kinds={})[0][:2] == ["N", "Kick-off"]
+    # The cover itself moved or removed: the call reorders the deck on purpose.
+    moved = {"op": "move", "slide": 1, "after": 2}
+    assert _covered(plain, moved) == (
+        ["N", "Agenda", "Kick-off", "Figures", "Thanks"],
+        [],
+    )
+    removed = {"op": "remove", "slide": 1}
+    assert _covered(plain, removed) == (["N", "Agenda", "Figures", "Thanks"], [])
 
 
 def test_the_delta_names_changed_added_and_removed_slides():

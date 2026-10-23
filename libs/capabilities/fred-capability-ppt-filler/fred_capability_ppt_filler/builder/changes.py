@@ -712,19 +712,65 @@ def _clear_for_kind(
     return gone
 
 
+def _kind(slide: SlidePlan, kinds: Mapping[str, str]) -> Optional[str]:
+    return slide.kind or kinds.get(slide.asked_design or slide.built_on or "")
+
+
+def _behind_the_cover(
+    base: DeckPlan, changes: List[SlideChange], kinds: Mapping[str, str]
+) -> set[int]:
+    """The changes that put a slide other than a cover before the deck's cover:
+    the cover stays first, as rebuilt as a section slide it loses its design."""
+    if not base.slides or _kind(base.slides[0], kinds) != "cover":
+        return set()
+    if any(c.slide == 1 and c.op in ("remove", "move") for c in changes):
+        return set()
+    if any(
+        c.slide == 1
+        and c.op == "replace"
+        and _kind(c.slides[0], kinds) not in (None, "cover")
+        for c in changes
+        if c.slides
+    ):
+        return set()
+    return {
+        k
+        for k, c in enumerate(changes)
+        if c.after == 0
+        and (
+            (c.op == "insert" and all(s.kind != "cover" for s in c.slides))
+            or (
+                c.op == "move"
+                and c.slide is not None
+                and 1 < c.slide <= len(base.slides)
+                and _kind(base.slides[c.slide - 1], kinds) != "cover"
+            )
+        )
+    }
+
+
 def apply_changes(
     base: DeckPlan,
     changes: List[SlideChange],
     unplaced: Optional[Callable[[SlidePlan], List[str]]] = None,
     cleared: Optional[Dict[int, List[str]]] = None,
     origins: Optional[Dict[int, Origin]] = None,
+    kinds: Optional[Mapping[str, str]] = None,
+    after_cover: Optional[List[int]] = None,
 ) -> DeckPlan:
     """The whole plan after ``changes``, all numbered on ``base``. Untouched
     slides stay the base's objects; raises :class:`ChangeError` listing every
     bad change, so nothing is built from half of them. With ``unplaced``, a kind
     edit clears the fields it names; ``cleared`` gets them per resulting slide,
-    ``origins`` where each resulting slide comes from."""
+    ``origins`` where each resulting slide comes from. With ``kinds`` (template
+    slide to kind), a slide sent before the cover goes after it, its resulting
+    number added to ``after_cover``."""
     n = len(base.slides)
+    behind = _behind_the_cover(base, changes, kinds) if kinds is not None else set()
+    changes = [
+        c.model_copy(update={"after": 1}) if k in behind else c
+        for k, c in enumerate(changes)
+    ]
     problems: List[str] = []
     replaced: Dict[int, List[SlidePlan]] = {}
     removed: set[int] = set()
@@ -895,6 +941,8 @@ def apply_changes(
 
     def follow(number: int) -> None:
         for k, entry in inserts.get(number, []):
+            if k in behind and after_cover is not None:
+                after_cover.append(len(slides) + 1)
             if isinstance(entry, int):
                 emit(entry)
             else:
