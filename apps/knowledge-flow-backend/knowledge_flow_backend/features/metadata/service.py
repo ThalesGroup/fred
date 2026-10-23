@@ -741,34 +741,21 @@ class MetadataService:
             if not metadata:
                 raise MetadataNotFound(f"Document '{document_uid}' not found.")
 
-            # 1) Update metadata-store view of retrievability
+            # Search filters on the chunks' copy of the flag, so apply it there first: a
+            # failure (or a store without toggle support) fails the request before
+            # anything is persisted. The toggle is idempotent, so a retry converges.
+            if ProcessingStage.VECTORIZED in metadata.processing.stages:
+                if self.vector_store is None:
+                    self.vector_store = ApplicationContext.get_instance().get_vector_store()
+                await asyncio.to_thread(self.vector_store.set_document_retrievable, document_uid=document_uid, value=value)
+                logger.info("[VECTOR] Updated retrievable=%s in vector index for document '%s'.", value, document_uid)
+
             metadata.source.retrievable = value
             metadata.identity.modified = datetime.now(timezone.utc)
             metadata.identity.last_modified_by = modified_by
 
             await self.metadata_store.save_metadata(metadata)
             logger.info(f"[METADATA] Set retrievable={value} for document '{document_uid}' by '{modified_by}'")
-
-            # 2) If the document was vectorized, reflect the toggle in the vector index
-            # to make the change effective immediately in search results, without deleting vectors.
-            try:
-                if ProcessingStage.VECTORIZED in metadata.processing.stages:
-                    if self.vector_store is None:
-                        self.vector_store = ApplicationContext.get_instance().get_vector_store()
-                    try:
-                        self.vector_store.set_document_retrievable(document_uid=document_uid, value=value)
-                        logger.info(
-                            "[VECTOR] Updated retrievable=%s in vector index for document '%s'.",
-                            value,
-                            document_uid,
-                        )
-                    except NotImplementedError:
-                        logger.info(
-                            "[VECTOR] Vector store does not support retrievable toggling; vectors unchanged for document '%s'.",
-                            document_uid,
-                        )
-            except Exception as ve:
-                logger.warning(f"[VECTOR] Could not reflect retrievable toggle in vector index for '{document_uid}': {ve}")
         except Exception as e:
             logger.error(f"Error updating retrievable flag for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
@@ -827,8 +814,8 @@ class MetadataService:
         await self.metadata_store.save_metadata(metadata)
         logger.info(f"[METADATA] Renamed document '{document_uid}' from '{old_name}' to '{new_name}' by '{modified_by}'")
 
-        # Best-effort vector sync, same shape as update_document_retrievable above:
-        # the Postgres write is authoritative and already succeeded; a vector store
+        # Best-effort vector sync (unlike update_document_retrievable, which search
+        # depends on): the Postgres write is authoritative and already succeeded; a vector store
         # that can't (or doesn't need to) reflect the change never fails the request.
         # Offloaded to a thread: every concrete store's set_document_name is a
         # synchronous, blocking client call (opensearchpy/chromadb/clickhouse_connect/
