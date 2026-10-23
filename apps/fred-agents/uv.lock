@@ -1231,6 +1231,7 @@ name = "fred-core"
 version = "4.5.7"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
+    { name = "aiohttp" },
     { name = "aiosqlite" },
     { name = "asyncpg" },
     { name = "authzed" },
@@ -1269,6 +1270,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.14.5" },
     { name = "aiosqlite", specifier = ">=0.22.1" },
     { name = "alembic", marker = "extra == 'dev'", specifier = ">=1.18.4" },
     { name = "alembic", marker = "extra == 'migration'", specifier = ">=1.18.4" },
