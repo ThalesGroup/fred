@@ -19,8 +19,7 @@ export interface MermaidTheme {
   colors: Record<keyof typeof MERMAID_TOKENS, string>;
   font: string;
   dark: boolean;
-  secondary: string;
-  tertiary: string;
+  palette: { background: string; text: string }[];
 }
 
 /** Read effective deployment/shipped tokens from the mounted diagram's theme. */
@@ -36,8 +35,10 @@ export function readMermaidTheme(element: HTMLElement): MermaidTheme {
       .trim()
       .replace(/^["']|["']$/g, ""),
     dark: document.documentElement.dataset.theme === "dark",
-    secondary: styles.getPropertyValue("--secondary").trim(),
-    tertiary: styles.getPropertyValue("--tertiary").trim(),
+    palette: ["primary", "secondary", "tertiary"].map((role) => ({
+      background: styles.getPropertyValue(`--${role}`).trim(),
+      text: styles.getPropertyValue(`--on-${role}`).trim(),
+    })),
   };
 }
 
@@ -47,15 +48,36 @@ let compatibilityQueue: Promise<unknown> = Promise.resolve();
 function renderCompatibility(code: string, id: string, theme: MermaidTheme): Promise<string> {
   const result = compatibilityQueue.then(async () => {
     const { default: mermaid } = await import("mermaid");
-    const { bg, fg, line, accent, surface, border } = theme.colors;
+    const { bg, fg, line, surface, border } = theme.colors;
+    // Override all sections: Mermaid otherwise darkens its generated mindmap palette to black.
+    const sectionColors = Object.fromEntries(
+      Array.from({ length: 12 }, (_, index) => {
+        const color = theme.palette[index % theme.palette.length];
+        return [
+          [`cScale${index}`, color.background],
+          [`cScaleLabel${index}`, color.text],
+          [`cScaleInv${index}`, line],
+          [`pie${index + 1}`, color.background],
+        ];
+      }).flat(),
+    );
     const config: MermaidConfig = {
       startOnLoad: false,
       securityLevel: "strict",
       suppressErrorRendering: true,
-      secure: ["securityLevel", "startOnLoad", "theme", "themeVariables", "fontFamily"],
+      secure: ["securityLevel", "startOnLoad", "theme", "themeVariables", "themeCSS", "fontFamily"],
       theme: "base",
       fontFamily: theme.font,
+      // Timeline's axis otherwise inherits the text color intended for its filled nodes.
+      themeCSS: `.lineWrapper line { stroke: ${line}; }`,
       themeVariables: {
+        ...sectionColors,
+        ...Object.fromEntries(
+          Array.from({ length: 6 }, (_, index) => [
+            `actor${index}`,
+            theme.palette[index % theme.palette.length].background,
+          ]),
+        ),
         darkMode: theme.dark,
         background: bg,
         fontFamily: theme.font,
@@ -76,9 +98,7 @@ function renderCompatibility(code: string, id: string, theme: MermaidTheme): Pro
         clusterBorder: border,
         edgeLabelBackground: bg,
         titleColor: fg,
-        pie1: accent,
-        pie2: theme.secondary,
-        pie3: theme.tertiary,
+        pieOpacity: 1,
         pieStrokeColor: border,
         pieSectionTextColor: fg,
         pieLegendTextColor: fg,
@@ -86,7 +106,17 @@ function renderCompatibility(code: string, id: string, theme: MermaidTheme): Pro
     };
     mermaid.initialize(config);
     try {
-      return (await mermaid.render(id, code)).svg;
+      const rendered = await mermaid.render(id, code);
+      if (rendered.diagramType !== "pie") return rendered.svg;
+      // Pie exposes only one label color. Match each rendered slice, including omitted zero values.
+      const template = document.createElement("template");
+      template.innerHTML = rendered.svg;
+      const labels = template.content.querySelectorAll<SVGTextElement>("text.slice");
+      template.content.querySelectorAll(".pieCircle").forEach((slice, index) => {
+        const color = theme.palette.find((entry) => entry.background === slice.getAttribute("fill"));
+        if (color && labels[index]) labels[index].style.fill = color.text;
+      });
+      return template.innerHTML;
     } finally {
       document.getElementById(`d${id}`)?.remove();
     }

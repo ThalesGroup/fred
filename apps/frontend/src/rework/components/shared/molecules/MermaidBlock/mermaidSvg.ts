@@ -12,9 +12,13 @@ export function prepareMermaidSvg(source: string, scope: string): string {
   template.innerHTML = source;
   const svg = template.content.firstElementChild;
   if (svg?.localName !== "svg") throw new Error("Invalid diagram output");
+  // Layout belongs to the viewer, not the renderer's inline size constraints.
+  const svgStyle = (svg as SVGSVGElement).style;
+  for (const property of ["width", "height", "max-width", "max-height", "min-width", "min-height"])
+    svgStyle.removeProperty(property);
   const naturalWidth = Number(svg.getAttribute("viewBox")?.split(/[\s,]+/)[2]);
   if (Number.isFinite(naturalWidth) && naturalWidth > 0) {
-    svg.setAttribute("style", `${svg.getAttribute("style") ?? ""};--mermaid-min-width:${naturalWidth}px`);
+    svg.setAttribute("width", String(naturalWidth));
   }
 
   const ids = new Map<string, string>();

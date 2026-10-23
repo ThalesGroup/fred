@@ -25,7 +25,7 @@ Deploy Fred normally. No stored diagram source or conversation data needs conver
 
 ## Validation
 
-Open a Mermaid flowchart in a conversation, change the UI theme and light/dark mode, and enlarge it. Both views must follow the active theme. Copy must return the original source. Also open an existing pie or Gantt diagram to verify the compatibility rendering path.
+Open a wide Mermaid flowchart in a conversation: the unframed inline preview must fit without cropping while surrounding prose keeps its reading width. Use its fullscreen icon, change the UI theme and light/dark mode, and verify both views follow the active theme. Escape must close fullscreen and restore focus. Copy must return the original source. Also open pie, Gantt, mindmap, journey and timeline diagrams to verify the compatibility rendering path, including visible connectors and theme colors in dark mode.
 
 ## Rollback
 

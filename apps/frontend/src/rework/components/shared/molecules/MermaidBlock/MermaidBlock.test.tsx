@@ -76,6 +76,7 @@ describe("MermaidBlock interactions", () => {
       ),
     );
     const enlarge = button("mermaid.enlarge");
+    await act(async () => enlarge.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
     await act(async () => enlarge.click());
     const dialog = document.querySelector('[role="dialog"]')!;
     expect(dialog).not.toBeNull();
@@ -92,7 +93,7 @@ describe("MermaidBlock interactions", () => {
         .match(/#([^)'"\s]+)/)![1];
       expect(view.querySelector(`[id="${reference}"]`)).not.toBeNull();
     }
-    await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    await act(async () => close.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(enlarge);
   });

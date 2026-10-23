@@ -14,42 +14,27 @@
  * limitations under the License.
  */
 
-/* Keep the same surface hierarchy as CodeBlock. */
-.block {
+.preview {
   margin: var(--spacing-s) 0;
-  border: 0.5px solid var(--outline-muted);
-  border-radius: var(--radius-s);
-  overflow: hidden;
+  width: 100%;
+  min-width: 0;
 }
 
-.header {
+.toolbar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
-  border-bottom: 0.5px solid var(--outline-muted);
-  background: var(--surface-container-high);
-  padding: var(--spacing-2xs) var(--spacing-s);
-  min-height: 32px;
+  gap: var(--spacing-2xs);
+  margin-bottom: var(--spacing-2xs);
   color: var(--on-surface);
 }
 
-.lang {
-  color: var(--on-surface-muted);
-  font: var(--font-label-medium);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.actions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2xs);
+.title {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
 }
 
 .body {
-  background: var(--surface-container);
-  padding: var(--spacing-m);
-  overflow-x: auto;
   color: var(--on-surface);
 }
 
@@ -61,7 +46,6 @@
 .diagram :global(svg) {
   display: block;
   margin: auto;
-  min-width: var(--mermaid-min-width);
   max-width: 100%;
   height: auto;
 }
@@ -100,6 +84,7 @@
   flex: 1;
   justify-content: center;
   width: 100%;
+  min-height: 0;
 }
 
 .zoomShell {
@@ -107,8 +92,8 @@
   flex: 1;
   flex-direction: column;
   margin: 0 auto;
-  padding: var(--spacing-l);
-  width: min(1400px, 100%);
+  padding: var(--spacing-m);
+  width: 100%;
   min-height: 0;
 }
 
@@ -121,11 +106,10 @@
 }
 
 .zoomBody {
+  display: flex;
   flex: 1;
-  border: 0.5px solid var(--outline-muted);
-  border-radius: var(--radius-s);
-  background: var(--surface-container);
-  padding: var(--spacing-l);
+  flex-direction: column;
+  padding: var(--spacing-xs);
   min-height: 0;
   overflow: auto;
   color: var(--on-surface);
@@ -133,11 +117,18 @@
 
 .zoomBody :global(svg) {
   display: block;
+  flex: none;
   margin: auto;
-  width: 100%;
-  min-width: var(--mermaid-min-width);
-  /* Mermaid's inline max-width otherwise prevents enlargement. */
-  max-width: none !important;
+  max-width: none;
   height: auto;
-  max-height: 100%;
+}
+
+/* Chat diagrams can use the surrounding column without widening the prose. */
+@container chat-messages (min-width: 0px) {
+  :global([data-copyable-content]) > .preview {
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(calc(100cqw - 2 * var(--spacing-2xl)), calc(1.4 * var(--content-prose-max-width)));
+  }
 }

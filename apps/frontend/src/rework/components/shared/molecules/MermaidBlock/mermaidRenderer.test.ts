@@ -21,8 +21,11 @@ const theme: MermaidTheme = {
   },
   font: "Inter",
   dark: false,
-  secondary: "#64597c",
-  tertiary: "#805239",
+  palette: [
+    { background: "#00658c", text: "#ffffff" },
+    { background: "#64597c", text: "#ffffff" },
+    { background: "#805239", text: "#ffffff" },
+  ],
 };
 
 const diagramExamples = [
@@ -97,6 +100,28 @@ describe("preferred Mermaid rendering", () => {
 });
 
 describe("Mermaid compatibility", () => {
+  it("keeps pie labels readable when a zero-value section leaves different slice foregrounds", async () => {
+    const palette = [
+      { background: "#00658c", text: "#ffffff" },
+      { background: "#64597c", text: "#ffffff" },
+      { background: "#04bbdd", text: "#001f27" },
+    ];
+    official.render.mockResolvedValueOnce({
+      diagramType: "pie",
+      svg: '<svg><path class="pieCircle" fill="#00658c"/><path class="pieCircle" fill="#04bbdd"/><text class="slice" style="text-anchor:middle">60%</text><text class="slice">40%</text></svg>',
+    });
+    const host = document.createElement("div");
+    host.innerHTML = prepareMermaidSvg(
+      await renderMermaid('pie\n "First": 60\n "Empty": 0\n "Cyan": 40', "pie", { ...theme, palette }),
+      "pieInline",
+    );
+    const labels = host.querySelectorAll<SVGTextElement>("text.slice");
+    expect(labels[0].style.fill).toBe("rgb(255, 255, 255)");
+    expect(labels[1].style.fill).toBe("rgb(0, 31, 39)");
+    expect(labels[0].style.textAnchor).toBe("middle");
+    expect(host.textContent).toBe("60%40%");
+  });
+
   it.each([
     "graph TD; A-->B",
     'pie title Budget\n "Tools" : 42\n "Other" : 58',

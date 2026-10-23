@@ -652,10 +652,11 @@
     }
   },
   "mermaid": {
+    "title": "Diagramme",
     "diagram": "Diagramme Mermaid",
     "copySource": "Copier le code du diagramme",
-    "enlarge": "Agrandir le diagramme",
-    "close": "Fermer le diagramme agrandi",
+    "enlarge": "Afficher le diagramme en plein écran",
+    "close": "Quitter le plein écran",
     "loading": "Rendu du diagramme...",
     "error": "Erreur du diagramme",
     "renderError": "Le diagramme n'a pas pu être affiché."

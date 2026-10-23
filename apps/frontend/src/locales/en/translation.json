@@ -652,10 +652,11 @@
     }
   },
   "mermaid": {
+    "title": "Diagram",
     "diagram": "Mermaid diagram",
     "copySource": "Copy diagram source",
-    "enlarge": "Enlarge diagram",
-    "close": "Close enlarged diagram",
+    "enlarge": "View diagram fullscreen",
+    "close": "Exit fullscreen",
     "loading": "Rendering diagram...",
     "error": "Diagram error",
     "renderError": "The diagram could not be rendered."

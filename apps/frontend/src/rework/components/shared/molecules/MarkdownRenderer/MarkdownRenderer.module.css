@@ -51,7 +51,8 @@
 }
 
 /* …except wide blocks, which span all three tracks to use the whole width. */
-.fullWidth > :global(table) {
+.fullWidth > :global(table),
+.fullWidth > :global([data-mermaid-preview]) {
   grid-column: 1 / -1;
 }
 

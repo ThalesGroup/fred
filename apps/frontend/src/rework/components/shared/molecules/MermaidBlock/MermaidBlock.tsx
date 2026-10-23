@@ -95,32 +95,32 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
   }, [code, themeRevision, diagramId]);
 
   return (
-    <div className={styles.block} ref={blockRef}>
-      <div className={styles.header} data-clipboard-ignore>
-        <span className={styles.lang}>mermaid</span>
-        <div className={styles.actions}>
-          {svg !== null && (
-            <IconButton
-              type="button"
-              variant="icon"
-              size="small"
-              icon={{ category: "outlined", type: "search" }}
-              aria-label={t("mermaid.enlarge")}
-              onClick={(event) => {
-                enlargeTrigger.current = event.currentTarget;
-                setZoomed(true);
-              }}
-            />
-          )}
+    <div className={styles.preview} ref={blockRef} data-mermaid-preview>
+      <div className={styles.toolbar} data-clipboard-ignore>
+        {svg !== null && (
           <IconButton
             type="button"
             variant="icon"
             size="small"
-            icon={{ category: "outlined", type: copied ? "check" : "content_copy" }}
-            onClick={handleCopy}
-            aria-label={copied ? t("common.copied") : t("mermaid.copySource")}
+            icon={{ category: "outlined", type: "fullscreen" }}
+            aria-label={t("mermaid.enlarge")}
+            title={t("mermaid.enlarge")}
+            aria-haspopup="dialog"
+            onClick={(event) => {
+              enlargeTrigger.current = event.currentTarget;
+              setZoomed(true);
+            }}
           />
-        </div>
+        )}
+        <IconButton
+          type="button"
+          variant="icon"
+          size="small"
+          icon={{ category: "outlined", type: copied ? "check" : "content_copy" }}
+          onClick={handleCopy}
+          aria-label={copied ? t("common.copied") : t("mermaid.copySource")}
+          title={copied ? t("common.copied") : t("mermaid.copySource")}
+        />
       </div>
       {error !== null ? (
         <div className={styles.error} role="alert">
@@ -151,15 +151,15 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
           <div className={styles.zoomOverlay} onClick={closeEnlarged}>
             <div className={styles.zoomShell} onClick={(event) => event.stopPropagation()}>
               <header className={styles.zoomHeader}>
-                <span id={`${diagramId}Zoom-title`} className={styles.lang}>
-                  mermaid
+                <span id={`${diagramId}Zoom-title`} className={styles.title}>
+                  {t("mermaid.title")}
                 </span>
                 <IconButton
                   type="button"
                   autoFocus
                   variant="icon"
                   size="small"
-                  icon={{ category: "outlined", type: "close" }}
+                  icon={{ category: "outlined", type: "fullscreen_exit" }}
                   aria-label={t("mermaid.close")}
                   onClick={closeEnlarged}
                 />

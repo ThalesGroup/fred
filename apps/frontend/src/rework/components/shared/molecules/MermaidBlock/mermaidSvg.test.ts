@@ -16,6 +16,21 @@ svg {--bg:var(--surface-container)} text {font-family:Inter;fill:var(--on-surfac
 <use href="#node"/></svg>`;
 
 describe("SVG view isolation", () => {
+  it("lets the viewer fit the SVG without losing its natural size or geometry", () => {
+    const host = document.createElement("div");
+    host.innerHTML = prepareMermaidSvg(
+      '<svg viewBox="0 0 1200 600" width="100%" height="600" style="max-width:1200px;min-width:1200px;width:100%;height:600px;color:var(--on-surface)"><path d="M0 0L1200 600"/><text>Family</text></svg>',
+      "sized",
+    );
+    const svg = host.querySelector("svg")!;
+    expect(svg.getAttribute("viewBox")).toBe("0 0 1200 600");
+    expect(svg.getAttribute("width")).toBe("1200");
+    for (const property of ["min-width", "max-width", "width", "height"])
+      expect(svg.style.getPropertyValue(property)).toBe("");
+    expect(svg.querySelector("path")!.getAttribute("d")).toBe("M0 0L1200 600");
+    expect(svg.textContent).toBe("Family");
+  });
+
   it("gives every inline/enlarged view its own IDs, references, styles and keyframes", () => {
     const host = document.createElement("div");
     host.innerHTML = ["firstInline", "firstEnlarged", "secondInline"]

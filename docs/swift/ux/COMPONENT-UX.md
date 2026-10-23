@@ -989,8 +989,14 @@ Both the inline diagram and enlarged view follow Fred's current theme: `surface-
 `surface-container-high` nodes, `on-surface` labels, `on-surface-retreat` connectors/secondary labels,
 `primary` accent and `outline-variant` borders. Diagram fonts are local application fonts; SVG styles,
 IDs, references and animations are isolated per view. Theme and mode changes update mounted diagrams.
-The compact header retains source copy and enlargement actions, with translated labels. Escape closes
-the enlarged view and returns focus to its trigger. Rendering errors retain the source-copy action.
+Compatibility diagrams use the primary, secondary and tertiary token pairs for section colors and
+journey actors; timeline axes retain the connector token in both modes.
+The diagram is unframed: no code-block label, header fill or border. Quiet actions retain source
+copy and a fullscreen icon with translated tooltips. Inline SVGs fit the available width without
+cropping. In chat, a diagram can extend beyond the prose column up to 1.4 times its reading measure;
+surrounding text keeps its original width. Full-width document previews let diagrams span their
+content area. The fullscreen view uses the available window, retains natural-size scrolling for
+large diagrams, and returns focus to its trigger on Escape. Rendering errors retain source copy.
 
 For a representative example, paste this completed block into an existing Markdown surface:
 
