@@ -991,9 +991,10 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "4.5.7"
+version = "4.5.9"
 source = { editable = "." }
 dependencies = [
+    { name = "aiohttp" },
     { name = "aiosqlite" },
     { name = "asyncpg" },
     { name = "authzed" },
@@ -1064,6 +1065,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.14.5" },
     { name = "aiosqlite", specifier = ">=0.22.1" },
     { name = "alembic", marker = "extra == 'dev'", specifier = ">=1.18.4" },
     { name = "alembic", marker = "extra == 'migration'", specifier = ">=1.18.4" },
