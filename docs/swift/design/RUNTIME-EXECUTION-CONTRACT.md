@@ -7156,7 +7156,7 @@ gets only the verified grant and admitted log context. The upgrade preserves
 tool names, descriptions and callable input schemas, allowing existing agents
 and legacy HTTP peers to use the same catalog entries.
 
-### 8.118 Turn-free capability model port and route team authorizer (2026-10-05)
+### 8.119 Turn-free capability model port and route team authorizer (2026-10-05)
 
 `RuntimeServices.capability_model` (`CapabilityModelPort`, optional, appended last)
 gives capability code outside a turn one chat call:
@@ -7197,7 +7197,7 @@ that calls it. On a secured pod a save or readiness request without `team_id` is
 
 Acceptance scenarios: `openspec/changes/ppt-builder-capability/`.
 
-### 8.119 Capability readiness hook and pod endpoint (2026-10-05)
+### 8.120 Capability readiness hook and pod endpoint (2026-10-05)
 
 `AgentCapability.readiness(stored, identity) -> CapabilityReadiness` is an optional
 async hook (default `ready`) for a capability whose save starts background work.
@@ -7219,7 +7219,7 @@ ready. Control-plane maps the answers to the `capability_pending` suspension
 `profile_ids` declaring `supports_vision`, mirrored on
 `CapabilityCatalogEntry.model_vision_profile_ids`.
 
-### 8.120 Capability manager check and teamless model port on capability routes (2026-10-22)
+### 8.121 Capability manager check and teamless model port on capability routes (2026-10-22)
 
 `CapabilityTeamAuthorizer.require_capability_manager()` is a non-abstract method: it
 returns 403 unless the caller holds `OrganizationPermission.CAN_MANAGE_CAPABILITIES`

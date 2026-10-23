@@ -5180,7 +5180,7 @@ platform settings and the OS color mode. Resizable pane widths and trace expansi
 
 **Readiness suspension.** `SuspensionReason` gains `capability_pending`: a selected
 capability reports, through its pod's `POST /agents/capabilities/readiness`
-(`RUNTIME-EXECUTION-CONTRACT.md` §8.119), that its saved configuration is still
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.120), that its saved configuration is still
 being prepared, or that preparing it failed. `ManagedAgentInstanceSummary` gains
 `suspension_detail` (nullable; Alembic `b8e1f4a2c6d9` adds the column), set only
 with `capability_pending` to carry the failure message. The existing suspension
@@ -5234,5 +5234,5 @@ panel filters it on `supports_vision`, as the agent form filters the team list.
 
 The capability routes those panels call (ppt_builder `/platform*`) live on the pod
 and are gated by the pod's capability-manager check
-(`RUNTIME-EXECUTION-CONTRACT.md` §8.120). Acceptance scenarios:
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.121). Acceptance scenarios:
 `openspec/changes/ppt-builder-platform-defaults/`.
