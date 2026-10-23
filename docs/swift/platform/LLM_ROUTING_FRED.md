@@ -104,7 +104,9 @@ team access to a model; it does not select the chat default. Remove the platform
 binding to restore team and pod routing. A discovery-only deployment with no
 binding opens a single-action dialog every time a platform administrator enters
 the Models view after every pod has reported that it has no manual chat default. This
-also applies when manual models exist but none was declared as default. The dialog explains that selecting a
+also applies when multiple manual chat profiles exist but none was declared as default.
+With exactly one manual chat profile, the pod uses it as its default automatically.
+The dialog explains that selecting a
 platform model overrides team choices and opens the binding editor; it cannot
 be postponed. Only a platform administrator can write or delete that binding,
 since advanced settings can change the destination for a provider credential.
@@ -195,8 +197,10 @@ default_profile_by_capability:
 
 `discovery` is optional and always contains a nonempty list, including when
 there is only one endpoint. Source IDs must be unique. Existing catalogs
-without `discovery` retain their behavior. The chat default stays in
-`default_profile_by_capability` and references a manually declared profile.
+without `discovery` remain valid. An explicit chat default stays in
+`default_profile_by_capability` and references a manually declared profile. If
+that setting is absent and exactly one manual chat profile exists, the pod uses
+it as the effective default. Discovered profiles never become implicit defaults.
 
 At pod startup and on administrator refresh, Fred sends an authenticated
 `GET https://gateway.example/v1/models` and reads the OpenAI-compatible JSON

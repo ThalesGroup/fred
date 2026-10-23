@@ -4278,7 +4278,7 @@ pod's `models_catalog.yaml`.
 
 | Field | Meaning |
 | ----- | ------- |
-| `default_chat_profile_id: str \| None` | This pod's `default_profile_by_capability.chat` — the LOWEST precedence level. `None` when the catalog declares no chat default. |
+| `default_chat_profile_id: str \| None` | This pod's effective manual chat default - the LOWEST precedence level. An explicit `default_profile_by_capability.chat` wins; otherwise the sole manual chat profile is inferred. `None` when neither rule selects one. |
 | `agent_chat_profile_overrides: dict[str, str]` | This pod's ops-authored `agent_profile_overrides`, RESTRICTED to entries targeting a chat profile — the HIGHEST level below the platform binding. |
 
 Both are pod-level, not per-model, so they sit beside `models` rather than on

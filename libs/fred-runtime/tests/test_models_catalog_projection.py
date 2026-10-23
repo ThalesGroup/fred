@@ -477,12 +477,18 @@ def test_response_advertises_the_pod_chat_default() -> None:
     assert response.default_chat_profile_id == "chat.a"
 
 
-def test_response_chat_default_is_none_when_catalog_declares_none() -> None:
-    """A legal pod with no chat default. Control-plane must see `None` rather
-    than a guess, so it reports "nothing routed" instead of naming a model."""
-
+def test_response_infers_single_manual_chat_default() -> None:
     catalog = ModelCatalog(
         default_profile_by_capability={}, profiles=(_profile("chat.a"),)
+    )
+    response = _project_model_catalog_response(catalog)
+    assert response.default_chat_profile_id == "chat.a"
+
+
+def test_response_chat_default_is_none_with_multiple_manual_chat_profiles() -> None:
+    catalog = ModelCatalog(
+        default_profile_by_capability={},
+        profiles=(_profile("chat.a"), _profile("chat.b", name="gpt-4.1")),
     )
     response = _project_model_catalog_response(catalog)
     assert response.default_chat_profile_id is None

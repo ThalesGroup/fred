@@ -37,6 +37,7 @@ from fred_runtime.model_routing.catalog import (
 )
 from fred_runtime.model_routing.contracts import (
     ModelCapability,
+    ModelSelectionRequest,
     TeamRoutingProfileDriftError,
 )
 from fred_runtime.model_routing.provider import RoutedChatModelFactory
@@ -1011,6 +1012,99 @@ def test_existing_catalog_default_stays_routable_without_discovery() -> None:
     assert (
         catalog.to_policy().default_profile_by_capability[ModelCapability.CHAT]
         == "chat.manual"
+    )
+
+
+def test_single_manual_chat_profile_becomes_effective_default() -> None:
+    catalog = ModelCatalog.model_validate(
+        {
+            "profiles": [
+                {
+                    "profile_id": "chat.manual",
+                    "capability": "chat",
+                    "model": {"provider": "openai", "name": "manual"},
+                },
+                {
+                    "profile_id": "embedding.manual",
+                    "capability": "embedding",
+                    "model": {"provider": "openai", "name": "embedding"},
+                },
+            ]
+        }
+    )
+    assert catalog.default_profile_by_capability == {}
+    policy = catalog.to_policy()
+    assert policy.default_profile_by_capability[ModelCapability.CHAT] == "chat.manual"
+    selection = ModelRoutingResolver(policy).resolve(
+        ModelSelectionRequest(capability=ModelCapability.CHAT)
+    )
+    assert selection.profile_id == "chat.manual"
+
+
+def test_multiple_manual_chat_profiles_still_need_a_default() -> None:
+    profiles = [
+        {
+            "profile_id": f"chat.{name}",
+            "capability": "chat",
+            "model": {"provider": "openai", "name": name},
+        }
+        for name in ("first", "second")
+    ]
+    catalog = ModelCatalog.model_validate({"profiles": profiles})
+    assert ModelCapability.CHAT not in catalog.to_policy().default_profile_by_capability
+    with pytest.raises(ValueError, match="No default profile"):
+        ModelRoutingResolver(catalog.to_policy()).resolve(
+            ModelSelectionRequest(capability=ModelCapability.CHAT)
+        )
+
+    explicit = ModelCatalog.model_validate(
+        {
+            "profiles": profiles,
+            "default_profile_by_capability": {"chat": "chat.second"},
+        }
+    )
+    assert (
+        explicit.to_policy().default_profile_by_capability[ModelCapability.CHAT]
+        == "chat.second"
+    )
+
+
+def test_discovered_profiles_do_not_change_the_single_manual_default(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    catalog = ModelCatalog.model_validate(
+        {
+            "profiles": [
+                {
+                    "profile_id": "chat.manual",
+                    "capability": "chat",
+                    "model": {"provider": "openai", "name": "manual"},
+                }
+            ],
+            "discovery": [
+                {"source_id": "gateway", "base_url": "https://models.example/v1"}
+            ],
+        }
+    ).resolve_discovery(transport=_transport({"data": [{"id": "new-chat"}]}))
+    assert len(catalog.profiles) == 2
+    assert (
+        catalog.to_policy().default_profile_by_capability[ModelCapability.CHAT]
+        == "chat.manual"
+    )
+    assert (
+        _project_model_catalog_response(catalog).default_chat_profile_id
+        == "chat.manual"
+    )
+
+    discovery_only = _catalog().resolve_discovery(
+        transport=_transport({"data": [{"id": "new-chat"}]})
+    )
+    assert ModelCapability.CHAT not in (
+        discovery_only.to_policy().default_profile_by_capability
+    )
+    assert (
+        _project_model_catalog_response(discovery_only).default_chat_profile_id is None
     )
 
 

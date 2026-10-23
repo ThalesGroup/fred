@@ -1479,7 +1479,7 @@ class _ModelCatalogResponse(BaseModel):
     discovered_model_ids: list[str] = Field(default_factory=list)
     discovery_sources: list[_ModelDiscoveryAdvertisement] = Field(default_factory=list)
     default_chat_profile_id: str | None = None
-    """This pod's `default_profile_by_capability.chat` — the LOWEST precedence
+    """This pod's effective manual chat default — the LOWEST precedence
     level (`LLM_ROUTING_FRED.md` §Deterministic precedence), and the one that
     actually serves the turn whenever nobody chose anything.
 
@@ -1492,8 +1492,8 @@ class _ModelCatalogResponse(BaseModel):
     instead — a value unrelated to routing, and wrong the moment any override
     applied.
 
-    `None` when the catalog declares no chat default: a legal pod that simply
-    cannot serve a chat turn unless a higher level names a profile."""
+    `None` when no explicit default or sole manual chat profile exists: a legal
+    pod that cannot serve a chat turn unless a higher level names a profile."""
     agent_chat_profile_overrides: dict[str, str] = Field(default_factory=dict)
     """This pod's ops-authored `agent_profile_overrides`, restricted to entries
     targeting a CHAT profile — the deployment's local escape hatch, and the
@@ -1667,7 +1667,7 @@ def _project_model_catalog_response(
         discovery_yaml_url=selected.yaml_url if selected else None,
         discovery_effective_url=selected.effective_url if selected else None,
         discovered_model_ids=selected.discovered_model_ids if selected else [],
-        default_chat_profile_id=catalog.default_profile_by_capability.get(
+        default_chat_profile_id=catalog.effective_default_profile_by_capability.get(
             ModelCapability.CHAT
         ),
         agent_chat_profile_overrides={

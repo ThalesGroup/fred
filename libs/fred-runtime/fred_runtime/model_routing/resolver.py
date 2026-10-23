@@ -95,9 +95,8 @@ class ModelRoutingResolver:
         return self._agent_overrides_by_capability.get(capability, {})
 
     def default_profile_id_for(self, capability: ModelCapability) -> str | None:
-        """This pod's `default_profile_by_capability` entry, or `None` when the
-        catalog declares no default for `capability` — the lowest precedence
-        level, and the last thing standing between a turn and a `ValueError`."""
+        """This pod's effective default for `capability`, or `None` when none
+        exists. It is the lowest routing precedence level."""
 
         return self._policy.default_profile_by_capability.get(capability)
 

@@ -166,6 +166,20 @@ class ModelCatalog(FrozenModel):
         default_factory=frozenset
     )
 
+    @property
+    def effective_default_profile_by_capability(self) -> dict[ModelCapability, str]:
+        defaults = dict(self.default_profile_by_capability)
+        if ModelCapability.CHAT not in defaults:
+            manual_chat_ids = [
+                profile.profile_id
+                for profile in self.profiles
+                if profile.capability == ModelCapability.CHAT
+                and profile.profile_id not in self._discovered_profile_sources
+            ]
+            if len(manual_chat_ids) == 1:
+                defaults[ModelCapability.CHAT] = manual_chat_ids[0]
+        return defaults
+
     @field_validator("discovery", mode="before")
     @classmethod
     def _validate_discovery_list(cls, value: object) -> object:
@@ -590,9 +604,10 @@ class ModelCatalog(FrozenModel):
         return resolved
 
     def to_policy(self) -> ModelRoutingPolicy:
+        effective_defaults = self.effective_default_profile_by_capability
         if any(
             profile_id in self._discovered_profile_sources
-            for profile_id in self.default_profile_by_capability.values()
+            for profile_id in effective_defaults.values()
         ):
             raise ValueError(
                 "default_profile_by_capability must reference a manual profile"
@@ -618,7 +633,7 @@ class ModelCatalog(FrozenModel):
             )
 
         return ModelRoutingPolicy(
-            default_profile_by_capability=dict(self.default_profile_by_capability),
+            default_profile_by_capability=effective_defaults,
             profiles=tuple(resolved_profiles),
             agent_profile_overrides=dict(self.agent_profile_overrides),
         )

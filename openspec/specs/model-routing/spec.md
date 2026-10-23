@@ -8,7 +8,7 @@ Defines how a pod turns model catalog sources into routable profiles and exposes
 
 ### Requirement: A model catalog can discover chat models from a compatible endpoint
 
-The catalog SHALL combine static YAML profiles and optional named OpenAI-compatible discovery sources. When present, `discovery` SHALL be a nonempty list of sources, including for one endpoint; source IDs SHALL be unique. If a pod chat default is configured, it SHALL remain in `default_profile_by_capability` and refer to a manually declared profile. By default, each configured source SHALL request `GET {base_url}/models` and read identifiers from `data[].id`. A platform administrator MAY override each URL; the effective URL MUST end in `/models`, and its parent SHALL become the inference base for that source's generated profiles. The pod SHALL produce stable identities for valid identifiers. Static-only catalogs SHALL retain existing behavior.
+The catalog SHALL combine static YAML profiles and optional named OpenAI-compatible discovery sources. When present, `discovery` SHALL be a nonempty list of sources, including for one endpoint; source IDs SHALL be unique. An explicitly configured pod chat default SHALL remain in `default_profile_by_capability` and refer to a manually declared profile. When no chat default is configured and exactly one manual chat profile exists, the pod SHALL use that profile as its effective chat default. Discovered profiles SHALL NOT count toward this inference; zero or multiple manual chat profiles SHALL leave the pod without an inferred chat default. By default, each configured source SHALL request `GET {base_url}/models` and read identifiers from `data[].id`. A platform administrator MAY override each URL; the effective URL MUST end in `/models`, and its parent SHALL become the inference base for that source's generated profiles. The pod SHALL produce stable identities for valid identifiers. Static-only catalogs SHALL remain usable without a discovery request.
 
 #### Scenario: Mixed catalog
 
@@ -21,6 +21,24 @@ The catalog SHALL combine static YAML profiles and optional named OpenAI-compati
 - **GIVEN** a configured source returning two valid model identifiers and a manually declared chat default
 - **WHEN** the pod starts
 - **THEN** both discovered models have stable chat profile and capability identities, and the manual profile remains the pod's chat default
+
+#### Scenario: Sole manual chat profile
+
+- **GIVEN** a catalog with one manual chat profile and no explicit chat default
+- **WHEN** the pod serves its catalog or routes an unselected chat turn
+- **THEN** it advertises and uses that manual profile as its effective chat default
+
+#### Scenario: Sole manual chat profile with discovery
+
+- **GIVEN** one manual chat profile, discovered chat profiles, and no explicit chat default
+- **WHEN** the pod resolves discovery and routes an unselected chat turn
+- **THEN** it advertises and uses the manual profile as its effective chat default
+
+#### Scenario: No unambiguous manual chat profile
+
+- **GIVEN** zero or multiple manual chat profiles and no explicit chat default
+- **WHEN** the pod serves its catalog
+- **THEN** it advertises no chat default, regardless of discovered profiles
 
 #### Scenario: Static catalog
 
@@ -205,9 +223,15 @@ The admin Models view SHALL keep separate Catalog and Discovery tabs. The platfo
 
 #### Scenario: Manual models without a declared default
 
-- **GIVEN** a pod advertises manual models but declares no chat default and no platform binding exists
+- **GIVEN** a pod advertises multiple manual chat models but declares no chat default and no platform binding exists
 - **WHEN** a platform administrator opens the Models view
 - **THEN** the required-choice modal appears
+
+#### Scenario: Single manual chat model without a declared default
+
+- **GIVEN** a pod advertises exactly one manual chat model, no explicit chat default and no platform binding
+- **WHEN** a platform administrator opens the Models view
+- **THEN** the required-choice modal does not appear because the pod inferred that model as its chat default
 
 #### Scenario: Manual default declared
 
