@@ -338,6 +338,11 @@ describe("entryLabel localization", () => {
     expect(entryLabel(sandboxEntry, (key) => key)).toBe("rework.chatTrace.toolLabels.codeSandbox");
   });
 
+  it("uses the localized label for a selected sandbox file", () => {
+    const selection = { ...entry, call: toolCallMsg("c1", "select_code_input") };
+    expect(entryLabel(selection, (key) => key)).toBe("rework.chatTrace.toolLabels.selectCodeInput");
+  });
+
   it("uses the localized label for ask_user", () => {
     const question = { kind: "combo" as const, call: toolCallMsg("c2", "ask_user") };
     expect(entryLabel(question, (key) => key)).toBe("rework.chatTrace.toolLabels.askUser");

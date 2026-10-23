@@ -126,9 +126,10 @@ class CodeSandboxCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel])
                 StructuredTool.from_function(
                     name="select_code_input",
                     description=(
-                        "Expose one authorized corpus document or conversation attachment "
-                        "as a read-only file in the sandbox. Use its ID from an existing "
-                        "document or attachment tool. Returns the path for execute_code."
+                        "Select one authorized corpus document or conversation attachment "
+                        "as a read-only file for execute_code. Use its ID from an existing "
+                        "document or attachment tool. Returns its /inputs path without "
+                        "starting a sandbox or executing code."
                     ),
                     coroutine=select_code_input,
                     response_format="content_and_artifact",

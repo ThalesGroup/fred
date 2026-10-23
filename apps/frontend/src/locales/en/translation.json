@@ -1901,6 +1901,7 @@
       },
       "toolLabels": {
         "codeSandbox": "Running code in an isolated space",
+        "selectCodeInput": "Preparing a file for analysis",
         "askUser": "Requesting information from the user",
         "readSkillFile": "Reading skill file",
         "readQuery": "Reading query",

@@ -1901,6 +1901,7 @@
       },
       "toolLabels": {
         "codeSandbox": "Exécution du code dans un espace isolé",
+        "selectCodeInput": "Préparation d'un fichier pour l'analyse",
         "askUser": "Demande d'information à l'utilisateur",
         "readSkillFile": "Lecture d’un fichier du skill",
         "readQuery": "Lecture de la requête",
