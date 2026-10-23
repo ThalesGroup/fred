@@ -230,9 +230,8 @@ is harmless. Both targets build every package, then compare each one with PyPI:
 a version above PyPI's latest is to upload; a version equal to PyPI's latest
 must build the published wheel, entry for entry (only `WHEEL` and `RECORD`,
 which stamp the build tool, may differ), or the release stops because a change
-shipped without a version bump. A version below PyPI's latest, a shared library
-advancing without the two others, or any PyPI answer other than 200 or 404 also
-stops it. Rerunning `make publish-libs` after a partial upload resumes it: the
+shipped without a version bump. A version below PyPI's latest, a version that is
+not X.Y.Z, or any PyPI answer other than 200 or 404 also stops it. Rerunning `make publish-libs` after a partial upload resumes it: the
 packages already uploaded now compare equal. Before running it, confirm that the release
 credential can create every package name that does not yet exist on PyPI; do
 not discover missing project-creation authority after existing packages have

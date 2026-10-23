@@ -16,8 +16,6 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from libs_version import SHARED
-
 NAME = re.compile(r"^([A-Za-z0-9_.-]+)(?:\[[^]]+\])?(.*)$")
 STABLE = re.compile(r"\d+\.\d+\.\d+")
 PYPI = "https://pypi.org/pypi"
@@ -255,12 +253,12 @@ def compare_with_pypi(
     PyPI's latest version is to skip, provided the built wheel is the published
     one: a change shipped under an unchanged version is a forgotten bump.
     """
+    if STABLE.fullmatch(version) is None:
+        return False, [f"{name}: {version} is not a stable X.Y.Z version"]
     body = fetch(f"{PYPI}/{name}/json")
     if body is None:
         return True, []
     releases: dict[str, list[dict[str, str]]] = json.loads(body)["releases"]
-    if STABLE.fullmatch(version) is None:
-        return False, [f"{name}: {version} is not a stable X.Y.Z version"]
     latest = max(
         (value for value in releases if STABLE.fullmatch(value)),
         key=version_key,
@@ -314,12 +312,6 @@ def release_plan(package_dirs: list[Path]) -> tuple[list[Path], list[str]]:
             pending.append(package_dir)
         state = "blocked" if package_errors else "to publish" if upload else "on PyPI"
         print(f"{name} {version}: {state}", file=sys.stderr)
-    names = {canonical(str(project(package_dir)["name"])) for package_dir in pending}
-    if names & set(SHARED) and not set(SHARED) <= names:
-        errors.append(
-            f"{', '.join(SHARED)} are released together; only "
-            f"{', '.join(sorted(names & set(SHARED)))} has a new version"
-        )
     return pending, errors
 
 

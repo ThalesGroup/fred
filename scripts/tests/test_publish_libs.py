@@ -385,26 +385,42 @@ class ValidatePythonReleaseTest(unittest.TestCase):
         self.assertIn("below 4.5.7", errors[0])
         self.assertIn("4.5.7 is the latest", errors[1])
 
-    def test_pypi_plan_releases_the_shared_libraries_together(self) -> None:
+    def test_pypi_plan_resumes_after_a_partial_upload(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            packages = [
-                self._package(root, name, version="4.5.8")
-                for name in ("fred-core", "fred-sdk")
-            ]
-            runtime = self._package(root, "fred-runtime", version="4.5.7")
+            core = self._package(root, "fred-core", version="4.5.8")
+            sdk = self._package(
+                root,
+                "fred-sdk",
+                version="4.5.8",
+                project_requirement="fred-core>=4.5.8",
+                wheel_requirement="fred-core>=4.5.8",
+                sdist_requirement="fred-core>=4.5.8",
+            )
             published = {
-                "fred-core": {"4.5.7": b""},
-                "fred-sdk": {"4.5.7": b""},
-                "fred-runtime": {
-                    "4.5.7": self._published_wheel("fred-runtime", "4.5.7")
+                "fred-core": {
+                    "4.5.7": b"",
+                    "4.5.8": self._published_wheel("fred-core", "4.5.8"),
                 },
+                "fred-sdk": {"4.5.7": b""},
             }
             with self._pypi(published):
-                _, errors = release_validator.release_plan([*packages, runtime])
+                pending, errors = release_validator.release_plan([core, sdk])
+            errors += validate([core, sdk], prepared={"fred-sdk"}, pending=set(pending))
 
+        self.assertEqual(errors, [])
+        self.assertEqual(pending, [sdk])
+
+    def test_pypi_plan_rejects_an_unstable_first_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            package = self._package(root, "fred-new", version="1.0.0rc1")
+            with self._pypi({}):
+                pending, errors = release_validator.release_plan([package])
+
+        self.assertEqual(pending, [])
         self.assertEqual(len(errors), 1)
-        self.assertIn("released together", errors[0])
+        self.assertIn("not a stable X.Y.Z version", errors[0])
 
 
 if __name__ == "__main__":
