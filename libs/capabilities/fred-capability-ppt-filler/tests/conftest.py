@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -32,7 +33,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import StaticPool
 
 
 @pytest.fixture(autouse=True)
@@ -54,8 +54,12 @@ def no_platform_default() -> Iterator[None]:
 
 
 @pytest_asyncio.fixture
-async def analysis_db() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
-    engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
+async def analysis_db(
+    tmp_path: Path,
+) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    # A file, one connection per session: sessions sharing one connection
+    # (StaticPool) undo each other's commits when they interleave.
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'analysis.db'}")
     async with engine.begin() as connection:
         await connection.run_sync(PptBuilderBase.metadata.create_all)
     maker = async_sessionmaker(engine, expire_on_commit=False)
