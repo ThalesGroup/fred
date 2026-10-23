@@ -586,6 +586,23 @@ commits suivants et valider les parcours jusqu'à satisfaction de Dimi.
 
 ## F-003 Organisation et équipe
 
+- 2026-10-21 : Dimi confirme avoir créé `ArxivAi` avec Priya dans Demo/fredlab.
+  Inspection en lecture seule du cluster secondaire : les 11 tables applicatives
+  de `fred` ont été examinées (effectifs et données du parcours), les deux
+  migrations SQLx correspondent aux checksums locaux ; aucun index invalide,
+  contrainte non validée, trigger désactivé ou incohérence de parent/chemin de dossier.
+  Un dossier racine ArxivAi dans fredlab ; cinq espaces (Demo, trois équipes et le
+  personnel de Priya). Priya est identifiée via Keycloak ; les tuples du store actif
+  OpenFGA rattachent fredlab à Demo et donnent editor à Priya. Bootstrap terminé,
+  deux consentements v1 ; user_identity vide en mode annuaire Keycloak.
+  Tables document/upload/processing/deletion vides. Quatre buckets S3 listés
+  récursivement, tous vides, notamment app-content-documents ; compteurs SQL à zéro.
+  Versioning absent, lifecycle absent, Object Lock non configuré sur ce bucket.
+  Pas de test d'écriture ni de preuve du créateur historique : folder ne conserve
+  pas created_by. Les bases internes des services ne sont pas auditées intégralement.
+  Ce constat valide la cohérence de l'état observé, pas tous les cas de sécurité.
+
+
 - Parcours souhaité : créer une organisation puis une équipe avec l'administrateur.
 - État : à parcourir ; résultats et limites à consigner au fil des étapes de Dimi.
 - Les rôles, rattachements et droits observés alimenteront les chapitres
@@ -795,3 +812,88 @@ parcours manuel dans l’UI Rebac. Résultat encore à observer.
   Ce lot ne modifie pas les privilèges PostgreSQL.
 - Aucun test, build, migration ou déploiement lancé ; validation au prochain
   déploiement manuel de Dimi.
+
+### F-004 : contrat d'inclusion dans la recherche
+
+- 2026-10-23 : diagnostic en lecture seule puis proposition acceptée explicitement
+  par Dimi, y compris le contenu/effet UI, les actions individuelles et groupées,
+  et la reprise séparément autorisée des documents déjà publiés. Demande de code
+  minimal et de réutilisation de l'UI Swift.
+- Cause : présentation manager forcée à `retrievable: false`, aucun état Rust
+  correspondant ; le worker écrit déjà true dans les vecteurs. Inclusion,
+  indexation et autorisation de lecture restent trois notions distinctes.
+- Lot local : migration additive 0004 (état et commande dans `document`, aucune
+  nouvelle table), publication depuis metadata.json vérifié, mutation authentifiée
+  via Temporal/KF, projection sur les seuls chunks publiés et confirmation après
+  relecture. Aucun filtre de recherche ni tuple OpenFGA modifié. Pas de nouvelle
+  dépendance ni service. Les échecs incertains restent explicitement en attente,
+  sans relance automatique concurrente ni succès anticipé.
+- UI : composants, icône, libellés et toasts Swift conservés ; adapter alimenté par
+  Rust, menus d'inclusion réactivés, sélection/dossiers reliés au même transport.
+  Client RTK régénéré depuis OpenAPI ; compilation Rust liée à cette génération.
+- Reprise préparée via PUT retrievable avec null : vérifie l'artefact publié et
+  les chunks, ne modifie pas les vecteurs. Ne pas annoncer le PDF existant corrigé
+  avant migration/déploiement et cette reprise, à autoriser séparément.
+- Lors du lot initial, tests ciblés préparés (publication/rejeu, contrat, projection
+  partielle, restauration et menus UI), non exécutés à cette étape. Aucun build d'image, déploiement,
+  modification du cluster, réingestion, commit ou push. Validation UI et recherche
+  réelle non effectuées ; le parcours recherche/chat manager reste distinct.
+- Architecture à reporter sur demande : 05, 02a, A1/A2/A3. Modifications locales
+  préexistantes du journal et des chapitres 00/01 conservées.
+
+- 2026-10-23, correction backend de la reprise (demande explicite, périmètre F-004) :
+  séparation mutation unique, enregistrement de sa fin, puis vérification/confirmation.
+  La commande JSON SQL porte `ready -> writing -> applied` et conserve `confirmed`.
+  Le claim atomique interdit un deuxième writer, même après expiration de l'historique
+  Temporal ; les callbacks anciens sont rejetés par l'identifiant de commande.
+  Une demande déjà confirmée retrouve son résultat sans relivraison. Une reprise de
+  workflow fermé en échec relit SQL et ne réécrit pas une projection appliquée.
+  `AlreadyExists` n'est plus assimilé sans inspection à une exécution vivante.
+- L'enregistrement de fin de mutation est répétable séparément ; aucune échéance
+  globale du workflow ne supprime cette reprise pendant une panne temporaire de
+  confirmation. La vérification/confirmation a cinq tentatives par exécution et
+  peut être reprise par le même PUT après échec. Une mutation partielle, un thread
+  encore actif ou une ancienne commande sans phase restent protégés. Pas d'endpoint
+  de réparation opérateur : le README décrit le diagnostic et cette limite, sans
+  promettre une réconciliation inexistante.
+- Vérification OpenSearch : `_mget` séquentiel par lots de 500, uniquement les champs
+  d'appartenance et d'inclusion ; identifiants exacts et erreurs par élément contrôlés.
+  Coût par passage : `ceil(N/500)` requêtes pour N chunks, aucune mesure de performance
+  revendiquée. Restauration `null` toujours sans écriture OpenSearch.
+- Aucun changement UI supplémentaire, ni modification des permissions, migrations
+  existantes ou données du cluster. Aucun déploiement, réingestion, commit ou push.
+- Validation ciblée exécutée pour cette correction (2026-10-23) :
+  - Depuis `apps/knowledge-flow-backend`, avec `CONTROL_PLANE_IT_TEMPORAL` pointant
+    vers un conteneur jetable `mirror.gcr.io/temporalio/admin-tools:1.28` démarré
+    avec `temporal server start-dev --ip 0.0.0.0 --headless` :
+    `.venv/bin/python -m pytest tests/features/manager_processing/test_retrievable.py tests/features/manager_processing/test_persistence.py -q --tb=short --show-capture=no`
+    : **58 passed**, dont cinq scénarios Temporal réels (panne temporaire,
+    workflow échoué repris, réponse perdue, écriture incertaine, terminaison avec
+    thread d'écriture toujours actif). Trois avertissements de dépendances
+    préexistants (LangChain, Pydantic, ffmpeg absent).
+  - Depuis `apps/control-plane` :
+    `cargo test --lib processing::retrievable -- --nocapture` : **2 passed**.
+    `cargo test --test openapi all_registered_routes_have_a_unique_operation_and_auth_contract -- --exact`
+    : **1 passed**.
+  - Avec PostgreSQL 15.12 et OpenFGA 1.15.1 jetables, les variables
+    `CONTROL_PLANE_IT_POSTGRES`, `CONTROL_PLANE_IT_OPENFGA` et le jeton bootstrap
+    fixe de fixture du Makefile ; les fixtures existantes démarrent SeaweedFS 4.29
+    et Temporal jetables :
+    `cargo test --test integration processing_admission_fences_publication_and_original_survival -- --ignored --nocapture`
+    : **1 passed** ; admission réelle, commande conservée après livraison impossible,
+    reprise par une autre instance de service, claim unique, confirmation conditionnée
+    à la fin de mutation, demande inverse bloquée, confirmation répétée, ancien
+    callback rejeté et publication initiale/rejeu.
+    `cargo test --test integration retrieval_delivery_restarts_closed_failure_and_preserves_running_execution -- --ignored --nocapture`
+    : **1 passed** ; le client Rust conserve le run actif et crée un autre run après
+    terminaison, avec sa véritable politique Temporal et ses identifiants de requête.
+  - Les premiers essais ont révélé des fixtures à adapter (ancien mock OpenSearch
+    assignant une propriété en lecture seule et nom du champ protobuf de terminaison) ;
+    corrigées avant les résultats ci-dessus. Les conteneurs de test sont supprimés.
+- Limites des preuves : OpenSearch est simulé pour la vérification et les pannes ;
+  les tests Temporal Python simulent le client HTTP manager, les transitions SQL et
+  l'admission sont vérifiées séparément par les tests Rust avec PostgreSQL réel.
+  Pas de parcours intégré complet Rust + KF + OpenSearch réel, ni de validation UI
+  ou recherche réelle. Pas de campagne générale. Le PDF déjà ingéré reste inchangé :
+  déploiement/migration puis restauration explicite `retrievable: null` restent des
+  actions ultérieures soumises à autorisation distincte.
