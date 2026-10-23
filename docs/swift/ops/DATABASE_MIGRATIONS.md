@@ -101,6 +101,7 @@ the tree whose migration you intend to reverse. The target is mandatory:
 cd apps/fred-agents
 make db-downgrade MIGRATION_TREE=runtime ALEMBIC_CONFIG_FILE=/path/to/configuration_prod.yaml
 make db-downgrade MIGRATION_TREE=capability:writable_document ALEMBIC_CONFIG_FILE=/path/to/configuration_prod.yaml
+make db-downgrade MIGRATION_TREE=capability:ppt_builder ALEMBIC_CONFIG_FILE=/path/to/configuration_prod.yaml
 ```
 
 Each invocation moves only its selected tree back one revision. Under the
@@ -114,7 +115,9 @@ runtime tree.
 
 Review the selected `downgrade()` script and take a suitable backup before
 running it. The writable-document capability's initial revision drops its
-document table on downgrade; fred-runtime's retired demo table revision has
+document table on downgrade, and the ppt_builder tree's two table revisions drop
+`cap_ppt_builder_deck_plan` and `cap_ppt_builder_analysis` (stored templates and
+analyses included); fred-runtime's retired demo table revision has
 an empty downgrade. A changed version row therefore does not prove that data
 or schema was restored. Check the selected version table and schema before
 restarting writers. This command does not coordinate application rollback or
