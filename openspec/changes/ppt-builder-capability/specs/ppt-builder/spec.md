@@ -377,6 +377,7 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 - **WHEN** a deck is assigned on a template holding a cover pattern
 - **THEN** only the first slide may use the cover; a first slide with no `kind` holding only a title and subtitle uses it
 - **AND** a first slide with another `kind` or another content shape keeps it, so a deck without a cover (a single summary slide, "no cover", slide 1 removed) is built as sent
+- **AND** a whole deck resent over a delivered one that opened on a cover, keeping at least 60 % of its other titles but no longer opening on a cover, builds nothing: `needs_revision` points to `changes` with an insert `after: 1` (or a remove of slide 1 when the user asked); a resend with most titles changed is a new deck, built as sent
 
 #### Scenario: Closing at most once, last
 
