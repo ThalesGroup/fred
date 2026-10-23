@@ -23,7 +23,10 @@ import { PatchNoteDialog } from "@shared/molecules/PatchNoteDialog/PatchNoteDial
 import TextInput from "@shared/atoms/TextInput/TextInput";
 import { PromptEditor } from "@shared/molecules/PromptEditor/PromptEditor";
 import { resolveAnnouncementText } from "../../../../features/announcements/announcementText";
-import type { Announcement, AnnouncementWriteRequest } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type {
+  Announcement,
+  AnnouncementWriteRequest,
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./PatchNoteEditorDialog.module.css";
 
 const LOCALES = ["fr", "en"] as const;

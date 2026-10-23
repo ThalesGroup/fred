@@ -25,7 +25,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { CapabilityEnablementItem, Team } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type {
+  CapabilityEnablementItem,
+  Team,
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer";
 
 vi.mock("react-i18next", () => ({

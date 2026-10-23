@@ -22,7 +22,10 @@ import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
-import type { ChatControlDescriptor, EffectiveChatModel } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type {
+  ChatControlDescriptor,
+  EffectiveChatModel,
+} from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import type { ChatTurnControlComposerState } from "./types";
 import { currentModelRow, offersReasoning } from "./modelChoice";
 import styles from "./ReasoningChip.module.css";

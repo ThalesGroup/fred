@@ -16,7 +16,10 @@
 // RFC §8.5). Kept framework-free so the tri-state derivation and settings-form
 // seeding are unit-testable without rendering.
 
-import type { CapabilityEnablementItem, FieldSpec } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type {
+  CapabilityEnablementItem,
+  FieldSpec,
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 /** The subset of i18next's `t` these helpers need — keeps this module free of
  * a react-i18next import, so it stays testable without a provider. */

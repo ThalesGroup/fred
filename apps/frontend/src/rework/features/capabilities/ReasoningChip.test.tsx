@@ -18,7 +18,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { COMPOSER_CHIP_WIDGETS, ReasoningChip, modelLabel, modelLabelFromCapabilityId } from "./ReasoningChip";
-import type { ChatControlDescriptor, EffectiveChatModel } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type {
+  ChatControlDescriptor,
+  EffectiveChatModel,
+} from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import type { ChatTurnControlComposerState } from "./types";
 
 vi.mock("react-i18next", () => ({

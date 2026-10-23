@@ -14,7 +14,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SearchPolicyName } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import type { ChatControlDescriptor, EffectiveChatModel } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type {
+  ChatControlDescriptor,
+  EffectiveChatModel,
+} from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { currentModelRow, recommendedModelRow } from "../../../features/capabilities/modelChoice";
 import { modelLabel } from "../../../features/capabilities/ReasoningChip";
 

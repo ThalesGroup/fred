@@ -22,7 +22,10 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReasoningChip } from "./ReasoningChip";
-import type { ChatControlDescriptor, EffectiveChatModel } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type {
+  ChatControlDescriptor,
+  EffectiveChatModel,
+} from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import type { ChatTurnControlComposerState } from "./types";
 
 declare global {

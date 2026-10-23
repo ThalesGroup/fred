@@ -21,7 +21,10 @@ import { v4 as uuidv4 } from "uuid";
 
 import { setCapabilityBaseUrls } from "../../../common/capabilityRoutingSlice";
 import { KeyCloakService } from "../../../security/KeycloakService";
-import type { ChatControlDescriptor, ExecutionPreparation } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type {
+  ChatControlDescriptor,
+  ExecutionPreparation,
+} from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { usePrepareAgentExecutionMutation } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import type {
   AssistantDeltaRuntimeEvent,

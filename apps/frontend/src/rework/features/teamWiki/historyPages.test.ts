@@ -13,7 +13,10 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { WikiRevisionList, WikiRevisionSummary } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type {
+  WikiRevisionList,
+  WikiRevisionSummary,
+} from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { emptyHistoryPages, mergeHistoryPage, type HistoryPages } from "./historyPages";
 
 const revision = (id: string): WikiRevisionSummary => ({

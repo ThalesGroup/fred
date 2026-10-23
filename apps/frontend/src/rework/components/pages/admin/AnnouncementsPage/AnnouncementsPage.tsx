@@ -31,7 +31,10 @@ import {
   useSetAnnouncementEnabledMutation,
   useUpdateAnnouncementMutation,
 } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
-import type { Announcement, AnnouncementWriteRequest } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type {
+  Announcement,
+  AnnouncementWriteRequest,
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import ActivationHistory from "./ActivationHistory";
 import AnnouncementEditorDialog from "./AnnouncementEditorDialog";
 import PatchNoteAnnouncer from "./PatchNoteAnnouncer";

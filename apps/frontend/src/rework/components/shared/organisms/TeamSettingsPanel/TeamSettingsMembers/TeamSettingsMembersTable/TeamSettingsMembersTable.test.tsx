@@ -16,7 +16,10 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { TeamMember, TeamWithPermissions } from "../../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type {
+  TeamMember,
+  TeamWithPermissions,
+} from "../../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var

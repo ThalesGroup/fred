@@ -13,7 +13,10 @@
 // limitations under the License.
 
 import { useTranslation } from "react-i18next";
-import type { SkillUsageResponse, SkillUsageRow } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type {
+  SkillUsageResponse,
+  SkillUsageRow,
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import DataTable, { type DataTableColumn } from "../DataTable/LocalizedDataTable";
 import styles from "./SkillUsageTable.module.css";
 

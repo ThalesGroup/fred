@@ -36,7 +36,11 @@ vi.mock("@shared/molecules/Autocomplete/Autocomplete", () => ({
   default: ({ textInput, onFieldValueChange, options, onSelect }) => (
     <div>
       <input {...textInput} onChange={(event) => onFieldValueChange(event.target.value)} />
-      {options.map((option) => <button type="button" key={option.key} onClick={() => onSelect(option.value)}>Select {option.key}</button>)}
+      {options.map((option) => (
+        <button type="button" key={option.key} onClick={() => onSelect(option.value)}>
+          Select {option.key}
+        </button>
+      ))}
     </div>
   ),
 }));

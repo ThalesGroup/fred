@@ -22,7 +22,10 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import type { OptionModel } from "@models/Option.model.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
-import { ManagedAgentInstanceSummary, UserSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
+import {
+  ManagedAgentInstanceSummary,
+  UserSummary,
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import styles from "./AgentCard.module.scss";
 import TeamMarketplaceState from "./TeamMarketplaceState.tsx";
 

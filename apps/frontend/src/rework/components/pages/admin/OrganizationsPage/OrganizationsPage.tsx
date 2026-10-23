@@ -21,7 +21,12 @@ import {
 import styles from "../AdminTeamsPage/AdminTeamsPage.module.css";
 
 // Reuse Swift's candidate search and selection controls independently for each role.
-function OrganizationContact({ label, value, onChange, disabled }: {
+function OrganizationContact({
+  label,
+  value,
+  onChange,
+  disabled,
+}: {
   label: string;
   value: UserSummary | null;
   onChange: (user: UserSummary | null) => void;
@@ -40,17 +45,24 @@ function OrganizationContact({ label, value, onChange, disabled }: {
         textInput={{ label, value: query, disabled: disabled || !!value }}
         minQueryLength={2}
         onFieldValueChange={setQuery}
-        noOptionsMessage={t(isFetching
-          ? "rework.adminTeams.createTeam.adminsSearching"
-          : isError ? "rework.organizations.searchFailed" : "rework.adminTeams.createTeam.adminsNoMatch")}
-        options={(!disabled && !value && trimmedQuery.length >= 2 && !isError ? currentData ?? [] : [])
+        noOptionsMessage={t(
+          isFetching
+            ? "rework.adminTeams.createTeam.adminsSearching"
+            : isError
+              ? "rework.organizations.searchFailed"
+              : "rework.adminTeams.createTeam.adminsNoMatch",
+        )}
+        options={(!disabled && !value && trimmedQuery.length >= 2 && !isError ? (currentData ?? []) : [])
           .filter((user) => !!user.username)
           .map((user) => ({
             label: `${user.first_name ?? ""} ${user.last_name ?? ""} (${user.username})`,
             value: user,
             key: user.id,
           }))}
-        onSelect={(user) => { onChange(user); setQuery(""); }}
+        onSelect={(user) => {
+          onChange(user);
+          setQuery("");
+        }}
       />
       {value && (
         <Chip

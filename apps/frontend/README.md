@@ -181,10 +181,10 @@ This branch retains the existing product routes under manager admission guards.
 The profile/legal pages retain their standalone presentation.
 The frontend reads two configuration surfaces during startup:
 
-| Surface                            | Owner                                           | Purpose                                                                                                                                                                                |
-| ---------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/config.json`                     | frontend static asset / Helm frontend ConfigMap | Router base path, backend URLs, and static branding `properties` such as `siteDisplayName`, `siteTitle`, logos, favicons, agent nicknames, support links, and default avatars/banners. |
-| `/control-plane/v1/frontend/config` | control-plane                                    | Public pre-auth runtime settings derived from backend config: `user_auth` and `gcu_version`.                                                                                           |
+| Surface                             | Owner                                           | Purpose                                                                                                                                                                                |
+| ----------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/config.json`                      | frontend static asset / Helm frontend ConfigMap | Router base path, backend URLs, and static branding `properties` such as `siteDisplayName`, `siteTitle`, logos, favicons, agent nicknames, support links, and default avatars/banners. |
+| `/control-plane/v1/frontend/config` | control-plane                                   | Public pre-auth runtime settings derived from backend config: `user_auth` and `gcu_version`.                                                                                           |
 
 Authenticated manager state comes from `/me/onboarding`, then `/me` and
 `/me/spaces` after consent. The former control-plane product bootstrap is not

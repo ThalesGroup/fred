@@ -1,7 +1,7 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
-import os
 import asyncio
+import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace

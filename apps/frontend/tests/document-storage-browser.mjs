@@ -91,7 +91,8 @@ export async function documentStorageJourney({ page, context, bearer, origin, sp
   await page.getByRole("button", { name: "Home", exact: true }).click();
   const recovered = page.waitForResponse(
     (r) =>
-      r.request().method() === "GET" && new URL(r.url()).pathname === `/control-plane/v1/document-uploads/${requestKey}`,
+      r.request().method() === "GET" &&
+      new URL(r.url()).pathname === `/control-plane/v1/document-uploads/${requestKey}`,
   );
   release();
   const recovery = await recovered;

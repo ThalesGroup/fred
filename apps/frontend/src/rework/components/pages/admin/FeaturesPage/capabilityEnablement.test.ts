@@ -13,7 +13,10 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { CapabilityEnablementItem, FieldSpec } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type {
+  CapabilityEnablementItem,
+  FieldSpec,
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import {
   PERSONAL_SCOPE_ROW_ID,
   capabilityLabel,

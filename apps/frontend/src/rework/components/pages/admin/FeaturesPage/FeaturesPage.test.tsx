@@ -18,7 +18,10 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CapabilityEnablementItem, Team } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type {
+  CapabilityEnablementItem,
+  Team,
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 const h = vi.hoisted(() => ({
   applicationsEnabled: false,

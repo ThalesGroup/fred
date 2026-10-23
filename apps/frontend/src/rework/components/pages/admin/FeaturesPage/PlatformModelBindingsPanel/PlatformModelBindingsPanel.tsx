@@ -46,7 +46,10 @@ import {
   usePlatformModelBindingQuery,
   useSetPlatformModelBindingMutation,
 } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
-import type { ModelBinding, ModelBindingSettings } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type {
+  ModelBinding,
+  ModelBindingSettings,
+} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./PlatformModelBindingsPanel.module.css";
 
 interface PlatformModelBindingsPanelProps {

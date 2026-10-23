@@ -87,7 +87,12 @@ class ScopedVectors:
             document = self.documents[ordinal]
             stored = self.underlying.get_chunk(str(d.work.document_id), identifier)
             metadata = stored.get("metadata", {})
-            if metadata.get("retrievable") is not True or stored.get("text") != document.page_content or metadata.get("document_uid") != str(d.work.document_id) or metadata.get("chunk_uid") != identifier:
+            if (
+                metadata.get("retrievable") is not True
+                or stored.get("text") != document.page_content
+                or metadata.get("document_uid") != str(d.work.document_id)
+                or metadata.get("chunk_uid") != identifier
+            ):
                 raise ManagerError("indexing_failed")
             records.append(to_json({"id": identifier, "text": document.page_content, "metadata": document.metadata}).decode("utf-8"))
             ordinals.append(ordinal)

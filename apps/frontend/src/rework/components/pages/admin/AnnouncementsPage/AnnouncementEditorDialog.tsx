@@ -19,7 +19,10 @@ import TextArea from "@shared/atoms/TextArea/TextArea";
 import TextInput from "@shared/atoms/TextInput/TextInput";
 import Switch from "@shared/atoms/Switch/Switch";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
-import type { Announcement, AnnouncementWriteRequest } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type {
+  Announcement,
+  AnnouncementWriteRequest,
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./AnnouncementEditorDialog.module.css";
 
 const LOCALES = ["fr", "en"] as const;
