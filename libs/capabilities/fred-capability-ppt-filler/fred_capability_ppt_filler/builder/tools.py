@@ -93,6 +93,7 @@ from fred_capability_ppt_filler.builder.changes import (
     Origin,
     SlideChange,
     apply_changes,
+    cover_dropped,
     deck_delta,
     repinned,
     unchanged,
@@ -1255,6 +1256,18 @@ _UNCHANGED = (
     "slide already has never moves it to another design. If the deck already shows what the user asked, "
     "tell them so."
 )
+# A resend that keeps the deck but loses its cover is an edit gone wrong (an
+# added first slide written over it), never a new deck.
+_COVER_DROPPED = (
+    "No deck was built: this resends the user's deck with most of its slides but without "
+    "its cover. Keep the cover: to add a slide at the start, send only `changes` with an "
+    "insert `after: 1` (right after the cover); never replace a slide to keep the slide "
+    "count. To remove the cover because the user asked, send `changes` with a remove of "
+    "slide 1."
+    + _NEXT_CALL
+    + "\n"
+    + json.dumps({"status": "needs_revision", "cover": "dropped"})
+)
 _NO_BASE = (
     "No deck was built: there is no previous deck in this conversation to change. Send the "
     "whole deck in `slides`."
@@ -1608,6 +1621,8 @@ def build_builder_tools(
 
         delivered = await previous_deck(None) if base is None else None
         if delivered is not None:
+            if cover_dropped(delivered, plan, _kinds(inventory)):
+                return _answer(_COVER_DROPPED)
             plan = repinned(delivered, plan, _kinds(inventory))
 
         call_key = json.dumps(kwargs, sort_keys=True, default=_jsonable) + (

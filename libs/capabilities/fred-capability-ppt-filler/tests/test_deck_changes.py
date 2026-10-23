@@ -29,6 +29,7 @@ from fred_capability_ppt_filler.builder.changes import (
     ChangeError,
     SlideChange,
     apply_changes,
+    cover_dropped,
     deck_delta,
 )
 from fred_capability_ppt_filler.builder.deck_plans import (
@@ -716,6 +717,55 @@ async def test_a_small_edit_resent_as_a_whole_deck_is_built_and_pointed_to_chang
     text, _ = await turn.build(slides=deck)
     assert text.startswith(tools_mod._DELIVERED), text
     assert "changed: 3; 4 unchanged." in text and "`changes` next time" in text
+
+
+@pytest.mark.asyncio
+async def test_a_resent_deck_that_writes_over_its_cover_is_refused(monkeypatch):
+    """A slide added first was sent as the whole deck with the cover dropped:
+    refused and pointed to an insert after the cover."""
+    turn = _Turn(monkeypatch, FakeWorkspace())
+    deck = [COVER, *({"title": f"Part {n}", "bullets": ["a"]} for n in range(1, 5))]
+    await turn.build(slides=deck)
+    resent = [{"title": "Recommendation", "bullets": ["Go"]}, *deck[1:]]
+    text, result = await turn.build(slides=resent)
+    assert not result.is_error and len(turn.rendered) == 1
+    assert "without its cover" in text and "`after: 1`" in text
+    assert _payload(text) == {"status": "needs_revision", "cover": "dropped"}
+
+
+@pytest.mark.asyncio
+async def test_a_new_deck_without_a_cover_is_built_over_a_delivered_one(monkeypatch):
+    turn = _Turn(monkeypatch, FakeWorkspace())
+    deck = [COVER, *({"title": f"Part {n}", "bullets": ["a"]} for n in range(1, 6))]
+    await turn.build(slides=deck)
+    # Two of five titles kept (< 60 %): another deck, not an edit of this one.
+    other = [
+        {"title": t, "bullets": ["a"]} for t in ("Part 1", "Part 2", "New", "Other")
+    ]
+    text, _ = await turn.build(slides=other)
+    assert text.startswith(tools_mod._DELIVERED), text
+
+
+def test_a_cover_is_dropped_only_when_most_titles_are_kept():
+    delivered = DeckPlan.model_validate(
+        {"slides": [COVER, *({"title": f"Part {n}"} for n in range(1, 6))]}
+    )
+
+    def resent(*titles: str, first: Any = None) -> DeckPlan:
+        head = [first] if first else []
+        return DeckPlan.model_validate(
+            {"slides": head + [{"title": t, "bullets": ["a"]} for t in titles]}
+        )
+
+    kept = ("Part 1", "Part 2", "Part 3")  # 3 of 5 = 60 %
+    assert cover_dropped(delivered, resent(*kept), {})
+    assert not cover_dropped(delivered, resent("Part 1", "Part 2", "X"), {})
+    assert not cover_dropped(delivered, resent(*kept, first=COVER), {})
+    assert not cover_dropped(
+        delivered, resent(*kept, first={"kind": "cover", "title": "T"}), {}
+    )
+    no_cover = resent("Part 1", "Part 2", "Part 3", "Part 4", "Part 5")
+    assert not cover_dropped(no_cover, resent(*kept), {})
 
 
 @pytest.mark.asyncio

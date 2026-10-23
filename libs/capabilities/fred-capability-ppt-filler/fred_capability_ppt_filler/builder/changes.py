@@ -497,6 +497,36 @@ def unchanged(base: DeckPlan, changed: DeckPlan, kinds: Mapping[str, str]) -> bo
     )
 
 
+# Share of the delivered deck's titles a resend keeps to be an edit of it, not a new deck.
+_KEPT_TITLES = 0.6
+
+
+def _is_cover(slide: SlidePlan, kinds: Mapping[str, str]) -> bool:
+    kind = _kind(slide, kinds)
+    if kind is not None:
+        return kind == "cover"
+    body = slide.model_copy(update={"title": None, "subtitle": None})
+    return not has_content(body)
+
+
+def cover_dropped(
+    delivered: DeckPlan, plan: DeckPlan, kinds: Mapping[str, str]
+) -> bool:
+    """Whether a whole deck resent as an edit of the delivered one (most of its
+    titles kept) no longer opens on the cover the delivered deck had."""
+    if not delivered.slides or not plan.slides:
+        return False
+    if not _is_cover(delivered.slides[0], kinds) or _is_cover(plan.slides[0], kinds):
+        return False
+    before = {_title_key(s) for s in delivered.slides[1:]} - {""}
+    after = {_title_key(s) for s in plan.slides}
+    return bool(before) and len(before & after) >= _KEPT_TITLES * len(before)
+
+
+def _title_key(slide: SlidePlan) -> str:
+    return " ".join(re.findall(r"\w+", (slide.title or "").lower()))
+
+
 def repinned(delivered: DeckPlan, plan: DeckPlan, kinds: Mapping[str, str]) -> DeckPlan:
     """A resent slide identical to a delivered one keeps its template slide: a
     whole deck resent never moves the slides it leaves as they were."""
