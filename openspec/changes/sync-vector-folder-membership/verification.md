@@ -41,6 +41,13 @@ exist`, swallowed into an empty result. Not fixed here.
 Not verified: OpenSearch against a live cluster (fake client only), ClickHouse
 against a live server (fake client only), an end-to-end search through the API.
 
+Follow-up review: ClickHouse now overlays the promoted `tag_ids` column when
+returning chunks and search hits, so a folder change cannot expose stale tags
+from the JSON metadata copy. The targeted ClickHouse adapter tests passed
+(3 passed) using the main checkout's venv with `--noconftest`; the full test
+conftest could not import `fastapi_mcp` from that venv. Ruff check passed on
+the touched Python files. A live ClickHouse server was not available.
+
 ## Performance review
 
 - Search hot path unchanged; no per-query lookup added.
