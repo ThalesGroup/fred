@@ -290,5 +290,6 @@ def test_the_working_rules_name_the_template_and_keep_revisions_truthful():
         assert "cannot switch template" in rules and "{" not in rules
         assert "do only that (propose any other slide or content instead)" in rules
         assert "Ask which slide when the request does not say" in rules
+        assert "Never drop or replace a slide to keep an earlier slide count" in rules
         assert "only when build_presentation delivered it in this answer" in rules
         assert "Never invent one" in rules

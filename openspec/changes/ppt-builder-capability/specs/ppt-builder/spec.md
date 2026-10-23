@@ -607,7 +607,7 @@ The system SHALL instruct the agent to write the plan and call `build_presentati
 #### Scenario: A revision request
 
 - **WHEN** the user asks to change a delivered deck
-- **THEN** the working rules tell the agent to do only what was asked (any other slide or content is proposed, not added), to send `changes` for the slides concerned and the whole deck only for a new deck or a rewrite of most slides, to ask which slide when the request names none, to say a deck was built or changed only after a delivery in that answer and to describe only what the result lists, and to say so when nothing needed changing or could be applied
+- **THEN** the working rules tell the agent to do only what was asked (any other slide or content is proposed, not added), to send `changes` for the slides concerned and the whole deck only for a new deck or a rewrite of most slides, never to drop or replace a slide to keep an earlier slide count unless the user asks for a count, to ask which slide when the request names none, to say a deck was built or changed only after a delivery in that answer and to describe only what the result lists, and to say so when nothing needed changing or could be applied
 
 #### Scenario: A request for another template
 
