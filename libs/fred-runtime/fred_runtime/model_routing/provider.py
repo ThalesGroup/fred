@@ -726,33 +726,6 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             team_chat_default_profile_id=binding.runtime_context.chat_default_profile_id,
         )
         if resolution is None:
-            source = next(
-                (
-                    item
-                    for item in (self.catalog.discovery_sources if self.catalog else ())
-                    if item.default_model_id is not None
-                ),
-                None,
-            )
-            if source is not None and source.default_model_id is not None:
-                from hashlib import sha256
-
-                profile_id = (
-                    f"discovered.chat.{source.source_id}."
-                    f"{sha256(source.default_model_id.encode('utf-8')).hexdigest()}"
-                )
-                removed_capability_id = removed.get(profile_id)
-                if removed_capability_id is not None:
-                    if removed_capability_id in binding.team_disabled_model_ids or (
-                        binding.usable_model_ids is not None
-                        and removed_capability_id not in binding.usable_model_ids
-                    ):
-                        raise ModelNotUsableError(
-                            capability_id=removed_capability_id,
-                            provider="openai",
-                            name=source.default_model_id,
-                        )
-                    return self._platform_fallback_selection(binding, profile_id)
             # Same failure the resolver's own default lookup raised before: the
             # catalog declares no chat default and no other level produced one.
             raise ValueError(

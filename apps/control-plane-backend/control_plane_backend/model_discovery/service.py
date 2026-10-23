@@ -183,9 +183,26 @@ async def refresh(
         for source, result in zip(sources, inspected, strict=True)
         if isinstance(result, BaseException)
     ]
+    pod_chat_default_available: bool | None = None
+    if (
+        inspected
+        and not unverified
+        and all(
+            "default_chat_profile_id" in item[1]
+            for item in inspected
+            if not isinstance(item, BaseException)
+        )
+    ):
+        pod_chat_default_available = all(
+            isinstance(item[1]["default_chat_profile_id"], str)
+            and bool(item[1]["default_chat_profile_id"].strip())
+            for item in inspected
+            if not isinstance(item, BaseException)
+        )
     if unverified:
         result = await get_status(user, deps)
         result.unverified_runtimes = unverified
+        result.pod_chat_default_available = pod_chat_default_available
         verified_source_ids: set[str] = set()
         for item in inspected:
             if isinstance(item, BaseException):
@@ -424,7 +441,9 @@ async def refresh(
                 yaml_url=yaml_url,
                 error="Discovery URL changed during refresh",
             )
-    return await get_status(user, deps)
+    result = await get_status(user, deps)
+    result.pod_chat_default_available = pod_chat_default_available
+    return result
 
 
 async def get_fallback(

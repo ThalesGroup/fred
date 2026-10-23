@@ -4285,6 +4285,32 @@ export type AssetSlot = {
   max_count?: number | null;
 };
 export type TeamScopePolicy = "default_on" | "admin_gated";
+export type ModelBindingSettings = {
+  base_url?: string | null;
+  azure_endpoint?: string | null;
+  azure_openai_api_version?: string | null;
+  azure_ad_client_id?: string | null;
+  azure_ad_client_scope?: string | null;
+  azure_apim_base_url?: string | null;
+  azure_apim_resource_path?: string | null;
+  azure_tenant_id?: string | null;
+  project?: string | null;
+  location?: string | null;
+  model_family?: ("mistral" | "llama" | "anthropic" | "claude") | null;
+  temperature?: number | null;
+  max_tokens?: number | null;
+  top_p?: number | null;
+  max_retries?: number | null;
+  streaming?: boolean | null;
+  stream_usage?: boolean | null;
+  request_timeout?: number | null;
+  reasoning_effort?: string | null;
+};
+export type ModelBinding = {
+  provider: "anthropic" | "azure-apim" | "azure-openai" | "ollama" | "openai" | "vertex-ai" | "vertex-ai-model-garden";
+  name: string;
+  settings?: ModelBindingSettings;
+};
 export type CapabilityCatalogEntry = {
   id: string;
   runtime_id?: string | null;
@@ -4311,6 +4337,7 @@ export type CapabilityCatalogEntry = {
   model_runtime_ids?: string[];
   model_discovery_source_id?: string | null;
   model_chat_profile_ids?: string[];
+  model_platform_binding?: ModelBinding | null;
   model_thinking_profile_ids?: string[];
   model_reasoning_efforts?: {
     [key: string]: ("low" | "medium" | "high")[];
@@ -4745,32 +4772,6 @@ export type ManagedAgentTuning = {
         };
   };
 };
-export type ModelBindingSettings = {
-  base_url?: string | null;
-  azure_endpoint?: string | null;
-  azure_openai_api_version?: string | null;
-  azure_ad_client_id?: string | null;
-  azure_ad_client_scope?: string | null;
-  azure_apim_base_url?: string | null;
-  azure_apim_resource_path?: string | null;
-  azure_tenant_id?: string | null;
-  project?: string | null;
-  location?: string | null;
-  model_family?: ("mistral" | "llama" | "anthropic" | "claude") | null;
-  temperature?: number | null;
-  max_tokens?: number | null;
-  top_p?: number | null;
-  max_retries?: number | null;
-  streaming?: boolean | null;
-  stream_usage?: boolean | null;
-  request_timeout?: number | null;
-  reasoning_effort?: string | null;
-};
-export type ModelBinding = {
-  provider: "anthropic" | "azure-apim" | "azure-openai" | "ollama" | "openai" | "vertex-ai" | "vertex-ai-model-garden";
-  name: string;
-  settings?: ModelBindingSettings;
-};
 export type ManagedAgentRuntimeBinding = {
   agent_instance_id: string;
   template_agent_id: string;
@@ -5015,6 +5016,7 @@ export type CapabilityEnablementItem = {
   /** Runtime pods currently advertising this model. */
   model_runtime_ids?: string[];
   model_chat_profile_ids?: string[];
+  model_platform_binding?: ModelBinding | null;
   model_fallback_profile_ids?: string[];
   model_capabilities?: string[];
   model_chat_capability_verified?: boolean;
@@ -5118,6 +5120,7 @@ export type ModelDiscoveryStatus = {
   refresh_error?: string | null;
   unverified_runtimes?: UnverifiedRuntime[];
   verified_source_ids?: string[];
+  pod_chat_default_available?: boolean | null;
 };
 export type SetDiscoveryUrlRequest = {
   url?: string | null;

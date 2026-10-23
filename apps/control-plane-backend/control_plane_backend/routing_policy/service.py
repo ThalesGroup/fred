@@ -51,7 +51,10 @@ from control_plane_backend.capabilities.catalog import (
     model_display_name_overrides,
     universally_available_chat_model_profile_ids,
 )
-from control_plane_backend.organization_authz import require_manage_capabilities
+from control_plane_backend.organization_authz import (
+    require_manage_capabilities,
+    require_manage_platform_model_binding,
+)
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.routing_policy.schemas import (
     AvailableModelProfile,
@@ -586,13 +589,6 @@ async def resolve_effective_chat_model(
         ),
     )
     if resolution is None:
-        removed_default = pod_models.discovery_default_profile_id
-        if (
-            removed_default is not None
-            and removed_default in removed_profiles
-            and _selectable(removed_profiles[removed_default])
-        ):
-            return _fallback_result()
         return empty
 
     entry = entry_by_profile.get(resolution.profile_id)
@@ -867,7 +863,7 @@ async def set_platform_model_binding(
     binding: ModelBinding,
     deps: ProductServiceDependencies,
 ) -> PlatformModelBinding:
-    """Feature-governance-gated write of the platform-wide `chat` binding.
+    """Platform-admin-gated write of the platform-wide `chat` binding.
 
     `binding` arrives already validated by `ModelBinding` (provider
     restricted to `fred_core.model.models.ModelProvider`, settings
@@ -876,7 +872,7 @@ async def set_platform_model_binding(
     that same validated object — see `PlatformModelBindingStore.set`.
     """
 
-    await require_manage_capabilities(deps.team_dependencies.rebac, user)
+    await require_manage_platform_model_binding(deps.team_dependencies.rebac, user)
     store = deps.get_platform_model_binding_store()
     stored = await store.set(binding=binding, updated_by=user.uid)
     return _to_platform_model_binding(stored)
@@ -887,7 +883,7 @@ async def delete_platform_model_binding(
     user: KeycloakUser,
     deps: ProductServiceDependencies,
 ) -> PlatformModelBinding:
-    """Feature-governance-gated unset of the platform-wide `chat` binding.
+    """Platform-admin-gated unset of the platform-wide `chat` binding.
 
     Returns the now-unset state (`binding=None`) rather than nothing, so the
     caller can render the row without a second read — same result shape as
@@ -895,7 +891,7 @@ async def delete_platform_model_binding(
     delete.
     """
 
-    await require_manage_capabilities(deps.team_dependencies.rebac, user)
+    await require_manage_platform_model_binding(deps.team_dependencies.rebac, user)
     store = deps.get_platform_model_binding_store()
     await store.delete()
     return PlatformModelBinding(binding=None)

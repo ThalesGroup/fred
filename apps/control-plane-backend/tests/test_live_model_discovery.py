@@ -49,6 +49,63 @@ def _model(name: str) -> dict:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("catalog_fields", "expected"),
+    [
+        ({"default_chat_profile_id": "chat.manual.safe"}, True),
+        ({"default_chat_profile_id": None}, False),
+        ({}, None),
+    ],
+)
+async def test_refresh_reports_pod_default_without_a_discovery_source(
+    monkeypatch: pytest.MonkeyPatch,
+    catalog_fields: dict,
+    expected: bool | None,
+) -> None:
+    async def allowed(*args, **kwargs) -> None:
+        return None
+
+    async def no_names(*args, **kwargs) -> dict[str, str]:
+        return {}
+
+    monkeypatch.setattr(service, "require_manage_capabilities", allowed)
+    monkeypatch.setattr(service, "model_display_name_overrides", no_names)
+
+    class Store:
+        async def list_all(self) -> list[StoredDiscoverySourceState]:
+            return []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"models": [], **catalog_fields})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        deps = cast(
+            ProductServiceDependencies,
+            SimpleNamespace(
+                team_dependencies=SimpleNamespace(rebac=object()),
+                configuration=SimpleNamespace(
+                    platform=SimpleNamespace(
+                        runtime_catalog_sources=[
+                            SimpleNamespace(
+                                runtime_id="pod-a",
+                                base_url="https://pod-a.example",
+                                enabled=True,
+                            ),
+                        ]
+                    )
+                ),
+                get_model_discovery_state_store=lambda: Store(),
+                get_runtime_http_client=lambda: client,
+            ),
+        )
+        result = await service.refresh(
+            cast(KeycloakUser, object()), deps, authorization="Bearer test"
+        )
+
+    assert result.pod_chat_default_available is expected
+
+
+@pytest.mark.asyncio
 async def test_successful_inventory_diff_and_failure_preserve_confirmed_removals() -> (
     None
 ):

@@ -34,6 +34,7 @@ import { toIconType } from "@shared/utils/Type.ts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
+import { useUserCapabilities } from "@rework/core/hooks/useUserCapabilities";
 import {
   useAdminCapabilitiesQuery,
   useLazyCapabilityRevokeImpactQuery,
@@ -41,6 +42,7 @@ import {
   useSetCapabilityDefaultOnMutation,
   useSetModelReasoningMutation,
   useModelDiscoveryQuery,
+  usePlatformModelBindingQuery,
   useRefreshModelDiscoveryMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -80,6 +82,7 @@ const CORE_KIND_FILTERS: CapabilityKind[] = ["tool", "agent", "model", "knowledg
 export default function FeaturesPage() {
   const { t } = useTranslation();
   const { showSuccess, showError, showWarn } = useToast();
+  const { canAdmin } = useUserCapabilities();
   const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications");
   const kindFilters: CapabilityKind[] = applicationsEnabled ? [...CORE_KIND_FILTERS, "app"] : CORE_KIND_FILTERS;
 
@@ -105,6 +108,8 @@ export default function FeaturesPage() {
   const [matrixCapabilityId, setMatrixCapabilityId] = useState<string | null>(null);
   const [suspendedCapabilityId, setSuspendedCapabilityId] = useState<string | null>(null);
   const [platformBindingsPanelOpen, setPlatformBindingsPanelOpen] = useState(false);
+  const [noDefaultModalOpen, setNoDefaultModalOpen] = useState(false);
+  const [noDefaultModalPending, setNoDefaultModalPending] = useState(false);
   const [pendingDefaultOff, setPendingDefaultOff] = useState<CapabilityEnablementItem | null>(null);
   // #2470: an agent template whose dependencies are not default-on, waiting for
   // the admin to confirm granting them alongside it. Holds the capability the
@@ -120,20 +125,33 @@ export default function FeaturesPage() {
   const { data: discoveryStatus, refetch: refetchDiscoveryStatus } = useModelDiscoveryQuery(undefined, {
     skip: activeKindFilter !== "model",
   });
+  const {
+    data: platformModelBinding,
+    isLoading: platformModelBindingLoading,
+    isError: platformModelBindingError,
+  } = usePlatformModelBindingQuery(undefined, {
+    skip: activeKindFilter !== "model",
+  });
   const [refreshDiscovery, discoveryRefresh] = useRefreshModelDiscoveryMutation();
   const [modelInventoryReady, setModelInventoryReady] = useState(false);
   const [modelRefreshError, setModelRefreshError] = useState<string | null>(null);
   const [unverifiedModelRuntimes, setUnverifiedModelRuntimes] = useState<{ runtime_id: string; base_url: string }[]>(
     [],
   );
+  const [verifiedModelSourceIds, setVerifiedModelSourceIds] = useState<string[]>([]);
+  const [podChatDefaultAvailable, setPodChatDefaultAvailable] = useState<boolean | null>(null);
   const refreshModels = useCallback(async () => {
     try {
       const result = await refreshDiscovery().unwrap();
       setModelRefreshError(result.refresh_error ?? null);
       setUnverifiedModelRuntimes(result.unverified_runtimes ?? []);
+      setVerifiedModelSourceIds(result.verified_source_ids ?? []);
+      setPodChatDefaultAvailable(result.pod_chat_default_available ?? null);
     } catch {
       setModelRefreshError(t("rework.admin.capabilities.discovery.refreshFailed"));
       setUnverifiedModelRuntimes([]);
+      setVerifiedModelSourceIds([]);
+      setPodChatDefaultAvailable(null);
     }
     await Promise.all([refetchCapabilities(), refetchDiscoveryStatus()]);
   }, [refreshDiscovery, refetchCapabilities, refetchDiscoveryStatus, t]);
@@ -192,6 +210,41 @@ export default function FeaturesPage() {
   const capabilities = allCapabilities.filter((cap) => (cap.kind ?? "tool") === activeKindFilter);
   const { manual: manualModels, discovered: discoveredModels } = splitModelSections(capabilities);
   const hasDiscovery = Boolean(discoveryStatus?.sources?.length || discoveredModels.length);
+  useEffect(() => {
+    if (
+      !noDefaultModalPending ||
+      activeKindFilter !== "model" ||
+      isLoading ||
+      platformModelBindingLoading ||
+      !modelInventoryReady
+    )
+      return;
+    setNoDefaultModalPending(false);
+    if (
+      canAdmin &&
+      !isError &&
+      !platformModelBindingError &&
+      !modelRefreshError &&
+      unverifiedModelRuntimes.length === 0 &&
+      !platformModelBinding?.binding &&
+      podChatDefaultAvailable === false
+    ) {
+      setNoDefaultModalOpen(true);
+    }
+  }, [
+    activeKindFilter,
+    canAdmin,
+    isError,
+    isLoading,
+    modelInventoryReady,
+    modelRefreshError,
+    noDefaultModalPending,
+    platformModelBinding?.binding,
+    platformModelBindingError,
+    platformModelBindingLoading,
+    podChatDefaultAvailable,
+    unverifiedModelRuntimes.length,
+  ]);
   const visibleModels = (modelTab === "manual" ? manualModels : discoveredModels).filter((model) =>
     [model.model_display_name, model.name, model.id, ...(model.model_runtime_ids ?? [])]
       .filter(Boolean)
@@ -625,7 +678,8 @@ export default function FeaturesPage() {
         title={t("rework.admin.capabilities.title")}
         subtitle={t("rework.admin.capabilities.subtitle")}
         actions={
-          activeKindFilter === "model" && (
+          activeKindFilter === "model" &&
+          canAdmin && (
             <Button
               color="on-surface"
               variant="outlined"
@@ -644,7 +698,11 @@ export default function FeaturesPage() {
             variant="radio"
             aria-label={t("rework.admin.capabilities.kindFilter.aria")}
             selectedIndex={kindFilters.indexOf(activeKindFilter)}
-            onSelectedIndexChange={(index) => setKindFilter(kindFilters[index])}
+            onSelectedIndexChange={(index) => {
+              const next = kindFilters[index];
+              setKindFilter(next);
+              setNoDefaultModalPending(next === "model");
+            }}
             items={kindFilters.map((kind) => ({
               label: t(`rework.admin.capabilities.kindFilter.${kind}`),
             }))}
@@ -682,6 +740,7 @@ export default function FeaturesPage() {
           refreshError={discoveryRefresh.isError || Boolean(modelRefreshError)}
           refreshErrorMessage={modelRefreshError}
           unverifiedRuntimes={unverifiedModelRuntimes}
+          verifiedSourceIds={verifiedModelSourceIds}
         />
       )}
 
@@ -771,6 +830,21 @@ export default function FeaturesPage() {
         open={platformBindingsPanelOpen}
         onClose={() => setPlatformBindingsPanelOpen(false)}
         manualModels={manualModels}
+        discoveredModels={discoveredModels}
+      />
+
+      <ConfirmationDialog
+        open={noDefaultModalOpen}
+        title={t("rework.admin.platformModelBindings.noPlatformDefaultTitle")}
+        message={t("rework.admin.platformModelBindings.noPlatformDefault")}
+        confirmLabel={t("rework.admin.platformModelBindings.chooseModel")}
+        showCancel={false}
+        dismissible={false}
+        onConfirm={() => {
+          setNoDefaultModalOpen(false);
+          setPlatformBindingsPanelOpen(true);
+        }}
+        onCancel={() => setNoDefaultModalOpen(false)}
       />
 
       <SuspendedInstancesDrawer

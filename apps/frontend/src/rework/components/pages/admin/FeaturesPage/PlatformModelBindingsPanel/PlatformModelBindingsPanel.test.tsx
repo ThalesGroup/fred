@@ -123,6 +123,12 @@ function openEditForm() {
   click(findButton("rework.admin.platformModelBindings.editAction"));
 }
 
+function advancedSaveButton(): HTMLButtonElement {
+  const button = container.querySelector<HTMLButtonElement>("details button[type=submit]");
+  if (!button) throw new Error("advanced save button not rendered");
+  return button;
+}
+
 describe("PlatformModelBindingsPanel chat-only surface", () => {
   it("renders exactly one row (chat) when unset", () => {
     h.binding = { model_capability: "chat", binding: null };
@@ -140,6 +146,83 @@ describe("PlatformModelBindingsPanel chat-only surface", () => {
     render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
 
     expect(buttons().filter((b) => b.textContent === "rework.admin.platformModelBindings.editAction")).toHaveLength(2);
+  });
+});
+
+describe("PlatformModelBindingsPanel catalog selector", () => {
+  it("preselects the saved model when the API omits null settings", () => {
+    h.binding = {
+      model_capability: "chat",
+      binding: { provider: "openai", name: "gateway-small", settings: { base_url: "https://models.example/v1" } },
+    };
+    const manual = {
+      id: "model__openai__gateway-small",
+      name: "gateway-small",
+      model_display_name: "Gateway Small",
+      model_platform_binding: {
+        provider: "openai",
+        name: "gateway-small",
+        settings: { base_url: "https://models.example/v1", temperature: null },
+      },
+    } as CapabilityEnablementItem;
+    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={[manual]} />);
+    openEditForm();
+    expect(container.querySelector('button[aria-haspopup="listbox"]')?.textContent).toContain("Gateway Small");
+  });
+
+  it("selects an advertised discovered model without opening advanced configuration", async () => {
+    h.binding = { model_capability: "chat", binding: null };
+    const manualModel = {
+      id: "model__openai__manual-small",
+      name: "manual-small",
+      model_display_name: "Manual Small",
+      model_platform_binding: { provider: "openai", name: "manual-small" },
+    } as CapabilityEnablementItem;
+    const discoveredModel = {
+      id: "model__openai__gateway-small",
+      name: "gateway-small",
+      model_display_name: "Gateway Small",
+      model_discovery_source_id: "gateway",
+      model_platform_binding: {
+        provider: "openai",
+        name: "gateway-small",
+        settings: { base_url: "https://models.example/v1" },
+      },
+    } as CapabilityEnablementItem;
+    render(
+      <PlatformModelBindingsPanel
+        open
+        onClose={() => {}}
+        manualModels={[manualModel]}
+        discoveredModels={[discoveredModel]}
+      />,
+    );
+    openEditForm();
+
+    expect(container.querySelector("details")?.hasAttribute("open")).toBe(false);
+    const selectTrigger = container.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]');
+    if (!selectTrigger) throw new Error("model selector not rendered");
+    act(() => {
+      selectTrigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    const listbox = document.querySelector('[role="listbox"]');
+    expect(listbox?.textContent).toContain("rework.admin.platformModelBindings.manualSource");
+    expect(listbox?.textContent).toContain("rework.admin.platformModelBindings.discoveredSource");
+    expect(listbox?.querySelectorAll('[role="presentation"]')).toHaveLength(2);
+    act(() => {
+      selectTrigger.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    });
+    act(() => {
+      selectTrigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    const saveButton = findButton("rework.admin.platformModelBindings.form.save");
+    expect(saveButton.hasAttribute("disabled")).toBe(false);
+    click(saveButton);
+    await act(async () => {});
+
+    expect(h.setBinding).toHaveBeenCalledWith({
+      setPlatformModelBindingRequest: { binding: discoveredModel.model_platform_binding },
+    });
   });
 });
 
@@ -207,7 +290,7 @@ describe("PlatformModelBindingsPanel JSON settings editor", () => {
       azure_openai_api_version: "2024-08-01",
     };
     typeInto(textarea, JSON.stringify(nextSettings));
-    click(findButton("rework.admin.platformModelBindings.form.save"));
+    click(advancedSaveButton());
     await act(async () => {});
 
     expect(h.setBinding).toHaveBeenCalledWith({
@@ -230,7 +313,7 @@ describe("PlatformModelBindingsPanel JSON settings editor", () => {
     typeInto(textarea, "{not valid json");
 
     expect(container.textContent).toContain("rework.admin.platformModelBindings.form.settingsInvalidJson");
-    const saveButton = findButton("rework.admin.platformModelBindings.form.save");
+    const saveButton = advancedSaveButton();
     expect(saveButton.hasAttribute("disabled")).toBe(true);
 
     click(saveButton);
@@ -250,7 +333,7 @@ describe("PlatformModelBindingsPanel JSON settings editor", () => {
     typeInto(textarea, "[1, 2, 3]");
 
     expect(container.textContent).toContain("rework.admin.platformModelBindings.form.settingsInvalidJson");
-    expect(findButton("rework.admin.platformModelBindings.form.save").hasAttribute("disabled")).toBe(true);
+    expect(advancedSaveButton().hasAttribute("disabled")).toBe(true);
   });
 
   it("accepts an empty textarea as an empty settings object", async () => {
@@ -263,7 +346,7 @@ describe("PlatformModelBindingsPanel JSON settings editor", () => {
     typeInto(inputs()[1], "gpt-5");
     typeInto(container.querySelector("textarea") as HTMLTextAreaElement, "");
 
-    const saveButton = findButton("rework.admin.platformModelBindings.form.save");
+    const saveButton = advancedSaveButton();
     expect(saveButton.hasAttribute("disabled")).toBe(false);
     click(saveButton);
     await act(async () => {});

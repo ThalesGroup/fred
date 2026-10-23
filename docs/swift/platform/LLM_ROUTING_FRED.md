@@ -91,14 +91,23 @@ The platform binding is absolute. Without it, a pod static override is the
 operator's local escape hatch. Team per-agent selection then wins over the team
 default. No scoring or rule ordering is involved.
 
-To set a platform default in either static or discovery mode, open
-**Capabilities > Models > Default chat model**. Enter the provider, the model's
-wire ID, and any connection settings. For Mistral via the OpenAI-compatible
-client, use `openai`, the Mistral model ID, and
-`{"base_url": "https://api.mistral.ai/v1"}`. This binding takes precedence over
+To override the pod default platform-wide in either static or discovery mode,
+open **Capabilities > Models > Platform chat model** and select a chat model
+from the Catalog or Discovery section of the selector. The selector carries its validated
+provider, wire ID and inference settings. Models with unsupported or ambiguous
+settings are not offered there; the advanced manual form can set a supported
+binding directly. For Mistral via the OpenAI-compatible client, use `openai`,
+the Mistral model ID, and `{"base_url": "https://api.mistral.ai/v1"}` in that
+form. This binding takes precedence over
 the pod and team defaults. The Models table's `default_on` switch controls
 team access to a model; it does not select the chat default. Remove the platform
-binding to restore team and pod routing.
+binding to restore team and pod routing. A discovery-only deployment with no
+binding opens a single-action dialog every time a platform administrator enters
+the Models view after every pod has reported that it has no manual chat default. This
+also applies when manual models exist but none was declared as default. The dialog explains that selecting a
+platform model overrides team choices and opens the binding editor; it cannot
+be postponed. Only a platform administrator can write or delete that binding,
+since advanced settings can change the destination for a provider credential.
 
 The same panel has a separate **Fallback chat model**. It is used only when a
 saved choice names a discovered model confirmed absent by a successful refresh.
@@ -173,7 +182,7 @@ An operator can add several discovery sources alongside manually listed chat pro
 
 ```yaml
 version: v1
-discoveries:
+discovery:
   - source_id: primary-gateway
     base_url: https://gateway.example/v1
     include_model_ids: [chat-small, chat-large]
@@ -184,10 +193,10 @@ default_profile_by_capability:
   chat: chat.manual.safe
 ```
 
-For one source, the existing `discovery:` mapping remains valid. `discovery`
-and `discoveries` cannot appear together. Source IDs must be unique. A
-discovered `default_model_id` may be set on at most one source, and cannot
-coexist with a manual chat default.
+`discovery` is optional and always contains a nonempty list, including when
+there is only one endpoint. Source IDs must be unique. Existing catalogs
+without `discovery` retain their behavior. The chat default stays in
+`default_profile_by_capability` and references a manually declared profile.
 
 At pod startup and on administrator refresh, Fred sends an authenticated
 `GET https://gateway.example/v1/models` and reads the OpenAI-compatible JSON
@@ -201,16 +210,14 @@ use separate pods when endpoints need different credentials. `source_id` is a st
 identity. Changing it creates new model capability and profile ids, which need
 new admin grants. `include_model_ids` is optional; its listed IDs must be
 present during initial catalog validation. A later administrator refresh can
-confirm a listed model's removal and apply the platform fallback. A discovered
-default must be in the selected list when first validated.
+confirm a listed model's removal and apply the platform fallback.
 
 The standard OpenAI `/models` response does not identify chat models, context
 sizes, or supported reasoning levels. Configure a gateway that lists chat
 models only, or use the allowlist to exclude embeddings and other modalities.
 OpenAI's `GET /models/{id}` also returns only basic model metadata; its model
 documentation publishes context limits, but the list API does not supply them
-for automatic discovery. The admin view marks the model type as unspecified
-when the endpoint does not confirm chat support and leaves unknown limits blank.
+for automatic discovery. The admin view leaves unknown limits blank.
 When an entry supplies `capabilities.completion_chat`, only `true` entries are
 discovered; entries without this field remain eligible. Fred shows the exact
 upstream `id` in the admin Models table and uses it for inference. A nonblank

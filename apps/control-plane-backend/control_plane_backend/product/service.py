@@ -894,7 +894,6 @@ class PodModelCatalog:
 
     entries: list[CapabilityCatalogEntry] = field(default_factory=list)
     default_chat_profile_id: str | None = None
-    discovery_default_profile_id: str | None = None
     agent_chat_profile_overrides: dict[str, str] = field(default_factory=dict)
 
 
@@ -990,16 +989,12 @@ async def _model_capabilities_for_source_uncached(
     )
     discovered_source_by_id: dict[str, str] = {}
     raw_sources = payload.get("discovery_sources")
-    discovery_default_profile_id: str | None = None
     if isinstance(raw_sources, list):
         for source in raw_sources:
             if not isinstance(source, dict) or not isinstance(
                 source.get("source_id"), str
             ):
                 continue
-            source_default = source.get("default_profile_id")
-            if isinstance(source_default, str) and source_default:
-                discovery_default_profile_id = source_default
             for model_id in source.get("discovered_model_ids", []):
                 if isinstance(model_id, str):
                     discovered_source_by_id[model_id] = source["source_id"]
@@ -1011,10 +1006,6 @@ async def _model_capabilities_for_source_uncached(
             for model_id in payload["discovered_model_ids"]
             if isinstance(model_id, str)
         }
-    if discovery_default_profile_id is None:
-        raw_default = payload.get("discovery_default_profile_id")
-        if isinstance(raw_default, str):
-            discovery_default_profile_id = raw_default
     entries = [
         CapabilityCatalogEntry(
             id=entry["id"],
@@ -1040,6 +1031,7 @@ async def _model_capabilities_for_source_uncached(
             # convention. Missing on an older pod means no chat profile is
             # certified there, which makes writes fail closed during rollout.
             model_chat_profile_ids=tuple(entry.get("chat_profile_ids") or ()),
+            model_platform_binding=entry.get("platform_binding"),
             # REASON-01 §5.3 — the pod derives this subset from each profile's
             # `supports_thinking`; control-plane carries it verbatim, exactly
             # like `profile_ids` above. Absent on a pre-REASON-01 pod, which
@@ -1075,7 +1067,6 @@ async def _model_capabilities_for_source_uncached(
             if isinstance(raw_default := payload.get("default_chat_profile_id"), str)
             else None
         ),
-        discovery_default_profile_id=discovery_default_profile_id,
         agent_chat_profile_overrides={
             str(agent_id): str(profile_id)
             for agent_id, profile_id in raw_overrides.items()

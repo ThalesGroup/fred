@@ -12,26 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Platform-wide chat model binding admin panel — chat-only, since V1's only
-// real consumer is chat, so this panel edits exactly one binding, not a
-// fixed 4-row list. Lets a platform operator assert one
-// authoritative (provider, name, settings) binding that every runtime pod's
-// own `models_catalog.yaml` resolution is bypassed for — the concrete lever
-// for a deployment where the operator knows what's actually
-// reachable/licensed and no pod's shipped catalog does. Opened as a drawer
-// (not a page) from FeaturesPage's Models tab, sibling to
-// CapabilityTeamMatrixDrawer.tsx — a single binding, so a full page is
-// disproportionate.
-//
-// Settings are edited as raw JSON text (TextArea atom), not a key/value rows
-// editor: `ModelBindingSettings` is a strict, typed, generated shape
-// (bool/int/float/string fields), and a rows editor that always stores
-// `string` per row cannot represent that without lossy coercion. The
-// JSON editor parses explicitly, reports invalid JSON inline, and only
-// submits when the parsed value is a JSON object — the server's strict
-// `ModelBindingSettings` contract (extra="forbid", no credential/auth/
-// header/cookie/client-object field) remains the actual security boundary;
-// this editor does not re-implement any client-side credential-key check.
+// The default path selects an advertised chat model. Manual provider settings
+// stay available in the advanced disclosure for deployments needing them.
 
 import Button from "@shared/atoms/Button/Button.tsx";
 import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton";
@@ -61,6 +43,7 @@ interface PlatformModelBindingsPanelProps {
   open: boolean;
   onClose: () => void;
   manualModels: CapabilityEnablementItem[];
+  discoveredModels?: CapabilityEnablementItem[];
 }
 
 /** Parses the settings textarea. `null` means "not a JSON object" (including
@@ -81,7 +64,21 @@ function parseSettingsObject(text: string): { value: Record<string, unknown> } |
   return { value: parsed as Record<string, unknown> };
 }
 
-export function PlatformModelBindingsPanel({ open, onClose, manualModels }: PlatformModelBindingsPanelProps) {
+function sameBinding(left: ModelBinding | null, right: ModelBinding): boolean {
+  if (!left || left.provider !== right.provider || left.name !== right.name) return false;
+  const settings = (binding: ModelBinding) =>
+    Object.entries(binding.settings ?? {})
+      .filter(([, value]) => value !== null && value !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b));
+  return JSON.stringify(settings(left)) === JSON.stringify(settings(right));
+}
+
+export function PlatformModelBindingsPanel({
+  open,
+  onClose,
+  manualModels,
+  discoveredModels = [],
+}: PlatformModelBindingsPanelProps) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
   const { data, isLoading, isError } = usePlatformModelBindingQuery();
@@ -103,11 +100,24 @@ export function PlatformModelBindingsPanel({ open, onClose, manualModels }: Plat
       description: `${profileId} - ${(model.model_runtime_ids ?? []).join(", ")}`,
     })),
   );
+  const modelOptions = [...manualModels, ...discoveredModels]
+    .filter((model) => model.model_platform_binding)
+    .map((model) => ({
+      key: model.id,
+      value: model.id,
+      label: model.model_display_name || model.name,
+      description: model.name,
+      section: model.model_discovery_source_id
+        ? t("rework.admin.platformModelBindings.discoveredSource")
+        : t("rework.admin.platformModelBindings.manualSource"),
+      binding: model.model_platform_binding!,
+    }));
 
   const [isEditing, setIsEditing] = useState(false);
   const [provider, setProvider] = useState("");
   const [name, setName] = useState("");
   const [settingsText, setSettingsText] = useState("{}");
+  const [selectedModelId, setSelectedModelId] = useState("");
   const [isEditingFallback, setIsEditingFallback] = useState(false);
   const [selectedFallbackProfileId, setSelectedFallbackProfileId] = useState("");
 
@@ -122,6 +132,7 @@ export function PlatformModelBindingsPanel({ open, onClose, manualModels }: Plat
 
   const startEdit = () => {
     setIsEditing(true);
+    setSelectedModelId(modelOptions.find((option) => sameBinding(binding, option.binding))?.value ?? "");
     setProvider(binding?.provider ?? "");
     setName(binding?.name ?? "");
     setSettingsText(JSON.stringify(binding?.settings ?? {}, null, 2));
@@ -132,6 +143,7 @@ export function PlatformModelBindingsPanel({ open, onClose, manualModels }: Plat
   const parsedSettings = parseSettingsObject(settingsText);
   const settingsInvalid = "error" in parsedSettings;
   const canSave = provider.trim() !== "" && name.trim() !== "" && !settingsInvalid;
+  const selectedModel = modelOptions.find((option) => option.value === selectedModelId);
   const canSaveFallback = fallbackOptions.some((option) => option.value === selectedFallbackProfileId);
 
   const startFallbackEdit = () => {
@@ -177,6 +189,17 @@ export function PlatformModelBindingsPanel({ open, onClose, manualModels }: Plat
           },
         },
       }).unwrap();
+      showSuccess({ summary: t("rework.admin.platformModelBindings.saveToast") });
+      setIsEditing(false);
+    } catch {
+      showError({ summary: t("rework.admin.platformModelBindings.saveError") });
+    }
+  };
+
+  const handleSelectedSave = async () => {
+    if (!selectedModel) return;
+    try {
+      await setBinding({ setPlatformModelBindingRequest: { binding: selectedModel.binding } }).unwrap();
       showSuccess({ summary: t("rework.admin.platformModelBindings.saveToast") });
       setIsEditing(false);
     } catch {
@@ -237,46 +260,76 @@ export function PlatformModelBindingsPanel({ open, onClose, manualModels }: Plat
             </div>
 
             {isEditing && (
-              <form
-                className={styles.editForm}
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void handleSave();
-                }}
-              >
-                <TextInput
-                  label={t("rework.admin.platformModelBindings.form.provider")}
-                  value={provider}
-                  onChange={(e) => setProvider(e.target.value)}
+              <div className={styles.editForm}>
+                <Select
+                  label={t("rework.admin.platformModelBindings.modelSelect")}
+                  size="small"
+                  compact
+                  options={modelOptions}
+                  value={selectedModelId}
+                  onChange={setSelectedModelId}
                   disabled={busy}
-                  required
+                  emptyMessage={t("rework.admin.platformModelBindings.noSelectableModels")}
                 />
-                <TextInput
-                  label={t("rework.admin.platformModelBindings.form.name")}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  disabled={busy}
-                  required
-                />
-                <TextArea
-                  label={t("rework.admin.platformModelBindings.form.settingsTitle")}
-                  value={settingsText}
-                  onChange={(e) => setSettingsText(e.target.value)}
-                  error={settingsInvalid ? t("rework.admin.platformModelBindings.form.settingsInvalidJson") : undefined}
-                  explanation={settingsInvalid ? undefined : t("rework.admin.platformModelBindings.form.settingsHint")}
-                  rows={8}
-                  disabled={busy}
-                />
-
                 <div className={styles.formActions}>
                   <Button color="on-surface" variant="text" size="small" onClick={cancelEdit} disabled={busy}>
                     {t("rework.admin.platformModelBindings.form.cancel")}
                   </Button>
-                  <Button color="primary" variant="filled" size="small" type="submit" disabled={busy || !canSave}>
+                  <Button
+                    color="primary"
+                    variant="filled"
+                    size="small"
+                    onClick={() => void handleSelectedSave()}
+                    disabled={busy || !selectedModel}
+                  >
                     {t("rework.admin.platformModelBindings.form.save")}
                   </Button>
                 </div>
-              </form>
+                <details className={styles.advanced}>
+                  <summary>{t("rework.admin.platformModelBindings.advanced")}</summary>
+                  <form
+                    className={styles.advancedForm}
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void handleSave();
+                    }}
+                  >
+                    <TextInput
+                      label={t("rework.admin.platformModelBindings.form.provider")}
+                      value={provider}
+                      onChange={(e) => setProvider(e.target.value)}
+                      disabled={busy}
+                      required
+                    />
+                    <TextInput
+                      label={t("rework.admin.platformModelBindings.form.name")}
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      disabled={busy}
+                      required
+                    />
+                    <TextArea
+                      label={t("rework.admin.platformModelBindings.form.settingsTitle")}
+                      value={settingsText}
+                      onChange={(e) => setSettingsText(e.target.value)}
+                      error={
+                        settingsInvalid ? t("rework.admin.platformModelBindings.form.settingsInvalidJson") : undefined
+                      }
+                      explanation={
+                        settingsInvalid ? undefined : t("rework.admin.platformModelBindings.form.settingsHint")
+                      }
+                      rows={8}
+                      disabled={busy}
+                    />
+
+                    <div className={styles.formActions}>
+                      <Button color="primary" variant="filled" size="small" type="submit" disabled={busy || !canSave}>
+                        {t("rework.admin.platformModelBindings.form.save")}
+                      </Button>
+                    </div>
+                  </form>
+                </details>
+              </div>
             )}
           </div>
         )}

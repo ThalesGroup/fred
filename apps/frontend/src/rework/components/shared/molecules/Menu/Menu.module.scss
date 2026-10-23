@@ -37,3 +37,16 @@
   font: var(--font-body-large);
   text-align: center;
 }
+
+.sectionTitle {
+  margin: var(--spacing-2xs) var(--spacing-xs);
+  border-radius: var(--radius-xs);
+  background: var(--surface-container-high);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.sectionTitle:not(:first-child) {
+  margin-top: var(--spacing-s);
+}

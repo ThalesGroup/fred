@@ -416,6 +416,14 @@ async def _build_enablement_item(
         model_discovery_source_id=entry.model_discovery_source_id,
         model_runtime_ids=list(entry.model_runtime_ids),
         model_chat_profile_ids=list(entry.model_chat_profile_ids),
+        model_platform_binding=(
+            entry.model_platform_binding
+            if any(
+                profile_id in universal_chat_profile_ids
+                for profile_id in entry.model_chat_profile_ids
+            )
+            else None
+        ),
         model_fallback_profile_ids=(
             [
                 profile_id

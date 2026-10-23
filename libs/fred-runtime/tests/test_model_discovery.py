@@ -37,7 +37,6 @@ from fred_runtime.model_routing.catalog import (
 )
 from fred_runtime.model_routing.contracts import (
     ModelCapability,
-    ModelNotUsableError,
     TeamRoutingProfileDriftError,
 )
 from fred_runtime.model_routing.provider import RoutedChatModelFactory
@@ -56,12 +55,13 @@ from pydantic import ValidationError
 def _catalog(**discovery: object) -> ModelCatalog:
     return ModelCatalog.model_validate(
         {
-            "discovery": {
-                "source_id": "gateway",
-                "base_url": "https://models.example/v1",
-                "default_model_id": "chat-a",
-                **discovery,
-            }
+            "discovery": [
+                {
+                    "source_id": "gateway",
+                    "base_url": "https://models.example/v1",
+                    **discovery,
+                }
+            ],
         }
     )
 
@@ -103,7 +103,7 @@ def test_refresh_permission_requires_platform_admin_for_new_endpoint() -> None:
 def _multi_source_catalog() -> ModelCatalog:
     return ModelCatalog.model_validate(
         {
-            "discoveries": [
+            "discovery": [
                 {"source_id": "east", "base_url": "https://east.example/v1"},
                 {"source_id": "west", "base_url": "https://west.example/v1"},
             ]
@@ -486,10 +486,7 @@ def test_discovery_only_catalog_has_stable_routable_profiles(monkeypatch) -> Non
     settings = first.to_policy().profiles[0].model.settings
     assert settings is not None
     assert settings["base_url"] == ("https://models.example/v1")
-    default = first.default_profile_by_capability[ModelCapability.CHAT]
-    assert next(p for p in first.profiles if p.profile_id == default).model.name == (
-        "chat-a"
-    )
+    assert first.default_profile_by_capability == {}
     assert all(not p.supports_thinking for p in first.profiles)
 
 
@@ -497,10 +494,9 @@ def test_catalog_projection_uses_resolved_discovery_provenance(monkeypatch) -> N
     monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
     catalog = ModelCatalog.model_validate(
         {
-            "discovery": {
-                "source_id": "gateway",
-                "base_url": "https://models.example/v1",
-            },
+            "discovery": [
+                {"source_id": "gateway", "base_url": "https://models.example/v1"}
+            ],
             "profiles": [
                 {
                     "profile_id": "discovered.chat.gateway.pinned",
@@ -551,10 +547,9 @@ def test_static_profiles_remain_routable_when_discovered_inventory_changes(
                     "model": {"provider": "openai", "name": "static-chat"},
                 }
             ],
-            "discovery": {
-                "source_id": "gateway",
-                "base_url": "https://models.example/v1",
-            },
+            "discovery": [
+                {"source_id": "gateway", "base_url": "https://models.example/v1"}
+            ],
         }
     )
     first = catalog.resolve_discovery(
@@ -831,7 +826,6 @@ def test_allowlist_ignores_invalid_or_duplicate_excluded_entries(monkeypatch) ->
         ({"data": [{"id": " chat-a"}]}, "invalid model id"),
         ({"data": [{"id": "x" * 257}]}, "invalid model id"),
         ({"data": [{"id": "chat-a\n"}]}, "invalid model id"),
-        ({"data": [{"id": "chat-b"}]}, "missing its default model"),
     ],
 )
 def test_invalid_inventory_fails(monkeypatch, payload, message) -> None:
@@ -896,7 +890,7 @@ def test_pod_builder_advertises_its_routing_snapshot(monkeypatch, tmp_path) -> N
     assert [item.name for item in projected.models] == ["chat-a"]
     assert (
         projected.default_chat_profile_id
-        == snapshot.default_profile_by_capability[ModelCapability.CHAT]
+        == snapshot.default_profile_by_capability.get(ModelCapability.CHAT)
     )
     assert factory.with_provider(factory._provider).catalog is resolved
 
@@ -966,23 +960,77 @@ def test_discovery_url_rejects_non_endpoint_forms(base_url) -> None:
         _catalog(base_url=base_url)
 
 
-def test_discovery_default_conflicts_with_static_default() -> None:
-    with pytest.raises(ValidationError, match="conflicts"):
+@pytest.mark.parametrize(
+    "discovery",
+    [
+        {"source_id": "gateway", "base_url": "https://models.example/v1"},
+        [],
+        [
+            {"source_id": "gateway", "base_url": "https://models.example/v1"},
+            {"source_id": "gateway", "base_url": "https://other.example/v1"},
+        ],
+    ],
+)
+def test_discovery_requires_nonempty_list_with_unique_sources(discovery) -> None:
+    with pytest.raises(ValidationError):
+        ModelCatalog.model_validate({"discovery": discovery})
+
+
+def test_legacy_plural_discoveries_is_rejected() -> None:
+    with pytest.raises(ValidationError):
         ModelCatalog.model_validate(
             {
-                "discovery": {
-                    "source_id": "gateway",
-                    "base_url": "https://models.example/v1",
-                    "default_model_id": "chat-a",
-                },
-                "default_profile_by_capability": {"chat": "static"},
+                "discoveries": [
+                    {"source_id": "gateway", "base_url": "https://models.example/v1"}
+                ]
             }
         )
 
 
+def test_one_source_list_round_trips() -> None:
+    catalog = _catalog()
+    assert len(catalog.discovery_sources) == 1
+    assert len(catalog.model_dump(mode="json")["discovery"]) == 1
+    assert ModelCatalog.model_validate(catalog.model_dump(mode="json")) == catalog
+
+
+def test_existing_catalog_default_stays_routable_without_discovery() -> None:
+    catalog = ModelCatalog.model_validate(
+        {
+            "default_profile_by_capability": {"chat": "chat.manual"},
+            "profiles": [
+                {
+                    "profile_id": "chat.manual",
+                    "capability": "chat",
+                    "model": {"provider": "openai", "name": "manual"},
+                }
+            ],
+        }
+    )
+    assert catalog.discovery_sources == ()
+    assert (
+        catalog.to_policy().default_profile_by_capability[ModelCapability.CHAT]
+        == "chat.manual"
+    )
+
+
+def test_discovered_profile_cannot_be_pod_default(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    resolved = _catalog().resolve_discovery(
+        transport=_transport({"data": [{"id": "chat-a"}]})
+    )
+    invalid = resolved.model_copy(
+        update={
+            "default_profile_by_capability": {
+                ModelCapability.CHAT: resolved.profiles[0].profile_id
+            }
+        }
+    )
+    with pytest.raises(ValueError, match="manual profile"):
+        invalid.to_policy()
+
+
 def test_discovery_config_rejects_invalid_model_ids() -> None:
-    with pytest.raises(ValidationError, match="default_model_id"):
-        _catalog(default_model_id=" chat-a")
     with pytest.raises(ValidationError, match="include_model_ids"):
         _catalog(include_model_ids=["chat-a", "chat-a"])
 
@@ -1021,10 +1069,11 @@ def test_discovered_model_uses_existing_grant_and_drift_gates(monkeypatch) -> No
         resolver=ModelRoutingResolver(catalog.to_policy()), provider=Provider()
     )
     definition = cast(AgentDefinition, SimpleNamespace(agent_id="agent-a"))
-    with pytest.raises(ModelNotUsableError):
+    with pytest.raises(ValueError, match="No default profile"):
         factory.build_for_chat(definition=definition, binding=binding(()))
     model, selection = factory.build_for_chat(
-        definition=definition, binding=binding((profile.capability_id,))
+        definition=definition,
+        binding=binding((profile.capability_id,), selected_profile=profile.profile_id),
     )
     assert model is not None
     assert selection.profile_id == profile.profile_id
@@ -1107,7 +1156,7 @@ def test_confirmed_removed_team_default_uses_separate_platform_fallback(
             "usable_model_ids": (),
         }
     )
-    with pytest.raises(ModelNotUsableError):
+    with pytest.raises(ValueError, match="No default profile"):
         factory.build_for_chat(
             definition=cast(AgentDefinition, SimpleNamespace(agent_id="agent-a")),
             binding=no_team_choice,
@@ -1115,10 +1164,9 @@ def test_confirmed_removed_team_default_uses_separate_platform_fallback(
 
     manual_catalog = ModelCatalog.model_validate(
         {
-            "discovery": {
-                "source_id": "gateway",
-                "base_url": "https://models.example/v1",
-            },
+            "discovery": [
+                {"source_id": "gateway", "base_url": "https://models.example/v1"}
+            ],
             "profiles": [
                 {
                     "profile_id": "chat.manual",

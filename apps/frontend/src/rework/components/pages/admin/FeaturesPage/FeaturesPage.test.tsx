@@ -25,6 +25,7 @@ import type { CapabilityEnablementItem, Team } from "../../../../../slices/contr
 
 const h = vi.hoisted(() => ({
   applicationsEnabled: false,
+  canAdmin: false,
   list: { data: undefined, isLoading: false, isError: false } as {
     data?: { items?: CapabilityEnablementItem[] };
     isLoading: boolean;
@@ -39,7 +40,7 @@ const h = vi.hoisted(() => ({
   tKeys: [] as string[],
   discoverySources: [] as { source_id: string; yaml_url: string; effective_url: string }[],
   refetch: async () => {},
-  refreshDiscovery: () => ({ unwrap: async () => ({ sources: [] }) }),
+  refreshDiscovery: () => ({ unwrap: async () => ({ sources: [], pod_chat_default_available: true }) }),
 }));
 const translate = vi.hoisted(
   () => (key: string, opts?: { defaultValue?: string; count?: number; content?: string }) => {
@@ -96,7 +97,7 @@ vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
   useFrontendFeatureFlag: () => ({ enabled: h.applicationsEnabled, isLoading: false }),
 }));
 vi.mock("@rework/core/hooks/useUserCapabilities", () => ({
-  useUserCapabilities: () => ({ canAdmin: false }),
+  useUserCapabilities: () => ({ canAdmin: h.canAdmin }),
 }));
 
 // Isolate the page from the drawer's own internals (TuningFieldRenderer, tri-state
@@ -132,7 +133,9 @@ function render(): string {
 
 beforeEach(() => {
   h.applicationsEnabled = false;
+  h.canAdmin = false;
   h.discoverySources = [];
+  h.refreshDiscovery = () => ({ unwrap: async () => ({ sources: [], pod_chat_default_available: true }) });
 });
 
 describe("FeaturesPage states", () => {
@@ -446,6 +449,100 @@ describe("FeaturesPage default-on gate for required team settings", () => {
 });
 
 describe("FeaturesPage kind filter (CAPAB-01, RFC §8.6; model kind OBSERV-02 v3 RFC §8.7)", () => {
+  it("reopens the missing-default dialog on every visit to Models", async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    h.canAdmin = true;
+    h.refreshDiscovery = () => ({ unwrap: async () => ({ sources: [], pod_chat_default_available: false }) });
+    h.list = {
+      data: { items: [cap({ id: "discovered.chat", kind: "model", model_discovery_source_id: "gateway" })] },
+      isLoading: false,
+      isError: false,
+    };
+    h.discoverySources = [
+      {
+        source_id: "gateway",
+        yaml_url: "https://example.test/v1/models",
+        effective_url: "https://example.test/v1/models",
+      },
+    ];
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<FeaturesPage />));
+      const kindButtons = () =>
+        container.querySelectorAll<HTMLButtonElement>('[role="radiogroup"]')[0].querySelectorAll("button");
+      await act(async () => kindButtons()[2].click());
+      expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
+        "rework.admin.platformModelBindings.noPlatformDefaultTitle",
+      );
+      expect(document.querySelectorAll('[role="alertdialog"] button')).toHaveLength(1);
+      await act(async () => {
+        document.querySelector<HTMLButtonElement>('[role="alertdialog"] button')?.click();
+      });
+      expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('aside[data-open="true"] button[aria-label="Close panel"]')?.click(),
+      );
+      await act(async () => kindButtons()[1].click());
+      await act(async () => kindButtons()[2].click());
+      expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
+        "rework.admin.platformModelBindings.noPlatformDefaultTitle",
+      );
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it.each([
+    [true, false],
+    [false, true],
+  ])("checks the declared pod default for a manual catalog (%s)", async (hasDefault, expectModal) => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    h.canAdmin = true;
+    h.list = { data: { items: [cap({ id: "manual.chat", kind: "model" })] }, isLoading: false, isError: false };
+    h.refreshDiscovery = () => ({
+      unwrap: async () => ({ sources: [], pod_chat_default_available: hasDefault }),
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<FeaturesPage />));
+      await act(async () => container.querySelectorAll<HTMLButtonElement>('[role="radiogroup"] button')[2].click());
+      expect(Boolean(document.querySelector('[role="alertdialog"]'))).toBe(expectModal);
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("does not demand a default when an agent pod is unreachable", async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    h.canAdmin = true;
+    h.list = { data: { items: [] }, isLoading: false, isError: false };
+    h.refreshDiscovery = () => ({
+      unwrap: async () => ({
+        sources: [],
+        pod_chat_default_available: false,
+        unverified_runtimes: [{ runtime_id: "pod-b", base_url: "http://localhost:8013" }],
+      }),
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<FeaturesPage />));
+      await act(async () => container.querySelectorAll<HTMLButtonElement>('[role="radiogroup"] button')[2].click());
+      expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+      h.refreshDiscovery = () => ({ unwrap: async () => ({ sources: [], pod_chat_default_available: true }) });
+    }
+  });
+
   it("keeps the original model table when no discovery source is configured", async () => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
     h.list = {

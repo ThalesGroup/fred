@@ -56,7 +56,6 @@ from collections.abc import (
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from hashlib import sha256
 from typing import Any, cast
 from uuid import uuid4
 
@@ -1417,6 +1416,7 @@ class _ModelCatalogEntry(BaseModel):
     context_window_tokens: int | None = None
     max_input_tokens: int | None = None
     max_output_tokens: int | None = None
+    platform_binding: ModelBinding | None = None
 
 
 class _PlatformPromptFileResponse(BaseModel):
@@ -1467,7 +1467,6 @@ class _ModelDiscoveryAdvertisement(BaseModel):
     yaml_url: str
     effective_url: str
     discovered_model_ids: list[str] = Field(default_factory=list)
-    default_profile_id: str | None = None
 
 
 class _ModelCatalogResponse(BaseModel):
@@ -1478,7 +1477,6 @@ class _ModelCatalogResponse(BaseModel):
     discovery_yaml_url: str | None = None
     discovery_effective_url: str | None = None
     discovered_model_ids: list[str] = Field(default_factory=list)
-    discovery_default_profile_id: str | None = None
     discovery_sources: list[_ModelDiscoveryAdvertisement] = Field(default_factory=list)
     default_chat_profile_id: str | None = None
     """This pod's `default_profile_by_capability.chat` — the LOWEST precedence
@@ -1526,6 +1524,16 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
     from ..model_routing import ModelCapability
 
     seen: dict[str, _ModelCatalogEntry] = {}
+    chat_bindings: dict[str, ModelBinding | None] = {}
+    ambiguous_chat_bindings: set[str] = set()
+    resolved_models = {
+        profile.profile_id: profile.model
+        for profile in catalog.model_copy(
+            update={"agent_profile_overrides": {}, "default_profile_by_capability": {}}
+        )
+        .to_policy()
+        .profiles
+    }
     for profile in catalog.profiles:
         provider = profile.model.provider
         name = profile.model.name
@@ -1540,6 +1548,21 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
         # models share): keying on anything else could emit two entries whose
         # ids collide once normalized.
         key = profile.capability_id
+        binding: ModelBinding | None = None
+        if profile.capability == ModelCapability.CHAT:
+            resolved = resolved_models[profile.profile_id]
+            settings = dict(resolved.settings or {})
+            settings.pop("timeout", None)
+            settings.pop("http_client_limits", None)
+            if provider == "openai" and "openai_api_base" in settings:
+                settings["base_url"] = settings.pop("openai_api_base")
+            try:
+                binding = ModelBinding.model_validate(
+                    {"provider": provider, "name": name, "settings": settings}
+                )
+            except ValueError:
+                # Catalog settings outside the platform contract stay pod-local.
+                pass
         existing = seen.get(key)
         if existing is None:
             existing = _ModelCatalogEntry(
@@ -1552,6 +1575,7 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
                 max_input_tokens=profile.max_input_tokens,
                 max_output_tokens=profile.max_output_tokens,
                 profile_ids=[profile.profile_id],
+                platform_binding=binding,
             )
             seen[key] = existing
         else:
@@ -1571,6 +1595,12 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
             existing.chat_capability_verified = True
         if profile.capability == ModelCapability.CHAT:
             existing.chat_profile_ids.append(profile.profile_id)
+            previous = chat_bindings.setdefault(key, binding)
+            if binding != previous:
+                ambiguous_chat_bindings.add(key)
+            existing.platform_binding = (
+                None if key in ambiguous_chat_bindings else previous
+            )
         # REASON-01 §5.3: aptitude is per profile, the toggle is per model —
         # this one condition is the whole projection between them.
         if profile.supports_thinking:
@@ -1614,12 +1644,6 @@ def _project_model_catalog_response(
             for profile_id, owner in catalog.discovered_profile_sources.items()
             if owner == source.source_id
         }
-        default_profile_id = (
-            f"discovered.chat.{source.source_id}."
-            f"{sha256(source.default_model_id.encode('utf-8')).hexdigest()}"
-            if source.default_model_id is not None
-            else None
-        )
         advertisements.append(
             _ModelDiscoveryAdvertisement(
                 source_id=source.source_id,
@@ -1630,7 +1654,6 @@ def _project_model_catalog_response(
                     for profile in catalog.profiles
                     if profile.profile_id in owned_ids
                 ],
-                default_profile_id=default_profile_id,
             )
         )
     selected = next(
@@ -1644,7 +1667,6 @@ def _project_model_catalog_response(
         discovery_yaml_url=selected.yaml_url if selected else None,
         discovery_effective_url=selected.effective_url if selected else None,
         discovered_model_ids=selected.discovered_model_ids if selected else [],
-        discovery_default_profile_id=selected.default_profile_id if selected else None,
         default_chat_profile_id=catalog.default_profile_by_capability.get(
             ModelCapability.CHAT
         ),

@@ -46,6 +46,11 @@ async def test_parses_a_well_formed_models_catalog_response(
                 "provider": "openai",
                 "name": "gpt-5.1",
                 "description": "OpenAI GPT-5.1",
+                "platform_binding": {
+                    "provider": "openai",
+                    "name": "gpt-5.1",
+                    "settings": {"base_url": "https://models.example/v1"},
+                },
             },
             {
                 "id": "model__ollama__mistral-latest",
@@ -74,25 +79,30 @@ async def test_parses_a_well_formed_models_catalog_response(
     # A missing/None description falls back to the model name, never a blank
     # string — CapabilityCatalogEntry.description requires min_length=1.
     assert entries[1].description == "mistral:latest"
+    assert entries[0].model_platform_binding is not None
+    assert entries[0].model_platform_binding.settings.base_url == (
+        "https://models.example/v1"
+    )
 
 
 @pytest.mark.asyncio
-async def test_reads_discovery_default_from_the_second_source(
+async def test_preserves_identity_for_models_from_multiple_discovery_sources(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     payload = {
-        "models": [],
-        "discovery_default_profile_id": None,
+        "models": [
+            {"id": "model-east", "name": "east-chat", "provider": "openai"},
+            {"id": "model-west", "name": "west-chat", "provider": "openai"},
+        ],
+        "default_chat_profile_id": "chat.manual.safe",
         "discovery_sources": [
             {
                 "source_id": "east",
-                "discovered_model_ids": [],
-                "default_profile_id": None,
+                "discovered_model_ids": ["model-east"],
             },
             {
                 "source_id": "west",
-                "discovered_model_ids": [],
-                "default_profile_id": "discovered.chat.west.safe",
+                "discovered_model_ids": ["model-west"],
             },
         ],
     }
@@ -103,7 +113,11 @@ async def test_reads_discovery_default_from_the_second_source(
     monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
     pod_models = await _model_capabilities_for_source("http://pod")
     assert pod_models is not None
-    assert pod_models.discovery_default_profile_id == "discovered.chat.west.safe"
+    assert pod_models.default_chat_profile_id == "chat.manual.safe"
+    assert [entry.model_discovery_source_id for entry in pod_models.entries] == [
+        "east",
+        "west",
+    ]
 
 
 @pytest.mark.asyncio

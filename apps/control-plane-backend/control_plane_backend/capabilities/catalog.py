@@ -246,6 +246,12 @@ async def aggregate_capability_catalog(
                             existing.model_chat_profile_ids,
                             entry.model_chat_profile_ids,
                         ),
+                        "model_platform_binding": (
+                            entry.model_platform_binding
+                            if entry.model_platform_binding
+                            == existing.model_platform_binding
+                            else None
+                        ),
                         "model_thinking_profile_ids": _union_profile_ids(
                             existing.model_thinking_profile_ids,
                             entry.model_thinking_profile_ids,

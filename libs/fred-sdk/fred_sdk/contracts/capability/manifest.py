@@ -39,6 +39,7 @@ from fred_core.security.rebac.capability_authz import (
 )
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from ..context import ModelBinding
 from ..models import FieldSpec, TeamScopePolicy
 
 # Capability ids live in OpenFGA object ids (`capability:<id>`, RFC §8.1) and
@@ -426,6 +427,7 @@ class CapabilityCatalogEntry(BaseModel):
     # A future embedding policy will expose its own typed subset when it has
     # a production consumer. Always empty for kind="tool"/"agent" entries.
     model_chat_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
+    model_platform_binding: ModelBinding | None = None
     # The subset of `model_profile_ids` declaring `supports_thinking`
     # (`MODEL-REASONING-ENABLEMENT-RFC.md` §5.3, REASON-01). Aptitude is
     # declared per profile, where the behaviour actually differs; the admin

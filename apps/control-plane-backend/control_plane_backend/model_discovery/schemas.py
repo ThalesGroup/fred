@@ -55,6 +55,7 @@ class ModelDiscoveryStatus(BaseModel):
     refresh_error: str | None = None
     unverified_runtimes: list[UnverifiedRuntime] = Field(default_factory=list)
     verified_source_ids: list[str] = Field(default_factory=list)
+    pod_chat_default_available: bool | None = None
 
 
 class SetDiscoveryUrlRequest(BaseModel):

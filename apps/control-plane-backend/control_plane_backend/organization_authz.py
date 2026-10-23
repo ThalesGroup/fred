@@ -47,6 +47,14 @@ async def require_manage_model_discovery_urls(
     await _require(rebac, user, OrganizationPermission.CAN_MANAGE_PLATFORM)
 
 
+async def require_manage_platform_model_binding(
+    rebac: RebacEngine, user: KeycloakUser
+) -> None:
+    """Changing a model endpoint can send the pod's provider credential to it."""
+
+    await _require(rebac, user, OrganizationPermission.CAN_MANAGE_PLATFORM)
+
+
 async def require_edit_platform_prompt(rebac: RebacEngine, user: KeycloakUser) -> None:
     """Platform-prompt gate: `can_edit_platform_prompt` (`platform_admin or
     prompt_editor`). Not `can_manage_platform` — that catch-all also carries

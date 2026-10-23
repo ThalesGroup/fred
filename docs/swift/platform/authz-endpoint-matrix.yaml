@@ -1098,7 +1098,7 @@ operations:
     method: PUT
     path: /control-plane/v1/admin/model-discovery/{source_id}/url
     review_status: approved
-    required_permission: can_manage_capabilities
+    required_permission: can_manage_platform
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/platform-model-fallback
@@ -1118,7 +1118,7 @@ operations:
     method: POST
     path: /pod/v1/agents/models-catalog/refresh
     review_status: approved
-    required_permission: can_manage_capabilities # Enforced against the caller when pod security is enabled; local unsecured mode bypasses ReBAC.
+    required_permission: can_manage_capabilities # A changed models_url additionally requires can_manage_platform. Enforced when pod security is enabled; local unsecured mode bypasses ReBAC.
   - service: agent-pod
     method: GET
     path: /pod/v1/agents/models-catalog/detail
@@ -1133,12 +1133,12 @@ operations:
     method: PUT
     path: /control-plane/v1/admin/platform/model-bindings
     review_status: approved
-    required_permission: can_manage_capabilities # organization_authz.require_manage_capabilities. ModelBinding's own strict settings contract (ModelBindingSettings, extra="forbid") rejects credential-shaped or unknown settings keys at request-body parsing (422), before this route's authz even runs.
+    required_permission: can_manage_platform # Advanced URL settings can redirect a pod's provider credential. ModelBinding's strict settings contract rejects unknown keys at request parsing (422).
   - service: control-plane
     method: DELETE
     path: /control-plane/v1/admin/platform/model-bindings
     review_status: approved
-    required_permission: can_manage_capabilities # organization_authz.require_manage_capabilities. Unsets the binding (row deletion — no off-sentinel) and echoes the now-unset state.
+    required_permission: can_manage_platform # Unsets the binding and echoes the now-unset state.
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/platform/prompt

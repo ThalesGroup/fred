@@ -164,6 +164,23 @@ it("does not call a source unregistered while another pod is unreachable", () =>
   expect(html).not.toContain("discovery.unregisteredSource");
 });
 
+it("keeps an unregistered-source warning for a verified pod during another pod's outage", () => {
+  const html = renderToStaticMarkup(
+    <ModelDiscoveryStatus
+      data={{ sources: [] }}
+      discoveredSourceIds={["reachable", "unknown"]}
+      refreshing={false}
+      refreshError={false}
+      unverifiedRuntimes={[{ runtime_id: "pod-b", base_url: "http://localhost:8013" }]}
+      verifiedSourceIds={["reachable"]}
+    />,
+  );
+
+  expect(html).toContain("discovery.unverifiedRuntimes");
+  expect(html).toContain("discovery.unregisteredSourcereachable");
+  expect(html).not.toContain("discovery.unregisteredSourceunknown");
+});
+
 it("shows the effective URL without edit controls to a delegated feature manager", () => {
   const source = {
     source_id: "gateway",

@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from fred_sdk.contracts.capability.manifest import TeamScopePolicy
+from fred_sdk.contracts.context import ModelBinding
 from fred_sdk.contracts.models import FieldSpec
 from pydantic import BaseModel, Field, field_validator
 
@@ -195,6 +196,7 @@ class CapabilityEnablementItem(BaseModel):
         description="Runtime pods currently advertising this model.",
     )
     model_chat_profile_ids: list[str] = Field(default_factory=list)
+    model_platform_binding: ModelBinding | None = None
     model_fallback_profile_ids: list[str] = Field(default_factory=list)
     model_capabilities: list[str] = Field(default_factory=list)
     model_chat_capability_verified: bool = False
