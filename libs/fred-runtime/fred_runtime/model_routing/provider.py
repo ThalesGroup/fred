@@ -499,8 +499,8 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
 
         Who calls it:
         - `build(...)` (per turn) and the turn-free capability model port,
-          which may pass `profile_id`: a known, usable chat profile then
-          replaces the routed default; otherwise routing applies unchanged
+          which may pass `profile_id`: that chat profile then replaces the
+          routed default, and an unknown or unusable one raises `ValueError`
 
         Return / side effects:
         - returns `(BaseChatModel, ModelSelection)`
@@ -527,15 +527,19 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         construction, because the YAML already put `reasoning_effort` in
         `settings`: declining to add it would never reach the model.
         """
-        selection = (
-            self.usable_profile_selection(profile_id, binding)
-            if profile_id is not None
-            else None
-        ) or self.select(
-            definition=definition,
-            binding=binding,
-            capability=ModelCapability.CHAT,
-        )
+        if profile_id is None:
+            selection = self.select(
+                definition=definition,
+                binding=binding,
+                capability=ModelCapability.CHAT,
+            )
+        else:
+            requested = self.usable_profile_selection(profile_id, binding)
+            if requested is None:
+                raise ValueError(
+                    f"Model profile {profile_id!r} is not a chat model this team may use."
+                )
+            selection = requested
         # The winning profile's own identity, never re-derived from
         # `model.name`: siblings on one gateway share that wire name.
         capability_id = selection.capability_id

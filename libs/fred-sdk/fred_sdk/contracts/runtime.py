@@ -592,9 +592,11 @@ class CapabilityModelPort(ABC):
     (save-time validation, background jobs started from it).
 
     Resolves the model the saved agent uses by default (agent override, team
-    default, catalogue default), within the team's usable models. A known, usable `profile_id` replaces that default. Fails closed with
-    `CapabilityModelUnavailableError`, including when `require_vision` is set and
-    the resolved profile does not declare `supports_vision`. Images go as
+    default, catalogue default), within the team's usable models. A `profile_id`
+    replaces that default and is never swapped for it. Fails closed with
+    `CapabilityModelUnavailableError`, including when that profile is unknown or
+    outside the usable models, and when `require_vision` is set and the resolved
+    profile does not declare `supports_vision`. Images go as
     LangChain `image_url` content parts.
     """
 

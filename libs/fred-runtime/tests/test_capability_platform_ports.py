@@ -167,8 +167,11 @@ def test_profile_override_wins_when_usable(monkeypatch: pytest.MonkeyPatch) -> N
     assert _ask(port, profile_id=VISION_PROFILE, require_vision=True) == "vision-model"
 
 
-def test_unknown_profile_falls_back_to_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    assert _ask(_port(monkeypatch), profile_id="chat.ghost") == "text-model"
+def test_unknown_profile_fails_instead_of_using_the_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with pytest.raises(CapabilityModelUnavailableError, match="chat.ghost"):
+        _ask(_port(monkeypatch), profile_id="chat.ghost")
 
 
 def test_vision_refused_on_a_text_only_model(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -176,11 +179,9 @@ def test_vision_refused_on_a_text_only_model(monkeypatch: pytest.MonkeyPatch) ->
         _ask(_port(monkeypatch), require_vision=True)
 
 
-def test_unusable_override_is_ignored_then_vision_refused(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_unusable_override_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     port = _port(monkeypatch, usable=frozenset({TEXT_ID}))
-    with pytest.raises(CapabilityModelUnavailableError, match="vision"):
+    with pytest.raises(CapabilityModelUnavailableError, match=VISION_PROFILE):
         _ask(port, profile_id=VISION_PROFILE, require_vision=True)
 
 
@@ -225,7 +226,8 @@ def test_a_revoked_model_stops_being_used_after_the_ttl(
     assert _ask(port, profile_id=VISION_PROFILE) == "vision-model"
     assert len(queries) == 1
     now["t"] += platform_ports._USABLE_MODELS_TTL_S
-    assert _ask(port, profile_id=VISION_PROFILE) == "text-model"
+    with pytest.raises(CapabilityModelUnavailableError):
+        _ask(port, profile_id=VISION_PROFILE)
     assert len(queries) == 2
 
 
