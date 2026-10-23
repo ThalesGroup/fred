@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The one-measure check of a deck plan's charts, run before the assignment
+"""The one-measure check of a deck plan's charts (amounts in k€ and M€ are
+first put in one scale), run before the assignment
 (problems in the assigner's shape join its ``needs_revision``), and the plan
 outline shown for validation. Whether a slide makes a point, cites a source or
 needs a cover is the model's call (working rules), never refused here.
@@ -20,14 +21,17 @@ needs a cover is the model's call (working rules), never refused here.
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence, Tuple
+import re
+from collections import Counter
+from typing import Dict, List, Optional, Sequence, Tuple
 
-from fred_capability_ppt_filler.builder import charts
+from fred_capability_ppt_filler.builder import charts, notes
 from fred_capability_ppt_filler.builder.assign import SlideProblem
 from fred_capability_ppt_filler.builder.plan import (
     XY_TYPES,
     DeckPlan,
     PlanChart,
+    SlidePlan,
     shown_charts,
 )
 
@@ -74,6 +78,121 @@ def _axis_units(chart: PlanChart) -> List[Tuple[str, str]]:
                 )
             )
     return found
+
+
+# --- scale prefixes of one unit (k€, M€, Md€) ---------------------------------------
+
+_BASES = {"€": "€", "EUR": "€", "$": "$", "USD": "$", "£": "£", "GBP": "£"}
+_PREFIXES = {
+    **dict.fromkeys(("k", "K"), 1e3),
+    "M": 1e6,
+    **dict.fromkeys(("Md", "Mds", "Mrd", "Mrds", "B", "bn", "Bn"), 1e9),
+}
+# English finance writes the symbol first: €m, $bn.
+_AFTER_SYMBOL = {"k": 1e3, "K": 1e3, "m": 1e6, "M": 1e6, "bn": 1e9, "B": 1e9}
+_PREFIX_OF = {
+    "fr": {1e3: "k", 1e6: "M", 1e9: "Md"},
+    "en": {1e3: "k", 1e6: "M", 1e9: "bn"},
+}
+# A single unit is rescaled only past this: 1 500 € stays as written.
+_LARGE = 1e4
+
+
+def _scale(unit: str) -> Optional[Tuple[str, float]]:
+    """``"M€"`` → ``("€", 1e6)``; None for a unit that is no scaled amount."""
+    text = re.sub(r"\s", "", unit)
+    if text.upper() in _BASES:
+        return _BASES[text.upper()], 1.0
+    match = re.fullmatch(r"(Mrds?|Mds?|bn|Bn|[kKMB])(€|\$|£|EUR|USD|GBP)?", text)
+    if match:
+        return _BASES.get((match.group(2) or "").upper(), ""), _PREFIXES[match.group(1)]
+    match = re.fullmatch(r"(€|\$|£)(bn|[kKmMB])", text)
+    if match:
+        return match.group(1), _AFTER_SYMBOL[match.group(2)]
+    return None
+
+
+def _in_range(amounts: Sequence[float], factor: float) -> Tuple[int, int]:
+    scaled = [abs(a) / factor for a in amounts if a]
+    return sum(1 <= v < 1000 for v in scaled), -sum(v >= 1000 for v in scaled)
+
+
+def rescaled_chart(chart: PlanChart, language: str) -> Optional[PlanChart]:
+    """The chart in one scale of its amounts' unit: written in several (500 k€,
+    2 M€), or one leaving large figures (1 250 000 €). None when unchanged."""
+    if chart.type in XY_TYPES:
+        return None
+    given = _scale(chart.unit) if chart.unit else None
+    scales: Dict[str, Tuple[str, float]] = {}
+    for unit in {u for s in chart.series for u in s.units if u.strip()}:
+        scale = _scale(unit)
+        if scale is None:
+            return None
+        scales[unit] = scale
+    bases = {b for b, _ in scales.values()} | ({given[0]} if given else set())
+    factors = {f for _, f in scales.values()}
+    if len(bases) != 1:
+        return None
+    mixed = len(factors) > 1
+    amounts: List[Optional[float]] = []
+    for series in chart.series:
+        units = list(series.units) + [""] * (len(series.values) - len(series.units))
+        for value, unit in zip(series.values, units):
+            scale = scales.get(unit) or (None if mixed else given)
+            if value is not None and scale is None:
+                return None  # a bare number beside several scales: no way to tell
+            amounts.append(None if value is None or scale is None else value * scale[1])
+    known = [a for a in amounts if a is not None]
+    current = next(iter(factors)) if factors else given[1] if given else 1.0
+    if not mixed and (not known or max(map(abs, known)) / current < _LARGE):
+        return None
+    if mixed and given:
+        target = given[1]
+    else:
+        target = max((1.0, 1e3, 1e6, 1e9), key=lambda f: (*_in_range(known, f), f))
+    if not mixed and target == current:
+        return None
+    (base,) = bases
+    spelled = Counter(u for s in chart.series for u in s.units if u in scales)
+    label: Optional[str] = next(
+        (u for u, _ in spelled.most_common() if scales[u][1] == target),
+        (_PREFIX_OF["fr" if language == "fr" else "en"].get(target, "") + base) or None,
+    )
+    if given and given[1] == target:
+        label = chart.unit
+    values = iter(None if a is None else round(a / target, 9) for a in amounts)
+    series = [
+        s.model_copy(
+            update={
+                "values": [next(values) for _ in s.values],
+                "units": [label or "" for _ in s.values],
+            }
+        )
+        for s in chart.series
+    ]
+    return chart.model_copy(update={"series": series, "unit": label})
+
+
+def rescaled(plan: DeckPlan) -> DeckPlan:
+    """Every chart of the plan in one scale of its unit (see `rescaled_chart`)."""
+    language = notes.plan_language(plan)
+
+    def slide_of(slide: SlidePlan) -> SlidePlan:
+        update = {}
+        if slide.chart is not None:
+            chart = rescaled_chart(slide.chart, language)
+            if chart is not None:
+                update["chart"] = chart
+        if slide.charts:
+            redone = [rescaled_chart(c, language) for c in slide.charts]
+            if any(redone):
+                update["charts"] = [n or c for n, c in zip(redone, slide.charts)]
+        return slide.model_copy(update=update) if update else slide
+
+    slides = [slide_of(s) for s in plan.slides]
+    if all(a is b for a, b in zip(slides, plan.slides)):
+        return plan
+    return plan.model_copy(update={"slides": slides})
 
 
 def check(plan: DeckPlan, indices: Sequence[int]) -> List[SlideProblem]:

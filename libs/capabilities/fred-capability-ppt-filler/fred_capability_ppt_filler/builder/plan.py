@@ -766,10 +766,10 @@ class PlanSeries(BaseModel):
         for index, entry in enumerate(raw):
             number, unit = read_number(entry, mark)
             values.append(number)
+            # One per value, "" where none was written: a rescale reads each one.
+            units.append(unit if number is not None and isinstance(entry, str) else "")
             if number is None and (entry is not None or index in carried):
                 unread[index] = carried.get(index) or _quote(entry)[:20]
-            elif isinstance(entry, str):
-                units.append(unit)
         return {
             "name": _as_text(name) or "",
             "values": values,
@@ -827,7 +827,9 @@ class PlanChart(BaseModel):
         default=None, description="Optional caption of the chart itself."
     )
     unit: Optional[str] = Field(
-        default=None, description="Optional unit of the values: '%', 'M€', 'days'."
+        default=None,
+        description="Optional unit of the values: '%', 'M€', 'days'. Amounts written "
+        "in k€, M€ and Md€ (or k$, M$, bn) in one chart are converted to one of them.",
     )
     show: Optional[PieShow] = Field(
         default=None,

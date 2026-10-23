@@ -1224,6 +1224,7 @@ def _evaluate(
     checked: Sequence[int],
 ) -> Tuple[Assignment, DeckPlan, List[str]]:
     """The chart-unit check, then the assignment: one revision for both."""
+    plan = story.rescaled(plan)
     told = story.check(plan, checked)
     assignment, plan, bad = _assign_loadable(
         inventory, plan, prefetched, variety, max_uses

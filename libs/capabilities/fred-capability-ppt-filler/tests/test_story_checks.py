@@ -166,3 +166,55 @@ def test_a_wide_range_and_untitled_charts_are_built_as_sent():
         "series": [{"name": "P", "values": [6, 4]}],
     }
     assert _check(_slide(chart=REPRO), _slide(charts=[REPRO, pie])) == []
+
+
+# --- scale prefixes of one unit ------------------------------------------------------
+
+
+def _rescaled(
+    values: List[Any], unit: Any = None, title: str = "Le chiffre d'affaires"
+):
+    chart: Dict[str, Any] = {
+        "type": "column",
+        "categories": [f"Q{i}" for i in range(1, len(values) + 1)],
+        "series": [{"name": "CA", "values": values}],
+    }
+    if unit:
+        chart["unit"] = unit
+    plan = story.rescaled(
+        DeckPlan.model_validate({"slides": [COVER, _slide(title=title, chart=chart)]})
+    )
+    (rescaled,) = plan.slides[1].chart.series  # type: ignore[union-attr]
+    return rescaled.values, plan.slides[1].chart.unit, story.check(plan, [2])  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize(
+    "values, unit, expected",
+    [
+        (["500 k€", "2 M€"], None, ([0.5, 2.0], "M€")),
+        # The model's own unit wins.
+        (["500 k€", "2 M€"], "k€", ([500.0, 2000.0], "k€")),
+        (["2 Md€", "800 M€"], None, ([2.0, 0.8], "Md€")),
+        (["$500k", "$2M"], None, ([0.5, 2.0], "M$")),
+        (["3 bn", "800 M"], None, ([3.0, 0.8], "bn")),
+        # Large plain amounts are shown in a scale that keeps them short.
+        (["1 250 000 €", "800 000 €"], None, ([1.25, 0.8], "M€")),
+        ([1250000, 800000], "€", ([1.25, 0.8], "M€")),
+        # Short enough already: left as written.
+        (["1 500 €", "2 300 €"], None, ([1500.0, 2300.0], "€")),
+    ],
+)
+def test_amounts_in_several_scales_of_one_unit_are_put_in_one(values, unit, expected):
+    *got, problems = _rescaled(values, unit)
+    assert tuple(got) == expected and problems == []
+
+
+def test_a_billion_scale_is_spelled_in_the_deck_s_language():
+    english = "The revenue of the group"
+    assert _rescaled(["2 500 000 000 €", "900 000 000 €"], title=english)[1] == "bn€"
+    assert _rescaled(["2 500 000 000 €", "900 000 000 €"])[1] == "Md€"
+
+
+def test_other_measures_or_unscaled_numbers_still_mix_units():
+    for values in (["12 %", "3 M€"], ["500 k€", 14, "2 M€"], ["500 k€", "2 M$"]):
+        assert "chart mixes units" in _rescaled(values)[2][0].problem

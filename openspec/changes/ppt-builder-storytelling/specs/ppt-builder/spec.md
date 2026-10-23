@@ -26,12 +26,22 @@ The system SHALL accept a `takeaway` on every plan slide: the conclusion the aud
 
 ### Requirement: A chart holds one measure
 
-The system SHALL return `needs_revision` for a chart whose values are written with two different units, every time it is sent; a scatter or bubble chart SHALL be checked per axis. This check SHALL run before the slide assignment, and a `changes` call SHALL be checked on the slides it touches only. The system SHALL NOT refuse a chart for the spread of its values or, on a slide with several charts, for a missing chart title.
+Before that check, the system SHALL put a category chart's amounts in one scale of their unit: values written with scale prefixes of one base unit (k€, M€, Md€; k$, M$; K, M, B, bn, Md) SHALL be converted to the scale that keeps most values between 1 and 999 (the chart's own `unit` when it names one of them), and amounts of a single unit reaching 10 000 or more (1 250 000 €) SHALL be shown in such a scale; the converted values carry that unit in their number format, data labels included, its billion prefix spelled in the deck's language (Md in French, bn in English). A bare number beside several scales SHALL NOT be converted. The system SHALL return `needs_revision` for a chart whose values are still written with two different units, every time it is sent; a scatter or bubble chart SHALL be checked per axis. This check SHALL run before the slide assignment, and a `changes` call SHALL be checked on the slides it touches only. The system SHALL NOT refuse a chart for the spread of its values or, on a slide with several charts, for a missing chart title.
 
 #### Scenario: Two written units
 
 - **WHEN** a series holds "12 %" and "3 M€"
 - **THEN** no deck is built and the problem names both units; **WHEN** the same chart is sent again **THEN** it is refused again
+
+#### Scenario: Two scales of one unit
+
+- **WHEN** a series holds "500 k€" and "2 M€"
+- **THEN** the deck is built and the chart plots 0.5 and 2 with the number format `M€`
+
+#### Scenario: Large plain amounts
+
+- **WHEN** a series holds "1 250 000 €" and "800 000 €" in a French deck
+- **THEN** the chart plots 1.25 and 0.8 in `M€`; "1 500 €" and "2 300 €" are plotted as written
 
 #### Scenario: Wide-range values
 

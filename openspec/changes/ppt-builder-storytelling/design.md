@@ -139,6 +139,10 @@ Fixes 2 and 3 (D9) cut re-calls after a proposal from 96 % to 78 %, not to zero,
 
 Any reply after a proposal used to count as approval. The platform's `ask_user` tool (a HITL interrupt with choices) already renders a card; the capability uses it rather than its own interrupt, which the SDK does not offer to capability tools and which would replay the whole build on resume. After a proposal the middleware offers the model only `ask_user` (`tool_choice="any"`) and, in `awrap_tool_call`, replaces its choices with one `approve` choice labelled in the plan's language (`notes.plan_language`, carried in the proposal's payload) plus the free answer, so the model cannot drop or rename the button. `plan_approved` reads the `ask_user` result after the last proposal: `approve` builds, anything else is revision. With `ask_user` not offered (toggle off, OpenAI-compatible calls), the previous rule stays: the user's next message answers.
 
+### D12. Amounts in one scale (owner decision 2026-10-23)
+
+"500 k€" beside "2 M€" was refused as two units. `story.rescaled` runs before the check (`tools._evaluate`): it reads each value's written unit (`PlanSeries.units` is now one entry per value), converts amounts of one base unit to a common scale chosen by the most values in 1-999 (ties: the larger scale), and writes that unit in `chart.unit`, which the number format already carries to axis and data labels. A single unit is rescaled only from 10 000, so short amounts stay as written. A written spelling of the chosen scale is reused; otherwise k/M/Md (French) or k/M/bn (English) by `notes.plan_language`. Scatter and bubble axes and table cells are left as written (a table's text is the user's).
+
 ## Risks / Trade-offs
 
 - [More revision rounds on weak models] → checks run before the assignment and share one revision; each option is a concrete edit; measured in the eval (first-call success, rounds per deck).

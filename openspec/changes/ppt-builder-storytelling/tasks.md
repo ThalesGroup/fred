@@ -75,3 +75,8 @@
 
 - [x] 9.1 With `ask_user` offered, a proposal forces the approval question; the middleware replaces its choices by "Approuver"/"Approve" plus a free answer; only that choice approves, a free answer revises, a skip ends the answer; an approval forces the build call. Without `ask_user`, the user's reply still answers. Tests: `test_plan_validation.py::test_only_the_approve_button_approves_a_plan`, `::test_the_approve_button_builds_and_a_free_answer_revises`, `::test_with_ask_user_a_proposal_asks_and_an_approval_builds`, `::test_the_approval_question_offers_approve_and_a_free_answer`, `::test_a_proposal_or_a_delivery_closes_the_answer_until_the_user_speaks` (updated)
 - [ ] 9.2 Live check once fred-agents runs this code: the card shows the outline with the Approve button and the free answer
+
+## 10. Amounts in one scale (owner decision 2026-10-23, design D12)
+
+- [x] 10.1 A category chart's k€/M€/Md€ (k$, M$, K/M/B/bn/Md) values are converted to one scale (most values 1-999, the chart's `unit` when it names one); single-unit amounts from 10 000 are shown in k€/M€/Md€ (bn in English); the one-measure check runs after it. Charts only: tables keep their cells as written. Tests: `test_story_checks.py::test_amounts_in_several_scales_of_one_unit_are_put_in_one`, `::test_a_billion_scale_is_spelled_in_the_deck_s_language`, `::test_other_measures_or_unscaled_numbers_still_mix_units`, `test_story_render.py::test_k_and_m_euros_in_one_chart_are_drawn_in_one_scale`
+- [ ] 10.2 Live check once fred-agents runs this code
