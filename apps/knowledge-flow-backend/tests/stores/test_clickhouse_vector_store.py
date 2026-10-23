@@ -21,7 +21,6 @@ from langchain_community.embeddings import FakeEmbeddings
 from sqlalchemy import Column, MetaData, String, Table
 from sqlalchemy.engine import Engine
 
-import knowledge_flow_backend.core.stores.vector.clickhouse_vector_store as clickhouse_module
 from knowledge_flow_backend.core.stores.vector.clickhouse_vector_store import ClickHouseVectorStoreAdapter
 
 
@@ -100,7 +99,7 @@ def test_chunk_read_uses_the_updated_tag_column_when_json_is_stale(monkeypatch: 
 
             return Result()
 
-    monkeypatch.setattr(clickhouse_module, "Session", FakeSession)
+    monkeypatch.setattr("knowledge_flow_backend.core.stores.vector.clickhouse_vector_store.Session", FakeSession)
     store.set_document_tag_ids(document_uid="doc-1", tag_ids=["beta"])
 
     assert store.get_chunk("doc-1", "chunk-1")["metadata"]["tag_ids"] == ["beta"]
