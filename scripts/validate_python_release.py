@@ -5,17 +5,25 @@ from __future__ import annotations
 
 import argparse
 import email.parser
+import io
+import json
 import re
 import sys
 import tarfile
 import tomllib
+import urllib.error
+import urllib.request
 import zipfile
 from pathlib import Path
 
-from libs_version import SHARED, baseline, candidates, patch_after, tagged_text
+from libs_version import SHARED
 
-ROOT = Path(__file__).resolve().parent.parent
 NAME = re.compile(r"^([A-Za-z0-9_.-]+)(?:\[[^]]+\])?(.*)$")
+STABLE = re.compile(r"\d+\.\d+\.\d+")
+PYPI = "https://pypi.org/pypi"
+# A rebuild of unchanged sources still differs in these wheel entries: WHEEL
+# stamps the setuptools version and RECORD hashes WHEEL.
+REBUILT = ("WHEEL", "RECORD")
 
 
 def canonical(name: str) -> str:
@@ -210,53 +218,130 @@ def validate_artifacts(
     return errors
 
 
-def prepared_from_base(
-    projects: list[tuple[Path, dict[str, object]]], base: str
-) -> tuple[set[str], list[str]]:
-    baseline(ROOT, base)
-    prepared: set[str] = set()
+def version_key(value: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in value.split("."))
+
+
+def fetch(url: str) -> bytes | None:
+    """Return a PyPI response body, None when PyPI does not have it.
+
+    Any answer other than 200 or 404 raises: the release stops rather than guess.
+    """
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response:
+            return response.read()
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return None
+        raise
+
+
+def wheel_entries(data: bytes) -> dict[str, bytes]:
+    """Return a wheel's entries, without the ones every rebuild changes."""
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        return {
+            entry: archive.read(entry)
+            for entry in archive.namelist()
+            if not any(entry.endswith(f".dist-info/{name}") for name in REBUILT)
+        }
+
+
+def compare_with_pypi(
+    package_dir: Path, name: str, version: str
+) -> tuple[bool, list[str]]:
+    """Decide whether one built package is to upload, against PyPI's releases.
+
+    A version above PyPI's latest is to upload, whatever releases were skipped.
+    PyPI's latest version is to skip, provided the built wheel is the published
+    one: a change shipped under an unchanged version is a forgotten bump.
+    """
+    body = fetch(f"{PYPI}/{name}/json")
+    if body is None:
+        return True, []
+    releases: dict[str, list[dict[str, str]]] = json.loads(body)["releases"]
+    if STABLE.fullmatch(version) is None:
+        return False, [f"{name}: {version} is not a stable X.Y.Z version"]
+    latest = max(
+        (value for value in releases if STABLE.fullmatch(value)),
+        key=version_key,
+        default=None,
+    )
+    if version not in releases:
+        if latest is not None and version_key(version) < version_key(latest):
+            return False, [f"{name}: {version} is below {latest}, the latest on PyPI"]
+        return True, []
+    if version != latest:
+        return False, [f"{name}: {version} is on PyPI but {latest} is the latest"]
+    stem = name.replace("-", "_")
+    wheel = package_dir / "target" / "dist" / f"{stem}-{version}-py3-none-any.whl"
+    published = next(
+        (
+            file["url"]
+            for file in releases[version]
+            if file["packagetype"] == "bdist_wheel"
+        ),
+        None,
+    )
+    if not wheel.is_file():
+        return False, [f"{name}: {wheel} is missing; build before comparing"]
+    if published is None or (remote := fetch(published)) is None:
+        return False, [f"{name}: PyPI has no wheel for {version} to compare with"]
+    local, remote_entries = wheel_entries(wheel.read_bytes()), wheel_entries(remote)
+    changed = sorted(
+        entry
+        for entry in local.keys() | remote_entries.keys()
+        if local.get(entry) != remote_entries.get(entry)
+    )
+    if changed:
+        shown = ", ".join(changed[:5]) + (", ..." if len(changed) > 5 else "")
+        return False, [
+            f"{name}: differs from {version} on PyPI but its version was not "
+            f"raised ({shown})"
+        ]
+    return False, []
+
+
+def release_plan(package_dirs: list[Path]) -> tuple[list[Path], list[str]]:
+    """Return the packages to upload, in order, and what forbids the release."""
+    pending: list[Path] = []
     errors: list[str] = []
-    for package_dir, data in projects:
-        name = canonical(str(data["name"]))
-        previous_text = tagged_text(
-            ROOT, base, (package_dir / "pyproject.toml").relative_to(ROOT)
+    for package_dir in package_dirs:
+        data = project(package_dir)
+        name, version = canonical(str(data["name"])), str(data["version"])
+        upload, package_errors = compare_with_pypi(package_dir, name, version)
+        errors.extend(package_errors)
+        if upload:
+            pending.append(package_dir)
+        state = "blocked" if package_errors else "to publish" if upload else "on PyPI"
+        print(f"{name} {version}: {state}", file=sys.stderr)
+    names = {canonical(str(project(package_dir)["name"])) for package_dir in pending}
+    if names & set(SHARED) and not set(SHARED) <= names:
+        errors.append(
+            f"{', '.join(SHARED)} are released together; only "
+            f"{', '.join(sorted(names & set(SHARED)))} has a new version"
         )
-        if previous_text is None:
-            prepared.add(name)
-            continue
-        previous = str(tomllib.loads(previous_text)["project"]["version"])
-        current = str(data["version"])
-        target = patch_after(previous)
-        if name in SHARED and current != target:
-            errors.append(
-                f"{name}: expected one patch after {previous}, found {current}"
-            )
-        elif current == target:
-            prepared.add(name)
-        elif current != previous:
-            errors.append(f"{name}: expected {previous} or {target}, found {current}")
-    for name in candidates(ROOT, base):
-        if name not in prepared:
-            errors.append(
-                f"{name}: changed since {base} but its package version was not prepared"
-            )
-    return prepared, errors
+    return pending, errors
 
 
 def validate(
     package_dirs: list[Path],
     *,
-    base: str | None = None,
+    prepared: set[str] | None = None,
     pending: set[Path] | None = None,
 ) -> list[str]:
-    """Validate the complete package map and artifacts selected for publication."""
+    """Validate the complete package map and artifacts selected for publication.
+
+    ``prepared`` names the packages getting a new version: their internal floors
+    must name the new versions of the other prepared packages.
+    """
     projects = [(package_dir, project(package_dir)) for package_dir in package_dirs]
     versions = {
         canonical(str(data["name"])): str(data["version"]) for _, data in projects
     }
     if len(versions) != len(projects):
         return ["Duplicate Python package names in release inventory"]
-    prepared, errors = prepared_from_base(projects, base) if base else (set(), [])
+    prepared = prepared or set()
+    errors: list[str] = []
     if pending is not None and (unknown := (pending - set(package_dirs))):
         errors.append(
             f"Unknown pending packages: {', '.join(str(path) for path in sorted(unknown))}"
@@ -288,24 +373,38 @@ def validate(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base", help="previous stable code/vX.Y.Z tag")
     parser.add_argument(
-        "--pending", nargs="*", help="only these package directories need artifacts"
+        "--pypi",
+        action="store_true",
+        help="compare the built packages with PyPI and print, one per line, "
+        "the directories to upload in order",
     )
     parser.add_argument("packages", nargs="+", help="package directories")
     args = parser.parse_args()
     package_dirs = [Path(package).resolve() for package in args.packages]
-    errors = validate(
-        package_dirs,
-        base=args.base,
-        pending={Path(path).resolve() for path in args.pending}
-        if args.pending is not None
-        else None,
-    )
+    if not args.pypi:
+        errors = validate(package_dirs)
+    else:
+        try:
+            pending, errors = release_plan(package_dirs)
+        except (OSError, ValueError, KeyError) as error:
+            print(f"PyPI could not be compared: {error}; stopping.", file=sys.stderr)
+            return 1
+        errors += validate(
+            package_dirs,
+            prepared={canonical(str(project(path)["name"])) for path in pending},
+            pending=set(pending),
+        )
     if errors:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
+    if args.pypi:
+        for package_dir in pending:
+            print(package_dir)
+        if not pending:
+            print("Nothing to publish: PyPI has every package.", file=sys.stderr)
+        return 0
     print(f"Validated {len(package_dirs)} package manifest(s).")
     return 0
 

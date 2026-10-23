@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -48,9 +49,13 @@ class PublishLibsTest(unittest.TestCase):
 
             bin_dir = project / "bin"
             bin_dir.mkdir()
-            curl = bin_dir / "curl"
-            _ = curl.write_text('#!/bin/sh\nprintf "%s" "$PUBLISH_TEST_STATUS"\n')
-            curl.chmod(0o755)
+            check = bin_dir / "check"
+            _ = check.write_text(
+                '#!/bin/sh\nfor arg; do case "$arg" in --*) ;; *)\n'
+                '  [ "$PUBLISH_TEST_STATUS" = 404 ] && echo "$arg" ;; esac; done\n'
+                "exit 0\n"
+            )
+            check.chmod(0o755)
             uv = bin_dir / "uv"
             _ = uv.write_text("#!/bin/sh\nexit 0\n")
             uv.chmod(0o755)
@@ -76,8 +81,7 @@ class PublishLibsTest(unittest.TestCase):
                         trace.unlink(missing_ok=True)
                         common = [
                             "PYPI_PACKAGES=first second",
-                            "PYPI_RELEASE_CHECK=true",
-                            "BASE_TAG=code/v1.0.0",
+                            f"PYPI_RELEASE_CHECK={check}",
                         ]
                         built = subprocess.run(
                             ["make", *options, "publish-libs-dry-run", *common],
@@ -110,7 +114,8 @@ class PublishLibsTest(unittest.TestCase):
                             0,
                             completed.stdout + completed.stderr,
                         )
-                        expected = ["build:first", "build:second"]
+                        # publish-libs builds again before checking against PyPI.
+                        expected = ["build:first", "build:second"] * 2
                         if status == "404":
                             expected += ["publish:first", "publish:second"]
                         self.assertEqual(trace.read_text().splitlines(), expected)
@@ -127,7 +132,8 @@ class PublishLibsTest(unittest.TestCase):
             )
             trace = project / "trace"
             _ = (package / "Makefile").write_text(
-                'publish:\n\t@echo publish:first >> "$$PUBLISH_TEST_TRACE"\n'
+                "publish-dry-run:\n"
+                + 'publish:\n\t@echo publish:first >> "$$PUBLISH_TEST_TRACE"\n'
             )
             bin_dir = project / "bin"
             bin_dir.mkdir()
@@ -140,7 +146,6 @@ class PublishLibsTest(unittest.TestCase):
                     "publish-libs",
                     "PYPI_PACKAGES=first",
                     "PYPI_RELEASE_CHECK=false",
-                    "BASE_TAG=code/v1.0.0",
                 ],
                 cwd=project,
                 env={
@@ -290,55 +295,116 @@ class ValidatePythonReleaseTest(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("sdist internal requirements differ", errors[0])
 
-    def test_tagged_package_map_rejects_omitted_changes_and_stale_floors(self) -> None:
+    @staticmethod
+    def _wheel(entries: dict[str, str]) -> bytes:
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            for name, content in entries.items():
+                archive.writestr(name, content)
+        return buffer.getvalue()
+
+    def _pypi(self, published: dict[str, dict[str, bytes]]):
+        """Serve ``{name: {version: wheel}}`` as PyPI would."""
+
+        def fetch(url: str) -> bytes | None:
+            path = url.removeprefix(release_validator.PYPI + "/")
+            if path.startswith("wheel/"):
+                _, name, version = path.split("/")
+                return published[name][version]
+            name = path.removesuffix("/json")
+            if name not in published:
+                return None
+            releases = {
+                version: [
+                    {
+                        "packagetype": "bdist_wheel",
+                        "url": f"{release_validator.PYPI}/wheel/{name}/{version}",
+                    }
+                ]
+                for version in published[name]
+            }
+            return json.dumps({"releases": releases}).encode()
+
+        return patch.object(release_validator, "fetch", fetch)
+
+    def _published_wheel(self, name: str, version: str, *, code: str = "") -> bytes:
+        """The wheel ``_package`` builds, as another setuptools would stamp it."""
+        stem = name.replace("-", "_")
+        entries = {
+            f"{stem}-{version}.dist-info/METADATA": (
+                f"Metadata-Version: 2.4\nName: {name}\nVersion: {version}\n"
+            ),
+            f"{stem}-{version}.dist-info/WHEEL": "Generator: setuptools (0.0)\n",
+        }
+        if code:
+            entries[f"{stem}/__init__.py"] = code
+        return self._wheel(entries)
+
+    def test_pypi_plan_uploads_new_versions_even_after_a_skipped_release(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
-            subprocess.run(
-                ["git", "config", "user.email", "test@example.com"],
-                cwd=root,
-                check=True,
-            )
-            subprocess.run(
-                ["git", "config", "user.name", "Release Test"], cwd=root, check=True
-            )
-            core = root / "libs/fred-core"
-            capability = root / "libs/capabilities/fred-capability-x"
-            core.mkdir(parents=True)
-            capability.mkdir(parents=True)
-            core_project = core / "pyproject.toml"
-            cap_project = capability / "pyproject.toml"
-            core_project.write_text(
-                '[project]\nname = "fred-core"\nversion = "4.5.0"\n'
-            )
-            cap_project.write_text(
-                '[project]\nname = "fred-capability-x"\nversion = "4.5.0"\n'
-                'dependencies = ["fred-core>=4.5.0"]\n'
-            )
-            subprocess.run(["git", "add", "."], cwd=root, check=True)
-            subprocess.run(["git", "commit", "-qm", "baseline"], cwd=root, check=True)
-            subprocess.run(["git", "tag", "code/v1.0.0"], cwd=root, check=True)
-            core_project.write_text(core_project.read_text().replace("4.5.0", "4.5.1"))
-            (capability / "feature.py").write_text("enabled = True\n")
-            with patch.object(release_validator, "ROOT", root):
-                errors = validate([core, capability], base="code/v1.0.0", pending=set())
-                self.assertTrue(any("version was not prepared" in e for e in errors))
-                cap_project.write_text(
-                    cap_project.read_text().replace(
-                        'version = "4.5.0"', 'version = "4.5.1"'
-                    )
-                )
-                errors = validate([core, capability], base="code/v1.0.0", pending=set())
-                self.assertTrue(any("prepared fred-core floor" in e for e in errors))
-                cap_project.write_text(
-                    cap_project.read_text().replace(
-                        "fred-core>=4.5.0", "fred-core>=4.5.1"
-                    )
-                )
-                self.assertEqual(
-                    validate([core, capability], base="code/v1.0.0", pending=set()),
-                    [],
-                )
+            new = self._package(root, "fred-new", version="1.0.0")
+            skipped = self._package(root, "fred-skipped", version="4.5.7")
+            same = self._package(root, "fred-same", version="4.5.1")
+            published = {
+                "fred-skipped": {"4.5.5": b""},
+                "fred-same": {"4.5.1": self._published_wheel("fred-same", "4.5.1")},
+            }
+            with self._pypi(published):
+                pending, errors = release_validator.release_plan([new, skipped, same])
+
+        self.assertEqual(errors, [])
+        self.assertEqual(pending, [new, skipped])
+
+    def test_pypi_plan_rejects_a_change_under_a_published_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            package = self._package(root, "fred-same", version="4.5.1")
+            wheel = self._published_wheel("fred-same", "4.5.1", code="old = True\n")
+            with self._pypi({"fred-same": {"4.5.1": wheel}}):
+                pending, errors = release_validator.release_plan([package])
+
+        self.assertEqual(pending, [])
+        self.assertEqual(len(errors), 1)
+        self.assertIn("version was not raised", errors[0])
+        self.assertIn("fred_same/__init__.py", errors[0])
+
+    def test_pypi_plan_rejects_a_version_behind_pypi(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            below = self._package(root, "fred-below", version="4.5.6")
+            older = self._package(root, "fred-older", version="4.5.5")
+            published = {
+                "fred-below": {"4.5.7": b""},
+                "fred-older": {"4.5.5": b"", "4.5.7": b""},
+            }
+            with self._pypi(published):
+                pending, errors = release_validator.release_plan([below, older])
+
+        self.assertEqual(pending, [])
+        self.assertIn("below 4.5.7", errors[0])
+        self.assertIn("4.5.7 is the latest", errors[1])
+
+    def test_pypi_plan_releases_the_shared_libraries_together(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            packages = [
+                self._package(root, name, version="4.5.8")
+                for name in ("fred-core", "fred-sdk")
+            ]
+            runtime = self._package(root, "fred-runtime", version="4.5.7")
+            published = {
+                "fred-core": {"4.5.7": b""},
+                "fred-sdk": {"4.5.7": b""},
+                "fred-runtime": {
+                    "4.5.7": self._published_wheel("fred-runtime", "4.5.7")
+                },
+            }
+            with self._pypi(published):
+                _, errors = release_validator.release_plan([*packages, runtime])
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn("released together", errors[0])
 
 
 if __name__ == "__main__":
