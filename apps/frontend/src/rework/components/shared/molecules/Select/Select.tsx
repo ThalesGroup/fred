@@ -42,6 +42,7 @@ export interface SelectOption<T = string> {
   icon?: IconProps;
   disabled?: boolean;
   description?: string;
+  section?: string;
   destructive?: boolean;
   tooltip?: string;
 }

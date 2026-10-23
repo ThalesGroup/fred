@@ -3,5 +3,7 @@
   "enableExperimentalFeatures": true,
   "venvPath": ".",
   "venv": ".venv",
+  "extraPaths": ["../../libs/fred-sdk"],
+  "exclude": ["target", ".venv", "**/node_modules", "**/__pycache__", "**/.*"],
   "reportUnreachable": "warning"
 }

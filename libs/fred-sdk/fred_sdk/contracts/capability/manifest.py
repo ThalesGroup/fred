@@ -39,6 +39,7 @@ from fred_core.security.rebac.capability_authz import (
 )
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from ..context import ModelBinding
 from ..models import FieldSpec, TeamScopePolicy
 
 # Capability ids live in OpenFGA object ids (`capability:<id>`, RFC §8.1) and
@@ -415,12 +416,18 @@ class CapabilityCatalogEntry(BaseModel):
     # policy consumers use the explicit subset below. Always empty for
     # kind="tool"/"agent" entries — only `kind="model"` populates it.
     model_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
+    model_capabilities: tuple[str, ...] = Field(default_factory=tuple)
+    model_chat_capability_verified: bool = False
+    model_runtime_ids: tuple[str, ...] = Field(default_factory=tuple)
+    # Set from the pod's discovery inventory; absent for YAML-only models.
+    model_discovery_source_id: str | None = None
     # The chat-capable subset of `model_profile_ids`. Team routing is a
     # chat-only contract, so its picker and write validation consume this
     # explicit projection instead of guessing from profile-id conventions.
     # A future embedding policy will expose its own typed subset when it has
     # a production consumer. Always empty for kind="tool"/"agent" entries.
     model_chat_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
+    model_platform_binding: ModelBinding | None = None
     # The subset of `model_profile_ids` declaring `supports_thinking`
     # (`MODEL-REASONING-ENABLEMENT-RFC.md` §5.3, REASON-01). Aptitude is
     # declared per profile, where the behaviour actually differs; the admin
@@ -442,6 +449,9 @@ class CapabilityCatalogEntry(BaseModel):
     # frontend derives one from the capability id. Display only; nothing
     # routes or authorizes on it. Only `kind="model"` entries populate it.
     model_display_name: str | None = None
+    model_context_window_tokens: int | None = Field(default=None, gt=0)
+    model_max_input_tokens: int | None = Field(default=None, gt=0)
+    model_max_output_tokens: int | None = Field(default=None, gt=0)
 
     @classmethod
     def from_manifest(

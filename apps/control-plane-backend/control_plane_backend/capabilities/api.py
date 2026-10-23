@@ -47,9 +47,11 @@ from control_plane_backend.capabilities.schemas import (
     CapabilityImpactPreview,
     CapabilityPersonalScopeResult,
     EnableTeamCapabilityRequest,
+    ModelDisplayNameResult,
     ModelReasoningResult,
     SetCapabilityDefaultOnRequest,
     SetCapabilityPersonalScopeRequest,
+    SetModelDisplayNameRequest,
     SetModelReasoningRequest,
     TeamCapabilityEnablementResult,
 )
@@ -63,6 +65,28 @@ ProductDependencies = Annotated[
     ProductServiceDependencies,
     Depends(get_product_service_dependencies),
 ]
+
+
+@router.put(
+    "/admin/capabilities/{capability_id}/display-name",
+    response_model=ModelDisplayNameResult,
+    summary="Set or clear a model's platform display name.",
+)
+async def put_model_display_name(
+    capability_id: Annotated[str, Path(min_length=1)],
+    body: SetModelDisplayNameRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> ModelDisplayNameResult:
+    try:
+        return await capability_service.set_model_display_name(
+            user=user,
+            capability_id=capability_id,
+            display_name=body.display_name,
+            deps=deps,
+        )
+    except (AuthorizationError, CapabilityNotFound) as exc:
+        raise _map_error(exc) from exc
 
 
 @router.get(

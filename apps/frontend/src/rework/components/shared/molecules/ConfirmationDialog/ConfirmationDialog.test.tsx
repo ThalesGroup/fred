@@ -98,6 +98,29 @@ function renderOverDialog(handlers: Handlers) {
 }
 
 describe("ConfirmationDialog keyboard", () => {
+  it("shows and focuses only the required action when cancellation is hidden", () => {
+    const onConfirm = vi.fn();
+    act(() =>
+      root.render(
+        <ConfirmationDialog
+          open
+          title="Select a model"
+          confirmLabel="Choose model"
+          showCancel={false}
+          dismissible={false}
+          onConfirm={onConfirm}
+          onCancel={vi.fn()}
+        />,
+      ),
+    );
+    expect(confirmation().querySelectorAll("button")).toHaveLength(1);
+    expect(document.activeElement).toBe(buttonIn(confirmation(), "Choose model"));
+    press("Escape");
+    expect(confirmation()).not.toBeNull();
+    act(() => buttonIn(confirmation(), "Choose model").click());
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
   it("focuses Cancel, the safe choice, on open", () => {
     renderOverDialog({});
     expect(document.activeElement).toBe(buttonIn(confirmation(), "Cancel"));

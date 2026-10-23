@@ -46,6 +46,11 @@ async def test_parses_a_well_formed_models_catalog_response(
                 "provider": "openai",
                 "name": "gpt-5.1",
                 "description": "OpenAI GPT-5.1",
+                "platform_binding": {
+                    "provider": "openai",
+                    "name": "gpt-5.1",
+                    "settings": {"base_url": "https://models.example/v1"},
+                },
             },
             {
                 "id": "model__ollama__mistral-latest",
@@ -74,6 +79,45 @@ async def test_parses_a_well_formed_models_catalog_response(
     # A missing/None description falls back to the model name, never a blank
     # string — CapabilityCatalogEntry.description requires min_length=1.
     assert entries[1].description == "mistral:latest"
+    assert entries[0].model_platform_binding is not None
+    assert entries[0].model_platform_binding.settings.base_url == (
+        "https://models.example/v1"
+    )
+
+
+@pytest.mark.asyncio
+async def test_preserves_identity_for_models_from_multiple_discovery_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {
+        "models": [
+            {"id": "model-east", "name": "east-chat", "provider": "openai"},
+            {"id": "model-west", "name": "west-chat", "provider": "openai"},
+        ],
+        "default_chat_profile_id": "chat.manual.safe",
+        "discovery_sources": [
+            {
+                "source_id": "east",
+                "discovered_model_ids": ["model-east"],
+            },
+            {
+                "source_id": "west",
+                "discovered_model_ids": ["model-west"],
+            },
+        ],
+    }
+
+    async def _fake_get(self, url, *args, **kwargs):  # noqa: ANN001
+        return httpx.Response(200, json=payload, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
+    pod_models = await _model_capabilities_for_source("http://pod")
+    assert pod_models is not None
+    assert pod_models.default_chat_profile_id == "chat.manual.safe"
+    assert [entry.model_discovery_source_id for entry in pod_models.entries] == [
+        "east",
+        "west",
+    ]
 
 
 @pytest.mark.asyncio
@@ -187,6 +231,12 @@ async def test_admin_row_carries_the_display_name() -> None:
         icon="neurology",
         kind="model",
         model_display_name="Mistral Medium 3.1",
+        model_runtime_ids=("fred-agents",),
+        model_capabilities=("chat",),
+        model_chat_profile_ids=("chat.mistral.medium",),
+        model_context_window_tokens=32768,
+        model_max_input_tokens=30000,
+        model_max_output_tokens=2048,
     )
 
     item = await _build_enablement_item(
@@ -196,9 +246,16 @@ async def test_admin_row_carries_the_display_name() -> None:
         total_personal_space_count=0,
         impact={},
         reasoning_enabled_ids=frozenset(),
+        universal_chat_profile_ids=frozenset({"chat.mistral.medium"}),
     )
 
     assert item.model_display_name == "Mistral Medium 3.1"
+    assert item.model_runtime_ids == ["fred-agents"]
+    assert item.model_capabilities == ["chat"]
+    assert item.model_fallback_profile_ids == ["chat.mistral.medium"]
+    assert item.model_context_window_tokens == 32768
+    assert item.model_max_input_tokens == 30000
+    assert item.model_max_output_tokens == 2048
     assert item.name == "mistral"
 
 

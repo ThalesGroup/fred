@@ -990,6 +990,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bootstrapPlatformAdminRequest,
       }),
     }),
+    putModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePut: build.mutation<
+      PutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutApiResponse,
+      PutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/display-name`,
+        method: "PUT",
+        body: queryArg.setModelDisplayNameRequest,
+      }),
+    }),
     getAdminCapabilitiesControlPlaneV1AdminCapabilitiesGet: build.query<
       GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiResponse,
       GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiArg
@@ -1057,6 +1067,97 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/reasoning`,
         method: "PATCH",
         body: queryArg.setModelReasoningRequest,
+      }),
+    }),
+    getModelDiscoveryControlPlaneV1AdminModelDiscoveryGet: build.query<
+      GetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetApiResponse,
+      GetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/model-discovery` }),
+    }),
+    dismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDelete: build.mutation<
+      DismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDeleteApiResponse,
+      DismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/model-discovery/${queryArg.sourceId}/removed-model`,
+        method: "DELETE",
+        params: {
+          model_id: queryArg.modelId,
+        },
+      }),
+    }),
+    getPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGet: build.query<
+      GetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetApiResponse,
+      GetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/pod-chat-defaults` }),
+    }),
+    putPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPut: build.mutation<
+      PutPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPutApiResponse,
+      PutPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/pod-chat-defaults/${queryArg.runtimeId}`,
+        method: "PUT",
+        body: queryArg.setPodChatDefaultRequest,
+      }),
+    }),
+    clearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDelete: build.mutation<
+      ClearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDeleteApiResponse,
+      ClearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/pod-chat-defaults/${queryArg.runtimeId}`,
+        method: "DELETE",
+      }),
+    }),
+    putPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPut: build.mutation<
+      PutPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPutApiResponse,
+      PutPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/pod-chat-defaults/${queryArg.runtimeId}/fallback`,
+        method: "PUT",
+        body: queryArg.setPodChatFallbackRequest,
+      }),
+    }),
+    clearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDelete: build.mutation<
+      ClearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDeleteApiResponse,
+      ClearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/pod-chat-defaults/${queryArg.runtimeId}/fallback`,
+        method: "DELETE",
+      }),
+    }),
+    refreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPost: build.mutation<
+      RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiResponse,
+      RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/model-discovery/refresh`, method: "POST" }),
+    }),
+    getModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGet: build.query<
+      GetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetApiResponse,
+      GetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/model-discovery/detail`,
+        params: {
+          source_id: queryArg.sourceId,
+          model_id: queryArg.modelId,
+          runtime_id: queryArg.runtimeId,
+        },
+      }),
+    }),
+    putModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPut: build.mutation<
+      PutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutApiResponse,
+      PutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/model-discovery/${queryArg.sourceId}/url`,
+        method: "PUT",
+        body: queryArg.setDiscoveryUrlRequest,
       }),
     }),
     publishKnowledgeBaseDefinition: build.mutation<
@@ -2783,6 +2884,12 @@ export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiRes
 export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiArg = {
   bootstrapPlatformAdminRequest: BootstrapPlatformAdminRequest;
 };
+export type PutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutApiResponse =
+  /** status 200 Successful Response */ ModelDisplayNameResult;
+export type PutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutApiArg = {
+  capabilityId: string;
+  setModelDisplayNameRequest: SetModelDisplayNameRequest;
+};
 export type GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiResponse =
   /** status 200 Successful Response */ CapabilityEnablementList;
 export type GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiArg = void;
@@ -2825,6 +2932,58 @@ export type PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdR
 export type PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchApiArg = {
   capabilityId: string;
   setModelReasoningRequest: SetModelReasoningRequest;
+};
+export type GetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetApiResponse =
+  /** status 200 Successful Response */ ModelDiscoveryStatus;
+export type GetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetApiArg = void;
+export type DismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDeleteApiResponse =
+  /** status 200 Successful Response */ DiscoverySourceStatus;
+export type DismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDeleteApiArg = {
+  sourceId: string;
+  modelId: string;
+};
+export type GetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetApiResponse =
+  /** status 200 Successful Response */ PodChatDefaults;
+export type GetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetApiArg = void;
+export type PutPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPutApiResponse =
+  /** status 200 Successful Response */ PodChatDefaultStatus;
+export type PutPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPutApiArg = {
+  runtimeId: string;
+  setPodChatDefaultRequest: SetPodChatDefaultRequest;
+};
+export type ClearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDeleteApiResponse =
+  /** status 200 Successful Response */ PodChatDefaultStatus;
+export type ClearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDeleteApiArg = {
+  runtimeId: string;
+};
+export type PutPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPutApiResponse =
+  /** status 200 Successful Response */ PodChatDefaultStatus;
+export type PutPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPutApiArg = {
+  runtimeId: string;
+  setPodChatFallbackRequest: SetPodChatFallbackRequest;
+};
+export type ClearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDeleteApiResponse =
+  /** status 200 Successful Response */ PodChatDefaultStatus;
+export type ClearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDeleteApiArg = {
+  runtimeId: string;
+};
+export type RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiResponse =
+  /** status 200 Successful Response */ ModelDiscoveryStatus;
+export type RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiArg = void;
+export type GetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetApiArg = {
+  sourceId: string;
+  modelId: string;
+  runtimeId?: string | null;
+};
+export type PutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutApiResponse =
+  /** status 200 Successful Response */ DiscoverySourceStatus;
+export type PutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutApiArg = {
+  sourceId: string;
+  setDiscoveryUrlRequest: SetDiscoveryUrlRequest;
 };
 export type PublishKnowledgeBaseDefinitionApiResponse =
   /** status 200 Successful Response */ KnowledgeBasePublicationResult;
@@ -4180,6 +4339,32 @@ export type AssetSlot = {
   max_count?: number | null;
 };
 export type TeamScopePolicy = "default_on" | "admin_gated";
+export type ModelBindingSettings = {
+  base_url?: string | null;
+  azure_endpoint?: string | null;
+  azure_openai_api_version?: string | null;
+  azure_ad_client_id?: string | null;
+  azure_ad_client_scope?: string | null;
+  azure_apim_base_url?: string | null;
+  azure_apim_resource_path?: string | null;
+  azure_tenant_id?: string | null;
+  project?: string | null;
+  location?: string | null;
+  model_family?: ("mistral" | "llama" | "anthropic" | "claude") | null;
+  temperature?: number | null;
+  max_tokens?: number | null;
+  top_p?: number | null;
+  max_retries?: number | null;
+  streaming?: boolean | null;
+  stream_usage?: boolean | null;
+  request_timeout?: number | null;
+  reasoning_effort?: string | null;
+};
+export type ModelBinding = {
+  provider: "anthropic" | "azure-apim" | "azure-openai" | "ollama" | "openai" | "vertex-ai" | "vertex-ai-model-garden";
+  name: string;
+  settings?: ModelBindingSettings;
+};
 export type CapabilityCatalogEntry = {
   id: string;
   runtime_id?: string | null;
@@ -4201,12 +4386,20 @@ export type CapabilityCatalogEntry = {
   route_base_url?: string | null;
   default_capability_ids?: string[];
   model_profile_ids?: string[];
+  model_capabilities?: string[];
+  model_chat_capability_verified?: boolean;
+  model_runtime_ids?: string[];
+  model_discovery_source_id?: string | null;
   model_chat_profile_ids?: string[];
+  model_platform_binding?: ModelBinding | null;
   model_thinking_profile_ids?: string[];
   model_reasoning_efforts?: {
     [key: string]: ("low" | "medium" | "high")[];
   };
   model_display_name?: string | null;
+  model_context_window_tokens?: number | null;
+  model_max_input_tokens?: number | null;
+  model_max_output_tokens?: number | null;
 };
 export type AgentTemplateSummary = {
   template_id: string;
@@ -4633,32 +4826,6 @@ export type ManagedAgentTuning = {
         };
   };
 };
-export type ModelBindingSettings = {
-  base_url?: string | null;
-  azure_endpoint?: string | null;
-  azure_openai_api_version?: string | null;
-  azure_ad_client_id?: string | null;
-  azure_ad_client_scope?: string | null;
-  azure_apim_base_url?: string | null;
-  azure_apim_resource_path?: string | null;
-  azure_tenant_id?: string | null;
-  project?: string | null;
-  location?: string | null;
-  model_family?: ("mistral" | "llama" | "anthropic" | "claude") | null;
-  temperature?: number | null;
-  max_tokens?: number | null;
-  top_p?: number | null;
-  max_retries?: number | null;
-  streaming?: boolean | null;
-  stream_usage?: boolean | null;
-  request_timeout?: number | null;
-  reasoning_effort?: string | null;
-};
-export type ModelBinding = {
-  provider: "anthropic" | "azure-apim" | "azure-openai" | "ollama" | "openai" | "vertex-ai" | "vertex-ai-model-garden";
-  name: string;
-  settings?: ModelBindingSettings;
-};
 export type ManagedAgentRuntimeBinding = {
   agent_instance_id: string;
   template_agent_id: string;
@@ -4676,6 +4843,18 @@ export type ManagedAgentRuntimeBinding = {
   reasoning_enabled_model_ids?: string[];
   team_disabled_model_ids?: string[];
   platform_chat_model_binding?: ModelBinding | null;
+  pod_chat_default_profile_id?: string | null;
+  platform_chat_model_fallback?: ModelBinding | null;
+  pod_chat_fallback_profile_id?: string | null;
+  model_discovery_urls?: {
+    [key: string]: string;
+  };
+  model_discovery_revisions?: {
+    [key: string]: number;
+  };
+  confirmed_removed_chat_profiles?: {
+    [key: string]: string;
+  };
   platform_prompt?: string | null;
 };
 export type SessionListItem = {
@@ -4831,6 +5010,13 @@ export type BootstrapPlatformAdminRequest = {
   /** The one-time root-bootstrap secret. */
   token: string;
 };
+export type ModelDisplayNameResult = {
+  capability_id: string;
+  display_name: string | null;
+};
+export type SetModelDisplayNameRequest = {
+  display_name: string | null;
+};
 export type ImpactedInstanceSummary = {
   agent_instance_id: string;
   team_id: string;
@@ -4876,8 +5062,25 @@ export type CapabilityEnablementItem = {
   thinking_profile_ids?: string[];
   /** Whether this model's thinking-capable profiles may run with reasoning on, platform-wide (REASON-01 §5). GLOBAL, with no subject: an activation, not a permission — per-team model access remains the untouched ReBAC `can_use` axis (§5.1/§5.4). No stored row means `false` (§5.6): enabling a model and enabling its reasoning are two separate admin actions, in that order. */
   reasoning_enabled?: boolean;
-  /** For a `kind="model"` row: the ops-authored `model_display_name` from models_catalog.yaml, carried verbatim. `name` is the wire model value, which several models on one gateway can share, so the admin label prefers this when set. Display only. */
+  /** For a `kind="model"` row: the effective label. A saved admin name takes priority over pod catalog metadata. `name` remains the wire model value. Display only. */
   model_display_name?: string | null;
+  /** The platform administrator's saved label, if any. Clear to restore the pod label. */
+  model_display_name_override?: string | null;
+  /** The pod-advertised discovery source for this model, if any. */
+  model_discovery_source_id?: string | null;
+  /** Runtime pods currently advertising this model. */
+  model_runtime_ids?: string[];
+  model_chat_profile_ids?: string[];
+  model_platform_binding?: ModelBinding | null;
+  model_fallback_profile_ids?: string[];
+  model_capabilities?: string[];
+  model_chat_capability_verified?: boolean;
+  model_reasoning_efforts?: {
+    [key: string]: string[];
+  };
+  model_context_window_tokens?: number | null;
+  model_max_input_tokens?: number | null;
+  model_max_output_tokens?: number | null;
 };
 export type CapabilityEnablementList = {
   items?: CapabilityEnablementItem[];
@@ -4939,6 +5142,72 @@ export type ModelReasoningResult = {
 };
 export type SetModelReasoningRequest = {
   reasoning_enabled: boolean;
+};
+export type DiscoveredModel = {
+  id: string;
+  name: string;
+  provider: string;
+  display_name?: string | null;
+  profile_ids?: string[];
+  chat_profile_ids?: string[];
+  context_window_tokens?: number | null;
+  max_input_tokens?: number | null;
+  max_output_tokens?: number | null;
+};
+export type DiscoverySourceStatus = {
+  source_id: string;
+  yaml_url: string;
+  override_url?: string | null;
+  effective_url: string;
+  available_models?: DiscoveredModel[];
+  removed_models?: DiscoveredModel[];
+  new_ids?: string[];
+  last_success_at?: string | null;
+  last_attempt_at?: string | null;
+  last_error?: string | null;
+};
+export type UnverifiedRuntime = {
+  runtime_id: string;
+  base_url: string;
+};
+export type ModelDiscoveryStatus = {
+  sources?: DiscoverySourceStatus[];
+  refresh_error?: string | null;
+  unverified_runtimes?: UnverifiedRuntime[];
+  verified_source_ids?: string[];
+  pod_chat_default_available?: boolean | null;
+};
+export type PodChatModelOption = {
+  profile_id: string;
+  model_id: string;
+  name: string;
+  display_name?: string | null;
+  discovery_source_id?: string | null;
+};
+export type PodChatDefaultStatus = {
+  runtime_id: string;
+  base_url: string;
+  reachable: boolean;
+  yaml_profile_id?: string | null;
+  override_profile_id?: string | null;
+  effective_profile_id?: string | null;
+  override_unavailable?: boolean;
+  fallback_override_profile_id?: string | null;
+  effective_fallback_profile_id?: string | null;
+  fallback_unavailable?: boolean;
+  models?: PodChatModelOption[];
+};
+export type PodChatDefaults = {
+  pods?: PodChatDefaultStatus[];
+};
+export type SetPodChatDefaultRequest = {
+  profile_id: string;
+};
+export type SetPodChatFallbackRequest = {
+  profile_id: string;
+};
+export type SetDiscoveryUrlRequest = {
+  url?: string | null;
 };
 export type KnowledgeBasePublicationResult = {
   id: string;
@@ -5057,7 +5326,7 @@ export type SelectableChatModel = {
 export type EffectiveChatModel = {
   /** The concrete model name. `capability_id` below identifies the `(provider, name)` pair uniquely for a caller that needs to join against team enablement or the models admin view. */
   name?: string | null;
-  /** The ops-authored `model_display_name` for this model, when the pod catalog names one. `None` leaves the frontend on its name/id prettifying fallback — the same fallback the composer already had. */
+  /** The saved administrator name or pod catalog name for this model. `None` leaves the frontend on its name/id prettifying fallback — the same fallback the composer already had. */
   display_name?: string | null;
   /** The `(provider, name)`-keyed `kind="model"` capability id, so the caller can join this against team enablement and the models admin view. `None` for an unresolved model. */
   capability_id?: string | null;
@@ -6027,6 +6296,7 @@ export const {
   useLazyGetAgentInstanceSkillDetailQuery,
   usePrepareAgentExecutionMutation,
   useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation,
+  usePutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutMutation,
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
   useLazyGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
   useGetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetQuery,
@@ -6036,6 +6306,19 @@ export const {
   usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation,
   usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation,
   usePatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchMutation,
+  useGetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetQuery,
+  useLazyGetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetQuery,
+  useDismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDeleteMutation,
+  useGetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetQuery,
+  useLazyGetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetQuery,
+  usePutPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPutMutation,
+  useClearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDeleteMutation,
+  usePutPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPutMutation,
+  useClearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDeleteMutation,
+  useRefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostMutation,
+  useGetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetQuery,
+  useLazyGetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetQuery,
+  usePutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutMutation,
   usePublishKnowledgeBaseDefinitionMutation,
   useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
   useLazyListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,

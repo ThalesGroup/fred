@@ -170,8 +170,8 @@ class EffectiveChatModel(BaseModel):
     display_name: str | None = Field(
         default=None,
         description=(
-            "The ops-authored `model_display_name` for this model, when the pod "
-            "catalog names one. `None` leaves the frontend on its name/id "
+            "The saved administrator name or pod catalog name for this model. "
+            "`None` leaves the frontend on its name/id "
             "prettifying fallback — the same fallback the composer already had."
         ),
     )
