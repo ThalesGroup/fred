@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 BackendKind = Literal["docker", "kubernetes", "agent_sandbox"]
 IsolationKind = Literal["kata", "gvisor"]
+MountKind = Literal["none", "rclone_csi", "rclone_docker"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +35,11 @@ class BrokerSettings:
     idle_timeout_seconds: int = 1200
     settings_url: str | None = None
     settings_token: str | None = None
+    mount_provider: MountKind = "none"
+    file_gateway_url: str | None = None
+    file_gateway_secret: str | None = None
+    file_storage_class: str | None = None
+    docker_volume_plugin: str | None = None
 
     def __post_init__(self) -> None:
         if self.backend not in {"docker", "kubernetes", "agent_sandbox"}:
@@ -93,6 +99,46 @@ class BrokerSettings:
                 raise ValueError(
                     "Sandbox settings token must have at least 32 characters"
                 )
+        if self.mount_provider not in {"none", "rclone_csi", "rclone_docker"}:
+            raise ValueError("Sandbox mount provider is invalid")
+        if self.mount_provider == "rclone_csi" and self.backend not in {
+            "kubernetes",
+            "agent_sandbox",
+        }:
+            raise ValueError("Rclone CSI requires a Kubernetes backend")
+        if self.mount_provider == "rclone_docker" and self.backend != "docker":
+            raise ValueError("Rclone Docker volume requires the Docker backend")
+        if self.mount_provider != "none":
+            url = urlsplit(self.file_gateway_url or "")
+            if (
+                url.scheme != "https"
+                or not url.hostname
+                or url.username
+                or url.password
+                or url.query
+                or url.fragment
+                or not url.path.endswith("/sandbox-mount")
+            ):
+                raise ValueError("Sandbox file gateway requires an HTTPS mount URL")
+            if not self.file_gateway_secret or len(self.file_gateway_secret) < 32:
+                raise ValueError(
+                    "Sandbox file gateway secret must have at least 32 characters"
+                )
+            if self.mount_provider == "rclone_csi" and not self.file_storage_class:
+                raise ValueError("Sandbox file StorageClass is required")
+            if self.mount_provider == "rclone_docker" and not re.fullmatch(
+                r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}", self.docker_volume_plugin or ""
+            ):
+                raise ValueError("An approved Docker volume plugin is required")
+        elif any(
+            (
+                self.file_gateway_url,
+                self.file_gateway_secret,
+                self.file_storage_class,
+                self.docker_volume_plugin,
+            )
+        ):
+            raise ValueError("Sandbox file mount settings require a mount provider")
 
     @classmethod
     def from_environment(cls) -> BrokerSettings:
@@ -126,4 +172,9 @@ class BrokerSettings:
             idle_timeout_seconds=int(os.getenv("SANDBOX_IDLE_TIMEOUT", "1200")),
             settings_url=os.getenv("SANDBOX_SETTINGS_URL") or None,
             settings_token=os.getenv("SANDBOX_SETTINGS_TOKEN") or None,
+            mount_provider=os.getenv("SANDBOX_MOUNT_PROVIDER", "none"),  # type: ignore[arg-type]
+            file_gateway_url=os.getenv("SANDBOX_FILE_GATEWAY_URL") or None,
+            file_gateway_secret=os.getenv("SANDBOX_FILE_GATEWAY_SECRET") or None,
+            file_storage_class=os.getenv("SANDBOX_FILE_STORAGE_CLASS") or None,
+            docker_volume_plugin=os.getenv("SANDBOX_DOCKER_VOLUME_PLUGIN") or None,
         )

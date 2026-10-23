@@ -34,6 +34,23 @@ logger = logging.getLogger(__name__)
 _CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 
 
+class _BoundedBlobReader:
+    def __init__(self, stream: BinaryIO, length: int) -> None:
+        self._stream = stream
+        self._remaining = length
+
+    def read(self, size: int = -1) -> bytes:
+        if self._remaining <= 0:
+            return b""
+        count = self._remaining if size < 0 else min(size, self._remaining)
+        data = self._stream.read(count)
+        self._remaining -= len(data)
+        return data
+
+    def close(self) -> None:
+        self._stream.close()
+
+
 def _load_adc_credentials():
     """Return Application Default Credentials able to mint OAuth2 access tokens.
 
@@ -269,8 +286,12 @@ class GcsContentStore(BaseContentStore):
 
     def get_content_range(self, document_uid: str, start: int, length: int) -> BinaryIO:
         blob = self._get_primary_blob(document_uid)
-        data = blob.download_as_bytes(start=start, end=start + length - 1)
-        return io.BytesIO(data)
+        if length <= 0:
+            return io.BytesIO()
+        blob.reload()
+        stream = blob.open("rb", chunk_size=256 * 1024)
+        stream.seek(start)
+        return _BoundedBlobReader(stream, length)
 
     def get_content(self, document_uid: str) -> BinaryIO:
         blob = self._get_primary_blob(document_uid)
@@ -309,17 +330,15 @@ class GcsContentStore(BaseContentStore):
 
     def get_object_stream(self, key: str, *, start: Optional[int] = None, length: Optional[int] = None) -> BinaryIO:
         object_name = self._normalize_key(key)
-        blob = self.object_bucket.blob(object_name)
-        try:
-            if start is None and length is None:
-                data = blob.download_as_bytes()
-            else:
-                s = start or 0
-                end = s + length - 1 if length is not None else None
-                data = blob.download_as_bytes(start=s, end=end)
-        except NotFound as e:
-            raise FileNotFoundError(f"Object not found: {key}") from e
-        return io.BytesIO(data)
+        blob = self.object_bucket.get_blob(object_name)
+        if blob is None:
+            raise FileNotFoundError(f"Object not found: {key}")
+        if length == 0:
+            return io.BytesIO()
+        stream = blob.open("rb", chunk_size=256 * 1024)
+        if start:
+            stream.seek(start)
+        return _BoundedBlobReader(stream, length) if length is not None else stream
 
     def stat_object(self, key: str) -> StoredObjectInfo:
         object_name = self._normalize_key(key)

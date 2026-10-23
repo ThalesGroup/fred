@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from secrets import token_hex
 from time import monotonic
 
 from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest, SandboxResult
@@ -21,6 +22,7 @@ _SWEEP_SECONDS = 10
 @dataclass(slots=True)
 class _Session:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    view_key: str = field(default_factory=lambda: token_hex(32))
     lease: SandboxLease | None = None
     last_used: float = field(default_factory=monotonic)
     retire: bool = False
@@ -39,6 +41,26 @@ class ConversationPool:
 
     def start(self) -> None:
         self._worker = asyncio.create_task(self._sweep_loop())
+
+    async def view_key(self, key: str) -> str:
+        while True:
+            async with self._lock:
+                entry = self._sessions.get(key)
+                if entry is None:
+                    if len(self._sessions) >= self.max_sessions:
+                        raise SandboxError("busy")
+                    entry = _Session()
+                    self._sessions[key] = entry
+            async with entry.lock:
+                async with self._lock:
+                    if self._sessions.get(key) is not entry:
+                        continue
+                if entry.retire or self._expired(entry):
+                    await self._release(entry)
+                    entry.view_key = token_hex(32)
+                    entry.retire = False
+                    entry.last_used = monotonic()
+                return entry.view_key
 
     async def execute(self, key: str, request: SandboxRequest) -> SandboxResult:
         while True:
@@ -61,9 +83,13 @@ class ConversationPool:
                     continue
                 if entry.lease is not None and self._expired(entry):
                     await self._release(entry)
+                    entry.view_key = token_hex(32)
+                elif entry.lease is None and self._expired(entry):
+                    entry.view_key = token_hex(32)
+                    entry.last_used = monotonic()
                 try:
                     if entry.lease is None:
-                        entry.lease = await self.pool.acquire()
+                        entry.lease = await self.pool.acquire(entry.view_key)
                     renew = getattr(self.pool.backend, "renew", None)
                     if renew is not None:
                         await renew(

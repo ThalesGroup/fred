@@ -43,6 +43,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import time
 from collections.abc import (
@@ -956,6 +957,22 @@ def _build_runtime_services(
     """
 
     runtime_config = get_runtime_context().config
+    sandbox_inputs = None
+    if (
+        runtime_config.sandbox_execution is not None
+        and os.getenv("FRED_SANDBOX_FILE_MOUNTS_ENABLED", "false").lower() == "true"
+    ):
+        from fred_runtime.sandbox_http import SandboxHttpAdapter
+        from fred_runtime.sandbox_inputs import SandboxInputHttpAdapter
+
+        if isinstance(runtime_config.sandbox_execution, SandboxHttpAdapter) and (
+            access_token or credential_provider
+        ):
+            sandbox_inputs = SandboxInputHttpAdapter(
+                runtime_config.sandbox_execution,
+                access_token=access_token,
+                credentials=credential_provider,
+            )
     if conversation_filesystem is None:
         conversation_filesystem = _build_conversation_filesystem(binding)
     conversation_port = None
@@ -1127,6 +1144,7 @@ def _build_runtime_services(
             else None
         ),
         sandbox_execution=runtime_config.sandbox_execution,
+        sandbox_inputs=sandbox_inputs,
         # The calling team's wiki (WIKI-03). Per-turn like the document ports —
         # it binds this turn's team and token privately — over the pod-lifetime
         # control-plane client.

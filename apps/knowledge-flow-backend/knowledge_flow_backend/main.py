@@ -57,6 +57,7 @@ from knowledge_flow_backend.core.monitoring.monitoring_controller import (
 from knowledge_flow_backend.features.audio.audio_transcription_controller import AudioTranscriptionController
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.content_controller import ContentController
+from knowledge_flow_backend.features.content.sandbox_mount_controller import SandboxMountController
 from knowledge_flow_backend.features.corpus_tree.controller import CorpusTreeController
 from knowledge_flow_backend.features.extract.controller import ExtractController
 from knowledge_flow_backend.features.filesystem.mcp_fs_controller import McpFilesystemController
@@ -301,6 +302,7 @@ def create_app() -> FastAPI:
         prefix=configuration.app.base_url,
         dependencies=[Depends(declare_delegation_parameters)],
     )
+    sandbox_mount_router = APIRouter(prefix=configuration.app.base_url)
 
     MonitoringController(monitoring_router, application_context)
 
@@ -308,6 +310,7 @@ def create_app() -> FastAPI:
     TasksController(router)
     MetadataController(router)
     ContentController(router)
+    SandboxMountController(router, sandbox_mount_router)
     AudioTranscriptionController(router)
     IngestionController(router)
     LibrarySyncController(router)
@@ -370,6 +373,7 @@ def create_app() -> FastAPI:
     logger.info("%s All controllers registered.", LOG_PREFIX)
     app.include_router(monitoring_router)
     app.include_router(router)
+    app.include_router(sandbox_mount_router)
     mcp_prefix = "/knowledge-flow/v1"
 
     def _mcp_auth() -> AuthConfig:

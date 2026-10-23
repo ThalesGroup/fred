@@ -27,10 +27,10 @@ spec:
           image: REPLACE_WITH_APPROVED_PYTHON_IMAGE_DIGEST
           imagePullPolicy: IfNotPresent
           command: [sleep, infinity]
-          workingDir: /tmp
+          workingDir: /work
           env:
             - name: HOME
-              value: /tmp
+              value: /work
             - name: PYTHONDONTWRITEBYTECODE
               value: "1"
           securityContext:
@@ -50,6 +50,8 @@ spec:
           volumeMounts:
             - name: scratch
               mountPath: /tmp
+            - name: scratch
+              mountPath: /work
       volumes:
         - name: scratch
           emptyDir:

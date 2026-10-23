@@ -12,6 +12,7 @@ from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest, SandboxResu
 from .backend import SandboxLease, SandboxPrepareLeak
 from .command import CommandRunner, CommandTimeout
 from .config import BrokerSettings
+from .mounts import mount_bearer, view_key_for_mount
 from .process_cleanup import remove_code_processes
 
 
@@ -39,10 +40,30 @@ class DockerBackend:
             self.settings.isolation == "gvisor" and "gvisor" in path
         ):
             raise SandboxError("runtime_unavailable")
+        if self.settings.mount_provider == "rclone_docker":
+            plugin = await self.runner.run(
+                [
+                    "docker",
+                    "plugin",
+                    "inspect",
+                    self.settings.docker_volume_plugin or "",
+                    "--format",
+                    "{{.Enabled}}",
+                ],
+                timeout=10,
+            )
+            if plugin.returncode != 0 or plugin.stdout.strip() != "true":
+                raise SandboxError("policy_unavailable")
 
-    async def prepare(self) -> SandboxLease:
+    async def prepare(self, view_key: str | None = None) -> SandboxLease:
         name = f"fred-sbx-{uuid4().hex[:20]}"
         settings = self.settings
+        mounted_key = (
+            view_key_for_mount(view_key)
+            if settings.mount_provider == "rclone_docker"
+            else None
+        )
+        lease = SandboxLease(id=name, target=name, view_key=mounted_key)
         args = [
             "docker",
             "run",
@@ -73,28 +94,34 @@ class DockerBackend:
             "256m",
             "--tmpfs",
             "/tmp:rw,nosuid,nodev,size=16m,mode=1777",
+            "--tmpfs",
+            "/work:rw,nosuid,nodev,size=16m,mode=1777",
             "--workdir",
-            "/tmp",
+            "/work",
             "--env",
-            "HOME=/tmp",
+            "HOME=/work",
             "--env",
             "PYTHONDONTWRITEBYTECODE=1",
-            settings.image,
-            "sleep",
-            "86400",
         ]
+        if mounted_key is not None:
+            args.extend(
+                ["--mount", f"type=volume,src=inputs-{name},dst=/inputs,readonly"]
+            )
+        args.extend([settings.image, "sleep", "86400"])
         try:
+            if mounted_key is not None:
+                await self._create_volume(name, mounted_key)
             result = await self.runner.run(
                 args, timeout=settings.preparation_timeout_seconds
             )
             if result.returncode != 0:
                 raise SandboxError("backend_failed")
-            return SandboxLease(id=name, target=name)
+            return lease
         except BaseException:
             try:
-                await self._remove(name)
+                await self.dispose(lease)
             except Exception as exc:
-                raise SandboxPrepareLeak(SandboxLease(id=name, target=name)) from exc
+                raise SandboxPrepareLeak(lease) from exc
             raise
 
     async def execute(
@@ -123,6 +150,43 @@ class DockerBackend:
 
     async def dispose(self, lease: SandboxLease) -> None:
         await self._remove(lease.id)
+        if lease.view_key is not None:
+            result = await self.runner.run(
+                ["docker", "volume", "rm", f"inputs-{lease.id}"], timeout=30
+            )
+            if result.returncode != 0 and "No such volume" not in result.stderr:
+                raise SandboxError("backend_failed")
+
+    async def _create_volume(self, name: str, key: str) -> None:
+        settings = self.settings
+        if not settings.file_gateway_url or not settings.file_gateway_secret:
+            raise SandboxError("policy_unavailable")
+        result = await self.runner.run(
+            [
+                "docker",
+                "volume",
+                "create",
+                "--name",
+                f"inputs-{name}",
+                "--driver",
+                settings.docker_volume_plugin or "",
+                "--opt",
+                "type=webdav",
+                "--opt",
+                f"webdav-url={settings.file_gateway_url.rstrip('/')}/{key}",
+                "--opt",
+                f"webdav-bearer-token={mount_bearer(settings.file_gateway_secret, key)}",
+                "--opt",
+                "allow-other=true",
+                "--opt",
+                "vfs-cache-mode=off",
+                "--opt",
+                "dir-cache-time=1s",
+            ],
+            timeout=30,
+        )
+        if result.returncode != 0:
+            raise SandboxError("backend_failed")
 
     async def _remove(self, name: str) -> None:
         result = await self.runner.run(["docker", "rm", "--force", name], timeout=10)

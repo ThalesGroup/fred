@@ -69,6 +69,10 @@ class _FakeBlob:
             return data
         return data[start : (end + 1) if end is not None else None]
 
+    def open(self, mode="rb", chunk_size=None):
+        assert mode == "rb" and chunk_size == 256 * 1024
+        return BytesIO(self.download_as_bytes())
+
     def download_to_filename(self, path):
         with open(path, "wb") as f:
             f.write(self._bucket[self.name][0])

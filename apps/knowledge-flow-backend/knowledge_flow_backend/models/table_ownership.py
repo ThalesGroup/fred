@@ -49,6 +49,7 @@ import fred_core.documents.label_models  # noqa: F401 — registers document_lab
 
 import knowledge_flow_backend.core.stores.resources.resource_models  # noqa: F401 — registers resource with Base
 import knowledge_flow_backend.models.task_models  # noqa: F401 — registers kf_task_run / kf_task_event_log with Base
+import knowledge_flow_backend.models.sandbox_view_models  # noqa: F401
 from knowledge_flow_backend.models.base import Base
 
 # CoreBase tables whose migrations this tree owns — explicit names, never
@@ -62,7 +63,7 @@ OWNED_TABLES: frozenset[str] = frozenset(Base.metadata.tables) | SHARED_CORE_TAB
 # (TeamMetadataStore in ingestion/metadata services). Their migrations belong
 # to control-plane's tree — listing them here only makes the startup guard
 # honest about what this component needs to serve traffic.
-REQUIRED_TABLES: frozenset[str] = OWNED_TABLES | frozenset({"users", "teammetadata"})
+REQUIRED_TABLES: frozenset[str] = OWNED_TABLES | frozenset({"users", "teammetadata", "session_metadata", "session_attachments"})
 
 # Consumed by alembic/env.py, main.py and main_worker.py — declared so
 # CodeQL's module-local unused-global query sees the export.

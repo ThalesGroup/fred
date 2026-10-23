@@ -13,6 +13,7 @@ from fred_sdk.contracts.runtime import RuntimeServices
 from fred_sdk.contracts.sandbox import (
     SandboxError,
     SandboxExecutionPort,
+    SandboxInputPort,
     SandboxResult,
     SandboxSessionIdentity,
 )
@@ -32,12 +33,27 @@ class FakeSandbox(SandboxExecutionPort):
         return SandboxResult(exit_code=0, stdout="42\n", stderr="")
 
 
-def context(port, session_id=None):
+class FakeInputs(SandboxInputPort):
+    def __init__(self):
+        self.calls = []
+
+    async def bind_corpus(self, document_uid, session):
+        self.calls.append(("corpus", document_uid, session))
+        return f"/inputs/corpus/{document_uid}/report.txt"
+
+    async def bind_attachment(self, attachment_id, session):
+        self.calls.append(("attachment", attachment_id, session))
+        return f"/inputs/attachments/{attachment_id}/sheet.xlsx"
+
+
+def context(port, session_id=None, team_id=None, inputs=None):
     return CapabilityContext(
-        identity=CapabilityIdentity(user_id="user", session_id=session_id),
+        identity=CapabilityIdentity(
+            user_id="user", session_id=session_id, team_id=team_id
+        ),
         config=EmptyModel(),
         turn_options=EmptyModel(),
-        services=RuntimeServices(sandbox_execution=port),
+        services=RuntimeServices(sandbox_execution=port, sandbox_inputs=inputs),
     )
 
 
@@ -95,3 +111,26 @@ async def test_tool_binds_conversation_without_exposing_it_to_model() -> None:
         user_id="user", session_id="chat-1"
     )
     assert set(tool.args_schema.model_fields) == {"language", "code"}
+
+
+@pytest.mark.asyncio
+async def test_input_selection_uses_the_trusted_conversation_scope() -> None:
+    port = FakeSandbox()
+    inputs = FakeInputs()
+    tools = CodeSandboxCapability().tools(
+        context(port, session_id="chat-1", team_id="team-1", inputs=inputs)
+    )
+    assert [tool.name for tool in tools] == ["execute_code", "select_code_input"]
+    selected = await tools[1].ainvoke({"source_type": "corpus", "source_id": "doc-1"})
+    assert json.loads(selected)["path"] == "/inputs/corpus/doc-1/report.txt"
+    assert inputs.calls == [
+        (
+            "corpus",
+            "doc-1",
+            SandboxSessionIdentity(
+                user_id="user", session_id="chat-1", team_id="team-1"
+            ),
+        )
+    ]
+    assert port.requests == []
+    assert set(tools[1].args_schema.model_fields) == {"source_type", "source_id"}

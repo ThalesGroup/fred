@@ -77,3 +77,23 @@ async def test_adapter_scopes_session_header_to_private_identity() -> None:
     assert keys[0] != keys[2]
     assert all(json.loads(item.content) == request.model_dump() for item in seen)
     await adapter.aclose()
+
+
+@pytest.mark.asyncio
+async def test_adapter_requests_generation_scoped_view_without_starting_code() -> None:
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"view_key": "a" * 64})
+
+    adapter = SandboxHttpAdapter(
+        base_url="https://broker.internal",
+        token="x" * 32,
+        transport=httpx.MockTransport(handler),
+    )
+    session = SandboxSessionIdentity(user_id="user-a", session_id="chat-1")
+    assert await adapter.view_key(session) == "a" * 64
+    assert seen[0].url.path == "/v1/view-key"
+    assert seen[0].headers["X-Fred-Sandbox-Session"] == adapter.session_key(session)
+    await adapter.aclose()

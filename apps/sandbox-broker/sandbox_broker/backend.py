@@ -15,6 +15,7 @@ from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest, SandboxResu
 class SandboxLease:
     id: str
     target: str
+    view_key: str | None = None
     prepared_at: float = field(default_factory=monotonic)
 
 
@@ -27,7 +28,7 @@ class SandboxPrepareLeak(SandboxError):
 class SandboxBackend(Protocol):
     async def preflight(self) -> None: ...
 
-    async def prepare(self) -> SandboxLease: ...
+    async def prepare(self, view_key: str | None = None) -> SandboxLease: ...
 
     async def execute(
         self, lease: SandboxLease, request: SandboxRequest

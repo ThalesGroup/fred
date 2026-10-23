@@ -15,6 +15,7 @@ from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest, SandboxResu
 from .backend import SandboxLease, SandboxPrepareLeak
 from .command import CommandRunner, CommandTimeout
 from .config import BrokerSettings
+from .mounts import RcloneCsiMount, view_key_for_mount
 from .process_cleanup import remove_code_processes
 
 _DENY_POLICY = "fred-sandbox-deny-all"
@@ -24,6 +25,11 @@ class KubernetesBackend:
     def __init__(self, settings: BrokerSettings, runner: CommandRunner) -> None:
         self.settings = settings
         self.runner = runner
+        self.mount = (
+            RcloneCsiMount(settings, runner)
+            if settings.mount_provider == "rclone_csi"
+            else None
+        )
 
     async def preflight(self) -> None:
         settings = self.settings
@@ -65,11 +71,18 @@ class KubernetesBackend:
             or spec.get("egress")
         ):
             raise SandboxError("policy_unavailable")
+        if self.mount is not None:
+            await self.mount.preflight()
 
-    async def prepare(self) -> SandboxLease:
+    async def prepare(self, view_key: str | None = None) -> SandboxLease:
         name = f"fred-sbx-{uuid4().hex[:20]}"
+        mounted_key = view_key_for_mount(view_key) if self.mount else None
+        lease = SandboxLease(id=name, target=name, view_key=mounted_key)
         manifest = self.job_manifest(name)
         try:
+            if self.mount is not None and mounted_key is not None:
+                await self.mount.create_secret(name, mounted_key)
+                await self.mount.create_pvc(name)
             result = await self.runner.run(
                 self._kubectl("create", "-f", "-"),
                 timeout=15,
@@ -77,6 +90,8 @@ class KubernetesBackend:
             )
             if result.returncode != 0:
                 raise SandboxError("backend_failed")
+            if self.mount is not None:
+                await self.mount.attach_owner(name, "job", pvc=True)
             deadline = time.monotonic() + self.settings.preparation_timeout_seconds
             while time.monotonic() < deadline:
                 pods = await self._get_json(
@@ -101,14 +116,16 @@ class KubernetesBackend:
                     ):
                         pod_name = pod.get("metadata", {}).get("name")
                         if isinstance(pod_name, str) and pod_name:
-                            return SandboxLease(id=name, target=pod_name)
+                            return SandboxLease(
+                                id=name, target=pod_name, view_key=mounted_key
+                            )
                 await asyncio.sleep(0.25)
             raise SandboxError("backend_failed")
         except BaseException:
             try:
-                await self._delete(name)
+                await self.dispose(lease)
             except Exception as exc:
-                raise SandboxPrepareLeak(SandboxLease(id=name, target=name)) from exc
+                raise SandboxPrepareLeak(lease) from exc
             raise
 
     async def execute(
@@ -141,6 +158,25 @@ class KubernetesBackend:
 
     async def dispose(self, lease: SandboxLease) -> None:
         await self._delete(lease.id)
+        if self.mount is not None:
+            await self.mount.delete(lease.id)
+
+    async def recover(self) -> None:
+        result = await self.runner.run(
+            self._kubectl(
+                "delete",
+                "jobs",
+                "-l",
+                "app.kubernetes.io/name=fred-sandbox",
+                "--ignore-not-found=true",
+                "--wait=true",
+            ),
+            timeout=90,
+        )
+        if result.returncode != 0:
+            raise SandboxError("backend_failed")
+        if self.mount is not None:
+            await self.mount.clean_orphans()
 
     def job_manifest(self, name: str) -> dict[str, Any]:
         settings = self.settings
@@ -180,9 +216,9 @@ class KubernetesBackend:
                                 "image": settings.image,
                                 "imagePullPolicy": "IfNotPresent",
                                 "command": ["sleep", "infinity"],
-                                "workingDir": "/tmp",
+                                "workingDir": "/work",
                                 "env": [
-                                    {"name": "HOME", "value": "/tmp"},
+                                    {"name": "HOME", "value": "/work"},
                                     {"name": "PYTHONDONTWRITEBYTECODE", "value": "1"},
                                 ],
                                 "securityContext": {
@@ -203,13 +239,38 @@ class KubernetesBackend:
                                     },
                                 },
                                 "volumeMounts": [
-                                    {"name": "scratch", "mountPath": "/tmp"}
-                                ],
+                                    {"name": "scratch", "mountPath": "/tmp"},
+                                    {"name": "scratch", "mountPath": "/work"},
+                                ]
+                                + (
+                                    [
+                                        {
+                                            "name": "inputs",
+                                            "mountPath": "/inputs",
+                                            "readOnly": True,
+                                        }
+                                    ]
+                                    if self.mount
+                                    else []
+                                ),
                             }
                         ],
                         "volumes": [
                             {"name": "scratch", "emptyDir": {"sizeLimit": "16Mi"}}
-                        ],
+                        ]
+                        + (
+                            [
+                                {
+                                    "name": "inputs",
+                                    "persistentVolumeClaim": {
+                                        "claimName": f"inputs-{name}",
+                                        "readOnly": True,
+                                    },
+                                }
+                            ]
+                            if self.mount
+                            else []
+                        ),
                     },
                 },
             },

@@ -61,7 +61,7 @@ from .context import (
     UiPart,
 )
 from .models import AgentDefinition
-from .sandbox import SandboxExecutionPort
+from .sandbox import SandboxExecutionPort, SandboxInputPort
 from .skills import SkillLoadAttribution, SkillsPort
 from .web_research import WebResearchPort
 
@@ -1628,6 +1628,7 @@ class RuntimeServices:
     web_research: WebResearchPort | None = None
     skills: SkillsPort | None = None
     sandbox_execution: SandboxExecutionPort | None = None
+    sandbox_inputs: SandboxInputPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

@@ -17,6 +17,8 @@ import dataclasses
 import json
 import json as _json
 import logging
+import mimetypes
+import os
 import pathlib
 import shutil
 import tempfile
@@ -61,6 +63,7 @@ from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_kpi_writer, get_rebac_engine
+from knowledge_flow_backend.features.content.sandbox_views import SandboxViewStore
 from knowledge_flow_backend.common.structures import (
     IngestionProcessingProfile,
     Status,
@@ -851,6 +854,13 @@ class IngestionController:
         del storage_key
         backend = await self._delete_fast_vectors(document_uid=document_uid)
         await self._delete_attachment_tabular_dataset(user=user, document_uid=document_uid, is_platform_bypass=is_platform_bypass)
+        context = ApplicationContext.get_instance()
+        await SandboxViewStore(context.get_pg_async_engine()).delete_attachment_original(
+            context=context,
+            document_uid=document_uid,
+            user_id=user.uid,
+            platform_bypass=is_platform_bypass,
+        )
         return backend
 
     async def _delete_attachment_tabular_dataset(self, *, user: KeycloakUser, document_uid: str, is_platform_bypass: bool) -> None:
@@ -1597,11 +1607,41 @@ class IngestionController:
             bind_operation_context({"session_id": session_id} if session_id else {}, document_uid=document_uid)
             tabular_available = False
 
+            async def retain_original() -> None:
+                if session_id is None or not os.getenv("SANDBOX_FILE_GATEWAY_SECRET"):
+                    return
+                context = ApplicationContext.get_instance()
+                await SandboxViewStore(context.get_pg_async_engine()).retain_attachment_original(
+                    context=context,
+                    document_uid=document_uid,
+                    session_id=session_id,
+                    user_id=user.uid,
+                    name=filename,
+                    raw_path=raw_path,
+                    content_type=file.content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream",
+                )
+
+            async def remove_original_after_failure() -> None:
+                if session_id is None or not os.getenv("SANDBOX_FILE_GATEWAY_SECRET"):
+                    return
+                try:
+                    context = ApplicationContext.get_instance()
+                    await SandboxViewStore(context.get_pg_async_engine()).delete_attachment_original(
+                        context=context,
+                        document_uid=document_uid,
+                        user_id=user.uid,
+                        platform_bypass=False,
+                    )
+                except Exception:
+                    logger.warning("Failed to clean up attachment original for %s", document_uid, exc_info=True)
+
             if pathlib.Path(filename).suffix.lower() in {".xls", ".xlsx", ".xlsm"}:
                 try:
                     try:
+                        await retain_original()
                         roadmap = await self._build_attachment_excel_dataset(user=user, document_uid=document_uid, filename=filename, raw_path=raw_path)
                     except Exception:
+                        await remove_original_after_failure()
                         logger.exception("[FAST TEXT][INGEST] Failed to build Excel dataset for %s", filename)
                         raise HTTPException(
                             status_code=422,
@@ -1630,6 +1670,7 @@ class IngestionController:
             # the raw file, so cleanup now wraps the whole handler instead of
             # just fast-text extraction.
             try:
+                await retain_original()
                 # Extract fast text
                 result: FastTextResult
                 try:
@@ -1763,6 +1804,9 @@ class IngestionController:
                                 "message": f"Could not build a queryable dataset from {filename}.",
                             },
                         )
+            except BaseException:
+                await remove_original_after_failure()
+                raise
             finally:
                 cleanup_uploaded_temp_file(raw_path)
 

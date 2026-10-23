@@ -1,0 +1,45 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fred-sandbox-broker-files
+  namespace: fred-sandbox
+rules:
+  - apiGroups: [""]
+    resources: [secrets, persistentvolumeclaims]
+    verbs: [create, get, list, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fred-sandbox-broker-files
+  namespace: fred-sandbox
+subjects:
+  - kind: ServiceAccount
+    name: fred-sandbox-broker
+    namespace: fred-sandbox-system
+roleRef:
+  kind: Role
+  name: fred-sandbox-broker-files
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fred-sandbox-broker-files-read
+rules:
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fred-sandbox-broker-files-read
+subjects:
+  - kind: ServiceAccount
+    name: fred-sandbox-broker
+    namespace: fred-sandbox-system
+roleRef:
+  kind: ClusterRole
+  name: fred-sandbox-broker-files-read
+  apiGroup: rbac.authorization.k8s.io

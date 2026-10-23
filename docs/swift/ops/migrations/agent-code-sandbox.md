@@ -9,6 +9,8 @@ configuration_reason: "The Fred chart adds an optional sandbox settings token Se
 
 Fred deployments upgrading the control plane and optionally enabling the code sandbox capability.
 
+The optional file mount adds Knowledge Flow tables `sandbox_file_views` and `sandbox_attachment_originals`; run its Alembic migration before starting the new Knowledge Flow version. Existing sandbox deployments keep code-only behavior until the operator configures an approved mount provider and enables `FRED_SANDBOX_FILE_MOUNTS_ENABLED` on the agent runtime. Configure `SANDBOX_FILE_GATEWAY_SECRET` on Knowledge Flow and the broker with the same 32+ character value, and set it as `FRED_SANDBOX_FILE_GATEWAY_SECRET` in the trusted agent runtime for signed selection requests. Review the [sandbox broker file mount procedure](../../../../apps/sandbox-broker/README.md#optional-read-only-conversation-files) for the CSI driver, certificate trust, per-workload Secret/PVC, and Docker plugin prerequisites. The mounted view is read-only and source scoped; it does not change ordinary document or skill access when code sandbox is disabled.
+
 ## Prerequisites
 
 No action is required for deployments that leave code execution disabled. To enable it, select and verify a Kata or gVisor runtime on sandbox nodes, a CNI that enforces NetworkPolicy, finite kubelet pod PID limits, and an approved pinned Python/Bash image. Install SIG Agent Sandbox v1.0.6 only if using that backend. Follow the CNI probe and runtime checks in `apps/sandbox-broker/README.md` before setting broker verification flags.

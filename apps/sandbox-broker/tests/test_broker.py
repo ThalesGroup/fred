@@ -3,7 +3,6 @@ from time import monotonic
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
 from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest, SandboxResult
 from sandbox_broker.api import create_app
 from sandbox_broker.backend import SandboxLease, SandboxPrepareLeak
@@ -34,11 +33,13 @@ class FakeBackend:
         self.prepared = []
         self.disposed = []
         self.requests = []
+        self.view_keys = []
 
     async def preflight(self):
         return None
 
-    async def prepare(self):
+    async def prepare(self, view_key=None):
+        self.view_keys.append(view_key)
         lease = SandboxLease(id=f"sandbox-{len(self.prepared)}", target="target")
         self.prepared.append(lease)
         return lease
@@ -51,16 +52,51 @@ class FakeBackend:
         self.disposed.append(lease)
 
 
-def test_broker_auth_and_execution_contract() -> None:
+@pytest.mark.asyncio
+async def test_view_key_is_workload_generation_scoped() -> None:
+    first = FakeBackend()
+    second = FakeBackend()
+    views = []
+    for backend in (first, second):
+        app = create_app(settings(), backend)
+        async with (
+            app.router.lifespan_context(app),
+            httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://test"
+            ) as client,
+        ):
+            headers = {
+                "Authorization": "Bearer " + "x" * 32,
+                "X-Fred-Sandbox-Session": "a" * 64,
+            }
+            response = await client.post("/v1/view-key", headers=headers)
+            assert response.status_code == 200
+            views.append(response.json()["view_key"])
+            assert (
+                await client.post(
+                    "/v1/execute",
+                    headers=headers,
+                    json={"language": "bash", "code": "true"},
+                )
+            ).status_code == 200
+            assert backend.view_keys == [views[-1]]
+    assert views[0] != views[1]
+
+
+@pytest.mark.asyncio
+async def test_broker_auth_and_execution_contract() -> None:
     fake = FakeBackend()
-    with TestClient(create_app(settings(), fake)) as client:
+    app = create_app(settings(), fake)
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client,
+    ):
         assert (
-            client.post(
-                "/v1/execute", json={"language": "bash", "code": "pwd"}
-            ).status_code
-            == 401
-        )
-        response = client.post(
+            await client.post("/v1/execute", json={"language": "bash", "code": "pwd"})
+        ).status_code == 401
+        response = await client.post(
             "/v1/execute",
             headers={"Authorization": "Bearer " + "x" * 32},
             json={"language": "python", "code": "print(1)"},
@@ -71,10 +107,17 @@ def test_broker_auth_and_execution_contract() -> None:
     assert fake.prepared[0] in fake.disposed
 
 
-def test_broker_rejects_large_input_before_backend() -> None:
+@pytest.mark.asyncio
+async def test_broker_rejects_large_input_before_backend() -> None:
     fake = FakeBackend()
-    with TestClient(create_app(settings(), fake)) as client:
-        response = client.post(
+    app = create_app(settings(), fake)
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client,
+    ):
+        response = await client.post(
             "/v1/execute",
             headers={"Authorization": "Bearer " + "x" * 32},
             content=b"x" * 20_001,
@@ -83,14 +126,21 @@ def test_broker_rejects_large_input_before_backend() -> None:
         assert fake.requests == []
 
 
-def test_conversation_reuses_workload_and_never_shares_it() -> None:
+@pytest.mark.asyncio
+async def test_conversation_reuses_workload_and_never_shares_it() -> None:
     fake = FakeBackend()
     config = settings(warm_pool_size=0, cold_start_on_miss=True, max_sandboxes=2)
-    with TestClient(create_app(config, fake)) as client:
+    app = create_app(config, fake)
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client,
+    ):
         headers = {"Authorization": "Bearer " + "x" * 32}
         body = {"language": "bash", "code": "pwd"}
         for key in ("a" * 64, "a" * 64, "b" * 64):
-            response = client.post(
+            response = await client.post(
                 "/v1/execute",
                 headers={**headers, "X-Fred-Sandbox-Session": key},
                 json=body,
@@ -99,15 +149,14 @@ def test_conversation_reuses_workload_and_never_shares_it() -> None:
         assert fake.requests[0][0] == fake.requests[1][0]
         assert fake.requests[0][0] != fake.requests[2][0]
         assert fake.disposed == []
-        assert client.get("/healthz").json()["active_conversations"] == 2
+        assert (await client.get("/healthz")).json()["active_conversations"] == 2
         assert (
-            client.post(
+            await client.post(
                 "/v1/execute",
                 headers={**headers, "X-Fred-Sandbox-Session": "bad"},
                 json=body,
-            ).status_code
-            == 400
-        )
+            )
+        ).status_code == 400
     assert len(fake.disposed) == 2
 
 
@@ -119,10 +168,12 @@ async def test_conversation_idle_expiry_replaces_workload() -> None:
     sessions = ConversationPool(pool, idle_seconds=1200, max_sessions=1)
     request = SandboxRequest(language="bash", code="pwd")
     await sessions.execute("a", request)
+    first_view = fake.view_keys[0]
     sessions._sessions["a"].last_used = monotonic() - 1201
     await sessions.sweep()
     await asyncio.sleep(0)
     await sessions.execute("a", request)
+    assert fake.view_keys[1] != first_view
     assert fake.requests[0][0] != fake.requests[1][0]
     assert fake.requests[0][0] in fake.disposed
     await sessions.close()
@@ -304,7 +355,7 @@ async def test_capacity_provisions_on_demand_and_caps_concurrency() -> None:
 @pytest.mark.asyncio
 async def test_uncertain_prepare_cleanup_keeps_capacity_reserved() -> None:
     class LeakingBackend(FakeBackend):
-        async def prepare(self):
+        async def prepare(self, view_key=None):
             lease = SandboxLease(id="uncertain", target="uncertain")
             self.prepared.append(lease)
             raise SandboxPrepareLeak(lease)

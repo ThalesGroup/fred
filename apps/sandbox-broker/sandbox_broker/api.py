@@ -76,6 +76,23 @@ def create_app(
             "idle_timeout_seconds": app.state.sessions.idle_seconds,
         }
 
+    @app.post("/v1/view-key")
+    async def view_key(request: Request) -> JSONResponse:
+        config: BrokerSettings = app.state.settings
+        if not hmac.compare_digest(
+            request.headers.get("Authorization", ""), f"Bearer {config.token}"
+        ):
+            return _error(401, "unauthorized")
+        session_key = request.headers.get("X-Fred-Sandbox-Session", "")
+        if not re.fullmatch(r"[a-f0-9]{64}", session_key):
+            return _error(400, "invalid_request")
+        try:
+            return JSONResponse(
+                {"view_key": await app.state.sessions.view_key(session_key)}
+            )
+        except SandboxError as exc:
+            return _error(429 if exc.code == "busy" else 503, exc.code)
+
     @app.post("/v1/execute")
     async def execute(request: Request) -> JSONResponse:
         config: BrokerSettings = app.state.settings

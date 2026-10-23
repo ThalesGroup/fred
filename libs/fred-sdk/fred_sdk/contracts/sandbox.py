@@ -64,3 +64,17 @@ class SandboxExecutionPort(ABC):
         self, request: SandboxRequest, session: SandboxSessionIdentity | None = None
     ) -> SandboxResult:
         """Run source in an isolated workload; infrastructure is bound privately."""
+
+
+class SandboxInputPort(ABC):
+    @abstractmethod
+    async def bind_corpus(
+        self, document_uid: str, session: SandboxSessionIdentity
+    ) -> str:
+        """Expose one authorized corpus original as a read-only guest path."""
+
+    @abstractmethod
+    async def bind_attachment(
+        self, attachment_id: str, session: SandboxSessionIdentity
+    ) -> str:
+        """Expose one conversation attachment original as a read-only guest path."""

@@ -11,6 +11,7 @@ from fred_sdk.contracts.sandbox import SandboxError
 
 from .backend import SandboxBackend, SandboxLease, SandboxPrepareLeak
 from .config import BrokerSettings
+from .mounts import revoke_view
 
 logger = logging.getLogger(__name__)
 _CLEANUP_CHECK_SECONDS = 30
@@ -30,16 +31,19 @@ class OnDemandCapacity:
 
     async def start(self) -> None:
         await self.backend.preflight()
+        recover = getattr(self.backend, "recover", None)
+        if recover is not None:
+            await recover()
         self._worker = asyncio.create_task(self._retry_cleanup())
 
-    async def acquire(self) -> SandboxLease:
+    async def acquire(self, view_key: str | None = None) -> SandboxLease:
         if self._closed:
             raise SandboxError("unavailable")
         if self._total >= self.settings.max_sandboxes:
             raise SandboxError("busy")
         self._total += 1
         try:
-            lease = await self.backend.prepare()
+            lease = await self.backend.prepare(view_key)
         except SandboxPrepareLeak as exc:
             self._leaked.add(exc.lease)
             self._wake.set()
@@ -53,7 +57,7 @@ class OnDemandCapacity:
 
     async def release(self, lease: SandboxLease) -> None:
         try:
-            await self.backend.dispose(lease)
+            await self._dispose(lease)
         except Exception:
             self._leaked.add(lease)
             self._wake.set()
@@ -81,14 +85,16 @@ class OnDemandCapacity:
         leases = list(self._active | self._leaked)
         for lease in leases:
             try:
-                await self.backend.dispose(lease)
+                await self._dispose(lease)
             except Exception:
                 logger.exception("Failed to dispose sandbox workload at shutdown")
 
     async def _retry_cleanup(self) -> None:
         while not self._closed:
             try:
-                await asyncio.wait_for(self._wake.wait(), timeout=_CLEANUP_CHECK_SECONDS)
+                await asyncio.wait_for(
+                    self._wake.wait(), timeout=_CLEANUP_CHECK_SECONDS
+                )
             except TimeoutError:
                 pass
             self._wake.clear()
@@ -97,12 +103,23 @@ class OnDemandCapacity:
     async def _retry_leaked(self) -> None:
         for lease in list(self._leaked):
             try:
-                await self.backend.dispose(lease)
+                await self._dispose(lease)
             except Exception:
                 logger.exception("Failed to retry sandbox workload cleanup")
             else:
                 self._leaked.discard(lease)
                 self._total -= 1
+
+    async def _dispose(self, lease: SandboxLease) -> None:
+        revoke_error: Exception | None = None
+        if lease.view_key is not None:
+            try:
+                await revoke_view(self.settings, lease.view_key)
+            except Exception as exc:
+                revoke_error = exc
+        await self.backend.dispose(lease)
+        if revoke_error is not None:
+            raise revoke_error
 
     @property
     def allocated_count(self) -> int:

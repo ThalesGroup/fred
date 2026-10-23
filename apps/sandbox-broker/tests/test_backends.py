@@ -45,6 +45,40 @@ class DockerRunner:
 
 
 @pytest.mark.asyncio
+async def test_docker_file_volume_stays_outside_guest_credentials() -> None:
+    class MountRunner(DockerRunner):
+        async def run(self, args, *, timeout, output_limit=65536, input_data=None):
+            if args[:2] == ["docker", "plugin"]:
+                self.calls.append((list(args), input_data))
+                return CommandResult(0, "true\n", "")
+            return await super().run(
+                args, timeout=timeout, output_limit=output_limit, input_data=input_data
+            )
+
+    runner = MountRunner()
+    backend = DockerBackend(
+        settings(
+            mount_provider="rclone_docker",
+            file_gateway_url="https://files.example/knowledge-flow/v1/sandbox-mount",
+            file_gateway_secret="s" * 32,
+            docker_volume_plugin="rclone",
+        ),
+        runner,
+    )
+    await backend.preflight()
+    lease = await backend.prepare("a" * 64)
+    volume = next(
+        args for args, _ in runner.calls if args[:3] == ["docker", "volume", "create"]
+    )
+    run = next(args for args, _ in runner.calls if args[:2] == ["docker", "run"])
+    assert "--mount" in run and any("dst=/inputs,readonly" in arg for arg in run)
+    assert not any("bearer-token" in arg for arg in run)
+    assert any("webdav-bearer-token=" in arg for arg in volume)
+    await backend.dispose(lease)
+    assert runner.calls[-1][0][:3] == ["docker", "volume", "rm"]
+
+
+@pytest.mark.asyncio
 async def test_docker_requires_isolated_runtime_and_hardens_container() -> None:
     runner = DockerRunner()
     backend = DockerBackend(settings(), runner)
@@ -175,6 +209,73 @@ class KubeRunner:
 
 
 @pytest.mark.asyncio
+async def test_kubernetes_mount_creates_private_secret_and_read_only_pvc() -> None:
+    class MountRunner(KubeRunner):
+        def __init__(self):
+            super().__init__()
+            self.manifests = []
+
+        async def run(self, args, *, timeout, output_limit=65536, input_data=None):
+            if args[:3] == ["kubectl", "get", "storageclass"]:
+                return CommandResult(
+                    0,
+                    json.dumps(
+                        {
+                            "provisioner": "rclone.csi.veloxpack.io",
+                            "parameters": {
+                                "csi.storage.k8s.io/node-publish-secret-name": "${pvc.name}",
+                                "csi.storage.k8s.io/node-publish-secret-namespace": "fred-sandbox",
+                                "remote": "fred",
+                                "remotePath": "/",
+                            },
+                            "mountOptions": ["dir-cache-time=1s", "vfs-cache-mode=off"],
+                        }
+                    ),
+                    "",
+                )
+            if "get" in args and "job" in args:
+                return CommandResult(
+                    0, json.dumps({"metadata": {"uid": "job-uid"}}), ""
+                )
+            if input_data:
+                self.manifests.append(json.loads(input_data))
+            return await super().run(
+                args, timeout=timeout, output_limit=output_limit, input_data=input_data
+            )
+
+    runner = MountRunner()
+    backend = KubernetesBackend(
+        settings(
+            "kubernetes",
+            mount_provider="rclone_csi",
+            file_gateway_url="https://files.example/knowledge-flow/v1/sandbox-mount",
+            file_gateway_secret="s" * 32,
+            file_storage_class="fred-sandbox-webdav",
+        ),
+        runner,
+    )
+    await backend.preflight()
+    lease = await backend.prepare("a" * 64)
+    secret, pvc, job = runner.manifests
+    assert (
+        secret["kind"] == "Secret"
+        and secret["metadata"]["name"] == pvc["metadata"]["name"]
+    )
+    assert "bearer_token" in secret["stringData"]["configData"]
+    assert job["kind"] == "Job"
+    assert any("patch" in args and "secret" in args for args in runner.calls)
+    assert any("patch" in args and "pvc" in args for args in runner.calls)
+    pod = job["spec"]["template"]["spec"]
+    assert pod["containers"][0]["volumeMounts"][-1] == {
+        "name": "inputs",
+        "mountPath": "/inputs",
+        "readOnly": True,
+    }
+    assert pod["volumes"][-1]["persistentVolumeClaim"]["readOnly"] is True
+    await backend.dispose(lease)
+
+
+@pytest.mark.asyncio
 async def test_kubernetes_preflight_manifest_and_single_use_lifecycle() -> None:
     runner = KubeRunner()
     backend = KubernetesBackend(settings("kubernetes"), runner)
@@ -291,7 +392,10 @@ class AgentRunner(KubeRunner):
                 0,
                 json.dumps(
                     {
-                        "metadata": {"creationTimestamp": "2026-10-22T00:00:01Z"},
+                        "metadata": {
+                            "creationTimestamp": "2026-10-22T00:00:01Z",
+                            "uid": "claim-uid",
+                        },
                         "status": {"sandbox": {"name": self.claim_name}},
                     }
                 ),
@@ -323,6 +427,113 @@ class AgentRunner(KubeRunner):
         return await super().run(
             args, timeout=timeout, output_limit=output_limit, input_data=input_data
         )
+
+
+@pytest.mark.asyncio
+async def test_agent_sandbox_claim_injects_only_approved_inputs_volume() -> None:
+    class MountAgentRunner(AgentRunner):
+        def __init__(self):
+            super().__init__()
+            self.created = []
+
+        async def run(self, args, *, timeout, output_limit=65536, input_data=None):
+            if args[:3] == ["kubectl", "get", "storageclass"]:
+                return CommandResult(
+                    0,
+                    json.dumps(
+                        {
+                            "provisioner": "rclone.csi.veloxpack.io",
+                            "parameters": {
+                                "csi.storage.k8s.io/node-publish-secret-name": "${pvc.name}",
+                                "csi.storage.k8s.io/node-publish-secret-namespace": "fred-sandbox",
+                                "remote": "fred",
+                                "remotePath": "/",
+                            },
+                            "mountOptions": ["dir-cache-time=1s", "vfs-cache-mode=off"],
+                        }
+                    ),
+                    "",
+                )
+            if input_data:
+                item = json.loads(input_data)
+                self.created.append(item)
+                if item["kind"] == "Secret":
+                    return CommandResult(0, "created", "")
+            if "sandboxwarmpool" in args:
+                return CommandResult(
+                    0,
+                    json.dumps(
+                        {
+                            "metadata": {"generation": 1},
+                            "spec": {
+                                "replicas": 0,
+                                "sandboxTemplateRef": {"name": "fred-code-files"},
+                                "updateStrategy": {"type": "Recreate"},
+                            },
+                            "status": {
+                                "replicas": 0,
+                                "readyReplicas": 0,
+                                "observedGeneration": 1,
+                            },
+                        }
+                    ),
+                    "",
+                )
+            if "sandboxtemplate" in args:
+                pod = KubernetesBackend(self.mount_settings, self).job_manifest(
+                    "placeholder"
+                )["spec"]["template"]["spec"]
+                pod["volumes"].pop()
+                return CommandResult(
+                    0,
+                    json.dumps(
+                        {
+                            "spec": {
+                                "networkPolicyManagement": "Unmanaged",
+                                "volumeClaimTemplatesPolicy": "Allowed",
+                                "podTemplate": {"spec": pod},
+                            }
+                        }
+                    ),
+                    "",
+                )
+            if "pod" in args and "get" in args:
+                pod = KubernetesBackend(self.mount_settings, self).job_manifest(
+                    self.claim_name
+                )["spec"]["template"]["spec"]
+                pod["volumes"][-1]["persistentVolumeClaim"].pop("readOnly")
+                return CommandResult(
+                    0,
+                    json.dumps(
+                        {
+                            "metadata": {
+                                "ownerReferences": [{"name": self.claim_name}]
+                            },
+                            "spec": pod,
+                        }
+                    ),
+                    "",
+                )
+            return await super().run(
+                args, timeout=timeout, output_limit=output_limit, input_data=input_data
+            )
+
+    runner = MountAgentRunner()
+    runner.mount_settings = settings(
+        "agent_sandbox",
+        agent_pool_name="fred-code-files",
+        mount_provider="rclone_csi",
+        file_gateway_url="https://files.example/knowledge-flow/v1/sandbox-mount",
+        file_gateway_secret="s" * 32,
+        file_storage_class="fred-sandbox-webdav",
+    )
+    backend = AgentSandboxBackend(runner.mount_settings, runner)
+    lease = await backend.prepare("a" * 64)
+    claim = next(item for item in runner.created if item["kind"] == "SandboxClaim")
+    assert claim["spec"]["volumeClaimTemplates"][0]["metadata"]["name"] == "inputs"
+    assert any("patch" in args and "secret" in args for args in runner.calls)
+    assert lease.view_key == "a" * 64
+    await backend.dispose(lease)
 
 
 @pytest.mark.asyncio

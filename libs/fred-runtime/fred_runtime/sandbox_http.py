@@ -70,14 +70,7 @@ class SandboxHttpAdapter(SandboxExecutionPort):
     ) -> SandboxResult:
         headers = {"Authorization": f"Bearer {self._token}"}
         if session is not None:
-            payload = json.dumps(
-                session.model_dump(), sort_keys=True, separators=(",", ":")
-            ).encode()
-            headers["X-Fred-Sandbox-Session"] = hmac.new(
-                self._token.encode(),
-                b"fred-sandbox-session-v1\0" + payload,
-                hashlib.sha256,
-            ).hexdigest()
+            headers["X-Fred-Sandbox-Session"] = self.session_key(session)
         try:
             response = await self._client.post(
                 f"{self._base_url}/v1/execute",
@@ -96,6 +89,37 @@ class SandboxHttpAdapter(SandboxExecutionPort):
             return SandboxResult.model_validate(response.json())
         except (ValueError, TypeError) as exc:
             raise SandboxError("invalid_response") from exc
+
+    def session_key(self, session: SandboxSessionIdentity) -> str:
+        payload = json.dumps(
+            session.model_dump(), sort_keys=True, separators=(",", ":")
+        ).encode()
+        return hmac.new(
+            self._token.encode(),
+            b"fred-sandbox-session-v1\0" + payload,
+            hashlib.sha256,
+        ).hexdigest()
+
+    async def view_key(self, session: SandboxSessionIdentity) -> str:
+        try:
+            response = await self._client.post(
+                f"{self._base_url}/v1/view-key",
+                headers={
+                    "Authorization": f"Bearer {self._token}",
+                    "X-Fred-Sandbox-Session": self.session_key(session),
+                },
+            )
+            response.raise_for_status()
+            key = response.json()["view_key"]
+            if (
+                not isinstance(key, str)
+                or len(key) != 64
+                or any(character not in "0123456789abcdef" for character in key)
+            ):
+                raise ValueError("Invalid sandbox view key")
+            return key
+        except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+            raise SandboxError("unavailable") from exc
 
     async def aclose(self) -> None:
         await self._client.aclose()

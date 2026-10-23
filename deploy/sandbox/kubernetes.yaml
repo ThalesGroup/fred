@@ -25,6 +25,9 @@ spec:
   hard:
     pods: "20"
     count/jobs.batch: "20"
+    persistentvolumeclaims: "20"
+    requests.storage: 20Gi
+    count/secrets: "20"
     requests.cpu: "4"
     requests.memory: 4Gi
     limits.cpu: "12"

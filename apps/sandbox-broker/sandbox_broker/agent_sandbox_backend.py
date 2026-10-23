@@ -15,6 +15,7 @@ from .backend import SandboxLease, SandboxPrepareLeak
 from .command import CommandRunner
 from .config import BrokerSettings
 from .kubernetes_backend import KubernetesBackend
+from .mounts import view_key_for_mount
 
 
 class AgentSandboxBackend:
@@ -56,8 +57,13 @@ class AgentSandboxBackend:
             "networkPolicyManagement"
         ) != "Unmanaged" or not self._is_safe_pod_spec(pod):
             raise SandboxError("policy_unavailable")
+        if self.kubernetes.mount is not None:
+            if spec.get("volumeClaimTemplatesPolicy") != "Allowed" or spec.get(
+                "volumeClaimTemplates"
+            ):
+                raise SandboxError("policy_unavailable")
 
-    def _is_safe_pod_spec(self, pod: Any) -> bool:
+    def _is_safe_pod_spec(self, pod: Any, *, workload_name: str | None = None) -> bool:
         if not isinstance(pod, dict):
             return False
         containers = pod.get("containers", [])
@@ -81,14 +87,25 @@ class AgentSandboxBackend:
             and container.get("image") == self.settings.image
             and container.get("name") == "sandbox"
             and container.get("command") == ["sleep", "infinity"]
+            and container.get("workingDir") == "/work"
             and container.get("env")
             == [
-                {"name": "HOME", "value": "/tmp"},
+                {"name": "HOME", "value": "/work"},
                 {"name": "PYTHONDONTWRITEBYTECODE", "value": "1"},
             ]
             and not container.get("envFrom")
             and container.get("volumeMounts")
-            == [{"name": "scratch", "mountPath": "/tmp"}]
+            == (
+                [
+                    {"name": "scratch", "mountPath": "/tmp"},
+                    {"name": "scratch", "mountPath": "/work"},
+                ]
+                + (
+                    [{"name": "inputs", "mountPath": "/inputs", "readOnly": True}]
+                    if self.kubernetes.mount
+                    else []
+                )
+            )
             and security.get("allowPrivilegeEscalation") is False
             and security.get("readOnlyRootFilesystem") is True
             and security.get("capabilities", {}).get("drop") == ["ALL"]
@@ -97,16 +114,32 @@ class AgentSandboxBackend:
             == "256Mi"
             and container.get("resources", {}).get("limits", {}).get("cpu") == "500m"
             and pod.get("volumes")
-            == [{"name": "scratch", "emptyDir": {"sizeLimit": "16Mi"}}]
+            == (
+                [{"name": "scratch", "emptyDir": {"sizeLimit": "16Mi"}}]
+                + (
+                    [
+                        {
+                            "name": "inputs",
+                            "persistentVolumeClaim": {
+                                "claimName": f"inputs-{workload_name}",
+                            },
+                        }
+                    ]
+                    if self.kubernetes.mount and workload_name
+                    else []
+                )
+            )
         )
 
-    async def prepare(self) -> SandboxLease:
-        return await self._prepare_claim()
+    async def prepare(self, view_key: str | None = None) -> SandboxLease:
+        return await self._prepare_claim(view_key)
 
-    async def _prepare_claim(self) -> SandboxLease:
+    async def _prepare_claim(self, view_key: str | None) -> SandboxLease:
         await self.preflight()
         name = f"fred-sbx-{uuid4().hex[:20]}"
-        lease = SandboxLease(id=name, target=name)
+        mount = self.kubernetes.mount
+        mounted_key = view_key_for_mount(view_key) if mount else None
+        lease = SandboxLease(id=name, target=name, view_key=mounted_key)
         expiry = datetime.now(timezone.utc) + timedelta(
             seconds=self.settings.preparation_timeout_seconds
             + self.settings.execution_timeout_seconds
@@ -115,7 +148,11 @@ class AgentSandboxBackend:
         manifest: dict[str, Any] = {
             "apiVersion": "extensions.agents.x-k8s.io/v1beta1",
             "kind": "SandboxClaim",
-            "metadata": {"name": name, "namespace": self.settings.namespace},
+            "metadata": {
+                "name": name,
+                "namespace": self.settings.namespace,
+                "labels": {"app.kubernetes.io/name": "fred-sandbox"},
+            },
             "spec": {
                 "warmPoolRef": {"name": self.settings.agent_pool_name},
                 "lifecycle": {
@@ -124,7 +161,11 @@ class AgentSandboxBackend:
                 },
             },
         }
+        if mount is not None:
+            manifest["spec"]["volumeClaimTemplates"] = [mount.claim_template()]
         try:
+            if mount is not None and mounted_key is not None:
+                await mount.create_secret(name, mounted_key)
             result = await self.runner.run(
                 self.kubernetes._kubectl("create", "-f", "-"),
                 timeout=15,
@@ -132,6 +173,8 @@ class AgentSandboxBackend:
             )
             if result.returncode != 0:
                 raise SandboxError("backend_failed")
+            if mount is not None:
+                await mount.attach_owner(name, "sandboxclaim", pvc=False)
             result = await self.runner.run(
                 self.kubernetes._kubectl(
                     "wait",
@@ -150,12 +193,12 @@ class AgentSandboxBackend:
                 raise SandboxError("backend_failed")
             pod = await self._get("pod", pod_name)
             if (
-                not self._is_safe_pod_spec(pod.get("spec"))
+                not self._is_safe_pod_spec(pod.get("spec"), workload_name=name)
                 or pod.get("metadata", {}).get("ownerReferences", [{}])[0].get("name")
                 != pod_name
             ):
                 raise SandboxError("policy_unavailable")
-            return SandboxLease(id=name, target=pod_name)
+            return SandboxLease(id=name, target=pod_name, view_key=mounted_key)
         except BaseException:
             try:
                 await self.dispose(lease)
@@ -182,6 +225,26 @@ class AgentSandboxBackend:
         )
         if result.returncode != 0:
             raise SandboxError("backend_failed")
+        if self.kubernetes.mount is not None:
+            await self.kubernetes.mount.delete(lease.id)
+
+    async def recover(self) -> None:
+        result = await self.runner.run(
+            self.kubernetes._kubectl(
+                "delete",
+                "sandboxclaim",
+                "-l",
+                "app.kubernetes.io/name=fred-sandbox",
+                "--ignore-not-found=true",
+                "--cascade=foreground",
+                "--wait=true",
+            ),
+            timeout=90,
+        )
+        if result.returncode != 0:
+            raise SandboxError("backend_failed")
+        if self.kubernetes.mount is not None:
+            await self.kubernetes.mount.clean_orphans()
 
     async def renew(self, lease: SandboxLease, seconds: int) -> None:
         expiry = datetime.now(timezone.utc) + timedelta(seconds=seconds)
