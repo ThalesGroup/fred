@@ -1030,11 +1030,36 @@ export type McpCatalogResponse = {
   servers: McpCatalogEntry[];
 };
 export type ModelDiscoveryAdvertisement = {
-  default_profile_id?: string | null;
   discovered_model_ids?: string[];
   effective_url: string;
   source_id: string;
   yaml_url: string;
+};
+export type ModelBindingSettings = {
+  azure_ad_client_id?: string | null;
+  azure_ad_client_scope?: string | null;
+  azure_apim_base_url?: string | null;
+  azure_apim_resource_path?: string | null;
+  azure_endpoint?: string | null;
+  azure_openai_api_version?: string | null;
+  azure_tenant_id?: string | null;
+  base_url?: string | null;
+  location?: string | null;
+  max_retries?: number | null;
+  max_tokens?: number | null;
+  model_family?: ("mistral" | "llama" | "anthropic" | "claude") | null;
+  project?: string | null;
+  reasoning_effort?: string | null;
+  request_timeout?: number | null;
+  stream_usage?: boolean | null;
+  streaming?: boolean | null;
+  temperature?: number | null;
+  top_p?: number | null;
+};
+export type ModelBinding = {
+  name: string;
+  provider: "anthropic" | "azure-apim" | "azure-openai" | "ollama" | "openai" | "vertex-ai" | "vertex-ai-model-garden";
+  settings?: ModelBindingSettings;
 };
 export type ModelCatalogEntry = {
   capabilities?: string[];
@@ -1047,6 +1072,7 @@ export type ModelCatalogEntry = {
   max_input_tokens?: number | null;
   max_output_tokens?: number | null;
   name: string;
+  platform_binding?: ModelBinding | null;
   profile_ids?: string[];
   provider: string;
   reasoning_efforts?: {
@@ -1061,7 +1087,6 @@ export type ModelCatalogResponse = {
   };
   default_chat_profile_id?: string | null;
   discovered_model_ids?: string[];
-  discovery_default_profile_id?: string | null;
   discovery_effective_url?: string | null;
   discovery_source_id?: string | null;
   discovery_sources?: ModelDiscoveryAdvertisement[];
@@ -1340,6 +1365,7 @@ export type CapabilityCatalogEntry = {
   model_display_name?: string | null;
   model_max_input_tokens?: number | null;
   model_max_output_tokens?: number | null;
+  model_platform_binding?: ModelBinding | null;
   model_profile_ids?: string[];
   model_reasoning_efforts?: {
     [key: string]: ("low" | "medium" | "high")[];
