@@ -376,11 +376,13 @@ def test_repetition_is_allowed_and_reported_on_a_one_archetype_template():
     )
     assert not assignment.problems
     assert [p.label for p in assignment.patterns if p] == ["Only"] * 4
-    (note,) = assignment.notes
+    # Layout reuse is told with a proposed outline, never with a delivered deck.
+    assert not assignment.notes
+    (note,) = assignment.plan_notes
     assert note.startswith("Slides 1, 2, 3, 4 use the template slide 'Only' in a row.")
     assert note.endswith(
-        "No other slide of this template suits them: to vary them, use fewer "
-        "'bullets' slides."
+        "No other slide of this template suits them. If the user wants them varied: "
+        "use fewer 'bullets' slides."
     )
     assert "nothing to do" not in note.lower()
     # With the check off, the passive note of three in a row is kept.
@@ -389,7 +391,7 @@ def test_repetition_is_allowed_and_reported_on_a_one_archetype_template():
         _plan(*[SlidePlan(title=f"P{i}", bullets=["x"]) for i in range(4)]),
         "off",
     )
-    assert "Slides 1 to 3" in off.notes[0]
+    assert not off.notes and "Slides 1 to 3" in off.plan_notes[0]
 
 
 def test_invalid_entries_get_no_pattern_and_do_not_shift_the_rules():
@@ -1248,14 +1250,16 @@ def test_a_slide_used_three_times_is_reported_without_designs_that_cannot_hold_i
         SlidePlan(title=f"P{n}", bullets=["a long enough line"], kind="bullets")
         for n in range(5)
     ]
-    (note,) = [n for n in assign(inventory, _plan(*slides)).notes if "all use" in n]
+    (note,) = [
+        n for n in assign(inventory, _plan(*slides)).plan_notes if "all use" in n
+    ]
     assert note == (
         "Slides 1, 3, 5 all use the template slide 'A'. No other slide of this "
-        "template suits them: to vary them, use fewer 'bullets' slides."
+        "template suits them. If the user wants them varied: use fewer 'bullets' slides."
     )
     # By kind, the two template slides make one repeat.
     assignment = assign(inventory, _plan(*slides), "kind")
-    (note,) = [n for n in assignment.notes if "are all" in n]
+    (note,) = [n for n in assignment.plan_notes if "are all" in n]
     assert note.startswith(
         "Slides 1, 2, 3, 4, 5 are all 'bullets' slides (template slides 'A', 'B')."
     )
@@ -1280,7 +1284,7 @@ def test_one_kind_on_five_template_slides_is_a_repeat_with_content_advice():
         f"slide 5 (parallel 'Label : text' points) → cards holds {items}",
         f"slide 7 (dated items) → timeline holds {items}",
     ]
-    (note,) = [n for n in assignment.notes if "are all" in n]
+    (note,) = [n for n in assignment.plan_notes if "are all" in n]
     assert note.startswith("Slides 3, 5, 7, 9, 10 are all 'bullets' slides")
     assert f"slide 7 (dated items) → timeline holds {items}" in note
 
@@ -1838,9 +1842,8 @@ def test_identical_slides_the_user_asked_for_are_built_and_noted():
     assert not assignment.problems and _revisable(slides) == []
     assert [p.label if p else "-" for p in assignment.patterns][1:4] == ["A"] * 3
     assert assignment.repeated == {4: True}
-    assert "Slide 4 keeps slide 3's template slide, as the user asked" in " ".join(
-        assignment.notes
-    )
+    # Kept as asked: nothing to tell.
+    assert not assignment.notes and not assignment.plan_notes
 
 
 def test_repeat_layout_keeps_the_previous_template_slide_outside_the_cap():
@@ -1999,10 +2002,7 @@ def test_every_note_numbers_slides_as_its_outline_does():
     assignment = assign(
         with_item_slides(_agenda_inventory()), plan, "template_slide", 1
     )
-    (repeat,) = [n for n in assignment.notes if n.startswith("Slides ")]
-    assert (
-        repeat.startswith("Slides 1, 4, 5, 6, 7 ") and "slide 5 (dated items)" in repeat
-    )
+    assert not [n for n in assignment.notes if n.startswith("Slides ")]
     (planned,) = [n for n in assignment.plan_notes if n.startswith("Slides ")]
     assert (
         planned.startswith("Slides 1, 3, 4, 5, 6 ")

@@ -758,7 +758,7 @@ async def test_a_refused_plan_is_never_the_next_turns_base(
 @pytest.mark.asyncio
 async def test_a_change_to_a_delivered_deck_is_never_asked_to_vary(monkeypatch):
     """The later turn's history no longer shows the delivered deck (trimmed):
-    its stored base still says the conversation has one, so only the note."""
+    its stored base still says the conversation has one, so it is built as is."""
     workspace = FakeWorkspace()
     first = _Turn(monkeypatch, workspace)
     await first.build(slides=[COVER, {"title": "Agenda", "bullets": ["a"]}])
@@ -766,7 +766,7 @@ async def test_a_change_to_a_delivered_deck_is_never_asked_to_vary(monkeypatch):
     add = [{"op": "insert", "after": 2, "slides": _REPEATED[1:]}]
     text, result = await second.build(changes=add)
     assert not result.is_error, text
-    assert "all use the template slide 'Process'" in text
+    assert '"variety"' not in text and "all use the template slide" not in text
     assert len(second.rendered[-1].slides) == 2 + len(_REPEATED) - 1
 
 

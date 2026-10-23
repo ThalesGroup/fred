@@ -1865,8 +1865,9 @@ def _repeats(
     return repeats
 
 
-def _repeat_note(repeat: Repeat, at: Dict[int, int], planned: bool = False) -> str:
-    """The passive note: the slides and the kinds their content suits."""
+def _repeat_note(repeat: Repeat, at: Dict[int, int]) -> str:
+    """The passive note of a proposed outline: the slides and the kinds their
+    content suits."""
     at_text = ", ".join(str(at[n]) for n in repeat.slides)
     if repeat.in_a_row:
         note = f"Slides {at_text} use the template slide '{repeat.labels[0]}' in a row."
@@ -1880,27 +1881,15 @@ def _repeat_note(repeat: Repeat, at: Dict[int, int], planned: bool = False) -> s
         )
     if repeat.suggested:
         note += " Their content suits: " + "; ".join(repeat.suggestions(at)) + "."
-        return f"{note} " + _if_wanted(
-            "them varied",
-            "recast one as above",
-            planned,
-            "To vary them, recast one as above.",
-        )
-    fewer = f"use fewer '{repeat.kind}' slides"
+        return f"{note} If the user wants them varied: recast one as above."
     return (
-        f"{note} No other slide of this template suits them"
-        + (". " if planned else ": ")
-        + _if_wanted("them varied", fewer, planned, f"to vary them, {fewer}.")
+        f"{note} No other slide of this template suits them. If the user wants them "
+        f"varied: use fewer '{repeat.kind}' slides."
     )
 
 
-def _repeated_note(number: int, kept: bool, planned: bool = False) -> str:
-    """Never silent: a slide built alike on the user's word, or one that could not be."""
-    if kept:
-        return (
-            f"Slide {number} keeps slide {number - 1}'s template slide, as the user asked "
-            "(`repeat_layout`): left out of the variety limits."
-        )
+def _repeated_note(number: int, planned: bool = False) -> str:
+    """A slide the user asked built alike that could not be: never silent."""
     return (
         f"Slide {number} has `repeat_layout`, but its content does not fit slide "
         f"{number - 1}'s template slide, so it was built on another one. "
@@ -2075,27 +2064,27 @@ def assign(
             _substitution(slide, pattern, offered, number(k), not deck)
             for k, (slide, pattern) in enumerate(zip(slides, chosen))
         ]
-        # With a limit, a run is a repeat and noted as one.
-        notes += [
-            f"Slides {number(i - 2)} to {number(i)} use the same template slide: no other "
-            "one holds their content. "
-            + _if_wanted(
-                "them to look different",
-                "give one of them another content shape",
-                not deck,
-                "To make them look different, give one of them another content shape.",
-            )
-            for i in range(2, len(chosen))
-            if caps is None
-            and chosen[i].design_key
-            == chosen[i - 1].design_key
-            == chosen[i - 2].design_key
-            and slides[i].part == slides[i - 1].part == 1
-            and not _exempt(slides[i])
-        ]
-        notes += [_repeated_note(at[n], kept, not deck) for n, kept in repeated.items()]
         notes += [_split_note(split, at, not deck) for split in splits.values()]
-        notes += [_repeat_note(r, at, not deck) for r in repeats]
+        notes += [
+            _repeated_note(at[n], not deck) for n, kept in repeated.items() if not kept
+        ]
+        # Layout reuse is the user's to weigh in a proposed outline; once
+        # delivered it is design talk the user never asked for.
+        if not deck:
+            # With a limit, a run is a repeat and noted as one.
+            notes += [
+                f"Slides {number(i - 2)} to {number(i)} use the same template slide: no "
+                "other one holds their content. If the user wants them to look "
+                "different: give one of them another content shape."
+                for i in range(2, len(chosen))
+                if caps is None
+                and chosen[i].design_key
+                == chosen[i - 1].design_key
+                == chosen[i - 2].design_key
+                and slides[i].part == slides[i - 1].part == 1
+                and not _exempt(slides[i])
+            ]
+            notes += [_repeat_note(r, at) for r in repeats]
         return list(dict.fromkeys(n for n in notes if n))
 
     # The deck's own numbers: a split list's parts are slides of their own.

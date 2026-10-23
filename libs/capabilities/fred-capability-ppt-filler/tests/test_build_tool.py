@@ -560,10 +560,10 @@ async def test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built(monkey
     ]
     assert "options" not in repeat
     assert "send the same call again: it will be built as is" in text
-    # The same plan again: built, with the passive note only.
+    # The same plan again: built, the repetition no longer told.
     text, result = await build.coroutine(slides=_REPEATED)
     assert not result.is_error, text
-    assert "Slides 2, 3, 4, 5 all use the template slide 'Process'" in text
+    assert "all use the template slide" not in text
 
 
 @pytest.mark.asyncio
@@ -595,10 +595,10 @@ async def test_no_variety_ask_after_a_fit_repair(monkeypatch):
     build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
     text, result = await build.coroutine(slides=[COVER, _TOO_MANY])
     assert not result.is_error and "variety" not in text
-    # The repaired deck repeats a kind: built, the repetition only noted.
+    # The repaired deck repeats a kind: built, the repetition not told.
     text, result = await build.coroutine(slides=_REPEATED)
     assert not result.is_error, text
-    assert "Slides 2, 3, 4, 5 all use the template slide 'Process'" in text
+    assert "all use the template slide" not in text
 
 
 @pytest.mark.asyncio
@@ -650,11 +650,11 @@ async def test_slides_to_fix_that_repeat_are_asked_to_vary_in_the_same_round(
     (repeat,) = payload["variety"]
     assert repeat["slides"] == [2, 3] and repeat["at_most"] == 1
     assert "several slides would look the same" in text
-    # Fixed, kinds unchanged: built as is, the repeat only noted.
+    # Fixed, kinds unchanged: built as is, the repeat not told.
     fixed = [COVER, _labelled_steps(1, False), _labelled_steps(2, False)]
     text, result = await build.coroutine(slides=fixed)
     assert not result.is_error, text
-    assert "Slides 2, 3 all use the template slide 'Process'" in text
+    assert "all use the template slide" not in text
 
 
 class _Request:
@@ -709,14 +709,14 @@ def _rehydrated(history: list) -> list:
 
 
 @pytest.mark.asyncio
-async def test_a_deck_after_the_first_one_only_gets_the_note(monkeypatch):
+async def test_a_deck_after_the_first_one_is_built_as_is(monkeypatch):
     """A delivered deck in the history: the user may have asked for these slides."""
     delivered, result = await _build(monkeypatch, slides=[COVER])
     assert not result.is_error
     build = await _later_turn(monkeypatch, _turn(delivered))
     text, result = await build.coroutine(slides=_REPEATED)
     assert not result.is_error, text
-    assert "all use the template slide 'Process'" in text
+    assert '"variety"' not in text and "all use the template slide" not in text
 
 
 @pytest.mark.asyncio
@@ -782,19 +782,18 @@ async def test_one_kind_on_different_slides_is_asked_once_with_content_advice(
     assert any(s.startswith("slide 5 (parallel") for s in suggested)
     text, result = await build.coroutine(slides=EVIDENCE_SLIDES)
     assert not result.is_error, text
-    assert "Slides 3, 5, 7, 9, 10 are all 'bullets' slides" in text
+    assert "are all 'bullets' slides" not in text
 
 
 @pytest.mark.asyncio
-async def test_a_later_deck_repeating_a_kind_only_gets_the_note(monkeypatch):
+async def test_a_later_deck_repeating_a_kind_is_built_as_is(monkeypatch):
     delivered, _ = await _build(monkeypatch, slides=[COVER])
     build = await _later_turn(
         monkeypatch, _turn(delivered), extend=with_item_slides, variety="kind"
     )
     text, result = await build.coroutine(slides=EVIDENCE_SLIDES)
     assert not result.is_error, text
-    assert "are all 'bullets' slides" in text
-    assert "slide 7 (dated items) → timeline holds items max 6" in text
+    assert '"variety"' not in text and "are all 'bullets' slides" not in text
 
 
 @pytest.mark.asyncio
@@ -815,8 +814,8 @@ async def test_each_variety_check_mode_asks_for_its_own_repeat(monkeypatch):
         )
         assert not result.is_error, (variety, text)
         assert asked is ('"variety": [' in text), (variety, text)
-        if variety == "off":  # no ask, the passive note stays
-            assert "all use the template slide" in text or "are all" in text
+        # A delivered deck never talks layout reuse.
+        assert "all use the template slide" not in text and "are all" not in text
 
 
 def test_the_variety_check_defaults_and_never_triggers_a_re_analysis():

@@ -831,7 +831,8 @@ def _designs_line(
     )
     return (
         f"\nDesigns: {listed}. Slides with different names look different; to give slide N "
-        'the design of slide M, send {"op": "edit", "slide": N, "field": "like", "value": M}.'
+        'the design of slide M, send {"op": "edit", "slide": N, "field": "like", "value": M}. '
+        "This line is for your next changes: do not list designs to the user."
     )
 
 
