@@ -313,8 +313,10 @@ async def reconcile_instance_suspension(
       the pod raises `UnknownCapabilityError` for at assembly — reconciliation
       catches it first so the agent leaves the catalog before anyone hits it.
     - otherwise, if the instance is currently suspended for an availability
-      reason, CLEAR it (the capability came back — reinstall / re-grant) and
-      return None. A `capability_config_invalid` suspension is left untouched:
+      reason (the capability came back — reinstall / re-grant), move it to
+      `capability_pending` and return None: that reason may have overwritten a
+      pending one, and only a readiness verdict (the next listing or re-check)
+      lifts it. A `capability_config_invalid` suspension is left untouched:
       only a successful save clears that (RFC §3.9).
 
     Returns the reason the instance is (now) availability-suspended for, or None.
@@ -344,7 +346,15 @@ async def reconcile_instance_suspension(
             )
         return revoked_reason
     if current in _AVAILABILITY_REASON_VALUES:
-        await clear_suspension(store, instance, kpi_writer=kpi_writer)
+        # The availability reason may have overwritten `capability_pending`, which
+        # only a readiness verdict lifts: fail closed to it until the next answer.
+        await suspend_instance(
+            store,
+            instance,
+            SuspensionReason.CAPABILITY_PENDING,
+            kpi_writer=kpi_writer,
+            conditional=True,
+        )
     return None
 
 

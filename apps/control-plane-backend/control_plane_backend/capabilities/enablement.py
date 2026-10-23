@@ -865,15 +865,16 @@ async def revive_dependent_instances(
             revoked_reason=SuspensionReason.CAPABILITY_ACCESS_REVOKED,
             kpi_writer=kpi_writer,
         )
-        # A None return means "no AVAILABILITY reason" — NOT necessarily
-        # cleared: a `capability_config_invalid` instance also returns None
-        # while `clear_suspension` deliberately leaves its reason intact
-        # (RFC §3.9). Re-read the record and count only a real transition to
-        # unsuspended, so config-invalid instances are never miscounted.
+        # None also covers a kept `capability_config_invalid` (RFC §3.9): count
+        # only a move to unsuspended or to `capability_pending`, which the next
+        # readiness answer lifts.
         if updated is not None:
             continue
         fresh = await agent_instance_store.get(instance.agent_instance_id)
-        if fresh is not None and not fresh.is_suspended:
+        if fresh is not None and fresh.suspension_reason in (
+            None,
+            SuspensionReason.CAPABILITY_PENDING.value,
+        ):
             revived += 1
     return revived
 

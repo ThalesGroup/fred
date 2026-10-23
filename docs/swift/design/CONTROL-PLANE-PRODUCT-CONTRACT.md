@@ -5201,7 +5201,9 @@ After an enrol, a copy or a capability save, the instance gets one suspension wr
 when the pod answers ready (the save resolves any earlier reason), else
 `capability_pending`. No answer (timeout, unreachable pod, error) fails closed to
 `capability_pending` without detail, lifted by the next listing, re-check or sweep
-that gets an answer. Elsewhere, no answer changes nothing. Readiness writes are
+that gets an answer. An availability reason that clears (capability back, access
+re-granted) also leaves `capability_pending` without detail, since it may have
+overwritten one. Elsewhere, no answer changes nothing. Readiness writes are
 compare-and-set on the reason read before the pod call, so they never overwrite a
 suspension written meanwhile.
 
