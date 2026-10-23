@@ -29,6 +29,13 @@ Run without `make` (Vite is running from this checkout): `npx tsc --noEmit` clea
 - **ppt_builder capability:** `make code-quality` clean; `tests/test_platform_template.py` 20 passed (+1: an upload or re-run with a profile the drawer does not offer is 422 and starts nothing; rules-only is not checked). Full `make test` before the test fix: 961 passed, that one failing on its own assertion.
 - **Frontend (no `make`):** `controlPlaneOpenApi.ts` regenerated with `npx --no-install @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json`; `npx tsc --noEmit`, `npx eslint` and `npx prettier` on touched files clean; `npx vitest run src/rework/features/capabilities/ppt_builder src/rework/components/pages/admin/FeaturesPage`: 14 files, 208 passed (`PptBuilderPlatformPanel.test.tsx`: options from the team-free list labelled `display_name ?? name`; not queried without the manager right).
 
+## Review fixes and performance review (2026-10-23)
+
+- **`fred-performance-reviewer` (6.3):** the per-turn path reads only the pod-local snapshot (no I/O); its refresh is single flight in the background; analysis, labelling and upload CPU work run in `to_thread`; vision calls are bounded by `wait_for` and a semaphore. Fixed: a `rules` row cached for a vision key had no recheck, so other replicas kept it after a save re-ran it there (`ready_inventory`, test added). Not fixed (low): a refresh reads the template bytes inside the readiness call; two primary-key reads per model call while an analysis is not ready; a cold pod's first platform-default read has no own timeout; the template-bytes LRU holds 4 entries.
+- **ppt_builder capability:** ruff (incl. `--select I`) and `ruff format --check` clean; basedpyright with the baseline 0 errors; `test_pptx_archive`, `test_build_tool`, `test_analysis_job`, `test_builder_analysis`, `test_builder_render`, `test_analyze_route`, `test_builder_capability`, `test_platform_template`, `test_labelling`: 313 passed, 5 skipped.
+- **fred-sdk:** clean; `make test` 664 passed, 3 skipped. **fred-runtime:** clean (0 errors, 7 warnings); `make test` 2222 passed. **Control plane:** clean; `make test` 2045 passed plus the one assertion updated afterwards (`test_capability_impact.py`, 21 passed).
+- **Frontend (no `make`):** `npx tsc --noEmit`, eslint and prettier on the changed files clean; vitest on `features/capabilities`, AgentCard, `core/hooks` and the `Agent` pattern: 52 files / 542 tests and 34 files / 619 tests passed.
+
 ## Not yet verified
 
-- `make code-quality` / `make test` for the frontend (not run while Vite runs from this checkout), the `fred-performance-reviewer` skill (6.3), browser check 6.4.
+- `make code-quality` / `make test` for the frontend (not run while Vite runs from this checkout), browser check 6.4.
