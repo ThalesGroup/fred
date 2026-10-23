@@ -22,7 +22,8 @@ import {
 
 const PREFIX = "fred.usersPreferences:";
 const IMPORTED_KEY = "fred.usersPreferences.legacyImported";
-const PENDING_LEGACY_KEY = "fred.usersPreferences.pendingLegacy";
+const LEGACY_OWNER_KEY = "fred.usersPreferences.legacyImportOwner";
+const PENDING_LEGACY_PREFIX = "fred.usersPreferences.pendingLegacy:";
 const THEME_KEY = "localHook:ApplicationContextProvider.uiTheme";
 const MODE_KEY = "localHook:ApplicationContextProvider.themeMode";
 const SIDEBAR_KEY = "localHook:ApplicationContextProvider.isSidebarCollapsed";
@@ -130,10 +131,14 @@ async function writeLocalChoices(preferences: UserPreferences): Promise<void> {
 
 export async function initializeUserPreferences(userId: string): Promise<void> {
   activeUserId = userId;
+  const pendingKey = PENDING_LEGACY_PREFIX + encodeURIComponent(userId);
+  const owner = get(LEGACY_OWNER_KEY);
+  const canImport = get(IMPORTED_KEY) !== "1" && (!owner || owner === userId);
   let legacy: PatchUserPreferences = {};
-  if (get(IMPORTED_KEY) !== "1") {
+  if (canImport) {
+    if (!owner) set(LEGACY_OWNER_KEY, userId);
     try {
-      const pending: unknown = JSON.parse(get(PENDING_LEGACY_KEY) ?? "null");
+      const pending: unknown = JSON.parse(get(pendingKey) ?? "null");
       legacy =
         pending && typeof pending === "object" && !Array.isArray(pending)
           ? (pending as PatchUserPreferences)
@@ -141,7 +146,7 @@ export async function initializeUserPreferences(userId: string): Promise<void> {
     } catch {
       legacy = readLegacyPreferences();
     }
-    if (Object.keys(legacy).length) set(PENDING_LEGACY_KEY, JSON.stringify(legacy));
+    if (Object.keys(legacy).length) set(pendingKey, JSON.stringify(legacy));
   }
   const request = store.dispatch(
     controlPlaneApi.endpoints.getMyPreferencesControlPlaneV1UsersMePreferencesGet.initiate(undefined, {
@@ -150,7 +155,7 @@ export async function initializeUserPreferences(userId: string): Promise<void> {
   );
   try {
     let preferences = await request.unwrap();
-    if (!preferences.initialized && get(IMPORTED_KEY) !== "1") {
+    if (!preferences.initialized && canImport) {
       if (Object.keys(legacy).length) {
         const write = store.dispatch(
           controlPlaneApi.endpoints.patchMyPreferencesControlPlaneV1UsersMePreferencesPatch.initiate({
@@ -165,8 +170,11 @@ export async function initializeUserPreferences(userId: string): Promise<void> {
         }
       }
     }
-    set(IMPORTED_KEY, "1");
-    set(PENDING_LEGACY_KEY, null);
+    if (canImport) {
+      set(IMPORTED_KEY, "1");
+      set(LEGACY_OWNER_KEY, null);
+      set(pendingKey, null);
+    }
     set(cacheKey(userId), JSON.stringify(preferences));
     await writeLocalChoices(preferences);
   } catch {

@@ -106,7 +106,7 @@ it("keeps legacy data eligible for import when the first server write fails", as
   }));
   await initializeUserPreferences("alice");
   expect(localStorage.getItem("fred.usersPreferences.legacyImported")).toBeNull();
-  expect(JSON.parse(localStorage.getItem("fred.usersPreferences.pendingLegacy")!)).toMatchObject({
+  expect(JSON.parse(localStorage.getItem("fred.usersPreferences.pendingLegacy:alice")!)).toMatchObject({
     ui_theme_id: "cloud",
   });
   expect(localStorage.getItem("localHook:ApplicationContextProvider.uiTheme")).toBe("null");
@@ -121,7 +121,7 @@ it("preserves legacy data for a later import when the initial server read fails"
     unsubscribe: vi.fn(),
   }));
   await initializeUserPreferences("alice");
-  expect(JSON.parse(localStorage.getItem("fred.usersPreferences.pendingLegacy")!)).toMatchObject({
+  expect(JSON.parse(localStorage.getItem("fred.usersPreferences.pendingLegacy:alice")!)).toMatchObject({
     ui_theme_id: "cloud",
   });
   expect(localStorage.getItem("localHook:ApplicationContextProvider.uiTheme")).toBe("null");
@@ -129,7 +129,25 @@ it("preserves legacy data for a later import when the initial server read fails"
   mock.responses.push({ initialized: false });
   await initializeUserPreferences("alice");
   expect(mock.writes).toEqual([{ ui_theme_id: "cloud" }]);
-  expect(localStorage.getItem("fred.usersPreferences.pendingLegacy")).toBeNull();
+  expect(localStorage.getItem("fred.usersPreferences.pendingLegacy:alice")).toBeNull();
+});
+
+it("does not let another account consume a pending legacy import", async () => {
+  localStorage.setItem("localHook:ApplicationContextProvider.uiTheme", '"cloud"');
+  mock.dispatch.mockImplementationOnce(() => ({
+    unwrap: async () => {
+      throw new Error("offline");
+    },
+    unsubscribe: vi.fn(),
+  }));
+  await initializeUserPreferences("alice");
+  mock.responses.push({ initialized: false });
+  await initializeUserPreferences("bob");
+  expect(mock.writes).toHaveLength(0);
+  expect(localStorage.getItem("fred.usersPreferences.legacyImportOwner")).toBe("alice");
+  mock.responses.push({ initialized: false });
+  await initializeUserPreferences("alice");
+  expect(mock.writes).toEqual([{ ui_theme_id: "cloud" }]);
 });
 
 it("sends rapid updates in user action order", async () => {
