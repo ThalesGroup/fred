@@ -110,3 +110,19 @@ class Cleaned(Contract):
     cursor: int
     next_cursor: int
     objects_empty: bool
+
+
+class RetrievalWork(Contract):
+    document_id: UUID
+    operation_id: UUID
+    manifest: Manifest
+    retrievable: bool
+    restore: bool
+    confirmed: bool
+    phase: Literal["uncertain", "ready", "writing", "applied"] = "uncertain"
+
+
+class RetrievalConfirmation(Contract):
+    step: Literal["claim", "applied", "confirm"] = "confirm"
+    operation_id: UUID
+    retrievable: bool

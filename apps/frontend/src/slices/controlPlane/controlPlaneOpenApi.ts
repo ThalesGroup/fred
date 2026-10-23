@@ -79,6 +79,21 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.cleaned,
       }),
     }),
+    retrievalWork: build.query<RetrievalWorkApiResponse, RetrievalWorkApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/document-processing/retrievable/${queryArg.id}`,
+        params: {
+          operation_id: queryArg.operationId,
+        },
+      }),
+    }),
+    confirmRetrievable: build.mutation<ConfirmRetrievableApiResponse, ConfirmRetrievableApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/document-processing/retrievable/${queryArg.id}`,
+        method: "POST",
+        body: queryArg.retrievalConfirmation,
+      }),
+    }),
     abandon: build.mutation<AbandonApiResponse, AbandonApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/document-processing/${queryArg.id}/abandon`,
@@ -151,6 +166,13 @@ const injectedRtkApi = api.injectEndpoints({
         headers: {
           "Idempotency-Key": queryArg["Idempotency-Key"],
         },
+      }),
+    }),
+    setRetrievable: build.mutation<SetRetrievableApiResponse, SetRetrievableApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/documents/${queryArg.id}/retrievable`,
+        method: "PUT",
+        body: queryArg.setRetrievable,
       }),
     }),
     createFolder: build.mutation<CreateFolderApiResponse, CreateFolderApiArg>({
@@ -329,6 +351,16 @@ export type CleanedApiResponse = unknown;
 export type CleanedApiArg = {
   cleaned: Cleaned;
 };
+export type RetrievalWorkApiResponse = /** status 200 undefined */ RetrievalWork;
+export type RetrievalWorkApiArg = {
+  id: string;
+  operationId: string;
+};
+export type ConfirmRetrievableApiResponse = unknown;
+export type ConfirmRetrievableApiArg = {
+  id: string;
+  retrievalConfirmation: RetrievalConfirmation;
+};
 export type AbandonApiResponse = /** status 200 undefined */ Summary;
 export type AbandonApiArg = {
   id: string;
@@ -386,6 +418,11 @@ export type StartApiArg = {
   id: string;
   "Idempotency-Key": string;
   start: Start;
+};
+export type SetRetrievableApiResponse = /** status 200 undefined */ Document;
+export type SetRetrievableApiArg = {
+  id: string;
+  setRetrievable: SetRetrievable;
 };
 export type CreateFolderApiResponse = /** status 201 Success */ Folder;
 export type CreateFolderApiArg = {
@@ -622,6 +659,31 @@ export type Cleaned = {
   objects_empty: boolean;
   work: Work;
 };
+export type Artifact = {
+  path: string;
+  sha256: string;
+  size: number;
+};
+export type Manifest = {
+  artifacts: Artifact[];
+  chunks: number;
+  generation: string;
+  rows?: number | null;
+  vector_ordinals: number[];
+  vectors: number;
+};
+export type RetrievalWork = {
+  confirmed: boolean;
+  document_id: string;
+  manifest: Manifest;
+  operation_id: string;
+  restore: boolean;
+  retrievable: boolean;
+};
+export type RetrievalConfirmation = {
+  operation_id: string;
+  retrievable: boolean;
+};
 export type Stage = "queued" | "preparation" | "extraction" | "indexing" | "done";
 export type ProcessingStatus = "pending" | "running" | "succeeded" | "failed";
 export type Summary = {
@@ -655,19 +717,6 @@ export type Failure = {
   generation?: string | null;
   stage: Stage;
   work: Work;
-};
-export type Artifact = {
-  path: string;
-  sha256: string;
-  size: number;
-};
-export type Manifest = {
-  artifacts: Artifact[];
-  chunks: number;
-  generation: string;
-  rows?: number | null;
-  vector_ordinals: number[];
-  vectors: number;
 };
 export type Descriptor = {
   actor: string;
@@ -730,6 +779,23 @@ export type UploadReceipt = {
 export type Start = {
   profile: Profile;
   retry_of?: string | null;
+};
+export type Document = {
+  created_at: string;
+  created_by: string;
+  folder_id: string | null;
+  id: string;
+  mime: string;
+  name: string;
+  retrievable: boolean;
+  retrievable_pending: boolean;
+  sha256: string;
+  size: number;
+  space_id: string;
+};
+export type SetRetrievable = {
+  /** null restores an untouched legacy publication from its verified metadata and chunks. */
+  retrievable: boolean | null;
 };
 export type Folder = {
   created_at: string;
@@ -841,17 +907,6 @@ export type CreateSpace = {
   name: string;
   parent_id: string;
 };
-export type Document = {
-  created_at: string;
-  created_by: string;
-  folder_id: string | null;
-  id: string;
-  mime: string;
-  name: string;
-  sha256: string;
-  size: number;
-  space_id: string;
-};
 export type Entry =
   | {
       data: Folder;
@@ -896,6 +951,9 @@ export const {
   useCleanupQuery,
   useLazyCleanupQuery,
   useCleanedMutation,
+  useRetrievalWorkQuery,
+  useLazyRetrievalWorkQuery,
+  useConfirmRetrievableMutation,
   useAbandonMutation,
   useClaimMutation,
   useCommitMutation,
@@ -914,6 +972,7 @@ export const {
   useHistoryQuery,
   useLazyHistoryQuery,
   useStartMutation,
+  useSetRetrievableMutation,
   useCreateFolderMutation,
   useDeleteFolderMutation,
   useRenameFolderMutation,

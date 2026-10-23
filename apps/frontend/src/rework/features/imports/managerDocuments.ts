@@ -14,7 +14,7 @@ export function presentManagerDocument(document: Document, processing?: Summary)
     managerDocument: document,
     managerProcessing: processing,
     identity: { document_uid: document.id, document_name: document.name, uploaded_by: document.created_by },
-    source: { source_type: "push", date_added_to_kb: document.created_at, retrievable: false },
+    source: { source_type: "push", date_added_to_kb: document.created_at, retrievable: document.retrievable },
     file: { file_size_bytes: document.size, mime_type: document.mime, sha256: document.sha256 },
     processing: {
       profile: processing?.profile,

@@ -249,3 +249,70 @@ reset is not supported for the Rust ingestion profile.
 The frontend's `controlPlane` client targets this Rust API. `legacyControlPlane`
 retains the previous API types and clients for screens not yet migrated; the
 Python backend is no longer shipped.
+
+### Document search inclusion
+
+`Document.retrievable` is the last confirmed inclusion state, separate from processing
+success and caller permissions. Publication reads and verifies `metadata.json` before
+persisting it in the same transaction as the final manifest. The vector worker checks
+the flag on written chunks. Existing listing and content permissions are unchanged.
+
+`PUT /documents/{id}/retrievable` with `{"retrievable": false}` or `true` requires the
+existing space write permission and a published vector generation. KF updates only
+its published chunk IDs and reads them back before confirming SQL. The response is
+200 only after confirmation. `retrievable_pending` drives the existing UI refresh;
+503 means the outcome is not confirmed, not that the operation was rolled back.
+Repeating an already confirmed request returns its durable result without delivery or
+mutation. While pending, the same actor can repeat the same request; an opposite
+request is rejected. The command and its phase live in `document.retrieval_command`:
+
+- `ready`: the worker must atomically claim `writing` before touching OpenSearch.
+  Only one claim succeeds, including after an API restart or Temporal history expiry.
+- `writing`: the mutation activity has one attempt. Its timeout, termination or
+  partial failure never authorizes another writer. A lost claim response also stays
+  protected, even if no write actually began.
+- `applied`: a separate activity records successful writer completion. That callback
+  retries independently, without an overall workflow deadline, so a temporary SQL/HTTP
+  outage does not discard Temporal's evidence that the writer returned. Verification
+  and confirmation then run in a separate activity (up to five attempts per run).
+- `confirmed=true`: SQL contains the verified value; duplicate confirmations are
+  idempotent. Every callback is fenced by the current operation ID.
+
+Delivery uses `ALLOW_DUPLICATE_FAILED_ONLY`, with `FAIL` on a running ID and a fresh
+start-request ID. A failed, timed-out, cancelled or terminated run may restart; it
+reads the persisted phase and never repeats a claimed mutation. `AlreadyExists` is
+described and accepted only for a running execution, not a closed failure. A completed
+run is not restarted. These policies follow the
+[Temporal workflow identity contract](https://docs.temporal.io/workflow-execution/workflowid-runid).
+
+For diagnosis, use the authenticated internal GET
+`/document-processing/retrievable/{id}?operation_id={operation_id}` and the matching
+`manager-retrievable-{installation}-{operation_id}` Temporal history. If the phase is
+`applied`, repeat the original PUT to retry verification/confirmation. If it is
+`writing`, inspect whether the completion-recording activity is still retrying; it
+can finish without reapplying the mutation. A closed run with `writing`, a partial
+projection, or an old command without a phase (`uncertain`) requires investigation
+of the activity and remote write. There is **no automatic repair or operator reset
+endpoint** for that case. Keep pending, do not clear the command or submit the opposite
+value; any repair must first establish that the old writer and remote operations
+have stopped and be separately scoped. A read matching the target alone is not proof
+that an uncertain writer has stopped.
+
+OpenSearch verifies exactly the IDs derived from `manifest.vector_ordinals` with
+sequential `_mget` batches of at most 500. Only `metadata.document_uid` and
+`metadata.retrievable` are requested. Missing/duplicate/unexpected IDs, per-item errors,
+wrong ownership and nonmatching boolean values reject confirmation. For N published
+chunks and batch size B=500, each verification pass costs `ceil(N/B)` requests (zero
+for N=0), with at most one in flight, instead of N full-chunk reads. A confirmation
+retry before SQL succeeds can repeat this read cost; a confirmed replay performs no
+vector reads. No latency or throughput measurement is claimed. Unsupported vector
+backends explicitly reject both generation-scoped mutation and verification.
+
+Migration `0004_document_retrievable.sql` adds state without adopting pre-existing
+vector data. Before considering an old document's indicator repaired, an authorized
+writer must explicitly call the same route with `{"retrievable": null}`. This restores
+only a document with no prior inclusion command, using the verified published
+metadata and checking every published chunk; it does not rewrite vectors or ingest
+again. A mismatch fails instead of guessing from counts. Apply it per selected ID,
+not as an automatic startup sweep. This action was prepared but not run for the
+reported PDF. The manager index remains isolated from legacy search/chat.

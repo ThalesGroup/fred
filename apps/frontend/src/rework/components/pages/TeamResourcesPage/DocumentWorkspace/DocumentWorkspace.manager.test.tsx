@@ -30,6 +30,7 @@ const probe = vi.hoisted(() => ({
   queryOptions: {} as Record<string, unknown>,
   processingEnabled: false,
   processing: {} as Record<string, import("../../../../../slices/controlPlane/controlPlaneOpenApi").Summary>,
+  inclusion: vi.fn().mockResolvedValue({}),
   starts: vi.fn().mockResolvedValue({}),
   documents: [] as import("../../../../../slices/controlPlane/controlPlaneOpenApi").Document[],
   drawerProps: [] as Record<string, unknown>[],
@@ -55,6 +56,7 @@ const probe = vi.hoisted(() => ({
   legacyRequests: [] as string[],
 }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useSetRetrievableMutation: () => [(args: unknown) => ({ unwrap: () => probe.inclusion(args) })],
   useLazyEntriesQuery: () => [(args: unknown) => ({ unwrap: () => probe.findEntries(args) })],
   useEntriesQuery: (query: Record<string, unknown>, options: Record<string, unknown>) => {
     probe.queryOptions = options;
@@ -155,12 +157,15 @@ vi.mock("../../../../features/tasks/taskSlice", () => ({ selectActiveTasks: () =
 vi.mock("../../../../features/tasks/useRefetchOnTaskSettled", () => ({ useRefetchOnTaskSettled: () => {} }));
 vi.mock("../../../../features/tasks/useNotifyOnNewTaskTarget", () => ({ useNotifyOnNewTaskTarget: () => {} }));
 vi.mock("../../../../../components/documents/common/useDocumentCommands", () => ({
-  useDocumentCommands: () => ({
+  useDocumentCommands: ({ setRetrievable }: { setRetrievable: (doc: any, value: boolean) => Promise<unknown> }) => ({
     previewTarget: null,
     closePreview: () => {},
     preview: () => {},
     download: async () => {},
-    toggleRetrievable: async () => {},
+    toggleRetrievable: async (doc: any) => {
+      await setRetrievable(doc, !doc.source.retrievable);
+      return !doc.source.retrievable;
+    },
     removeFromLibrary: async () => {},
   }),
 }));
@@ -229,6 +234,7 @@ async function menuAction(name: string) {
 beforeEach(async () => {
   probe.documents = [];
   probe.refetch.mockClear();
+  probe.inclusion.mockClear();
   probe.findEntries.mockReset();
   probe.createConflict = false;
   probe.processingEnabled = false;
@@ -440,6 +446,8 @@ it("keeps document bulk controls visible but disables processing, ZIP and deleti
   probe.documents = [
     {
       id: "document",
+      retrievable: false,
+      retrievable_pending: false,
       space_id: "space-1",
       folder_id: "root-id",
       name: "original.txt",
@@ -487,6 +495,8 @@ it.each(["row", "bulk"])(
     probe.documents = [
       {
         id: "doc",
+        retrievable: false,
+        retrievable_pending: false,
         space_id: "space-1",
         folder_id: "root-id",
         name: "stored.txt",
@@ -525,20 +535,28 @@ it.each(["row", "bulk"])(
 it("refreshes on focus and polls only active processing in the current directory", async () => {
   vi.useFakeTimers();
   expect(probe.queryOptions.pollingInterval ?? 0).toBe(0);
-  await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(6000);
+  });
   expect(probe.refetch).not.toHaveBeenCalled();
-  await act(async () => { window.dispatchEvent(new Event("focus")); });
+  await act(async () => {
+    window.dispatchEvent(new Event("focus"));
+  });
   expect(probe.refetch).toHaveBeenCalledTimes(1);
   probe.refetch.mockClear();
   // Only status is consumed by this polling fixture; no document row is rendered.
   probe.processing = { doc: { status: "running" } as (typeof probe.processing)[string] };
   await render();
-  await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(3000);
+  });
   expect(probe.refetch).toHaveBeenCalledTimes(1);
   probe.processing = { doc: { status: "succeeded" } as (typeof probe.processing)[string] };
   await render();
   probe.refetch.mockClear();
-  await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(6000);
+  });
   expect(probe.refetch).not.toHaveBeenCalled();
 });
 
@@ -576,12 +594,41 @@ it("pauses active directory refresh while hidden and refreshes on focus", async 
   const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
   probe.processing = { doc: { status: "pending" } as (typeof probe.processing)[string] };
   await render();
-  await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(6000);
+  });
   expect(probe.refetch).not.toHaveBeenCalled();
   visibility.mockReturnValue("visible");
-  await act(async () => { window.dispatchEvent(new Event("focus")); });
+  await act(async () => {
+    window.dispatchEvent(new Event("focus"));
+  });
   expect(probe.refetch).toHaveBeenCalledTimes(1);
   await render();
-  await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(3000);
+  });
   expect(probe.refetch).toHaveBeenCalledTimes(2);
+});
+
+it.each([true, false])("routes the unchanged inclusion menu to manager for inclusion=%s", async (retrievable) => {
+  probe.folders = probe.folders.slice(0, 1);
+  probe.documents = [
+    {
+      id: "doc",
+      space_id: "space-1",
+      folder_id: "root-id",
+      name: "report.pdf",
+      mime: "application/pdf",
+      size: 42,
+      sha256: "a".repeat(64),
+      created_at: "2026-10-23",
+      created_by: "writer",
+      retrievable,
+      retrievable_pending: false,
+    },
+  ];
+  await render();
+  await click(namedButton("Library"));
+  await menuAction(retrievable ? "searchable" : "includeInSearch");
+  expect(probe.inclusion).toHaveBeenCalledWith({ id: "doc", setRetrievable: { retrievable: !retrievable } });
 });

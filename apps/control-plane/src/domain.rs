@@ -114,6 +114,8 @@ pub struct Folder {
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct Document {
+    pub retrievable: bool,
+    pub retrievable_pending: bool,
     pub id: Uuid,
     pub space_id: Uuid,
     #[schema(required = true)]

@@ -228,9 +228,20 @@ pub fn invalid() -> AppError {
 
 /// Internal worker persistence callbacks; Temporal retains the Python scheduler schema.
 pub fn schema() -> serde_json::Value {
+    use super::retrievable::{RetrievalConfirmation, RetrievalWork};
     use utoipa::OpenApi;
     #[derive(OpenApi)]
-    #[openapi(components(schemas(Work, Claim, Descriptor, Commit, Failure, Summary, Start)))]
+    #[openapi(components(schemas(
+        Work,
+        Claim,
+        Descriptor,
+        Commit,
+        Failure,
+        Summary,
+        Start,
+        RetrievalWork,
+        RetrievalConfirmation
+    )))]
     struct Contracts;
     let mut schema = serde_json::json!({"$schema":"https://json-schema.org/draft-07/schema#","$defs":Contracts::openapi().components.unwrap().schemas,"$ref":"#/$defs/Work"});
     fn refs(v: &mut serde_json::Value) {

@@ -32,7 +32,7 @@ macro_rules! folder {
 }
 macro_rules! document {
     () => {
-        "select id, space_id, folder_id, name, mime, size, sha256, created_by, created_at from document"
+        "select id, space_id, folder_id, name, mime, size, sha256, created_by, created_at, retrievable, retrievable_pending from document"
     };
 }
 

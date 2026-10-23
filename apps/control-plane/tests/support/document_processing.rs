@@ -77,6 +77,12 @@ fn claim(work: &Work, stage: Stage, activity: Uuid, attempt: u32) -> Claim {
 async fn commit(p: &Processing, d: &Descriptor, files: &[(&str, &[u8])], chunks: i64) -> Summary {
     let mut artifacts = vec![];
     for (name, bytes) in files {
+        let metadata = json!({"identity":{"document_uid":d.work.document_id},"source":{"retrievable":chunks>0},"processing":{"stages":{"vector":if chunks>0 {"done"} else {"not_started"}}}}).to_string();
+        let bytes = if *name == "metadata.json" && *bytes == b"{}" {
+            metadata.as_bytes()
+        } else {
+            *bytes
+        };
         let file = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(file.path(), bytes).unwrap();
         let hash: [u8; 32] = Sha256::digest(bytes).into();
@@ -118,7 +124,7 @@ async fn verify_terminal_replay(d: &Documents, p: &Processing, work: &Work, done
         .unwrap()
         .0;
     let generation = saved.generation;
-    let restarted = Processing {
+    let mut restarted = Processing {
         pool: sqlx::PgPool::connect_with(p.pool.connect_options().as_ref().clone())
             .await
             .unwrap(),
@@ -131,6 +137,174 @@ async fn verify_terminal_replay(d: &Documents, p: &Processing, work: &Work, done
         derived: p.derived.clone(),
         contract: WorkerContract::load(&p.config.worker_contract_file, "ingestion").unwrap(),
     };
+    use control_plane::processing::retrievable::{RetrievalConfirmation, SetRetrievable};
+    let row = store::row(&d.e.pool, work.processing_id).await.unwrap();
+    let mut inconsistent = saved.clone();
+    inconsistent.vectors = 0;
+    assert!(p.published_retrievable(&row, &inconsistent).await.is_err());
+    assert!(
+        p.set_retrievable(
+            "unknown-user",
+            work.document_id,
+            SetRetrievable {
+                retrievable: Some(false)
+            }
+        )
+        .await
+        .is_err()
+    );
+    use control_plane::processing::retrievable::RetrievalStep;
+    restarted.config.temporal.host = "127.0.0.1:1".into();
+    restarted.config.temporal.connect_timeout_seconds = 1;
+    // Admit through production code, with delivery unavailable. Another service
+    // instance must recover the same command from SQL, without any local memory.
+    assert!(
+        restarted
+            .set_retrievable(
+                &row.actor,
+                work.document_id,
+                SetRetrievable {
+                    retrievable: Some(false)
+                }
+            )
+            .await
+            .is_err()
+    );
+    let command: serde_json::Value =
+        sqlx::query_scalar("select retrieval_command from document where id=$1")
+            .bind(work.document_id)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    let operation: Uuid = command["id"].as_str().unwrap().parse().unwrap();
+    assert!(
+        restarted
+            .set_retrievable(
+                &row.actor,
+                work.document_id,
+                SetRetrievable {
+                    retrievable: Some(false)
+                }
+            )
+            .await
+            .is_err()
+    );
+    let recovered = p.retrieval_work(work.document_id, operation).await.unwrap();
+    assert!(!recovered.confirmed);
+    let callback = |step| RetrievalConfirmation {
+        operation_id: operation,
+        retrievable: false,
+        step,
+    };
+    assert!(
+        p.confirm_retrievable(work.document_id, callback(RetrievalStep::Confirm))
+            .await
+            .is_err()
+    );
+    p.confirm_retrievable(work.document_id, callback(RetrievalStep::Claim))
+        .await
+        .unwrap();
+    assert!(
+        restarted
+            .confirm_retrievable(work.document_id, callback(RetrievalStep::Claim))
+            .await
+            .is_err()
+    );
+    assert!(
+        restarted
+            .confirm_retrievable(work.document_id, callback(RetrievalStep::Confirm))
+            .await
+            .is_err()
+    );
+    let current = control_plane::db::document(&d.e.pool, work.document_id)
+        .await
+        .unwrap();
+    assert!(current.retrievable && current.retrievable_pending);
+    assert!(
+        p.set_retrievable(
+            &row.actor,
+            work.document_id,
+            SetRetrievable {
+                retrievable: Some(true)
+            }
+        )
+        .await
+        .is_err()
+    );
+    assert!(
+        p.confirm_retrievable(
+            work.document_id,
+            RetrievalConfirmation {
+                step: Default::default(),
+                operation_id: Uuid::new_v4(),
+                retrievable: false
+            }
+        )
+        .await
+        .is_err()
+    );
+    restarted
+        .confirm_retrievable(work.document_id, callback(RetrievalStep::Applied))
+        .await
+        .unwrap();
+    restarted
+        .confirm_retrievable(work.document_id, callback(RetrievalStep::Applied))
+        .await
+        .unwrap();
+    p.confirm_retrievable(
+        work.document_id,
+        RetrievalConfirmation {
+            step: Default::default(),
+            operation_id: operation,
+            retrievable: false,
+        },
+    )
+    .await
+    .unwrap();
+    let excluded = control_plane::db::document(&d.e.pool, work.document_id)
+        .await
+        .unwrap();
+    assert!(!excluded.retrievable && !excluded.retrievable_pending);
+    // A lost HTTP response is recovered without contacting Temporal or creating a command.
+    let repeated = restarted
+        .set_retrievable(
+            &row.actor,
+            work.document_id,
+            SetRetrievable {
+                retrievable: Some(false),
+            },
+        )
+        .await
+        .unwrap();
+    assert!(!repeated.retrievable && !repeated.retrievable_pending);
+    p.confirm_retrievable(work.document_id, callback(RetrievalStep::Confirm))
+        .await
+        .unwrap();
+    // A newer command rejects every late callback from the old operation.
+    assert!(
+        restarted
+            .set_retrievable(
+                &row.actor,
+                work.document_id,
+                SetRetrievable {
+                    retrievable: Some(true)
+                }
+            )
+            .await
+            .is_err()
+    );
+    for step in [
+        RetrievalStep::Claim,
+        RetrievalStep::Applied,
+        RetrievalStep::Confirm,
+    ] {
+        assert!(
+            p.confirm_retrievable(work.document_id, callback(step))
+                .await
+                .is_err()
+        );
+    }
+    // A replayed ingestion callback cannot undo this confirmed exclusion.
     let replay = Box::pin(restarted.commit(Commit {
         work: work.clone(),
         stage: Stage::Indexing,
@@ -138,6 +312,12 @@ async fn verify_terminal_replay(d: &Documents, p: &Processing, work: &Work, done
     }))
     .await
     .unwrap();
+    assert!(
+        !control_plane::db::document(&d.e.pool, work.document_id)
+            .await
+            .unwrap()
+            .retrievable
+    );
     assert_eq!(replay.revision, done.revision);
     assert_eq!(replay.status, ProcessingStatus::Succeeded);
     let mut conflicting = saved;
@@ -297,6 +477,12 @@ async fn processing_admission_fences_publication_and_original_survival() {
     )
     .await;
     assert_eq!(done.status, ProcessingStatus::Succeeded);
+    assert!(
+        control_plane::db::document(&d.e.pool, work.document_id)
+            .await
+            .unwrap()
+            .retrievable
+    );
     stop.store(true, std::sync::atomic::Ordering::Relaxed);
     let locks = samples.await.unwrap();
     let observed = d.fga_proxy.fault.lock().await;
@@ -1322,10 +1508,15 @@ async fn processing_workload_identity_and_revoked_publication() {
         .clone()
         .unwrap();
     manifest.generation = indexed.generation;
+    let metadata = json!({"identity":{"document_uid":work.document_id},"source":{"retrievable":false},"processing":{"stages":{}}}).to_string();
     for (name, bytes) in [
-        ("metadata.json", b"{}".as_slice()),
+        ("metadata.json", metadata.as_bytes()),
         ("output.md", b"kept".as_slice()),
     ] {
+        if let Some(artifact) = manifest.artifacts.iter_mut().find(|a| a.path == name) {
+            artifact.size = bytes.len() as i64;
+            artifact.sha256 = format!("{:x}", Sha256::digest(bytes));
+        }
         let file = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(file.path(), bytes).unwrap();
         Box::pin(p.derived.put_verified(
@@ -1501,4 +1692,83 @@ async fn processing_admission_request_budget_at_one_and_one_hundred_documents() 
                 .unwrap();
         }
     }
+}
+
+// Proves: I25, I26
+#[tokio::test]
+#[ignore = "needs disposable PostgreSQL, OpenFGA, SeaweedFS and Temporal"]
+async fn retrieval_delivery_restarts_closed_failure_and_preserves_running_execution() {
+    use control_plane::processing::dispatch::deliver_retrieval;
+    use temporalio_client::{grpc::WorkflowService, tonic::Request};
+    use temporalio_common::protos::temporal::api::{
+        common::v1::WorkflowExecution,
+        workflowservice::v1::{
+            DescribeWorkflowExecutionRequest, TerminateWorkflowExecutionRequest,
+        },
+    };
+    let (_d, p) = Box::pin(setup()).await;
+    let (_temporal, host) = start_temporal();
+    let mut client = ready_temporal(&host).await;
+    let mut config = p.config.clone();
+    config.temporal.host = host;
+    let operation = Uuid::new_v4();
+    let document = Uuid::new_v4();
+    let execution = WorkflowExecution {
+        workflow_id: format!("manager-retrievable-{}-{operation}", p.installation),
+        run_id: String::new(),
+    };
+    let describe = DescribeWorkflowExecutionRequest {
+        namespace: config.temporal.namespace.clone(),
+        execution: Some(execution.clone()),
+    };
+    deliver_retrieval(&config, p.installation, document, operation)
+        .await
+        .unwrap();
+    let first = client
+        .describe_workflow_execution(Request::new(describe.clone()))
+        .await
+        .unwrap()
+        .into_inner()
+        .workflow_execution_info
+        .unwrap()
+        .execution
+        .unwrap()
+        .run_id;
+    deliver_retrieval(&config, p.installation, document, operation)
+        .await
+        .unwrap();
+    let running = client
+        .describe_workflow_execution(Request::new(describe.clone()))
+        .await
+        .unwrap()
+        .into_inner()
+        .workflow_execution_info
+        .unwrap()
+        .execution
+        .unwrap()
+        .run_id;
+    assert_eq!(first, running);
+    client
+        .terminate_workflow_execution(Request::new(TerminateWorkflowExecutionRequest {
+            namespace: config.temporal.namespace.clone(),
+            workflow_execution: Some(execution),
+            reason: "fixture closed failure".into(),
+            ..Default::default()
+        }))
+        .await
+        .unwrap();
+    deliver_retrieval(&config, p.installation, document, operation)
+        .await
+        .unwrap();
+    let resumed = client
+        .describe_workflow_execution(Request::new(describe))
+        .await
+        .unwrap()
+        .into_inner()
+        .workflow_execution_info
+        .unwrap()
+        .execution
+        .unwrap()
+        .run_id;
+    assert_ne!(first, resumed);
 }

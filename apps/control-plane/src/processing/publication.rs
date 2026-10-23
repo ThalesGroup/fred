@@ -79,6 +79,11 @@ impl Processing {
                 return Err(invalid());
             }
         }
+        let retrievable = if commit.stage == Stage::Indexing {
+            Some(self.published_retrievable(&r, &commit.manifest).await?)
+        } else {
+            None
+        };
         let mut tx = if commit.stage == Stage::Indexing {
             let mut tx =
                 spaces::authorized_write(&self.pool, &self.fga, &r.actor, r.space_id).await?;
@@ -122,6 +127,15 @@ impl Processing {
             sqlx::query_as("update document_processing set generations=$2,reserved_bytes=$3,revision=revision+1 where id=$1 returning *")
                 .bind(r.summary.id).bind(&current.generations).bind(reserved).fetch_one(&mut *tx).await?
         };
+        if let Some(value) = retrievable {
+            sqlx::query(
+                "update document set retrievable=$2 where id=$1 and retrieval_command is null",
+            )
+            .bind(r.summary.document_id)
+            .bind(value)
+            .execute(&mut *tx)
+            .await?;
+        }
         tx.commit().await?;
         tracing::info!(operation_id=%r.summary.id,document_id=%r.summary.document_id,stage=?commit.stage,outcome="committed","Document processing output committed");
         Ok(summary)

@@ -104,7 +104,7 @@ def test_adaptive_retry_ids_are_fenced_before_writes(descriptor, tmp_path, journ
     store.add_documents = add
     store.get_chunk = lambda document, identifier: {"text": store.saved[identifier].page_content, "metadata": store.saved[identifier].metadata}
     vectors = ScopedVectors(store, descriptor, None, tmp_path, None)
-    written = vectors.add_documents([Document(page_content="first second", metadata={"date_added": datetime.now(timezone.utc)})])
+    written = vectors.add_documents([Document(page_content="first second", metadata={"date_added": datetime.now(timezone.utc), "retrievable": True})])
     assert vectors.ordinals == [1, 2]
     assert vectors.count == 2
     assert written == [str(uuid5(descriptor.generation, str(i))) for i in (1, 2)]
@@ -179,7 +179,7 @@ def test_actual_opensearch_resplit_preserves_concurrent_generation_scopes(descri
         directory = tmp_path / str(index)
         directory.mkdir()
         vectors = ScopedVectors(store, scoped, None, directory, SemanticSplitter(chunk_size=800, chunk_overlap=0))
-        ids = vectors.add_documents([Document(page_content="long content " * 80), Document(page_content="short")])
+        ids = vectors.add_documents([Document(page_content="long content " * 80, metadata={"retrievable": True}), Document(page_content="short", metadata={"retrievable": True})])
         assert str(uuid5(scoped.generation, "0")) not in ids
         assert str(uuid5(scoped.generation, "1")) in ids
         assert vectors.count == len(ids) > 2

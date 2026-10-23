@@ -78,6 +78,8 @@ class ManagedIngestionService(IngestionService):
         count = self.vectors.count if self.vectors else 0
         rows = metadata.file.row_count if metadata else None
         if metadata is not None:
+            if d.stage == "indexing" and count == 0:
+                metadata.mark_unretrievable()
             (output / "metadata.json").write_text(metadata.model_dump_json())
         manifest = self.artifacts.publish(d, output, chunks=count, vectors=count, rows=rows)
         manifest.vector_ordinals = self.vectors.ordinals if self.vectors else []

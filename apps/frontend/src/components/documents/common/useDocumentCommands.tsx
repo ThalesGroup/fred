@@ -28,6 +28,7 @@ import { downloadFile, fetchAuthedBlob } from "../../../utils/downloadUtils";
 import { collectDescendantTags, rewriteTagUnderFolder, type TagNode } from "../../../shared/utils/tagTree";
 
 type DocumentRefreshers = {
+  setRetrievable?: (doc: DocumentMetadata, value: boolean) => Promise<unknown>;
   refetchTags?: () => Promise<any>;
   refetchDocs?: (tagId?: string) => Promise<any>;
 };
@@ -38,7 +39,7 @@ export interface DocumentPreviewTarget {
   manager?: boolean;
 }
 
-export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefreshers = {}) {
+export function useDocumentCommands({ refetchTags, refetchDocs, setRetrievable }: DocumentRefreshers = {}) {
   const { t } = useTranslation();
   const { showSuccess, showError, showInfo } = useToast();
 
@@ -63,10 +64,8 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     async (doc: DocumentMetadata): Promise<boolean | undefined> => {
       const nextValue = !doc.source.retrievable;
       try {
-        await updateRetrievable({
-          documentUid: doc.identity.document_uid,
-          retrievable: nextValue,
-        }).unwrap();
+        if (setRetrievable) await setRetrievable(doc, nextValue);
+        else await updateRetrievable({ documentUid: doc.identity.document_uid, retrievable: nextValue }).unwrap();
         showSuccess?.({
           summary: t("validation.updated"),
           detail: nextValue ? t("documentTable.nowSearchable") : t("documentTable.nowExcluded"),
@@ -80,7 +79,7 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
         return undefined;
       }
     },
-    [updateRetrievable, showSuccess, showError, t],
+    [setRetrievable, updateRetrievable, showSuccess, showError, t],
   );
 
   const removeFromLibrary = useCallback(

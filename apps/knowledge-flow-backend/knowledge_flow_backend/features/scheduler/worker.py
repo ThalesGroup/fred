@@ -36,6 +36,8 @@ from knowledge_flow_backend.common.structures import (
     TemporalSchedulerConfig,
     extraction_task_queue,
 )
+from knowledge_flow_backend.features.manager_processing.retrievable import confirm_document_retrievable, record_retrievable_applied, set_document_retrievable
+from knowledge_flow_backend.features.manager_processing.retrievable_workflow import SetDocumentRetrievable
 from knowledge_flow_backend.features.scheduler.activities import (
     emit_ingestion_task_event,
     fast_delete_vectors,
@@ -146,8 +148,8 @@ def _build_worker(
     workflows = _COMMON_WORKFLOWS if is_common else []
     activities = _COMMON_ACTIVITIES if is_common else _EXTRACTION_ACTIVITIES
     if manager_processing:
-        workflows = [ProcessPush, ProcessPushFile, GetPushFileMetadata, PushInputProcess, OutputProcess] if is_common else []
-        activities = [get_push_file_metadata, output_process] if is_common else [push_input_process]
+        workflows = [ProcessPush, ProcessPushFile, GetPushFileMetadata, PushInputProcess, OutputProcess, SetDocumentRetrievable] if is_common else []
+        activities = [get_push_file_metadata, output_process, set_document_retrievable, record_retrievable_applied, confirm_document_retrievable] if is_common else [push_input_process]
 
     return Worker(
         client=client,

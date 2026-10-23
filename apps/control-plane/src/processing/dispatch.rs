@@ -276,3 +276,68 @@ pub async fn run(pool: PgPool, config: ProcessingConfig) {
         }
     }
 }
+
+/// A document retains the command until KF confirms it. Replays never launch a second writer.
+pub async fn deliver_retrieval(
+    config: &ProcessingConfig,
+    installation: Uuid,
+    document: Uuid,
+    operation: Uuid,
+) -> Result<()> {
+    let mut client = connect(config).await?;
+    let request = StartWorkflowExecutionRequest {
+        namespace: config.temporal.namespace.clone(),
+        workflow_id: format!("manager-retrievable-{installation}-{operation}"),
+        workflow_type: Some(WorkflowType {
+            name: "SetDocumentRetrievable".into(),
+        }),
+        task_queue: Some(TaskQueue {
+            name: config.temporal.task_queue.clone(),
+            ..Default::default()
+        }),
+        input: Some(Payloads {
+            payloads: vec![Payload {
+                metadata: [("encoding".into(), b"json/plain".to_vec())].into(),
+                data: serde_json::to_vec(
+                    &serde_json::json!({"document_id":document,"operation_id":operation}),
+                )?,
+                ..Default::default()
+            }],
+        }),
+        identity: "control-plane-processing".into(),
+        request_id: Uuid::new_v4().to_string(),
+        workflow_id_reuse_policy: 2, // ALLOW_DUPLICATE_FAILED_ONLY; SQL fences the writer.
+        workflow_id_conflict_policy: 1,
+        ..Default::default()
+    };
+    match tokio::time::timeout(
+        Duration::from_secs(config.temporal.rpc_timeout_seconds),
+        client.start_workflow_execution(Request::new(request)),
+    )
+    .await?
+    {
+        Ok(_) => Ok(()),
+        Err(e) if e.code() == Code::AlreadyExists => {
+            let reply = tokio::time::timeout(
+                Duration::from_secs(config.temporal.rpc_timeout_seconds),
+                client.describe_workflow_execution(Request::new(
+                    DescribeWorkflowExecutionRequest {
+                        namespace: config.temporal.namespace.clone(),
+                        execution: Some(WorkflowExecution {
+                            workflow_id: format!("manager-retrievable-{installation}-{operation}"),
+                            run_id: String::new(),
+                        }),
+                    },
+                )),
+            )
+            .await??
+            .into_inner();
+            anyhow::ensure!(
+                reply.workflow_execution_info.is_some_and(|i| i.status == 1),
+                "retrieval workflow is closed; SQL confirmation must be checked"
+            );
+            Ok(())
+        }
+        Err(_) => anyhow::bail!("retrieval delivery uncertain"),
+    }
+}

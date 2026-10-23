@@ -103,6 +103,14 @@ class BaseVectorStore(ABC):
         """Delete all chunks for a logical document."""
         raise NotImplementedError
 
+    def verify_chunks_retrievable(self, *, document_uid: str, chunk_ids: List[str], value: bool) -> None:
+        """Verify exact published IDs without loading text; unsupported stores reject it."""
+        raise NotImplementedError("This vector store does not support published chunk verification.")
+
+    def set_chunks_retrievable(self, *, document_uid: str, chunk_ids: List[str], value: bool) -> None:
+        """Change inclusion only for a published generation; unsupported stores reject it."""
+        raise NotImplementedError("This vector store does not support published chunk inclusion.")
+
     def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:  # pragma: no cover - optional capability
         """
         Optional capability: update the 'retrievable' flag for all chunks of a document

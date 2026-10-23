@@ -207,8 +207,44 @@ async fn cleaned(
 ) -> AppResult<()> {
     service(&s)?.cleaned(input).await
 }
+#[utoipa::path(put,path="/documents/{id}/retrievable",params(("id"=Uuid,Path)),request_body=super::retrievable::SetRetrievable,responses((status=200,body=crate::domain::Document),(status=400,body=crate::error::ErrorBody),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
+async fn set_retrievable(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<super::retrievable::SetRetrievable>,
+) -> AppResult<Json<crate::domain::Document>> {
+    Ok(Json(
+        service(&s)?.set_retrievable(&user.uid, id, input).await?,
+    ))
+}
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+struct RetrievalQuery {
+    operation_id: Uuid,
+}
+#[utoipa::path(get,path="/document-processing/retrievable/{id}",params(("id"=Uuid,Path),RetrievalQuery),responses((status=200,body=super::retrievable::RetrievalWork),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
+async fn retrieval_work(
+    State(s): State<AppState>,
+    Worker: Worker,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiQuery(q): ApiQuery<RetrievalQuery>,
+) -> AppResult<Json<super::retrievable::RetrievalWork>> {
+    Ok(Json(service(&s)?.retrieval_work(id, q.operation_id).await?))
+}
+#[utoipa::path(post,path="/document-processing/retrievable/{id}",params(("id"=Uuid,Path)),request_body=super::retrievable::RetrievalConfirmation,responses((status=200),(status=400,body=crate::error::ErrorBody),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
+async fn confirm_retrievable(
+    State(s): State<AppState>,
+    Worker: Worker,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<super::retrievable::RetrievalConfirmation>,
+) -> AppResult<()> {
+    service(&s)?.confirm_retrievable(id, input).await
+}
 pub fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
+        .routes(routes!(set_retrievable))
+        .routes(routes!(retrieval_work, confirm_retrievable))
         .routes(routes!(vectors))
         .routes(routes!(cleanup, cleaned))
         .routes(routes!(start, history))

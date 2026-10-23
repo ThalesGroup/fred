@@ -56,6 +56,8 @@ async fn lifecycle_authority_retirement_documents_and_durable_receipts() {
         Err(AppError::Unavailable(_))
     ));
     let document = Document {
+        retrievable: false,
+        retrievable_pending: false,
         id: Uuid::new_v4(),
         space_id: project.id,
         folder_id: None,
@@ -641,6 +643,8 @@ async fn lifecycle_blocked_scope_is_visible_and_does_not_starve_candidates() {
     let first = l.accept(&e.pool, &e.fga, "root", team.id).await.unwrap();
     let second = l.accept(&e.pool, &e.fga, "root", sibling.id).await.unwrap();
     let doc = Document {
+        retrievable: false,
+        retrievable_pending: false,
         id: Uuid::new_v4(),
         space_id: team.id,
         folder_id: None,

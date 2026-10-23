@@ -372,6 +372,8 @@ async fn an_interrupted_bootstrap_is_finished_by_its_caller_only() {
 
 fn document(space: Uuid, folder: Option<Uuid>, name: &str) -> Document {
     Document {
+        retrievable: false,
+        retrievable_pending: false,
         id: Uuid::new_v4(),
         space_id: space,
         folder_id: folder,

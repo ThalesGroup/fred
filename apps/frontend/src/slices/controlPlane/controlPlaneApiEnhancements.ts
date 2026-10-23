@@ -13,6 +13,15 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     receipts: { providesTags: ["DocumentUploads"] },
     receipt: { providesTags: ["DocumentUploads"] },
     acknowledge: { invalidatesTags: ["DocumentUploads"], extraOptions: { retryUnauthorized: false } },
+    setRetrievable(endpoint) {
+      endpoint.invalidatesTags = ["Documents"];
+      endpoint.extraOptions = { retryUnauthorized: false };
+      const query = endpoint.query!;
+      endpoint.query = (args) => {
+        const request = query(args);
+        return { ...(typeof request === "string" ? { url: request } : request), timeout: 90_000 };
+      };
+    },
     start: { invalidatesTags: ["Documents", "DocumentUploads"], extraOptions: { retryUnauthorized: false } },
     preview(endpoint) {
       const query = endpoint.query!;
@@ -60,6 +69,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
 
 export const {
   useStartMutation,
+  useSetRetrievableMutation,
   useLazyPreviewQuery,
   useEntriesQuery,
   useLazyEntriesQuery,

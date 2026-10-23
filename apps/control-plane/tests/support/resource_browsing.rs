@@ -71,6 +71,8 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
     let mut expected = vec![child.id];
     for i in 0..53 {
         let d = Document {
+            retrievable: false,
+            retrievable_pending: false,
             id: Uuid::new_v4(),
             space_id: team.id,
             folder_id: Some(root.id),

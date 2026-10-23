@@ -9,6 +9,7 @@ pub mod http;
 pub mod models;
 pub mod preview;
 pub mod publication;
+pub mod retrievable;
 pub mod store;
 pub mod worker_contract;
 

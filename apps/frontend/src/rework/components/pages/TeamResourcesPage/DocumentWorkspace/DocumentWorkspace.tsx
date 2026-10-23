@@ -72,7 +72,10 @@ import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOn
 import { useDocumentCommands } from "../../../../../components/documents/common/useDocumentCommands";
 import { downloadManyAsZip } from "../../../../../utils/downloadUtils.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
-import { useGetTeamQuery, useUsersByIdsQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import {
+  useGetTeamQuery,
+  useUsersByIdsQuery,
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { formatBytes } from "@shared/utils/formatBytes.ts";
@@ -103,6 +106,7 @@ import {
 
 import { startManagerProcessing } from "../../../../features/imports/managerImportRun";
 import {
+  useSetRetrievableMutation,
   useEntriesQuery,
   useLazyEntriesQuery,
   useCreateFolderMutation,
@@ -275,7 +279,10 @@ function DocumentWorkspace({
     const active = Object.values(directory.processing ?? {}).some(
       (processing) => processing.status === "pending" || processing.status === "running",
     );
-    if (!active) return;
+    const inclusionPending = directory.items.some(
+      (entry) => entry.kind === "document" && entry.data.retrievable_pending,
+    );
+    if (!active && !inclusionPending) return;
     const timer = window.setTimeout(() => {
       if (document.visibilityState !== "hidden") void managerQuery.refetch();
     }, DOC_STATUS_POLL_MS);
@@ -542,6 +549,7 @@ function DocumentWorkspace({
   // action (#2446): a folder's descendant documents are toggled one PUT each,
   // and unlike commands.toggleRetrievable this stays silent so a large subtree
   // shows a single summary toast instead of one per document.
+  const [updateManagerRetrievable] = useSetRetrievableMutation();
   const [updateRetrievable] =
     useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
 
@@ -730,7 +738,15 @@ function DocumentWorkspace({
     return () => clearInterval(interval);
   }, [pendingTagKey, loadTagPage, perTagRef]);
 
+  const setDocumentRetrievable = useCallback(
+    (doc: DocumentMetadata, value: boolean) =>
+      (doc as ResourceDocument).managerDocument
+        ? updateManagerRetrievable({ id: doc.identity.document_uid, setRetrievable: { retrievable: value } }).unwrap()
+        : updateRetrievable({ documentUid: doc.identity.document_uid, retrievable: value }).unwrap(),
+    [updateManagerRetrievable, updateRetrievable],
+  );
   const commands = useDocumentCommands({
+    setRetrievable: setDocumentRetrievable,
     refetchTags,
     refetchDocs: async (tagId?: string) => {
       if (tagId) await loadTagPage(tagId, perTag[tagId]?.offset ?? 0);
@@ -1254,6 +1270,36 @@ function DocumentWorkspace({
   // but the walk does not rely on it).
   const resolveFolderDocs = useCallback(
     async (folders: TagNode[]): Promise<{ doc: DocumentMetadata; relDir: string }[]> => {
+      if (managerSpaceId) {
+        const pending = folders.map((node) => ({ id: node.managerFolder!.id, relDir: node.name }));
+        const visited = new Set<string>();
+        const documents = new Map<string, { doc: ResourceDocument; relDir: string }>();
+        while (pending.length) {
+          const folder = pending.pop()!;
+          if (visited.has(folder.id)) continue;
+          visited.add(folder.id);
+          for (let offset = 0; ; ) {
+            const page = await findManagerEntries({
+              id: managerSpaceId,
+              parentId: folder.id,
+              offset,
+              limit: 200,
+            }).unwrap();
+            for (const item of page.items) {
+              if (item.kind === "folder")
+                pending.push({ id: item.data.id, relDir: `${folder.relDir}/${item.data.name}` });
+              else
+                documents.set(item.data.id, {
+                  doc: presentManagerDocument(item.data, page.processing[item.data.id]),
+                  relDir: folder.relDir,
+                });
+            }
+            offset += page.items.length;
+            if (!page.items.length || offset >= page.total) break;
+          }
+        }
+        return [...documents.values()];
+      }
       const tagEntries = folders.flatMap((node) => descendantTagsWithPaths(node, currentNode.full));
       const perTagResults = await Promise.all(
         tagEntries.map(async ({ tagId, relDir }) => (await fetchAllDocsForTag(tagId)).map((doc) => ({ doc, relDir }))),
@@ -1267,7 +1313,7 @@ function DocumentWorkspace({
       }
       return out;
     },
-    [fetchAllDocsForTag, currentNode.full],
+    [fetchAllDocsForTag, currentNode.full, managerSpaceId, findManagerEntries],
   );
 
   const hasSelection = selectedDocs.length > 0 || selectedFolders.length > 0;
@@ -1432,10 +1478,6 @@ function DocumentWorkspace({
   };
 
   const bulkToggleSearchable = async () => {
-    if (managerSpaceId) {
-      documentsUnavailable();
-      return;
-    }
     // searchToggleMode being defined guarantees the toggle-relevant subset of
     // the selection is uniform (all searchable or all excluded), so toggling
     // every one of those docs unconditionally moves them all the same
@@ -1454,10 +1496,6 @@ function DocumentWorkspace({
   // bulkToggleSearchable's one-toast-per-doc path (kept for the file-only case).
   const [bulkExcluding, setBulkExcluding] = useState(false);
   const bulkExcludeSelection = async () => {
-    if (managerSpaceId) {
-      documentsUnavailable();
-      return;
-    }
     setBulkExcluding(true);
     try {
       const folderDocs = selectedFolders.length > 0 ? (await resolveFolderDocs(selectedFolders)).map((e) => e.doc) : [];
@@ -1473,8 +1511,7 @@ function DocumentWorkspace({
       }
       const done = await Promise.all(
         targets.map((doc) =>
-          updateRetrievable({ documentUid: doc.identity.document_uid, retrievable: false })
-            .unwrap()
+          setDocumentRetrievable(doc, false)
             .then(() => doc.identity.document_uid)
             .catch(() => null),
         ),
@@ -1683,9 +1720,14 @@ function DocumentWorkspace({
     return doc.managerDocument
       ? options.map((option) => ({
           ...option,
-          disabled: option.value !== "download" && !(option.value === "relaunch" && directory?.processing_enabled),
+          disabled:
+            option.value !== "download" &&
+            option.value !== "searchable" &&
+            !(option.value === "relaunch" && directory?.processing_enabled),
           tooltip:
-            option.value !== "download" && !(option.value === "relaunch" && directory?.processing_enabled)
+            option.value !== "download" &&
+            option.value !== "searchable" &&
+            !(option.value === "relaunch" && directory?.processing_enabled)
               ? t("rework.resources.documentsUnavailable")
               : undefined,
         }))

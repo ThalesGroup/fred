@@ -1086,6 +1086,36 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         """
         return scan_document_uids_composite(self._client, self._index, page_size=page_size)
 
+    def verify_chunks_retrievable(self, *, document_uid: str, chunk_ids: List[str], value: bool) -> None:
+        for offset in range(0, len(chunk_ids), 500):
+            ids = chunk_ids[offset : offset + 500]
+            response = self._client.mget(
+                index=self._index,
+                body={"ids": ids},
+                params={"_source_includes": "metadata.document_uid,metadata.retrievable"},
+            )
+            docs = response.get("docs", [])
+            if len(docs) != len(ids) or {doc.get("_id") for doc in docs} != set(ids):
+                raise RuntimeError("Incomplete published chunk verification.")
+            for doc in docs:
+                metadata = doc.get("_source", {}).get("metadata", {})
+                if doc.get("error") or doc.get("found") is not True or metadata.get("document_uid") != document_uid or metadata.get("retrievable") is not value:
+                    raise RuntimeError("Published chunk inclusion does not match.")
+
+    def set_chunks_retrievable(self, *, document_uid: str, chunk_ids: List[str], value: bool) -> None:
+        for offset in range(0, len(chunk_ids), 500):
+            ids = chunk_ids[offset : offset + 500]
+            response = self._client.update_by_query(
+                index=self._index,
+                body={
+                    "query": {"bool": {"filter": [{"ids": {"values": ids}}, {"term": {"metadata.document_uid": document_uid}}]}},
+                    "script": {"source": "ctx._source.metadata.retrievable = params.value", "lang": "painless", "params": {"value": value}},
+                },
+                params={"refresh": "true"},
+            )
+            if response.get("timed_out") or response.get("failures") or response.get("version_conflicts", 0) or response.get("updated") != len(ids):
+                raise RuntimeError("Published chunk inclusion was not fully applied.")
+
     def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:
         """
         Update the 'retrievable' flag for all chunks of a document without deleting vectors.
