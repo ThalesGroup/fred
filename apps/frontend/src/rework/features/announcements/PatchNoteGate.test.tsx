@@ -114,7 +114,7 @@ describe("PatchNoteGate", () => {
     expect(dialog()!.querySelector("nav")?.textContent).toContain("1 / 2");
     expect(dialog()!.querySelector('input[type="checkbox"]')).toBeNull();
     // One read per load: no polling interval, no refetch on focus.
-    expect(queryMock.mock.calls[0]).toHaveLength(0);
+    expect(queryMock.mock.calls[0]).toEqual([undefined, { skip: false }]);
   });
 
   it("stays closed when no announcement is pending", () => {
