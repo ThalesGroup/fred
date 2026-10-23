@@ -158,6 +158,7 @@ export const teamsScenario: Scenario<TeamsDeps> = async (deps, report) => {
           throw new Error("the restored page lost its first version");
       } finally {
         await deps.deleteWikiPage(id, page.pageId);
+        await expectRefused(() => deps.readWikiPage(id, page.slug), "reading the deleted wiki page", [404]);
       }
       return { value: undefined, detail: "written twice, restored, deleted" };
     });

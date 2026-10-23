@@ -137,7 +137,8 @@ class FakeTeams {
         versions.push(versions[Number(revisionId.slice(1))]);
       },
       readWikiPage: async (_teamId, slug) => {
-        const versions = this.pages.get(slug)!;
+        const versions = this.pages.get(slug);
+        if (!versions) throw refused(404);
         return versions[versions.length - 1];
       },
       deleteWikiPage: async (_teamId, pageId) => {
@@ -257,6 +258,14 @@ describe("teamsScenario", () => {
     deps.restoreWikiRevision = async () => {};
     expect((await run(broken, deps)).status("wiki")).toBe("failed");
     expect(broken.pages.size).toBe(0);
+  });
+
+  it("fails the wiki check when deletion leaves the page readable", async () => {
+    const fake = new FakeTeams();
+    const deps = fake.deps();
+    deps.deleteWikiPage = async () => {};
+    const r = await run(fake, deps);
+    expect(r.status("wiki")).toBe("failed");
   });
 
   it("fails a join link that keeps its token when rotated, and closes it anyway", async () => {
