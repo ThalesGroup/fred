@@ -210,6 +210,7 @@ Ces diapositives restent visibles dans **Vérifier les slides**, avec la raison 
 | Graphique             | Plus de quatre graphiques sur la diapositive, ou un graphique dans un groupe                                                                                |
 | Tableau               | Un tableau qui n'est pas un tableau de données (cellules fusionnées, couleurs par cellule)                                                                  |
 | Planche de ressources | Une page de ressources, pas de contenu : une vingtaine de petites images ou beaucoup de formes sans texte, ou un titre comme « Typographie » ou « Palette » |
+| Banque d'icônes       | Une page d'icônes mise de côté lors d'une lecture plus ancienne du template ; une fois le template relu, elle apparaît en Planche de ressources             |
 | Non copiable          | Un SmartArt, un très petit graphique ou un objet incorporé (Excel…)                                                                                         |
 | Aucun espace réservé  | Un masque sans rien à remplir                                                                                                                               |
 | Exclu par vous        | Vous l'avez mise de côté                                                                                                                                    |

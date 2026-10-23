@@ -195,6 +195,7 @@ These slides stay visible in **Review slides**, with the reason:
 | Chart            | More than four charts share the slide, or a chart inside a group                                                                   |
 | Table            | A table that is not a data table (merged cells, per-cell colours)                                                                  |
 | Resource sheet   | A page of resources, not content: twenty or so small pictures or many shapes with no text, or a title such as "Fonts" or "Palette" |
+| Icon bank        | A page of icons set aside by an earlier reading of the template; once the template is read again, it shows as Resource sheet       |
 | Cannot be copied | A SmartArt, a very small chart or an embedded object (Excel…)                                                                      |
 | No placeholder   | A layout with nothing to fill                                                                                                      |
 | Excluded by you  | You set it aside                                                                                                                   |
