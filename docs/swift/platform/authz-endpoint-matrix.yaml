@@ -965,6 +965,16 @@ operations:
     path: /control-plane/v1/users/me/avatar
     review_status: approved
     required_permission: authenticated_user # self only
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/users/me/preferences
+    review_status: approved
+    required_permission: authenticated_user # self only
+  - service: control-plane
+    method: PATCH
+    path: /control-plane/v1/users/me/preferences
+    review_status: approved
+    required_permission: authenticated_user # self only
   # Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
   # can_administer_users gates all three; the platform_admin relation is
   # additionally guarded service-side: grant/revoke root-only, root never
