@@ -2954,15 +2954,11 @@ async def update_agent_instance(
             exclude_agent_instance_id=agent_instance_id,
         )
 
-    # 2026-07-19 fix (GitHub #2004 item 1): re-check the team's `can_use` on
-    # this instance's own `kind="agent"` template capability, the same gate
-    # `enroll_agent_instance` already applies at creation time. Without this,
-    # a team whose template grant was revoked (or a `default_on`/personal-
-    # scope withdrawal) could keep freely reconfiguring an instance that
-    # `suspend_dependent_instances`/`set_capability_default_on` already
-    # suspended for exactly that reason — unenroll (delete) is still always
-    # allowed, only editing is blocked.
-    if not await can_team_use_capability(
+    # Same template gate as enrollment: a revoked grant blocks editing (unenroll
+    # stays allowed). Exempt harness templates never carry a `can_use` tuple.
+    if not capability_gate_exempt(
+        record.source_agent_id
+    ) and not await can_team_use_capability(
         deps.team_dependencies.rebac,
         team_id,
         capability_id=template_capability_id(
