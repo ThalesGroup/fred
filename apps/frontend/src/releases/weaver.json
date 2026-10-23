@@ -1,0 +1,15 @@
+{
+  "codename": "weaver",
+  "version": "4.x.x",
+  "image": "/images/weaver_vintage_optimized.webp",
+  "en": {
+    "description": "The village weaver (Ploceus cucullatus) is a small bird from sub-Saharan Africa. In breeding plumage, the male wears brilliant yellow feathers and a dark mask. But his most remarkable achievement hangs from the branches: a nest woven entirely from plant fibres.\n\nConstruction begins with a few strands firmly attached to a support. Using his bill, the male threads, pulls and interlaces long strips of grass, often still green and supple. Gradually, a framework takes shape, then a chamber closes around an empty space. Without glue or tools, the bird turns humble materials into a hanging shelter with a downward-facing entrance. The female inspects the workmanship before choosing a home for her brood: building is only part of the challenge — he must also win her approval.\n\nVillage weavers often nest in colonies. A single tree may hold dozens of nests, each built separately, amid a bustle of calls, courtship displays and birds coming and going. This spectacular architecture grows from one repeated action: weaving one strand into another.",
+    "interpretation": "Fred 4.x — Weaver takes inspiration from this art of bringing things together. Agents, applications, knowledge bases and tools provide the elements from which teams can build larger services. Their value lies as much in each component as in the connections between them.",
+    "hint": "Strand by strand, possibilities take shape."
+  },
+  "fr": {
+    "description": "Le tisserin gendarme (Ploceus cucullatus) est un petit oiseau d’Afrique subsaharienne dont le mâle en plumage nuptial porte un jaune éclatant et un masque sombre. Mais sa réalisation la plus remarquable se trouve suspendue aux branches : un nid entièrement tissé de fibres végétales.\n\nLe chantier commence par quelques brins solidement attachés à un support. Avec son bec, le mâle passe, tire et entrelace de longues lanières d’herbe, souvent encore vertes et souples. Peu à peu, une structure prend forme, puis une chambre se referme autour d’un espace vide. Sans colle ni outils, l’oiseau transforme des matériaux modestes en un abri suspendu, dont l’entrée est orientée vers le bas. La femelle inspecte l’ouvrage avant de choisir d’y installer sa nichée : construire ne suffit pas, il faut aussi convaincre.\n\nLes tisserins gendarmes nichent souvent en colonies. Un même arbre peut accueillir des dizaines de nids, chacun construit séparément, dans une animation de chants, de parades et d’allées et venues. Cette architecture spectaculaire naît d’un geste répété : relier un brin à un autre.",
+    "interpretation": "Fred 4.x — Weaver s’inspire de cet art de l’assemblage. Agents, applications, bases de connaissances et outils constituent les éléments à partir desquels les équipes peuvent construire des services plus vastes. Leur richesse vient autant de chaque composant que des liens qui les unissent.",
+    "hint": "Brin après brin, les possibilités prennent forme."
+  }
+}

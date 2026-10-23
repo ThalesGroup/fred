@@ -21,10 +21,12 @@ import socket
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Literal
 
 import pytest
 import uvicorn
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from fred_core.logs.context import bind_operation_context
 from fred_core.logs.log_setup import AUDIT_LOGGER_NAME
 from fred_core.security.delegation import DelegationConfig, preserved_delegation
 
@@ -69,8 +71,19 @@ def _restored_logging() -> Iterator[None]:
             lg.disabled = disabled
 
 
-def _register_probe(router: APIRouter) -> None:
+def _register_probe(router: APIRouter, *, failure: Literal["uncaught", "caught"] | None = None) -> None:
     async def probe(name: str) -> dict[str, bool]:
+        if failure:
+            bind_operation_context(
+                user_id="synthetic-user", session_id="synthetic-session", agent_id="synthetic-agent", team_id="synthetic-team", exchange_id="synthetic-exchange", run_id="synthetic-run"
+            )
+            try:
+                raise RuntimeError("synthetic request failure")
+            except RuntimeError:
+                if failure == "caught":
+                    logging.getLogger("synthetic.controller").exception("Controller request failure")
+                    raise HTTPException(500, "Internal server error")
+                raise
         return {"ok": True}
 
     router.add_api_route("/probe/{name}", probe)
@@ -113,17 +126,20 @@ async def _serve_one_request(server: uvicorn.Server, sink: _Sink) -> bytes:
     return response
 
 
-async def _served_records(app_context: ApplicationContext, monkeypatch: pytest.MonkeyPatch, delegation: DelegationConfig) -> tuple[bytes, list[logging.LogRecord]]:
+async def _served_records(
+    app_context: ApplicationContext, monkeypatch: pytest.MonkeyPatch, delegation: DelegationConfig, *, failure: Literal["uncaught", "caught"] | None = None
+) -> tuple[bytes, list[logging.LogRecord]]:
     """Serve one request through the application `create_app` builds; return the response and every record."""
     config = app_context.configuration.model_copy(deep=True)
     config.security.delegation = delegation
+    config.app.log_format = "json"
     monkeypatch.setattr(main_module, "load_configuration", lambda: config)
     monkeypatch.setattr(main_module, "start_http_server", lambda *args, **kwargs: None)
     monkeypatch.setattr(ApplicationContext, "_instance", None)
     # Controllers need live stores; one probe route on the application router stands in for them.
     for name in [name for name in vars(main_module) if name.endswith("Controller")]:
         monkeypatch.setattr(main_module, name, lambda *args, **kwargs: None)
-    monkeypatch.setattr(main_module, "TasksController", _register_probe)
+    monkeypatch.setattr(main_module, "TasksController", lambda router: _register_probe(router, failure=failure))
     sink = _Sink()
     with preserved_delegation(), _restored_logging():
         # Production order: uvicorn configures its loggers, then the factory runs log_setup.
@@ -133,6 +149,30 @@ async def _served_records(app_context: ApplicationContext, monkeypatch: pytest.M
         logging.getLogger().addHandler(sink)
         response = await _serve_one_request(uvicorn.Server(uvicorn_config), sink)
     return response, sink.records
+
+
+@pytest.mark.parametrize("delegation", [DelegationConfig(), DelegationConfig(accept_delegated_calls=True), DelegationConfig(act_for_people=True)])
+@pytest.mark.parametrize("failure", ["uncaught", "caught"])
+@pytest.mark.asyncio
+async def test_real_server_reports_one_correlated_exception_and_one_completion(
+    app_context: ApplicationContext, monkeypatch: pytest.MonkeyPatch, delegation: DelegationConfig, failure: Literal["uncaught", "caught"]
+) -> None:
+    response, records = await _served_records(app_context, monkeypatch, delegation, failure=failure)
+    assert response.startswith(b"HTTP/1.1 500 ")
+    errors = [record for record in records if record.levelno >= logging.ERROR]
+    assert len(errors) == 2
+    expected_logger = "synthetic.controller" if failure == "caught" else "fred_core.logs.http"
+    assert {record.name for record in errors} == {"http", expected_logger}
+    diagnostic = next(record for record in errors if record.exc_info)
+    assert diagnostic.getMessage() == ("Controller request failure" if failure == "caught" else "Unhandled request failure")
+    assert str(diagnostic.exc_info[1]) == "synthetic request failure"
+    snapshots = [getattr(record, "_fred_snapshot").values for record in errors]
+    assert snapshots[0] == snapshots[1]
+    for field in ("user_id", "session_id", "agent_id", "team_id", "exchange_id", "run_id"):
+        assert snapshots[0][field] == "synthetic-" + field.removesuffix("_id")
+    assert snapshots[0]["request_id"].encode() in response
+    assert snapshots[0]["correlation_id"].encode() in response
+    assert not any(record.name == "uvicorn.error" for record in errors)
 
 
 @pytest.mark.parametrize(

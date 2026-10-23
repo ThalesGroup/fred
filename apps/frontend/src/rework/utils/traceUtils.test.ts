@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { describe, it, expect } from "vitest";
+import i18next, { type i18n as I18n } from "i18next";
+import { beforeAll, describe, it, expect } from "vitest";
 import type { ChatMessage } from "../../slices/runtime/runtimeOpenApi";
+import en from "../../locales/en/translation.json";
+import fr from "../../locales/fr/translation.json";
 import {
   skillLoadOf,
   skillFileReadOf,
@@ -21,6 +24,7 @@ import {
   asRagSearchResult,
   asSqlQueryResult,
   formatLatencyMs,
+  genericToolPayload,
   groupTraceEntries,
   humanizeToolName,
   isDocumentTreeTool,
@@ -327,10 +331,97 @@ describe("entryLabel localization", () => {
   };
 
   it.each([
-    ["Reading query", "Reading query"],
-    ["Lecture de la requête", "Lecture de la requête"],
+    ["Reading data", "Reading data"],
+    ["Consultation des données", "Consultation des données"],
   ])("uses the active language label %s", (translation, expected) => {
     expect(entryLabel(entry, () => translation)).toBe(expected);
+  });
+
+  it("uses the localized label for ask_user", () => {
+    const question = { kind: "combo" as const, call: toolCallMsg("c2", "ask_user") };
+    expect(entryLabel(question, (key) => key)).toBe("rework.chatTrace.toolLabels.platform.askUser");
+  });
+});
+
+describe("categorized tool labels", () => {
+  const enLabels = en.rework.chatTrace.toolLabels;
+  const frLabels = fr.rework.chatTrace.toolLabels;
+  const keyPrefix = "rework.chatTrace.toolLabels.";
+  const instances = {} as Record<"en" | "fr", I18n>;
+
+  beforeAll(async () => {
+    for (const language of ["en", "fr"] as const) {
+      const instance = i18next.createInstance();
+      await instance.init({ lng: language, resources: { en: { translation: en }, fr: { translation: fr } } });
+      instances[language] = instance;
+    }
+  });
+
+  const labelPaths = (node: unknown, path = ""): string[] =>
+    typeof node === "string"
+      ? [path]
+      : Object.entries(node as Record<string, unknown>).flatMap(([name, value]) =>
+          labelPaths(value, path ? `${path}.${name}` : name),
+        );
+
+  const translate = (key: string): string => instances.fr.t(key);
+
+  it("has matching French and English labels for each tool source", () => {
+    expect(labelPaths(enLabels).sort()).toEqual(labelPaths(frLabels).sort());
+    for (const path of labelPaths(frLabels)) {
+      const key = `${keyPrefix}${path}`;
+      expect(instances.en.t(key)).not.toBe(key);
+      expect(instances.fr.t(key)).not.toBe(key);
+    }
+    const groups = [
+      frLabels.mcp.text,
+      frLabels.mcp.opensearchOps,
+      frLabels.mcp.prometheusOps,
+      frLabels.capabilities.documentAccess,
+      frLabels.capabilities.documents,
+      frLabels.capabilities.writableDocument,
+      frLabels.capabilities.teamWiki,
+      frLabels.capabilities.htmlArtifact,
+      frLabels.capabilities.pptFiller,
+      frLabels.capabilities.platformOps,
+      frLabels.skills,
+      frLabels.deep,
+    ];
+    for (const group of groups) {
+      for (const [name, label] of Object.entries(group)) {
+        const entry = { kind: "combo" as const, call: toolCallMsg("c1", name) };
+        expect(entryLabel(entry, translate)).toBe(label);
+      }
+    }
+  });
+
+  it.each([
+    ["list_document_tree", "Consultation de l'arborescence des documents"],
+    ["write_document", "Rédaction d'un document Word"],
+    ["fill_ppt_template", "Création d'une présentation PowerPoint"],
+    ["wiki_read_page", "Lecture d'une page du wiki"],
+    ["mcp__knowledge_flow__os_health", "État de santé d'OpenSearch"],
+    ["mcp__knowledge_flow__prometheus_query_range_2", "Exécution d'une requête Prometheus sur une période"],
+  ])("renders the localized label for %s", (name, expected) => {
+    const entry = { kind: "combo" as const, call: toolCallMsg("c1", name) };
+    expect(entryLabel(entry, translate)).toBe(expected);
+    expect(genericToolPayload(entry, translate).action).toBe(expected);
+  });
+
+  it.each([
+    ["mcp__knowledge_flow__os_health", "mcp.opensearchOps.os_health"],
+    ["prometheus_targets", "mcp.prometheusOps.prometheus_targets"],
+    ["list_document_tree", "capabilities.documentAccess.list_document_tree"],
+    ["write_document", "capabilities.writableDocument.write_document"],
+    ["ls", "deep.ls"],
+  ])("uses the source category for %s", (name, path) => {
+    const entry = { kind: "combo" as const, call: toolCallMsg("c1", name) };
+    expect(entryLabel(entry, (key) => key)).toBe(`${keyPrefix}${path}`);
+  });
+
+  it("keeps the fallback for a namespaced external MCP tool with the same slug", () => {
+    const entry = { kind: "combo" as const, call: toolCallMsg("c1", "mcp__other__os_health") };
+    expect(entryLabel(entry, translate)).toBe("Os Health");
   });
 });
 
@@ -1069,7 +1160,7 @@ describe("toolDiscriminator", () => {
       result: toolResultMsg("c1", JSON.stringify([document])),
     };
     expect(toolDiscriminator(list)).toEqual({ kind: "documents", count: 1 });
-    expect(entryLabel(list, (key) => key)).toBe("rework.chatTrace.toolLabels.documents");
+    expect(entryLabel(list, (key) => key)).toBe("rework.chatTrace.toolLabels.mcp.tabular.documents");
 
     const schemas = {
       kind: "combo" as const,
@@ -1401,7 +1492,7 @@ describe("native web research trace rows", () => {
       call: toolCallMsg("w1", "web_search", { query: "fred agents" }),
       result: toolResultMsg("w1", JSON.stringify({ results: [{ url: "https://a.org" }, { url: "https://b.org" }] })),
     };
-    expect(entryLabel(search, (key) => key)).toBe("rework.chatTrace.toolLabels.webSearch");
+    expect(entryLabel(search, (key) => key)).toBe("rework.chatTrace.toolLabels.capabilities.webResearch.webSearch");
     expect(primaryTextForEntry(search)).toBe("fred agents");
     expect(toolDiscriminator(search)).toEqual({ kind: "sources", count: 2 });
 
@@ -1478,7 +1569,7 @@ describe("skill file read preview", () => {
       path: "references/model.md",
       content: "## Archived model\n**Exact** text",
     });
-    expect(entryLabel(entry, (key) => key)).toBe("rework.chatTrace.toolLabels.readSkillFile");
+    expect(entryLabel(entry, (key) => key)).toBe("rework.chatTrace.toolLabels.platform.readSkillFile");
     expect(primaryTextForEntry(entry)).toBe("references/model.md");
     expect(skillFileReadOf(groupTraceEntries([call])[0])).toBeNull();
     expect(skillFileReadOf(groupTraceEntries([call, toolResultMsg("ref", "failed", false)])[0])).toBeNull();
@@ -1508,7 +1599,7 @@ describe("native Deep skill reference preview", () => {
       content,
       excerpt: true,
     });
-    expect(entryLabel(entry, (key) => key)).toBe("rework.chatTrace.toolLabels.readSkillFile");
+    expect(entryLabel(entry, (key) => key)).toBe("rework.chatTrace.toolLabels.platform.readSkillFile");
     expect(primaryTextForEntry(entry)).toBe("references/model.md");
     expect(skillFileReadOf(groupTraceEntries([call])[0])).toBeNull();
     expect(skillFileReadOf(groupTraceEntries([call, toolResultMsg("native-ref", "failed", false)])[0])).toBeNull();

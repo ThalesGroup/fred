@@ -1,4 +1,5 @@
 {{- include "fred.validate-ingestion-worker-roles" $ }}
+{{- include "fred.validate-registrations" $ }}
 {{- range $name, $rawApp := .Values.applications }}
   {{- $app := deepCopy $rawApp }}
   {{- if hasKey $rawApp "inheritFrom" }}

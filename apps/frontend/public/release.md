@@ -1,3 +1,47 @@
+**v3.9.1** - 2026-10-23
+
+- **Summary**
+
+  This security update fixes critical vulnerabilities in image handling. The chat trace is easier to read, with clear, translated labels for tool actions and agent questions.
+
+- **Improvements**
+
+  - Tool actions in the chat trace have clear, translated labels (#3261)
+  - The empty chat screen no longer shows a background gradient around the message box (#3250)
+
+- **Security**
+
+  - Image handling is updated to fix critical vulnerabilities (#3243)
+
+- **Bug Fixes**
+
+  - Agent questions to the user appear in your language in the chat trace (#3257)
+
+- **Deployment note**
+
+  No configuration or data change: deploy normally, no additional action is needed.
+
+**v3.9.0** - 2026-10-22
+
+- **Summary**
+
+  Administrators can delegate Platform Access management, and hosted applications can exchange files with their services. Chat and administration screens behave more reliably while commands or Free links are in use and after future updates.
+
+- **Features**
+
+  - Delegate Platform Access management without granting full platform administrator rights (#3235)
+  - Upload and download files in compatible hosted applications (#3195)
+
+- **Bug Fixes**
+
+  - Chat tabs opened after this release recover if a later update makes part of the page unavailable (#3193)
+  - The slash-command menu stays open while typing a command (#3221)
+  - Free link history stays visible and joiner activity can be refreshed on demand (#3227)
+
+- **Deployment note**
+
+  If your authorization model is pinned, publish and pin the new model before deploying. Move existing application or Knowledge Base registrations to the new chart values, and review log rules for exception messages. See the operator guide for details.
+
 **v3.8.0** - 2026-10-20
 
 - **Summary**

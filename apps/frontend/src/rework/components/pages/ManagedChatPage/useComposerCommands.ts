@@ -453,8 +453,9 @@ export function useComposerCommands(params: {
   const panelOpen =
     focused &&
     query !== null &&
-    query ===
-      commandQueryOf(params.input, commandRange?.end, [...skillNames, ...commands.map((entry) => entry.command)]) &&
+    // The query lags the input by one commit; equality would unmount the menu per keystroke.
+    commandQueryOf(params.input, commandRange?.end, [...skillNames, ...commands.map((entry) => entry.command)]) !==
+      null &&
     query !== dismissedQuery &&
     !selectedSkills.some((token) => token.from === commandRange?.start) &&
     !selectedPrompts.some((prompt) => prompt.from === commandRange?.start);

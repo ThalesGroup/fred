@@ -1280,7 +1280,7 @@ describe("ManagedChatPage skill reference preview", () => {
         act(() => container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]')!.click());
         expect(container.textContent).toContain("Current skill description");
         const row = container.querySelector<HTMLElement>(
-          '[aria-label="1. rework.chatTrace.toolLabels.readSkillFile: references/model.md"]',
+          '[aria-label="1. rework.chatTrace.toolLabels.platform.readSkillFile: references/model.md"]',
         );
         expect(row).not.toBeNull();
         act(() => row!.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true })));

@@ -113,7 +113,11 @@ export default function CodenameModal({ open, onClose, data }: Props) {
             <span id="codename-modal-title" className={styles.badge}>
               {data.codename} · {data.version}
             </span>
-            <p className={styles.description}>{content.description}</p>
+            {content.description.split("\n\n").map((paragraph) => (
+              <p key={paragraph} className={styles.description}>
+                {paragraph}
+              </p>
+            ))}
             <p className={styles.interpretation}>{content.interpretation}</p>
             <hr className={styles.divider} />
             <p className={styles.hint}>{content.hint}</p>

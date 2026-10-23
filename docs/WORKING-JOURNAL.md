@@ -897,3 +897,57 @@ parcours manuel dans l’UI Rebac. Résultat encore à observer.
   ou recherche réelle. Pas de campagne générale. Le PDF déjà ingéré reste inchangé :
   déploiement/migration puis restauration explicite `retrievable: null` restent des
   actions ultérieures soumises à autorisation distincte.
+
+
+## 2026-10-23 — Merge Swift : registre des suppressions du control plane Python
+
+Merge de `swift` (`09dda98e2`) dans `chore/rust-rebac` (`bbbf41afa`),
+base commune `19709b017f7bff35e254df3242f38f6e5b0edd02`.
+Les 12 conflits « supprimé ici, modifié dans Swift » sont résolus en conservant
+la suppression de l'ancien service. Cela ne signifie pas que ses fonctionnalités
+entrantes sont déjà couvertes par le Rust. Inventaire demandé par Dimi, chemins
+relatifs à `apps/control-plane-backend/` :
+
+| Fichier supprimé | Origine / nature | Sujet entrant | Décision et suivi Rust |
+| --- | --- | --- | --- |
+| `Makefile` | `bd155eb52` (#3253), fix build | Transmission du secret Docker CA pour les proxys TLS | Conserver la suppression ; besoin CA potentiellement pertinent, non porté au Makefile Rust. |
+| `control_plane_backend/platform_access/api.py` | `624faf234` (#3235/#3236), feature | Permission dédiée `CAN_MANAGE_PLATFORM_ACCESS` sur les routes d'accès plateforme | À porter avec Platform Access ; aucun équivalent identifié dans Rust. |
+| `control_plane_backend/platform_access/service.py` | `624faf234`, feature | Admission admin et aperçu d'activation via `access_manager_uid` | À porter avec admission, whitelist et Free links ; ne pas considérer comme couvert. |
+| `control_plane_backend/product/service.py` | `624faf234`, feature | Bootstrap du rôle effectif `platform_access_manager` via OpenFGA | À porter dans le modèle Rust, son bootstrap et son contrat `/me`. |
+| `control_plane_backend/users/schemas.py` | `624faf234`, feature | Nouveau rôle assignable `PLATFORM_ACCESS_MANAGER` | À porter avec permissions et API ; ne pas ajouter uniquement un rôle UI. |
+| `dockerfiles/Dockerfile-prod` | `bd155eb52`, fix build ; `9c03ceab6` (#3243/#3259), outillage | Secret `ca-bundle`/`SSL_CERT_FILE`, uv 0.13.5 | uv sans objet pour Rust ; besoin CA à traiter avec le Makefile, pas de preuve d'échec actuel. |
+| `pyrightconfig.json` | `9c03ceab6`, outillage | `enableExperimentalFeatures` | Sans objet pour Rust. |
+| `tests/test_main.py` | `624faf234`, couverture feature | Nouveau rôle dérivé des checks OpenFGA plutôt que de Keycloak | Exigence à reprendre avec le portage ; Rust utilise déjà FGA mais ne connaît pas ce rôle. |
+| `tests/test_platform_access.py` | `624faf234`, couverture feature | Vérifier la nouvelle permission sur les endpoints | À reprendre avec les endpoints Platform Access. |
+| `tests/test_platform_roles.py` | `624faf234`, documentation de tests | Commentaires des quatre rôles délégués | Aucun nouveau comportement testé ; ne pas recopier la politique Python de bootstrap root. |
+| `tests/test_team_registry_edit.py` | `624faf234`, régression autorisation | `team_manager` seul ne peut pas renommer une équipe | Garder l'invariant « rôle global seul sans droits métier ». Rust rejette ce rôle historique et utilise des rôles locaux ; aucune route registry-edit équivalente identifiée. |
+| `uv.lock` | `60e5b1b65`, `b13bf8f5c`, `9c03ceab6`, `09dda98e2`, releases / dépendances | Versions 3.9.0/3.9.1, MCP v2, dépendances Python, format lock | Sans objet pour CP Rust/Cargo. Les locks entrants des autres services Python restent dans le merge. |
+
+Points d'appui : `apps/control-plane/src/roles.rs` (quatre rôles, sans access
+manager), `src/fga.rs`, `src/api.rs`, `src/platform.rs`, `openfga/model.fga`,
+`tests/openapi.rs` (refus des rôles historiques), `Makefile` et
+`dockerfiles/Dockerfile-prod` (pas de secret CA Cargo).
+La note `docs/swift/ops/migrations/delegate-platform-access-and-team-management.md`
+conserve les cas utilisateur Swift ; elle ne prouve pas leur implémentation Rust.
+
+Autres résolutions du merge :
+
+- Contrat API généré Rust conservé intact ; contrat Swift entrant relocalisé dans
+  `legacyControlPlaneOpenApi.ts` avec uniquement l'adaptation du nom du transport.
+  Le routeur conserve l'entrée manager `/admin/organizations` et les gardes Swift.
+- Helm conserve la configuration manager Rust, le worker et le DNS frontend
+  qualifié. Pas d'injection des champs de configuration Python dans le Rust.
+- **Feature à porter #3211** (`4d8f1d285`) : composition par identifiant des
+  inscriptions d'applications et de publishers KB. Dimi a validé explicitement
+  de la tracer et de refuser les inscriptions non supportées. Les deux maps
+  `registrations` restent vides ; leur contenu non vide est refusé par le schéma
+  et par les templates, même sans validation du schéma. L'ancien paramétrage
+  manuel frontend reste refusé pour éviter un contournement incohérent.
+  Les scénarios de composition Swift restent récupérables dans le commit source ;
+  le contrôle chart entrant est adapté au refus actuel, sans l'exécuter.
+- Les tests k3d fusionnent les nouveaux contenus runtime Swift avec le nom de
+  composant Rust `control-plane` et son image `control-plane-backend`.
+
+Aucun test, build ou déploiement exécuté pour cette résolution. Le schéma Helm
+est régénéré à partir des schémas de configuration existants. Cette résolution
+n'est pas une validation fonctionnelle de l'ensemble des changements Swift.

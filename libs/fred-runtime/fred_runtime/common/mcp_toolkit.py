@@ -21,15 +21,13 @@ McpToolkit — build LangChain tools from an MCP client *per turn*.
 
 from __future__ import annotations
 
-import asyncio
-import inspect
 import logging
 from functools import partial
 from operator import attrgetter
-from typing import Any, Coroutine, List, cast
+from typing import List
 
+from langchain.mcp import MCPAdapter
 from langchain_core.tools import BaseTool, BaseToolkit
-from langchain_mcp_adapters.client import MultiServerMCPClient
 from pydantic import Field, PrivateAttr
 
 from fred_runtime.common.context_aware_tool import ContextAwareTool
@@ -40,10 +38,10 @@ logger = logging.getLogger(__name__)
 
 class McpToolkit(BaseToolkit):
     tools: List[BaseTool] = Field(default_factory=list, description="(unused)")
-    _client: MultiServerMCPClient = PrivateAttr()
+    _client: list[MCPAdapter] = PrivateAttr()
     _agent: KnowledgeFlowAgentContext = PrivateAttr()
 
-    def __init__(self, client: MultiServerMCPClient, agent: KnowledgeFlowAgentContext):
+    def __init__(self, client: list[MCPAdapter], agent: KnowledgeFlowAgentContext):
         """
         Why: bind one MCP client to a runtime agent context for per-turn tools.
         How: pass the MCP client plus an agent context with runtime+settings data.
@@ -63,46 +61,8 @@ class McpToolkit(BaseToolkit):
     # -------- internal helpers --------
 
     def _discover_base_tools(self) -> List[BaseTool]:
-        """
-        Discover raw tools from the MCP client.
-
-        Note: adapter APIs may differ (get_tools vs as_langchain_tools). We try both
-        to be resilient across versions.
-        """
-        # If tools were prefetched and cached by MCPRuntime, use them.
-        if self.tools:
-            return self.tools
-
-        if hasattr(self._client, "get_tools"):
-            try:
-                result = self._client.get_tools()  # likely coroutine in new adapters
-                if inspect.isawaitable(result):
-                    # If we're not in a running loop, we can run it synchronously
-                    try:
-                        asyncio.get_running_loop()
-                        # Running inside event loop; cannot block safely here.
-                        logger.warning(
-                            "[MCP] _discover_base_tools called inside event loop without prefetched tools; returning empty list."
-                        )
-                        return []
-                    except RuntimeError:
-                        # No running loop: safe to run
-                        base_tools = asyncio.run(cast(Coroutine[Any, Any, Any], result))
-                else:
-                    base_tools = result
-
-                if base_tools:
-                    logger.info(
-                        "[MCP] discovered %d base tools via get_tools()",
-                        len(base_tools),
-                    )
-                return base_tools
-            except Exception as e:
-                logger.warning("[MCP] tool discovery via get_tools failed: %s", e)
-
-        # LOG 2 (Failure): Tool discovery failed
-        logger.error("MCP client does not expose a tool discovery method.")
-        raise RuntimeError("MCP client does not expose a tool discovery method.")
+        """Return the tools discovered during this runtime's initialization."""
+        return self.tools
 
     # -------- public API --------
 

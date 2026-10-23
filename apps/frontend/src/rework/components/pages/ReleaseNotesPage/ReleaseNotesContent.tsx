@@ -21,7 +21,7 @@ import CodenameModal from "@shared/molecules/CodenameModal/CodenameModal";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import { getProperty } from "../../../../common/config";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
-import CODENAME from "../../../../releases/swift.json";
+import CODENAME from "../../../../releases/weaver.json";
 import styles from "./ReleaseNotesContent.module.css";
 
 interface ReleaseCard {

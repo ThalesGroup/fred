@@ -33,12 +33,11 @@ dependencies = [
   "rich==14.0.0",
   "shortuuid==1.0.13",
   "openpyxl==3.1.5",
-  "docling==2.132.0",
+  "docling==2.142.0",
   "openvino==2026.0.0; sys_platform == 'linux'",
   "hf-xet==1.6.0",
-  "fastapi-mcp==0.4.0",
-  # Patched v1 SDK; fastapi-mcp still consumes its v1 API.
-  "mcp>=1.30.0,<2.0.0",
+  "fastmcp>=4.1.3,<5",
+  "mcp>=2.3.0,<3",
   "duckdb>=1.3.2",
   "fred-core>=4.5.3",
   "dateparser>=1.2.2",
@@ -46,7 +45,7 @@ dependencies = [
   "duckdb-engine>=0.17.0",
   "psycopg2-binary>=2.9.10",
   "sqlparse>=0.6.0",
-  "uv",
+  "uv==0.13.5",
   "python-keycloak>=5.8.1",
   # ClickHouse client
   "clickhouse-connect>=0.8.0",
@@ -58,9 +57,6 @@ dependencies = [
   # PyTorch for amd64: CPU-only wheels from pytorch-cpu index
   "torch==2.13.0+cpu; platform_machine == 'x86_64' and sys_platform == 'linux'",
   "torchvision==0.28.0+cpu; platform_machine == 'x86_64' and sys_platform == 'linux'",
-  # PyTorch for macOS on Intel (no +cpu builds)
-  "torch==2.13.0; platform_machine == 'x86_64' and sys_platform == 'darwin'",
-  "torchvision==0.28.0; platform_machine == 'x86_64' and sys_platform == 'darwin'",
   # PyTorch for ARM64 (M1/M2 Macs, Graviton, Raspberry Pi)
   "torch==2.13.0; platform_machine == 'aarch64' or platform_machine == 'arm64'",
   "torchvision==0.28.0; platform_machine == 'aarch64' or platform_machine == 'arm64'",
@@ -74,7 +70,8 @@ dependencies = [
   "av>=14.0.0",
   "faster-whisper>=1.1.0",
   "paddleocr>=3.6.0",
-  "paddlepaddle>=3.3.1"
+  # PyPI ships no Linux ARM64 wheels for paddlepaddle.
+  "paddlepaddle>=3.3.1; platform_machine == 'x86_64' or sys_platform == 'darwin'"
 ]
 
 [project.optional-dependencies]
@@ -160,7 +157,12 @@ constraint-dependencies = ["torch>=2.13.0", "torchvision>=0.28.0"]
 # https://github.com/microsoft/pylance-release/blob/main/TROUBLESHOOTING.md#editable-install-modules-not-found
 config-settings = { editable_mode = "compat" }
 # The lockfile is used for both Linux (deploy/CI) and macOS (local dev).
-environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
+# uv requires wheels for every environment listed, so name the real targets only.
+environments = [
+  "sys_platform == 'linux' and platform_machine == 'x86_64'",
+  "sys_platform == 'linux' and platform_machine == 'aarch64'",
+  "sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
 
 
 [tool.alembic]

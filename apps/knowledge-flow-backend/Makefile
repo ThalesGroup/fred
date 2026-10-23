@@ -151,6 +151,7 @@ reset-test-state: ## Reset local test state used by configuration_test.yaml
 docker-build: ## Build the Docker image
 	docker build \
 		--network=$(API_DOCKER_NETWORK) \
+		$(DOCKER_CA_SECRET) \
 		-f $(DOCKERFILE_PATH) \
 		-t $(IMAGE_FULL) \
 		$(DOCKER_CONTEXT)

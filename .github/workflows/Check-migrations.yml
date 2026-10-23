@@ -47,6 +47,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.5"
 
       - name: Install dependencies (knowledge-flow-backend)
         run: uv sync
@@ -77,6 +79,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.5"
 
       - name: Install dependencies (knowledge-flow-backend)
         run: uv sync
@@ -107,6 +111,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.5"
 
       - name: Install dependencies (knowledge-flow-backend)
         run: uv sync

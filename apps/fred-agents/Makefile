@@ -37,6 +37,7 @@ db-upgrade: dev ## apply all pending migrations (fred-runtime + every capability
 docker-build: ## Build the Docker image
 	docker build \
 		--network=$(API_DOCKER_NETWORK) \
+		$(DOCKER_CA_SECRET) \
 		-f $(DOCKERFILE_PATH) \
 		-t $(IMAGE_FULL) \
 		$(DOCKER_CONTEXT)

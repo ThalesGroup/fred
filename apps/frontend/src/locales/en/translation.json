@@ -1880,15 +1880,112 @@
         "success": "Success"
       },
       "toolLabels": {
-        "readSkillFile": "Reading skill file",
-        "readQuery": "Reading query",
-        "documents": "Listing tabular documents",
-        "markdown": "Reading the workbook catalog",
-        "schemas": "Reading tabular schemas",
-        "descriptions": "Reading tabular documents",
-        "search": "Searching tabular values",
-        "webSearch": "Searching the web",
-        "fetchUrl": "Reading a web page"
+        "platform": {
+          "askUser": "Requesting clarification",
+          "readSkillFile": "Reading instructions"
+        },
+        "mcp": {
+          "tabular": {
+            "readQuery": "Reading data",
+            "documents": "Listing data files",
+            "markdown": "Reading the workbook catalog",
+            "schemas": "Reading tabular schemas",
+            "descriptions": "Reading data structure",
+            "search": "Searching data"
+          },
+          "text": {
+            "search_documents_using_vectorization": "Searching documents"
+          },
+          "opensearchOps": {
+            "os_health": "Checking OpenSearch health",
+            "os_pending_tasks": "Viewing pending OpenSearch tasks",
+            "os_cluster_settings": "Viewing OpenSearch cluster settings",
+            "os_cluster_state": "Viewing OpenSearch cluster state",
+            "os_cluster_stats": "Viewing OpenSearch cluster statistics",
+            "os_allocation_explain": "Explaining OpenSearch shard allocation",
+            "os_nodes_stats": "Viewing OpenSearch node statistics",
+            "os_nodes_info": "Viewing OpenSearch node information",
+            "os_nodes_hot_threads": "Analyzing active OpenSearch threads",
+            "os_indices": "Listing OpenSearch indexes",
+            "os_index_stats": "Viewing OpenSearch index statistics",
+            "os_index_mapping": "Viewing OpenSearch index fields",
+            "os_index_settings": "Viewing OpenSearch index settings",
+            "os_index_recovery": "Tracking recovery of an OpenSearch index",
+            "os_tasks": "Listing running OpenSearch tasks",
+            "os_task_get": "Viewing OpenSearch task details",
+            "os_shards": "Viewing OpenSearch shards",
+            "os_cat_nodes": "Viewing OpenSearch nodes",
+            "os_cat_allocation": "Viewing OpenSearch shard distribution",
+            "os_cat_thread_pool": "Viewing OpenSearch thread pools",
+            "os_recovery": "Tracking OpenSearch index recoveries",
+            "os_diagnostics": "Checking OpenSearch diagnostics"
+          },
+          "prometheusOps": {
+            "prometheus_query": "Running an instant Prometheus query",
+            "prometheus_query_range": "Running a Prometheus query over time",
+            "prometheus_series": "Finding Prometheus metric series",
+            "prometheus_metrics": "Listing Prometheus metrics",
+            "prometheus_metrics_catalog": "Viewing the Prometheus metric catalog",
+            "prometheus_metadata": "Viewing Prometheus metric descriptions",
+            "prometheus_labels": "Listing Prometheus labels",
+            "prometheus_label_values": "Listing values of a Prometheus label",
+            "prometheus_targets": "Checking Prometheus scrape targets"
+          }
+        },
+        "capabilities": {
+          "webResearch": {
+            "webSearch": "Searching the web",
+            "fetchUrl": "Reading a web page"
+          },
+          "documentAccess": {
+            "list_document_tree": "Reading the document tree"
+          },
+          "documents": {
+            "list_documents_by_label": "Finding documents by label",
+            "read_document": "Reading a document",
+            "summarize_document": "Summarizing a document",
+            "extract_from_document": "Extracting information from a document",
+            "find_similar_passages": "Finding similar passages"
+          },
+          "writableDocument": {
+            "open_writable_document": "Opening a Word document",
+            "write_document": "Writing a Word document"
+          },
+          "teamWiki": {
+            "wiki_list_pages": "Listing wiki pages",
+            "wiki_read_page": "Reading a wiki page",
+            "wiki_propose_page_text": "Preparing a wiki page edit",
+            "wiki_propose_page": "Preparing a new wiki page",
+            "wiki_publish_proposal": "Requesting approval for a wiki page"
+          },
+          "htmlArtifact": {
+            "render_html_artifact": "Creating interactive content"
+          },
+          "pptFiller": {
+            "list_images_in_folder": "Finding images for a PowerPoint presentation",
+            "fill_ppt_template": "Creating a PowerPoint presentation"
+          },
+          "platformOps": {
+            "postgres_list_tables": "Reviewing available data",
+            "postgres_run_query": "Reading database data"
+          }
+        },
+        "deep": {
+          "ls": "Listing files",
+          "read_file": "Reading a file",
+          "write_file": "Creating a file",
+          "edit_file": "Editing a file",
+          "glob": "Finding files",
+          "grep": "Searching files",
+          "execute": "Running a command",
+          "concat_files": "Combining files",
+          "task": "Delegating work to an assistant",
+          "write_todos": "Updating the plan"
+        },
+        "skills": {
+          "load_skill": "Loading instructions",
+          "read_skill_file": "Reading instructions"
+        }
       },
       "webResearch": {
         "query": "Search:",
@@ -2734,6 +2831,7 @@
         "platform_admin": "Platform admin",
         "platform_observer": "Platform observer",
         "team_manager": "Team manager",
+        "platform_access_manager": "Platform access manager",
         "feature_manager": "Feature manager",
         "prompt_editor": "Prompt editor"
       },
@@ -2741,6 +2839,7 @@
         "platform_admin": "Full platform administration: every admin page, import/export and platform reset.",
         "platform_observer": "Read-only access to platform-wide analytics.",
         "team_manager": "Create teams and see every team on the platform.",
+        "platform_access_manager": "Manage filtering, whitelists, team admission, Free settings and Free links.",
         "feature_manager": "Enable or disable capabilities, agent templates and models.",
         "prompt_editor": "Edit the platform prompt prepended to every agent."
       },
@@ -3975,7 +4074,7 @@
         "accessLost": "With filtering on, you would lose access to the platform.",
         "accessSource": {
           "rule": "the rule",
-          "admin": "your platform administrator role",
+          "admin": "your platform access management role",
           "manual": "the user whitelist",
           "team": "the authorized team {{team}}",
           "teamUnnamed_one": "an authorized team",
@@ -4130,7 +4229,7 @@
         "unnamedTeam": "unnamed team",
         "label": "Other access",
         "attribute": "Rule",
-        "admin": "Platform administrator",
+        "admin": "Platform access management",
         "team_one": "Authorized team: {{teams}}",
         "team_other": "Authorized teams: {{teams}}",
         "free_one": "Link access: {{teams}}",

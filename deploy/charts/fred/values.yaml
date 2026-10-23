@@ -450,6 +450,19 @@ global:
     storageClass: "local-path" # if empty = default storage class
     hostPath: "/mnt/fred-data" # only used if dynamic=false & storageClass=local-path, remind to create this directory on your host
 
+# ── Registrations ────────────────────────────────────────────────────
+# What this deployment serves, one entry per application or Knowledge Base, keyed
+# by its id: Helm merges maps, so each one can come from its own values file, and
+# `null` removes it (a whole entry, not one of its fields). The chart derives from them the control plane's
+# platform.application_sources and knowledge_bases.publishers, and the frontend
+# gateway's FRONTEND_APPLICATIONS_JSON; setting those directly is refused.
+# Registration grants no access: a platform admin enables each one per team.
+# Rust control plane: both maps must remain empty until #3211 is ported.
+# Non-empty registrations are rejected by the schema and templates.
+registrations:
+  applications: {}
+  knowledgeBasePublishers: {}
+
 # ── 3. Applications ──────────────────────────────────────────────────
 applications:
   # ── 3.1 Fred Agents Runtime ────────────────────────────────────────
@@ -1052,43 +1065,6 @@ applications:
       # service DNS name in the Deployment template, even when env is replaced.
       # Set FRONTEND_CONTROL_PLANE_UPSTREAM here
       # or in extraEnvVars to override them (for example with a custom DNS domain).
-      # Applications this deployment serves, as seen by the frontend gateway.
-      # These are the SERVER-SIDE addresses nginx proxies to; the browser only
-      # ever sees /apps/<app_id>/ and /app-services/<app_id>/. Every app_id
-      # listed here must also appear in the control-plane's
-      # platform.application_sources below, which owns the browser-facing
-      # ui_prefix, the display strings, and the team authorization grant.
-      #
-      # ui_upstream       required — the fork-built UI container. It must serve
-      #                   the bundle under /apps/<app_id>/, because the whole
-      #                   prefix is forwarded so the bundle's own absolute
-      #                   asset URLs keep resolving.
-      # service_upstream  optional — the application API. Omitted: requests to
-      #                   /app-services/<app_id>/ answer 503.
-      # service_required  true means the container refuses to start without a
-      #                   service_upstream, instead of serving a permanent 503.
-      #
-      # Both upstreams must be FULLY QUALIFIED on Kubernetes. Application routes
-      # use a variable proxy_pass, so nginx resolves the host per request through
-      # its own resolver, which does not apply the pod's DNS search list. A bare
-      # Service name gives "could not be resolved (3: Host not found)" and a 502,
-      # even though that same name resolves from a shell in the same pod. This is
-      # also what lets an application live in its own namespace: only the
-      # namespace segment of the name changes.
-      #
-      # Worked example — registering one application:
-      #   - name: FRONTEND_APPLICATIONS_JSON
-      #     value: |
-      #       [
-      #         {
-      #           "app_id": "acme-forecast",
-      #           "ui_upstream": "http://acme-forecast-ui.acme-apps.svc.cluster.local:80",
-      #           "service_upstream": "http://acme-forecast-api.acme-apps.svc.cluster.local:8000",
-      #           "service_required": true
-      #         }
-      #       ]
-      - name: FRONTEND_APPLICATIONS_JSON
-        value: "[]"
       - name: FRONTEND_CLIENT_MAX_BODY_SIZE
         value: "150m"
       - name: VITE_BACKEND_URL_KNOWLEDGE
@@ -1161,8 +1137,8 @@ applications:
             # Worked example — sending an application UI straight to its own
             # Service, skipping the frontend hop. Only the path changes hands:
             # the browser URL stays /apps/acme-forecast/, so ui_prefix and the
-            # bundle's base path are unaffected. Keep the app_id in
-            # FRONTEND_APPLICATIONS_JSON regardless, since /app-services still
+            # bundle's base path are unaffected. Keep its gateway in
+            # registrations.applications regardless, since /app-services still
             # goes through the frontend and needs the id to answer 404 vs 503.
             # - path: /apps/acme-forecast
             #   pathType: Prefix

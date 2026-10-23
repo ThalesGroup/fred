@@ -38,7 +38,7 @@ function BusinessAdminNavbar() {
       label: t("rework.sidebar.admin.menu.teams"),
       icon: { category: "outlined", type: "groups", filled: true },
       linkProps: { to: "/admin/teams" },
-      requires: "teams",
+      requires: "teamRoster",
     },
     {
       type: "link",
@@ -125,7 +125,7 @@ function BusinessAdminNavbar() {
       label: t("rework.platformAccess.title"),
       icon: { category: "outlined", type: "lock", filled: false },
       linkProps: { to: "/admin/platform-access" },
-      requires: "admin",
+      requires: "platformAccess",
     });
   const navigationItems: NavigationMenuItemProps[] = allItems.filter((item) =>
     isProtectedAllowed(item.requires, capabilities),

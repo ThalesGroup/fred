@@ -510,6 +510,23 @@ _GLOBAL = _obj({
 
 
 # ---------------------------------------------------------------------------
+# Registrations
+# ---------------------------------------------------------------------------
+
+def _registrations() -> dict:
+    """Reserved until application and KB publisher registration is ported to Rust."""
+    unsupported = {
+        "type": "object",
+        "maxProperties": 0,
+        "description": "Non-empty registrations are not supported by the Rust control plane yet (#3211).",
+    }
+    return _obj({
+        "applications": unsupported,
+        "knowledgeBasePublishers": unsupported,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Assembly
 # ---------------------------------------------------------------------------
 
@@ -529,6 +546,7 @@ def build(fa_schema_path: Path, kf_schema_path: Path, cp_schema_path: Path) -> d
         "patternProperties": {"^x-": {}},
         "properties": {
             "global": _GLOBAL,
+            "registrations": _registrations(),
             "applications": _obj({
                 "fred-agents": _fred_agents_app(fa_config),
                 "frontend": _frontend_app(),

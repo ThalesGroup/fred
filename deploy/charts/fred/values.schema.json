@@ -40,6 +40,22 @@
       },
       "additionalProperties": false
     },
+    "registrations": {
+      "type": "object",
+      "properties": {
+        "applications": {
+          "type": "object",
+          "maxProperties": 0,
+          "description": "Non-empty registrations are not supported by the Rust control plane yet (#3211)."
+        },
+        "knowledgeBasePublishers": {
+          "type": "object",
+          "maxProperties": 0,
+          "description": "Non-empty registrations are not supported by the Rust control plane yet (#3211)."
+        }
+      },
+      "additionalProperties": false
+    },
     "applications": {
       "type": "object",
       "properties": {
