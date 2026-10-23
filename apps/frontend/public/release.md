@@ -1,3 +1,26 @@
+**v3.9.1** - 2026-10-23
+
+- **Summary**
+
+  This security update fixes critical vulnerabilities in image handling. The chat trace is easier to read, with clear, translated labels for tool actions and agent questions.
+
+- **Improvements**
+
+  - Tool actions in the chat trace have clear, translated labels (#3261)
+  - The empty chat screen no longer shows a background gradient around the message box (#3250)
+
+- **Security**
+
+  - Image handling is updated to fix critical vulnerabilities (#3243)
+
+- **Bug Fixes**
+
+  - Agent questions to the user appear in your language in the chat trace (#3257)
+
+- **Deployment note**
+
+  No configuration or data change: deploy normally, no additional action is needed.
+
 **v3.9.0** - 2026-10-22
 
 - **Summary**
