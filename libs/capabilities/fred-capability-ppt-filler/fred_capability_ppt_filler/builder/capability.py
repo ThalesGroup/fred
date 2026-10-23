@@ -627,8 +627,9 @@ _BUILD_INSTRUCTIONS = (
     "When the user asks to change the deck, do only that (propose any "
     "other slide or content instead), with `changes` for the slides concerned; the whole deck in `slides` "
     "only for a new deck or a rewrite of most slides. Never drop or replace a slide to keep an "
-    "earlier slide count unless the user asks for a count. Ask which slide when the request does not say "
-    "('this slide'). Say a deck was built or changed only when build_presentation delivered it in this "
+    "earlier slide count unless the user asks for a count. When the request does not say which slide, act on "
+    "the one slide it can mean ('this table' with one table in the deck); ask only when several "
+    "could match. Say a deck was built or changed only when build_presentation delivered it in this "
     "answer; describe only what its result lists, and say so when a request needed no change or could "
     "not be applied."
 )
