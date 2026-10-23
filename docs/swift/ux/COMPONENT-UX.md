@@ -789,14 +789,17 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   - SSE consumption) — a reasonable fast-follow, not required for the current fix since
     `content` already carries enough to render useful citations.
 
-- **Unrecognized-tool fallback still raw JSON** — two content shapes (SQL
-  `{sql_query, rows, error}`, RAG `{query, hits}`) plus two named first-party tools
-  (`summarize_document`, `list_document_tree`, see Resolved below) are recognized; any
-  other tool still falls back to the redacted `{action, status, latency}` JSON view.
-  Intentional (see Resolved below) but the list of recognized tools/shapes may need to
-  grow as more tools are added.
+- **Unrecognized-tool fallback still raw JSON** - curated views cover SQL, RAG,
+  summarization, document tree, tabular, web research, and code execution. Other tools
+  fall back to the redacted `{action, status, latency}` JSON view. The list of
+  recognized tools may need to grow as more tools are added.
 
 #### Resolved
+
+- **Code sandbox detail (2026-10-23)** - `execute_code` shows the submitted source
+  in a code block highlighted as Bash or Python, followed by stdout, stderr, exit code, and any
+  timeout or truncation notice. Broker failures use localized error codes; malformed
+  responses do not expose raw payloads.
 
 - **Single page-level instance (2026-06-18)** — the panel state is lifted to `ManagedChatPage`
   via `traceDrawerContext` and rendered once (instead of one drawer per trace row). It keeps the

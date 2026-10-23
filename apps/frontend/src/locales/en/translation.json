@@ -1912,6 +1912,26 @@
         "webSearch": "Searching the web",
         "fetchUrl": "Reading a web page"
       },
+      "sandbox": {
+        "code": "Code",
+        "result": "Result",
+        "exitCode": "Exit code: {{code}}",
+        "timedOut": "Time limit reached",
+        "truncated": "Output truncated",
+        "output": "Output",
+        "errors": "Errors",
+        "noOutput": "No output",
+        "errorsByCode": {
+          "unavailable": "The sandbox is unavailable.",
+          "unauthorized": "Code execution is not authorized.",
+          "busy": "The sandbox is busy. Try again shortly.",
+          "invalid_request": "The code request is invalid.",
+          "runtime_unavailable": "The sandbox runtime is unavailable.",
+          "policy_unavailable": "The sandbox security policy is unavailable.",
+          "backend_failed": "The sandbox could not run this code.",
+          "invalid_response": "The sandbox returned an invalid response."
+        }
+      },
       "webResearch": {
         "query": "Search:",
         "page": "Page:",

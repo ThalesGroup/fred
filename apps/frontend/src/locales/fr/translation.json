@@ -1912,6 +1912,26 @@
         "webSearch": "Recherche sur le web",
         "fetchUrl": "Lecture d'une page web"
       },
+      "sandbox": {
+        "code": "Code",
+        "result": "Résultat",
+        "exitCode": "Code de sortie : {{code}}",
+        "timedOut": "Durée maximale atteinte",
+        "truncated": "Sortie tronquée",
+        "output": "Sortie",
+        "errors": "Erreurs",
+        "noOutput": "Aucune sortie",
+        "errorsByCode": {
+          "unavailable": "La sandbox est indisponible.",
+          "unauthorized": "L'exécution de code n'est pas autorisée.",
+          "busy": "La sandbox est occupée. Réessayez dans un instant.",
+          "invalid_request": "La demande d'exécution est invalide.",
+          "runtime_unavailable": "Le runtime de la sandbox est indisponible.",
+          "policy_unavailable": "La politique de sécurité de la sandbox est indisponible.",
+          "backend_failed": "La sandbox n'a pas pu exécuter ce code.",
+          "invalid_response": "La sandbox a renvoyé une réponse invalide."
+        }
+      },
       "webResearch": {
         "query": "Recherche :",
         "page": "Page :",
