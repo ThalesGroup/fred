@@ -655,6 +655,8 @@
     "title": "Diagram",
     "diagram": "Mermaid diagram",
     "copySource": "Copy diagram source",
+    "download": "Download diagram as SVG",
+    "downloadError": "The diagram could not be downloaded. Please try again.",
     "enlarge": "View diagram fullscreen",
     "close": "Exit fullscreen",
     "loading": "Rendering diagram...",

@@ -20,12 +20,29 @@
   min-width: 0;
 }
 
-.toolbar {
+.toolbar,
+.actions {
   display: flex;
   justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-2xs);
+  color: var(--on-surface);
+}
+
+.toolbar {
   margin-bottom: var(--spacing-2xs);
+}
+
+.downloadError {
+  color: var(--error);
+  font: var(--font-body-small);
+}
+
+.export {
+  position: fixed;
+  top: 0;
+  left: -100000px;
+  visibility: hidden;
   color: var(--on-surface);
 }
 

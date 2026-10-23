@@ -15,7 +15,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { readMermaidTheme, renderMermaid } from "./mermaidRenderer";
-import { prepareMermaidSvg } from "./mermaidSvg";
+import { prepareMermaidSvg, serializeMermaidSvg } from "./mermaidSvg";
+import { downloadFile } from "src/utils/downloadUtils";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { FullPageModal } from "../FullPageModal/FullPageModal";
@@ -27,8 +28,10 @@ interface MermaidBlockProps {
 
 export function MermaidBlock({ code }: MermaidBlockProps) {
   const { t } = useTranslation();
-  const [svg, setSvg] = useState<{ inline: string; enlarged: string } | null>(null);
+  const [svg, setSvg] = useState<{ inline: string; enlarged: string; source: string; revision: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [zoomed, setZoomed] = useState(false);
   const [themeRevision, setThemeRevision] = useState(0);
@@ -36,6 +39,52 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const enlargeTrigger = useRef<HTMLButtonElement | null>(null);
   const renderedSource = useRef(code);
+  const canDownload = svg !== null && svg.source === code && svg.revision === themeRevision && error === null;
+
+  async function handleDownload() {
+    setDownloadError(false);
+    setDownloading(true);
+    const container = document.createElement("div");
+    container.className = styles.export;
+    container.id = `${diagramId}Export`;
+    for (const attribute of ["data-ui-theme", "data-ui-base-theme"])
+      container.setAttribute(attribute, document.documentElement.getAttribute(attribute) ?? "");
+    container.setAttribute("data-theme", "light");
+    container.style.setProperty("--surface-container", "#ffffff");
+    document.body.append(container);
+    try {
+      // A white file needs the selected theme's light palette, including from a dark UI.
+      const theme = { ...readMermaidTheme(container), dark: false };
+      const rendered = await renderMermaid(code, `${diagramId}ExportRender`, theme);
+      container.innerHTML = prepareMermaidSvg(rendered, container.id);
+      const source = container.querySelector("svg");
+      if (!source) throw new Error("Diagram unavailable");
+      downloadFile(new Blob([serializeMermaidSvg(source)], { type: "image/svg+xml;charset=utf-8" }), "diagram.svg");
+    } catch {
+      setDownloadError(true);
+    } finally {
+      container.remove();
+      setDownloading(false);
+    }
+  }
+
+  const downloadButton = (
+    <IconButton
+      type="button"
+      variant="icon"
+      size="small"
+      icon={{ category: "outlined", type: "download" }}
+      aria-label={t("mermaid.download")}
+      title={t("mermaid.download")}
+      disabled={!canDownload || downloading}
+      onClick={handleDownload}
+    />
+  );
+  const downloadFeedback = downloadError && (
+    <span className={styles.downloadError} role="alert">
+      {t("mermaid.downloadError")}
+    </span>
+  );
 
   function closeEnlarged() {
     setZoomed(false);
@@ -73,6 +122,7 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
       renderedSource.current = code;
     }
     setError(null);
+    setDownloadError(false);
 
     let cancelled = false;
     const theme = readMermaidTheme(blockRef.current!);
@@ -82,6 +132,8 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
           setSvg({
             inline: prepareMermaidSvg(rendered, `${diagramId}Inline`),
             enlarged: prepareMermaidSvg(rendered, `${diagramId}Enlarged`),
+            source: code,
+            revision: themeRevision,
           });
         }
       })
@@ -98,19 +150,22 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
     <div className={styles.preview} ref={blockRef} data-mermaid-preview>
       <div className={styles.toolbar} data-clipboard-ignore>
         {svg !== null && (
-          <IconButton
-            type="button"
-            variant="icon"
-            size="small"
-            icon={{ category: "outlined", type: "fullscreen" }}
-            aria-label={t("mermaid.enlarge")}
-            title={t("mermaid.enlarge")}
-            aria-haspopup="dialog"
-            onClick={(event) => {
-              enlargeTrigger.current = event.currentTarget;
-              setZoomed(true);
-            }}
-          />
+          <>
+            <IconButton
+              type="button"
+              variant="icon"
+              size="small"
+              icon={{ category: "outlined", type: "fullscreen" }}
+              aria-label={t("mermaid.enlarge")}
+              title={t("mermaid.enlarge")}
+              aria-haspopup="dialog"
+              onClick={(event) => {
+                enlargeTrigger.current = event.currentTarget;
+                setZoomed(true);
+              }}
+            />
+            {downloadButton}
+          </>
         )}
         <IconButton
           type="button"
@@ -122,6 +177,7 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
           title={copied ? t("common.copied") : t("mermaid.copySource")}
         />
       </div>
+      {!zoomed && downloadFeedback}
       {error !== null ? (
         <div className={styles.error} role="alert">
           <span className={styles.errorLabel}>{t("mermaid.error")}</span>
@@ -154,16 +210,20 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
                 <span id={`${diagramId}Zoom-title`} className={styles.title}>
                   {t("mermaid.title")}
                 </span>
-                <IconButton
-                  type="button"
-                  autoFocus
-                  variant="icon"
-                  size="small"
-                  icon={{ category: "outlined", type: "fullscreen_exit" }}
-                  aria-label={t("mermaid.close")}
-                  onClick={closeEnlarged}
-                />
+                <div className={styles.actions}>
+                  <IconButton
+                    type="button"
+                    autoFocus
+                    variant="icon"
+                    size="small"
+                    icon={{ category: "outlined", type: "fullscreen_exit" }}
+                    aria-label={t("mermaid.close")}
+                    onClick={closeEnlarged}
+                  />
+                  {downloadButton}
+                </div>
               </header>
+              {downloadFeedback}
               <div
                 id={`${diagramId}Enlarged`}
                 className={styles.zoomBody}

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it } from "vitest";
-import { prepareMermaidSvg } from "./mermaidSvg";
+import { prepareMermaidSvg, serializeMermaidSvg } from "./mermaidSvg";
 
 const example = `<svg id="raw" aria-labelledby="title"><title id="title">Example</title>
 <style>@import url('https://fonts.googleapis.com/css?family=Inter');
@@ -16,6 +16,39 @@ svg {--bg:var(--surface-container)} text {font-family:Inter;fill:var(--on-surfac
 <use href="#node"/></svg>`;
 
 describe("SVG view isolation", () => {
+  it("exports a complete standalone white SVG with its scope, theme, HTML labels and references", () => {
+    const host = document.createElement("div");
+    host.id = "download";
+    host.innerHTML = prepareMermaidSvg(
+      '<svg viewBox="-10 -20 1200 600" style="--surface-container:#101010;--on-surface:#ffffff;--primary:#00658c;font-family:Arial;font-size:16px"><style>text{fill:var(--on-surface)}</style><defs><marker id="arrow"><path d="M0 0L4 2"/></marker></defs><text>Full diagram</text><path marker-end="url(#arrow)"/><foreignObject width="100" height="20"><div xmlns="http://www.w3.org/1999/xhtml">HTML label</div></foreignObject></svg>',
+      host.id,
+    );
+    document.body.append(host);
+    try {
+      const source = host.querySelector("svg")!;
+      const before = host.innerHTML;
+      const output = new DOMParser().parseFromString(serializeMermaidSvg(source), "image/svg+xml");
+      expect(output.querySelector("parsererror")).toBeNull();
+      expect(output.documentElement.id).toBe("download");
+      expect(output.documentElement.getAttribute("viewBox")).toBe("0 0 1200 600");
+      expect(output.documentElement.firstElementChild?.getAttribute("fill")).toBe("#ffffff");
+      expect(output.querySelector("svg svg")!.getAttribute("viewBox")).toBe("-10 -20 1200 600");
+      expect(output.documentElement.style.getPropertyValue("--on-surface")).toBe("#ffffff");
+      expect(output.querySelector("style")!.textContent).toContain("#download text");
+      expect(output.querySelector("foreignObject")!.getAttribute("style")).toContain("overflow: visible");
+      const reference = output
+        .querySelector("[marker-end]")!
+        .getAttribute("marker-end")!
+        .match(/#([^)'"\s]+)/)![1];
+      expect(output.getElementById(reference)?.localName).toBe("marker");
+      expect(output.documentElement.textContent).toContain("Full diagram");
+      expect(output.documentElement.textContent).toContain("HTML label");
+      expect(host.innerHTML).toBe(before);
+    } finally {
+      host.remove();
+    }
+  });
+
   it("lets the viewer fit the SVG without losing its natural size or geometry", () => {
     const host = document.createElement("div");
     host.innerHTML = prepareMermaidSvg(

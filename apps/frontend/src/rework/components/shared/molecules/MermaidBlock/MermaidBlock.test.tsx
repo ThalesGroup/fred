@@ -10,6 +10,8 @@ import { MarkdownRenderer } from "../MarkdownRenderer/MarkdownRenderer";
 import { renderMermaid } from "./mermaidRenderer";
 
 const clipboard = vi.hoisted(() => vi.fn());
+const download = vi.hoisted(() => vi.fn());
+vi.mock("src/utils/downloadUtils", () => ({ downloadFile: download, downloadAuthed: vi.fn() }));
 vi.mock("@rework/utils/clipboardUtils", () => ({ writeRichClipboard: clipboard }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("./mermaidRenderer", async (importOriginal) => ({
@@ -18,7 +20,7 @@ vi.mock("./mermaidRenderer", async (importOriginal) => ({
 }));
 
 const svg = (label: string) =>
-  `<svg><style>text{fill:var(--on-surface)}</style><defs><marker id="arrow"><path d="M0,0 L4,2"/></marker></defs><text>${label}</text><path marker-end="url(#arrow)"/></svg>`;
+  `<svg viewBox="0 0 320 180"><style>text{fill:var(--on-surface)}</style><defs><marker id="arrow"><path d="M0,0 L4,2"/></marker></defs><text>${label}</text><path marker-end="url(#arrow)"/></svg>`;
 const renderMock = vi.mocked(renderMermaid);
 let host: HTMLDivElement;
 let root: Root;
@@ -31,6 +33,7 @@ beforeEach(() => {
   document.body.append(host);
   root = createRoot(host);
   clipboard.mockReset().mockResolvedValue(true);
+  download.mockReset();
   renderMock.mockReset().mockImplementation(async (code) => svg(code));
 });
 
@@ -49,6 +52,58 @@ function button(label: string, scope: ParentNode = host): HTMLButtonElement {
 }
 
 describe("MermaidBlock interactions", () => {
+  it("downloads the current diagram from the second action with a white light-mode export", async () => {
+    const submit = vi.fn((event: React.FormEvent) => event.preventDefault());
+    document.documentElement.dataset.theme = "dark";
+    await act(async () =>
+      root.render(
+        <form onSubmit={submit}>
+          <MermaidBlock code="Generated graph" />
+        </form>,
+      ),
+    );
+    const source = host.querySelector("svg")!.outerHTML;
+    expect([...host.querySelectorAll("button")].map((node) => node.getAttribute("aria-label"))).toEqual([
+      "mermaid.enlarge",
+      "mermaid.download",
+      "mermaid.copySource",
+    ]);
+    const action = button("mermaid.download");
+    expect(action.type).toBe("button");
+    await act(async () => action.click());
+    expect(download).toHaveBeenCalledWith(expect.any(Blob), "diagram.svg");
+    expect(download.mock.calls[0][0].type).toBe("image/svg+xml;charset=utf-8");
+    expect(renderMock.mock.lastCall![0]).toBe("Generated graph");
+    expect(renderMock.mock.lastCall![2]).toMatchObject({ dark: false, colors: { bg: "#ffffff" } });
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(host.querySelector("svg")!.outerHTML).toBe(source);
+    expect(document.querySelector('[id$="Export"]')).toBeNull();
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("downloads from fullscreen and reports export failures without closing or replacing the graph", async () => {
+    await render("Generated graph");
+    await act(async () => button("mermaid.enlarge").click());
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect([...dialog.querySelectorAll("button")].map((node) => node.getAttribute("aria-label"))).toEqual([
+      "mermaid.close",
+      "mermaid.download",
+    ]);
+    await act(async () => button("mermaid.download", dialog).click());
+    expect(download).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+    download.mockImplementationOnce(() => {
+      throw new Error("Download failed");
+    });
+    await act(async () => button("mermaid.download", dialog).click());
+    expect(dialog.querySelector('[role="alert"]')?.textContent).toBe("mermaid.downloadError");
+    expect(dialog.querySelector("svg")).not.toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+    expect(document.querySelector('[id$="Export"]')).toBeNull();
+    await act(async () => button("mermaid.close", dialog).click());
+    expect(document.activeElement).toBe(button("mermaid.enlarge"));
+  });
+
   it("copies the original source without submitting a surrounding form", async () => {
     const submit = vi.fn((event: React.FormEvent) => event.preventDefault());
     await act(async () =>
@@ -115,6 +170,7 @@ describe("MermaidBlock interactions", () => {
     const pending = new Map<string, (value: string) => void>();
     renderMock.mockImplementation((code) => new Promise((resolve) => pending.set(code, resolve)));
     await render("Old");
+    expect(button("mermaid.download")).toBeNull();
     expect(host.querySelector('[role="status"]')).not.toBeNull();
     await render("New");
     await act(async () => pending.get("New")!(svg("Latest")));
@@ -138,7 +194,9 @@ describe("MermaidBlock interactions", () => {
       document.documentElement.dataset.uiTheme = "cobalt";
     });
     expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+    expect(button("mermaid.download", dialog).disabled).toBe(true);
     await act(async () => finish(svg("Question")));
+    expect(button("mermaid.download", dialog).disabled).toBe(false);
     expect(document.querySelector('[role="dialog"]')).toBe(dialog);
   });
 
@@ -147,6 +205,7 @@ describe("MermaidBlock interactions", () => {
     await render("invalid source");
     expect(host.querySelector('[role="alert"]')?.textContent).toContain("Invalid diagram source");
     expect(host.querySelector("svg")).toBeNull();
+    expect(button("mermaid.download")).toBeNull();
     await act(async () => button("mermaid.copySource").click());
     expect(clipboard).toHaveBeenCalledWith("", "invalid source");
   });

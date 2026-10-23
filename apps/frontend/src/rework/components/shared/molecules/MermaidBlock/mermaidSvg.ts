@@ -4,6 +4,46 @@
 import DOMPurify from "dompurify";
 import { generate, parse, walk } from "css-tree";
 
+/** Keep the view's CSS scope and inherited theme when the diagram leaves the page. */
+export function serializeMermaidSvg(source: SVGSVGElement): string {
+  const [, , width, height] = (source.getAttribute("viewBox") ?? "")
+    .trim()
+    .split(/[\s,]+/)
+    .map(Number);
+  if (!(width > 0 && height > 0 && Number.isFinite(width) && Number.isFinite(height)))
+    throw new Error("Invalid diagram dimensions");
+
+  const output = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  output.id = source.parentElement.id;
+  output.setAttribute("width", String(width));
+  output.setAttribute("height", String(height));
+  output.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  const styles = getComputedStyle(source);
+  output.style.fontFamily = styles.fontFamily;
+  output.style.fontSize = styles.fontSize;
+  output.style.color = styles.color;
+  const snapshot = source.cloneNode(true) as SVGSVGElement;
+  // XMLSerializer supplies namespace declarations from the DOM's actual namespaces.
+  for (const element of [snapshot, ...snapshot.querySelectorAll("[xmlns]")]) element.removeAttribute("xmlns");
+  // Only capture variables referenced by this diagram, not unrelated page styles.
+  for (const [, variable] of source.outerHTML.matchAll(/var\(\s*(--[\w-]+)/g)) {
+    const value = styles.getPropertyValue(variable).trim();
+    if (value) output.style.setProperty(variable, value);
+  }
+  snapshot.setAttribute("width", String(width));
+  snapshot.setAttribute("height", String(height));
+  // A local fallback font can be wider when the file is opened without Fred's web fonts.
+  snapshot.querySelectorAll<SVGElement>("foreignObject").forEach((label) => {
+    label.style.overflow = "visible";
+  });
+  const background = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  background.setAttribute("width", String(width));
+  background.setAttribute("height", String(height));
+  background.setAttribute("fill", "#ffffff");
+  output.append(background, snapshot);
+  return new XMLSerializer().serializeToString(output);
+}
+
 /** Sanitize and scope a library SVG for one inline or enlarged view. */
 export function prepareMermaidSvg(source: string, scope: string): string {
   const template = document.createElement("template");

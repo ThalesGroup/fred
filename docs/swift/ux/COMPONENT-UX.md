@@ -992,7 +992,12 @@ IDs, references and animations are isolated per view. Theme and mode changes upd
 Compatibility diagrams use the primary, secondary and tertiary token pairs for section colors and
 journey actors; timeline axes retain the connector token in both modes.
 The diagram is unframed: no code-block label, header fill or border. Quiet actions retain source
-copy and a fullscreen icon with translated tooltips. Inline SVGs fit the available width without
+copy and translated fullscreen/download icons. The action order is fullscreen, download, copy.
+Download saves the complete graph as `diagram.svg` on a white background, using the selected theme's
+light palette even from a dark interface. The standalone SVG retains scoped styles, references and
+safe HTML labels; fonts use the existing stack and local fallbacks. Fullscreen also offers download
+as its second action, and export failures show localized feedback without replacing the diagram.
+Inline SVGs fit the available width without
 cropping. In chat, a diagram can extend beyond the prose column up to 1.4 times its reading measure;
 surrounding text keeps its original width. Full-width document previews let diagrams span their
 content area. The fullscreen view uses the available window, retains natural-size scrolling for
