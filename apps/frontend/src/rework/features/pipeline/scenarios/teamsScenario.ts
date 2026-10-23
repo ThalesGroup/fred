@@ -197,21 +197,55 @@ export const teamsScenario: Scenario<TeamsDeps> = async (deps, report) => {
       return { value: undefined, detail: `refused with HTTP ${status}` };
     });
   } finally {
-    await cleanup(report, "delete-personal-copy", "Delete the personal copy", personalCopy, (id) =>
-      deps.deleteAgent(deps.personalTeamId, id),
+    await cleanup(
+      report,
+      "delete-personal-copy",
+      "Delete the personal copy",
+      personalCopy,
+      (id) => deps.deleteAgent(deps.personalTeamId, id),
+      async (id) => {
+        if ((await deps.listAgentIds(deps.personalTeamId)).includes(id))
+          throw new Error(`personal agent ${id} is still listed after deletion`);
+      },
     );
     const team = teamId;
     if (team) {
       await deps.grantRole(team, deps.userId, "team_editor").catch(() => undefined);
-      await cleanup(report, "delete-team-prompt", "Delete the team prompt", promptId, (id) =>
-        deps.deletePrompt(team, id),
+      await cleanup(
+        report,
+        "delete-team-prompt",
+        "Delete the team prompt",
+        promptId,
+        (id) => deps.deletePrompt(team, id),
+        async (id) => {
+          await expectRefused(() => deps.readPrompt(team, id), "reading the deleted prompt", [404]);
+        },
       );
-      await cleanup(report, "delete-team-folder", "Delete the team folder", libraryId, deps.deleteLibrary);
+      await cleanup(
+        report,
+        "delete-team-folder",
+        "Delete the team folder",
+        libraryId,
+        deps.deleteLibrary,
+        async (id) => {
+          if ((await deps.listLibraryIds(null)).includes(id))
+            throw new Error(`folder ${id} is still listed after deletion`);
+        },
+      );
     }
-    await cleanup(report, "delete-team", "Delete the disposable team", teamId, async (id) => {
-      await deps.deleteTeam(id);
-      teamDeleted = true;
-    });
+    await cleanup(
+      report,
+      "delete-team",
+      "Delete the disposable team",
+      teamId,
+      async (id) => {
+        await deps.deleteTeam(id);
+        teamDeleted = true;
+      },
+      async (id) => {
+        await expectRefused(() => deps.readTeam(id), "reading the deleted team", [404]);
+      },
+    );
   }
   await runStep(
     report,

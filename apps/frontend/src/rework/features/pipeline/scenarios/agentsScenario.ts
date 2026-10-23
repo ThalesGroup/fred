@@ -184,12 +184,20 @@ export const agentsScenario: Scenario<AgentsDeps> = async (deps, report, signal)
     );
   } finally {
     for (const [i, id] of sessions.entries())
-      await cleanup(report, `delete-session-${i}`, "Delete a test session", id, deps.deleteSession);
+      await cleanup(report, `delete-session-${i}`, "Delete a test session", id, deps.deleteSession, (id) =>
+        deps.verifyDeleted("session", id),
+      );
     for (const [i, id] of prompts.entries())
-      await cleanup(report, `delete-prompt-${i}`, "Delete a test prompt", id, deps.deleteContextPrompt);
+      await cleanup(report, `delete-prompt-${i}`, "Delete a test prompt", id, deps.deleteContextPrompt, (id) =>
+        deps.verifyDeleted("prompt", id),
+      );
     for (const [i, id] of copies.entries())
-      await cleanup(report, `delete-copy-${i}`, "Delete an agent copy", id, deps.deleteAgentInstance);
-    await cleanup(report, "delete-agent", "Delete the self-test agent", agentId, deps.deleteAgentInstance);
+      await cleanup(report, `delete-copy-${i}`, "Delete an agent copy", id, deps.deleteAgentInstance, (id) =>
+        deps.verifyDeleted("agent", id),
+      );
+    await cleanup(report, "delete-agent", "Delete the self-test agent", agentId, deps.deleteAgentInstance, (id) =>
+      deps.verifyDeleted("agent", id),
+    );
     await runStep(
       report,
       "verify-agents-deleted",

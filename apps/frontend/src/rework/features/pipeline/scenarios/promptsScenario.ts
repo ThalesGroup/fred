@@ -132,10 +132,19 @@ export const promptsScenario: Scenario<PromptsDeps> = async (deps, report, signa
       detail: `${await deps.marketplaceCount()} published prompt(s)`,
     }));
   } finally {
-    await cleanup(report, "delete-session", "Delete the chat session", sessionId, deps.deleteSession);
-    await cleanup(report, "delete-prompt", "Delete the prompt", promptId, deps.deleteContextPrompt);
-    await cleanup(report, "delete-category", "Delete the category", categoryId, deps.deleteCategory);
-    await cleanup(report, "delete-agent", "Delete the self-test agent", agentId, deps.deleteAgentInstance);
+    await cleanup(report, "delete-session", "Delete the chat session", sessionId, deps.deleteSession, (id) =>
+      deps.verifyDeleted("session", id),
+    );
+    await cleanup(report, "delete-prompt", "Delete the prompt", promptId, deps.deleteContextPrompt, (id) =>
+      deps.verifyDeleted("prompt", id),
+    );
+    await cleanup(report, "delete-category", "Delete the category", categoryId, deps.deleteCategory, async (id) => {
+      if ((await deps.listCategories()).some((category) => category.id === id))
+        throw new Error(`category ${id} is still listed after deletion`);
+    });
+    await cleanup(report, "delete-agent", "Delete the self-test agent", agentId, deps.deleteAgentInstance, (id) =>
+      deps.verifyDeleted("agent", id),
+    );
     await runStep(
       report,
       "prompt-gone",

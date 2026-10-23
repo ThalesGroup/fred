@@ -77,6 +77,8 @@ async function eventually(deps: KnowledgeDeps, check: () => Promise<boolean>, si
  */
 export const knowledgeScenario: Scenario<KnowledgeDeps> = async (deps, report, signal) => {
   const scope = newRunScope();
+  const alphaFile = fileOf(ALPHA, scope.token);
+  const betaFile = fileOf(BETA, scope.token);
   let alpha: string | null = null;
   let beta: string | null = null;
   let formats: string | null = null;
@@ -108,13 +110,13 @@ export const knowledgeScenario: Scenario<KnowledgeDeps> = async (deps, report, s
     });
     alphaDoc = await runStep(report, "ingest-alpha", "Upload and index a document into ALPHA", async () => {
       if (!alpha) throw new SkipStep("ALPHA folder missing");
-      const uid = await ingest(alpha, fileOf(ALPHA));
-      return { value: uid, detail: `${ALPHA.fileName} (${uid})` };
+      const uid = await ingest(alpha, alphaFile);
+      return { value: uid, detail: `${alphaFile.name} (${uid})` };
     });
     await runStep(report, "ingest-beta", "Upload and index a document into BETA", async () => {
       if (!beta) throw new SkipStep("BETA folder missing");
-      const uid = await ingest(beta, fileOf(BETA));
-      return { value: undefined, detail: `${BETA.fileName} (${uid})` };
+      const uid = await ingest(beta, betaFile);
+      return { value: undefined, detail: `${betaFile.name} (${uid})` };
     });
 
     await runStep(report, "query-alpha", "Ask the agent about ALPHA: the marker must be found", async () => {
@@ -216,7 +218,7 @@ export const knowledgeScenario: Scenario<KnowledgeDeps> = async (deps, report, s
     await runStep(report, "document-tree", "The folder's document tree lists its document", async () => {
       if (!alpha) throw new SkipStep("ALPHA folder missing");
       const tree = await deps.documentTree(alpha);
-      if (!tree.includes(ALPHA.fileName)) throw new Error(`${ALPHA.fileName} is missing from the tree`);
+      if (!tree.includes(alphaFile.name)) throw new Error(`${alphaFile.name} is missing from the tree`);
       return { value: undefined, detail: `${tree.split("\n").length} line(s)` };
     });
 
@@ -274,10 +276,28 @@ export const knowledgeScenario: Scenario<KnowledgeDeps> = async (deps, report, s
       return { value: undefined, detail: `${uids.length} document(s) consistent` };
     });
   } finally {
-    await cleanup(report, "delete-agent", "Delete the self-test agent", agentInstanceId, deps.deleteAgentInstance);
-    await cleanup(report, "delete-alpha", "Delete folder ALPHA and its document", alpha, deps.deleteLibrary);
-    await cleanup(report, "delete-beta", "Delete folder BETA and its document", beta, deps.deleteLibrary);
-    await cleanup(report, "delete-formats", "Delete the formats folder and its documents", formats, deps.deleteLibrary);
+    await cleanup(
+      report,
+      "delete-agent",
+      "Delete the self-test agent",
+      agentInstanceId,
+      deps.deleteAgentInstance,
+      (id) => deps.verifyDeleted("agent", id),
+    );
+    await cleanup(report, "delete-alpha", "Delete folder ALPHA and its document", alpha, deps.deleteLibrary, (id) =>
+      deps.verifyDeleted("library", id),
+    );
+    await cleanup(report, "delete-beta", "Delete folder BETA and its document", beta, deps.deleteLibrary, (id) =>
+      deps.verifyDeleted("library", id),
+    );
+    await cleanup(
+      report,
+      "delete-formats",
+      "Delete the formats folder and its documents",
+      formats,
+      deps.deleteLibrary,
+      (id) => deps.verifyDeleted("library", id),
+    );
     await runStep(
       report,
       "verify-deletion",

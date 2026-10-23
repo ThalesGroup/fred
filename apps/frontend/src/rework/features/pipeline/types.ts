@@ -61,6 +61,8 @@ export interface PipelineDeps {
   deleteLibrary(libraryId: string): Promise<void>;
   /** List the caller's document libraries (for reconcile-before-create and verify-after-delete). */
   listLibraries(): Promise<Array<{ id: string; name: string }>>;
+  /** Re-read the owned resource after teardown and fail if its id remains. */
+  verifyDeleted(kind: "library" | "agent" | "prompt" | "session", id: string): Promise<void>;
   /** Upload a document and wait for the real ingestion task to finish indexing it. */
   ingestDocument(libraryId: string, file: File, signal: AbortSignal): Promise<void>;
   /** Enroll a fresh managed instance of an agent template, optionally with initial tuning

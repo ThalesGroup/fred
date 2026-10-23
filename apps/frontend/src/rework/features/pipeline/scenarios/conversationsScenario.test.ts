@@ -74,6 +74,24 @@ describe("conversationsScenario", () => {
     expect(platform.sessions.size).toBe(0);
   });
 
+  it("detects a false bulk deletion success and retries teardown", async () => {
+    const platform = new FakePlatform();
+    const deps = platform.conversationsDeps();
+    deps.bulkDelete = async (ids) => ({ deleted: ids, failed: [] });
+    const r = await run(platform, deps);
+    expect(r.status("bulk-delete")).toBe("failed");
+    expect(platform.sessions.size).toBe(0);
+  });
+
+  it("reports an agent left behind by teardown", async () => {
+    const platform = new FakePlatform();
+    const deps = platform.conversationsDeps();
+    deps.deleteAgentInstance = async () => {};
+    const r = await run(platform, deps);
+    expect(r.status("delete-agent")).toBe("failed");
+    expect(platform.agents.size).toBe(1);
+  });
+
   it("deletes the conversations one by one when bulk deletion never ran", async () => {
     const platform = new FakePlatform();
     const deps = platform.conversationsDeps();

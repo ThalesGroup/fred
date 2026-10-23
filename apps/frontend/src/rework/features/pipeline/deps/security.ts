@@ -42,6 +42,7 @@ export function useSecurityDeps(knowledge: KnowledgeDeps): SecurityDeps {
       token: async () => ((await KeyCloakService.ensureFreshToken(30)) ? KeyCloakService.GetToken() : null),
       createLibrary: knowledge.createLibrary,
       deleteLibrary: knowledge.deleteLibrary,
+      listLibraries: knowledge.listLibraries,
       ingest: async (libraryId, file) => {
         await knowledge.ingestDocument(libraryId, file, new AbortController().signal);
         const doc = (await knowledge.documentsIn(libraryId)).find((d) => d.name === file.name);

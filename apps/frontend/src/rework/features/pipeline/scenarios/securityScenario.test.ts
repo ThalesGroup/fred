@@ -48,6 +48,7 @@ function deps(overrides: Partial<SecurityDeps> = {}, stream?: HeaderMap): Securi
     deleteLibrary: async (id) => {
       libraries.delete(id);
     },
+    listLibraries: async () => [...libraries].map((id) => ({ id, name: id })),
     ingest: async () => "doc-1",
     ...overrides,
   };
@@ -65,6 +66,13 @@ describe("securityScenario", () => {
     const r = await run(d);
     expect(r.steps.filter((s) => s.status !== "passed").map((s) => `${s.id}:${s.status}`)).toEqual([]);
     expect(d.libraries.size).toBe(0);
+  });
+
+  it("reports a folder left behind by a successful delete response", async () => {
+    const d = deps({ deleteLibrary: async () => {} });
+    const r = await run(d);
+    expect(r.status("delete-security-folder")).toBe("failed");
+    expect(d.libraries.size).toBe(1);
   });
 
   it("fails when an SVG preview is served inline without a sandbox", async () => {

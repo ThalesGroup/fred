@@ -268,6 +268,15 @@ export class FakePlatform {
         });
       },
       listLibraries: async () => [...this.libraries].map(([id, name]) => ({ id, name })),
+      verifyDeleted: async (kind, id) => {
+        const resources = {
+          library: this.libraries,
+          agent: this.agents,
+          prompt: this.prompts,
+          session: this.sessions,
+        };
+        if (resources[kind].has(id)) throw new Error(`${kind} ${id} is still listed after deletion`);
+      },
       ingestDocument: async (libraryId, file) => {
         this.fail(`ingest:${file.name}`);
         this.documents.push({

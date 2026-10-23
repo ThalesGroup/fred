@@ -24,6 +24,31 @@ async function run(platform: FakePlatform, deps = platform.knowledgeDeps()) {
 }
 
 describe("knowledgeScenario", () => {
+  it("names uploaded documents with the same run token as their folders", async () => {
+    const platform = new FakePlatform();
+    const deps = platform.knowledgeDeps();
+    const names: string[] = [];
+    const createLibrary = deps.createLibrary;
+    const ingestDocument = deps.ingestDocument;
+    deps.createLibrary = async (name) => {
+      names.push(name);
+      return createLibrary(name);
+    };
+    deps.ingestDocument = async (libraryId, file, s) => {
+      names.push(file.name);
+      return ingestDocument(libraryId, file, s);
+    };
+
+    await run(platform, deps);
+    const token = names
+      .find((name) => name.startsWith("fred-selftest-alpha-"))
+      ?.split("-")
+      .slice(-1)[0];
+    expect(token).toMatch(/^[a-z0-9]{8}$/i);
+    expect(names).toContain(`fred-selftest-alpha-${token}.md`);
+    expect(names).toContain(`fred-selftest-beta-${token}.md`);
+  });
+
   it("passes every check and removes every fixture", async () => {
     const platform = new FakePlatform();
     const r = await run(platform);

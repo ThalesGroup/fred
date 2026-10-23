@@ -17,7 +17,10 @@ import {
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
   useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation,
   useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation,
+  useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   useLazyGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
+  useLazyGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
+  useLazyGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
   usePrepareAgentExecutionMutation,
   usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation,
@@ -30,6 +33,7 @@ import {
   useLazyListTagsQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { awaitIngestion, streamAgentTurn, uploadDocument } from "./actions";
+import { expectRefused } from "./scenarios/runScope";
 import type { PipelineDeps, Scenario } from "./types";
 import { useScenarioRun, type PipelineRun } from "./useScenarioRun";
 import { KeyCloakService } from "../../../security/KeycloakService";
@@ -47,6 +51,9 @@ export function usePipelineDeps(): PipelineDeps {
   const [deleteTag] = useDeleteTagMutation();
   const [prepareExecution] = usePrepareAgentExecutionMutation();
   const [listTemplates] = useLazyGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery();
+  const [listAgents] = useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery();
+  const [listPrompts] = useLazyGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery();
+  const [readSession] = useLazyGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery();
   const [enrollInstance] = usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation();
   const [deleteInstance] =
     useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation();
@@ -71,6 +78,21 @@ export function usePipelineDeps(): PipelineDeps {
       listLibraries: async () => {
         const tags = await listTags({}).unwrap();
         return tags.filter((t) => t.type === "document").map((t) => ({ id: t.id, name: t.name }));
+      },
+      verifyDeleted: async (kind, id) => {
+        if (kind === "session") {
+          await expectRefused(() => readSession({ teamId, sessionId: id }).unwrap(), "reading a deleted session", [
+            404,
+          ]);
+          return;
+        }
+        const ids =
+          kind === "library"
+            ? (await listTags({}).unwrap()).filter((tag) => tag.type === "document").map((tag) => tag.id)
+            : kind === "agent"
+              ? (await listAgents({ teamId }).unwrap()).map((agent) => agent.agent_instance_id)
+              : (await listPrompts({ teamId }).unwrap()).map((prompt) => prompt.id);
+        if (ids.includes(id)) throw new Error(`${kind} ${id} is still listed after deletion`);
       },
       ingestDocument: async (libraryId, file, signal) => {
         const taskId = await uploadDocument(libraryId, file);
@@ -166,6 +188,9 @@ export function usePipelineDeps(): PipelineDeps {
       createTag,
       deleteTag,
       listTags,
+      listAgents,
+      listPrompts,
+      readSession,
       prepareExecution,
       listTemplates,
       enrollInstance,

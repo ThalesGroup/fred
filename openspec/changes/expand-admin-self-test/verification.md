@@ -427,3 +427,16 @@ on that file: **17 passed**. `ruff check` and `ruff format --check` on the
 touched files: passed. `make test` stalls in the shared conftest's SQLite
 schema setup (as before) and was not completed. A fresh two-account
 campaign run against restarted backends is still pending.
+
+## Merge review corrections (23 October)
+
+The run-scoped knowledge files now include the same token as their folders.
+Every `cleanup` call verifies the deleted resource through a fresh list or
+owner read, including failed family teardown. Bulk conversation deletion
+verifies each session separately and retries any unconfirmed deletion during
+teardown. Focused scenario tests: 79 passed across six files. Frontend
+typecheck passed. No live self-test campaign was run for these corrections.
+
+The French UI still shows English step titles, details and copied report text.
+This localization gap remains for a follow-up; it does not affect the result of
+the checks.

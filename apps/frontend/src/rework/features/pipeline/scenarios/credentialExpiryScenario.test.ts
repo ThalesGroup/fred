@@ -51,6 +51,7 @@ function setup() {
     createLibrary: forbidden,
     deleteLibrary: forbidden,
     listLibraries: forbidden,
+    verifyDeleted: forbidden,
     ingestDocument: forbidden,
     provisionAgentInstance: vi.fn(async () => "temporary-instance"),
     deleteAgentInstance: vi.fn(async () => {}),

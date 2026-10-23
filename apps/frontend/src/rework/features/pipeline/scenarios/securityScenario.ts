@@ -25,6 +25,7 @@ export interface SecurityDeps {
   token: () => Promise<string | null>;
   createLibrary: (name: string) => Promise<string>;
   deleteLibrary: (id: string) => Promise<void>;
+  listLibraries: () => Promise<Array<{ id: string; name: string }>>;
   /** Ingests the file and returns its document uid. */
   ingest: (libraryId: string, file: File) => Promise<string>;
 }
@@ -140,6 +141,10 @@ export const securityScenario: Scenario<SecurityDeps> = async (deps, report) => 
       "Delete the security folder and its document",
       libraryId,
       deps.deleteLibrary,
+      async (id) => {
+        if ((await deps.listLibraries()).some((library) => library.id === id))
+          throw new Error(`folder ${id} is still listed after deletion`);
+      },
     );
   }
 };

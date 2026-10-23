@@ -16,7 +16,7 @@ import { runStep, SkipStep } from "../step";
 import type { PipelineDeps, Scenario } from "../types";
 import { PROMPT_PROBE, SELF_TEST_AGENT_ID } from "./corpus";
 import { INDEX_WAIT_MS, type SearchHit } from "./knowledgeScenario";
-import { cleanup, expectRefused, newRunScope } from "./runScope";
+import { cleanup, newRunScope } from "./runScope";
 
 const POLL_MS = 1_500;
 
@@ -136,22 +136,38 @@ export const conversationsScenario: Scenario<ConversationsDeps> = async (deps, r
     await runStep(report, "bulk-delete", "Bulk deletion removes both conversations", async () => {
       if (sessions.length === 0) throw new SkipStep("no conversation");
       const result = await deps.bulkDelete(sessions);
-      for (const id of result.deleted) deleted.add(id);
       const missed = sessions.filter((id) => !result.deleted.includes(id));
       if (missed.length) throw new Error(`not deleted: ${missed.join(", ")}`);
-      const status = await expectRefused(() => deps.readSession(sessions[0]), "reading a deleted conversation", [404]);
-      return { value: undefined, detail: `${result.deleted.length} deleted, then HTTP ${status}` };
+      for (const id of result.deleted) {
+        await deps.verifyDeleted("session", id);
+        deleted.add(id);
+      }
+      return { value: undefined, detail: `${result.deleted.length} deleted and confirmed absent` };
     });
   } finally {
     const first = sessions[0] ?? null;
     if (first && attachmentId) {
       const id = attachmentId;
-      await cleanup(report, "cleanup-attachment", "Delete the attachment", id, (a) => deps.deleteAttachment(first, a));
+      await cleanup(
+        report,
+        "cleanup-attachment",
+        "Delete the attachment",
+        id,
+        (a) => deps.deleteAttachment(first, a),
+        async (a) => {
+          if ((await deps.listAttachments(first)).includes(a))
+            throw new Error(`attachment ${a} is still listed after deletion`);
+        },
+      );
     }
     for (const [i, id] of sessions.entries()) {
       if (!deleted.has(id))
-        await cleanup(report, `delete-session-${i}`, "Delete a test conversation", id, deps.deleteSession);
+        await cleanup(report, `delete-session-${i}`, "Delete a test conversation", id, deps.deleteSession, (id) =>
+          deps.verifyDeleted("session", id),
+        );
     }
-    await cleanup(report, "delete-agent", "Delete the self-test agent", agentId, deps.deleteAgentInstance);
+    await cleanup(report, "delete-agent", "Delete the self-test agent", agentId, deps.deleteAgentInstance, (id) =>
+      deps.verifyDeleted("agent", id),
+    );
   }
 };

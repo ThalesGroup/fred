@@ -33,6 +33,7 @@ export async function cleanup(
   title: string,
   created: string | null,
   remove: (id: string) => Promise<void>,
+  verifyGone: (id: string) => Promise<void>,
 ): Promise<void> {
   await runStep(
     report,
@@ -41,6 +42,7 @@ export async function cleanup(
     async () => {
       if (!created) throw new SkipStep("nothing was created");
       await remove(created);
+      await verifyGone(created);
       return { value: undefined, detail: `deleted ${created}` };
     },
     { optional: true },
