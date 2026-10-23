@@ -4,14 +4,19 @@ This is the operator path for a production cluster. The [broker README](../../..
 
 ## 1. Choose the isolation profile and assign ownership
 
-| Component | Responsibility |
-| --- | --- |
-| Fred `code_sandbox` capability and runtime adapter | Expose `execute_code` and, when enabled, `select_code_input`; derive the conversation identity without putting credentials or infrastructure choices in the model's tool arguments. |
-| Fred sandbox broker | Authenticate calls, limit capacity, retain one workload per executing conversation, expire it after inactivity, and control the selected backend. Only the broker receives Kubernetes API credentials. |
-| Kubernetes Job or SIG Agent Sandbox | Create and dispose of Pods on demand. SIG adds `SandboxClaim`, `SandboxTemplate` and `SandboxWarmPool` reconciliation; a zero-replica warm pool is supported. Neither backend supplies the isolation boundary itself. |
-| Kata Containers or gVisor RuntimeClass | Isolate arbitrary Python/Bash execution. Kata uses a VM boundary; gVisor intercepts guest syscalls. The operator must validate the actual handler and eligible nodes. |
-| CNI, NetworkPolicy, admission and quotas | Deny guest ingress/egress, enforce Pod restrictions, and cap resource consumption. A NetworkPolicy object is insufficient unless the CNI enforces it. |
-| Optional rclone CSI and Knowledge Flow mount gateway | Mount only selected, authorized corpus documents and conversation attachments at `/inputs`. The gateway checks the user/team/conversation scope on each access. CSI runs privileged on the node, outside the guest; treat its installation and credentials as cluster trust. |
+| Component | Role | Protection and boundary |
+| --- | --- | --- |
+| Fred `code_sandbox` capability and runtime adapter | Offer `execute_code` and optional `select_code_input`; bind calls to the current user, team and conversation. | Keep broker credentials and deployment choices out of model tool arguments. This interface does not isolate a process. |
+| Fred sandbox broker | Authenticate calls, create on demand, retain one workload per executing conversation, and expire it after inactivity. | Keep Kubernetes or Docker control credentials outside the guest; bound execution time, output and active capacity. Protect the broker and its bearer token as trusted control components. |
+| Kubernetes Job or SIG Agent Sandbox | Create and dispose of Pods. SIG reconciles `SandboxTemplate`, `SandboxClaim` and `SandboxWarmPool`; keep pool replicas at zero for this profile. | Enforce lifecycle and approved templates. Neither backend isolates syscalls or closes network access by itself. |
+| Kata Containers RuntimeClass | Start a lightweight VM for each Pod, with its own guest kernel. | Separate guest kernel execution from the host kernel. Validate KVM, the actual handler and CSI volumes on eligible nodes. |
+| gVisor RuntimeClass | Run the Pod through `runsc`, which handles guest system calls in a userspace kernel. | Reduce the host kernel surface exposed to guest code. This is not a per-Pod VM; validate the handler and volumes on eligible nodes. |
+| Approved execution image and Pod Security | Supply Bash/Python and enforce non-root UID, read-only root, seccomp, dropped capabilities, no privilege escalation and no guest service account token. | Limit files and privileges inside the guest. Only `/work` and `/tmp` should be writable; selected `/inputs` and `/skills` mounts remain read-only. |
+| CNI and deny-all NetworkPolicy | Apply ingress and egress filtering to every sandbox Pod. | Block guest connections to the Kubernetes API, broker, other workloads and the Internet. Policies are additive and require a CNI that enforces them. |
+| Kubernetes RBAC and ResourceQuota | Give the broker only the required namespace operations and cap Pod, CPU, memory and storage use. | Limit control-plane blast radius and resource exhaustion. The privileged broker remains part of the trusted boundary. |
+| Optional rclone CSI | Mount a per-workload `/inputs` PVC in the guest; the CSI node plugin connects to the file gateway. | Present selected files read-only without placing the WebDAV credential in the guest. The privileged node plugin is a trusted cluster component, not a guest security boundary. |
+| Knowledge Flow file gateway | Resolve selected corpus documents and conversation attachments on each read. | Recheck active account, team or personal scope, conversation binding and document authorization; never expose the whole corpus bucket. |
+| Control plane admin settings | Set the inactivity timeout (20 minutes by default) and active-conversation cap. | Bound workload lifetime and cost. Image, RuntimeClass, network and resource profiles remain operator-approved deployment settings. |
 
 Use a dedicated sandbox node pool where possible. Install an operator-approved Kata or gVisor distribution there and create a `RuntimeClass` with the corresponding handler. For Kata, verify KVM and the node runtime configuration. For gVisor, verify `runsc` on every eligible node. Managed offerings may supply a different RuntimeClass name; use that exact name throughout the manifests. Never fall back to the default container runtime when the requested handler is unavailable.
 
