@@ -8,7 +8,7 @@ on:
         required: true
         default: prepare-only
         type: choice
-        options: [prepare-only, publish, verify]
+        options: [prepare-only, publish, verify, recover-iframe-sdk]
       packages:
         description: Comma-separated registered package IDs
         required: true
@@ -35,6 +35,7 @@ permissions:
 
 jobs:
   authorize-source:
+    if: inputs.operation != 'recover-iframe-sdk'
     runs-on: ubuntu-24.04
     outputs:
       operation: ${{ steps.inputs.outputs.operation }}
@@ -326,3 +327,119 @@ jobs:
       - name: Summarize public-registry verification
         run: node scripts/release-summary.mjs verify target/registry-verification.json
         working-directory: libs/frontend
+
+  recover-iframe-sdk:
+    if: inputs.operation == 'recover-iframe-sdk' && github.repository == 'ThalesGroup/fred' && github.ref == 'refs/heads/swift'
+    runs-on: ubuntu-24.04
+    environment: npm-publish
+    concurrency:
+      group: frontend-packages-publish
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.21.0"
+      - run: npm install --global npm@11.19.0
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: 12495715568
+          run-id: 39937958215
+          repository: ThalesGroup/fred
+          github-token: ${{ github.token }}
+          path: target/iframe-recovery
+      - name: Verify artifact, archive, and absent exact version
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { readFileSync, writeFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const base = 'target/iframe-recovery/';
+          const filename = 'fred-oss-iframe-sdk-0.1.1-alpha.1.tgz';
+          const expectedHex = 'b0e2ccaff4a4d8c037d77caa4b1b8203ff23dabad4f9d2953986d5cc2eb330e3d037deeaa297109ca3140a74a34fbb52dc66f1f161ba3ee86866da3091408b12';
+          const expectedIntegrity = 'sha512-sOLMr/Sk2MA313yqSxuCA/8j2rrU+dKVOYbVzC6zMOPQN97qopcQnKMUCnSjT7tS3Gbx8WG6PuhoZtowkUCLEg==';
+          const expectedCommit = 'a43ca854d946c6f8fd83a97d5144208f0d6710ba';
+          const candidate = JSON.parse(readFileSync(base + 'candidate-record.json'));
+          assert.equal(candidate.sourceCommit, expectedCommit);
+          assert.deepEqual(candidate.selected.map(({ id }) => id), ['designTokens', 'ui', 'iframeSdk']);
+          assert.equal(candidate.archives.iframeSdk.filename, filename);
+          assert.equal(candidate.archives.iframeSdk.integrity, expectedIntegrity);
+          const bytes = readFileSync(base + filename);
+          assert.equal(bytes.length, candidate.archives.iframeSdk.bytes);
+          const digest = createHash('sha512').update(bytes).digest();
+          assert.equal(digest.toString('hex'), expectedHex);
+          assert.equal('sha512-' + digest.toString('base64'), expectedIntegrity);
+          const manifest = JSON.parse(execFileSync('tar', ['-xOzf', base + filename, 'package/package.json']));
+          assert.equal(manifest.name, '@fred-oss/iframe-sdk');
+          assert.equal(manifest.version, '0.1.1-alpha.1');
+          assert.equal(manifest.repository.url, 'git+https://github.com/ThalesGroup/fred.git');
+          const artifact = await fetch('https://api.github.com/repos/ThalesGroup/fred/actions/artifacts/12495715568', {
+            headers: { Authorization: 'Bearer ' + process.env.GITHUB_TOKEN, Accept: 'application/vnd.github+json' },
+            signal: AbortSignal.timeout(15000),
+          });
+          assert.equal(artifact.status, 200);
+          const metadata = await artifact.json();
+          assert.equal(metadata.expired, false);
+          assert.equal(metadata.digest, 'sha256:5b7e15824ebacedf4e80548d278401eaa4c8a6b99edeefbf0b58b4d1222c56c1');
+          assert.equal(metadata.workflow_run.id, 39937958215);
+          assert.equal(metadata.workflow_run.head_sha, expectedCommit);
+          const version = 'https://registry.npmjs.org/@fred-oss%2Fiframe-sdk/0.1.1-alpha.1';
+          for (let i = 0; i < 3; i++) {
+            const response = await fetch(version + '?recovery-check=' + process.env.GITHUB_RUN_ID + '-' + i, {
+              headers: { 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(15000),
+            });
+            assert.equal(response.status, 404, 'version already exists or registry lookup failed');
+          }
+          writeFileSync('target/iframe-recovery-intent.json', JSON.stringify({
+            candidateArtifactId: 12495715568,
+            candidateSourceCommit: expectedCommit,
+            package: '@fred-oss/iframe-sdk@0.1.1-alpha.1',
+            tarballSha512: expectedHex,
+            executionCommit: process.env.GITHUB_SHA,
+            runId: process.env.GITHUB_RUN_ID,
+            runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            command: 'npm publish exact retained tarball --tag next --access public --provenance',
+          }, null, 2) + '\n', { flag: 'wx' });
+          NODE
+      - name: Retain intent before publishing
+        id: intent
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-packages-iframe-recovery-intent-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/iframe-recovery-intent.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish exact retained iframe SDK once
+        id: publish-iframe
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/iframe-recovery-npm"
+          : > "$RUNNER_TEMP/iframe-recovery-npm/user.npmrc"
+          : > "$RUNNER_TEMP/iframe-recovery-npm/global.npmrc"
+          export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/iframe-recovery-npm/user.npmrc"
+          export NPM_CONFIG_GLOBALCONFIG="$RUNNER_TEMP/iframe-recovery-npm/global.npmrc"
+          unset NODE_AUTH_TOKEN NPM_TOKEN NPM_BOOTSTRAP_TOKEN GITHUB_TOKEN
+          npm publish "$GITHUB_WORKSPACE/target/iframe-recovery/fred-oss-iframe-sdk-0.1.1-alpha.1.tgz" --tag next --access public --provenance --registry https://registry.npmjs.org/
+      - name: Record command outcome
+        if: always() && steps.intent.outcome == 'success'
+        env:
+          PUBLISH_OUTCOME: ${{ steps.publish-iframe.outcome }}
+        run: |
+          node -e 'require("node:fs").writeFileSync("target/iframe-recovery-outcome.json", JSON.stringify({runId:process.env.GITHUB_RUN_ID,runAttempt:process.env.GITHUB_RUN_ATTEMPT,commandOutcome:process.env.PUBLISH_OUTCOME,tarballSha512:"b0e2ccaff4a4d8c037d77caa4b1b8203ff23dabad4f9d2953986d5cc2eb330e3d037deeaa297109ca3140a74a34fbb52dc66f1f161ba3ee86866da3091408b12"},null,2)+"\n")'
+      - name: Retain command outcome
+        if: always() && steps.intent.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-packages-iframe-recovery-outcome-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/iframe-recovery-outcome.json
+          if-no-files-found: error
+          retention-days: 30
