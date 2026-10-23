@@ -18,6 +18,8 @@
 // Every read/write is guarded: a blocked or full storage degrades to "no
 // recency" (falls back to alphabetical) rather than throwing.
 
+import { persistUserPreference } from "../../../../app/userPreferences";
+
 const RECENCY_KEY = "fred.teamRecency";
 const SORT_MODE_KEY = "fred.teamSortMode";
 
@@ -65,4 +67,5 @@ export function setTeamSortMode(mode: TeamSortMode): void {
   } catch {
     // Persisting the preference is best-effort.
   }
+  persistUserPreference({ team_sort_mode: mode });
 }

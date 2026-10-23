@@ -3561,7 +3561,9 @@
         "themePebble": "Galet",
         "uiThemeAria": "Thème graphique",
         "interfaceTitle": "Interface : thème et mode",
-        "languageAria": "Langue"
+        "languageAria": "Langue",
+        "saveFailed": "Impossible d'enregistrer la préférence d'affichage",
+        "saveFailedDetail": "Votre choix précédent a été rétabli. Réessayez."
       },
       "conversationProfile": {
         "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos {{agentsNicknamePlural}} doivent s'adresser à vous.",

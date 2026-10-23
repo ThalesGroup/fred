@@ -25,6 +25,7 @@ import { store } from "./common/store.tsx";
 import { KeyCloakService } from "./security/KeycloakService.ts";
 import { getPlatformUiThemes, loadConfig } from "./common/config.tsx";
 import { applyResolvedTheme } from "./app/uiThemes.ts";
+import { initializeUserPreferences } from "./app/userPreferences.ts";
 import { loadThemeTranslations } from "./i18n";
 import { installStaleChunkReload } from "./common/staleChunkReload.ts";
 import "@fontsource/inter/100.css";
@@ -72,7 +73,10 @@ const startApp = async () => {
     // theme-boot.js used the cached platform settings; apply the fresh ones before anything renders.
     applyResolvedTheme(getPlatformUiThemes());
     console.info("Configuration loaded successfully");
-    KeyCloakService.CallLogin(() => {
+    KeyCloakService.CallLogin(async () => {
+      const userId = KeyCloakService.GetUserId();
+      if (userId) await initializeUserPreferences(userId);
+      applyResolvedTheme(getPlatformUiThemes());
       const root = createRoot(document.getElementById("root"), { onCaughtError: reportCaughtReactError });
       root.render(
         <StrictMode>

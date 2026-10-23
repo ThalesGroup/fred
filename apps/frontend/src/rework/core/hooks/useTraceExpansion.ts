@@ -14,6 +14,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useLocalStorageState } from "../../../hooks/useLocalStorageState";
+import { persistUserPreference } from "../../../app/userPreferences";
 
 /** localStorage key (namespaced by `useLocalStorageState` itself). */
 export const TRACE_EXPANDED_PREFERENCE_KEY = "chatTraceExpanded";
@@ -66,6 +67,7 @@ export function useTraceExpansion(done: boolean): { expanded: boolean; toggle: (
     const next = !expanded;
     setOverride(next);
     setPreference(next);
+    persistUserPreference({ trace_expanded: next });
   }, [expanded, setPreference]);
 
   return { expanded, toggle };

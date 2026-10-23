@@ -356,6 +356,22 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/users/me/avatar`, method: "DELETE" }),
     }),
+    getMyPreferencesControlPlaneV1UsersMePreferencesGet: build.query<
+      GetMyPreferencesControlPlaneV1UsersMePreferencesGetApiResponse,
+      GetMyPreferencesControlPlaneV1UsersMePreferencesGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/users/me/preferences` }),
+    }),
+    patchMyPreferencesControlPlaneV1UsersMePreferencesPatch: build.mutation<
+      PatchMyPreferencesControlPlaneV1UsersMePreferencesPatchApiResponse,
+      PatchMyPreferencesControlPlaneV1UsersMePreferencesPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/me/preferences`,
+        method: "PATCH",
+        body: queryArg.patchUserPreferences,
+      }),
+    }),
     getUserDetailsControlPlaneV1UserGet: build.query<
       GetUserDetailsControlPlaneV1UserGetApiResponse,
       GetUserDetailsControlPlaneV1UserGetApiArg
@@ -2480,6 +2496,14 @@ export type UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiArg = {
 };
 export type DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiResponse = unknown;
 export type DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiArg = void;
+export type GetMyPreferencesControlPlaneV1UsersMePreferencesGetApiResponse =
+  /** status 200 Successful Response */ UserPreferences;
+export type GetMyPreferencesControlPlaneV1UsersMePreferencesGetApiArg = void;
+export type PatchMyPreferencesControlPlaneV1UsersMePreferencesPatchApiResponse =
+  /** status 200 Successful Response */ UserPreferences;
+export type PatchMyPreferencesControlPlaneV1UsersMePreferencesPatchApiArg = {
+  patchUserPreferences: PatchUserPreferences;
+};
 export type GetUserDetailsControlPlaneV1UserGetApiResponse = /** status 200 Successful Response */ UserDetails;
 export type GetUserDetailsControlPlaneV1UserGetApiArg = void;
 export type ValidateGcuControlPlaneV1GcuPostApiResponse = /** status 200 Successful Response */ any;
@@ -4016,6 +4040,31 @@ export type GrantPlatformRoleRequest = {
 export type BodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost = {
   /** Profile picture file (max 5MB, JPEG/PNG/WebP) */
   file: string;
+};
+export type UserPreferences = {
+  initialized?: boolean;
+  ui_theme_id?: string | null;
+  theme_mode?: "light" | "dark" | "system";
+  language?: ("fr" | "en") | null;
+  sidebar_collapsed?: boolean;
+  team_sort_mode?: "recent" | "alpha";
+  agent_sort?: "name" | "created_at:desc" | "updated_at:desc";
+  trace_expanded?: boolean | null;
+  pane_widths?: {
+    [key: string]: number;
+  };
+};
+export type PatchUserPreferences = {
+  ui_theme_id?: string | null;
+  theme_mode?: ("light" | "dark" | "system") | null;
+  language?: ("fr" | "en") | null;
+  sidebar_collapsed?: boolean | null;
+  team_sort_mode?: ("recent" | "alpha") | null;
+  agent_sort?: ("name" | "created_at:desc" | "updated_at:desc") | null;
+  trace_expanded?: boolean | null;
+  pane_widths?: {
+    [key: string]: number;
+  } | null;
 };
 export type UserTeamRelation = "team_admin" | "pending_team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type JoiningMode = "open" | "invite_only";
@@ -6191,6 +6240,9 @@ export const {
   useDeleteUserControlPlaneV1UsersUserIdDeleteMutation,
   useUploadMyAvatarControlPlaneV1UsersMeAvatarPostMutation,
   useDeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteMutation,
+  useGetMyPreferencesControlPlaneV1UsersMePreferencesGetQuery,
+  useLazyGetMyPreferencesControlPlaneV1UsersMePreferencesGetQuery,
+  usePatchMyPreferencesControlPlaneV1UsersMePreferencesPatchMutation,
   useGetUserDetailsControlPlaneV1UserGetQuery,
   useLazyGetUserDetailsControlPlaneV1UserGetQuery,
   useValidateGcuControlPlaneV1GcuPostMutation,

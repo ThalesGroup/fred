@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { createContext, PropsWithChildren, useEffect, useState } from "react";
+import { createContext, PropsWithChildren, useEffect, useRef, useState } from "react";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { ApplicationContextStruct, ThemeMode } from "./ApplicationContextStruct.tsx";
 import { getPlatformUiThemes } from "../common/config.tsx";
 import { useFrontendConfigQuery } from "../slices/controlPlane/controlPlaneApiEnhancements";
+import { saveUserPreference, persistUserPreference } from "./userPreferences";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "../rework/core/hooks/crossSessionRefresh";
 import {
   cachePlatformUiThemes,
@@ -46,10 +47,14 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
     false,
   );
   // Default to "system" so the first load honours the OS preference (prefers-color-scheme);
-  // an explicit Light/Dark/System choice from the settings toggle then persists in localStorage.
-  const [themeMode, setThemeMode] = useLocalStorageState<ThemeMode>(THEME_MODE_STORAGE_KEY, "system");
+  // an explicit Light/Dark/System choice is also saved in the user's profile.
+  const [themeMode, setStoredThemeMode] = useLocalStorageState<ThemeMode>(THEME_MODE_STORAGE_KEY, "system");
   // null = no choice yet, so the platform default can apply (see resolveUiTheme).
-  const [storedUiTheme, setUiTheme] = useLocalStorageState<UiTheme | null>(UI_THEME_STORAGE_KEY, null);
+  const [storedUiTheme, setStoredUiTheme] = useLocalStorageState<UiTheme | null>(UI_THEME_STORAGE_KEY, null);
+  const confirmedMode = useRef(themeMode);
+  const confirmedTheme = useRef(storedUiTheme);
+  const modeChange = useRef(0);
+  const themeChange = useRef(0);
   const { data: publicConfig, refetch } = useFrontendConfigQuery(undefined, crossSessionRefreshOptions(false));
   useRefetchOnWindowFocus(refetch, false);
   const platformUiThemes = publicConfig ? (publicConfig.ui_themes ?? null) : getPlatformUiThemes();
@@ -71,7 +76,35 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
   }, []);
 
   const toggleSidebar = () => {
-    setIsSidebarCollapsed((prevState) => !prevState);
+    const next = !isSidebarCollapsed;
+    setIsSidebarCollapsed(next);
+    persistUserPreference({ sidebar_collapsed: next });
+  };
+
+  const setThemeMode = (mode: ThemeMode, onError?: (error: unknown) => void) => {
+    const change = ++modeChange.current;
+    setStoredThemeMode(mode);
+    void saveUserPreference({ theme_mode: mode })
+      .then(() => {
+        confirmedMode.current = mode;
+      })
+      .catch((error) => {
+        if (change === modeChange.current) setStoredThemeMode(confirmedMode.current);
+        onError?.(error);
+      });
+  };
+
+  const setUiTheme = (theme: UiTheme, onError?: (error: unknown) => void) => {
+    const change = ++themeChange.current;
+    setStoredUiTheme(theme);
+    void saveUserPreference({ ui_theme_id: theme })
+      .then(() => {
+        confirmedTheme.current = theme;
+      })
+      .catch((error) => {
+        if (change === themeChange.current) setStoredUiTheme(confirmedTheme.current);
+        onError?.(error);
+      });
   };
 
   const contextValue: ApplicationContextStruct = {

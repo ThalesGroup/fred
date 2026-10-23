@@ -24,6 +24,7 @@ import HelpSidebar from "./HelpSidebar";
 import HelpArticle from "./HelpArticle";
 import HelpSearch from "./HelpSearch";
 import styles from "./HelpCenterPage.module.scss";
+import { persistUserPreference } from "../../../../app/userPreferences";
 
 /** App-language → help-content language ("fr-FR" → "fr"; anything non-English falls back to fr). */
 function appLangToHelpLang(appLanguage: string | undefined): HelpLang {
@@ -71,6 +72,7 @@ export default function HelpCenterPage() {
 
   const switchLanguage = (target: HelpLang) => {
     if (target === lang) return;
+    persistUserPreference({ language: target });
     // Same page in the target language when it exists, else the section index.
     const twin = getHelpPage(target, section.id, pageId);
     navigate(twin ? helpPagePath(target, section.id, pageId) : `/help/${target}/${section.id}`);
