@@ -20,10 +20,8 @@ import { PptBuilderPlatformPanel } from "./PptBuilderPlatformPanel";
 
 export const pptBuilderCapability: CapabilityUiPlugin = {
   id: "ppt_builder",
-  // The generated deck is delivered as ppt_filler's `ppt_preview` chat part
-  // (one owner per kind), so that plugin's renderer draws the card. This one
-  // declares the same preview pane for when it is active alone; with both on,
-  // the side-panel registry offers the pane once.
+  // The deck arrives as ppt_filler's `ppt_preview` part, drawn by that plugin. The
+  // same pane is declared here for when this one is active alone (offered once).
   configWidgets: { ppt_builder_template: PptBuilderConfigForm },
   // The platform default template, set in Admin > Features.
   platformPanel: PptBuilderPlatformPanel,

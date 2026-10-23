@@ -32,10 +32,8 @@ export function preparingPollDelay(attempt: number, elapsedMs: number): number {
   return Math.min(PREPARING_POLL_MS * 2 ** attempt, PREPARING_POLL_MAX_MS);
 }
 
-// The team agent list, re-fetched while an agent is still preparing: listing is what
-// makes the control plane re-check readiness, so the agent turns available on its own.
-// Backs off and gives up after a while: an unreachable capability never resolves.
-// `base` options (e.g. a cross-session refresh) apply whenever no preparing poll runs.
+// The team agent list, re-polled with back-off while an agent is preparing: listing
+// makes the control plane re-check readiness. `base` options apply when no poll runs.
 export function useTeamAgentInstances(
   teamId: string | undefined,
   base?: { pollingInterval?: number; refetchOnMountOrArgChange?: number | boolean },
