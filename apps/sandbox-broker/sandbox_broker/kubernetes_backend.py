@@ -73,6 +73,20 @@ class KubernetesBackend:
             raise SandboxError("policy_unavailable")
         if self.mount is not None:
             await self.mount.preflight()
+        if settings.skills_volume:
+            skills = await self._get_json(
+                self._kubectl("get", "pvc", settings.skills_volume, "-o", "json"),
+                "policy_unavailable",
+            )
+            if (
+                skills.get("metadata", {}).get("labels", {}).get("fred.sandbox/skills")
+                != "approved"
+                or skills.get("status", {}).get("phase") != "Bound"
+                or not {"ReadOnlyMany", "ReadWriteMany"}.intersection(
+                    skills.get("spec", {}).get("accessModes", [])
+                )
+            ):
+                raise SandboxError("policy_unavailable")
 
     async def prepare(self, view_key: str | None = None) -> SandboxLease:
         name = f"fred-sbx-{uuid4().hex[:20]}"
@@ -252,6 +266,17 @@ class KubernetesBackend:
                                     ]
                                     if self.mount
                                     else []
+                                )
+                                + (
+                                    [
+                                        {
+                                            "name": "skills",
+                                            "mountPath": "/skills",
+                                            "readOnly": True,
+                                        }
+                                    ]
+                                    if settings.skills_volume
+                                    else []
                                 ),
                             }
                         ],
@@ -269,6 +294,19 @@ class KubernetesBackend:
                                 }
                             ]
                             if self.mount
+                            else []
+                        )
+                        + (
+                            [
+                                {
+                                    "name": "skills",
+                                    "persistentVolumeClaim": {
+                                        "claimName": settings.skills_volume,
+                                        "readOnly": True,
+                                    },
+                                }
+                            ]
+                            if settings.skills_volume
                             else []
                         ),
                     },

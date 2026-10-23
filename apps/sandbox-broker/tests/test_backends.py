@@ -79,6 +79,54 @@ async def test_docker_file_volume_stays_outside_guest_credentials() -> None:
 
 
 @pytest.mark.asyncio
+async def test_docker_mounts_operator_approved_skills_volume_read_only() -> None:
+    class SkillsRunner(DockerRunner):
+        async def run(self, args, *, timeout, output_limit=65536, input_data=None):
+            if args[:3] == ["docker", "volume", "inspect"]:
+                self.calls.append((list(args), input_data))
+                return CommandResult(
+                    0,
+                    json.dumps(
+                        [
+                            {
+                                "Labels": {"fred.sandbox/skills": "approved"},
+                            }
+                        ]
+                    ),
+                    "",
+                )
+            return await super().run(
+                args, timeout=timeout, output_limit=output_limit, input_data=input_data
+            )
+
+    runner = SkillsRunner()
+    backend = DockerBackend(settings(skills_volume="fred-platform-skills"), runner)
+    await backend.preflight()
+    lease = await backend.prepare()
+    run = next(args for args, _ in runner.calls if args[:2] == ["docker", "run"])
+    assert "type=volume,src=fred-platform-skills,dst=/skills,readonly" in run
+    await backend.dispose(lease)
+
+
+@pytest.mark.asyncio
+async def test_docker_recovery_removes_managed_workload_and_input_volume() -> None:
+    class RecoveryRunner(DockerRunner):
+        async def run(self, args, *, timeout, output_limit=65536, input_data=None):
+            if args[:2] == ["docker", "ps"]:
+                self.calls.append((list(args), input_data))
+                return CommandResult(0, "a" * 64 + "\n", "")
+            if args[:3] == ["docker", "volume", "ls"]:
+                self.calls.append((list(args), input_data))
+                return CommandResult(0, "inputs-fred-sbx-" + "b" * 20 + "\n", "")
+            return await super().run(args, timeout=timeout, output_limit=output_limit, input_data=input_data)
+
+    runner = RecoveryRunner()
+    await DockerBackend(settings(), runner).recover()
+    assert any(args[:3] == ["docker", "rm", "--force"] for args, _ in runner.calls)
+    assert any(args[:3] == ["docker", "volume", "rm"] for args, _ in runner.calls)
+
+
+@pytest.mark.asyncio
 async def test_docker_requires_isolated_runtime_and_hardens_container() -> None:
     runner = DockerRunner()
     backend = DockerBackend(settings(), runner)
@@ -273,6 +321,49 @@ async def test_kubernetes_mount_creates_private_secret_and_read_only_pvc() -> No
     }
     assert pod["volumes"][-1]["persistentVolumeClaim"]["readOnly"] is True
     await backend.dispose(lease)
+
+
+@pytest.mark.asyncio
+async def test_kubernetes_mounts_only_approved_skill_claim_read_only() -> None:
+    class SkillsRunner(KubeRunner):
+        async def run(self, args, *, timeout, output_limit=65536, input_data=None):
+            if "get" in args and "pvc" in args:
+                return CommandResult(
+                    0,
+                    json.dumps(
+                        {
+                            "metadata": {"labels": {"fred.sandbox/skills": "approved"}},
+                            "status": {"phase": "Bound"},
+                            "spec": {"accessModes": ["ReadOnlyMany"]},
+                        }
+                    ),
+                    "",
+                )
+            return await super().run(
+                args, timeout=timeout, output_limit=output_limit, input_data=input_data
+            )
+
+    runner = SkillsRunner()
+    backend = KubernetesBackend(
+        settings("kubernetes", skills_volume="fred-platform-skills"), runner
+    )
+    await backend.preflight()
+    manifest = backend.job_manifest("fred-sbx-test")
+    pod = manifest["spec"]["template"]["spec"]
+    assert {"name": "skills", "mountPath": "/skills", "readOnly": True} in pod[
+        "containers"
+    ][0]["volumeMounts"]
+    assert {
+        "name": "skills",
+        "persistentVolumeClaim": {
+            "claimName": "fred-platform-skills",
+            "readOnly": True,
+        },
+    } in pod["volumes"]
+    with pytest.raises(SandboxError, match="policy_unavailable"):
+        await KubernetesBackend(
+            settings("kubernetes", skills_volume="unapproved"), KubeRunner()
+        ).preflight()
 
 
 @pytest.mark.asyncio
@@ -533,6 +624,68 @@ async def test_agent_sandbox_claim_injects_only_approved_inputs_volume() -> None
     assert claim["spec"]["volumeClaimTemplates"][0]["metadata"]["name"] == "inputs"
     assert any("patch" in args and "secret" in args for args in runner.calls)
     assert lease.view_key == "a" * 64
+    await backend.dispose(lease)
+
+
+@pytest.mark.asyncio
+async def test_agent_sandbox_skills_claim_uses_approved_read_only_volume() -> None:
+    class SkillsAgentRunner(AgentRunner):
+        async def run(self, args, *, timeout, output_limit=65536, input_data=None):
+            if "get" in args and "pvc" in args:
+                return CommandResult(
+                    0,
+                    json.dumps(
+                        {
+                            "metadata": {"labels": {"fred.sandbox/skills": "approved"}},
+                            "status": {"phase": "Bound"},
+                            "spec": {"accessModes": ["ReadWriteMany"]},
+                        }
+                    ),
+                    "",
+                )
+            if "sandboxtemplate" in args:
+                pod = KubernetesBackend(self.skills_settings, self).job_manifest("x")[
+                    "spec"
+                ]["template"]["spec"]
+                return CommandResult(
+                    0,
+                    json.dumps(
+                        {
+                            "spec": {
+                                "networkPolicyManagement": "Unmanaged",
+                                "podTemplate": {"spec": pod},
+                            }
+                        }
+                    ),
+                    "",
+                )
+            if "pod" in args and "get" in args:
+                pod = KubernetesBackend(self.skills_settings, self).job_manifest("x")[
+                    "spec"
+                ]["template"]["spec"]
+                return CommandResult(
+                    0,
+                    json.dumps(
+                        {
+                            "metadata": {
+                                "ownerReferences": [{"name": self.claim_name}]
+                            },
+                            "spec": pod,
+                        }
+                    ),
+                    "",
+                )
+            return await super().run(
+                args, timeout=timeout, output_limit=output_limit, input_data=input_data
+            )
+
+    runner = SkillsAgentRunner()
+    runner.skills_settings = settings(
+        "agent_sandbox", skills_volume="fred-platform-skills"
+    )
+    backend = AgentSandboxBackend(runner.skills_settings, runner)
+    lease = await backend.prepare()
+    assert lease.target == lease.id
     await backend.dispose(lease)
 
 

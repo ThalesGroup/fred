@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import re
 from uuid import uuid4
 
 from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest, SandboxResult
@@ -54,6 +55,25 @@ class DockerBackend:
             )
             if plugin.returncode != 0 or plugin.stdout.strip() != "true":
                 raise SandboxError("policy_unavailable")
+        if self.settings.skills_volume:
+            volume = await self.runner.run(
+                ["docker", "volume", "inspect", self.settings.skills_volume],
+                timeout=10,
+            )
+            if volume.returncode != 0:
+                raise SandboxError("policy_unavailable")
+            try:
+                details = json.loads(volume.stdout)
+            except ValueError as exc:
+                raise SandboxError("policy_unavailable") from exc
+            if (
+                not isinstance(details, list)
+                or len(details) != 1
+                or not isinstance(details[0], dict)
+                or (details[0].get("Labels") or {}).get("fred.sandbox/skills")
+                != "approved"
+            ):
+                raise SandboxError("policy_unavailable")
 
     async def prepare(self, view_key: str | None = None) -> SandboxLease:
         name = f"fred-sbx-{uuid4().hex[:20]}"
@@ -73,6 +93,8 @@ class DockerBackend:
             "never",
             "--name",
             name,
+            "--label",
+            "fred.sandbox/managed=true",
             "--runtime",
             settings.runtime_name,
             "--network",
@@ -106,6 +128,13 @@ class DockerBackend:
         if mounted_key is not None:
             args.extend(
                 ["--mount", f"type=volume,src=inputs-{name},dst=/inputs,readonly"]
+            )
+        if settings.skills_volume:
+            args.extend(
+                [
+                    "--mount",
+                    f"type=volume,src={settings.skills_volume},dst=/skills,readonly",
+                ]
             )
         args.extend([settings.image, "sleep", "86400"])
         try:
@@ -157,6 +186,32 @@ class DockerBackend:
             if result.returncode != 0 and "No such volume" not in result.stderr:
                 raise SandboxError("backend_failed")
 
+    async def recover(self) -> None:
+        containers = await self.runner.run(
+            ["docker", "ps", "-aq", "--filter", "label=fred.sandbox/managed=true"],
+            timeout=10,
+        )
+        if containers.returncode != 0:
+            raise SandboxError("backend_failed")
+        for container_id in containers.stdout.splitlines():
+            if not re.fullmatch(r"[a-f0-9]{12,64}", container_id):
+                raise SandboxError("backend_failed")
+            await self._remove(container_id)
+        volumes = await self.runner.run(
+            ["docker", "volume", "ls", "-q", "--filter", "label=fred.sandbox/managed=true"],
+            timeout=10,
+        )
+        if volumes.returncode != 0:
+            raise SandboxError("backend_failed")
+        for volume_name in volumes.stdout.splitlines():
+            if not re.fullmatch(r"inputs-fred-sbx-[a-f0-9]{20}", volume_name):
+                raise SandboxError("backend_failed")
+            result = await self.runner.run(
+                ["docker", "volume", "rm", volume_name], timeout=30
+            )
+            if result.returncode != 0:
+                raise SandboxError("backend_failed")
+
     async def _create_volume(self, name: str, key: str) -> None:
         settings = self.settings
         if not settings.file_gateway_url or not settings.file_gateway_secret:
@@ -168,6 +223,8 @@ class DockerBackend:
                 "create",
                 "--name",
                 f"inputs-{name}",
+                "--label",
+                "fred.sandbox/managed=true",
                 "--driver",
                 settings.docker_volume_plugin or "",
                 "--opt",

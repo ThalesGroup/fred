@@ -13,6 +13,8 @@ The optional file mount adds Knowledge Flow tables `sandbox_file_views` and `san
 
 ## Prerequisites
 
+To run published platform skill scripts, configure `SANDBOX_SKILLS_VOLUME` with an operator-approved PVC or Docker volume containing only scripts common to all code-enabled agents. The broker procedure documents the SIG template variants. User-authored skill publishing is outside this profile.
+
 No action is required for deployments that leave code execution disabled. To enable it, select and verify a Kata or gVisor runtime on sandbox nodes, a CNI that enforces NetworkPolicy, finite kubelet pod PID limits, and an approved pinned Python/Bash image. Install SIG Agent Sandbox v1.0.6 only if using that backend. Follow the CNI probe and runtime checks in `apps/sandbox-broker/README.md` before setting broker verification flags.
 
 ## Configuration
@@ -27,7 +29,7 @@ Run the normal control-plane Alembic upgrade before starting the new control-pla
 
 ## Validation
 
-Confirm the admin Capabilities page shows the approved profile and 20-minute default. Save a different idle expiry and verify `/healthz` on the broker reflects it within 30 seconds. Run Bash to create a file under `/tmp`, read it with Python in the same conversation, and confirm a second conversation cannot read it. Check `kubectl -n fred-sandbox get sandboxclaims,sandboxwarmpools,pods` when using SIG Agent Sandbox. A cluster with no code calls should have no sandbox workloads. The SIG pool must stay at zero replicas.
+Confirm the admin Capabilities page shows the approved profile and 20-minute default. Save a different idle expiry and verify `/healthz` on the broker reflects it within 30 seconds. Run Bash to create a file under `/work`, read it with Python in the same conversation, and confirm a second conversation cannot read it. Check `kubectl -n fred-sandbox get sandboxclaims,sandboxwarmpools,pods` when using SIG Agent Sandbox. A cluster with no code calls should have no sandbox workloads. The SIG pool must stay at zero replicas.
 
 ## Rollback
 
@@ -35,4 +37,4 @@ Disable the capability gate, stop new code calls, and let active conversations e
 
 ## Limitations
 
-This pilot uses one broker replica with process-local admission and session state. A broker restart loses conversation leases; SIG claim shutdown times and Job/Docker hard lifetimes clean up orphaned workloads. The measured k3d gVisor latency is not a Kata or production SLO. Operators must size namespace quota and node capacity for active claims only.
+This pilot uses one broker replica with process-local admission and session state. A broker restart loses conversation leases and removes prior Kubernetes workloads before serving new requests. SIG claim shutdown times and Docker hard lifetimes bound abandoned workloads if the broker does not restart. The measured k3d gVisor latency is not a Kata or production SLO. Operators must size namespace quota and node capacity for active claims only.

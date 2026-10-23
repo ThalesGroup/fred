@@ -105,6 +105,11 @@ class AgentSandboxBackend:
                     if self.kubernetes.mount
                     else []
                 )
+                + (
+                    [{"name": "skills", "mountPath": "/skills", "readOnly": True}]
+                    if self.settings.skills_volume
+                    else []
+                )
             )
             and security.get("allowPrivilegeEscalation") is False
             and security.get("readOnlyRootFilesystem") is True
@@ -126,6 +131,19 @@ class AgentSandboxBackend:
                         }
                     ]
                     if self.kubernetes.mount and workload_name
+                    else []
+                )
+                + (
+                    [
+                        {
+                            "name": "skills",
+                            "persistentVolumeClaim": {
+                                "claimName": self.settings.skills_volume,
+                                "readOnly": True,
+                            },
+                        }
+                    ]
+                    if self.settings.skills_volume
                     else []
                 )
             )

@@ -40,6 +40,7 @@ class BrokerSettings:
     file_gateway_secret: str | None = None
     file_storage_class: str | None = None
     docker_volume_plugin: str | None = None
+    skills_volume: str | None = None
 
     def __post_init__(self) -> None:
         if self.backend not in {"docker", "kubernetes", "agent_sandbox"}:
@@ -139,6 +140,10 @@ class BrokerSettings:
             )
         ):
             raise ValueError("Sandbox file mount settings require a mount provider")
+        if self.skills_volume and not re.fullmatch(
+            r"[a-z0-9][a-z0-9.-]{0,62}", self.skills_volume
+        ):
+            raise ValueError("Sandbox skills volume name is invalid")
 
     @classmethod
     def from_environment(cls) -> BrokerSettings:
@@ -177,4 +182,5 @@ class BrokerSettings:
             file_gateway_secret=os.getenv("SANDBOX_FILE_GATEWAY_SECRET") or None,
             file_storage_class=os.getenv("SANDBOX_FILE_STORAGE_CLASS") or None,
             docker_volume_plugin=os.getenv("SANDBOX_DOCKER_VOLUME_PLUGIN") or None,
+            skills_volume=os.getenv("SANDBOX_SKILLS_VOLUME") or None,
         )
