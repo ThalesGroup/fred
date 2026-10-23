@@ -1159,9 +1159,9 @@ The name `small` is scoped to this component. On the shared scale, 24px is
 **Status:** `Functional`
 
 The `ppt_builder` capability's configuration surface: one widget
-(`PptBuilderConfigForm`) owns all six config fields (`template_sha256`,
+(`PptBuilderConfigForm`) owns all seven config fields (`template_sha256`,
 `overrides`, `use_vision`, `labelling_model`, `variety_check`,
-`variety_max_uses`) and is rendered by the
+`variety_max_uses`, `validate_plan`) and is rendered by the
 Advanced capability card and the Simple "Generate a presentation" pack alike.
 Nothing in it is mandatory — an agent without a template builds on the
 built-in template.
@@ -1188,6 +1188,11 @@ built-in template.
 - **Guide link.** Last line of the template card: "How to prepare your
   template?", a Body Small `primary` link (underlined on hover) opening the
   Help Center guide `guides/prepare-powerpoint-template` in a new tab.
+- **Plan approval** (`PptBuilderPlanSettings`). A setting card right under
+  the template card, outside the advanced settings: the switch row "Validate
+  the plan before building" (default off) with its Body Small description.
+  On saves `validate_plan: true`: the first deck of a conversation is shown as
+  an outline the user approves before it is built.
 - **Vision settings.** A switch row "Use a vision model" (default on). With no
   vision-capable model for the agent (`supports_vision` on neither the
   effective chat model nor any available profile) it is shown off and
