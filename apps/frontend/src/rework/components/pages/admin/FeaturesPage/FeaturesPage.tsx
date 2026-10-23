@@ -64,7 +64,7 @@ import {
   requiresTeamSettings,
 } from "./capabilityEnablement";
 import { ModelIdentityCell } from "./ModelIdentityCell";
-import { ModelDiscoveryStatus } from "./ModelDiscoveryStatus";
+import { ModelDiscoveryStatus, UnverifiedRuntimeWarning } from "./ModelDiscoveryStatus";
 import { partitionDiscoveredModels, splitModelSections } from "./modelSections";
 
 // "tool" (MCP servers, etc.) vs "agent" (a control-plane-side projection of
@@ -141,21 +141,25 @@ export default function FeaturesPage() {
   });
   const [refreshDiscovery, discoveryRefresh] = useRefreshModelDiscoveryMutation();
   const [modelInventoryReady, setModelInventoryReady] = useState(false);
+  const [modelSourceCheckReady, setModelSourceCheckReady] = useState(false);
   const [modelRefreshError, setModelRefreshError] = useState<string | null>(null);
   const [unverifiedModelRuntimes, setUnverifiedModelRuntimes] = useState<{ runtime_id: string; base_url: string }[]>(
     [],
   );
-  const [verifiedModelSourceIds, setVerifiedModelSourceIds] = useState<string[]>([]);
+  const [verifiedModelSourceIds, setVerifiedModelSourceIds] = useState<string[] | null>(null);
   const refreshModels = useCallback(async () => {
     try {
       const result = await refreshDiscovery().unwrap();
       setModelRefreshError(result.refresh_error ?? null);
       setUnverifiedModelRuntimes(result.unverified_runtimes ?? []);
-      setVerifiedModelSourceIds(result.verified_source_ids ?? []);
+      setVerifiedModelSourceIds(result.verified_source_ids ?? null);
+      if (result.verified_source_ids?.length === 0 && !result.unverified_runtimes?.length) {
+        setModelTab("manual");
+      }
     } catch {
       setModelRefreshError(t("rework.admin.capabilities.discovery.refreshFailed"));
       setUnverifiedModelRuntimes([]);
-      setVerifiedModelSourceIds([]);
+      setVerifiedModelSourceIds(null);
     }
     await Promise.all([refetchCapabilities(), refetchDiscoveryStatus()]);
   }, [refreshDiscovery, refetchCapabilities, refetchDiscoveryStatus, t]);
@@ -163,6 +167,15 @@ export default function FeaturesPage() {
     if (activeKindFilter !== "model") return;
     let mounted = true;
     setModelInventoryReady(false);
+    setModelSourceCheckReady(false);
+    setVerifiedModelSourceIds(null);
+    setUnverifiedModelRuntimes([]);
+    void refetchDiscoveryStatus().then(
+      (result) => {
+        if (mounted && !(result && "error" in result && result.error)) setModelSourceCheckReady(true);
+      },
+      () => undefined,
+    );
     void refreshModels().then(
       () => {
         if (mounted) setModelInventoryReady(true);
@@ -174,8 +187,19 @@ export default function FeaturesPage() {
     return () => {
       mounted = false;
     };
-  }, [activeKindFilter, refreshModels]);
-  const newModelIds = new Set((discoveryStatus?.sources ?? []).flatMap((source) => source.new_ids ?? []));
+  }, [activeKindFilter, refetchDiscoveryStatus, refreshModels]);
+  const currentVerifiedSourceIds =
+    verifiedModelSourceIds ?? (modelSourceCheckReady ? (discoveryStatus?.verified_source_ids ?? null) : null);
+  const currentUnverifiedRuntimes =
+    modelInventoryReady && verifiedModelSourceIds !== null
+      ? unverifiedModelRuntimes
+      : (discoveryStatus?.unverified_runtimes ?? unverifiedModelRuntimes);
+  const discoveryConfigurationReady = modelSourceCheckReady || modelInventoryReady;
+  const verifiedDiscoverySources = currentVerifiedSourceIds !== null && currentUnverifiedRuntimes.length === 0;
+  const discoverySources = verifiedDiscoverySources
+    ? (discoveryStatus?.sources ?? []).filter((source) => currentVerifiedSourceIds?.includes(source.source_id))
+    : (discoveryStatus?.sources ?? []);
+  const newModelIds = new Set(discoverySources.flatMap((source) => source.new_ids ?? []));
   // Which row's mutation is in flight — NOT just a boolean. Disabling every
   // switch off `isTogglingDefault` used to include the one the admin just
   // clicked, which still holds native focus at that instant: yanking
@@ -213,11 +237,21 @@ export default function FeaturesPage() {
   // as the backend's own `CapabilityEnablementItem.kind`.
   const capabilities = allCapabilities.filter((cap) => (cap.kind ?? "tool") === activeKindFilter);
   const { manual: manualModels, discovered: advertisedDiscoveredModels } = splitModelSections(capabilities);
+  const activeDiscoveredModels = verifiedDiscoverySources
+    ? advertisedDiscoveredModels.filter((model) =>
+        currentVerifiedSourceIds?.includes(model.model_discovery_source_id ?? ""),
+      )
+    : advertisedDiscoveredModels;
   const { listed: discoveredModels, unavailableIds: unavailableDiscoveredIds } = partitionDiscoveredModels(
-    advertisedDiscoveredModels,
-    discoveryStatus?.sources ?? [],
+    activeDiscoveredModels,
+    discoverySources,
   );
-  const hasDiscovery = Boolean(discoveryStatus?.sources?.length || advertisedDiscoveredModels.length);
+  const hasDiscovery =
+    discoveryConfigurationReady &&
+    (verifiedDiscoverySources
+      ? (currentVerifiedSourceIds?.length ?? 0) > 0
+      : Boolean(discoverySources.length || advertisedDiscoveredModels.length));
+  const visibleCapabilities = activeKindFilter === "model" && !hasDiscovery ? manualModels : capabilities;
   useEffect(() => {
     if (
       !noDefaultModalPending ||
@@ -742,6 +776,12 @@ export default function FeaturesPage() {
             selectedIndex={kindFilters.indexOf(activeKindFilter)}
             onSelectedIndexChange={(index) => {
               const next = kindFilters[index];
+              if (next === "model") {
+                setModelInventoryReady(false);
+                setModelSourceCheckReady(false);
+                setVerifiedModelSourceIds(null);
+                setUnverifiedModelRuntimes([]);
+              }
               setKindFilter(next);
               setNoDefaultModalPending(next === "model");
             }}
@@ -754,6 +794,9 @@ export default function FeaturesPage() {
 
       {isLoading && <p className={styles.status}>{t("rework.admin.capabilities.loading")}</p>}
       {isError && <p className={styles.statusError}>{t("rework.admin.capabilities.loadError")}</p>}
+      {activeKindFilter === "model" && !discoveryConfigurationReady && !isLoading && !isError && (
+        <p className={styles.status}>{t("rework.admin.capabilities.discovery.refreshing")}</p>
+      )}
 
       {activeKindFilter === "model" && hasDiscovery && (
         <div className={styles.modelToolbar}>
@@ -774,22 +817,26 @@ export default function FeaturesPage() {
 
       {activeKindFilter === "model" && hasDiscovery && modelTab === "discovered" && (
         <ModelDiscoveryStatus
-          data={discoveryStatus}
+          data={discoveryStatus ? { ...discoveryStatus, sources: discoverySources } : undefined}
           discoveredSourceIds={discoveredModels.flatMap((model) =>
             model.model_discovery_source_id ? [model.model_discovery_source_id] : [],
           )}
           refreshing={discoveryRefresh.isLoading || !modelInventoryReady}
           refreshError={discoveryRefresh.isError || Boolean(modelRefreshError)}
           refreshErrorMessage={modelRefreshError}
-          unverifiedRuntimes={unverifiedModelRuntimes}
-          verifiedSourceIds={verifiedModelSourceIds}
+          unverifiedRuntimes={currentUnverifiedRuntimes}
+          verifiedSourceIds={currentVerifiedSourceIds ?? []}
         />
+      )}
+
+      {activeKindFilter === "model" && discoveryConfigurationReady && !hasDiscovery && (
+        <UnverifiedRuntimeWarning runtimes={currentUnverifiedRuntimes} />
       )}
 
       {!isLoading &&
         !isError &&
-        (activeKindFilter !== "model" || !hasDiscovery || modelInventoryReady) &&
-        capabilities.length === 0 &&
+        (activeKindFilter !== "model" || discoveryConfigurationReady) &&
+        visibleCapabilities.length === 0 &&
         !(activeKindFilter === "model" && hasDiscovery) && (
           <PageEmptyState
             icon="tune"
@@ -809,8 +856,8 @@ export default function FeaturesPage() {
 
       {!isLoading &&
         !isError &&
-        (activeKindFilter !== "model" || !hasDiscovery || modelInventoryReady) &&
-        (capabilities.length > 0 || (activeKindFilter === "model" && hasDiscovery)) &&
+        (activeKindFilter !== "model" || discoveryConfigurationReady) &&
+        (visibleCapabilities.length > 0 || (activeKindFilter === "model" && hasDiscovery)) &&
         (activeKindFilter === "model" && hasDiscovery ? (
           <section
             className={styles.modelSection}
@@ -861,7 +908,12 @@ export default function FeaturesPage() {
             )}
           </section>
         ) : (
-          <DataTable columns={columns} data={capabilities} rowKey={(capability) => capability.id} size="medium" />
+          <DataTable
+            columns={columns}
+            data={visibleCapabilities}
+            rowKey={(capability) => capability.id}
+            size="medium"
+          />
         ))}
 
       <CapabilityTeamMatrixDrawer

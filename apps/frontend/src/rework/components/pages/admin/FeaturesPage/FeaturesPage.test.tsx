@@ -43,6 +43,7 @@ const h = vi.hoisted(() => ({
   // the key request is the only observable signal that the hint was wired up.
   tKeys: [] as string[],
   discoverySources: [] as DiscoverySourceStatus[],
+  discoveryVerifiedSourceIds: undefined as string[] | undefined,
   podDefaults: [
     { runtime_id: "pod-a", base_url: "http://pod-a", reachable: true, effective_profile_id: "chat.manual" },
   ] as {
@@ -51,7 +52,7 @@ const h = vi.hoisted(() => ({
     reachable: boolean;
     effective_profile_id: string | null;
   }[],
-  refetch: async () => {},
+  refetch: (async () => {}) as () => Promise<{ error?: unknown } | void>,
   refreshDiscovery: () => ({ unwrap: async () => ({ sources: [], pod_chat_default_available: true }) }),
 }));
 const translate = vi.hoisted(
@@ -75,7 +76,10 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useAdminCapabilitiesQuery: () => ({ ...h.list, refetch: h.refetch }),
-  useModelDiscoveryQuery: () => ({ data: { sources: h.discoverySources }, refetch: h.refetch }),
+  useModelDiscoveryQuery: () => ({
+    data: { sources: h.discoverySources, verified_source_ids: h.discoveryVerifiedSourceIds },
+    refetch: h.refetch,
+  }),
   usePodChatDefaultsQuery: () => ({ data: { pods: h.podDefaults }, isFetching: false, isError: false }),
   useRefreshModelDiscoveryMutation: () => [h.refreshDiscovery, { isLoading: false, isError: false }],
   useListAllTeamsQuery: (arg: unknown) => {
@@ -154,6 +158,8 @@ beforeEach(() => {
   h.applicationsEnabled = false;
   h.canAdmin = false;
   h.discoverySources = [];
+  h.discoveryVerifiedSourceIds = undefined;
+  h.refetch = async () => {};
   h.podDefaults = [
     { runtime_id: "pod-a", base_url: "http://pod-a", reachable: true, effective_profile_id: "chat.manual" },
   ];
@@ -634,6 +640,7 @@ describe("FeaturesPage kind filter (CAPAB-01, RFC §8.6; model kind OBSERV-02 v3
       await act(async () => root.render(<FeaturesPage />));
       await act(async () => container.querySelectorAll<HTMLButtonElement>('[role="radiogroup"] button')[2].click());
       expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+      expect(container.textContent).toContain("rework.admin.capabilities.discovery.unverifiedRuntimes");
     } finally {
       await act(async () => root.unmount());
       container.remove();
@@ -706,6 +713,206 @@ describe("FeaturesPage kind filter (CAPAB-01, RFC §8.6; model kind OBSERV-02 v3
       await act(async () => root.render(<FeaturesPage />));
       expect(container.textContent).toContain("rework.admin.capabilities.discovery.refresh");
       expect(container.textContent).toContain("rework.admin.capabilities.discovery.emptyDiscovered");
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("hides stale discovery state when reachable pods advertise only manual models", async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    h.list = {
+      data: {
+        items: [
+          cap({ id: "manual.chat", kind: "model" }),
+          cap({ id: "discovered.chat.gateway.old", kind: "model", model_discovery_source_id: "gateway" }),
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    };
+    h.discoverySources = [
+      {
+        source_id: "gateway",
+        yaml_url: "https://example.test/v1/models",
+        effective_url: "https://example.test/v1/models",
+        last_error: "Discovery source is not advertised by an enabled runtime pod",
+      },
+    ];
+    h.discoveryVerifiedSourceIds = [];
+    h.refreshDiscovery = () => ({
+      unwrap: async () => ({ sources: h.discoverySources, verified_source_ids: [], pod_chat_default_available: true }),
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<FeaturesPage />));
+      await act(async () => container.querySelectorAll<HTMLButtonElement>('[role="radiogroup"] button')[2].click());
+      expect(container.querySelectorAll('[role="radiogroup"]')).toHaveLength(1);
+      expect(container.textContent).toContain("cap.manual.chat");
+      expect(container.textContent).not.toContain("cap.discovered.chat.gateway.old");
+      expect(container.textContent).not.toContain("rework.admin.capabilities.discovery.refresh");
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("excludes a retired source when another discovery source remains active", async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    h.list = {
+      data: {
+        items: [
+          cap({ id: "discovered.new", kind: "model", model_discovery_source_id: "new" }),
+          cap({ id: "discovered.old", kind: "model", model_discovery_source_id: "old" }),
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    };
+    h.discoverySources = [
+      {
+        source_id: "new",
+        yaml_url: "https://new.example/v1/models",
+        effective_url: "https://new.example/v1/models",
+        last_success_at: "2026-10-23T09:00:00Z",
+        available_models: [{ id: "discovered.new", name: "new", provider: "openai" }],
+      },
+      {
+        source_id: "old",
+        yaml_url: "https://old.example/v1/models",
+        effective_url: "https://old.example/v1/models",
+        last_error: "Discovery source is not advertised by an enabled runtime pod",
+      },
+    ];
+    h.discoveryVerifiedSourceIds = ["new"];
+    h.refreshDiscovery = () => ({
+      unwrap: async () => ({
+        sources: h.discoverySources,
+        verified_source_ids: ["new"],
+        pod_chat_default_available: true,
+      }),
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<FeaturesPage />));
+      await act(async () => container.querySelectorAll<HTMLButtonElement>('[role="radiogroup"] button')[2].click());
+      await act(async () =>
+        container.querySelectorAll<HTMLButtonElement>('[role="radiogroup"]')[1].querySelectorAll("button")[1].click(),
+      );
+      expect(container.textContent).toContain("cap.discovered.new");
+      expect(container.textContent).not.toContain("cap.discovered.old");
+      expect(container.textContent).not.toContain("https://old.example/v1/models");
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("shows discovery tabs before the model inventory refresh completes", async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    h.list = {
+      data: { items: [cap({ id: "manual.chat", kind: "model" })] },
+      isLoading: false,
+      isError: false,
+    };
+    h.discoverySources = [
+      {
+        source_id: "gateway",
+        yaml_url: "https://example.test/v1/models",
+        effective_url: "https://example.test/v1/models",
+      },
+    ];
+    h.discoveryVerifiedSourceIds = ["gateway"];
+    h.refreshDiscovery = () => ({
+      unwrap: () => new Promise<{ sources: []; pod_chat_default_available: boolean }>(() => {}),
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<FeaturesPage />));
+      await act(async () => container.querySelectorAll<HTMLButtonElement>('[role="radiogroup"] button')[2].click());
+      expect(container.querySelectorAll('[role="radiogroup"]')).toHaveLength(2);
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("uses a fresh source check when returning to Models", async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    h.list = {
+      data: { items: [cap({ id: "manual.chat", kind: "model" })] },
+      isLoading: false,
+      isError: false,
+    };
+    h.discoveryVerifiedSourceIds = [];
+    h.refreshDiscovery = () => ({
+      unwrap: async () => ({ sources: [], verified_source_ids: [], pod_chat_default_available: true }),
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<FeaturesPage />));
+      const kindButtons = () =>
+        container.querySelectorAll<HTMLButtonElement>('[role="radiogroup"]')[0].querySelectorAll("button");
+      await act(async () => kindButtons()[2].click());
+      expect(container.querySelectorAll('[role="radiogroup"]')).toHaveLength(1);
+      await act(async () => kindButtons()[0].click());
+
+      h.discoverySources = [
+        {
+          source_id: "gateway",
+          yaml_url: "https://example.test/v1/models",
+          effective_url: "https://example.test/v1/models",
+        },
+      ];
+      h.refetch = async () => {
+        h.discoveryVerifiedSourceIds = ["gateway"];
+      };
+      h.refreshDiscovery = () => ({
+        unwrap: () => new Promise<{ sources: []; pod_chat_default_available: boolean }>(() => {}),
+      });
+      await act(async () => kindButtons()[2].click());
+      expect(container.querySelectorAll('[role="radiogroup"]')).toHaveLength(2);
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("does not treat cached sources as verified when the fast check fails", async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    h.list = {
+      data: { items: [cap({ id: "manual.chat", kind: "model" })] },
+      isLoading: false,
+      isError: false,
+    };
+    h.discoverySources = [
+      {
+        source_id: "old",
+        yaml_url: "https://old.example/v1/models",
+        effective_url: "https://old.example/v1/models",
+      },
+    ];
+    h.discoveryVerifiedSourceIds = ["old"];
+    h.refetch = async () => ({ error: { status: 503 } });
+    h.refreshDiscovery = () => ({
+      unwrap: () => new Promise<{ sources: []; pod_chat_default_available: boolean }>(() => {}),
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<FeaturesPage />));
+      await act(async () => container.querySelectorAll<HTMLButtonElement>('[role="radiogroup"] button')[2].click());
+      expect(container.querySelectorAll('[role="radiogroup"]')).toHaveLength(1);
+      expect(container.textContent).toContain("rework.admin.capabilities.discovery.refreshing");
     } finally {
       await act(async () => root.unmount());
       container.remove();

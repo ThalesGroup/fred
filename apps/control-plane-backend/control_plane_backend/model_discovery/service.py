@@ -123,12 +123,62 @@ def _status(
 
 
 async def get_status(
-    user: KeycloakUser, deps: ProductServiceDependencies
+    user: KeycloakUser,
+    deps: ProductServiceDependencies,
+    *,
+    authorization: str | None = None,
+    inspect_pods: bool = False,
 ) -> ModelDiscoveryStatus:
     await require_manage_capabilities(deps.team_dependencies.rebac, user)
     rows = await deps.get_model_discovery_state_store().list_all()
     names = await model_display_name_overrides(deps)
-    return ModelDiscoveryStatus(sources=[_status(row, names) for row in rows])
+    result = ModelDiscoveryStatus(sources=[_status(row, names) for row in rows])
+    if not inspect_pods:
+        return result
+
+    sources = [
+        source
+        for source in deps.configuration.platform.runtime_catalog_sources
+        if source.enabled
+    ]
+    client = deps.get_runtime_http_client()
+    headers = {"Authorization": authorization} if authorization else None
+
+    async def inspect(source):
+        response = await client.get(
+            f"{source.base_url.rstrip('/')}/agents/models-catalog",
+            headers=headers,
+            timeout=5.0,
+            follow_redirects=False,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict) or not isinstance(payload.get("models"), list):
+            raise ValueError("Invalid pod catalog response")
+        return payload
+
+    inspected = await asyncio.gather(
+        *(inspect(source) for source in sources), return_exceptions=True
+    )
+    result.unverified_runtimes = [
+        UnverifiedRuntime(runtime_id=source.runtime_id, base_url=source.base_url)
+        for source, payload in zip(sources, inspected, strict=True)
+        if isinstance(payload, BaseException)
+    ]
+    source_ids: set[str] = set()
+    for payload in inspected:
+        if not isinstance(payload, dict):
+            continue
+        advertised = payload.get("discovery_sources")
+        if not isinstance(advertised, list):
+            advertised = [{"source_id": payload.get("discovery_source_id")}]
+        for entry in advertised:
+            if isinstance(entry, dict):
+                source_id = entry.get("source_id")
+                if isinstance(source_id, str):
+                    source_ids.add(source_id)
+    result.verified_source_ids = sorted(source_ids)
+    return result
 
 
 async def get_pod_chat_defaults(
@@ -763,6 +813,7 @@ async def refresh(
             )
     result = await get_status(user, deps)
     result.pod_chat_default_available = pod_chat_default_available
+    result.verified_source_ids = sorted(grouped)
     return result
 
 

@@ -45,10 +45,17 @@ Dependencies = Annotated[
 
 @router.get("/admin/model-discovery", response_model=ModelDiscoveryStatus)
 async def get_model_discovery(
-    deps: Dependencies, user: KeycloakUser = Depends(get_current_user)
+    request: Request,
+    deps: Dependencies,
+    user: KeycloakUser = Depends(get_current_user),
 ) -> ModelDiscoveryStatus:
     try:
-        return await service.get_status(user, deps)
+        return await service.get_status(
+            user,
+            deps,
+            authorization=request.headers.get("Authorization"),
+            inspect_pods=True,
+        )
     except AuthorizationError as exc:
         raise map_error(exc) from exc
 

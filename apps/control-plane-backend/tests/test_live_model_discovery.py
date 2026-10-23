@@ -362,8 +362,16 @@ async def test_refresh_reports_pod_default_without_a_discovery_source(
         result = await service.refresh(
             cast(KeycloakUser, object()), deps, authorization="Bearer test"
         )
+        status = await service.get_status(
+            cast(KeycloakUser, object()),
+            deps,
+            authorization="Bearer test",
+            inspect_pods=True,
+        )
 
     assert result.pod_chat_default_available is expected
+    assert result.verified_source_ids == []
+    assert status.verified_source_ids == []
 
 
 @pytest.mark.asyncio
@@ -941,7 +949,9 @@ async def test_one_pod_registers_and_refreshes_multiple_sources(monkeypatch) -> 
                     platform=SimpleNamespace(
                         runtime_catalog_sources=[
                             SimpleNamespace(
-                                base_url="https://pod.example", enabled=True
+                                runtime_id="pod-a",
+                                base_url="https://pod.example",
+                                enabled=True,
                             )
                         ]
                     )
@@ -953,8 +963,13 @@ async def test_one_pod_registers_and_refreshes_multiple_sources(monkeypatch) -> 
         result = await service.refresh(
             cast(KeycloakUser, object()), deps, authorization=None
         )
+        status = await service.get_status(
+            cast(KeycloakUser, object()), deps, inspect_pods=True
+        )
     assert prepared == ["east", "west"]
     assert {item.source_id for item in result.sources} == {"east", "west"}
+    assert result.verified_source_ids == ["east", "west"]
+    assert status.verified_source_ids == ["east", "west"]
 
 
 @pytest.mark.asyncio

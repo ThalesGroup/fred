@@ -33,6 +33,25 @@ import type {
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./FeaturesPage.module.css";
 
+export function UnverifiedRuntimeWarning({ runtimes }: { runtimes: { runtime_id: string; base_url: string }[] }) {
+  const { t } = useTranslation();
+  if (runtimes.length === 0) return null;
+  return (
+    <p className={styles.statusWarning}>
+      <Icon category="outlined" type="warning" />
+      <span>
+        {t("rework.admin.capabilities.discovery.unverifiedRuntimes")}{" "}
+        {runtimes.map((runtime, index) => (
+          <span key={`${runtime.runtime_id}:${runtime.base_url}`}>
+            {index > 0 && ", "}
+            <code>{runtime.runtime_id}</code> (<code>{runtime.base_url}</code>)
+          </span>
+        ))}
+      </span>
+    </p>
+  );
+}
+
 function SourceUrlEditor({ source }: { source: DiscoverySourceStatus }) {
   const { t } = useTranslation();
   const { canAdmin } = useUserCapabilities();
@@ -218,20 +237,7 @@ export function ModelDiscoveryStatus({
         onCancel={() => setPendingRemoval(null)}
       />
       {refreshing && <p className={styles.status}>{t("rework.admin.capabilities.discovery.refreshing")}</p>}
-      {unverifiedRuntimes.length > 0 && (
-        <p className={styles.statusWarning}>
-          <Icon category="outlined" type="warning" />
-          <span>
-            {t("rework.admin.capabilities.discovery.unverifiedRuntimes")}{" "}
-            {unverifiedRuntimes.map((runtime, index) => (
-              <span key={`${runtime.runtime_id}:${runtime.base_url}`}>
-                {index > 0 && ", "}
-                <code>{runtime.runtime_id}</code> (<code>{runtime.base_url}</code>)
-              </span>
-            ))}
-          </span>
-        </p>
-      )}
+      <UnverifiedRuntimeWarning runtimes={unverifiedRuntimes} />
       {(refreshError || data?.refresh_error) && (
         <p className={styles.statusError}>
           {t("rework.admin.capabilities.discovery.refreshFailed")}
