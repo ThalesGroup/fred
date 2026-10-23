@@ -1,3 +1,19 @@
+**v3.9.2** - 2026-10-23
+
+- **Summary**
+
+  This security update fixes vulnerabilities in PDF reading, network communication and the display of formatted content.
+
+- **Security**
+
+  - PDF reading is updated to fix vulnerabilities (#3268)
+  - Network communication components are updated to fix a critical vulnerability (#3268)
+  - Formatted content and diagrams are cleaned with an updated library before they are displayed (#3269)
+
+- **Deployment note**
+
+  No configuration or data change: deploy normally, no additional action is needed.
+
 **v3.9.1** - 2026-10-23
 
 - **Summary**
