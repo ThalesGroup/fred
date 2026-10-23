@@ -44,9 +44,11 @@ it("imports valid legacy choices once and ignores malformed widths", async () =>
   localStorage.setItem("localHook:inline-drawer:capability-side-panel:width", JSON.stringify(180));
   localStorage.setItem("localHook:import-panel:width", JSON.stringify(-2));
   localStorage.setItem("fred.teamSortMode", "alpha");
+  localStorage.setItem("i18nextLng", "fr");
   expect(readLegacyPreferences()).toMatchObject({
     ui_theme_id: "acme",
     theme_mode: "dark",
+    language: "fr",
     team_sort_mode: "alpha",
     pane_widths: { "team-wiki:rail:width": 450, "inline-drawer:capability-side-panel:width": 180 },
   });
