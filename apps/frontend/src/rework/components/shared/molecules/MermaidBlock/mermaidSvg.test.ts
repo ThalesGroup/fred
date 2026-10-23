@@ -112,9 +112,9 @@ describe("SVG view isolation", () => {
     expect(() => prepareMermaidSvg("<div>not a diagram</div>", "bad")).toThrow("Invalid diagram output");
   });
 
-  it("preserves Mermaid's HTML labels while sanitizing their contents", () => {
+  it.each(["-->", "--!>"])("sanitizes HTML labels after a comment ending with %s", (commentEnd) => {
     const output = prepareMermaidSvg(
-      '<svg><foreignObject width="100" height="24"><div xmlns="http://www.w3.org/1999/xhtml"><span>Question</span><script>alert(1)</script><img src="x" onerror="alert(1)"></div></foreignObject></svg>',
+      `<svg><foreignObject width="100" height="24"><div xmlns="http://www.w3.org/1999/xhtml"><!-- comment ${commentEnd}<span>Question</span><script>alert(1)</script><img src="x" onerror="alert(1)"></div></foreignObject></svg>`,
       "htmlLabel",
     );
     const host = document.createElement("div");

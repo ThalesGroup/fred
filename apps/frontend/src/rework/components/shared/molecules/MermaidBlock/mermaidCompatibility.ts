@@ -4,9 +4,11 @@
 const ID = String.raw`[A-Za-z_][\w-]*`;
 const NODE = String.raw`${ID}(?:\(\[[^\]]*\]\)|\(\([^)]*\)\)|\[[^\]]*\]|\([^)]*\)|\{[^}]*\})?(?:::\w+)?`;
 const GROUP = String.raw`${NODE}(?:\s*&\s*${NODE})*`;
-const FLOW_LINE = new RegExp(String.raw`^${GROUP}(?:\s*(?:-->|---|==>|-\.->)(?:\|[^|]*\|)?\s*${GROUP})*$`);
+const LINK = String.raw`(?:-->|---|==>|-\.->)(?:\|[^|]*\|)?`;
+const FLOW_LINE = new RegExp(String.raw`^${GROUP}(?:\s*${LINK}\s*${GROUP})*$`);
 const FLOW_NODE = new RegExp(String.raw`^(${ID})(.*)$`);
 const COMPLETE_NODE = new RegExp(`^${NODE}$`);
+const FLOW_NODES = new RegExp(String.raw`(.+?)(\s*${LINK}\s*|\s*&\s*|$)`, "g");
 
 /** Use the evaluated renderer subset; its parsers silently skip unknown statements. */
 export function supportsBeautifulMermaid(code: string): boolean {
@@ -30,8 +32,9 @@ export function supportsBeautifulMermaid(code: string): boolean {
         if (/^direction\s+(?:TD|TB|LR|RL|BT)$/.test(line)) return depth > 0;
         if (/^(?:classDef|class|style|linkStyle)\s+/.test(line)) return true;
         if (!FLOW_LINE.test(line)) return false;
-        return line.split(/\s*(?:-->|---|==>|-\.->)(?:\|[^|]*\|)?\s*|\s*&\s*/).every((node) => {
-          if (!COMPLETE_NODE.test(node)) return false;
+        return [...line.matchAll(FLOW_NODES)].every(([, node, separator]) => {
+          // Keep separators distinct from identifiers in the preferred parser.
+          if (!COMPLETE_NODE.test(node) || (separator && !/^[\s&]/.test(separator))) return false;
           const parts = node.match(FLOW_NODE);
           if (!parts) return false;
           const [, id, label] = parts;

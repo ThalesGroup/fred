@@ -86,6 +86,37 @@ describe("preferred Mermaid rendering", () => {
     expect(svg).toContain("--xychart-color-1:var(--secondary)");
   });
 
+  it.each(["-->", "---", "==>", "-.->"])("keeps nodes and edge labels with %s flowchart links", async (link) => {
+    const raw = await renderMermaid(`flowchart LR\n A[Question] ${link}|Search| B[Answer]`, "links", theme);
+    const host = document.createElement("div");
+    host.innerHTML = prepareMermaidSvg(raw, "linksInline");
+    for (const label of ["Question", "Search", "Answer"]) expect(host.textContent).toContain(label);
+    expect(official.render).not.toHaveBeenCalled();
+  });
+
+  it("keeps grouped endpoints and their later label definitions on the compatibility path", async () => {
+    const code = "flowchart LR\n A[Question] & B[Other] --> C[Answer]\n B[Revised]";
+    await renderMermaid(code, "groups", theme);
+    expect(official.render).toHaveBeenCalledWith("groupsRaw", code);
+  });
+
+  it.each(["&", " &", "& ", " & "])("preserves grouped endpoints with '%s' separators", async (separator) => {
+    const raw = await renderMermaid(`flowchart LR\n A[Question]${separator}B[Other] -->C[Answer]`, "groups", theme);
+    const host = document.createElement("div");
+    host.innerHTML = prepareMermaidSvg(raw, "groupsInline");
+    for (const label of ["Question", "Other", "Answer"]) expect(host.textContent).toContain(label);
+    expect(host.querySelectorAll("[marker-end]")).toHaveLength(2);
+    expect(official.render).not.toHaveBeenCalled();
+  });
+
+  it("does not treat an edge label as a node declaration", async () => {
+    const raw = await renderMermaid("flowchart LR\n X -->|A| Y\n A[Question]", "edgeLabel", theme);
+    const host = document.createElement("div");
+    host.innerHTML = prepareMermaidSvg(raw, "edgeLabelInline");
+    for (const label of ["X", "Y", "Question"]) expect(host.textContent).toContain(label);
+    expect(official.render).not.toHaveBeenCalled();
+  });
+
   it("keeps marker references distinct from a node named arrowhead", async () => {
     const raw = await renderMermaid("flowchart LR\n arrowhead[Marker node] --> B[Other]", "collision", theme);
     const container = document.createElement("div");
@@ -100,6 +131,12 @@ describe("preferred Mermaid rendering", () => {
 });
 
 describe("Mermaid compatibility", () => {
+  it.each(["--->", "---->", "----", "-----"])("keeps extended %s links on the official renderer", async (link) => {
+    const code = `flowchart LR\n A${link}|Search|B`;
+    await renderMermaid(code, "extended", theme);
+    expect(official.render).toHaveBeenCalledWith("extendedRaw", code);
+  });
+
   it("keeps pie labels readable when a zero-value section leaves different slice foregrounds", async () => {
     const palette = [
       { background: "#00658c", text: "#ffffff" },
@@ -131,6 +168,10 @@ describe("Mermaid compatibility", () => {
     "stateDiagram-v2\n A --> B\n note right of A : Important",
     "---\ntitle: Diagram\n---\nflowchart TD\n A --> B",
     "flowchart LR\n A --> B\n A[Question]\n B[Answer]",
+    "flowchart LR\n A-->B",
+    "flowchart LR\n A---B",
+    "flowchart LR\n A==>B",
+    "flowchart LR\n A-->B\n A[Question]\n B[Answer]",
     "flowchart LR\n A[First] --> B\n A[Revised]",
     'stateDiagram-v2\n A --> B\n state "Question" as A',
     'stateDiagram-v2\n state "First" as A\n state "Revised" as A\n A --> B',
