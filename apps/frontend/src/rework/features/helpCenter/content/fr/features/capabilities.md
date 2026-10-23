@@ -110,7 +110,7 @@ nous venons de parcourir. »
 
 **Ce qu'elle fait** — l'agent remplit un template PowerPoint que vous avez
 déposé sur l'agent. Chaque emplacement à remplir est un repère placé dans une
-diapositive et décrit dans les commentaires de celle-ci ; un repère peut
+slide et décrit dans les commentaires de celle-ci ; un repère peut
 attendre du texte ou une image tirée d'un dossier de ressources.
 
 **Ses limites** — l'agent remplit un template, il ne conçoit pas de
@@ -118,24 +118,24 @@ présentation : sans template déposé, la capacité ne fonctionne pas. Le templ
 vérifié au dépôt et les erreurs de repérage vous sont signalées. Un agent
 dupliqué ou copié dans une autre équipe emporte son propre exemplaire du template.
 
-**Un exemple** — un template de revue mensuelle en cinq diapositives, que l'agent
+**Un exemple** — un template de revue mensuelle en cinq slides, que l'agent
 remplit chaque mois à partir des documents de la période.
 
 ### Générer une présentation
 
 **Ce qu'elle fait** — l'agent construit une présentation PowerPoint à partir de
 votre demande, sur le template de votre entreprise ou, à défaut, sur le
-template de la plateforme. Pour chaque diapositive, il choisit la diapositive du template qui
+template de la plateforme. Pour chaque slide, il choisit la slide du template qui
 convient le mieux au contenu et la remplit. Quand le template a une
-diapositive qui peut recevoir un graphique, les chiffres deviennent des
+slide qui peut recevoir un graphique, les chiffres deviennent des
 graphiques modifiables, aux couleurs du template, des barres et secteurs
 jusqu'aux radars, nuages de points et bulles ; un graphique en secteurs
 affiche des pourcentages, sauf si vous donnez une unité (M€, personnes…) :
 il affiche alors les valeurs. La présentation s'affiche dans un
 aperçu à côté de la conversation et se télécharge en `.pptx`. Le bouton
 d'information à côté du téléchargement montre **Ce qui a été construit** :
-chaque diapositive, son type, et ce qui a été raccourci, laissé de côté ou
-continué sur une autre diapositive.
+chaque slide, son type, et ce qui a été raccourci, laissé de côté ou
+continué sur une autre slide.
 
 **Comment la configurer** — déposez un template `.pptx` sur l'agent et
 enregistrez. Le template est alors lu en arrière-plan : pendant ce temps,
@@ -143,12 +143,12 @@ l'agent affiche **En préparation — lecture du template PowerPoint en cours** 
 n'est pas disponible ; il le redeviendra tout seul dans quelques minutes, quand
 la lecture sera terminée, et vous pouvez fermer la
 fenêtre en attendant. Ensuite, **Vérifier les slides** montre chaque
-diapositive trouvée, avec son nom et son type : renommez une diapositive,
+slide trouvée, avec son nom et son type : renommez une slide,
 changez son type ou mettez-la de côté. Rien n'est obligatoire.
 Le template et **Valider le plan avant de construire** s'affichent d'emblée ;
 **Vérifier les slides**, le modèle de vision et la variété sont sous
 **Paramètres avancés**. **Vérifier les slides** apparaît aussi sous le template
-quand la lecture a mis des diapositives de côté.
+quand la lecture a mis des slides de côté.
 Pour préparer un template que l'agent comprend bien, voir
 [Préparer son template PowerPoint](/help/fr/guides/prepare-powerpoint-template).
 
@@ -160,32 +160,32 @@ défini par l'administrateur** et le nom du fichier, voir
 toujours la main.
 
 **Utiliser un modèle de vision** — quand un modèle d'IA capable de lire les
-images est disponible, il regarde chaque diapositive du template pour
+images est disponible, il regarde chaque slide du template pour
 la nommer et comprendre à quoi elle sert. Vous pouvez choisir le modèle
 d'IA qui s'en charge, ou garder celui de l'agent. Sans un tel modèle d'IA,
 l'interrupteur est verrouillé et
-les diapositives sont nommées par des règles : cela fonctionne, mais les noms
+les slides sont nommées par des règles : cela fonctionne, mais les noms
 sont moins précis.
 
-**Forcer de la variété** — limite le nombre de fois qu'une même diapositive
+**Forcer de la variété** — limite le nombre de fois qu'une même slide
 revient dans une présentation. **Par nom de slide** (par défaut) : chaque
-diapositive du template sert au plus le nombre de fois choisi. **Par type de slide
+slide du template sert au plus le nombre de fois choisi. **Par type de slide
 identifié** : chaque type (des listes à puces, par exemple) revient au plus ce
-nombre de fois, même sur des diapositives différentes. Avec **1**, chaque
-diapositive est différente ; avec **2** (par défaut), une diapositive peut
+nombre de fois, même sur des slides différentes. Avec **1**, chaque
+slide est différente ; avec **2** (par défaut), une slide peut
 revenir une fois. La limite compte dans chaque section : une section (un pays,
-par exemple) peut reprendre les mêmes diapositives qu'une autre. Des
-diapositives identiques à la suite ne sont faites que si vous le demandez. Quand le template contient trop peu de diapositives pour la
+par exemple) peut reprendre les mêmes slides qu'une autre. Des
+slides identiques à la suite ne sont faites que si vous le demandez. Quand le template contient trop peu de slides pour la
 présentation demandée, l'agent fait au mieux. Sur la première présentation
 d'une conversation, l'agent est invité à revoir celles qui se répètent trop.
 Interrupteur coupé : aucune limite. Le changement vaut dès la présentation
 suivante, sans relire le template.
 
-**Le fil de la présentation** — pour chaque diapositive, l'agent décide
+**Le fil de la présentation** — pour chaque slide, l'agent décide
 d'abord ce que le public doit en retenir, en une phrase, puis choisit ce qu'il
 montre pour le prouver. Cette phrase ouvre les notes de l'orateur, et le
-titre la résume en quelques mots. Elle n'est affichée sur les diapositives que
-si vous demandez les messages clés sur les diapositives, et seulement sur
+titre la résume en quelques mots. Elle n'est affichée sur les slides que
+si vous demandez les messages clés sur les slides, et seulement sur
 celles dont le template prévoit une place pour elle.
 Quand le contenu vient de vos documents ou de ce que vous avez écrit dans la
 conversation, les notes disent d'où il vient ; les connaissances générales
@@ -196,36 +196,36 @@ présenter.
 
 **Valider le plan avant de construire** — désactivé par défaut. Activé, l'agent
 montre d'abord son plan pour la première présentation d'une conversation : le
-public, le message principal, une ligne par diapositive et ce que la
-construction changerait (une diapositive construite sous un autre type, par
+public, le message principal, une ligne par slide et ce que la
+construction changerait (une slide construite sous un autre type, par
 exemple). Il attend votre
 réponse : validez-le ou dites ce qu'il faut changer, et il construit. Pour
 passer cette étape une fois, demandez-lui de construire directement, sans plan.
-Une fois le plan validé, les diapositives restent telles que convenu : l'agent
+Une fois le plan validé, les slides restent telles que convenu : l'agent
 n'est pas invité à revoir celles qui se répètent. Les modifications d'une
 présentation déjà livrée n'attendent jamais.
 
 **Modifier une présentation livrée** — demandez-le dans la même conversation :
 l'agent modifie la dernière présentation qu'il y a livrée, jamais une plus
-ancienne. Désignez les diapositives par leur numéro dans le fichier : changez
-le texte de la diapositive 4, ajoutez une diapositive après la 2, déplacez la
-6 après la 3, supprimez la 5. Pour donner à une diapositive l'apparence d'une
-autre, demandez « la même mise en page que la diapositive 3 ». Les autres
-diapositives restent telles quelles.
+ancienne. Désignez les slides par leur numéro dans le fichier : changez
+le texte de la slide 4, ajoutez une slide après la 2, déplacez la
+6 après la 3, supprimez la 5. Pour donner à une slide l'apparence d'une
+autre, demandez « la même mise en page que la slide 3 ». Les autres
+slides restent telles quelles.
 
 **Les images** — l'agent prend les images dans un dossier des ressources de
 votre équipe : nommez le dossier dans votre demande (« les images de
-Images/Sites »). Seules les diapositives du template qui ont une zone d'image
+Images/Sites »). Seules les slides du template qui ont une zone d'image
 en affichent une. Un fichier qui n'est pas une image utilisable est laissé de
 côté, et **Ce qui a été construit** le signale.
 
-**Ses limites** — l'agent n'utilise que les diapositives que le template
+**Ses limites** — l'agent n'utilise que les slides que le template
 contient : il n'en dessine pas de nouvelles. Quand un contenu ne tient dans
-aucune diapositive (trop d'éléments, par exemple), il le découpe ou le
+aucune slide (trop d'éléments, par exemple), il le découpe ou le
 raccourcit. Si la lecture du template échoue, l'agent reste indisponible : le
 formulaire en donne la raison ; enregistrez l'agent pour le relire.
 
-**Un exemple** — « Prépare une présentation de dix diapositives sur nos
+**Un exemple** — « Prépare une présentation de dix slides sur nos
 résultats trimestriels pour le comité de direction. »
 
 ### Générer une page web (HTML/CSS)

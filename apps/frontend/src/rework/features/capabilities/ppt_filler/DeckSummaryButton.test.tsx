@@ -129,9 +129,9 @@ describe("DeckSummaryButton", () => {
     const container = await mount("fr", summary);
     expect(container.querySelector("button")!.getAttribute("aria-label")).toBe("Ce qui a été construit");
     const dialog = open(container);
-    expect(dialog.textContent).toContain("Cette présentation compte 4 diapositives.");
+    expect(dialog.textContent).toContain("Cette présentation compte 4 slides.");
     expect(dialog.textContent).toContain("Sommaire");
-    expect(dialog.textContent).toContain("La liste continue sur la diapositive suivante.");
+    expect(dialog.textContent).toContain("La liste continue sur la slide suivante.");
     expect(dialog.textContent).toContain("Construite en « Liste à puces » au lieu de « Frise chronologique ».");
     expect(dialog.textContent).toContain("2 images n'ont pas pu être utilisées.");
     expect(dialog.textContent).not.toContain("capability.ppt_builder");

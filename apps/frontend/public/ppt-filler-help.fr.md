@@ -16,13 +16,13 @@ Dans une zone de texte, écrivez une **clé** entre accolades simples ou doubles
 {contexte}
 ```
 
-Les captures utilisent des accolades simples. `{contexte}` et `{{contexte}}` désignent la même clé : les deux formes peuvent être mélangées, y compris pour les images. Le nom doit être identique dans la diapositive et les notes (sensible à la casse, espaces en bordure ignorés). Les templates en doubles accolades restent compatibles.
+Les captures utilisent des accolades simples. `{contexte}` et `{{contexte}}` désignent la même clé : les deux formes peuvent être mélangées, y compris pour les images. Le nom doit être identique dans la slide et les notes (sensible à la casse, espaces en bordure ignorés). Les templates en doubles accolades restent compatibles.
 
-Vous pouvez réutiliser la même clé plusieurs fois sur une diapositive pour répéter la même valeur. La même clé sur une autre diapositive est, elle, indépendante.
+Vous pouvez réutiliser la même clé plusieurs fois sur une slide pour répéter la même valeur. La même clé sur une autre slide est, elle, indépendante.
 
 ### 2. Décrivez chaque clé dans les notes
 
-Dans les **notes** de la diapositive, écrivez pour chaque clé une ligne d'en-tête `{clé}:` ou `{{clé}}:` suivie d'une description. Elle indique à l'agent quoi mettre à cet endroit :
+Dans les **notes** de la slide, écrivez pour chaque clé une ligne d'en-tête `{clé}:` ou `{{clé}}:` suivie d'une description. Elle indique à l'agent quoi mettre à cet endroit :
 
 ```
 {contexte}:
@@ -31,7 +31,7 @@ Contexte du projet. Une à deux phrases.
 
 Une ligne n'est un en-tête que si elle se compose d'une ou plusieurs clés `{clé}` ou `{{clé}}`, séparées par des virgules et terminées par deux-points. Une clé citée au milieu d'une phrase reste du texte ordinaire - vous pouvez donc écrire naturellement.
 
-![Une diapositive avec des clés entre accolades simples dans ses zones de texte, et les notes de la diapositive décrivant chaque clé.](/ppt-filler/template.png)
+![Une slide avec des clés entre accolades simples dans ses zones de texte, et les notes de la slide décrivant chaque clé.](/ppt-filler/template.png)
 
 ## Utilisation avancée
 
@@ -53,7 +53,7 @@ Trois à cinq points maximum, formulés pour un public métier.
 
 ### Assigner une description à plusieurs clés
 
-Listez plusieurs clés séparées par des virgules sur la ligne d'en-tête pour leur donner la même description. C'est utile quand une diapositive répète la même structure plusieurs fois — par exemple un CV avec trois sections décrivant les trois dernières expériences, chacune avec un titre et une description :
+Listez plusieurs clés séparées par des virgules sur la ligne d'en-tête pour leur donner la même description. C'est utile quand une slide répète la même structure plusieurs fois — par exemple un CV avec trois sections décrivant les trois dernières expériences, chacune avec un titre et une description :
 
 ```
 {{titreExperience1}}, {{titreExperience2}}, {{titreExperience3}}:
@@ -72,12 +72,12 @@ Par défaut, vos descriptions `{{clé}}:` sont des instructions de configuration
 Un résumé en une phrase de la mission.
 
 ---
-Note au présentateur : garder cette diapositive sous deux minutes.
+Note au présentateur : garder cette slide sous deux minutes.
 ```
 
 ## Ajouter des images
 
-Une clé peut aussi être remplie par une **image** plutôt que par du texte. L'agent choisit une image dans un dossier de vos ressources et la place dans votre diapositive.
+Une clé peut aussi être remplie par une **image** plutôt que par du texte. L'agent choisit une image dans un dossier de vos ressources et la place dans votre slide.
 
 ### 1. Marquez l'emplacement de l'image
 
@@ -117,7 +117,7 @@ Vous pouvez proposer N emplacements d'image et demander à l'agent (dans la desc
 ### Bon à savoir
 
 - L'image est mise à l'échelle pour **tenir à l'intérieur** du cadre de la forme, en conservant son rapport hauteur/largeur et centrée — sans déformation ni rognage.
-- Une clé d'image répétée (la même clé dans plusieurs formes d'une diapositive) reçoit la même image partout, comme les clés de texte répétées.
+- Une clé d'image répétée (la même clé dans plusieurs formes d'une slide) reçoit la même image partout, comme les clés de texte répétées.
 - Les vraies notes du présentateur situées après le séparateur `---` ne sont pas touchées.
 - Le dossier doit être un dossier réel de votre espace. Son existence est vérifiée à l'enregistrement du template importé.
 
@@ -125,8 +125,8 @@ Vous pouvez proposer N emplacements d'image et demander à l'agent (dans la desc
 
 Quand vous uploadé un template de PowerPoint, il est analysé immédiatement. Tant qu'une erreur subsiste, l'agent ne peut pas être enregistré. Plusieurs cas peuvent se présenter :
 
-- **Une clé sans description** — une `{{clé}}` apparaît dans une zone de texte mais n'est pas décrite dans la note de la diapositive -> Il faut ajoutez la description manquante dans les notes
-- **Une description pour une clé absente** — les notes décrivent une `{{clé}}` qui n'apparaît dans aucune zone de texte de la diapositive -> Corrigez la faute de frappe, supprimez la description obsolète ou ajouter la clé manquante à la diapositive
+- **Une clé sans description** — une `{{clé}}` apparaît dans une zone de texte mais n'est pas décrite dans la note de la slide -> Il faut ajoutez la description manquante dans les notes
+- **Une description pour une clé absente** — les notes décrivent une `{{clé}}` qui n'apparaît dans aucune zone de texte de la slide -> Corrigez la faute de frappe, supprimez la description obsolète ou ajouter la clé manquante à la slide
 - **Un mot-clé de métadonnée inconnu** — une ligne de métadonnée utilise un mot-clé autre que `type` ou `folder` -> Corrigez la faute de frappe ; seuls `type` et `folder` sont reconnus
 - **Un type inconnu** — la valeur de `type:` n'est ni `text` ni `image` -> Utilisez l'une de ces deux valeurs
 - **Une métadonnée en double** — le même mot-clé de métadonnée apparaît deux fois dans le bloc d'une clé -> Supprimez la ligne en double
