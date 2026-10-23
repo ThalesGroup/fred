@@ -176,7 +176,8 @@ class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
         """
         Whether this instance's saved slice is ready to serve turns, for a
         capability whose save starts background work. Asked by control-plane
-        after a save and on re-checks; must be a cheap read. Default: ready.
+        after a save, on listings and on re-checks, so it must return quickly:
+        it may start or refresh that work but never waits for it. Default: ready.
         The UI names the pending work from the frontend locale key
         `capability.<id>.preparing` when the capability ships one.
         """
