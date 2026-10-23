@@ -878,7 +878,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-document-access"
-version = "4.5.1"
+version = "4.5.2"
 source = { editable = "../../libs/capabilities/fred-capability-document-access" }
 dependencies = [
     { name = "fred-core" },
@@ -1059,7 +1059,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-ppt-filler"
-version = "4.5.1"
+version = "4.5.2"
 source = { editable = "../../libs/capabilities/fred-capability-ppt-filler" }
 dependencies = [
     { name = "fastapi" },
@@ -1228,7 +1228,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "4.5.6"
+version = "4.5.7"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -1372,7 +1372,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "4.5.6"
+version = "4.5.7"
 source = { editable = "../../libs/fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -1449,7 +1449,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.5.6"
+version = "4.5.7"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "fred-pod" },
