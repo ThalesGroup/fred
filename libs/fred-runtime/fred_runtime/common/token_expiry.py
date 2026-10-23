@@ -20,6 +20,7 @@ import logging
 from typing import Optional
 
 import httpx
+import httpx2
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +95,7 @@ def is_expired_httpx_status_error(err: httpx.HTTPStatusError) -> bool:
     return False
 
 
-def is_expired_httpx_response(resp: httpx.Response | None) -> bool:
+def is_expired_httpx_response(resp: httpx.Response | httpx2.Response | None) -> bool:
     if not resp or resp.status_code != 401:
         return False
     try:

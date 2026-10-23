@@ -18,36 +18,25 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from functools import partial
-from typing import List, Optional, Tuple, cast
+from typing import List, Optional, cast
 
 import anyio
 from fred_sdk.contracts.context import RuntimeContext as AgentRuntimeContext
 from fred_sdk.contracts.models import (
     MCPServerConfiguration,
 )
+from langchain.mcp import MCPAdapter
 from langchain_core.tools import BaseTool
-from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import ToolNode
 
 from fred_runtime.common.kf_base_client import KnowledgeFlowAgentContext
-from fred_runtime.common.mcp_interceptors import (
-    DelegatedAuthorityInterceptor,
-    ExpiredTokenRetryInterceptor,
-    LivePersonBearerInterceptor,
-)
 from fred_runtime.common.mcp_toolkit import McpToolkit
 from fred_runtime.common.mcp_utils import (
-    AUTH_MODE_DELEGATED,
-    AUTH_MODE_NO_TOKEN,
     MCPConnectionError,
-    _normalize_auth_mode,
     get_connected_mcp_client_for_agent,
 )
 from fred_runtime.common.outbound_credentials import (
-    OutboundCredentialProvider,
-    OutboundCredentials,
     delegation_enabled,
     resolve_credential_provider,
 )
@@ -61,85 +50,9 @@ logger = logging.getLogger(__name__)
 MCP_CONNECT_MAX_ATTEMPTS = 3
 MCP_CONNECT_RETRY_BASE_DELAY_SECS = 0.5
 
-# --- Cross-request connect/tool-list cache (perf) -----------------------------
-# BENCH-<pending id>: `_run_lifecycle` used to reconnect + re-list tools against
-# every configured MCP server on EVERY agent turn (measured: ~2-3s wall time for
-# a 7-server agent, with a near-instant mock LLM). `MultiServerMCPClient` itself
-# holds no persistent resources (see `_close_mcp_client_quietly` below), so the
-# per-turn cost was purely the repeated connect+list_tools round trips, not
-# anything a "closed" connection would have saved by staying open.
-#
-# This cache reuses the (client, tools) pair across turns for the SAME agent +
-# server set + access token, so repeat turns in a session (or across sessions
-# for the same user/dev token) skip the round trips entirely.
-#
-# Auth freshness on a cache hit: `langchain_mcp_adapters` reads `tool_interceptors`
-# (and per-server `headers`) live off the client instance at call time, not from a
-# snapshot frozen at discovery time (verified against langchain_mcp_adapters==0.3.0
-# — see `execute_tool`/`_build_interceptor_chain` in its `tools.py`). So on a cache
-# hit we mutate `client.tool_interceptors` IN PLACE (never reassign the list) to the
-# CURRENT request's own interceptors before handing the client back — every request
-# still gets its own live `ExpiredTokenRetryInterceptor` (bound to ITS OWN, live
-# `agent_instance`/token-refresh callback), even though the underlying connection +
-# discovered tool schemas are shared. Headers don't need the same treatment: the
-# cache key already includes the exact access_token string, so a cache hit implies
-# an identical token/header value already.
-#
-# A delegated connection is single-use and is therefore never cached: its grant
-# names one run, so no later turn could match it, and an entry nothing can hit
-# would only hold its tool objects until it expired.
-#
-# Residual, accepted race: two truly concurrent requests for the SAME identity
-# (same cache key) could have request A's in-flight tool call pick up request B's
-# interceptor instance instead of its own. Both point at the same live user, so
-# this is never a cross-user leak — at worst a harmless same-identity mix-up.
-# Closing it fully would need a lock held for an entire turn's tool-calling phase,
-# which would serialize concurrent turns for the same user; not worth it.
-MCP_CLIENT_CACHE_TTL_SECS = 300.0
-_mcp_client_cache: dict[
-    Tuple[str, Tuple[str, ...], str], Tuple[MultiServerMCPClient, List[BaseTool], float]
-] = {}
-_mcp_client_cache_lock = asyncio.Lock()
-
 
 async def _context_token(runtime_context: AgentRuntimeContext) -> str | None:
     return runtime_context.access_token
-
-
-def _mcp_cache_key(
-    agent_id: str,
-    servers: List[MCPServerConfiguration],
-    credentials: OutboundCredentials,
-) -> Tuple[str, Tuple[str, ...], str]:
-    # The key names whatever the connection actually carries. Under delegation
-    # that is the grant on the endpoint, so two people never share a connection.
-    identity = (
-        "|".join(
-            f"{name}={value}" for name, value in sorted(credentials.parameters.items())
-        )
-        if credentials.delegated
-        else (credentials.authorization or "")
-    )
-    return (agent_id, tuple(sorted(s.id for s in servers)), identity)
-
-
-def _prune_expired_mcp_cache_locked(now: float) -> None:
-    """
-    Drop every expired entry from `_mcp_client_cache`.
-
-    Why this exists:
-    - a cache hit only checks the ONE key being looked up; without this, any
-      OTHER key that expires (e.g. a rotated user token, an agent that stops
-      being used) stays resident in process memory forever — a real memory
-      leak over a long-running pod's life, and it keeps stale `Authorization`
-      headers (the cache key embeds the raw access_token) around indefinitely.
-
-    How to use it:
-    - call under `_mcp_client_cache_lock`, before a lookup or insert.
-    """
-    expired = [k for k, v in _mcp_client_cache.items() if v[2] <= now]
-    for k in expired:
-        del _mcp_client_cache[k]
 
 
 async def _get_or_connect_mcp_client(
@@ -147,75 +60,30 @@ async def _get_or_connect_mcp_client(
     agent_id: str,
     mcp_servers: List[MCPServerConfiguration],
     runtime_context: AgentRuntimeContext,
-    tool_interceptors: list,
-    credentials: OutboundCredentialProvider,
-) -> Tuple[MultiServerMCPClient, List[BaseTool]]:
-    if all(
-        _normalize_auth_mode(server.auth_mode) == AUTH_MODE_NO_TOKEN
-        for server in mcp_servers
-    ):
-        return await get_connected_mcp_client_for_agent(
-            agent_id=agent_id,
-            mcp_servers=mcp_servers,
-            runtime_context=runtime_context,
-            tool_interceptors=tool_interceptors,
-            credentials=credentials,
-        )
-
-    call_credentials = await credentials.credentials()
-    if call_credentials.delegated:
-        return await get_connected_mcp_client_for_agent(
-            agent_id=agent_id,
-            mcp_servers=mcp_servers,
-            runtime_context=runtime_context,
-            tool_interceptors=tool_interceptors,
-            credentials=credentials,
-        )
-
-    key = _mcp_cache_key(agent_id, mcp_servers, call_credentials)
-    now = time.monotonic()
-
-    async with _mcp_client_cache_lock:
-        _prune_expired_mcp_cache_locked(now)
-        cached = _mcp_client_cache.get(key)
-        if cached is not None and cached[2] > now:
-            cached_client = cached[0]
-            # In-place mutation only — reassigning `.tool_interceptors` would not
-            # be seen by tool closures already vended from a prior get_tools()
-            # call (they hold a reference to the original list object).
-            cached_client.tool_interceptors[:] = tool_interceptors
-            if credentials.delegated:
-                logger.info("[MCP] event=connection_cache outcome=hit")
-            else:
-                logger.info(
-                    "[MCP] agent=%s cache hit: reusing connected client (%d tools), "
-                    "current request's interceptors swapped in.",
-                    agent_id,
-                    len(cached[1]),
-                )
-            return cached_client, cached[1]
-
-    client, tools = await get_connected_mcp_client_for_agent(
+    credentials,
+    refresh_token_cb: TokenRefreshCallback | None,
+    refresh_owner: object,
+) -> tuple[list[MCPAdapter], list[BaseTool]]:
+    # The adapter's callable tools retain their client's authentication object.
+    # A cross-run tool cache would retain a previous run's credential provider.
+    return await get_connected_mcp_client_for_agent(
         agent_id=agent_id,
         mcp_servers=mcp_servers,
         runtime_context=runtime_context,
-        tool_interceptors=tool_interceptors,
         credentials=credentials,
+        refresh_token_cb=refresh_token_cb,
+        refresh_owner=refresh_owner,
     )
-    async with _mcp_client_cache_lock:
-        _mcp_client_cache[key] = (client, tools, now + MCP_CLIENT_CACHE_TTL_SECS)
-    return client, tools
 
 
-async def _close_mcp_client_quietly(client: Optional[MultiServerMCPClient]) -> None:
+async def _close_mcp_client_quietly(client: Optional[list[MCPAdapter]]) -> None:
     if not client:
         logger.debug("[MCP] event=connection_close outcome=skipped reason=no_client")
         return
 
     logger.info("[MCP] event=connection_close outcome=started")
 
-    # Newer MultiServerMCPClient does not maintain persistent resources; sessions are
-    # opened/closed per call. Nothing to close at the client level.
+    # MCPAdapter opens a client per listing or invocation; no context remains open.
     logger.debug("[MCP] event=connection_close outcome=succeeded")
 
 
@@ -275,7 +143,7 @@ class MCPRuntime:
                     continue
                 self.available_servers.append(server_configuration)
 
-        self.mcp_client: Optional[MultiServerMCPClient] = None
+        self.mcp_client: Optional[list[MCPAdapter]] = None
         self.toolkit: Optional[McpToolkit] = None
 
         # Lifecycle orchestration so enter/exit happen in the SAME task
@@ -390,11 +258,9 @@ class MCPRuntime:
 
     async def _run_lifecycle(self, runtime_context: AgentRuntimeContext) -> None:
         """
-        Create and connect the MultiServerMCPClient in THIS task and close it
-        from the same task on stop signal to avoid AnyIO cancel-scope mismatches.
+        Discover tools through MCPAdapter for this run's credential provider.
         """
         try:
-            interceptors = []
             refresh_cb_attr = getattr(
                 self.agent_instance, "refresh_user_access_token", None
             )
@@ -407,40 +273,13 @@ class MCPRuntime:
                 holder=self.agent_instance,
                 person_token_getter=partial(_context_token, runtime_context),
             )
-            if provider.delegated:
-                delegated_server_ids = {
-                    server.id
-                    for server in self.available_servers
-                    if str(_normalize_auth_mode(server.auth_mode))
-                    == AUTH_MODE_DELEGATED
-                }
-                interceptors.append(
-                    DelegatedAuthorityInterceptor(
-                        provider,
-                        delegated_server_ids=delegated_server_ids,
-                    )
-                )
-            else:
-                authenticated_server_ids = {
-                    server.id
-                    for server in self.available_servers
-                    if str(_normalize_auth_mode(server.auth_mode)) != AUTH_MODE_NO_TOKEN
-                }
-                interceptors.append(
-                    LivePersonBearerInterceptor(
-                        provider,
-                        authenticated_server_ids=authenticated_server_ids,
-                    )
-                )
-                if refresh_cb:
-                    interceptors.append(ExpiredTokenRetryInterceptor(refresh_cb))
-
             new_client, tools = await _get_or_connect_mcp_client(
                 agent_id=self._agent_id,
                 mcp_servers=self.available_servers,
                 runtime_context=runtime_context,
-                tool_interceptors=interceptors,
                 credentials=provider,
+                refresh_token_cb=refresh_cb,
+                refresh_owner=self.agent_instance,
             )
             self.mcp_client = new_client
             # `tools` were already fetched (per server) while connecting/validating

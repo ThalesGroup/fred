@@ -140,7 +140,7 @@ def test_uvicorn_sanitization_preserves_diagnostics_independently_of_delegation(
     assert UvicornSensitiveQueryFilter().filter(record)
     assert (
         record.getMessage()
-        == "Failure at /documents?person=synthetic-person&token=<redacted>&ordinary=visible"
+        == "Failure at /documents?person=<redacted>&token=<redacted>&ordinary=visible"
     )
     assert record.exc_info is not None
     assert record.exc_info[1] is error
@@ -583,9 +583,11 @@ def test_shared_output_preserves_legacy_arguments_and_structured_fields(
 
 
 @pytest.mark.parametrize("delegation", [False, True])
+@pytest.mark.parametrize("logger_name", ["httpx.transport", "httpx2._client"])
 def test_dependency_child_diagnostics_remain_sanitized(
     capsys: pytest.CaptureFixture[str],
     delegation: bool,
+    logger_name: str,
 ) -> None:
     initialize_delegation(DelegationConfig(accept_delegated_calls=delegation))
     log_setup(
@@ -594,7 +596,11 @@ def test_dependency_child_diagnostics_remain_sanitized(
         log_format="json",
         include_uvicorn=False,
     )
-    logging.getLogger("httpx.transport").warning(
+    logging.getLogger(logger_name).info(
+        "HTTP request to http://tools.invalid/mcp?person=private&run=private&agent=private"
+    )
+    assert capsys.readouterr().out == ""
+    logging.getLogger(logger_name).warning(
         "SECRET-CANARY signed_url=%s",
         "SECRET-CANARY",
         extra={"detail": "SECRET-CANARY"},

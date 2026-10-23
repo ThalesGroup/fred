@@ -310,6 +310,7 @@ def log_setup(
         "elasticsearch",
         "aiohttp",
         "httpx",
+        "httpx2",
         "httpcore",
         "azure",
         "azure.core",

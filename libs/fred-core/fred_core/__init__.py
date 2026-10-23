@@ -103,10 +103,8 @@ from fred_core.security.keycloak.keycloack_admin_client import (
     create_keycloak_admin,
 )
 from fred_core.security.mcp_delegation import (
-    apply_verified_grant,
     declare_delegation_parameters,
     mcp_mount_auth,
-    strip_grant_tool_fields,
     verified_grant,
 )
 from fred_core.security.models import (
@@ -227,10 +225,8 @@ __all__ = [
     "AssertedUser",
     "DelegationConfig",
     "security_configuration_from_env",
-    "apply_verified_grant",
     "declare_delegation_parameters",
     "mcp_mount_auth",
-    "strip_grant_tool_fields",
     "verified_grant",
     "holds_caller_role",
     "is_delegation_caller",
