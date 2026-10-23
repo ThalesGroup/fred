@@ -8,4 +8,4 @@
 
 - [x] 2.1 Update the sample catalog, Helm values, and operator documentation; verify the sample and static Helm catalogs parse.
 - [x] 2.2 Capture the grouped selector, advanced form, and recurring no-default modal in Playwright using the real React UI.
-- [ ] 2.3 Run root quality checks, review the branch against `swift`, and confirm the draft PR CI passes.
+- [x] 2.3 Run root quality checks, review the branch against `swift`, and confirm the draft PR CI passes.
