@@ -8,7 +8,7 @@
 - [x] 2.1 Download flowchart, HTML-label ER, pie and Gantt examples from localhost in light/dark modes and reopen the files outside Fred; verify complete diagrams, readable colors, local markers and retained fullscreen state.
 - [x] 2.2 Run affected tests, production build, root code-quality and migration validation; fix failures and record results in the existing PR.
 - [x] 2.3 Update component UX and the existing migration note, perform author/independent review of the added export contract, and record review coverage and dispositions in the PR.
-- [ ] 2.4 Reconcile tasks/specs with verified behavior, sync the main spec, then commit/push to the existing draft PR; verify clean worktree and published head.
+- [x] 2.4 Reconcile tasks/specs with verified behavior, sync the main spec, then commit/push to the existing draft PR; verify clean worktree and published head.
 
 Archive the completed change afterward under the repository close-out policy.
 
