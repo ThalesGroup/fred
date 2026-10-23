@@ -146,7 +146,11 @@ class UserPreferencesStore:
             if "trace_expanded" in fields:
                 row.trace_expanded = patch.trace_expanded
             if "pane_widths" in fields:
-                row.pane_widths = {**row.pane_widths, **(patch.pane_widths or {})}
+                row.pane_widths = (
+                    {**row.pane_widths, **patch.pane_widths}
+                    if patch.pane_widths is not None
+                    else {}
+                )
             row.updated_at = utcnow()
             await session.flush()
             return _to_preferences(row)

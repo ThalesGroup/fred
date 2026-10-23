@@ -60,6 +60,9 @@ async def test_preferences_round_trip_and_account_isolation(
         "inline-drawer:capability-side-panel:width": 640,
     }
 
+    cleared = await store.patch("alice", PatchUserPreferences(pane_widths=None))
+    assert cleared.pane_widths == {}
+
     await store.delete("alice")
     assert (await store.get("alice")).initialized is False
 
