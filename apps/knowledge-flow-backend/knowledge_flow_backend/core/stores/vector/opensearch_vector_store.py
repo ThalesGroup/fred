@@ -1031,13 +1031,10 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
     def delete_vectors_for_document(self, *, document_uid: str) -> None:
         try:
             body = {"query": {"term": {"metadata.document_uid": {"value": document_uid}}}}
-            # conflicts="proceed": this purge is idempotent and runs from more
-            # than one place on a cancelled ingestion (the indexing thread
-            # self-cleans, then the workflow compensation sweeps the same uid).
-            # A version conflict just means the other pass already removed the
-            # chunk — the default "abort" turned that benign race into a 409
-            # with a full stacktrace (#2315).
-            resp = self._client.delete_by_query(index=self._index, body=body, params={"conflicts": "proceed"})
+            # conflicts="proceed": the purge is idempotent and may race a second pass on a
+            # cancelled ingestion. refresh: deleted chunks must stop being searchable and
+            # counted when this returns, like the per-document update paths below.
+            resp = self._client.delete_by_query(index=self._index, body=body, params={"conflicts": "proceed", "refresh": "true"})
             deleted = int(resp.get("deleted", 0))
             logger.info("[VECTOR][OPENSEARCH] deleted %s vector chunks for document_uid=%s.", deleted, document_uid)
         except Exception:
