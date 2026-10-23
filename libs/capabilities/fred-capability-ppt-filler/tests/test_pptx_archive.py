@@ -40,6 +40,7 @@ from fred_capability_ppt_filler.capability import (
 from fred_capability_ppt_filler.pptx_archive import (
     UnsafeArchiveError,
     check_archive,
+    parse_xml,
     sanitize_template,
 )
 from fred_sdk.contracts.capability import (
@@ -96,6 +97,14 @@ def test_declared_sizes_and_ratios_are_checked():
 def test_the_analysis_reports_a_bomb_as_an_unreadable_template():
     result = analyze_template(_declaring_huge_member())
     assert result.inventory is None and "inflates" in result.errors[0].message
+
+
+def test_an_external_entity_is_never_resolved(tmp_path):
+    secret = tmp_path / "secret.txt"
+    secret.write_text("leaked")
+    xml = (f'<!DOCTYPE r [<!ENTITY x SYSTEM "file://{secret}">]><r>&x;</r>').encode()
+    root = parse_xml(xml)
+    assert "leaked" not in (root.text or "")
 
 
 @pytest.mark.asyncio

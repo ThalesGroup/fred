@@ -73,6 +73,7 @@ from fred_capability_ppt_filler.builder.plan import (
 from fred_capability_ppt_filler.pptx_archive import (
     UnsafeArchiveError,
     open_presentation,
+    parse_xml,
     unreadable_message,
 )
 from fred_capability_ppt_filler.traversal import KEY_PATTERN, PathPart, walk_shapes
@@ -216,7 +217,7 @@ def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
             for rel in master_part.rels.values()
             if not rel.is_external and rel.reltype.endswith("/theme")
         )
-        scheme = etree.fromstring(theme_part.blob).find(f".//{qn('a:fontScheme')}")
+        scheme = parse_xml(theme_part.blob).find(f".//{qn('a:fontScheme')}")
     except Exception:  # noqa: BLE001 - a theme-less deck just measures by default
         return None, None
     if scheme is None:

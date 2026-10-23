@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import io
 import posixpath
+import threading
 import zipfile
 from typing import Any, Dict, List, Set, Tuple
 
@@ -34,6 +35,22 @@ MAX_MEMBER_BYTES = 256 * 1024 * 1024
 # slide XML compresses ~10-30x, a bomb thousands of times.
 RATIO_CHECKED_BYTES = 10 * 1024 * 1024
 MAX_RATIO = 100
+
+
+_PARSERS = threading.local()
+
+
+def parse_xml(data: bytes) -> Any:
+    """``data`` parsed without entity expansion, network access or huge trees,
+    since template parts are user bytes. One parser per thread: lxml parsers
+    are not thread-safe."""
+    parser = getattr(_PARSERS, "parser", None)
+    if parser is None:
+        parser = etree.XMLParser(
+            resolve_entities=False, no_network=True, huge_tree=False
+        )
+        _PARSERS.parser = parser
+    return etree.fromstring(data, parser=parser)
 
 
 class UnsafeArchiveError(ValueError):
@@ -130,7 +147,7 @@ def _kept_rel(rel: Any) -> bool:
 
 def _unreferenced(xml: bytes, dropped: Set[str]) -> bytes:
     """``xml`` without its references to the ``dropped`` relationship ids."""
-    root = etree.fromstring(xml)
+    root = parse_xml(xml)
     for element in list(root.iter(etree.Element)):
         refs = [
             k for k, v in element.attrib.items() if k.startswith(_R_NS) and v in dropped
@@ -162,7 +179,7 @@ def sanitize_template(content: bytes) -> bytes:
     for name in names:
         if not name.endswith(".rels") or name in removed:
             continue
-        root = etree.fromstring(source.read(name))
+        root = parse_xml(source.read(name))
         dropped = [r for r in root.iter(f"{_REL_NS}Relationship") if not _kept_rel(r)]
         if not dropped:
             continue
@@ -177,7 +194,7 @@ def sanitize_template(content: bytes) -> bytes:
             ids = {r.get("Id", "") for r in dropped}
             changed[owner] = _unreferenced(source.read(owner), ids)
     if "[Content_Types].xml" in names:
-        types = etree.fromstring(source.read("[Content_Types].xml"))
+        types = parse_xml(source.read("[Content_Types].xml"))
         macros = [e for e in types if _macro(e.get("ContentType", ""))]
         mains = [e for e in types if e.get("ContentType") in _MACRO_MAIN]
         for entry in macros:  # a shared extension default stays, typeless
@@ -216,7 +233,7 @@ def _rels(archive: zipfile.ZipFile, part: str) -> List[Tuple[str, str, str]]:
     path = posixpath.join(folder, "_rels", name + ".rels")
     if path not in archive.namelist():
         return []
-    root = etree.fromstring(archive.read(path))
+    root = parse_xml(archive.read(path))
     return sorted(
         (
             rel.get("Id", ""),
@@ -234,7 +251,7 @@ def slide_fingerprints(content: bytes) -> List[str]:
     notes. Two renders that look the same hash the same, wherever they sit."""
     archive = zipfile.ZipFile(io.BytesIO(content))
     names = set(archive.namelist())
-    order = etree.fromstring(archive.read("ppt/presentation.xml"))
+    order = parse_xml(archive.read("ppt/presentation.xml"))
     targets = {rid: target for rid, _, target in _rels(archive, "ppt/presentation.xml")}
     prints: List[str] = []
     for slide_id in order.iter("{*}sldId"):
