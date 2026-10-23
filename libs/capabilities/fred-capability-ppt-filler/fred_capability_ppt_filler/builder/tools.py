@@ -444,7 +444,9 @@ def _schema_for(
         table=table,
         chart=chart,
         charts=charts_field,
-        kind=(
+        # pydantic 2.14 types create_model fields as TypeForm, which pyright cannot
+        # infer for an Optional[...] value: the definitions themselves are valid.
+        kind=(  # pyright: ignore[reportArgumentType]
             Optional[SlideKind],
             Field(
                 default=None,
@@ -507,18 +509,18 @@ def _schema_for(
                 ),
             ),
         ),
-        file_name=(
+        file_name=(  # pyright: ignore[reportArgumentType]
             Optional[str],
             Field(
                 default=None,
                 description="Short, relevant file name for the deck; '.pptx' is added.",
             ),
         ),
-        audience=(
+        audience=(  # pyright: ignore[reportArgumentType]
             Optional[str],
             Field(default=None, description="Optional: who the deck is for."),
         ),
-        main_message=(
+        main_message=(  # pyright: ignore[reportArgumentType]
             Optional[str],
             Field(
                 default=None,
@@ -526,7 +528,7 @@ def _schema_for(
                 description="Optional: the one idea the whole deck leaves, as a sentence.",
             ),
         ),
-        skip_plan=(
+        skip_plan=(  # pyright: ignore[reportArgumentType]
             (
                 Optional[str],
                 Field(
@@ -538,7 +540,7 @@ def _schema_for(
             if plan_gate
             else (SkipJsonSchema[Optional[str]], None)
         ),
-        show_takeaways=(
+        show_takeaways=(  # pyright: ignore[reportArgumentType]
             (Optional[bool], Field(default=None, description=_SHOW_TAKEAWAYS))
             if takeaways
             else (SkipJsonSchema[Optional[bool]], None)
