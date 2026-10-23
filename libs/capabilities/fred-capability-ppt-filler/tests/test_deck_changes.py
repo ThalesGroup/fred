@@ -1487,6 +1487,47 @@ def test_a_kind_edit_keeps_what_the_same_call_sets_and_what_the_kind_holds():
 
 
 @pytest.mark.asyncio
+async def test_a_bare_kind_edit_that_would_empty_a_slide_is_refused(
+    monkeypatch, deck_plan_store
+):
+    """Live: kind edits sent without content cleared the old bullets and the
+    slides were delivered empty."""
+    workspace = FakeWorkspace()
+    deck = [COVER, _PERSPECTIVES, {"title": "Merci"}]
+    text, result = await _Turn(monkeypatch, workspace).build(slides=deck)
+    assert not result.is_error, text
+    text, result = await _Turn(monkeypatch, workspace).build(
+        changes=[_TO_TWO_COLUMNS[0]]
+    )
+    assert result.is_error and len(workspace.writes) == 1
+    assert (
+        "slide 2: changing its kind to 'two_columns' clears its bullets and would "
+        "leave it empty: send its content for that kind in the same call (title and "
+        "columns), or keep its kind"
+    ) in text
+
+
+def test_a_kind_edit_to_a_title_only_kind_may_clear_the_body():
+    base = DeckPlan.model_validate({"slides": [COVER, _PERSPECTIVES]})
+    edit = {"op": "edit", "field": "kind", "slide": 2, "value": "section"}
+    plan = apply_changes(
+        base, [SlideChange.model_validate(edit)], lambda slide: ["bullets"]
+    )
+    assert plan.slides[1].bullets == [] and plan.slides[1].title == "Perspectives 2025"
+    with pytest.raises(ChangeError) as caught:
+        apply_changes(
+            base,
+            [SlideChange.model_validate({**edit, "value": "cards"})],
+            lambda slide: ["bullets"],
+        )
+    (problem,) = caught.value.problems
+    assert problem.startswith(
+        "changes[0] (edit): slide 2: changing its kind to 'cards'"
+    )
+    assert "(title and items)" in problem
+
+
+@pytest.mark.asyncio
 async def test_a_drop_option_gives_its_exact_change(monkeypatch, deck_plan_store):
     workspace = FakeWorkspace()
     two = {**_PERSPECTIVES, "kind": "two_columns", "columns": _COUNTRIES}

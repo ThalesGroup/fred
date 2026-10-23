@@ -41,6 +41,7 @@ from fred_capability_ppt_filler.builder.plan import (
     REPEAT_ALIASES,
     DeckPlan,
     SlidePlan,
+    has_content,
 )
 
 _OPS: Tuple[str, ...] = ("replace", "insert", "remove", "edit", "move")
@@ -712,6 +713,40 @@ def _clear_for_kind(
     return gone
 
 
+# What a kind's slide shows, for a kind edit that would leave it empty;
+# the title-only kinds are never empty with their title.
+_CONTENT_OF = {
+    "bullets": "bullets",
+    "agenda": "bullets",
+    "two_columns": "columns",
+    "comparison": "columns",
+    "cards": "items",
+    "figures": "items",
+    "process": "items",
+    "timeline": "items",
+    "team": "items",
+    "image_text": "image and bullets",
+    "table": "table",
+    "chart": "chart",
+}
+_TITLE_ONLY = ("cover", "section", "quote", "closing")
+
+
+def _emptied(number: int, dumped: Dict[str, Any], gone: List[str]) -> Optional[str]:
+    """Why a kind edit cannot stand: it cleared the old content and sent none
+    for the new kind, so the slide would be delivered empty."""
+    slide = SlidePlan.model_validate(dumped)
+    body = slide.model_copy(update={"title": None, "subtitle": None})
+    if not gone or slide.kind in _TITLE_ONLY or has_content(body):
+        return None
+    wanted = _CONTENT_OF.get(slide.kind or "", "its content")
+    return (
+        f"slide {number}: changing its kind to '{slide.kind}' clears its "
+        f"{', '.join(gone)} and would leave it empty: send its content for that kind "
+        f"in the same call (title and {wanted}), or keep its kind"
+    )
+
+
 def _kind(slide: SlidePlan, kinds: Mapping[str, str]) -> Optional[str]:
     return slide.kind or kinds.get(slide.asked_design or slide.built_on or "")
 
@@ -908,6 +943,13 @@ def apply_changes(
         if not failed and unplaced is not None and number not in liked:
             before = base.slides[number - 1]
             gone[number] = _clear_for_kind(before, dumped, entries, unplaced)
+            why = _emptied(number, dumped, gone[number])
+            if why:
+                k, change = next(
+                    (e for e in entries if e[1].field == "kind"), entries[0]
+                )
+                report(k, change, why)
+                failed.append((k, change, why))
         if not failed:
             edited[number] = SlidePlan.model_validate(dumped)
     if problems:
