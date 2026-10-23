@@ -771,7 +771,11 @@ async def ready_inventory(
         return None
     if record.outdated():
         await _refresh_quietly(store, record)
-    remember_inventory(instance_id, sha, key, inventory, outdated=record.outdated())
+    # A rules row serving a vision key is re-read too: another replica's save re-runs it.
+    stand_in = record.labelling_key != key
+    remember_inventory(
+        instance_id, sha, key, inventory, outdated=record.outdated() or stand_in
+    )
     return inventory
 
 

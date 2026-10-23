@@ -165,6 +165,20 @@ async def test_any_replica_reads_the_stored_result(analysis_db):
 
 
 @pytest.mark.asyncio
+async def test_a_rules_row_serving_a_vision_key_is_cached_for_a_recheck(analysis_db):
+    await _save(PptBuilderConfig(use_vision=False), _uploads())
+    await drain()
+    vision_key = PptBuilderConfig(use_vision=True).labelling_key()
+    store = get_analysis_store()
+    assert await ready_inventory(store, INSTANCE, SHA, vision_key) is not None
+    entry = analysis_job._inventories.get((INSTANCE, SHA, vision_key))
+    assert entry is not None and entry[1] is not None  # another replica may re-run it
+    assert await ready_inventory(store, INSTANCE, SHA, "rules") is not None
+    rules = analysis_job._inventories.get((INSTANCE, SHA, "rules"))
+    assert rules is not None and rules[1] is None
+
+
+@pytest.mark.asyncio
 async def test_interrupted_analysis_is_reported_and_recovered(analysis_db):
     stored = await _save(PptBuilderConfig(use_vision=False), _uploads())
     await drain()
