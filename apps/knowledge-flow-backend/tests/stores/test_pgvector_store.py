@@ -79,3 +79,38 @@ def test_ann_search_keeps_a_single_value_as_plain_equality():
 
     assert fake.filters == [{"document_uid": "doc-a"}]
     assert [h.document.metadata["document_uid"] for h in hits] == ["doc-a"]
+
+
+class _RecordingEngine:
+    """Captures the statement and parameters `set_document_tag_ids` sends."""
+
+    def __init__(self) -> None:
+        self.executed: list[tuple[str, dict[str, Any]]] = []
+
+    def begin(self):
+        engine = self
+
+        class _Conn:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def execute(self, statement, params):
+                engine.executed.append((str(statement), params))
+                return type("Result", (), {"rowcount": 2})()
+
+        return _Conn()
+
+
+def test_set_document_tag_ids_replaces_the_jsonb_array_on_every_chunk():
+    store, _ = _make_store([])
+    engine = _RecordingEngine()
+    store._engine = cast(Any, engine)
+
+    store.set_document_tag_ids(document_uid="doc-1", tag_ids=["alpha", "beta"])
+
+    [(sql, params)] = engine.executed
+    assert "jsonb_set(e.cmetadata, '{tag_ids}', CAST(:tag_ids AS jsonb))" in sql
+    assert params == {"collection": "test-collection", "doc_uid": "doc-1", "tag_ids": '["alpha", "beta"]'}

@@ -247,6 +247,28 @@ def test_set_document_name_does_not_log_error_on_full_success(monkeypatch, caplo
     assert any("updated document_name on 3 vector chunks" in r.message for r in caplog.records)
 
 
+def test_set_document_tag_ids_replaces_the_folder_ids_on_every_chunk_of_the_document(monkeypatch):
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=ovs.build_vector_index_mapping(4))
+    store = _make_store_for_existing_index(monkeypatch, fake_client)
+
+    store.set_document_tag_ids(document_uid="doc-1", tag_ids=["alpha", "beta"])
+
+    [(index, body)] = fake_client.update_by_query_calls
+    assert index == "fred-vectors"
+    assert body["query"] == {"term": {"metadata.document_uid": {"value": "doc-1"}}}
+    assert body["script"]["source"] == "ctx._source.metadata.tag_ids = params.value"
+    assert body["script"]["params"] == {"value": ["alpha", "beta"]}
+
+
+def test_set_document_tag_ids_raises_on_reported_failures(monkeypatch):
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=ovs.build_vector_index_mapping(4))
+    fake_client.update_by_query_response = {"updated": 1, "failures": [{"cause": "version_conflict"}]}
+    store = _make_store_for_existing_index(monkeypatch, fake_client)
+
+    with pytest.raises(RuntimeError, match="1 chunk"):
+        store.set_document_tag_ids(document_uid="doc-1", tag_ids=["beta"])
+
+
 def test_application_context_opensearch_factory_does_not_call_validate_index_or_fail(
     app_context,
     monkeypatch,

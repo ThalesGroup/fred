@@ -19,7 +19,7 @@ import json
 import logging
 import re
 from datetime import date, datetime, timezone
-from typing import Any, Dict, List, Optional, Type, TypeVar
+from typing import Any, Dict, List, Optional, Sequence, Type, TypeVar
 from urllib.parse import quote_plus
 
 import clickhouse_connect
@@ -474,13 +474,13 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
         """
         try:
             t = self._orm_table
-            stmt = select(t.c.chunk_uid, t.c.metadata, t.c.retrievable).where(t.c.document_uid == document_uid)
+            stmt = select(t.c.chunk_uid, t.c.metadata, t.c.retrievable, t.c.tag_ids).where(t.c.document_uid == document_uid)
             with Session(self._engine, future=True) as session:
                 rows = session.execute(stmt).all()
 
             updated = 0
-            for chunk_uid, metadata_raw, retrievable in rows:
-                md = self._decode_metadata(metadata_raw, retrievable)
+            for chunk_uid, metadata_raw, retrievable, tag_ids in rows:
+                md = self._decode_metadata(metadata_raw, retrievable, tag_ids)
                 md["document_name"] = document_name
                 self._command(
                     f"ALTER TABLE {self._table_ref} UPDATE metadata = {{value:String}} WHERE chunk_uid = {{chunk_uid:String}} SETTINGS mutations_sync = 1",
@@ -500,7 +500,14 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
             )
             raise RuntimeError("Failed to update document_name in ClickHouse.")
 
-    def _decode_metadata(self, metadata_raw: Any, retrievable: Optional[int]) -> Dict[str, Any]:
+    def set_document_tag_ids(self, *, document_uid: str, tag_ids: Sequence[str]) -> None:
+        # Search filters on the promoted column; one mutation instead of a JSON rewrite per chunk.
+        self._command(
+            f"ALTER TABLE {self._table_ref} UPDATE tag_ids = {{tag_ids:Array(String)}} WHERE document_uid = {{doc_uid:String}} SETTINGS mutations_sync = 1",
+            {"tag_ids": [str(t) for t in tag_ids], "doc_uid": document_uid},
+        )
+
+    def _decode_metadata(self, metadata_raw: Any, retrievable: Optional[int], tag_ids: Optional[Sequence[str]] = None) -> Dict[str, Any]:
         md: Dict[str, Any]
         if isinstance(metadata_raw, dict):
             md = dict(metadata_raw)
@@ -515,6 +522,8 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
         md = _normalize_metadata(md)
         if retrievable is not None:
             md["retrievable"] = bool(int(retrievable))
+        if tag_ids is not None:
+            md["tag_ids"] = [str(tag_id) for tag_id in tag_ids]
         return md
 
     def get_vectors_for_document(self, document_uid: str, with_document: bool = True) -> List[Dict[str, Any]]:
@@ -547,12 +556,12 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
     def get_chunks_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
         try:
             t = self._orm_table
-            stmt = select(t.c.chunk_uid, t.c.text, t.c.metadata, t.c.retrievable).where(t.c.document_uid == document_uid)
+            stmt = select(t.c.chunk_uid, t.c.text, t.c.metadata, t.c.retrievable, t.c.tag_ids).where(t.c.document_uid == document_uid)
             with Session(self._engine, future=True) as session:
                 rows = session.execute(stmt).all()
             out: List[Dict[str, Any]] = []
-            for chunk_uid, text, metadata_raw, retrievable in rows:
-                md = self._decode_metadata(metadata_raw, retrievable)
+            for chunk_uid, text, metadata_raw, retrievable, tag_ids in rows:
+                md = self._decode_metadata(metadata_raw, retrievable, tag_ids)
                 out.append(
                     {
                         "chunk_uid": chunk_uid,
@@ -571,17 +580,17 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
     def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:
         try:
             t = self._orm_table
-            stmt = select(t.c.chunk_uid, t.c.text, t.c.metadata, t.c.retrievable).where(t.c.document_uid == document_uid, t.c.chunk_uid == chunk_uid).limit(1)
+            stmt = select(t.c.chunk_uid, t.c.text, t.c.metadata, t.c.retrievable, t.c.tag_ids).where(t.c.document_uid == document_uid, t.c.chunk_uid == chunk_uid).limit(1)
             with Session(self._engine, future=True) as session:
                 rows = session.execute(stmt).all()
             if not rows:
                 logger.warning("[VECTOR][CLICKHOUSE] chunk not found: %s", chunk_uid)
                 return {"chunk_uid": chunk_uid}
-            _, text, metadata_raw, retrievable = rows[0]
+            _, text, metadata_raw, retrievable, tag_ids = rows[0]
             return {
                 "chunk_uid": chunk_uid,
                 "text": text or "",
-                "metadata": self._decode_metadata(metadata_raw, retrievable),
+                "metadata": self._decode_metadata(metadata_raw, retrievable, tag_ids),
             }
         except Exception:
             logger.exception("[VECTOR][CLICKHOUSE] failed to fetch chunk %s", chunk_uid)
@@ -632,8 +641,8 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
         results: List[T] = []
 
         for rank, row in enumerate(rows, start=1):
-            chunk_uid, text, metadata_raw, retrievable, score = row
-            meta = self._decode_metadata(metadata_raw, retrievable)
+            chunk_uid, text, metadata_raw, retrievable, tag_ids, score = row
+            meta = self._decode_metadata(metadata_raw, retrievable, tag_ids)
             meta.setdefault(CHUNK_ID_FIELD, chunk_uid)
             meta["score"] = float(score)
             meta["rank"] = rank
@@ -732,7 +741,7 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
         try:
             t = self._orm_table
             score = (1.0 - func.cosineDistance(t.c.embedding, [float(v) for v in query_vector])).label("score")
-            stmt = select(t.c.chunk_uid, t.c.text, t.c.metadata, t.c.retrievable, score)
+            stmt = select(t.c.chunk_uid, t.c.text, t.c.metadata, t.c.retrievable, t.c.tag_ids, score)
             for cond in self._build_filter_conditions(search_filter, t):
                 stmt = stmt.where(cond)
             stmt = stmt.order_by(score.desc()).limit(int(k))
@@ -756,7 +765,7 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
             t = self._orm_table
             pos = func.positionCaseInsensitiveUTF8(t.c.text, query)
             score = (1.0 / (1.0 + pos)).label("score")
-            stmt = select(t.c.chunk_uid, t.c.text, t.c.metadata, t.c.retrievable, score)
+            stmt = select(t.c.chunk_uid, t.c.text, t.c.metadata, t.c.retrievable, t.c.tag_ids, score)
             for cond in self._build_filter_conditions(search_filter, t):
                 stmt = stmt.where(cond)
             stmt = stmt.where(pos > 0).order_by(score.desc()).limit(int(top_k))
@@ -807,7 +816,7 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
             md[CHUNK_ID_FIELD] = cid
             retrievable = _as_nullable_uint8(md.get("retrievable"))
             metadata_raw = json.dumps(md, ensure_ascii=True)
-            merged_rows.append((cid, doc_copy.page_content or "", metadata_raw, retrievable, float(combined)))
+            merged_rows.append((cid, doc_copy.page_content or "", metadata_raw, retrievable, md["tag_ids"], float(combined)))
 
-        merged_rows.sort(key=lambda row: float(row[4]), reverse=True)
+        merged_rows.sort(key=lambda row: float(row[5]), reverse=True)
         return self._build_hybrid_hits(merged_rows[:top_k])

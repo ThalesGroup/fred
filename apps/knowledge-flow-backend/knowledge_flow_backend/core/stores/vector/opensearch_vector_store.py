@@ -19,7 +19,7 @@ from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Type, TypeVar
+from typing import Any, Dict, List, Optional, Sequence, Type, TypeVar
 
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.store import MappingValidationError, validate_index_mapping
@@ -1158,6 +1158,18 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         except Exception:
             logger.exception("[VECTOR][OPENSEARCH] failed to update document_name for document_uid=%s.", document_uid)
             raise RuntimeError("Failed to update document_name in OpenSearch.")
+
+    def set_document_tag_ids(self, *, document_uid: str, tag_ids: Sequence[str]) -> None:
+        body = {
+            "script": {"source": "ctx._source.metadata.tag_ids = params.value", "lang": "painless", "params": {"value": [str(t) for t in tag_ids]}},
+            "query": {"term": {"metadata.document_uid": {"value": document_uid}}},
+        }
+        resp = self._client.update_by_query(index=self._index, body=body, params={"refresh": "true"})
+        # Per-document failures (e.g. version conflicts) are reported, not raised.
+        failures = resp.get("failures") or []
+        if failures:
+            raise RuntimeError(f"OpenSearch failed to update tag_ids on {len(failures)} chunk(s) of document {document_uid}.")
+        logger.info("[VECTOR][OPENSEARCH] updated tag_ids on %s chunk(s) for document_uid=%s.", resp.get("updated", 0), document_uid)
 
     # ---------- Diagnostics / Introspection ----------
 
