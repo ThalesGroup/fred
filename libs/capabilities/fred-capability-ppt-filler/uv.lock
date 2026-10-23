@@ -603,7 +603,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "4.5.7"
+version = "4.5.8"
 source = { editable = "../../fred-core" }
 dependencies = [
     { name = "aiohttp" },
@@ -749,7 +749,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.5.7"
+version = "4.5.8"
 source = { editable = "../../fred-sdk" }
 dependencies = [
     { name = "fred-pod" },
