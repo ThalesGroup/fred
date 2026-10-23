@@ -67,6 +67,12 @@ Les icônes sont des fichiers SVG de `images/`, donnés **sans** l'extension
 `.svg`. Sans ces champs, l'onglet garde son titre et son icône habituels. En
 revenant à un autre thème, l'onglet reprend aussi les siens.
 
+Gardez le même `id` lors de la mise à jour du ZIP d'un thème. Fred enregistre
+cet ID dans les préférences de chaque utilisateur, et un redémarrage du
+frontend n'en crée pas un nouveau. L'archive refuse les doublons et les ID
+réservés à Galet, Cobalt et Nuage. Choisissez un nouvel ID seulement pour un
+thème différent.
+
 ## 2. Couleurs, polices et formes
 
 `themes/<id>/theme-custom.css` ne contient que les différences avec le thème de base.

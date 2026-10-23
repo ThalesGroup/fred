@@ -1,48 +1,51 @@
 ## Context
 
-See proposal.md for motivation and specs/user-ui-preferences/spec.md for the behavior. `ApplicationContextProvider` currently writes theme ID and mode through `useLocalStorageState`, and `public/theme-boot.js` reads the same global keys. `platform_ui_settings` holds the administrator's default and hidden IDs. `libs/fred-core/fred_core/users/user_models.py` already has a `users` row keyed by authenticated user UUID, and the Control Plane users API already has `/users/me/avatar` routes. The frontend catalog is owned by the shipped list plus the validated deployment `theme-catalog.json`.
+See proposal.md and specs/user-ui-preferences/spec.md. Personal theme, mode, sidebar, trace choice and pane widths use `useLocalStorageState`; language uses i18next's `i18nextLng` key; the team and agent sort controls write localStorage directly. `public/theme-boot.js` reads global theme keys before login. The managed workstation can erase all browser storage on restart. `platform_ui_settings` is the administrator's separate default/visibility record. The Control Plane already owns personal product data and `/users/me` routes.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Make the authenticated user row authoritative for the personal theme ID and mode.
-- Preserve the existing catalog, platform fallback and pre-content theme rules.
-- Keep identity separation on a browser shared by multiple accounts.
+- Restore durable display choices after browser storage is erased or a user signs in elsewhere.
+- Keep one typed record per authenticated subject and avoid changing the shared `users` model.
+- Preserve the theme catalog, platform fallback and before-content paint behavior.
 
 **Non-Goals:**
 
-- Store the theme ZIP, CSS, label or assets in PostgreSQL.
-- Change how administrators choose the platform default or hidden themes.
-- Infer the owner of legacy browser keys, which were never associated with a user ID.
+- Store browser-only activity/recovery data: team visit timestamps, unfinished imports, conversation caches, open panels tied to a session or per-conversation todo state.
+- Sync security or notice acknowledgements: tool approval grants, upload warning acknowledgements and announcement dismissals keep their existing lifecycle.
+- Store theme ZIP/CSS/assets in PostgreSQL or change administrator theme settings.
 
 ## Decisions
 
-### Add columns to `users`
+### Create `users_preferences` in Control Plane
 
-Add nullable `ui_theme_id` and `ui_theme_mode` columns in a single Control Plane Alembic migration. A null ID means no explicit personal theme; a null mode means `system`. Extend `UserRow` and its existing store rather than creating a second preferences table: both values have the same owner and lifecycle as the user, and no separate access policy or history is needed. The API returns `system` for a null mode. The write operation updates or creates the row for the authenticated UUID, following existing user-store behavior.
+One row per authenticated `user.uid`, with that subject string as the primary key. Use typed columns for `ui_theme_id`, `theme_mode`, `language`, `sidebar_collapsed`, `team_sort_mode`, `agent_sort`, `trace_expanded` and a bounded JSON mapping `pane_widths` for the named resizable panels. Null theme ID means no explicit choice; null language follows navigator language; null trace expansion keeps today's automatic behavior. Defaults for the other fields match today's frontend defaults. The identity row in shared `users` is not guaranteed for every externally authenticated subject, so do not add a foreign key. Delete this row explicitly when deleting a user through Control Plane. One new table and one migration satisfy the requested separation without changing `fred-core`.
 
-### Use self-service endpoints
+### Read and patch self-service preferences
 
-Add `GET` and `PUT /control-plane/v1/users/me/ui-preferences`. `PUT` replaces both fields atomically with `{ui_theme_id, theme_mode}`; the response has the same shape. Require the authenticated identity and derive the UUID from it. Validate the 32-character lowercase ID syntax but do not check current catalog membership: frontend versions and ZIPs can differ, and temporarily absent IDs must survive. The mode is a three-value enum. Regenerate the frontend OpenAPI client from the backend source, then expose friendly hooks through the existing enhancements module.
+Add authenticated `GET` and `PATCH /control-plane/v1/users/me/preferences`. A read returns typed defaults and `initialized: false` when no row exists. PATCH accepts only known fields; omitted fields remain unchanged, and pane-width entries merge by known key. Validate all fields before writing; backend theme ID syntax matches the platform theme setting, but catalog membership is a frontend concern. The path has no user ID parameter. Partial writes avoid resetting other controls when one setting changes in a second tab. The generated Control Plane client is the sole frontend API binding.
 
-### Reconcile the browser cache by identity
+### Hydrate before rendering signed-in content
 
-The static boot script uses public platform settings to color the empty document before authentication. Once login yields the user ID, the application reads a cache key scoped to that ID, applies it before rendering content, then fetches the database preference. A small gate holds application content until the first preference read succeeds, or falls back to that user's scoped cache/default if the read fails. The database response updates that cache and theme state. Profile changes update the UI and cache optimistically, then persist through the generated mutation; a failed save restores the last confirmed choice and shows an error. Existing global personal-choice keys are ignored and removed once the authenticated path initializes.
+After OIDC login, obtain the authenticated subject ID, read this user's preference through the generated API client and apply the result to the existing frontend state before mounting application content. If the API fails, a cache keyed by that subject may be used; otherwise use defaults. The static boot script may color only the empty document from public platform settings before identity is known. Theme ID resolution still uses `resolveUiTheme` and retains hidden or absent saved IDs. On a successful read, refresh the scoped cache; changes to a control patch its field and update the cache. Save failures restore the last confirmed value for explicit profile controls and report the error. Browser-local storage may remain as an implementation cache for components, but is not authoritative after hydration.
 
-This sequence avoids attributing an unscoped legacy choice to whichever account happens to log in next. It also prevents a new browser from painting application content in the platform default before the user's database choice arrives. The user may briefly see only the boot background or loading shell during the fetch.
+### Import old browser values once
 
-### Keep the ID stable at the catalog boundary
+Before the first profile read, claim the ownerless legacy keys for the first authenticated subject and copy validated values to a snapshot keyed by that subject. When the GET result says no row exists, send that snapshot in one PATCH before application content mounts. Mark that browser's legacy import complete and clear the snapshot only after the server acknowledges the write; a failed read or import remains eligible for that subject to retry while visible controls use user-scoped cache or defaults. Another account cannot consume the pending snapshot. The local keys may continue as a component cache but must not seed another account after the marker is set. Old keys have no account ID, so the initial claim can only assign them to the first authenticated user who loads this browser after upgrade. It is impossible to recover values already erased by workstation policy. The migration note describes this limitation and the UI remains editable if the imported values belong to someone else.
 
-The saved value is the existing string ID, never a list index or generated UUID. Shipped IDs are constants. A deployment theme's ID comes from `theme-catalog.json` and does not change when the frontend process restarts. Duplicate IDs and collisions with shipped IDs remain rejected by archive validation. Document that changing an ID is equivalent to removing one theme and adding another; keep it stable across ZIP versions, and use a new ID when the theme's identity intentionally changes.
+### Keep identifiers and widths bounded
+
+Persist the catalog's stable string theme ID, never a list position or a generated process ID. Archive validation already rejects duplicate custom IDs and IDs colliding with `pebble`, `cobalt` or `cloud`. Document that the same theme keeps its ID across archive updates and frontend restarts. The pane-width map accepts only the known keys used by the wiki rail, import panel and named inline drawers, with positive bounded pixel values; the frontend's viewport clamp remains the final rendering guard.
 
 ## Risks / Trade-offs
 
-- [Legacy unscoped choices are not safely attributable to a user] -> Do not import them; explain the one-time reselection in the migration note.
-- [Preference API unavailable] -> Use the account-scoped cache if present, otherwise platform default and system mode; retry on the next load. Saving failure restores the confirmed state.
-- [One user changes preference in another browser while this page stays open] -> The fresh preference is read on the next load; live cross-browser synchronization is outside this slice.
-- [ZIP removes a selected ID] -> Keep the ID in the user row and use existing frontend fallback resolution until that ID returns.
+- [Legacy keys may belong to another person on a shared browser] -> Import only when the database has no row, mark the browser import complete after success, and document that the first import cannot prove ownership.
+- [Browser values were cleared before rollout] -> Use defaults; users can choose again and subsequent changes persist centrally.
+- [Preference API is unavailable] -> Use the authenticated subject's scoped cache or defaults, keep controls usable, and retry on the next load.
+- [Many rapid pane drags] -> Persist the final width when dragging ends rather than sending a request per pointer move.
+- [Concurrent updates] -> PATCH only the field changed; the same field uses last-write-wins semantics.
 
 ## Migration Plan
 
-Apply the one additive nullable-column migration before deploying the Control Plane and frontend. Existing rows have no personal choice and resolve to the platform default/system mode. Rollback can return to the previous frontend/backend with the new columns left unused; dropping the columns would discard choices saved after rollout. Include the operational sequence and impact in the required PR migration note.
+Apply the additive `users_preferences` table migration before deploying the new Control Plane and frontend. Existing users have no row and receive defaults or a first-load import. Rollback to older application images leaves the table unused. Dropping it would discard choices saved after rollout. The operator note specifies the sequence, validation, rollback and limitation of already-erased browser data.

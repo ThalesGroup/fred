@@ -5150,3 +5150,27 @@ removes that source on the next request. Suspension, terms and resource checks
 remain independent. `team_manager` has no Platform Access authority, including
 Free links. `platform_admin` inherits both delegated surfaces through the
 OpenFGA role unions. Deploy the OpenFGA model before the backend and frontend.
+
+## 69. Contract Notes - personal display preferences (2026-10-24)
+
+`users_preferences` has one row per authenticated subject ID. It stores the
+selected UI theme ID, light/dark/system mode, language (`en` or `fr`), navigation
+sidebar collapsed state, team and agent sort modes, trace expansion choice, and
+a bounded map of named resizable pane widths. An absent row uses the frontend's
+existing defaults. The table is separate from `platform_ui_settings`, which
+continues to hold the administrator's platform-wide default and hidden themes.
+
+`GET /control-plane/v1/users/me/preferences` returns these typed values and an
+`initialized` flag. `PATCH` at the same path changes only submitted fields;
+the authenticated subject is the sole row key, with no target-user parameter.
+The backend validates theme ID shape, not catalog membership. A saved ID can
+remain when its theme is hidden or absent; the frontend resolves the visible
+theme by the existing platform fallback rules. Account deletion removes the
+preference row.
+
+The frontend reads the database record after login and before painting signed-in
+content. On first load after upgrade, an absent row can be seeded from valid
+legacy localStorage values still present in that browser. The keys do not record
+which account set them, and values erased before rollout cannot be recovered.
+A user-scoped browser cache is only a startup/failure fallback; the database is
+authoritative after a successful read.
