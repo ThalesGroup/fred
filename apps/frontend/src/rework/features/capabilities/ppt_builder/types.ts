@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The ppt_builder config widget's own types. The inventory comes from the
-// generated client; the override is the stored-config shape the backend's
-// `PatternOverride` reads (it never travels through a capability route).
+// The ppt_builder config widget's own types; the inventory and the override
+// come from the generated client.
 
-import type { Pattern, TemplateInventory } from "./api/pptBuilderCapabilityOpenApi";
+import type { Pattern, PatternOverride, TemplateInventory } from "./api/pptBuilderCapabilityOpenApi";
+
+export type { PatternOverride };
 
 export type SlideKind = Pattern["kind"];
 
-export const SLIDE_KINDS: readonly SlideKind[] = [
+export const SLIDE_KINDS = [
   "cover",
   "agenda",
   "section",
@@ -38,15 +39,7 @@ export const SLIDE_KINDS: readonly SlideKind[] = [
   "chart",
   "closing",
   "other",
-];
-
-/** One pattern's author corrections; only set fields apply (backend `PatternOverride`). */
-export interface PatternOverride {
-  pattern_id: string;
-  label?: string | null;
-  kind?: SlideKind | null;
-  included?: boolean | null;
-}
+] as const satisfies readonly SlideKind[];
 
 export type OverridePatch = Partial<Omit<PatternOverride, "pattern_id">>;
 
