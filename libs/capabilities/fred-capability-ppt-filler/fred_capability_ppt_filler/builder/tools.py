@@ -1598,10 +1598,9 @@ def build_builder_tools(
     # One build at a time: parallel calls of a round are refused by the
     # middleware, this guards the turn's state when the tool is called directly.
     build_lock = asyncio.Lock()
-    # What this turn's `changes` apply to: the deck delivered, or a refused or
-    # proposed `slides` plan. A refused `changes` call leaves it as it was, so
-    # a later call never builds on changes it did not send. A delivered deck or
-    # a proposed plan is stored for later turns, a refused one never.
+    # What this turn's `changes` apply to: the delivered deck, or a refused or
+    # proposed `slides` plan. A refused `changes` call leaves it unchanged; a
+    # refused plan is never stored for later turns.
     turn_base: List[DeckPlan] = []
     # Calls refused this turn, keyed with the plan they applied to: the same
     # call on the same base is refused again without a new evaluation.
