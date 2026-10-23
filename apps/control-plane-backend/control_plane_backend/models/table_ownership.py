@@ -24,6 +24,8 @@ control-plane's autogenerate propose creating knowledge-flow's tables.
 
 from __future__ import annotations
 
+from importlib import import_module
+
 # Register admission tables on CoreBase before Alembic inspects ownership.
 # codeql[py/unused-import]
 import fred_core.security.platform_access.models  # noqa: F401
@@ -49,11 +51,6 @@ import control_plane_backend.models.knowledge_base_models  # noqa: F401
 # codeql[py/unused-import]
 import control_plane_backend.models.marketplace_settings_models  # noqa: F401 — registers platform_marketplace_settings with Base
 
-# codeql[py/unused-import]
-import control_plane_backend.models.model_discovery_models  # noqa: F401
-
-# codeql[py/unused-import]
-import control_plane_backend.models.model_display_name_models  # noqa: F401
 import control_plane_backend.models.model_reasoning_models  # noqa: F401
 
 # codeql[py/unused-import]
@@ -72,6 +69,9 @@ import control_plane_backend.models.task_models  # noqa: F401 — registers cp_t
 import control_plane_backend.models.team_admin_charter_models  # noqa: F401 - registers team_admin_charter_acceptances with Base
 import control_plane_backend.models.team_wiki_models  # noqa: F401 — registers team_wiki_pages / team_wiki_revisions with Base
 from control_plane_backend.models.base import Base
+
+import_module("control_plane_backend.models.model_discovery_models")
+import_module("control_plane_backend.models.model_display_name_models")
 
 # CoreBase tables whose migrations this tree owns — explicit names, never
 # derived from CoreBase.metadata (that would claim every backend's tables).
