@@ -85,7 +85,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneAgentInstance",
     "ControlPlanePlatformModelBinding",
     "ControlPlaneModelDiscovery",
-    "ControlPlanePlatformModelFallback",
+    "ControlPlanePodChatDefault",
     "ControlPlanePlatformPrompt",
     "ControlPlaneCreationAssistantSettings",
     "ControlPlanePlatformUiSettings",
@@ -852,26 +852,37 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getModelDiscoveryControlPlaneV1AdminModelDiscoveryGet: {
       providesTags: [{ type: "ControlPlaneModelDiscovery" as const, id: "LIST" }],
     },
+    dismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDelete: {
+      invalidatesTags: [{ type: "ControlPlaneModelDiscovery", id: "LIST" }],
+    },
+    getPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGet: {
+      providesTags: [{ type: "ControlPlanePodChatDefault" as const, id: "LIST" }],
+    },
+    putPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPut: {
+      invalidatesTags: [{ type: "ControlPlanePodChatDefault", id: "LIST" }],
+    },
+    clearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDelete: {
+      invalidatesTags: [{ type: "ControlPlanePodChatDefault", id: "LIST" }],
+    },
+    putPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPut: {
+      invalidatesTags: [{ type: "ControlPlanePodChatDefault", id: "LIST" }],
+    },
+    clearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDelete: {
+      invalidatesTags: [{ type: "ControlPlanePodChatDefault", id: "LIST" }],
+    },
     refreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPost: {
       invalidatesTags: [
         { type: "ControlPlaneModelDiscovery", id: "LIST" },
+        { type: "ControlPlanePodChatDefault", id: "LIST" },
         { type: "ControlPlaneCapability", id: "LIST" },
       ],
     },
     putModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPut: {
       invalidatesTags: [
         { type: "ControlPlaneModelDiscovery", id: "LIST" },
+        { type: "ControlPlanePodChatDefault", id: "LIST" },
         { type: "ControlPlaneCapability", id: "LIST" },
       ],
-    },
-    getPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGet: {
-      providesTags: [{ type: "ControlPlanePlatformModelFallback" as const, id: "LIST" }],
-    },
-    putPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackPut: {
-      invalidatesTags: [{ type: "ControlPlanePlatformModelFallback", id: "LIST" }],
-    },
-    deletePlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackDelete: {
-      invalidatesTags: [{ type: "ControlPlanePlatformModelFallback", id: "LIST" }],
     },
     // Platform-wide platform prompt — a single row, so one LIST tag covers it,
     // same shape as the platform model binding above.
@@ -1116,13 +1127,17 @@ export const {
   useDeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteMutation:
     useDeletePlatformModelBindingMutation,
   useGetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetQuery: useModelDiscoveryQuery,
+  useDismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDeleteMutation:
+    useDismissRemovedModelMutation,
+  useGetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetQuery: usePodChatDefaultsQuery,
+  usePutPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPutMutation: useSetPodChatDefaultMutation,
+  useClearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDeleteMutation: useClearPodChatDefaultMutation,
+  usePutPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPutMutation: useSetPodChatFallbackMutation,
+  useClearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDeleteMutation:
+    useClearPodChatFallbackMutation,
   useLazyGetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetQuery: useLazyModelDiscoveryDetailQuery,
   useRefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostMutation: useRefreshModelDiscoveryMutation,
   usePutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutMutation: useSetModelDiscoveryUrlMutation,
-  useGetPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGetQuery: usePlatformModelFallbackQuery,
-  usePutPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackPutMutation: useSetPlatformModelFallbackMutation,
-  useDeletePlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackDeleteMutation:
-    useDeletePlatformModelFallbackMutation,
   // Platform-wide platform prompt — the first block of every agent's system prompt.
   useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery: usePlatformPromptQuery,
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation: useSetPlatformPromptMutation,

@@ -1153,8 +1153,9 @@ class ManagedAgentRuntimeBinding(BaseModel):
     # deployment before this feature). V1 is chat-only — no
     # language/embedding/image sibling field exists here.
     platform_chat_model_binding: ModelBinding | None = None
+    pod_chat_default_profile_id: str | None = None
     platform_chat_model_fallback: ModelBinding | None = None
-    platform_chat_model_fallback_profile_id: str | None = None
+    pod_chat_fallback_profile_id: str | None = None
     model_discovery_urls: dict[str, str] = Field(default_factory=dict)
     model_discovery_revisions: dict[str, int] = Field(default_factory=dict)
     confirmed_removed_chat_profiles: dict[str, str] = Field(default_factory=dict)

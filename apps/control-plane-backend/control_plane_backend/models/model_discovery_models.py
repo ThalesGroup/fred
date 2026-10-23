@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Integer, String, Text
+from sqlalchemy import DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from control_plane_backend.models.base import Base, utcnow
@@ -43,21 +43,12 @@ class ModelDiscoverySourceStateRow(Base):
     updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
-class PlatformModelFallbackRow(Base):
-    __tablename__ = "platform_model_fallback"
-    __table_args__ = (
-        CheckConstraint(
-            "model_capability = 'chat'", name="ck_platform_model_fallback_chat_only"
-        ),
-    )
+class PodChatDefaultRow(Base):
+    __tablename__ = "pod_chat_default"
 
-    model_capability: Mapped[str] = mapped_column(
-        String, primary_key=True, default="chat"
-    )
-    profile_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    provider: Mapped[str | None] = mapped_column(String, nullable=True)
-    name: Mapped[str | None] = mapped_column(String, nullable=True)
-    settings_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    runtime_id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    profile_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    fallback_profile_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
     updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow

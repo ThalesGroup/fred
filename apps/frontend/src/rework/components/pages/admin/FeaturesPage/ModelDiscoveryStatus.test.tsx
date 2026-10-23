@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,23 +13,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ModelDiscoveryStatus } from "./ModelDiscoveryStatus";
 
 const access = vi.hoisted(() => ({ canAdmin: false }));
+const dismissRemovedModel = vi.hoisted(() => vi.fn(() => ({ unwrap: async () => ({}) })));
 vi.mock("@rework/core/hooks/useUserCapabilities", () => ({
   useUserCapabilities: () => access,
 }));
 
 beforeEach(() => {
   access.canAdmin = false;
+  dismissRemovedModel.mockClear();
 });
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, values?: { source?: string; sources?: string; services?: string }) =>
-      `${key}${values?.source ?? values?.sources ?? values?.services ?? ""}`,
+    t: (key: string, values?: { source?: string; sources?: string; services?: string; id?: string }) =>
+      `${key}${values?.source ?? values?.sources ?? values?.services ?? values?.id ?? ""}`,
   }),
 }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
@@ -36,9 +41,11 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
 }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useSetModelDiscoveryUrlMutation: () => [vi.fn(), { isLoading: false }],
+  useDismissRemovedModelMutation: () => [dismissRemovedModel, { isLoading: false }],
 }));
 
-it("shows a confirmed disappearance separately from available models", () => {
+it("lists a confirmed absence with a cleanup action outside the available-model table", () => {
+  access.canAdmin = true;
   const html = renderToStaticMarkup(
     <ModelDiscoveryStatus
       data={{
@@ -60,11 +67,61 @@ it("shows a confirmed disappearance separately from available models", () => {
     />,
   );
   expect(html).toContain("https://models.example/v1/models");
-  expect(html).toContain("Old chat (chat-a)");
-  expect(html).toContain("rework.admin.capabilities.discovery.unavailable");
+  expect(html).toContain("rework.admin.capabilities.discovery.showRemoved");
+  expect(html).not.toContain("rework.admin.capabilities.discovery.removedModelIdchat-a");
+  expect(html).not.toContain("Old chat (chat-a)");
+  expect(html).toContain("rework.admin.capabilities.discovery.summary");
   expect(html).toContain("rework.admin.capabilities.discovery.discoveryUrls");
-  expect(html.indexOf("rework.admin.capabilities.discovery.unavailable")).toBeGreaterThan(html.indexOf("</details>"));
   expect(html).not.toContain("chat-b)");
+});
+
+it("dismisses the selected absence by source and model ID", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  access.canAdmin = true;
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <ModelDiscoveryStatus
+          data={{
+            sources: [
+              {
+                source_id: "mistral",
+                yaml_url: "https://api.mistral.ai/v1/models",
+                effective_url: "https://api.mistral.ai/v1/models",
+                removed_models: [{ id: "model__openai__old", name: "old", provider: "openai" }],
+              },
+            ],
+          }}
+          discoveredSourceIds={["mistral"]}
+          refreshing={false}
+          refreshError={false}
+        />,
+      ),
+    );
+    const showRemoved = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((item) =>
+      item.textContent?.includes("rework.admin.capabilities.discovery.showRemoved"),
+    );
+    await act(async () => showRemoved?.click());
+    expect(document.body.textContent).toContain("rework.admin.capabilities.discovery.removedModelIdold");
+    const button = document.body.querySelector<HTMLButtonElement>(
+      'button[aria-label="rework.admin.capabilities.discovery.removeFromList"]',
+    );
+    expect(button).toBeTruthy();
+    await act(async () => button?.click());
+    expect(dismissRemovedModel).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain("rework.admin.capabilities.discovery.removeConfirmTitle");
+    const confirm = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')).find(
+      (item) => item.textContent?.includes("rework.admin.capabilities.discovery.removeFromList"),
+    );
+    await act(async () => confirm?.click());
+    expect(dismissRemovedModel).toHaveBeenCalledWith({ sourceId: "mistral", modelId: "model__openai__old" });
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
 });
 
 it("explains why discovered models have no editable source", () => {
@@ -127,8 +184,8 @@ it("shows a source refresh failure outside the collapsed settings", () => {
       refreshError={false}
     />,
   );
-  expect(html).toContain("rework.admin.capabilities.discovery.failedSourceswest");
-  expect(html.indexOf("failedSourceswest")).toBeLessThan(html.indexOf("<details"));
+  expect(html).toContain("rework.admin.capabilities.discovery.failedSourceswest: timeout");
+  expect(html.indexOf("failedSourceswest: timeout")).toBeLessThan(html.indexOf("<details"));
 });
 
 it("warns about unreachable agent services without claiming discovery failed", () => {

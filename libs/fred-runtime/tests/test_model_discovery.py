@@ -44,7 +44,6 @@ from fred_runtime.model_routing.provider import RoutedChatModelFactory
 from fred_runtime.model_routing.resolver import ModelRoutingResolver
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
-    ModelBinding,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
@@ -394,7 +393,7 @@ async def test_delegated_direct_refresh_cannot_publish_after_url_change(
     )
     release.set()
     with pytest.raises(ValueError, match="changed during refresh"):
-        await refresh
+        await asyncio.gather(refresh)
     assert factory.catalog is not None
     active_east = factory.catalog.discovery_source("east")
     assert active_east is not None
@@ -725,7 +724,7 @@ async def test_cancelled_turn_does_not_cancel_shared_refresh(
     await started.wait()
     first.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await first
+        await asyncio.gather(first)
     second = asyncio.create_task(
         factory.refresh_catalog(
             str(path),
@@ -1181,22 +1180,36 @@ def test_discovered_model_uses_existing_grant_and_drift_gates(monkeypatch) -> No
         )
 
 
-def test_confirmed_removed_team_default_uses_separate_platform_fallback(
-    monkeypatch,
-) -> None:
+def test_confirmed_removed_team_default_uses_pod_manual_fallback(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
-    before = _catalog().resolve_discovery(
-        transport=_transport({"data": [{"id": "chat-a"}]})
+    base = ModelCatalog.model_validate(
+        {
+            "discovery": [
+                {"source_id": "gateway", "base_url": "https://models.example/v1"}
+            ],
+            "default_profile_by_capability": {"chat": "chat.manual"},
+            "profiles": [
+                {
+                    "profile_id": "chat.manual",
+                    "capability": "chat",
+                    "model": {
+                        "provider": "openai",
+                        "name": "tested-chat",
+                        "settings": {"base_url": "https://manual.example/v1"},
+                    },
+                }
+            ],
+        }
     )
-    after = _catalog().resolve_discovery(
-        transport=_transport({"data": [{"id": "chat-b"}]}),
-        allow_missing_default=True,
+    before = base.resolve_discovery(transport=_transport({"data": [{"id": "chat-a"}]}))
+    after = base.resolve_discovery(transport=_transport({"data": [{"id": "chat-b"}]}))
+    removed = next(
+        p for p in before.profiles if p.profile_id.startswith("discovered.chat.")
     )
-    removed = before.profiles[0]
 
     class Provider:
         def build_model(self, model_config, *, capability):
-            assert model_config.name == "chat-b"
+            assert model_config.name == "tested-chat"
             return ToolFriendlyFakeChatModel(responses=[])
 
     factory = RoutedChatModelFactory(
@@ -1221,42 +1234,69 @@ def test_confirmed_removed_team_default_uses_separate_platform_fallback(
         ),
         usable_model_ids=(removed.capability_id,),
         confirmed_removed_chat_profiles={removed.profile_id: removed.capability_id},
-        platform_chat_model_fallback=ModelBinding.model_validate(
-            {
-                "provider": "openai",
-                "name": "chat-b",
-                "settings": {"base_url": "https://models.example/v1"},
+    )
+    definition = cast(AgentDefinition, SimpleNamespace(agent_id="agent-a"))
+    _, selection = factory.build_for_chat(definition=definition, binding=binding)
+    assert selection.source.value == "pod_fallback"
+    assert selection.profile_id == "chat.manual"
+
+    cached_factory = RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(before.to_policy()),
+        provider=Provider(),
+        catalog=before,
+    )
+    _, cached_selection = cached_factory.build_for_chat(
+        definition=definition,
+        binding=binding.model_copy(
+            update={
+                "runtime_context": binding.runtime_context.model_copy(
+                    update={"chat_profile_id": removed.profile_id}
+                )
             }
         ),
     )
-    _, selection = factory.build_for_chat(
-        definition=cast(AgentDefinition, SimpleNamespace(agent_id="agent-a")),
-        binding=binding,
+    assert cached_selection.source.value == "pod_fallback"
+
+    overridden_catalog = before.model_copy(
+        update={"agent_profile_overrides": {"agent-a": removed.profile_id}}
     )
-    assert selection.source.value == "platform_fallback"
-    assert selection.model.name == "chat-b"
+    overridden_factory = RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(overridden_catalog.to_policy()),
+        provider=Provider(),
+        catalog=overridden_catalog,
+    )
+    _, overridden_selection = overridden_factory.build_for_chat(
+        definition=definition, binding=binding
+    )
+    assert overridden_selection.profile_id == "chat.manual"
+    assert overridden_selection.source.value == "pod_fallback"
 
     with pytest.raises(TeamRoutingProfileDriftError):
         factory.build_for_chat(
-            definition=cast(AgentDefinition, SimpleNamespace(agent_id="agent-a")),
+            definition=definition,
             binding=binding.model_copy(update={"confirmed_removed_chat_profiles": {}}),
         )
 
-    no_team_choice = binding.model_copy(
-        update={
-            "runtime_context": binding.runtime_context.model_copy(
-                update={"chat_default_profile_id": None}
-            ),
-            "usable_model_ids": (),
-        }
+    _, overridden = factory.build_for_chat(
+        definition=definition,
+        binding=binding.model_copy(
+            update={"pod_chat_fallback_profile_id": "chat.manual"}
+        ),
     )
-    with pytest.raises(ValueError, match="No default profile"):
-        factory.build_for_chat(
-            definition=cast(AgentDefinition, SimpleNamespace(agent_id="agent-a")),
-            binding=no_team_choice,
-        )
+    assert overridden.profile_id == "chat.manual"
 
-    manual_catalog = ModelCatalog.model_validate(
+    _, invalid_override = factory.build_for_chat(
+        definition=definition,
+        binding=binding.model_copy(
+            update={"pod_chat_fallback_profile_id": "chat.missing"}
+        ),
+    )
+    assert invalid_override.profile_id == "chat.manual"
+
+
+def test_discovery_refresh_accepts_a_disappeared_agent_override(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    base = ModelCatalog.model_validate(
         {
             "discovery": [
                 {"source_id": "gateway", "base_url": "https://models.example/v1"}
@@ -1265,43 +1305,105 @@ def test_confirmed_removed_team_default_uses_separate_platform_fallback(
                 {
                     "profile_id": "chat.manual",
                     "capability": "chat",
-                    "model": {
-                        "provider": "openai",
-                        "name": "tested-chat",
-                        "settings": {"base_url": "https://manual.example/v1"},
-                    },
+                    "model": {"provider": "openai", "name": "manual"},
                 }
             ],
         }
-    ).resolve_discovery(transport=_transport({"data": [{"id": "chat-b"}]}))
-
-    class ManualProvider:
-        def build_model(self, model_config, *, capability):
-            assert model_config.name == "tested-chat"
-            assert model_config.settings["base_url"] == "https://manual.example/v1"
-            return ToolFriendlyFakeChatModel(responses=[])
-
-    manual_factory = RoutedChatModelFactory(
-        resolver=ModelRoutingResolver(manual_catalog.to_policy()),
-        provider=ManualProvider(),
-        catalog=manual_catalog,
     )
-    manual_binding = binding.model_copy(
-        update={
-            "platform_chat_model_fallback": None,
-            "platform_chat_model_fallback_profile_id": "chat.manual",
+    before = base.resolve_discovery(transport=_transport({"data": [{"id": "chat-a"}]}))
+    removed_id = next(
+        profile.profile_id
+        for profile in before.profiles
+        if profile.profile_id.startswith("discovered.chat.")
+    )
+    with_override = before.model_copy(
+        update={"agent_profile_overrides": {"agent-a": removed_id}}
+    )
+    after = with_override.resolve_discovery(
+        transport=_transport({"data": [{"id": "chat-b"}]})
+    )
+    resolver = ModelRoutingResolver(after.to_policy())
+    assert resolver.agent_overrides_for(ModelCapability.CHAT) == {"agent-a": removed_id}
+    assert removed_id not in {profile.profile_id for profile in after.profiles}
+
+
+def test_admin_pod_default_replaces_yaml_only_at_default_level() -> None:
+    catalog = ModelCatalog.model_validate(
+        {
+            "default_profile_by_capability": {"chat": "chat.yaml"},
+            "profiles": [
+                {
+                    "profile_id": "chat.yaml",
+                    "capability": "chat",
+                    "model": {"provider": "openai", "name": "yaml-model"},
+                },
+                {
+                    "profile_id": "chat.admin",
+                    "capability": "chat",
+                    "model": {"provider": "openai", "name": "admin-model"},
+                },
+            ],
         }
     )
-    _, manual_selection = manual_factory.build_for_chat(
-        definition=cast(AgentDefinition, SimpleNamespace(agent_id="agent-a")),
-        binding=manual_binding,
+    factory = RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(catalog.to_policy()), catalog=catalog
     )
-    assert manual_selection.source.value == "platform_fallback"
-    assert manual_selection.profile_id == "chat.manual"
-    with pytest.raises(ValueError, match="unavailable"):
-        manual_factory.build_for_chat(
-            definition=cast(AgentDefinition, SimpleNamespace(agent_id="agent-a")),
-            binding=manual_binding.model_copy(
-                update={"platform_chat_model_fallback_profile_id": "chat.missing"}
+    definition = cast(AgentDefinition, SimpleNamespace(agent_id="agent-a"))
+    binding = BoundRuntimeContext(
+        runtime_context=RuntimeContext(team_id="team-a", user_id="user-a"),
+        portable_context=PortableContext(
+            request_id="request-a",
+            correlation_id="request-a",
+            actor="user-a",
+            tenant="default",
+            environment=PortableEnvironment.DEV,
+            team_id="team-a",
+            user_id="user-a",
+        ),
+        pod_chat_default_profile_id="chat.admin",
+    )
+    assert (
+        factory.select(
+            definition=definition, binding=binding, capability=ModelCapability.CHAT
+        ).profile_id
+        == "chat.admin"
+    )
+    assert (
+        factory.select(
+            definition=definition,
+            binding=binding.model_copy(
+                update={"pod_chat_default_profile_id": "chat.removed"}
             ),
-        )
+            capability=ModelCapability.CHAT,
+        ).profile_id
+        == "chat.yaml"
+    )
+    removed_default = factory.select(
+        definition=definition,
+        binding=binding.model_copy(
+            update={
+                "pod_chat_default_profile_id": "chat.removed",
+                "pod_chat_fallback_profile_id": "chat.admin",
+                "confirmed_removed_chat_profiles": {
+                    "chat.removed": "model__openai__removed"
+                },
+            }
+        ),
+        capability=ModelCapability.CHAT,
+    )
+    assert removed_default.profile_id == "chat.admin"
+    assert removed_default.source.value == "pod_fallback"
+    assert (
+        factory.select(
+            definition=definition,
+            binding=binding.model_copy(
+                update={
+                    "runtime_context": binding.runtime_context.model_copy(
+                        update={"chat_default_profile_id": "chat.yaml"}
+                    )
+                }
+            ),
+            capability=ModelCapability.CHAT,
+        ).profile_id
+        == "chat.yaml"
+    )

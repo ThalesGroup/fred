@@ -772,8 +772,9 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         capability_registry: CapabilityRegistry | None = None,
         *,
         platform_chat_model_binding: ModelBinding | None = None,
+        pod_chat_default_profile_id: str | None = None,
         platform_chat_model_fallback: ModelBinding | None = None,
-        platform_chat_model_fallback_profile_id: str | None = None,
+        pod_chat_fallback_profile_id: str | None = None,
         confirmed_removed_chat_profiles: dict[str, str] | None = None,
         platform_prompt: str | None = None,
         credentials: OutboundCredentialProvider | None = None,
@@ -793,10 +794,9 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         # or any other channel a caller/child could read or forge — the only way
         # to reach it is this private attribute on the invoker itself.
         self._platform_chat_model_binding = platform_chat_model_binding
+        self._pod_chat_default_profile_id = pod_chat_default_profile_id
         self._platform_chat_model_fallback = platform_chat_model_fallback
-        self._platform_chat_model_fallback_profile_id = (
-            platform_chat_model_fallback_profile_id
-        )
+        self._pod_chat_fallback_profile_id = pod_chat_fallback_profile_id
         self._confirmed_removed_chat_profiles = confirmed_removed_chat_profiles or {}
         # TRUSTED, same private channel and same reason: without it a nested
         # `context.invoke_agent(...)` child would compose its prompt with
@@ -898,8 +898,9 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             # the parent turn's platform chat binding, never the request's
             # own `context` — that dict has no field for it at all.
             platform_chat_model_binding=self._platform_chat_model_binding,
+            pod_chat_default_profile_id=self._pod_chat_default_profile_id,
             platform_chat_model_fallback=self._platform_chat_model_fallback,
-            platform_chat_model_fallback_profile_id=self._platform_chat_model_fallback_profile_id,
+            pod_chat_fallback_profile_id=self._pod_chat_fallback_profile_id,
             confirmed_removed_chat_profiles=self._confirmed_removed_chat_profiles,
             platform_prompt=self._platform_prompt,
         ):
@@ -1110,8 +1111,9 @@ def _build_runtime_services(
             # None. `binding` is this same request's BoundRuntimeContext —
             # never the child's, and never a client-controlled value.
             platform_chat_model_binding=binding.platform_chat_model_binding,
+            pod_chat_default_profile_id=binding.pod_chat_default_profile_id,
             platform_chat_model_fallback=binding.platform_chat_model_fallback,
-            platform_chat_model_fallback_profile_id=binding.platform_chat_model_fallback_profile_id,
+            pod_chat_fallback_profile_id=binding.pod_chat_fallback_profile_id,
             confirmed_removed_chat_profiles=binding.confirmed_removed_chat_profiles,
             platform_prompt=binding.platform_prompt,
         )
@@ -1732,8 +1734,9 @@ class _ResolvedAgentInstance(BaseModel):
     # `_ResolvedExecutionTarget.platform_chat_model_binding` for why this is
     # never read off the caller-supplied context either.
     platform_chat_model_binding: ModelBinding | None = None
+    pod_chat_default_profile_id: str | None = None
     platform_chat_model_fallback: ModelBinding | None = None
-    platform_chat_model_fallback_profile_id: str | None = None
+    pod_chat_fallback_profile_id: str | None = None
     model_discovery_urls: dict[str, str] = Field(default_factory=dict)
     model_discovery_revisions: dict[str, int] = Field(default_factory=dict)
     confirmed_removed_chat_profiles: dict[str, str] = Field(default_factory=dict)
@@ -1781,8 +1784,9 @@ class _ResolvedExecutionTarget:
     # managed agent-instance execution only, and direct execution stays
     # pod-local routing.
     platform_chat_model_binding: ModelBinding | None = None
+    pod_chat_default_profile_id: str | None = None
     platform_chat_model_fallback: ModelBinding | None = None
-    platform_chat_model_fallback_profile_id: str | None = None
+    pod_chat_fallback_profile_id: str | None = None
     confirmed_removed_chat_profiles: dict[str, str] = field(default_factory=dict)
     # Platform-wide platform prompt, resolved on the SAME per-turn call as the
     # two fields above and for the same reason. `None` for direct (non-managed)
@@ -2110,8 +2114,9 @@ async def _resolve_agent_instance(
         reasoning_enabled_model_ids=tuple(resolution.reasoning_enabled_model_ids),
         team_disabled_model_ids=tuple(resolution.team_disabled_model_ids),
         platform_chat_model_binding=resolution.platform_chat_model_binding,
+        pod_chat_default_profile_id=resolution.pod_chat_default_profile_id,
         platform_chat_model_fallback=resolution.platform_chat_model_fallback,
-        platform_chat_model_fallback_profile_id=resolution.platform_chat_model_fallback_profile_id,
+        pod_chat_fallback_profile_id=resolution.pod_chat_fallback_profile_id,
         confirmed_removed_chat_profiles=resolution.confirmed_removed_chat_profiles,
         platform_prompt=resolution.platform_prompt,
     )
@@ -3920,8 +3925,9 @@ async def _stream(
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
+    pod_chat_default_profile_id: str | None = None,
     platform_chat_model_fallback: ModelBinding | None = None,
-    platform_chat_model_fallback_profile_id: str | None = None,
+    pod_chat_fallback_profile_id: str | None = None,
     confirmed_removed_chat_profiles: dict[str, str] | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
@@ -3973,8 +3979,9 @@ async def _stream(
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
         team_disabled_model_ids=team_disabled_model_ids,
         platform_chat_model_binding=platform_chat_model_binding,
+        pod_chat_default_profile_id=pod_chat_default_profile_id,
         platform_chat_model_fallback=platform_chat_model_fallback,
-        platform_chat_model_fallback_profile_id=platform_chat_model_fallback_profile_id,
+        pod_chat_fallback_profile_id=pod_chat_fallback_profile_id,
         confirmed_removed_chat_profiles=confirmed_removed_chat_profiles,
         platform_prompt=platform_prompt,
         credential_provider=credential_provider,
@@ -4570,8 +4577,9 @@ async def _iterate_runtime_event_payloads(
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
+    pod_chat_default_profile_id: str | None = None,
     platform_chat_model_fallback: ModelBinding | None = None,
-    platform_chat_model_fallback_profile_id: str | None = None,
+    pod_chat_fallback_profile_id: str | None = None,
     confirmed_removed_chat_profiles: dict[str, str] | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
@@ -4596,8 +4604,9 @@ async def _iterate_runtime_event_payloads(
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
         team_disabled_model_ids=team_disabled_model_ids,
         platform_chat_model_binding=platform_chat_model_binding,
+        pod_chat_default_profile_id=pod_chat_default_profile_id,
         platform_chat_model_fallback=platform_chat_model_fallback,
-        platform_chat_model_fallback_profile_id=platform_chat_model_fallback_profile_id,
+        pod_chat_fallback_profile_id=pod_chat_fallback_profile_id,
         confirmed_removed_chat_profiles=confirmed_removed_chat_profiles,
         platform_prompt=platform_prompt,
         credential_provider=credential_provider,
@@ -4687,8 +4696,9 @@ async def _iterate_runtime_event_payloads_inner(
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
+    pod_chat_default_profile_id: str | None = None,
     platform_chat_model_fallback: ModelBinding | None = None,
-    platform_chat_model_fallback_profile_id: str | None = None,
+    pod_chat_fallback_profile_id: str | None = None,
     confirmed_removed_chat_profiles: dict[str, str] | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
@@ -4872,8 +4882,9 @@ async def _iterate_runtime_event_payloads_inner(
         # request-body field can never set this: unlike
         # chat_default_profile_id above, there is no ctx.get(...) for it at all.
         platform_chat_model_binding=platform_chat_model_binding,
+        pod_chat_default_profile_id=pod_chat_default_profile_id,
         platform_chat_model_fallback=platform_chat_model_fallback,
-        platform_chat_model_fallback_profile_id=platform_chat_model_fallback_profile_id,
+        pod_chat_fallback_profile_id=pod_chat_fallback_profile_id,
         confirmed_removed_chat_profiles=confirmed_removed_chat_profiles or {},
         # TRUSTED, same channel: no ctx.get(...) exists for either field.
         team_disabled_model_ids=tuple(team_disabled_model_ids),
@@ -6618,8 +6629,9 @@ def _build_agent_router(
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 team_disabled_model_ids=target.team_disabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
+                pod_chat_default_profile_id=target.pod_chat_default_profile_id,
                 platform_chat_model_fallback=target.platform_chat_model_fallback,
-                platform_chat_model_fallback_profile_id=target.platform_chat_model_fallback_profile_id,
+                pod_chat_fallback_profile_id=target.pod_chat_fallback_profile_id,
                 confirmed_removed_chat_profiles=target.confirmed_removed_chat_profiles,
                 platform_prompt=target.platform_prompt,
                 credential_provider=target.credential_provider,
@@ -6729,8 +6741,9 @@ def _build_agent_router(
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 team_disabled_model_ids=target.team_disabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
+                pod_chat_default_profile_id=target.pod_chat_default_profile_id,
                 platform_chat_model_fallback=target.platform_chat_model_fallback,
-                platform_chat_model_fallback_profile_id=target.platform_chat_model_fallback_profile_id,
+                pod_chat_fallback_profile_id=target.pod_chat_fallback_profile_id,
                 confirmed_removed_chat_profiles=target.confirmed_removed_chat_profiles,
                 platform_prompt=target.platform_prompt,
                 credential_provider=target.credential_provider,
@@ -6861,8 +6874,9 @@ def _build_agent_router(
             reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
             team_disabled_model_ids=target.team_disabled_model_ids,
             platform_chat_model_binding=target.platform_chat_model_binding,
+            pod_chat_default_profile_id=target.pod_chat_default_profile_id,
             platform_chat_model_fallback=target.platform_chat_model_fallback,
-            platform_chat_model_fallback_profile_id=target.platform_chat_model_fallback_profile_id,
+            pod_chat_fallback_profile_id=target.pod_chat_fallback_profile_id,
             confirmed_removed_chat_profiles=target.confirmed_removed_chat_profiles,
             platform_prompt=target.platform_prompt,
             credential_provider=provider,

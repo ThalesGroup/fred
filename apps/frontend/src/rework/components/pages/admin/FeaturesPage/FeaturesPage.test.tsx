@@ -21,7 +21,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createRoot } from "react-dom/client";
 import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CapabilityEnablementItem, Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type {
+  CapabilityEnablementItem,
+  DiscoverySourceStatus,
+  Team,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 const h = vi.hoisted(() => ({
   applicationsEnabled: false,
@@ -38,7 +42,15 @@ const h = vi.hoisted(() => ({
   // `renderToStaticMarkup` (no effects, no DOM) never contains the hint text —
   // the key request is the only observable signal that the hint was wired up.
   tKeys: [] as string[],
-  discoverySources: [] as { source_id: string; yaml_url: string; effective_url: string }[],
+  discoverySources: [] as DiscoverySourceStatus[],
+  podDefaults: [
+    { runtime_id: "pod-a", base_url: "http://pod-a", reachable: true, effective_profile_id: "chat.manual" },
+  ] as {
+    runtime_id: string;
+    base_url: string;
+    reachable: boolean;
+    effective_profile_id: string | null;
+  }[],
   refetch: async () => {},
   refreshDiscovery: () => ({ unwrap: async () => ({ sources: [], pod_chat_default_available: true }) }),
 }));
@@ -64,6 +76,7 @@ vi.mock("react-i18next", () => ({
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useAdminCapabilitiesQuery: () => ({ ...h.list, refetch: h.refetch }),
   useModelDiscoveryQuery: () => ({ data: { sources: h.discoverySources }, refetch: h.refetch }),
+  usePodChatDefaultsQuery: () => ({ data: { pods: h.podDefaults }, isFetching: false, isError: false }),
   useRefreshModelDiscoveryMutation: () => [h.refreshDiscovery, { isLoading: false, isError: false }],
   useListAllTeamsQuery: (arg: unknown) => {
     h.allTeamsArg = arg;
@@ -86,8 +99,14 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   usePlatformModelFallbackQuery: () => ({ data: { binding: null }, isLoading: false, isError: false }),
   useSetPlatformModelFallbackMutation: () => [vi.fn(), { isLoading: false }],
   useDeletePlatformModelFallbackMutation: () => [vi.fn(), { isLoading: false }],
+  useSetPodChatDefaultMutation: () => [vi.fn(), { isLoading: false }],
+  useClearPodChatDefaultMutation: () => [vi.fn(), { isLoading: false }],
+  useSetPodChatFallbackMutation: () => [vi.fn(), { isLoading: false }],
+  useClearPodChatFallbackMutation: () => [vi.fn(), { isLoading: false }],
   useSetModelDiscoveryUrlMutation: () => [vi.fn(), { isLoading: false }],
+  useDismissRemovedModelMutation: () => [vi.fn(), { isLoading: false }],
   useSetModelDisplayNameMutation: () => [vi.fn(), { isLoading: false }],
+  useLazyModelDiscoveryDetailQuery: () => [vi.fn(), { data: undefined, isFetching: false, isError: false }],
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
@@ -135,6 +154,9 @@ beforeEach(() => {
   h.applicationsEnabled = false;
   h.canAdmin = false;
   h.discoverySources = [];
+  h.podDefaults = [
+    { runtime_id: "pod-a", base_url: "http://pod-a", reachable: true, effective_profile_id: "chat.manual" },
+  ];
   h.refreshDiscovery = () => ({ unwrap: async () => ({ sources: [], pod_chat_default_available: true }) });
 });
 
@@ -223,6 +245,7 @@ describe("FeaturesPage catalog rows", () => {
 
     // A non-default-on capability counts explicit grants only, labeled as teams.
     expect(html).toContain("rework.admin.capabilities.enabledTeams.teams:1");
+    expect(html).toMatch(/>groups<\/span>1<\/span>/);
 
     // Resting health with no suspended/unknown instances reads as healthy (#1975).
     expect(html).toContain("rework.admin.capabilities.health.healthy");
@@ -312,6 +335,7 @@ describe("FeaturesPage catalog rows", () => {
 
     // "8 personal spaces", not "0 teams + 8 personal spaces".
     expect(html).toContain("rework.admin.capabilities.enabledTeams.personal:8");
+    expect(html).toMatch(/>person<\/span>8<\/span>/);
     expect(html).not.toContain("rework.admin.capabilities.enabledTeams.teams");
   });
 
@@ -396,7 +420,7 @@ describe("FeaturesPage default-on gate for required team settings", () => {
 
   /** The default-on column is the first cell, so its Switch is the first input. */
   function defaultOnInput(html: string): string {
-    return html.split("<input").slice(1)[0] ?? "";
+    return html.match(/<input[^>]*aria-label="rework\.admin\.capabilities\.col\.defaultOn"[^>]*>/)?.[0] ?? "";
   }
 
   it("disables the switch and offers the hint when a required setting blocks default-on", () => {
@@ -449,9 +473,72 @@ describe("FeaturesPage default-on gate for required team settings", () => {
 });
 
 describe("FeaturesPage kind filter (CAPAB-01, RFC §8.6; model kind OBSERV-02 v3 RFC §8.7)", () => {
+  it("dims and disables discovered models missing from the last inventory even when a team still has access", async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    h.list = {
+      data: {
+        items: [
+          cap({ id: "removed-unused", kind: "model", model_discovery_source_id: "gateway" }),
+          cap({
+            id: "removed-team",
+            kind: "model",
+            model_discovery_source_id: "gateway",
+            enabled_team_ids: ["team-a"],
+          }),
+          cap({ id: "available", kind: "model", model_discovery_source_id: "gateway" }),
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    };
+    h.discoverySources = [
+      {
+        source_id: "gateway",
+        yaml_url: "https://example.test/v1/models",
+        effective_url: "https://example.test/v1/models",
+        last_success_at: "2026-10-23T09:00:00Z",
+        available_models: [{ id: "available", name: "available", provider: "openai" }],
+        removed_models: ["removed-unused", "removed-team"].map((id) => ({ id, name: id, provider: "openai" })),
+      },
+    ];
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<FeaturesPage />));
+      await act(async () => container.querySelectorAll<HTMLButtonElement>('[role="radiogroup"] button')[2].click());
+      await act(async () =>
+        container.querySelectorAll<HTMLButtonElement>('[role="radiogroup"]')[1].querySelectorAll("button")[1].click(),
+      );
+
+      const rows = Array.from(container.querySelectorAll<HTMLElement>('div[class*="datatable-row"]'));
+      expect(rows).toHaveLength(3);
+      for (const row of rows.filter((item) => item.textContent?.includes("removed-"))) {
+        expect(row.className).toContain("unavailableRow");
+        const manageButton = Array.from(row.querySelectorAll("button")).find((button) =>
+          button.textContent?.includes("rework.admin.capabilities.manageTeams"),
+        );
+        expect(manageButton?.hasAttribute("disabled")).toBe(true);
+        expect(row.querySelector('button[aria-label^="rework.admin.capabilities.modelName.editAria"]')).toBeNull();
+      }
+      expect(
+        rows.some((row) =>
+          Boolean(
+            row.textContent?.includes("available") &&
+              row.textContent?.includes("rework.admin.capabilities.health.healthy"),
+          ),
+        ),
+      ).toBe(true);
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
   it("reopens the missing-default dialog on every visit to Models", async () => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
     h.canAdmin = true;
+    h.podDefaults = [{ runtime_id: "pod-a", base_url: "http://pod-a", reachable: true, effective_profile_id: null }];
     h.refreshDiscovery = () => ({ unwrap: async () => ({ sources: [], pod_chat_default_available: false }) });
     h.list = {
       data: { items: [cap({ id: "discovered.chat", kind: "model", model_discovery_source_id: "gateway" })] },
@@ -501,6 +588,14 @@ describe("FeaturesPage kind filter (CAPAB-01, RFC §8.6; model kind OBSERV-02 v3
   ])("checks the declared pod default for a manual catalog (%s)", async (hasDefault, expectModal) => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
     h.canAdmin = true;
+    h.podDefaults = [
+      {
+        runtime_id: "pod-a",
+        base_url: "http://pod-a",
+        reachable: true,
+        effective_profile_id: hasDefault ? "chat.manual" : null,
+      },
+    ];
     h.list = { data: { items: [cap({ id: "manual.chat", kind: "model" })] }, isLoading: false, isError: false };
     h.refreshDiscovery = () => ({
       unwrap: async () => ({ sources: [], pod_chat_default_available: hasDefault }),
@@ -521,6 +616,9 @@ describe("FeaturesPage kind filter (CAPAB-01, RFC §8.6; model kind OBSERV-02 v3
   it("does not demand a default when an agent pod is unreachable", async () => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
     h.canAdmin = true;
+    h.podDefaults = [
+      { runtime_id: "pod-b", base_url: "http://localhost:8013", reachable: false, effective_profile_id: null },
+    ];
     h.list = { data: { items: [] }, isLoading: false, isError: false };
     h.refreshDiscovery = () => ({
       unwrap: async () => ({
@@ -540,6 +638,33 @@ describe("FeaturesPage kind filter (CAPAB-01, RFC §8.6; model kind OBSERV-02 v3
       await act(async () => root.unmount());
       container.remove();
       h.refreshDiscovery = () => ({ unwrap: async () => ({ sources: [], pod_chat_default_available: true }) });
+    }
+  });
+
+  it("requires a default on a reachable pod even when another pod is unreachable", async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    h.canAdmin = true;
+    h.podDefaults = [
+      { runtime_id: "pod-a", base_url: "http://pod-a", reachable: true, effective_profile_id: null },
+      { runtime_id: "pod-b", base_url: "http://localhost:8013", reachable: false, effective_profile_id: null },
+    ];
+    h.refreshDiscovery = () => ({
+      unwrap: async () => ({
+        sources: [],
+        pod_chat_default_available: false,
+        unverified_runtimes: [{ runtime_id: "pod-b", base_url: "http://localhost:8013" }],
+      }),
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<FeaturesPage />));
+      await act(async () => container.querySelectorAll<HTMLButtonElement>('[role="radiogroup"] button')[2].click());
+      expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
     }
   });
 

@@ -20,14 +20,13 @@ from datetime import datetime
 from typing import Any
 
 from fred_core.sql import make_session_factory, use_session
-from fred_sdk.contracts.context import ModelBinding
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.model_discovery_models import (
     ModelDiscoverySourceStateRow,
-    PlatformModelFallbackRow,
+    PodChatDefaultRow,
 )
 
 
@@ -173,81 +172,107 @@ class ModelDiscoveryStateStore:
             row.last_error = error[:1000]
             return _source_record(row)
 
+    async def dismiss_removed_model(
+        self, *, source_id: str, model_id: str
+    ) -> StoredDiscoverySourceState:
+        async with use_session(self._sessions) as s:
+            row = await s.get(
+                ModelDiscoverySourceStateRow, source_id, with_for_update=True
+            )
+            if row is None:
+                raise KeyError(source_id)
+            removed = json.loads(row.removed_json)
+            item = next((item for item in removed if item["id"] == model_id), None)
+            if item is None or item.get("dismissed"):
+                raise KeyError(model_id)
+            item["dismissed"] = True
+            row.removed_json = json.dumps(removed)
+            return _source_record(row)
 
-class PlatformModelFallbackStore:
+
+class PodChatDefaultStore:
     def __init__(self, engine: AsyncEngine) -> None:
         self._sessions = make_session_factory(engine)
 
-    async def get(self, *, session: AsyncSession | None = None) -> ModelBinding | None:
+    async def list_all(self, *, session: AsyncSession | None = None) -> dict[str, str]:
         async with use_session(self._sessions, session) as s:
-            row = await s.get(PlatformModelFallbackRow, "chat")
-            if (
-                row is None
-                or row.profile_id is not None
-                or row.provider is None
-                or row.name is None
-            ):
-                return None
-            return ModelBinding.model_validate(
-                {
-                    "provider": row.provider,
-                    "name": row.name,
-                    "settings": json.loads(row.settings_json or "{}"),
-                }
-            )
+            rows = (await s.execute(select(PodChatDefaultRow))).scalars().all()
+            return {row.runtime_id: row.profile_id for row in rows if row.profile_id}
 
-    async def get_profile_id(
+    async def list_fallbacks(
         self, *, session: AsyncSession | None = None
+    ) -> dict[str, str]:
+        async with use_session(self._sessions, session) as s:
+            rows = (await s.execute(select(PodChatDefaultRow))).scalars().all()
+            return {
+                row.runtime_id: row.fallback_profile_id
+                for row in rows
+                if row.fallback_profile_id
+            }
+
+    async def get(
+        self, runtime_id: str, *, session: AsyncSession | None = None
     ) -> str | None:
         async with use_session(self._sessions, session) as s:
-            row = await s.get(PlatformModelFallbackRow, "chat")
+            row = await s.get(PodChatDefaultRow, runtime_id)
             return row.profile_id if row is not None else None
 
-    async def set(self, binding: ModelBinding, *, updated_by: str | None) -> None:
-        async with use_session(self._sessions) as s:
-            row = await s.get(PlatformModelFallbackRow, "chat")
-            if row is None:
-                s.add(
-                    PlatformModelFallbackRow(
-                        model_capability="chat",
-                        profile_id=None,
-                        provider=binding.provider,
-                        name=binding.name,
-                        settings_json=json.dumps(
-                            binding.settings.model_dump(mode="json", exclude_none=True)
-                        ),
-                        updated_by=updated_by,
-                    )
-                )
-            else:
-                row.profile_id = None
-                row.provider = binding.provider
-                row.name = binding.name
-                row.settings_json = json.dumps(
-                    binding.settings.model_dump(mode="json", exclude_none=True)
-                )
-                row.updated_by = updated_by
+    async def get_fallback(
+        self, runtime_id: str, *, session: AsyncSession | None = None
+    ) -> str | None:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(PodChatDefaultRow, runtime_id)
+            return row.fallback_profile_id if row is not None else None
 
-    async def set_profile_id(self, profile_id: str, *, updated_by: str | None) -> None:
+    async def set(
+        self, runtime_id: str, profile_id: str, *, updated_by: str | None
+    ) -> None:
         async with use_session(self._sessions) as s:
-            row = await s.get(PlatformModelFallbackRow, "chat")
+            row = await s.get(PodChatDefaultRow, runtime_id)
             if row is None:
                 s.add(
-                    PlatformModelFallbackRow(
-                        model_capability="chat",
+                    PodChatDefaultRow(
+                        runtime_id=runtime_id,
                         profile_id=profile_id,
                         updated_by=updated_by,
                     )
                 )
             else:
                 row.profile_id = profile_id
-                row.provider = None
-                row.name = None
-                row.settings_json = None
                 row.updated_by = updated_by
 
-    async def delete(self) -> None:
+    async def delete(self, runtime_id: str) -> None:
         async with use_session(self._sessions) as s:
-            row = await s.get(PlatformModelFallbackRow, "chat")
+            row = await s.get(PodChatDefaultRow, runtime_id)
             if row is not None:
-                await s.delete(row)
+                if row.fallback_profile_id is None:
+                    await s.delete(row)
+                else:
+                    row.profile_id = None
+
+    async def set_fallback(
+        self, runtime_id: str, profile_id: str, *, updated_by: str | None
+    ) -> None:
+        async with use_session(self._sessions) as s:
+            row = await s.get(PodChatDefaultRow, runtime_id)
+            if row is None:
+                s.add(
+                    PodChatDefaultRow(
+                        runtime_id=runtime_id,
+                        profile_id=None,
+                        fallback_profile_id=profile_id,
+                        updated_by=updated_by,
+                    )
+                )
+            else:
+                row.fallback_profile_id = profile_id
+                row.updated_by = updated_by
+
+    async def delete_fallback(self, runtime_id: str) -> None:
+        async with use_session(self._sessions) as s:
+            row = await s.get(PodChatDefaultRow, runtime_id)
+            if row is not None:
+                if row.profile_id is None:
+                    await s.delete(row)
+                else:
+                    row.fallback_profile_id = None

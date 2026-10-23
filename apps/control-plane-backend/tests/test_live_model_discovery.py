@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import cast
 
@@ -25,17 +26,16 @@ from control_plane_backend.model_discovery import service
 from control_plane_backend.model_discovery.service import validate_models_url
 from control_plane_backend.model_discovery.store import (
     ModelDiscoveryStateStore,
-    PlatformModelFallbackStore,
+    PodChatDefaultStore,
     StoredDiscoverySourceState,
 )
 from control_plane_backend.models.base import Base
 from control_plane_backend.models.model_discovery_models import (
     ModelDiscoverySourceStateRow,
-    PlatformModelFallbackRow,
+    PodChatDefaultRow,
 )
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from fred_core import KeycloakUser, OrganizationPermission
-from fred_sdk.contracts.context import ModelBinding
 from sqlalchemy.ext.asyncio import create_async_engine
 
 
@@ -46,6 +46,221 @@ def _model(name: str) -> dict:
         "provider": "openai",
         "chat_profile_ids": [f"discovered.chat.gateway.{name}"],
     }
+
+
+@pytest.mark.asyncio
+async def test_pod_chat_default_store_round_trip() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(
+                lambda sync: Base.metadata.create_all(
+                    sync, tables=[Base.metadata.tables[PodChatDefaultRow.__tablename__]]
+                )
+            )
+        store = PodChatDefaultStore(engine)
+        assert await store.get("pod-a") is None
+        await store.set("pod-a", "chat.manual", updated_by="admin")
+        await store.set("pod-b", "chat.discovered", updated_by="admin")
+        assert await store.list_all() == {
+            "pod-a": "chat.manual",
+            "pod-b": "chat.discovered",
+        }
+        await store.set("pod-a", "chat.other", updated_by="admin")
+        assert await store.get("pod-a") == "chat.other"
+        await store.set_fallback("pod-a", "chat.manual", updated_by="admin")
+        await store.set_fallback("pod-c", "chat.safe", updated_by="admin")
+        assert await store.list_fallbacks() == {
+            "pod-a": "chat.manual",
+            "pod-c": "chat.safe",
+        }
+        await store.delete("pod-a")
+        assert await store.get("pod-a") is None
+        assert await store.get_fallback("pod-a") == "chat.manual"
+        assert await store.get("pod-b") == "chat.discovered"
+        await store.delete_fallback("pod-a")
+        await store.delete_fallback("pod-c")
+        assert await store.list_fallbacks() == {}
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_pod_chat_default_selection_uses_yaml_until_saved(monkeypatch) -> None:
+    async def allowed(*args, **kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(service, "require_manage_capabilities", allowed)
+    monkeypatch.setattr(service, "require_manage_platform_model_binding", allowed)
+
+    class Store:
+        override: str | None = None
+        fallback: str | None = None
+
+        async def list_all(self) -> dict[str, str]:
+            return {"pod-a": self.override} if self.override else {}
+
+        async def list_fallbacks(self) -> dict[str, str]:
+            return {"pod-a": self.fallback} if self.fallback else {}
+
+        async def set(
+            self, runtime_id: str, profile_id: str, *, updated_by: str | None
+        ) -> None:
+            self.override = profile_id
+
+        async def delete(self, runtime_id: str) -> None:
+            self.override = None
+
+        async def set_fallback(
+            self, runtime_id: str, profile_id: str, *, updated_by: str | None
+        ) -> None:
+            self.fallback = profile_id
+
+        async def delete_fallback(self, runtime_id: str) -> None:
+            self.fallback = None
+
+    store = Store()
+
+    class DiscoveryStore:
+        states: list = []
+
+        async def list_all(self) -> list:
+            return self.states
+
+    discovery_store = DiscoveryStore()
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "default_chat_profile_id": "chat.manual",
+                "discovery_sources": [
+                    {"source_id": "first"},
+                    {"source_id": "second"},
+                ],
+                "models": [
+                    {
+                        "id": "manual",
+                        "name": "manual",
+                        "chat_profile_ids": ["chat.manual"],
+                    },
+                    {
+                        "id": "backup",
+                        "name": "backup",
+                        "chat_profile_ids": ["chat.backup"],
+                    },
+                    {
+                        "id": "discovered",
+                        "name": "discovered",
+                        "chat_profile_ids": ["discovered.chat.first.model"],
+                    },
+                    {
+                        "id": "second-discovered",
+                        "name": "second-discovered",
+                        "chat_profile_ids": ["discovered.chat.second.model"],
+                    },
+                ],
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        deps = cast(
+            ProductServiceDependencies,
+            SimpleNamespace(
+                team_dependencies=SimpleNamespace(rebac=object()),
+                configuration=SimpleNamespace(
+                    platform=SimpleNamespace(
+                        runtime_catalog_sources=[
+                            SimpleNamespace(
+                                runtime_id="pod-a",
+                                base_url="https://pod-a.example",
+                                enabled=True,
+                            )
+                        ]
+                    )
+                ),
+                get_pod_chat_default_store=lambda: store,
+                get_model_discovery_state_store=lambda: discovery_store,
+                get_runtime_http_client=lambda: client,
+            ),
+        )
+        user = cast(KeycloakUser, SimpleNamespace(uid="admin"))
+        initial = await service.get_pod_chat_defaults(user, deps, authorization=None)
+        assert initial.pods[0].effective_profile_id == "chat.manual"
+        assert initial.pods[0].effective_fallback_profile_id == "chat.manual"
+        with pytest.raises(ValueError, match="manual chat profile"):
+            await service.set_pod_chat_fallback(
+                user,
+                deps,
+                runtime_id="pod-a",
+                profile_id="discovered.chat.first.model",
+                authorization=None,
+            )
+        saved_fallback = await service.set_pod_chat_fallback(
+            user,
+            deps,
+            runtime_id="pod-a",
+            profile_id="chat.manual",
+            authorization=None,
+        )
+        assert saved_fallback.fallback_override_profile_id == "chat.manual"
+        cleared_fallback = await service.delete_pod_chat_fallback(
+            user, deps, runtime_id="pod-a", authorization=None
+        )
+        assert cleared_fallback.effective_fallback_profile_id == "chat.manual"
+        assert (
+            next(
+                option
+                for option in initial.pods[0].models
+                if option.profile_id == "discovered.chat.second.model"
+            ).discovery_source_id
+            == "second"
+        )
+        selected = await service.set_pod_chat_default(
+            user,
+            deps,
+            runtime_id="pod-a",
+            profile_id="discovered.chat.first.model",
+            authorization=None,
+        )
+        assert selected.effective_profile_id == "discovered.chat.first.model"
+        await service.set_pod_chat_fallback(
+            user,
+            deps,
+            runtime_id="pod-a",
+            profile_id="chat.backup",
+            authorization=None,
+        )
+        discovery_store.states = [
+            SimpleNamespace(
+                source_id="first",
+                inventory=[],
+                removed=[
+                    {
+                        "id": "discovered",
+                        "chat_profile_ids": ["discovered.chat.first.model"],
+                    }
+                ],
+                last_success_at=datetime.now(timezone.utc),
+            )
+        ]
+        disappeared = await service.get_pod_chat_defaults(
+            user, deps, authorization=None
+        )
+        assert disappeared.pods[0].override_unavailable is True
+        assert disappeared.pods[0].effective_profile_id == "chat.backup"
+        assert all(
+            option.profile_id != "discovered.chat.first.model"
+            for option in disappeared.pods[0].models
+        )
+        store.override = "chat.missing"
+        missing = await service.get_pod_chat_defaults(user, deps, authorization=None)
+        assert missing.pods[0].override_unavailable is True
+        assert missing.pods[0].effective_profile_id == "chat.manual"
+        cleared = await service.delete_pod_chat_default(
+            user, deps, runtime_id="pod-a", authorization=None
+        )
+        assert cleared.effective_profile_id == "chat.manual"
 
 
 @pytest.mark.asyncio
@@ -149,6 +364,15 @@ async def test_successful_inventory_diff_and_failure_preserve_confirmed_removals
         assert failed.removed == second.removed
         assert failed.inventory == second.inventory
         assert failed.active_url == second.active_url
+        dismissed = await store.dismiss_removed_model(
+            source_id="gateway", model_id="model__openai__a"
+        )
+        assert dismissed.removed[0]["dismissed"] is True
+        assert service._status(dismissed).removed_models == []
+        with pytest.raises(KeyError):
+            await store.dismiss_removed_model(
+                source_id="gateway", model_id="model__openai__a"
+            )
         returned = await store.save_success(
             source_id="gateway",
             yaml_url=first.yaml_url,
@@ -163,7 +387,7 @@ async def test_successful_inventory_diff_and_failure_preserve_confirmed_removals
 
 
 @pytest.mark.asyncio
-async def test_url_override_and_fallback_persist_independently() -> None:
+async def test_url_override_persists() -> None:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     try:
         async with engine.begin() as connection:
@@ -174,7 +398,6 @@ async def test_url_override_and_fallback_persist_independently() -> None:
                         Base.metadata.tables[
                             ModelDiscoverySourceStateRow.__tablename__
                         ],
-                        Base.metadata.tables[PlatformModelFallbackRow.__tablename__],
                     ],
                 )
             )
@@ -212,21 +435,6 @@ async def test_url_override_and_fallback_persist_independently() -> None:
         persisted = await ModelDiscoveryStateStore(engine).get("gateway")
         assert persisted is not None
         assert persisted.effective_url == saved.effective_url
-        binding = ModelBinding.model_validate(
-            {
-                "provider": "openai",
-                "name": "chat-b",
-                "settings": {"base_url": "https://other.example/v1"},
-            }
-        )
-        fallback = PlatformModelFallbackStore(engine)
-        await fallback.set(binding, updated_by="admin")
-        assert await PlatformModelFallbackStore(engine).get() == binding
-        await fallback.set_profile_id("chat.manual", updated_by="admin")
-        assert await fallback.get_profile_id() == "chat.manual"
-        assert await fallback.get() is None
-        await fallback.delete()
-        assert await fallback.get() is None
     finally:
         await engine.dispose()
 
@@ -268,6 +476,33 @@ async def test_url_override_requires_platform_admin_before_store_access() -> Non
             source_id="gateway",
             url="https://attacker.example/v1/models",
             authorization=None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_dismiss_removed_model_requires_platform_admin_before_store_access() -> (
+    None
+):
+    class Rebac:
+        async def check_user_permission_or_raise(
+            self,
+            user: KeycloakUser,
+            permission: OrganizationPermission,
+            resource_id: str,
+        ) -> None:
+            assert permission == OrganizationPermission.CAN_MANAGE_PLATFORM
+            raise PermissionError("delegated feature manager")
+
+    deps = cast(
+        ProductServiceDependencies,
+        SimpleNamespace(team_dependencies=SimpleNamespace(rebac=Rebac())),
+    )
+    with pytest.raises(PermissionError, match="delegated feature manager"):
+        await service.dismiss_removed_model(
+            cast(KeycloakUser, object()),
+            deps,
+            source_id="gateway",
+            model_id="model__openai__a",
         )
 
 
@@ -357,8 +592,23 @@ async def test_unreachable_runtime_is_a_transient_warning(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("failure_response", "expected_error"),
+    [
+        (httpx.Response(502), "Discovery refresh failed"),
+        (
+            httpx.Response(
+                502,
+                json={"detail": "Model discovery source 'gateway' failed: HTTP 401"},
+            ),
+            "Model discovery source 'gateway' failed: HTTP 401",
+        ),
+    ],
+)
 async def test_failed_preparation_does_not_activate_or_remove_models(
     monkeypatch,
+    failure_response: httpx.Response,
+    expected_error: str,
 ) -> None:
     async def allowed(*args, **kwargs) -> None:
         return None
@@ -414,7 +664,7 @@ async def test_failed_preparation_does_not_activate_or_remove_models(
         body = json.loads(request.content)
         posts.append(body)
         if request.url.host == "pod-b.example":
-            return httpx.Response(502)
+            return failure_response
         return httpx.Response(
             200,
             json={
@@ -453,7 +703,7 @@ async def test_failed_preparation_does_not_activate_or_remove_models(
     assert len(posts) == 2
     assert all(post.get("prepare") is True for post in posts)
     assert result.sources[0].available_models[0].name == "a"
-    assert result.sources[0].last_error == "Discovery refresh failed"
+    assert result.sources[0].last_error == expected_error
 
 
 @pytest.mark.asyncio

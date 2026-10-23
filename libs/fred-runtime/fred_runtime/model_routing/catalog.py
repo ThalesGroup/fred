@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
@@ -632,10 +633,24 @@ class ModelCatalog(FrozenModel):
                 profile.model_copy(update={"model": resolved_model})
             )
 
+        known_profile_ids = {profile.profile_id for profile in resolved_profiles}
+        unavailable_overrides = frozenset(
+            profile_id
+            for profile_id in self.agent_profile_overrides.values()
+            if profile_id not in known_profile_ids
+            and any(
+                re.fullmatch(
+                    rf"discovered\.chat\.{re.escape(source_id)}\.[0-9a-f]{{64}}",
+                    profile_id,
+                )
+                for source_id in self._verified_discovery_source_ids
+            )
+        )
         return ModelRoutingPolicy(
             default_profile_by_capability=effective_defaults,
             profiles=tuple(resolved_profiles),
             agent_profile_overrides=dict(self.agent_profile_overrides),
+            unavailable_discovered_chat_profile_ids=unavailable_overrides,
         )
 
 

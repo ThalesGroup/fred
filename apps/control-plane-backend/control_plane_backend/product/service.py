@@ -3716,11 +3716,9 @@ async def get_runtime_binding_for_team(
             session=session
         )
         binding = await resolve_platform_chat_model_binding(deps, session=session)
-        fallback = await deps.get_platform_model_fallback_store().get(session=session)
-        fallback_profile_id = (
-            await deps.get_platform_model_fallback_store().get_profile_id(
-                session=session
-            )
+        pod_defaults = await deps.get_pod_chat_default_store().list_all(session=session)
+        pod_fallbacks = await deps.get_pod_chat_default_store().list_fallbacks(
+            session=session
         )
         discovery_states = await deps.get_model_discovery_state_store().list_all(
             session=session
@@ -3729,8 +3727,8 @@ async def get_runtime_binding_for_team(
         return (
             reasoning,
             binding,
-            fallback,
-            fallback_profile_id,
+            pod_defaults,
+            pod_fallbacks,
             discovery_states,
             prompt,
         )
@@ -3745,8 +3743,8 @@ async def get_runtime_binding_for_team(
     (
         reasoning_enabled_model_ids,
         platform_chat_model_binding,
-        platform_chat_model_fallback,
-        platform_chat_model_fallback_profile_id,
+        pod_defaults,
+        pod_fallbacks,
         discovery_states,
         platform_prompt,
     ) = platform_result
@@ -3779,8 +3777,8 @@ async def get_runtime_binding_for_team(
             else []
         ),
         platform_chat_model_binding=platform_chat_model_binding,
-        platform_chat_model_fallback=platform_chat_model_fallback,
-        platform_chat_model_fallback_profile_id=platform_chat_model_fallback_profile_id,
+        pod_chat_default_profile_id=pod_defaults.get(instance.source_runtime_id),
+        pod_chat_fallback_profile_id=pod_fallbacks.get(instance.source_runtime_id),
         model_discovery_urls={
             state.source_id: state.active_url or state.yaml_url
             for state in discovery_states

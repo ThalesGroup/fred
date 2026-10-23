@@ -2800,6 +2800,17 @@ class _FakeEmptyDiscoveryStateStore:
         return []
 
 
+class _FakeEmptyPodChatDefaultStore:
+    def __init__(self, overrides=None):
+        self.overrides = overrides or {}
+
+    async def list_all(self, session=None):
+        return self.overrides
+
+    async def list_fallbacks(self, session=None):
+        return {}
+
+
 @pytest.mark.asyncio
 async def test_runtime_binding_carries_selected_team_settings() -> None:
     from types import SimpleNamespace
@@ -2830,7 +2841,9 @@ async def test_runtime_binding_carries_selected_team_settings() -> None:
         get_team_capability_settings_store=lambda: settings,
         get_model_reasoning_store=_FakeReasoningStore,
         get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
-        get_platform_model_fallback_store=_FakeNoPlatformModelBindingStore,
+        get_pod_chat_default_store=lambda: _FakeEmptyPodChatDefaultStore(
+            {record.source_runtime_id: "chat.admin"}
+        ),
         get_model_discovery_state_store=_FakeEmptyDiscoveryStateStore,
         get_platform_prompt_store=_FakeNoPlatformPromptStore,
         get_sql_session_factory=None,
@@ -2842,6 +2855,7 @@ async def test_runtime_binding_carries_selected_team_settings() -> None:
     assert binding is not None
     # Only the SELECTED capability's settings are shipped to the pod.
     assert binding.team_capability_settings == {"corp_drive": {"root_folder": "f-1"}}
+    assert binding.pod_chat_default_profile_id == "chat.admin"
 
 
 @pytest.mark.asyncio
@@ -2864,7 +2878,7 @@ async def test_runtime_binding_carries_fresh_reasoning_enabled_snapshot() -> Non
             {"model__openai__gpt-5.1", "model__mistral__small"}
         ),
         get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
-        get_platform_model_fallback_store=_FakeNoPlatformModelBindingStore,
+        get_pod_chat_default_store=_FakeEmptyPodChatDefaultStore,
         get_model_discovery_state_store=_FakeEmptyDiscoveryStateStore,
         get_platform_prompt_store=_FakeNoPlatformPromptStore,
         get_sql_session_factory=None,
@@ -2911,7 +2925,7 @@ async def test_runtime_binding_carries_team_disabled_models_from_one_gather(
         get_team_capability_settings_store=_FakeSettingsStore,
         get_model_reasoning_store=_FakeReasoningStore,
         get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
-        get_platform_model_fallback_store=_FakeNoPlatformModelBindingStore,
+        get_pod_chat_default_store=_FakeEmptyPodChatDefaultStore,
         get_model_discovery_state_store=_FakeEmptyDiscoveryStateStore,
         get_platform_prompt_store=_FakeNoPlatformPromptStore,
         get_sql_session_factory=None,

@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The default path selects an advertised chat model. Manual provider settings
-// stay available in the advanced disclosure for deployments needing them.
+// The global override uses an explicit provider binding, as on swift.
+// Pod model choices are configured separately in the Agent pods tab.
 
 import Button from "@shared/atoms/Button/Button.tsx";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
-import Select from "@shared/molecules/Select/Select.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -28,22 +28,15 @@ import {
   useDeletePlatformModelBindingMutation,
   usePlatformModelBindingQuery,
   useSetPlatformModelBindingMutation,
-  usePlatformModelFallbackQuery,
-  useSetPlatformModelFallbackMutation,
-  useDeletePlatformModelFallbackMutation,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type {
-  CapabilityEnablementItem,
-  ModelBinding,
-  ModelBindingSettings,
-} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ModelBinding, ModelBindingSettings } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./PlatformModelBindingsPanel.module.css";
+import { PodChatDefaultsTab } from "./PodChatDefaultsTab";
 
 interface PlatformModelBindingsPanelProps {
   open: boolean;
   onClose: () => void;
-  manualModels: CapabilityEnablementItem[];
-  discoveredModels?: CapabilityEnablementItem[];
+  initialTab?: "platform" | "pods";
 }
 
 /** Parses the settings textarea. `null` means "not a JSON object" (including
@@ -64,75 +57,32 @@ function parseSettingsObject(text: string): { value: Record<string, unknown> } |
   return { value: parsed as Record<string, unknown> };
 }
 
-function sameBinding(left: ModelBinding | null, right: ModelBinding): boolean {
-  if (!left || left.provider !== right.provider || left.name !== right.name) return false;
-  const settings = (binding: ModelBinding) =>
-    Object.entries(binding.settings ?? {})
-      .filter(([, value]) => value !== null && value !== undefined)
-      .sort(([a], [b]) => a.localeCompare(b));
-  return JSON.stringify(settings(left)) === JSON.stringify(settings(right));
-}
-
-export function PlatformModelBindingsPanel({
-  open,
-  onClose,
-  manualModels,
-  discoveredModels = [],
-}: PlatformModelBindingsPanelProps) {
+export function PlatformModelBindingsPanel({ open, onClose, initialTab = "pods" }: PlatformModelBindingsPanelProps) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
   const { data, isLoading, isError } = usePlatformModelBindingQuery();
   const [setBinding, { isLoading: isSaving }] = useSetPlatformModelBindingMutation();
   const [deleteBinding, { isLoading: isDeleting }] = useDeletePlatformModelBindingMutation();
-  const { data: fallbackData, isLoading: fallbackLoading, isError: fallbackError } = usePlatformModelFallbackQuery();
-  const [setFallback, { isLoading: isSavingFallback }] = useSetPlatformModelFallbackMutation();
-  const [deleteFallback, { isLoading: isDeletingFallback }] = useDeletePlatformModelFallbackMutation();
-  const busy = isSaving || isDeleting || isSavingFallback || isDeletingFallback;
+  const busy = isSaving || isDeleting;
 
   const binding = data?.binding ?? null;
-  const fallback = fallbackData?.binding ?? null;
-  const fallbackProfileId = fallbackData?.profile_id ?? null;
-  const fallbackOptions = manualModels.flatMap((model) =>
-    (model.model_fallback_profile_ids ?? []).map((profileId) => ({
-      key: profileId,
-      value: profileId,
-      label: model.model_display_name || model.name,
-      description: `${profileId} - ${(model.model_runtime_ids ?? []).join(", ")}`,
-    })),
-  );
-  const modelOptions = [...manualModels, ...discoveredModels]
-    .filter((model) => model.model_platform_binding)
-    .map((model) => ({
-      key: model.id,
-      value: model.id,
-      label: model.model_display_name || model.name,
-      description: model.name,
-      section: model.model_discovery_source_id
-        ? t("rework.admin.platformModelBindings.discoveredSource")
-        : t("rework.admin.platformModelBindings.manualSource"),
-      binding: model.model_platform_binding!,
-    }));
-
   const [isEditing, setIsEditing] = useState(false);
   const [provider, setProvider] = useState("");
   const [name, setName] = useState("");
   const [settingsText, setSettingsText] = useState("{}");
-  const [selectedModelId, setSelectedModelId] = useState("");
-  const [isEditingFallback, setIsEditingFallback] = useState(false);
-  const [selectedFallbackProfileId, setSelectedFallbackProfileId] = useState("");
+  const [tab, setTab] = useState<"platform" | "pods">(initialTab);
 
   // Editing state does not survive the drawer closing — reopening always
   // starts from the current server state, never a stale in-progress edit.
   useEffect(() => {
+    setTab(initialTab);
     if (!open) {
       setIsEditing(false);
-      setIsEditingFallback(false);
     }
-  }, [open]);
+  }, [open, initialTab]);
 
   const startEdit = () => {
     setIsEditing(true);
-    setSelectedModelId(modelOptions.find((option) => sameBinding(binding, option.binding))?.value ?? "");
     setProvider(binding?.provider ?? "");
     setName(binding?.name ?? "");
     setSettingsText(JSON.stringify(binding?.settings ?? {}, null, 2));
@@ -143,35 +93,6 @@ export function PlatformModelBindingsPanel({
   const parsedSettings = parseSettingsObject(settingsText);
   const settingsInvalid = "error" in parsedSettings;
   const canSave = provider.trim() !== "" && name.trim() !== "" && !settingsInvalid;
-  const selectedModel = modelOptions.find((option) => option.value === selectedModelId);
-  const canSaveFallback = fallbackOptions.some((option) => option.value === selectedFallbackProfileId);
-
-  const startFallbackEdit = () => {
-    setIsEditingFallback(true);
-    setSelectedFallbackProfileId(fallbackProfileId ?? fallbackOptions[0]?.value ?? "");
-  };
-
-  const handleFallbackSave = async () => {
-    if (!canSaveFallback) return;
-    try {
-      await setFallback({
-        setPlatformModelFallbackRequest: { profile_id: selectedFallbackProfileId },
-      }).unwrap();
-      showSuccess({ summary: t("rework.admin.platformModelBindings.fallbackSaveToast") });
-      setIsEditingFallback(false);
-    } catch {
-      showError({ summary: t("rework.admin.platformModelBindings.fallbackError") });
-    }
-  };
-
-  const handleFallbackDelete = async () => {
-    try {
-      await deleteFallback().unwrap();
-      showSuccess({ summary: t("rework.admin.platformModelBindings.fallbackDeleteToast") });
-    } catch {
-      showError({ summary: t("rework.admin.platformModelBindings.fallbackError") });
-    }
-  };
 
   const handleSave = async () => {
     if (!canSave || "error" in parsedSettings) return;
@@ -196,17 +117,6 @@ export function PlatformModelBindingsPanel({
     }
   };
 
-  const handleSelectedSave = async () => {
-    if (!selectedModel) return;
-    try {
-      await setBinding({ setPlatformModelBindingRequest: { binding: selectedModel.binding } }).unwrap();
-      showSuccess({ summary: t("rework.admin.platformModelBindings.saveToast") });
-      setIsEditing(false);
-    } catch {
-      showError({ summary: t("rework.admin.platformModelBindings.saveError") });
-    }
-  };
-
   const handleDelete = async () => {
     try {
       await deleteBinding().unwrap();
@@ -218,100 +128,91 @@ export function PlatformModelBindingsPanel({
   };
 
   return (
-    <InlineDrawer open={open} onClose={onClose} title={t("rework.admin.platformModelBindings.title")} width="480px">
+    <InlineDrawer open={open} onClose={onClose} title={t("rework.admin.platformModelBindings.title")} width="560px">
       <div className={styles.body}>
-        <p className={styles.hint}>{t("rework.admin.platformModelBindings.subtitle")}</p>
+        {open && (
+          <ButtonGroup
+            size="small"
+            color="secondary"
+            variant="radio"
+            aria-label={t("rework.admin.platformModelBindings.tabAria")}
+            selectedIndex={tab === "pods" ? 0 : 1}
+            onSelectedIndexChange={(index) => setTab(index === 0 ? "pods" : "platform")}
+            items={[
+              { label: t("rework.admin.platformModelBindings.podsTab") },
+              { label: t("rework.admin.platformModelBindings.platformTab") },
+            ]}
+          />
+        )}
+        {tab === "pods" ? (
+          <PodChatDefaultsTab />
+        ) : (
+          <div className={styles.body}>
+            <p className={styles.hint}>{t("rework.admin.platformModelBindings.subtitle")}</p>
 
-        {isLoading && <p className={styles.hint}>{t("rework.admin.platformModelBindings.loading")}</p>}
-        {isError && <p className={styles.statusError}>{t("rework.admin.platformModelBindings.loadError")}</p>}
+            {isLoading && <p className={styles.hint}>{t("rework.admin.platformModelBindings.loading")}</p>}
+            {isError && <p className={styles.statusError}>{t("rework.admin.platformModelBindings.loadError")}</p>}
 
-        {!isLoading && !isError && (
-          <div className={styles.row}>
-            <strong>{t("rework.admin.platformModelBindings.forcedLabel")}</strong>
-            <div className={styles.rowHeader}>
-              <div className={styles.rowMain}>
-                <span className={styles.capabilityLabel}>
-                  {t("rework.admin.platformModelBindings.capability.chat")}
-                </span>
-                <span className={styles.stateText}>
-                  {binding
-                    ? t("rework.admin.platformModelBindings.boundState", {
-                        provider: binding.provider,
-                        name: binding.name,
-                      })
-                    : t("rework.admin.platformModelBindings.podDefault")}
-                </span>
-              </div>
-              <div className={styles.rowActions}>
-                {binding && !isEditing && (
-                  <DeleteIconButton
-                    size="small"
-                    aria-label={t("rework.admin.platformModelBindings.deleteAction")}
-                    onClick={() => void handleDelete()}
-                    disabled={busy}
-                  />
-                )}
-                {!isEditing && (
-                  <Button color="on-surface" variant="outlined" size="small" onClick={startEdit} disabled={busy}>
-                    {t("rework.admin.platformModelBindings.editAction")}
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {isEditing && (
-              <div className={styles.editForm}>
-                <Select
-                  label={t("rework.admin.platformModelBindings.modelSelect")}
-                  size="small"
-                  compact
-                  options={modelOptions}
-                  value={selectedModelId}
-                  onChange={setSelectedModelId}
-                  disabled={busy}
-                  emptyMessage={t("rework.admin.platformModelBindings.noSelectableModels")}
-                />
-                <div className={styles.formActions}>
-                  <Button color="on-surface" variant="text" size="small" onClick={cancelEdit} disabled={busy}>
-                    {t("rework.admin.platformModelBindings.form.cancel")}
-                  </Button>
-                  <Button
-                    color="primary"
-                    variant="filled"
-                    size="small"
-                    onClick={() => void handleSelectedSave()}
-                    disabled={busy || !selectedModel}
-                  >
-                    {t("rework.admin.platformModelBindings.form.save")}
-                  </Button>
+            {!isLoading && !isError && (
+              <div className={styles.row}>
+                <strong>{t("rework.admin.platformModelBindings.forcedLabel")}</strong>
+                <div className={styles.rowHeader}>
+                  <div className={styles.rowMain}>
+                    <span className={styles.capabilityLabel}>
+                      {t("rework.admin.platformModelBindings.capability.chat")}
+                    </span>
+                    <span className={styles.stateText}>
+                      {binding
+                        ? t("rework.admin.platformModelBindings.boundState", {
+                            provider: binding.provider,
+                            name: binding.name,
+                          })
+                        : t("rework.admin.platformModelBindings.podDefault")}
+                    </span>
+                  </div>
+                  <div className={styles.rowActions}>
+                    {binding && !isEditing && (
+                      <DeleteIconButton
+                        size="small"
+                        aria-label={t("rework.admin.platformModelBindings.deleteAction")}
+                        onClick={() => void handleDelete()}
+                        disabled={busy}
+                      />
+                    )}
+                    {!isEditing && (
+                      <Button color="on-surface" variant="outlined" size="small" onClick={startEdit} disabled={busy}>
+                        {t("rework.admin.platformModelBindings.editAction")}
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <details className={styles.advanced}>
-                  <summary>{t("rework.admin.platformModelBindings.advanced")}</summary>
+
+                {isEditing && (
                   <form
-                    className={styles.advancedForm}
-                    onSubmit={(e) => {
-                      e.preventDefault();
+                    className={styles.editForm}
+                    onSubmit={(event) => {
+                      event.preventDefault();
                       void handleSave();
                     }}
                   >
                     <TextInput
                       label={t("rework.admin.platformModelBindings.form.provider")}
                       value={provider}
-                      onChange={(e) => setProvider(e.target.value)}
+                      onChange={(event) => setProvider(event.target.value)}
                       disabled={busy}
                       required
                     />
                     <TextInput
                       label={t("rework.admin.platformModelBindings.form.name")}
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={(event) => setName(event.target.value)}
                       disabled={busy}
                       required
                     />
                     <TextArea
                       label={t("rework.admin.platformModelBindings.form.settingsTitle")}
                       value={settingsText}
-                      onChange={(e) => setSettingsText(e.target.value)}
+                      onChange={(event) => setSettingsText(event.target.value)}
                       error={
                         settingsInvalid ? t("rework.admin.platformModelBindings.form.settingsInvalidJson") : undefined
                       }
@@ -321,102 +222,20 @@ export function PlatformModelBindingsPanel({
                       rows={8}
                       disabled={busy}
                     />
-
                     <div className={styles.formActions}>
+                      <Button color="on-surface" variant="text" size="small" onClick={cancelEdit} disabled={busy}>
+                        {t("rework.admin.platformModelBindings.form.cancel")}
+                      </Button>
                       <Button color="primary" variant="filled" size="small" type="submit" disabled={busy || !canSave}>
                         {t("rework.admin.platformModelBindings.form.save")}
                       </Button>
                     </div>
                   </form>
-                </details>
+                )}
               </div>
             )}
           </div>
         )}
-
-        <div className={styles.row}>
-          <strong>{t("rework.admin.platformModelBindings.fallbackLabel")}</strong>
-          <p className={styles.hint}>{t("rework.admin.platformModelBindings.fallbackHint")}</p>
-          {fallbackLoading && <p className={styles.hint}>{t("rework.admin.platformModelBindings.loading")}</p>}
-          {fallbackError && <p className={styles.statusError}>{t("rework.admin.platformModelBindings.loadError")}</p>}
-          {!fallbackLoading && !fallbackError && (
-            <>
-              <div className={styles.rowHeader}>
-                <span className={styles.stateText}>
-                  {fallbackProfileId
-                    ? (fallbackOptions.find((option) => option.value === fallbackProfileId)?.label ?? fallbackProfileId)
-                    : fallback
-                      ? t("rework.admin.platformModelBindings.boundState", {
-                          provider: fallback.provider,
-                          name: fallback.name,
-                        })
-                      : t("rework.admin.platformModelBindings.noFallback")}
-                </span>
-                <div className={styles.rowActions}>
-                  {(fallback || fallbackProfileId) && !isEditingFallback && (
-                    <DeleteIconButton
-                      size="small"
-                      aria-label={t("rework.admin.platformModelBindings.clearFallback")}
-                      onClick={() => void handleFallbackDelete()}
-                      disabled={busy}
-                    />
-                  )}
-                  {!isEditingFallback && (
-                    <Button
-                      color="on-surface"
-                      variant="outlined"
-                      size="small"
-                      onClick={startFallbackEdit}
-                      disabled={busy}
-                    >
-                      {t("rework.admin.platformModelBindings.editAction")}
-                    </Button>
-                  )}
-                </div>
-              </div>
-              {isEditingFallback && (
-                <form
-                  className={styles.editForm}
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void handleFallbackSave();
-                  }}
-                >
-                  <Select
-                    label={t("rework.admin.platformModelBindings.fallbackSelect")}
-                    size="small"
-                    compact
-                    options={fallbackOptions}
-                    value={selectedFallbackProfileId}
-                    onChange={setSelectedFallbackProfileId}
-                    disabled={busy}
-                    emptyMessage={t("rework.admin.platformModelBindings.noManualModels")}
-                  />
-                  <div className={styles.formActions}>
-                    <Button
-                      color="on-surface"
-                      variant="text"
-                      size="small"
-                      onClick={() => setIsEditingFallback(false)}
-                      disabled={busy}
-                    >
-                      {t("rework.admin.platformModelBindings.form.cancel")}
-                    </Button>
-                    <Button
-                      color="primary"
-                      variant="filled"
-                      size="small"
-                      type="submit"
-                      disabled={busy || !canSaveFallback}
-                    >
-                      {t("rework.admin.platformModelBindings.form.save")}
-                    </Button>
-                  </div>
-                </form>
-              )}
-            </>
-          )}
-        </div>
       </div>
     </InlineDrawer>
   );

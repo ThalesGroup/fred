@@ -978,11 +978,15 @@ class BoundRuntimeContext(FrozenModel):
             "through to the profile-valued levels exactly as before."
         ),
     )
+    pod_chat_default_profile_id: str | None = Field(
+        default=None,
+        description="Trusted admin override for this agent pod's chat default, resolved on the managed turn.",
+    )
     platform_chat_model_fallback: ModelBinding | None = Field(
         default=None,
         description="Trusted platform fallback used only for a confirmed removed chat profile.",
     )
-    platform_chat_model_fallback_profile_id: str | None = Field(
+    pod_chat_fallback_profile_id: str | None = Field(
         default=None,
         description="Trusted manual catalog chat profile for a confirmed removed selection.",
     )

@@ -436,6 +436,7 @@ class _FakeDeps:
         self._fallback_profile_id = fallback_profile_id
         self._removed_profiles = removed_profiles or {}
         self._display_name_overrides = display_name_overrides or {}
+        self._pod_default_override: str | None = None
         self.configuration = SimpleNamespace(
             platform=SimpleNamespace(
                 runtime_catalog_sources=[
@@ -456,6 +457,25 @@ class _FakeDeps:
         class _Store:
             async def list_enabled_model_ids(self):
                 return set(ids)
+
+        return _Store()
+
+    def get_pod_chat_default_store(self):
+        override = self._pod_default_override
+        fallback = self._fallback_profile_id
+
+        class _Store:
+            async def get(self, runtime_id, *, session=None):
+                return override
+
+            async def list_all(self, *, session=None):
+                return {_POD: override} if override is not None else {}
+
+            async def get_fallback(self, runtime_id, *, session=None):
+                return fallback
+
+            async def list_fallbacks(self, *, session=None):
+                return {_POD: fallback} if fallback is not None else {}
 
         return _Store()
 
@@ -1459,6 +1479,7 @@ class _ResolutionDeps(_FakeDeps):
         display_name_overrides: dict[str, str] | None = None,
         fallback_profile_id: str | None = None,
         removed_profiles: dict[str, str] | None = None,
+        pod_default_override: str | None = None,
     ) -> None:
         super().__init__(
             store=store,
@@ -1469,6 +1490,7 @@ class _ResolutionDeps(_FakeDeps):
         )
         self._instance = instance
         self._reasoning_enabled_ids = reasoning_enabled_ids or set()
+        self._pod_default_override = pod_default_override
         self.configuration = SimpleNamespace(
             platform=SimpleNamespace(
                 runtime_catalog_sources=sources
@@ -1502,18 +1524,6 @@ class _ResolutionDeps(_FakeDeps):
         class _Store:
             async def get(self, *, model_capability="chat", session=None):
                 return None
-
-        return _Store()
-
-    def get_platform_model_fallback_store(self):
-        fallback_profile_id = self._fallback_profile_id
-
-        class _Store:
-            async def get(self, session=None):
-                return None
-
-            async def get_profile_id(self, session=None):
-                return fallback_profile_id
 
         return _Store()
 
@@ -1556,6 +1566,7 @@ def _resolution_deps(
     display_name_overrides: dict[str, str] | None = None,
     fallback_profile_id: str | None = None,
     removed_profiles: dict[str, str] | None = None,
+    pod_default_override: str | None = None,
 ) -> ProductServiceDependencies:
     stored: dict[str, Any] = {}
     if stored_default is not None or stored_disabled or stored_reasoning_off:
@@ -1575,6 +1586,7 @@ def _resolution_deps(
         display_name_overrides=display_name_overrides,
         fallback_profile_id=fallback_profile_id,
         removed_profiles=removed_profiles,
+        pod_default_override=pod_default_override,
     )
 
 
@@ -1636,6 +1648,34 @@ async def test_effective_model_falls_back_to_the_pod_default(
     )
     assert result.name == "gpt-5.1"
     assert result.enabled_for_team is True
+
+
+@pytest.mark.asyncio
+async def test_effective_model_uses_admin_pod_default_and_falls_back_to_yaml(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[
+            _chat_entry("model__openai__yaml", "chat.yaml", name="yaml"),
+            _chat_entry("model__openai__admin", "chat.admin", name="admin"),
+        ],
+        default_chat_profile_id="chat.yaml",
+    )
+    admin = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(pod_default_override="chat.admin"),
+    )
+    assert admin.name == "admin"
+    missing = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(pod_default_override="chat.removed"),
+    )
+    assert missing.name == "yaml"
 
 
 @pytest.mark.asyncio
@@ -1907,7 +1947,12 @@ async def test_effective_model_names_manual_fallback_for_removed_choice(
                 "chat.manual.safe",
                 name="manual-safe",
                 display_name="Safe Chat",
-            )
+            ),
+            _chat_entry(
+                "model__openai__gone",
+                "discovered.chat.gateway.gone",
+                name="gone",
+            ),
         ],
     )
     result = await resolve_effective_chat_model(
@@ -1926,6 +1971,39 @@ async def test_effective_model_names_manual_fallback_for_removed_choice(
     assert result.name == "manual-safe"
     assert result.display_name == "Platform Safe"
     assert result.capability_id == "model__openai__manual-safe"
+    assert all(
+        row.profile_id != "discovered.chat.gateway.gone"
+        for row in result.selectable_models
+    )
+
+
+@pytest.mark.asyncio
+async def test_effective_model_uses_pod_fallback_when_saved_discovery_default_is_removed(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[
+            _chat_entry("model__openai__yaml", "chat.yaml", name="yaml"),
+            _chat_entry("model__openai__safe", "chat.safe", name="safe"),
+            _chat_entry(
+                "model__openai__gone", "discovered.chat.gateway.gone", name="gone"
+            ),
+        ],
+        default_chat_profile_id="chat.yaml",
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(
+            pod_default_override="discovered.chat.gateway.gone",
+            fallback_profile_id="chat.safe",
+            removed_profiles={"discovered.chat.gateway.gone": "model__openai__gone"},
+        ),
+    )
+    assert result.name == "safe"
+    assert all(row.name != "gone" for row in result.selectable_models)
 
 
 @pytest.mark.asyncio

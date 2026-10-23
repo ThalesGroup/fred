@@ -49,7 +49,7 @@ from control_plane_backend.knowledge_bases.instance_store import (
 from control_plane_backend.knowledge_bases.store import KnowledgeBaseDefinitionStore
 from control_plane_backend.model_discovery.store import (
     ModelDiscoveryStateStore,
-    PlatformModelFallbackStore,
+    PodChatDefaultStore,
 )
 from control_plane_backend.platform_prompt.store import (
     CreationAssistantSettingsStore,
@@ -102,7 +102,7 @@ class ProductServiceDependencies:
     get_team_routing_policy_store: Callable[[], TeamRoutingPolicyStore]
     get_platform_model_binding_store: Callable[[], PlatformModelBindingStore]
     get_model_discovery_state_store: Callable[[], ModelDiscoveryStateStore]
-    get_platform_model_fallback_store: Callable[[], PlatformModelFallbackStore]
+    get_pod_chat_default_store: Callable[[], PodChatDefaultStore]
     get_platform_prompt_store: Callable[[], PlatformPromptStore]
     get_creation_assistant_settings_store: Callable[[], CreationAssistantSettingsStore]
     get_platform_ui_settings_store: Callable[[], PlatformUiSettingsStore]
@@ -162,7 +162,7 @@ def build_product_service_dependencies(
         get_team_routing_policy_store=container.get_team_routing_policy_store,
         get_platform_model_binding_store=container.get_platform_model_binding_store,
         get_model_discovery_state_store=container.get_model_discovery_state_store,
-        get_platform_model_fallback_store=container.get_platform_model_fallback_store,
+        get_pod_chat_default_store=container.get_pod_chat_default_store,
         get_platform_prompt_store=container.get_platform_prompt_store,
         get_creation_assistant_settings_store=container.get_creation_assistant_settings_store,
         get_platform_ui_settings_store=container.get_platform_ui_settings_store,

@@ -13,13 +13,20 @@
 // limitations under the License.
 
 import Button from "@shared/atoms/Button/Button.tsx";
+import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
+import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
+import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useUserCapabilities } from "@rework/core/hooks/useUserCapabilities";
-import { useSetModelDiscoveryUrlMutation } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import {
+  useDismissRemovedModelMutation,
+  useSetModelDiscoveryUrlMutation,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type {
   DiscoverySourceStatus,
   ModelDiscoveryStatus as Status,
@@ -112,24 +119,104 @@ export function ModelDiscoveryStatus({
   verifiedSourceIds?: string[];
 }) {
   const { t } = useTranslation();
+  const { canAdmin } = useUserCapabilities();
+  const { showError } = useToast();
+  const [dismissRemovedModel, { isLoading: dismissing }] = useDismissRemovedModelMutation();
+  const [pendingRemoval, setPendingRemoval] = useState<{ sourceId: string; modelId: string; name: string } | null>(
+    null,
+  );
+  const [showRemoved, setShowRemoved] = useState(false);
   const sources = data?.sources ?? [];
   const registeredSourceIds = new Set(sources.map((source) => source.source_id));
   const missingSourceIds = [...new Set(discoveredSourceIds)].filter((id) => !registeredSourceIds.has(id));
   const visibleMissingSourceIds =
     unverifiedRuntimes.length > 0 ? missingSourceIds.filter((id) => verifiedSourceIds.includes(id)) : missingSourceIds;
-  const failedSourceIds = sources.filter((source) => source.last_error).map((source) => source.source_id);
+  const failedSources = sources.filter((source) => source.last_error);
   const newCount = sources.reduce((count, source) => count + (source.new_ids?.length ?? 0), 0);
-  const removed = sources.flatMap((source) =>
-    (source.removed_models ?? []).map((model) => ({ ...model, discoverySourceId: source.source_id })),
-  );
+  const removedCount = sources.reduce((count, source) => count + (source.removed_models?.length ?? 0), 0);
+
+  useEffect(() => {
+    if (removedCount === 0) setShowRemoved(false);
+  }, [removedCount]);
+
+  const dismiss = async () => {
+    if (!pendingRemoval) return;
+    try {
+      await dismissRemovedModel({ sourceId: pendingRemoval.sourceId, modelId: pendingRemoval.modelId }).unwrap();
+      setPendingRemoval(null);
+    } catch {
+      showError({ summary: t("rework.admin.capabilities.discovery.removeError") });
+    }
+  };
 
   return (
     <section className={styles.discoveryStatus} aria-label={t("rework.admin.capabilities.discovery.title")}>
       <span className={styles.status}>
         {sources.length > 0
-          ? t("rework.admin.capabilities.discovery.summary", { added: newCount, removed: removed.length })
+          ? t("rework.admin.capabilities.discovery.summary", { added: newCount, removed: removedCount })
           : t("rework.admin.capabilities.discovery.title")}
       </span>
+      {removedCount > 0 && (
+        <Button color="on-surface" variant="outlined" size="small" onClick={() => setShowRemoved(true)}>
+          {t("rework.admin.capabilities.discovery.showRemoved", { count: removedCount })}
+        </Button>
+      )}
+      <Dialog
+        open={showRemoved}
+        inactive={pendingRemoval !== null}
+        title={t("rework.admin.capabilities.discovery.removedTitle")}
+        hideConfirm
+        confirmLabel=""
+        cancelLabel={t("rework.admin.capabilities.discovery.closeRemoved")}
+        onConfirm={() => {}}
+        onCancel={() => setShowRemoved(false)}
+        maxWidth={700}
+        className={styles.discoveryRemovedDialog}
+        dividers
+        initialFocus="dialog"
+      >
+        <div className={styles.discoveryRemoved}>
+          <p className={styles.status}>{t("rework.admin.capabilities.discovery.removedHint")}</p>
+          <ul>
+            {sources.flatMap((source) =>
+              (source.removed_models ?? []).map((model) => (
+                <li key={`${source.source_id}:${model.id}`}>
+                  <code>
+                    {t("rework.admin.capabilities.discovery.removedModelId", { id: model.name })} - {source.source_id}
+                  </code>
+                  {canAdmin && (
+                    <Tooltip text={t("rework.admin.capabilities.discovery.removeFromList")}>
+                      <DeleteIconButton
+                        size="small"
+                        aria-label={t("rework.admin.capabilities.discovery.removeFromList")}
+                        disabled={dismissing}
+                        onClick={() =>
+                          setPendingRemoval({
+                            sourceId: source.source_id,
+                            modelId: model.id,
+                            name: model.name,
+                          })
+                        }
+                      />
+                    </Tooltip>
+                  )}
+                </li>
+              )),
+            )}
+          </ul>
+        </div>
+      </Dialog>
+      <ConfirmationDialog
+        open={pendingRemoval !== null}
+        title={t("rework.admin.capabilities.discovery.removeConfirmTitle")}
+        message={t("rework.admin.capabilities.discovery.removeConfirmMessage", { name: pendingRemoval?.name })}
+        confirmLabel={t("rework.admin.capabilities.discovery.removeFromList")}
+        cancelLabel={t("rework.admin.capabilities.discovery.removeCancel")}
+        confirmDisabled={dismissing}
+        criticalAction
+        onConfirm={() => void dismiss()}
+        onCancel={() => setPendingRemoval(null)}
+      />
       {refreshing && <p className={styles.status}>{t("rework.admin.capabilities.discovery.refreshing")}</p>}
       {unverifiedRuntimes.length > 0 && (
         <p className={styles.statusWarning}>
@@ -153,9 +240,11 @@ export function ModelDiscoveryStatus({
           )}
         </p>
       )}
-      {failedSourceIds.length > 0 && (
+      {failedSources.length > 0 && (
         <p className={styles.statusError}>
-          {t("rework.admin.capabilities.discovery.failedSources", { sources: failedSourceIds.join(", ") })}
+          {t("rework.admin.capabilities.discovery.failedSources", {
+            sources: failedSources.map((source) => `${source.source_id}: ${source.last_error}`).join("; "),
+          })}
         </p>
       )}
       {data && !refreshing && !refreshError && visibleMissingSourceIds.length > 0 && (
@@ -186,18 +275,6 @@ export function ModelDiscoveryStatus({
               ))}
             </div>
           </details>
-          {removed.length > 0 && (
-            <div className={styles.discoveryRemoved}>
-              <strong>{t("rework.admin.capabilities.discovery.unavailable")}</strong>
-              <ul>
-                {removed.map((model) => (
-                  <li key={`${model.discoverySourceId}:${model.id}`}>
-                    {model.display_name ?? model.name} ({model.name}) - {model.discoverySourceId}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </>
       )}
     </section>

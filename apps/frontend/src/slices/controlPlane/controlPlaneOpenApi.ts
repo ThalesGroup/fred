@@ -1075,6 +1075,62 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/admin/model-discovery` }),
     }),
+    dismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDelete: build.mutation<
+      DismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDeleteApiResponse,
+      DismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/model-discovery/${queryArg.sourceId}/removed-model`,
+        method: "DELETE",
+        params: {
+          model_id: queryArg.modelId,
+        },
+      }),
+    }),
+    getPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGet: build.query<
+      GetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetApiResponse,
+      GetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/pod-chat-defaults` }),
+    }),
+    putPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPut: build.mutation<
+      PutPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPutApiResponse,
+      PutPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/pod-chat-defaults/${queryArg.runtimeId}`,
+        method: "PUT",
+        body: queryArg.setPodChatDefaultRequest,
+      }),
+    }),
+    clearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDelete: build.mutation<
+      ClearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDeleteApiResponse,
+      ClearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/pod-chat-defaults/${queryArg.runtimeId}`,
+        method: "DELETE",
+      }),
+    }),
+    putPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPut: build.mutation<
+      PutPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPutApiResponse,
+      PutPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/pod-chat-defaults/${queryArg.runtimeId}/fallback`,
+        method: "PUT",
+        body: queryArg.setPodChatFallbackRequest,
+      }),
+    }),
+    clearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDelete: build.mutation<
+      ClearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDeleteApiResponse,
+      ClearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/pod-chat-defaults/${queryArg.runtimeId}/fallback`,
+        method: "DELETE",
+      }),
+    }),
     refreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPost: build.mutation<
       RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiResponse,
       RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiArg
@@ -1103,28 +1159,6 @@ const injectedRtkApi = api.injectEndpoints({
         method: "PUT",
         body: queryArg.setDiscoveryUrlRequest,
       }),
-    }),
-    getPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGet: build.query<
-      GetPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGetApiResponse,
-      GetPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGetApiArg
-    >({
-      query: () => ({ url: `/control-plane/v1/admin/platform-model-fallback` }),
-    }),
-    putPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackPut: build.mutation<
-      PutPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackPutApiResponse,
-      PutPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackPutApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/admin/platform-model-fallback`,
-        method: "PUT",
-        body: queryArg.setPlatformModelFallbackRequest,
-      }),
-    }),
-    deletePlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackDelete: build.mutation<
-      DeletePlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackDeleteApiResponse,
-      DeletePlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackDeleteApiArg
-    >({
-      query: () => ({ url: `/control-plane/v1/admin/platform-model-fallback`, method: "DELETE" }),
     }),
     publishKnowledgeBaseDefinition: build.mutation<
       PublishKnowledgeBaseDefinitionApiResponse,
@@ -2902,6 +2936,37 @@ export type PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdR
 export type GetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetApiResponse =
   /** status 200 Successful Response */ ModelDiscoveryStatus;
 export type GetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetApiArg = void;
+export type DismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDeleteApiResponse =
+  /** status 200 Successful Response */ DiscoverySourceStatus;
+export type DismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDeleteApiArg = {
+  sourceId: string;
+  modelId: string;
+};
+export type GetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetApiResponse =
+  /** status 200 Successful Response */ PodChatDefaults;
+export type GetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetApiArg = void;
+export type PutPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPutApiResponse =
+  /** status 200 Successful Response */ PodChatDefaultStatus;
+export type PutPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPutApiArg = {
+  runtimeId: string;
+  setPodChatDefaultRequest: SetPodChatDefaultRequest;
+};
+export type ClearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDeleteApiResponse =
+  /** status 200 Successful Response */ PodChatDefaultStatus;
+export type ClearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDeleteApiArg = {
+  runtimeId: string;
+};
+export type PutPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPutApiResponse =
+  /** status 200 Successful Response */ PodChatDefaultStatus;
+export type PutPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPutApiArg = {
+  runtimeId: string;
+  setPodChatFallbackRequest: SetPodChatFallbackRequest;
+};
+export type ClearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDeleteApiResponse =
+  /** status 200 Successful Response */ PodChatDefaultStatus;
+export type ClearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDeleteApiArg = {
+  runtimeId: string;
+};
 export type RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiResponse =
   /** status 200 Successful Response */ ModelDiscoveryStatus;
 export type RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiArg = void;
@@ -2920,17 +2985,6 @@ export type PutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutA
   sourceId: string;
   setDiscoveryUrlRequest: SetDiscoveryUrlRequest;
 };
-export type GetPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGetApiResponse =
-  /** status 200 Successful Response */ PlatformModelFallback;
-export type GetPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGetApiArg = void;
-export type PutPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackPutApiResponse =
-  /** status 200 Successful Response */ PlatformModelFallback;
-export type PutPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackPutApiArg = {
-  setPlatformModelFallbackRequest: SetPlatformModelFallbackRequest;
-};
-export type DeletePlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackDeleteApiResponse =
-  /** status 200 Successful Response */ PlatformModelFallback;
-export type DeletePlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackDeleteApiArg = void;
 export type PublishKnowledgeBaseDefinitionApiResponse =
   /** status 200 Successful Response */ KnowledgeBasePublicationResult;
 export type PublishKnowledgeBaseDefinitionApiArg = {
@@ -4789,8 +4843,9 @@ export type ManagedAgentRuntimeBinding = {
   reasoning_enabled_model_ids?: string[];
   team_disabled_model_ids?: string[];
   platform_chat_model_binding?: ModelBinding | null;
+  pod_chat_default_profile_id?: string | null;
   platform_chat_model_fallback?: ModelBinding | null;
-  platform_chat_model_fallback_profile_id?: string | null;
+  pod_chat_fallback_profile_id?: string | null;
   model_discovery_urls?: {
     [key: string]: string;
   };
@@ -5122,15 +5177,37 @@ export type ModelDiscoveryStatus = {
   verified_source_ids?: string[];
   pod_chat_default_available?: boolean | null;
 };
+export type PodChatModelOption = {
+  profile_id: string;
+  model_id: string;
+  name: string;
+  display_name?: string | null;
+  discovery_source_id?: string | null;
+};
+export type PodChatDefaultStatus = {
+  runtime_id: string;
+  base_url: string;
+  reachable: boolean;
+  yaml_profile_id?: string | null;
+  override_profile_id?: string | null;
+  effective_profile_id?: string | null;
+  override_unavailable?: boolean;
+  fallback_override_profile_id?: string | null;
+  effective_fallback_profile_id?: string | null;
+  fallback_unavailable?: boolean;
+  models?: PodChatModelOption[];
+};
+export type PodChatDefaults = {
+  pods?: PodChatDefaultStatus[];
+};
+export type SetPodChatDefaultRequest = {
+  profile_id: string;
+};
+export type SetPodChatFallbackRequest = {
+  profile_id: string;
+};
 export type SetDiscoveryUrlRequest = {
   url?: string | null;
-};
-export type PlatformModelFallback = {
-  binding?: ModelBinding | null;
-  profile_id?: string | null;
-};
-export type SetPlatformModelFallbackRequest = {
-  profile_id: string;
 };
 export type KnowledgeBasePublicationResult = {
   id: string;
@@ -6231,14 +6308,17 @@ export const {
   usePatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchMutation,
   useGetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetQuery,
   useLazyGetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetQuery,
+  useDismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDeleteMutation,
+  useGetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetQuery,
+  useLazyGetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetQuery,
+  usePutPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPutMutation,
+  useClearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDeleteMutation,
+  usePutPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPutMutation,
+  useClearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDeleteMutation,
   useRefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostMutation,
   useGetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetQuery,
   useLazyGetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetQuery,
   usePutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutMutation,
-  useGetPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGetQuery,
-  useLazyGetPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGetQuery,
-  usePutPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackPutMutation,
-  useDeletePlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackDeleteMutation,
   usePublishKnowledgeBaseDefinitionMutation,
   useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
   useLazyListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,

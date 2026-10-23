@@ -82,7 +82,7 @@ _INFO_LOGGED_SOURCES = frozenset(
         ModelSelectionSource.USER_CHOICE,
         ModelSelectionSource.INSTANCE_RECOMMENDATION,
         ModelSelectionSource.TEAM_POLICY,
-        ModelSelectionSource.PLATFORM_FALLBACK,
+        ModelSelectionSource.POD_FALLBACK,
     }
 )
 
@@ -536,7 +536,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             selection.source
             not in {
                 ModelSelectionSource.PLATFORM_BINDING,
-                ModelSelectionSource.PLATFORM_FALLBACK,
+                ModelSelectionSource.POD_FALLBACK,
             }
             and binding.usable_model_ids is not None
         ):
@@ -696,10 +696,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             for candidate, accepted in candidates:
                 if accepted is not None:
                     break
-                if (
-                    candidate is None
-                    or self._resolver.profile_or_none(candidate) is not None
-                ):
+                if candidate is None:
                     continue
                 removed_capability_id = removed.get(candidate)
                 if removed_capability_id is None:
@@ -711,15 +708,29 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                     and removed_capability_id not in binding.usable_model_ids
                 ):
                     continue
-                return self._platform_fallback_selection(binding, candidate)
+                return self._pod_fallback_selection(binding, candidate)
 
         resolution = resolve_effective_chat_profile(
             agent_id=definition.agent_id,
             pod_agent_chat_profile_overrides=self._resolver.agent_overrides_for(
                 capability
             ),
-            pod_default_chat_profile_id=self._resolver.default_profile_id_for(
-                capability
+            pod_default_chat_profile_id=(
+                binding.pod_chat_default_profile_id
+                if binding.pod_chat_default_profile_id is not None
+                and (
+                    binding.pod_chat_default_profile_id in removed
+                    or (
+                        (
+                            override := self._resolver.profile_or_none(
+                                binding.pod_chat_default_profile_id
+                            )
+                        )
+                        is not None
+                        and override.capability == capability
+                    )
+                )
+                else self._resolver.default_profile_id_for(capability)
             ),
             user_chat_profile_id=user_choice,
             instance_chat_profile_id=recommendation,
@@ -731,6 +742,16 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             raise ValueError(
                 f"No default profile configured for capability={capability.value!r}."
             )
+
+        if (
+            resolution.origin
+            in (
+                ChatProfileOrigin.POD_AGENT_OVERRIDE,
+                ChatProfileOrigin.POD_DEFAULT,
+            )
+            and resolution.profile_id in removed
+        ):
+            return self._pod_fallback_selection(binding, resolution.profile_id)
 
         profile = self._resolver.profile_or_none(resolution.profile_id)
         team_origin = resolution.origin is ChatProfileOrigin.TEAM_DEFAULT
@@ -773,64 +794,43 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             capability_id=profile.capability_id,
         )
 
-    def _platform_fallback_selection(
+    def _pod_fallback_selection(
         self, binding: BoundRuntimeContext, removed_profile_id: str
     ) -> ModelSelection:
-        fallback_profile_id = binding.platform_chat_model_fallback_profile_id
-        if fallback_profile_id is not None:
-            profile = self._resolver.profile_or_none(fallback_profile_id)
-            discovered_ids = (
-                set(self.catalog.discovered_profile_ids)
-                if self.catalog is not None
-                else set()
+        discovered_ids = (
+            set(self.catalog.discovered_profile_ids)
+            if self.catalog is not None
+            else set()
+        )
+        profile = None
+        for fallback_profile_id in (
+            binding.pod_chat_fallback_profile_id,
+            self._resolver.policy.default_profile_by_capability.get(
+                ModelCapability.CHAT
+            ),
+        ):
+            candidate = (
+                self._resolver.profile_or_none(fallback_profile_id)
+                if fallback_profile_id is not None
+                else None
             )
             if (
-                profile is None
-                or profile.capability != ModelCapability.CHAT
-                or fallback_profile_id in discovered_ids
+                candidate is not None
+                and candidate.capability == ModelCapability.CHAT
+                and fallback_profile_id not in discovered_ids
             ):
-                raise ValueError(
-                    f"Platform fallback profile {fallback_profile_id!r} is unavailable"
-                )
-            return ModelSelection(
-                source=ModelSelectionSource.PLATFORM_FALLBACK,
-                capability=ModelCapability.CHAT,
-                profile_id=profile.profile_id,
-                model=profile.model.model_copy(deep=True),
-                capability_id=profile.capability_id,
-            )
-        fallback = binding.platform_chat_model_fallback
-        if fallback is None:
+                profile = candidate
+                break
+        if profile is None:
             raise ValueError(
-                f"Chat profile {removed_profile_id!r} was removed and no platform fallback is configured"
+                f"Chat profile {removed_profile_id!r} was removed and no manual fallback is available for this pod"
             )
-        settings = fallback.settings.model_dump(mode="json", exclude_none=True)
-        matching = next(
-            (
-                profile
-                for profile in self._resolver.policy.profiles
-                if profile.capability == ModelCapability.CHAT
-                and profile.model.provider == fallback.provider
-                and profile.model.name == fallback.name
-                and (profile.model.settings or {}).get("base_url")
-                == settings.get("base_url")
-            ),
-            None,
-        )
         return ModelSelection(
-            source=ModelSelectionSource.PLATFORM_FALLBACK,
+            source=ModelSelectionSource.POD_FALLBACK,
             capability=ModelCapability.CHAT,
-            profile_id=(matching.profile_id if matching else "platform-fallback:chat"),
-            model=ModelConfiguration(
-                provider=fallback.provider,
-                name=fallback.name,
-                settings=settings,
-            ),
-            capability_id=(
-                matching.capability_id
-                if matching
-                else model_capability_id(fallback.provider, fallback.name)
-            ),
+            profile_id=profile.profile_id,
+            model=profile.model.model_copy(deep=True),
+            capability_id=profile.capability_id,
         )
 
     def _accepted_choice(
@@ -843,7 +843,9 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         if profile_id is None:
             return None
         profile = self._resolver.profile_or_none(profile_id)
-        if profile is None or profile.capability != ModelCapability.CHAT:
+        if profile_id in binding.confirmed_removed_chat_profiles:
+            reason = "profile absent from the latest discovery inventory"
+        elif profile is None or profile.capability != ModelCapability.CHAT:
             reason = "unknown or non-chat profile"
         elif (
             binding.usable_model_ids is not None

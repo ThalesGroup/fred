@@ -23,10 +23,12 @@ import styles from "./FeaturesPage.module.css";
 export function ModelIdentityCell({
   capability,
   dimmed,
+  unavailable = false,
   isNew = false,
 }: {
   capability: CapabilityEnablementItem;
   dimmed: boolean;
+  unavailable?: boolean;
   isNew?: boolean;
 }) {
   const { t, i18n } = useTranslation();
@@ -100,13 +102,15 @@ export function ModelIdentityCell({
           )}
         </span>
       )}
-      <ModelDisplayNameEditor
-        capabilityId={capability.id}
-        wireName={capability.name}
-        effectiveName={capability.model_display_name}
-        overrideName={capability.model_display_name_override}
-      />
-      {capability.model_discovery_source_id && (
+      {!unavailable && (
+        <ModelDisplayNameEditor
+          capabilityId={capability.id}
+          wireName={capability.name}
+          effectiveName={capability.model_display_name}
+          overrideName={capability.model_display_name_override}
+        />
+      )}
+      {capability.model_discovery_source_id && !unavailable && (
         <ModelDetailTooltip
           sourceId={capability.model_discovery_source_id}
           modelId={capability.name}

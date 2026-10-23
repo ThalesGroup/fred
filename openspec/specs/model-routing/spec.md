@@ -145,7 +145,7 @@ The admin Models view SHALL provide a display-name field for an advertised model
 
 ### Requirement: Discovery uses existing access controls
 
-Every discovered model SHALL enter the existing model capability catalog without an initial access grant. Administrators SHALL be able to enable it through the existing default-on and team controls. A turn SHALL remain subject to the existing model access and routing checks. A stored selection confirmed removed by a successful refresh SHALL route to the separate platform fallback without altering the saved choice. Other unknown or unauthorized selections SHALL retain existing access and drift handling.
+Every discovered model SHALL enter the existing model capability catalog without an initial access grant. Administrators SHALL be able to enable it through the existing default-on and team controls. A turn SHALL remain subject to the existing model access and routing checks. A stored selection confirmed removed by a successful refresh SHALL route to that pod's manual fallback without altering the saved choice. Other unknown or unauthorized selections SHALL retain existing access and drift handling.
 
 #### Scenario: New model is not granted automatically
 
@@ -155,9 +155,9 @@ Every discovered model SHALL enter the existing model capability catalog without
 
 #### Scenario: Previously selected model disappears
 
-- **GIVEN** a stored selection for a discovered profile confirmed removed and an available platform fallback
+- **GIVEN** a stored selection for a discovered profile confirmed removed and an available manual fallback on its pod
 - **WHEN** a chat turn resolves that policy
-- **THEN** it routes to the platform fallback and keeps the stored selection unchanged
+- **THEN** it routes to that pod's fallback and keeps the stored selection unchanged
 
 ### Requirement: Administrators can distinguish manual and discovered models
 
@@ -193,63 +193,33 @@ The Models admin view SHALL separate manually declared models from models return
 - **WHEN** the Models view renders
 - **THEN** it names the unregistered source while showing the registered source's controls
 
-### Requirement: Admin model binding selection uses advertised chat models
+### Requirement: Pod defaults and global override are separate admin settings
 
-The admin Models view SHALL keep separate Catalog and Discovery tabs. The platform binding editor SHALL group selectable chat models by source, offering models whose effective provider settings can be represented by a validated platform `ModelBinding` and whose chat profiles are available across the relevant pods. It SHALL put manual provider and settings entry behind an advanced disclosure. Only platform administrators SHALL change or delete a platform binding. When all pods report their chat default state, a deployment with no usable pod chat default and no platform binding SHALL show a single-action modal every time a platform administrator selects the Models view, without suppressing it in browser storage. The dialog SHALL explain that a platform binding overrides team choices. The fallback description SHALL explain its use when a selected discovered model disappears or is decommissioned.
+The Models view SHALL keep separate Catalog and Discovery tabs. Its Model defaults panel SHALL show Agent pods first and Platform second. Each pod SHALL offer its advertised chat profiles as a default and its manual chat profiles as a fallback. The default selector SHALL show the effective YAML value until an administrator saves an override. The Platform tab SHALL retain the manual provider/name/settings form for a global forced binding, which takes precedence over pod and team choices. Only platform administrators SHALL change either setting. When a reachable pod has no usable chat default and there is no global binding, opening Models SHALL show a required-choice modal each time, with an action to open Agent pods.
 
-#### Scenario: Choose a discovered model
+#### Scenario: Choose a discovered pod default
 
-- **GIVEN** a discovered chat model advertised with a safe binding
-- **WHEN** the administrator selects and saves it in the platform binding editor
-- **THEN** its provider, wire name and inference settings are saved without manual form entry
+- **GIVEN** a pod advertises a discovered chat profile
+- **WHEN** a platform administrator saves it as that pod's default
+- **THEN** managed turns on that pod use it when no higher-precedence choice exists, without changing other pods
 
-#### Scenario: Unsupported catalog settings
+#### Scenario: Global override
 
-- **GIVEN** a catalog model with settings outside the platform binding contract
-- **WHEN** the administrator opens the model selector
-- **THEN** that model is omitted from the selector and advanced manual configuration remains available
+- **GIVEN** a platform administrator has configured a provider, model name and settings in Platform
+- **WHEN** a managed turn starts on any pod
+- **THEN** the global binding forces that model regardless of the pod default or team choice
 
-#### Scenario: No manual catalog and no platform binding
+#### Scenario: No chat default
 
-- **GIVEN** a deployment advertising only discovered models without a saved platform binding
-- **WHEN** the administrator opens the Models view
-- **THEN** a modal explains that a platform choice is required and offers to open the model binding editor without a postpone action
+- **GIVEN** a reachable pod advertises no effective chat default and no global binding exists
+- **WHEN** a platform administrator opens Models
+- **THEN** a required-choice modal opens and leads to the Agent pods selector
 
-#### Scenario: Revisit without a default
+#### Scenario: Sole manual model
 
-- **GIVEN** an administrator dismissed the no-default warning without setting a binding
-- **WHEN** the administrator selects the Models view again
-- **THEN** the modal warning appears again
-
-#### Scenario: Manual models without a declared default
-
-- **GIVEN** a pod advertises multiple manual chat models but declares no chat default and no platform binding exists
-- **WHEN** a platform administrator opens the Models view
-- **THEN** the required-choice modal appears
-
-#### Scenario: Single manual chat model without a declared default
-
-- **GIVEN** a pod advertises exactly one manual chat model, no explicit chat default and no platform binding
-- **WHEN** a platform administrator opens the Models view
-- **THEN** the required-choice modal does not appear because the pod inferred that model as its chat default
-
-#### Scenario: Manual default declared
-
-- **GIVEN** a pod declares a manual chat default and no platform binding exists
-- **WHEN** a platform administrator opens the Models view
-- **THEN** no required-choice modal appears
-
-#### Scenario: Unverified inventory
-
-- **GIVEN** an agent pod is unreachable and its manual models cannot be verified
-- **WHEN** a platform administrator opens the Models view
-- **THEN** the no-default modal is withheld until the inventory can be verified
-
-#### Scenario: Delegated feature manager
-
-- **GIVEN** a feature manager without platform administrator permission
-- **WHEN** they open the Models view or attempt a direct platform binding write
-- **THEN** they see no binding editor action and the write is denied
+- **GIVEN** a pod advertises exactly one manual chat model and no explicit YAML default
+- **WHEN** the administrator opens Models
+- **THEN** that model is inferred as the pod default and no required-choice modal appears for that pod
 
 ### Requirement: Platform administrators can override a discovery URL
 
@@ -315,19 +285,19 @@ The Models admin view SHALL show each source's YAML and effective URL, last succ
 - **WHEN** an administrator refreshes the Models view
 - **THEN** the view warns which pod catalog could not be checked, retains the last verified inventory, and confirms no removals or source failure from this outage
 
-### Requirement: A confirmed removed model falls back to the platform default
+### Requirement: A confirmed removed model falls back within its pod
 
-The platform SHALL provide a fallback manual chat profile independent of its forced chat binding. The admin SHALL select this profile from manual catalog chat profiles. On a managed turn, when the selected profile is confirmed removed by a successful source refresh, the pod SHALL resolve the selected manual profile from its current catalog, report the actual routed model, and keep the stored choice unchanged. A failed refresh, unknown profile, disabled model, or access denial SHALL NOT count as a confirmed removal. An unavailable fallback SHALL fail explicitly.
+Each pod SHALL offer an optional fallback selected from its own manual chat profiles, independent of the global forced binding. If unset, the pod SHALL use its manual YAML chat default when available. On a managed turn, when the selected profile is confirmed removed by a successful source refresh, the pod SHALL resolve the selected manual profile from its current catalog, report the actual routed model, and keep the stored choice unchanged. A failed refresh, unknown profile, disabled model, or access denial SHALL NOT count as a confirmed removal. An unavailable fallback SHALL fail explicitly.
 
 #### Scenario: Manual fallback selection
 
 - **GIVEN** manual and discovered chat models in the admin catalog
 - **WHEN** the administrator opens the fallback selector
-- **THEN** only manual chat profiles are offered and the chosen profile ID is saved
+- **THEN** only that pod's manual chat profiles are offered and the chosen profile ID is saved
 
 #### Scenario: Selected model disappears
 
-- **GIVEN** a saved selection confirmed removed and an available platform fallback
+- **GIVEN** a saved selection confirmed removed and an available manual fallback on that pod
 - **WHEN** the next managed turn executes
 - **THEN** it uses the fallback while the saved selection remains unchanged
 

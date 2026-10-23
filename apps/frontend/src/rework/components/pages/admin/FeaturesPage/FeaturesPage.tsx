@@ -42,6 +42,7 @@ import {
   useSetCapabilityDefaultOnMutation,
   useSetModelReasoningMutation,
   useModelDiscoveryQuery,
+  usePodChatDefaultsQuery,
   usePlatformModelBindingQuery,
   useRefreshModelDiscoveryMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -64,7 +65,7 @@ import {
 } from "./capabilityEnablement";
 import { ModelIdentityCell } from "./ModelIdentityCell";
 import { ModelDiscoveryStatus } from "./ModelDiscoveryStatus";
-import { splitModelSections } from "./modelSections";
+import { partitionDiscoveredModels, splitModelSections } from "./modelSections";
 
 // "tool" (MCP servers, etc.) vs "agent" (a control-plane-side projection of
 // an agent template into this same catalog, CAPAB-01 RFC §8.6) vs "model" (a
@@ -120,11 +121,17 @@ export default function FeaturesPage() {
   const [showAffected, setShowAffected] = useState(false);
   const [kindFilter, setKindFilter] = useState<CapabilityKind>("tool");
   const [modelTab, setModelTab] = useState<"manual" | "discovered">("manual");
+  const [modelDefaultsInitialTab, setModelDefaultsInitialTab] = useState<"platform" | "pods">("pods");
   const [modelFilter, setModelFilter] = useState("");
   const activeKindFilter: CapabilityKind = !applicationsEnabled && kindFilter === "app" ? "tool" : kindFilter;
   const { data: discoveryStatus, refetch: refetchDiscoveryStatus } = useModelDiscoveryQuery(undefined, {
     skip: activeKindFilter !== "model",
   });
+  const {
+    data: podDefaults,
+    isFetching: podDefaultsFetching,
+    isError: podDefaultsError,
+  } = usePodChatDefaultsQuery(undefined, { skip: activeKindFilter !== "model" });
   const {
     data: platformModelBinding,
     isLoading: platformModelBindingLoading,
@@ -139,19 +146,16 @@ export default function FeaturesPage() {
     [],
   );
   const [verifiedModelSourceIds, setVerifiedModelSourceIds] = useState<string[]>([]);
-  const [podChatDefaultAvailable, setPodChatDefaultAvailable] = useState<boolean | null>(null);
   const refreshModels = useCallback(async () => {
     try {
       const result = await refreshDiscovery().unwrap();
       setModelRefreshError(result.refresh_error ?? null);
       setUnverifiedModelRuntimes(result.unverified_runtimes ?? []);
       setVerifiedModelSourceIds(result.verified_source_ids ?? []);
-      setPodChatDefaultAvailable(result.pod_chat_default_available ?? null);
     } catch {
       setModelRefreshError(t("rework.admin.capabilities.discovery.refreshFailed"));
       setUnverifiedModelRuntimes([]);
       setVerifiedModelSourceIds([]);
-      setPodChatDefaultAvailable(null);
     }
     await Promise.all([refetchCapabilities(), refetchDiscoveryStatus()]);
   }, [refreshDiscovery, refetchCapabilities, refetchDiscoveryStatus, t]);
@@ -208,14 +212,20 @@ export default function FeaturesPage() {
   // after tools already shipped) — an absent value is a tool, same default
   // as the backend's own `CapabilityEnablementItem.kind`.
   const capabilities = allCapabilities.filter((cap) => (cap.kind ?? "tool") === activeKindFilter);
-  const { manual: manualModels, discovered: discoveredModels } = splitModelSections(capabilities);
-  const hasDiscovery = Boolean(discoveryStatus?.sources?.length || discoveredModels.length);
+  const { manual: manualModels, discovered: advertisedDiscoveredModels } = splitModelSections(capabilities);
+  const { listed: discoveredModels, unavailableIds: unavailableDiscoveredIds } = partitionDiscoveredModels(
+    advertisedDiscoveredModels,
+    discoveryStatus?.sources ?? [],
+  );
+  const hasDiscovery = Boolean(discoveryStatus?.sources?.length || advertisedDiscoveredModels.length);
   useEffect(() => {
     if (
       !noDefaultModalPending ||
       activeKindFilter !== "model" ||
       isLoading ||
       platformModelBindingLoading ||
+      podDefaultsFetching ||
+      (!podDefaults && !podDefaultsError) ||
       !modelInventoryReady
     )
       return;
@@ -224,10 +234,10 @@ export default function FeaturesPage() {
       canAdmin &&
       !isError &&
       !platformModelBindingError &&
+      !podDefaultsError &&
       !modelRefreshError &&
-      unverifiedModelRuntimes.length === 0 &&
       !platformModelBinding?.binding &&
-      podChatDefaultAvailable === false
+      podDefaults?.pods?.some((pod) => pod.reachable && !pod.effective_profile_id)
     ) {
       setNoDefaultModalOpen(true);
     }
@@ -242,8 +252,9 @@ export default function FeaturesPage() {
     platformModelBinding?.binding,
     platformModelBindingError,
     platformModelBindingLoading,
-    podChatDefaultAvailable,
-    unverifiedModelRuntimes.length,
+    podDefaults,
+    podDefaultsError,
+    podDefaultsFetching,
   ]);
   const visibleModels = (modelTab === "manual" ? manualModels : discoveredModels).filter((model) =>
     [model.model_display_name, model.name, model.id, ...(model.model_runtime_ids ?? [])]
@@ -257,7 +268,8 @@ export default function FeaturesPage() {
   // Every drawer mutation invalidates and refetches the list; a snapshot taken
   // at open time would keep the drawer's tri-state frozen while the table
   // behind it updates.
-  const matrixCapability = capabilities.find((cap) => cap.id === matrixCapabilityId) ?? null;
+  const matrixCapability =
+    capabilities.find((cap) => cap.id === matrixCapabilityId && !unavailableDiscoveredIds.has(cap.id)) ?? null;
   const suspendedCapability = capabilities.find((cap) => cap.id === suspendedCapabilityId) ?? null;
   const visiblePendingDefaultOff = applicationsEnabled || pendingDefaultOff?.kind !== "app" ? pendingDefaultOff : null;
   // Each kind loses something different when default-on goes off: agent
@@ -488,7 +500,11 @@ export default function FeaturesPage() {
           <Switch
             size="small"
             checked={cap.default_on}
-            disabled={blockedOn || (isTogglingDefault && togglingCapabilityId !== cap.id)}
+            disabled={
+              blockedOn ||
+              unavailableDiscoveredIds.has(cap.id) ||
+              (isTogglingDefault && togglingCapabilityId !== cap.id)
+            }
             onChange={() => onToggleDefault(cap)}
             aria-label={t("rework.admin.capabilities.col.defaultOn")}
           />
@@ -506,10 +522,15 @@ export default function FeaturesPage() {
     },
     {
       label: t("rework.admin.capabilities.col.capability"),
-      size: "2.4fr",
+      size: "3fr",
       cellRenderer: (cap) =>
         cap.kind === "model" ? (
-          <ModelIdentityCell capability={cap} dimmed={false} isNew={newModelIds.has(cap.id)} />
+          <ModelIdentityCell
+            capability={cap}
+            dimmed={false}
+            unavailable={unavailableDiscoveredIds.has(cap.id)}
+            isNew={newModelIds.has(cap.id)}
+          />
         ) : (
           <EntityIdentity
             name={capabilityLabel(t, cap)}
@@ -545,7 +566,9 @@ export default function FeaturesPage() {
                     <Switch
                       size="small"
                       checked={cap.reasoning_enabled ?? false}
-                      disabled={isTogglingReasoning && togglingReasoningId !== cap.id}
+                      disabled={
+                        unavailableDiscoveredIds.has(cap.id) || (isTogglingReasoning && togglingReasoningId !== cap.id)
+                      }
                       onChange={() => void applyReasoning(cap, !(cap.reasoning_enabled ?? false))}
                       aria-label={t("rework.admin.capabilities.col.reasoning")}
                     />
@@ -558,31 +581,40 @@ export default function FeaturesPage() {
       : []),
     {
       label: t("rework.admin.capabilities.col.enabledTeams"),
-      // Wider than the other 1fr columns: the two reach badges (teams,
-      // personal spaces) need to sit side by side on one line, not wrap.
-      size: "1.6fr",
+      size: "1fr",
       cellRenderer: (cap) => {
         const count = enabledTeamCount(cap);
         const personal = hasAgentInstanceLifecycle(cap.kind) ? personalSpaceCount(cap) : 0;
-        // Personal-class reach is additive to the team count — "12 teams" over
-        // "40 personal spaces", one line each — because personal spaces are
-        // deliberately not in `total_team_count` (RFC §8.4). A zero part says
-        // nothing, so it is dropped; `null` personal means "reaches personal
-        // spaces, roster unknown".
-        const parts: string[] = [];
+        // Personal spaces have their own denominator; keep separate badges.
+        const parts: { icon: "groups" | "person"; value: string; label: string }[] = [];
         if (count !== null && count > 0) {
-          parts.push(t("rework.admin.capabilities.enabledTeams.teams", { count }));
+          parts.push({
+            icon: "groups",
+            value: String(count),
+            label: t("rework.admin.capabilities.enabledTeams.teams", { count }),
+          });
         }
         if (personal === null) {
-          parts.push(t("rework.admin.capabilities.enabledTeams.personalUnknown"));
+          parts.push({
+            icon: "person",
+            value: "?",
+            label: t("rework.admin.capabilities.enabledTeams.personalUnknown"),
+          });
         } else if (personal > 0) {
-          parts.push(t("rework.admin.capabilities.enabledTeams.personal", { count: personal }));
+          parts.push({
+            icon: "person",
+            value: String(personal),
+            label: t("rework.admin.capabilities.enabledTeams.personal", { count: personal }),
+          });
         }
         const stack = (
-          <span className={`${styles.countStack} ${rowIsUnused(cap) ? styles.dimmed : ""}`}>
+          <span
+            className={`${styles.countStack} ${rowIsUnused(cap) && !unavailableDiscoveredIds.has(cap.id) ? styles.dimmed : ""}`}
+          >
             {parts.map((part) => (
-              <span key={part} className={styles.count}>
-                {part}
+              <span key={part.icon} className={styles.count} aria-label={part.label} title={part.label}>
+                <Icon category="outlined" type={part.icon} />
+                {part.value}
               </span>
             ))}
           </span>
@@ -623,7 +655,11 @@ export default function FeaturesPage() {
               const unknown = cap.health_unknown_instances ?? 0;
               return (
                 <div className={styles.centered}>
-                  {suspended > 0 ? (
+                  {unavailableDiscoveredIds.has(cap.id) ? (
+                    <span className={styles.healthUnavailable}>
+                      {t("rework.admin.capabilities.discovery.unavailable")}
+                    </span>
+                  ) : suspended > 0 ? (
                     // Clickable: opens the drill-down of which agents, in which team,
                     // this capability breaks at rest. A button, not a span, so
                     // it is keyboard-reachable and announced as actionable.
@@ -657,13 +693,16 @@ export default function FeaturesPage() {
       cellRenderer: (cap) => (
         // Dimmed but never disabled: an unused capability is exactly the one an
         // admin opens to grant its first team.
-        <div className={`${styles.actionsCell} ${rowIsUnused(cap) ? styles.dimmed : ""}`}>
+        <div
+          className={`${styles.actionsCell} ${rowIsUnused(cap) && !unavailableDiscoveredIds.has(cap.id) ? styles.dimmed : ""}`}
+        >
           <Button
             color="on-surface"
             variant="outlined"
             size="small"
             icon={{ category: "outlined", type: "groups" }}
             onClick={() => setMatrixCapabilityId(cap.id)}
+            disabled={unavailableDiscoveredIds.has(cap.id)}
           >
             {t("rework.admin.capabilities.manageTeams")}
           </Button>
@@ -685,7 +724,10 @@ export default function FeaturesPage() {
               variant="outlined"
               size="small"
               icon={{ category: "outlined", type: "tune" }}
-              onClick={() => setPlatformBindingsPanelOpen(true)}
+              onClick={() => {
+                setModelDefaultsInitialTab("pods");
+                setPlatformBindingsPanelOpen(true);
+              }}
             >
               {t("rework.admin.platformModelBindings.openButton")}
             </Button>
@@ -807,7 +849,15 @@ export default function FeaturesPage() {
                 )}
               </p>
             ) : (
-              <DataTable columns={columns} data={visibleModels} rowKey={(capability) => capability.id} size="medium" />
+              <DataTable
+                columns={columns}
+                data={visibleModels}
+                rowKey={(capability) => capability.id}
+                rowClassName={(capability) =>
+                  unavailableDiscoveredIds.has(capability.id) ? styles.unavailableRow : undefined
+                }
+                size="medium"
+              />
             )}
           </section>
         ) : (
@@ -816,6 +866,7 @@ export default function FeaturesPage() {
 
       <CapabilityTeamMatrixDrawer
         capability={matrixCapability}
+        unavailable={matrixCapability !== null && unavailableDiscoveredIds.has(matrixCapability.id)}
         // The FULL catalog, not the kind-filtered `capabilities`: an agent's
         // dependencies are tool rows the Agents tab has filtered out (#2408).
         allCapabilities={allCapabilities}
@@ -829,8 +880,7 @@ export default function FeaturesPage() {
       <PlatformModelBindingsPanel
         open={platformBindingsPanelOpen}
         onClose={() => setPlatformBindingsPanelOpen(false)}
-        manualModels={manualModels}
-        discoveredModels={discoveredModels}
+        initialTab={modelDefaultsInitialTab}
       />
 
       <ConfirmationDialog
@@ -842,6 +892,7 @@ export default function FeaturesPage() {
         dismissible={false}
         onConfirm={() => {
           setNoDefaultModalOpen(false);
+          setModelDefaultsInitialTab("pods");
           setPlatformBindingsPanelOpen(true);
         }}
         onCancel={() => setNoDefaultModalOpen(false)}

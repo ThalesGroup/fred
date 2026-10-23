@@ -34,7 +34,10 @@ from fred_core import (
     TeamPermission,
 )
 from fred_core.common import TeamId, is_personal_team_id
-from fred_sdk.contracts.capability.manifest import model_capability_id
+from fred_sdk.contracts.capability.manifest import (
+    CapabilityCatalogEntry,
+    model_capability_id,
+)
 from fred_sdk.contracts.context import (
     ChatProfileOrigin,
     ModelBinding,
@@ -180,27 +183,64 @@ async def _team_pod_default_profiles(
 
     from control_plane_backend.product.service import _model_capabilities_for_source
 
-    catalogs = await asyncio.gather(
-        *(
-            _model_capabilities_for_source(source.base_url)
-            for source in _team_sources(deps, source_runtime_ids)
-        )
+    sources = _team_sources(deps, source_runtime_ids)
+    catalogs, overrides, fallbacks, discovery_states = await asyncio.gather(
+        asyncio.gather(
+            *(_model_capabilities_for_source(source.base_url) for source in sources)
+        ),
+        deps.get_pod_chat_default_store().list_all(),
+        deps.get_pod_chat_default_store().list_fallbacks(),
+        deps.get_model_discovery_state_store().list_all(),
     )
+    removed_profiles = {
+        profile_id
+        for state in discovery_states
+        for item in state.removed
+        for profile_id in item.get("chat_profile_ids", [])
+    }
     defaults: list[tuple[str, str]] = []
-    for catalog in catalogs:
-        if catalog is None or catalog.default_chat_profile_id is None:
+    for source, catalog in zip(sources, catalogs, strict=True):
+        if catalog is None:
+            continue
+        override = overrides.get(source.runtime_id)
+        if override in removed_profiles:
+            default_profile_id = next(
+                (
+                    profile_id
+                    for profile_id in (
+                        fallbacks.get(source.runtime_id),
+                        catalog.default_chat_profile_id,
+                    )
+                    if profile_id is not None
+                    for entry in catalog.entries
+                    if profile_id in entry.model_chat_profile_ids
+                    and entry.model_discovery_source_id is None
+                ),
+                None,
+            )
+        else:
+            default_profile_id = _effective_pod_chat_default(catalog, override)
+        if default_profile_id is None:
             continue
         entry = next(
             (
                 candidate
                 for candidate in catalog.entries
-                if catalog.default_chat_profile_id in candidate.model_chat_profile_ids
+                if default_profile_id in candidate.model_chat_profile_ids
             ),
             None,
         )
         if entry is not None:
-            defaults.append((catalog.default_chat_profile_id, entry.id))
+            defaults.append((default_profile_id, entry.id))
     return defaults
+
+
+def _effective_pod_chat_default(catalog, override: str | None) -> str | None:
+    if override is not None and any(
+        override in entry.model_chat_profile_ids for entry in catalog.entries
+    ):
+        return override
+    return catalog.default_chat_profile_id
 
 
 async def _unreachable_team_pods(
@@ -466,15 +506,15 @@ async def resolve_effective_chat_model(
     (
         stored,
         usable,
-        fallback,
-        fallback_profile_id,
+        pod_fallback_profile_id,
         discovery_states,
+        pod_default_override,
     ) = await asyncio.gather(
         deps.get_team_routing_policy_store().get(team_id=team_id),
         usable_capability_ids(deps.team_dependencies.rebac, team_id),
-        deps.get_platform_model_fallback_store().get(),
-        deps.get_platform_model_fallback_store().get_profile_id(),
+        deps.get_pod_chat_default_store().get_fallback(instance.source_runtime_id),
         deps.get_model_discovery_state_store().list_all(),
+        deps.get_pod_chat_default_store().get(instance.source_runtime_id),
     )
     removed_profiles = {
         profile_id: item["id"]
@@ -490,49 +530,39 @@ async def resolve_effective_chat_model(
         for profile_id in entry.model_chat_profile_ids
     }
 
+    def _current_profile(entry: CapabilityCatalogEntry) -> str | None:
+        return next(
+            (
+                profile_id
+                for profile_id in entry.model_chat_profile_ids
+                if profile_id not in removed_profiles
+            ),
+            None,
+        )
+
     def _selectable(capability_id: str) -> bool:
         return (usable is None or capability_id in usable) and (
             capability_id not in disabled
         )
 
     def _fallback_result() -> EffectiveChatModel:
-        if fallback_profile_id is not None:
-            fallback_entry = entry_by_profile.get(fallback_profile_id)
-            if (
-                fallback_entry is None
-                or fallback_entry.model_discovery_source_id is not None
-            ):
-                return empty
-            fallback_id = fallback_entry.id
-            fallback_name = fallback_entry.name
-        else:
-            if fallback is None:
-                return empty
-            fallback_base_url = fallback.settings.model_dump(
-                mode="json", exclude_none=True
-            ).get("base_url")
-            discovered_id = next(
-                (
-                    item["id"]
-                    for state in discovery_states
-                    if state.active_url is not None
-                    and state.active_url.removesuffix("/models") == fallback_base_url
-                    for item in state.inventory
-                    if item.get("provider") == fallback.provider
-                    and item.get("name") == fallback.name
-                ),
-                None,
-            )
-            expected_id = discovered_id or model_capability_id(
-                fallback.provider, fallback.name
-            )
-            fallback_entry = next(
-                (entry for entry in pod_models.entries if entry.id == expected_id), None
-            )
-            fallback_id = (
-                fallback_entry.id if fallback_entry is not None else expected_id
-            )
-            fallback_name = fallback.name
+        fallback_entry = next(
+            (
+                candidate
+                for profile_id in (
+                    pod_fallback_profile_id,
+                    pod_models.default_chat_profile_id,
+                )
+                if profile_id is not None
+                for candidate in [entry_by_profile.get(profile_id)]
+                if candidate is not None and candidate.model_discovery_source_id is None
+            ),
+            None,
+        )
+        if fallback_entry is None:
+            return empty
+        fallback_id = fallback_entry.id
+        fallback_name = fallback_entry.name
         return EffectiveChatModel(
             name=fallback_name,
             display_name=display_name_overrides.get(
@@ -545,7 +575,7 @@ async def resolve_effective_chat_model(
             reasoning_enabled=fallback_id in reasoning_enabled_ids,
             selectable_models=[
                 SelectableChatModel(
-                    profile_id=entry.model_chat_profile_ids[0],
+                    profile_id=profile_id,
                     capability_id=entry.id,
                     name=entry.name,
                     display_name=display_name_overrides.get(
@@ -558,7 +588,8 @@ async def resolve_effective_chat_model(
                     ),
                 )
                 for entry in pod_models.entries
-                if entry.model_chat_profile_ids and _selectable(entry.id)
+                for profile_id in [_current_profile(entry)]
+                if profile_id is not None and _selectable(entry.id)
             ],
         )
 
@@ -567,7 +598,6 @@ async def resolve_effective_chat_model(
     recommended_entry = entry_by_profile.get(recommended) if recommended else None
     if (
         recommended is not None
-        and recommended_entry is None
         and recommended in removed_profiles
         and _selectable(removed_profiles[recommended])
         and instance.source_agent_id not in pod_models.agent_chat_profile_overrides
@@ -576,12 +606,18 @@ async def resolve_effective_chat_model(
     resolution = resolve_effective_chat_profile(
         agent_id=instance.source_agent_id,
         pod_agent_chat_profile_overrides=pod_models.agent_chat_profile_overrides,
-        pod_default_chat_profile_id=pod_models.default_chat_profile_id,
+        pod_default_chat_profile_id=(
+            pod_default_override
+            if pod_default_override in removed_profiles
+            else _effective_pod_chat_default(pod_models, pod_default_override)
+        ),
         # No user level: this read names what a NEW conversation starts on.
         user_chat_profile_id=None,
         instance_chat_profile_id=(
             recommended
-            if recommended_entry is not None and _selectable(recommended_entry.id)
+            if recommended_entry is not None
+            and recommended not in removed_profiles
+            and _selectable(recommended_entry.id)
             else None
         ),
         team_chat_default_profile_id=(
@@ -592,7 +628,7 @@ async def resolve_effective_chat_model(
         return empty
 
     entry = entry_by_profile.get(resolution.profile_id)
-    if entry is None:
+    if entry is None or resolution.profile_id in removed_profiles:
         if resolution.profile_id in removed_profiles and _selectable(
             removed_profiles[resolution.profile_id]
         ):
@@ -612,14 +648,13 @@ async def resolve_effective_chat_model(
         for candidate in pod_models.entries:
             if candidate.id in selectable or not _selectable(candidate.id):
                 continue
-            if not candidate.model_chat_profile_ids:
+            profile_id = _current_profile(candidate)
+            if profile_id is None:
                 continue
             reasoning_enabled = candidate.id in reasoning_enabled_ids
             selectable[candidate.id] = SelectableChatModel(
                 profile_id=(
-                    resolution.profile_id
-                    if candidate.id == entry.id
-                    else candidate.model_chat_profile_ids[0]
+                    resolution.profile_id if candidate.id == entry.id else profile_id
                 ),
                 capability_id=candidate.id,
                 name=candidate.name,

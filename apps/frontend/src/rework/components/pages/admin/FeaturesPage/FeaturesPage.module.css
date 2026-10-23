@@ -112,7 +112,51 @@
 .discoveryStatus {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: var(--spacing-s);
+}
+
+.discoveryRemoved h3 {
+  margin: 0;
+  font: var(--font-title-small-emphasized);
+}
+
+.discoveryRemoved p {
+  margin: var(--spacing-3xs) 0 var(--spacing-xs);
+}
+
+.discoveryRemoved ul {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: 0;
+  list-style: none;
+}
+
+.discoveryRemovedDialog {
+  height: min(34rem, calc(100dvh - 2rem));
+}
+
+.discoveryRemoved li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-s);
+}
+
+.discoveryRemoved li + li {
+  border-top: 1px solid var(--outline-variant);
+}
+
+.discoveryRemoved code {
+  font: var(--font-body-small);
+  font-family: var(--font-family-mono, monospace);
+  overflow-wrap: anywhere;
 }
 
 .modelToolbar {
@@ -199,11 +243,6 @@
 .discoveryReadOnlyUrl {
   font-family: var(--font-family-mono, monospace);
   overflow-wrap: anywhere;
-}
-
-.discoveryRemoved {
-  color: var(--on-surface);
-  font: var(--font-body-medium);
 }
 
 .modelSpecs {
@@ -305,6 +344,9 @@
  * (TeamSettingsMembersTable's .roleChip): outlined pill, label-small type.
  * Static here (no hover/active state) since these are counts, not controls. */
 .count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
   border: 0.5px solid var(--outline-variant);
   border-radius: 999px;
   background: var(--surface-container-highest);
@@ -314,11 +356,10 @@
   white-space: nowrap;
 }
 
-/* Team reach and personal-space reach are different denominators, so they get
- * their own badge each rather than an inline "A + B" that reads as a single
- * count. Row, not a column stack, so the two short badges sit side by side.
- * `nowrap` + the column's widened `1.6fr` (FeaturesPage.tsx) keep them on
- * one line instead of falling back to a two-line stack. */
+.count > span {
+  font-size: 1rem;
+}
+
 .countStack {
   display: flex;
   flex-wrap: nowrap;
@@ -357,9 +398,18 @@
   opacity: 0.55;
 }
 
+.unavailableRow {
+  opacity: 0.55;
+}
+
 .healthNeutral {
   color: var(--on-surface-muted);
   font: var(--font-body-medium);
+}
+
+.healthUnavailable {
+  color: var(--warning);
+  font: var(--font-label-medium);
 }
 
 .healthWarn {

@@ -1100,20 +1100,35 @@ operations:
     review_status: approved
     required_permission: can_manage_platform
   - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/model-discovery/{source_id}/removed-model
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
     method: GET
-    path: /control-plane/v1/admin/platform-model-fallback
+    path: /control-plane/v1/admin/pod-chat-defaults
     review_status: approved
     required_permission: can_manage_capabilities
   - service: control-plane
     method: PUT
-    path: /control-plane/v1/admin/platform-model-fallback
+    path: /control-plane/v1/admin/pod-chat-defaults/{runtime_id}
     review_status: approved
-    required_permission: can_manage_capabilities
+    required_permission: can_manage_platform
   - service: control-plane
     method: DELETE
-    path: /control-plane/v1/admin/platform-model-fallback
+    path: /control-plane/v1/admin/pod-chat-defaults/{runtime_id}
     review_status: approved
-    required_permission: can_manage_capabilities
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/pod-chat-defaults/{runtime_id}/fallback
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/pod-chat-defaults/{runtime_id}/fallback
+    review_status: approved
+    required_permission: can_manage_platform
   - service: agent-pod
     method: POST
     path: /pod/v1/agents/models-catalog/refresh

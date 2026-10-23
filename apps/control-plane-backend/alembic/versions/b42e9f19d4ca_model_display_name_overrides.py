@@ -65,21 +65,16 @@ def upgrade() -> None:
         sa.Column("updated_by", sa.String(), nullable=True),
     )
     op.create_table(
-        "platform_model_fallback",
-        sa.Column("model_capability", sa.String(), primary_key=True),
-        sa.Column("profile_id", sa.String(), nullable=True),
-        sa.Column("provider", sa.String(), nullable=True),
-        sa.Column("name", sa.String(), nullable=True),
-        sa.Column("settings_json", sa.Text(), nullable=True),
+        "pod_chat_default",
+        sa.Column("runtime_id", sa.String(length=160), primary_key=True),
+        sa.Column("profile_id", sa.String(length=256), nullable=True),
+        sa.Column("fallback_profile_id", sa.String(length=256), nullable=True),
         sa.Column("updated_by", sa.String(), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.CheckConstraint(
-            "model_capability = 'chat'", name="ck_platform_model_fallback_chat_only"
-        ),
     )
 
 
 def downgrade() -> None:
-    op.drop_table("platform_model_fallback")
+    op.drop_table("pod_chat_default")
     op.drop_table("model_discovery_source_state")
     op.drop_table("model_display_name_override")

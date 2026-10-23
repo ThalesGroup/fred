@@ -71,6 +71,10 @@ class ModelRoutingResolver:
         for agent_id, profile_id in policy.agent_profile_overrides.items():
             profile = self._profiles_by_id.get(profile_id)
             if profile is None:
+                if profile_id in policy.unavailable_discovered_chat_profile_ids:
+                    overrides_by_capability.setdefault(ModelCapability.CHAT, {})[
+                        agent_id
+                    ] = profile_id
                 continue
             overrides_by_capability.setdefault(profile.capability, {})[agent_id] = (
                 profile_id
@@ -125,8 +129,8 @@ class ModelRoutingResolver:
         if request.agent_id is not None:
             profile_id = self._policy.agent_profile_overrides.get(request.agent_id)
             if profile_id is not None:
-                profile = self._profile(profile_id)
-                if profile.capability == request.capability:
+                profile = self._profiles_by_id.get(profile_id)
+                if profile is not None and profile.capability == request.capability:
                     return ModelSelection(
                         source=ModelSelectionSource.AGENT_OVERRIDE,
                         capability=request.capability,

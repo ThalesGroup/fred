@@ -77,7 +77,7 @@ from control_plane_backend.marketplace_settings.store import (
 )
 from control_plane_backend.model_discovery.store import (
     ModelDiscoveryStateStore,
-    PlatformModelFallbackStore,
+    PodChatDefaultStore,
 )
 from control_plane_backend.models.task_models import TASK_TABLES
 from control_plane_backend.platform_prompt.store import (
@@ -128,7 +128,7 @@ class ApplicationContext:
         self._team_routing_policy_store: TeamRoutingPolicyStore | None = None
         self._platform_model_binding_store: PlatformModelBindingStore | None = None
         self._model_discovery_state_store: ModelDiscoveryStateStore | None = None
-        self._platform_model_fallback_store: PlatformModelFallbackStore | None = None
+        self._pod_chat_default_store: PodChatDefaultStore | None = None
         self._platform_prompt_store: PlatformPromptStore | None = None
         self._creation_assistant_settings_store: (
             CreationAssistantSettingsStore | None
@@ -442,12 +442,12 @@ class ApplicationContext:
             )
         return self._model_discovery_state_store
 
-    def get_platform_model_fallback_store(self) -> PlatformModelFallbackStore:
-        if self._platform_model_fallback_store is None:
-            self._platform_model_fallback_store = PlatformModelFallbackStore(
+    def get_pod_chat_default_store(self) -> PodChatDefaultStore:
+        if self._pod_chat_default_store is None:
+            self._pod_chat_default_store = PodChatDefaultStore(
                 engine=self.get_pg_async_engine()
             )
-        return self._platform_model_fallback_store
+        return self._pod_chat_default_store
 
     def get_platform_prompt_store(self) -> PlatformPromptStore:
         if self._platform_prompt_store is None:

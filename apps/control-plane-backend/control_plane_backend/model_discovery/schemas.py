@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fred_sdk.contracts.context import ModelBinding
 from pydantic import BaseModel, Field
 
 
@@ -62,10 +61,35 @@ class SetDiscoveryUrlRequest(BaseModel):
     url: str | None = None
 
 
-class PlatformModelFallback(BaseModel):
-    binding: ModelBinding | None = None
-    profile_id: str | None = None
+class PodChatModelOption(BaseModel):
+    profile_id: str
+    model_id: str
+    name: str
+    display_name: str | None = None
+    discovery_source_id: str | None = None
 
 
-class SetPlatformModelFallbackRequest(BaseModel):
-    profile_id: str = Field(min_length=1)
+class PodChatDefaultStatus(BaseModel):
+    runtime_id: str
+    base_url: str
+    reachable: bool
+    yaml_profile_id: str | None = None
+    override_profile_id: str | None = None
+    effective_profile_id: str | None = None
+    override_unavailable: bool = False
+    fallback_override_profile_id: str | None = None
+    effective_fallback_profile_id: str | None = None
+    fallback_unavailable: bool = False
+    models: list[PodChatModelOption] = Field(default_factory=list)
+
+
+class PodChatDefaults(BaseModel):
+    pods: list[PodChatDefaultStatus] = Field(default_factory=list)
+
+
+class SetPodChatDefaultRequest(BaseModel):
+    profile_id: str = Field(min_length=1, max_length=256)
+
+
+class SetPodChatFallbackRequest(BaseModel):
+    profile_id: str = Field(min_length=1, max_length=256)

@@ -3482,7 +3482,6 @@ def _build_erasure_deps(
         get_team_routing_policy_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_model_binding_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_model_discovery_state_store=lambda: None,  # type: ignore[arg-type,return-value]
-        get_platform_model_fallback_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_creation_assistant_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_ui_settings_store=lambda: None,  # type: ignore[arg-type,return-value]

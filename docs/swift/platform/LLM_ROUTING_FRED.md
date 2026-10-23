@@ -144,7 +144,7 @@ Two things it deliberately does:
 
 It shows nothing when nothing resolves, such as an unreachable pod or a pod
 declaring no chat default with no team policy. For a confirmed removed
-discovered choice, it shows the configured platform fallback.
+discovered choice, it shows that pod's manual fallback or its manual YAML default.
 
 ## Platform administration
 
@@ -214,7 +214,7 @@ use separate pods when endpoints need different credentials. `source_id` is a st
 identity. Changing it creates new model capability and profile ids, which need
 new admin grants. `include_model_ids` is optional; its listed IDs must be
 present during initial catalog validation. A later administrator refresh can
-confirm a listed model's removal and apply the platform fallback.
+confirm a listed model's removal and apply that pod's manual fallback.
 
 The standard OpenAI `/models` response does not identify chat models, context
 sizes, or supported reasoning levels. Configure a gateway that lists chat
@@ -361,7 +361,7 @@ that omits them reads as declaring neither.
   non-enabled profile is rejected before persistence.
 - A stored team profile missing from a pod, or declaring a non-chat capability,
   raises a typed drift error unless a successful discovery refresh confirmed
-  its removal. A confirmed removal uses the configured platform fallback;
+  its removal. A confirmed removal uses that pod's manual fallback or manual YAML default;
   neither case silently substitutes the pod default.
 - A resolved non-platform model that is no longer enabled for the team fails
   closed before the LLM call.

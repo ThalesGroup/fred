@@ -24,8 +24,10 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PlatformModelBinding } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
-import type { CapabilityEnablementItem } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type {
+  PlatformModelBinding,
+  PodChatDefaultStatus,
+} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -37,8 +39,11 @@ const h = vi.hoisted(() => ({
   binding: undefined as PlatformModelBinding | undefined,
   setBinding: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
   deleteBinding: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
-  setFallback: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
-  manualModels: [] as CapabilityEnablementItem[],
+  pods: [] as PodChatDefaultStatus[],
+  setPodDefault: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
+  clearPodDefault: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
+  setPodFallback: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
+  clearPodFallback: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -58,9 +63,11 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
   usePlatformModelBindingQuery: () => ({ data: h.binding, isLoading: false, isError: false }),
   useSetPlatformModelBindingMutation: () => [h.setBinding, { isLoading: false }],
   useDeletePlatformModelBindingMutation: () => [h.deleteBinding, { isLoading: false }],
-  usePlatformModelFallbackQuery: () => ({ data: { binding: null }, isLoading: false, isError: false }),
-  useSetPlatformModelFallbackMutation: () => [h.setFallback, { isLoading: false }],
-  useDeletePlatformModelFallbackMutation: () => [vi.fn(), { isLoading: false }],
+  usePodChatDefaultsQuery: () => ({ data: { pods: h.pods }, isLoading: false, isError: false }),
+  useSetPodChatDefaultMutation: () => [h.setPodDefault, { isLoading: false }],
+  useClearPodChatDefaultMutation: () => [h.clearPodDefault, { isLoading: false }],
+  useSetPodChatFallbackMutation: () => [h.setPodFallback, { isLoading: false }],
+  useClearPodChatFallbackMutation: () => [h.clearPodFallback, { isLoading: false }],
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
@@ -88,9 +95,12 @@ afterEach(() => {
   container.remove();
   h.setBinding.mockClear();
   h.deleteBinding.mockClear();
-  h.setFallback.mockClear();
   h.binding = undefined;
-  h.manualModels = [];
+  h.pods = [];
+  h.setPodDefault.mockClear();
+  h.clearPodDefault.mockClear();
+  h.setPodFallback.mockClear();
+  h.clearPodFallback.mockClear();
 });
 
 function buttons(): HTMLButtonElement[] {
@@ -124,135 +134,159 @@ function openEditForm() {
 }
 
 function advancedSaveButton(): HTMLButtonElement {
-  const button = container.querySelector<HTMLButtonElement>("details button[type=submit]");
-  if (!button) throw new Error("advanced save button not rendered");
+  const button = container.querySelector<HTMLButtonElement>("form button[type=submit]");
+  if (!button) throw new Error("save button not rendered");
   return button;
 }
 
 describe("PlatformModelBindingsPanel chat-only surface", () => {
   it("renders exactly one row (chat) when unset", () => {
     h.binding = { model_capability: "chat", binding: null };
-    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
+    render(<PlatformModelBindingsPanel open onClose={() => {}} initialTab="platform" />);
 
     expect(container.textContent).toContain("rework.admin.platformModelBindings.capability.chat");
     expect(container.textContent).not.toContain("rework.admin.platformModelBindings.capability.language");
     expect(container.textContent).not.toContain("rework.admin.platformModelBindings.capability.embedding");
     expect(container.textContent).not.toContain("rework.admin.platformModelBindings.capability.image");
-    expect(buttons().filter((b) => b.textContent === "rework.admin.platformModelBindings.editAction")).toHaveLength(2);
+    expect(buttons().filter((b) => b.textContent === "rework.admin.platformModelBindings.editAction")).toHaveLength(1);
   });
 
   it("renders the single row even when the backend response is not yet loaded", () => {
     h.binding = undefined;
-    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
+    render(<PlatformModelBindingsPanel open onClose={() => {}} initialTab="platform" />);
 
-    expect(buttons().filter((b) => b.textContent === "rework.admin.platformModelBindings.editAction")).toHaveLength(2);
+    expect(buttons().filter((b) => b.textContent === "rework.admin.platformModelBindings.editAction")).toHaveLength(1);
   });
 });
 
-describe("PlatformModelBindingsPanel catalog selector", () => {
-  it("preselects the saved model when the API omits null settings", () => {
-    h.binding = {
-      model_capability: "chat",
-      binding: { provider: "openai", name: "gateway-small", settings: { base_url: "https://models.example/v1" } },
-    };
-    const manual = {
-      id: "model__openai__gateway-small",
-      name: "gateway-small",
-      model_display_name: "Gateway Small",
-      model_platform_binding: {
-        provider: "openai",
-        name: "gateway-small",
-        settings: { base_url: "https://models.example/v1", temperature: null },
-      },
-    } as CapabilityEnablementItem;
-    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={[manual]} />);
-    openEditForm();
-    expect(container.querySelector('button[aria-haspopup="listbox"]')?.textContent).toContain("Gateway Small");
-  });
-
-  it("selects an advertised discovered model without opening advanced configuration", async () => {
-    h.binding = { model_capability: "chat", binding: null };
-    const manualModel = {
-      id: "model__openai__manual-small",
-      name: "manual-small",
-      model_display_name: "Manual Small",
-      model_platform_binding: { provider: "openai", name: "manual-small" },
-    } as CapabilityEnablementItem;
-    const discoveredModel = {
-      id: "model__openai__gateway-small",
-      name: "gateway-small",
-      model_display_name: "Gateway Small",
-      model_discovery_source_id: "gateway",
-      model_platform_binding: {
-        provider: "openai",
-        name: "gateway-small",
-        settings: { base_url: "https://models.example/v1" },
-      },
-    } as CapabilityEnablementItem;
-    render(
-      <PlatformModelBindingsPanel
-        open
-        onClose={() => {}}
-        manualModels={[manualModel]}
-        discoveredModels={[discoveredModel]}
-      />,
-    );
-    openEditForm();
-
-    expect(container.querySelector("details")?.hasAttribute("open")).toBe(false);
-    const selectTrigger = container.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]');
-    if (!selectTrigger) throw new Error("model selector not rendered");
-    act(() => {
-      selectTrigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    });
-    const listbox = document.querySelector('[role="listbox"]');
-    expect(listbox?.textContent).toContain("rework.admin.platformModelBindings.manualSource");
-    expect(listbox?.textContent).toContain("rework.admin.platformModelBindings.discoveredSource");
-    expect(listbox?.querySelectorAll('[role="presentation"]')).toHaveLength(2);
-    act(() => {
-      selectTrigger.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-    });
-    act(() => {
-      selectTrigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    });
-    const saveButton = findButton("rework.admin.platformModelBindings.form.save");
-    expect(saveButton.hasAttribute("disabled")).toBe(false);
-    click(saveButton);
-    await act(async () => {});
-
-    expect(h.setBinding).toHaveBeenCalledWith({
-      setPlatformModelBindingRequest: { binding: discoveredModel.model_platform_binding },
-    });
-  });
-});
-
-describe("PlatformModelBindingsPanel fallback", () => {
-  it("keeps fallback editing separate from the forced binding", async () => {
-    h.binding = { model_capability: "chat", binding: null };
-    h.manualModels = [
+describe("PlatformModelBindingsPanel agent pod defaults", () => {
+  it("offers only manual models as a fallback for the selected pod", async () => {
+    h.pods = [
       {
-        id: "model-chat-backup",
-        name: "chat-backup",
-        model_display_name: "Chat backup",
-        model_chat_profile_ids: ["manual.chat.backup"],
-        model_fallback_profile_ids: ["manual.chat.backup"],
-        model_runtime_ids: ["fred"],
-      } as CapabilityEnablementItem,
+        runtime_id: "fred-agents",
+        base_url: "http://fred-agents:8000",
+        reachable: true,
+        yaml_profile_id: "chat.manual.small",
+        override_profile_id: null,
+        effective_profile_id: "chat.manual.small",
+        effective_fallback_profile_id: "chat.manual.small",
+        models: [
+          { profile_id: "chat.manual.small", model_id: "manual-small", name: "manual-small", display_name: "Small" },
+          { profile_id: "chat.manual.safe", model_id: "manual-safe", name: "manual-safe", display_name: "Safe" },
+          {
+            profile_id: "discovered.chat.mistral.medium",
+            model_id: "discovered-medium",
+            name: "discovered-medium",
+            display_name: "Medium",
+            discovery_source_id: "mistral",
+          },
+        ],
+      },
     ];
-    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
-    expect(container.textContent).toContain("rework.admin.platformModelBindings.noFallback");
-    const editButtons = buttons().filter(
-      (button) => button.textContent === "rework.admin.platformModelBindings.editAction",
+    render(<PlatformModelBindingsPanel open onClose={() => {}} initialTab="pods" />);
+    const fallbackSelect = container.querySelectorAll<HTMLButtonElement>('button[aria-haspopup="listbox"]')[1];
+    click(fallbackSelect);
+    const options = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]'));
+    expect(options.map((option) => option.textContent).join(" ")).toContain("Safe");
+    expect(options.map((option) => option.textContent).join(" ")).not.toContain("Medium");
+    click(options.find((option) => option.textContent?.includes("Safe"))!);
+    const saveButtons = buttons().filter(
+      (button) => button.textContent === "rework.admin.platformModelBindings.form.save",
     );
-    click(editButtons[1]);
-    expect(container.textContent).toContain("Chat backup");
-    await act(async () => {
-      findButton("rework.admin.platformModelBindings.form.save").click();
+    await act(async () => saveButtons[1].click());
+    expect(h.setPodFallback).toHaveBeenCalledWith({
+      runtimeId: "fred-agents",
+      setPodChatFallbackRequest: { profile_id: "chat.manual.safe" },
     });
-    expect(h.setFallback).toHaveBeenCalledWith({
-      setPlatformModelFallbackRequest: { profile_id: "manual.chat.backup" },
+  });
+
+  it("shortens long discovered profile IDs in the pod selector while retaining the full ID on hover", () => {
+    const profileId = `discovered.chat.mistral.${"a".repeat(64)}`;
+    h.pods = [
+      {
+        runtime_id: "fred-agents",
+        base_url: "http://fred-agents:8000",
+        reachable: true,
+        yaml_profile_id: profileId,
+        override_profile_id: null,
+        effective_profile_id: profileId,
+        override_unavailable: false,
+        models: [
+          {
+            profile_id: profileId,
+            model_id: "mistral-small",
+            name: "mistral-small",
+            display_name: "Mistral Small",
+            discovery_source_id: "mistral",
+          },
+        ],
+      },
+    ];
+    render(<PlatformModelBindingsPanel open onClose={() => {}} initialTab="pods" />);
+
+    click(container.querySelector('button[aria-haspopup="listbox"]')!);
+    const option = document.body.querySelector('[role="option"]');
+    expect(option?.textContent).toContain(`${profileId.slice(0, 33)}...`);
+    expect(option?.querySelector("[hidden]")?.textContent).toBe(profileId);
+  });
+
+  it("opens the agent pods tab when a required-default dialog changes the initial tab", () => {
+    render(<PlatformModelBindingsPanel open={false} onClose={() => {}} initialTab="platform" />);
+
+    act(() => {
+      root.render(<PlatformModelBindingsPanel open onClose={() => {}} initialTab="pods" />);
     });
-    expect(h.setBinding).not.toHaveBeenCalled();
+
+    expect(container.textContent).toContain("rework.admin.platformModelBindings.noPods");
+    expect(container.textContent).not.toContain("rework.admin.platformModelBindings.forcedLabel");
+    const tabs = container.querySelectorAll('[role="radiogroup"] button');
+    expect(tabs[0]?.textContent).toContain("rework.admin.platformModelBindings.podsTab");
+    expect(tabs[1]?.textContent).toContain("rework.admin.platformModelBindings.platformTab");
+  });
+
+  it("displays the YAML default before an admin override and the saved override afterward", () => {
+    h.pods = [
+      {
+        runtime_id: "fred-agents",
+        base_url: "http://fred-agents:8000",
+        reachable: true,
+        yaml_profile_id: "chat.manual.small",
+        override_profile_id: null,
+        effective_profile_id: "chat.manual.small",
+        override_unavailable: false,
+        models: [
+          { profile_id: "chat.manual.small", model_id: "manual", name: "manual", display_name: "Small 4" },
+          {
+            profile_id: "discovered.chat.mistral.medium",
+            model_id: "discovered",
+            name: "discovered",
+            display_name: "Medium 3.5",
+            discovery_source_id: "mistral",
+          },
+        ],
+      },
+    ];
+    render(<PlatformModelBindingsPanel open onClose={() => {}} initialTab="pods" />);
+
+    expect(container.textContent).toContain("fred-agents");
+    expect(container.querySelector('button[aria-haspopup="listbox"]')?.textContent).toContain("Small 4");
+    expect(findButton("rework.admin.platformModelBindings.form.save").disabled).toBe(true);
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    h.pods = [
+      {
+        ...h.pods[0],
+        override_profile_id: "discovered.chat.mistral.medium",
+        effective_profile_id: "discovered.chat.mistral.medium",
+      },
+    ];
+    render(<PlatformModelBindingsPanel open onClose={() => {}} initialTab="pods" />);
+
+    expect(container.querySelector('button[aria-haspopup="listbox"]')?.textContent).toContain("Medium 3.5");
+    expect(findButton("rework.admin.platformModelBindings.podResetAction")).toBeTruthy();
   });
 });
 
@@ -271,7 +305,7 @@ describe("PlatformModelBindingsPanel JSON settings editor", () => {
         },
       },
     };
-    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
+    render(<PlatformModelBindingsPanel open onClose={() => {}} initialTab="platform" />);
     openEditForm();
 
     const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
@@ -302,7 +336,7 @@ describe("PlatformModelBindingsPanel JSON settings editor", () => {
 
   it("reports invalid JSON inline and disables Save without issuing the mutation", () => {
     h.binding = { model_capability: "chat", binding: null };
-    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
+    render(<PlatformModelBindingsPanel open onClose={() => {}} initialTab="platform" />);
     openEditForm();
 
     const inputs = () => Array.from(container.querySelectorAll("input"));
@@ -322,7 +356,7 @@ describe("PlatformModelBindingsPanel JSON settings editor", () => {
 
   it("rejects a non-object JSON value (array) the same way as a syntax error", () => {
     h.binding = { model_capability: "chat", binding: null };
-    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
+    render(<PlatformModelBindingsPanel open onClose={() => {}} initialTab="platform" />);
     openEditForm();
 
     const inputs = () => Array.from(container.querySelectorAll("input"));
@@ -338,7 +372,7 @@ describe("PlatformModelBindingsPanel JSON settings editor", () => {
 
   it("accepts an empty textarea as an empty settings object", async () => {
     h.binding = { model_capability: "chat", binding: null };
-    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
+    render(<PlatformModelBindingsPanel open onClose={() => {}} initialTab="platform" />);
     openEditForm();
 
     const inputs = () => Array.from(container.querySelectorAll("input"));
@@ -362,7 +396,7 @@ describe("PlatformModelBindingsPanel JSON settings editor", () => {
 describe("PlatformModelBindingsPanel delete/reset", () => {
   it("fires the delete mutation, then reflects the pod-default state once the query catches up", () => {
     h.binding = { model_capability: "chat", binding: { provider: "openai", name: "gpt-5", settings: {} } };
-    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
+    render(<PlatformModelBindingsPanel open onClose={() => {}} initialTab="platform" />);
 
     expect(container.textContent).toContain("boundState:provider=openai,name=gpt-5");
 
@@ -382,7 +416,7 @@ describe("PlatformModelBindingsPanel delete/reset", () => {
     });
     container.remove();
     h.binding = { model_capability: "chat", binding: null };
-    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
+    render(<PlatformModelBindingsPanel open onClose={() => {}} initialTab="platform" />);
 
     expect(container.textContent).not.toContain("boundState:provider=openai,name=gpt-5");
     expect(container.textContent).toContain("rework.admin.platformModelBindings.podDefault");
