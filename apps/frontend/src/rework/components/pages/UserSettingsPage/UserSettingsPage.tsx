@@ -71,8 +71,10 @@ export default function UserSettingsPage() {
         confirmedLanguage.current = language;
       })
       .catch((error) => {
-        if (change === languageChange.current) void i18n.changeLanguage(confirmedLanguage.current);
-        notifyPreferenceError(error);
+        if (change === languageChange.current) {
+          void i18n.changeLanguage(confirmedLanguage.current);
+          notifyPreferenceError(error);
+        }
       });
   };
 

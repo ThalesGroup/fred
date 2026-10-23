@@ -89,8 +89,10 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
         confirmedMode.current = mode;
       })
       .catch((error) => {
-        if (change === modeChange.current) setStoredThemeMode(confirmedMode.current);
-        onError?.(error);
+        if (change === modeChange.current) {
+          setStoredThemeMode(confirmedMode.current);
+          onError?.(error);
+        }
       });
   };
 
@@ -102,8 +104,10 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
         confirmedTheme.current = theme;
       })
       .catch((error) => {
-        if (change === themeChange.current) setStoredUiTheme(confirmedTheme.current);
-        onError?.(error);
+        if (change === themeChange.current) {
+          setStoredUiTheme(confirmedTheme.current);
+          onError?.(error);
+        }
       });
   };
 
