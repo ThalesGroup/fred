@@ -59,6 +59,8 @@ function PodDefaultRow({ pod }: { pod: PodChatDefaultStatus }) {
   const fallbackOptions = options.filter((option) =>
     (pod.models ?? []).some((model) => model.profile_id === option.value && !model.discovery_source_id),
   );
+  const defaultSelectable = options.some((option) => option.value === selectedProfileId);
+  const fallbackSelectable = fallbackOptions.some((option) => option.value === selectedFallbackId);
   const busy = isSaving || isClearing || isSavingFallback || isClearingFallback;
 
   const save = async () => {
@@ -117,13 +119,22 @@ function PodDefaultRow({ pod }: { pod: PodChatDefaultStatus }) {
           {t("rework.admin.platformModelBindings.podOverrideUnavailable", { profile: pod.override_profile_id })}
         </p>
       )}
+      {selectedProfileId && !defaultSelectable && (
+        <p className={styles.hint}>
+          {t("rework.admin.platformModelBindings.currentNotSelectable")}{" "}
+          <code className={styles.currentProfileId} title={selectedProfileId}>
+            {selectedProfileId}
+          </code>
+        </p>
+      )}
       <Select
         label={t("rework.admin.platformModelBindings.podDefaultSelect")}
         size="small"
         compact
         options={options}
-        value={selectedProfileId}
+        value={defaultSelectable ? selectedProfileId : ""}
         onChange={setSelectedProfileId}
+        placeholder={t("rework.admin.platformModelBindings.chooseEnabledModel")}
         disabled={!pod.reachable || busy}
         emptyMessage={t("rework.admin.platformModelBindings.podNoModels")}
       />
@@ -138,7 +149,7 @@ function PodDefaultRow({ pod }: { pod: PodChatDefaultStatus }) {
           variant="filled"
           size="small"
           onClick={() => void save()}
-          disabled={!pod.reachable || busy || !selectedProfileId || selectedProfileId === pod.effective_profile_id}
+          disabled={!pod.reachable || busy || !defaultSelectable || selectedProfileId === pod.effective_profile_id}
         >
           {t("rework.admin.platformModelBindings.form.save")}
         </Button>
@@ -153,13 +164,22 @@ function PodDefaultRow({ pod }: { pod: PodChatDefaultStatus }) {
             })}
           </p>
         )}
+        {selectedFallbackId && !fallbackSelectable && (
+          <p className={styles.hint}>
+            {t("rework.admin.platformModelBindings.currentNotSelectable")}{" "}
+            <code className={styles.currentProfileId} title={selectedFallbackId}>
+              {selectedFallbackId}
+            </code>
+          </p>
+        )}
         <Select
           label={t("rework.admin.platformModelBindings.fallbackSelect")}
           size="small"
           compact
           options={fallbackOptions}
-          value={selectedFallbackId}
+          value={fallbackSelectable ? selectedFallbackId : ""}
           onChange={setSelectedFallbackId}
+          placeholder={t("rework.admin.platformModelBindings.chooseEnabledManualModel")}
           disabled={!pod.reachable || busy}
           emptyMessage={t("rework.admin.platformModelBindings.noManualModels")}
         />
@@ -175,7 +195,7 @@ function PodDefaultRow({ pod }: { pod: PodChatDefaultStatus }) {
             size="small"
             onClick={() => void saveFallback()}
             disabled={
-              !pod.reachable || busy || !selectedFallbackId || selectedFallbackId === pod.effective_fallback_profile_id
+              !pod.reachable || busy || !fallbackSelectable || selectedFallbackId === pod.effective_fallback_profile_id
             }
           >
             {t("rework.admin.platformModelBindings.form.save")}

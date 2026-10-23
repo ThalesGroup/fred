@@ -92,6 +92,12 @@ async def test_pod_chat_default_selection_uses_yaml_until_saved(monkeypatch) -> 
 
     monkeypatch.setattr(service, "require_manage_capabilities", allowed)
     monkeypatch.setattr(service, "require_manage_platform_model_binding", allowed)
+    enabled_model_ids = {"manual", "backup", "discovered", "second-discovered"}
+
+    async def is_enabled(rebac, model_id, relation) -> bool:
+        return model_id in enabled_model_ids
+
+    monkeypatch.setattr(service, "has_org_relation", is_enabled)
 
     class Store:
         override: str | None = None
@@ -224,6 +230,46 @@ async def test_pod_chat_default_selection_uses_yaml_until_saved(monkeypatch) -> 
             authorization=None,
         )
         assert selected.effective_profile_id == "discovered.chat.first.model"
+        enabled_model_ids.remove("discovered")
+        inactive = await service.get_pod_chat_defaults(user, deps, authorization=None)
+        assert inactive.pods[0].effective_profile_id == "discovered.chat.first.model"
+        assert "discovered.chat.first.model" not in {
+            option.profile_id for option in inactive.pods[0].models
+        }
+        with pytest.raises(ValueError, match="enabled"):
+            await service.set_pod_chat_default(
+                user,
+                deps,
+                runtime_id="pod-a",
+                profile_id="discovered.chat.first.model",
+                authorization=None,
+            )
+        enabled_model_ids.remove("backup")
+        with pytest.raises(ValueError, match="enabled manual"):
+            await service.set_pod_chat_fallback(
+                user,
+                deps,
+                runtime_id="pod-a",
+                profile_id="chat.backup",
+                authorization=None,
+            )
+        enabled_model_ids.remove("manual")
+        inactive_yaml = await service.get_pod_chat_defaults(
+            user, deps, authorization=None
+        )
+        assert inactive_yaml.pods[0].yaml_profile_id == "chat.manual"
+        assert "chat.manual" not in {
+            option.profile_id for option in inactive_yaml.pods[0].models
+        }
+        with pytest.raises(ValueError, match="enabled manual"):
+            await service.set_pod_chat_fallback(
+                user,
+                deps,
+                runtime_id="pod-a",
+                profile_id="chat.manual",
+                authorization=None,
+            )
+        enabled_model_ids.update({"discovered", "backup", "manual"})
         await service.set_pod_chat_fallback(
             user,
             deps,

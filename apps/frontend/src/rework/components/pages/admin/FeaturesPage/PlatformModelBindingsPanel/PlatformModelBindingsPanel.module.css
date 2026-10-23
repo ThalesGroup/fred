@@ -25,6 +25,16 @@
   font: var(--font-body-small);
 }
 
+.currentProfileId {
+  display: inline-block;
+  vertical-align: bottom;
+  max-width: 100%;
+  overflow: hidden;
+  font-family: var(--font-family-mono, monospace);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .statusError {
   margin: 0;
   color: var(--error);

@@ -20,10 +20,12 @@ from urllib.parse import urlsplit
 
 import httpx
 from fred_core import KeycloakUser
+from fred_core.security.rebac.rebac_engine import RelationType
 
 from control_plane_backend.capabilities.catalog import (
     model_display_name_overrides,
 )
+from control_plane_backend.capabilities.enablement import has_org_relation
 from control_plane_backend.model_discovery.schemas import (
     DiscoveredModel,
     DiscoverySourceStatus,
@@ -178,6 +180,26 @@ async def get_pod_chat_defaults(
     inspected = await asyncio.gather(
         *(inspect(source) for source in sources), return_exceptions=True
     )
+    model_ids = {
+        item["id"]
+        for result in inspected
+        if isinstance(result, dict)
+        for item in result["models"]
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    activation = await asyncio.gather(
+        *(
+            has_org_relation(
+                deps.team_dependencies.rebac, model_id, RelationType.DEFAULT_ON
+            )
+            for model_id in model_ids
+        )
+    )
+    enabled_model_ids = {
+        model_id
+        for model_id, enabled in zip(model_ids, activation, strict=True)
+        if enabled
+    }
     pods: list[PodChatDefaultStatus] = []
     for source, result in zip(sources, inspected, strict=True):
         override = overrides.get(source.runtime_id)
@@ -267,7 +289,9 @@ async def get_pod_chat_defaults(
                 fallback_override_profile_id=fallback_override,
                 effective_fallback_profile_id=effective_fallback,
                 fallback_unavailable=fallback_unavailable,
-                models=options,
+                models=[
+                    option for option in options if option.model_id in enabled_model_ids
+                ],
             )
         )
     return PodChatDefaults(pods=pods)
@@ -289,7 +313,9 @@ async def set_pod_chat_default(
     if not pod.reachable:
         raise DiscoveryRefreshError("Agent pod catalog is unavailable")
     if profile_id not in {option.profile_id for option in pod.models}:
-        raise ValueError("Chat profile is not advertised by this agent pod")
+        raise ValueError(
+            "Chat profile is not advertised and enabled for this agent pod"
+        )
     await deps.get_pod_chat_default_store().set(
         runtime_id, profile_id, updated_by=user.uid
     )
@@ -343,7 +369,9 @@ async def set_pod_chat_fallback(
         option.profile_id for option in pod.models if option.discovery_source_id is None
     }
     if profile_id not in manual:
-        raise ValueError("Fallback must be a manual chat profile from this agent pod")
+        raise ValueError(
+            "Fallback must be an enabled manual chat profile from this agent pod"
+        )
     await deps.get_pod_chat_default_store().set_fallback(
         runtime_id, profile_id, updated_by=user.uid
     )

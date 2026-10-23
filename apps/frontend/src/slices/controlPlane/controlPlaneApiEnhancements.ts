@@ -343,6 +343,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut: {
       invalidatesTags: [
         { type: "ControlPlaneCapability", id: "LIST" },
+        { type: "ControlPlanePodChatDefault", id: "LIST" },
         { type: "ControlPlaneAgentInstance", id: "ALL" },
         { type: "ControlPlaneAgentMarketplace", id: "LIST" },
         "ControlPlaneTeam",

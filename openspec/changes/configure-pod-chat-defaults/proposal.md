@@ -4,7 +4,7 @@
 
 ## What Changes
 
-- Add a platform-admin setting for the chat default of each configured agent pod, selected from that pod's advertised chat profiles.
+- Add a platform-admin setting for the chat default of each configured agent pod, selected from that pod's advertised and platform-enabled chat profiles.
 - Apply a saved pod default only at the pod-default routing level; retain the YAML default when no override exists or a saved discovered profile is unavailable.
 - Give each pod a manual-catalog fallback for a selected discovered profile that disappears; use the manual YAML default when no fallback override exists.
 - Present a "Model defaults" panel with "Agent pods" and "Platform" tabs. The pod tab shows default and fallback selectors per detected pod. The platform tab preserves the existing manual provider/name/settings form for its global override.

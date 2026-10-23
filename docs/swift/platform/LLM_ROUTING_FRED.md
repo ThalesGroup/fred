@@ -156,6 +156,12 @@ one administrative decision. Profile settings and profile ids remain pod-owned.
 For team policy, the control plane offers only profiles explicitly advertised
 as chat profiles. It never infers capability from a profile-id prefix.
 
+In Model defaults > Agent pods, the default selector offers only chat profiles
+whose models are enabled platform-wide for that pod. The fallback selector
+further limits choices to manual profiles. The API applies the same checks on
+save. An existing YAML or saved value remains visible when its model is no
+longer enabled, but it is not offered as a new selection.
+
 An administrator can edit a model's display name in the Models view after the
 model is advertised. The saved name is stored by model capability id and takes
 effect in the admin list and chat model picker without restarting a pod. It

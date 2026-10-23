@@ -2,7 +2,7 @@
 
 ### Requirement: Platform administrators can configure a chat default for each agent pod
 
-The Models administration view SHALL provide a "Model defaults" panel with "Agent pods" first and "Platform" second. The Platform tab SHALL retain the manual provider/name/settings form for the global forced binding and explain that it imposes one model on all managed exchanges. The Agent pods tab SHALL show each configured enabled agent pod and offer its advertised chat profiles in a pod-specific default selector and its manual chat profiles in a fallback selector. Each selector SHALL initially show that pod's effective YAML value when one exists; a saved admin override SHALL replace the displayed selection. Only platform administrators SHALL save or clear pod overrides. Saved pod settings SHALL persist without modifying the pod YAML.
+The Models administration view SHALL provide a "Model defaults" panel with "Agent pods" first and "Platform" second. The Platform tab SHALL retain the manual provider/name/settings form for the global forced binding and explain that it imposes one model on all managed exchanges. The Agent pods tab SHALL show each configured enabled agent pod and offer only advertised chat profiles whose model is platform-enabled in a pod-specific default selector; the fallback selector SHALL further limit choices to manual chat profiles. The API SHALL reject new selections for models without platform-wide activation. Each selector SHALL initially show that pod's effective YAML value when one exists; a saved admin override SHALL replace the displayed selection. An existing YAML or saved choice that is no longer activated SHALL remain visible as the effective setting but SHALL NOT be offered as a new choice. Only platform administrators SHALL save or clear pod overrides. Saved pod settings SHALL persist without modifying the pod YAML.
 
 #### Scenario: Different pod defaults
 
@@ -39,3 +39,9 @@ The Models administration view SHALL provide a "Model defaults" panel with "Agen
 - **GIVEN** a feature manager without platform-administrator permission or a profile absent from the selected pod
 - **WHEN** they try to save a pod default
 - **THEN** the API rejects the write and leaves the previous default intact
+
+#### Scenario: Inactive model is not selectable
+
+- **GIVEN** a pod advertises an activated model and an inactive model
+- **WHEN** an administrator opens the pod default or fallback selector
+- **THEN** only the activated model is offered, and a direct API write selecting the inactive model is rejected

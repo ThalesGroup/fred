@@ -160,6 +160,50 @@ describe("PlatformModelBindingsPanel chat-only surface", () => {
 });
 
 describe("PlatformModelBindingsPanel agent pod defaults", () => {
+  it("shows an inactive YAML default but offers only enabled models for default and fallback", () => {
+    h.pods = [
+      {
+        runtime_id: "fred-agents",
+        base_url: "http://fred-agents:8000",
+        reachable: true,
+        yaml_profile_id: "chat.manual.inactive",
+        override_profile_id: null,
+        effective_profile_id: "chat.manual.inactive",
+        effective_fallback_profile_id: "chat.manual.inactive",
+        models: [
+          { profile_id: "chat.manual.active", model_id: "manual-active", name: "active", display_name: "Active" },
+          {
+            profile_id: "discovered.chat.mistral.active",
+            model_id: "discovered-active",
+            name: "discovered",
+            display_name: "Discovered",
+            discovery_source_id: "mistral",
+          },
+        ],
+      },
+    ];
+    render(<PlatformModelBindingsPanel open onClose={() => {}} initialTab="pods" />);
+
+    expect(container.textContent).toContain("chat.manual.inactive");
+    const selects = container.querySelectorAll<HTMLButtonElement>('button[aria-haspopup="listbox"]');
+    expect(selects[0].textContent).toContain("rework.admin.platformModelBindings.chooseEnabledModel");
+    expect(selects[1].textContent).toContain("rework.admin.platformModelBindings.chooseEnabledManualModel");
+    click(selects[0]);
+    expect(Array.from(document.body.querySelectorAll('[role="option"]')).map((option) => option.textContent)).toEqual(
+      expect.arrayContaining([expect.stringContaining("Active"), expect.stringContaining("Discovered")]),
+    );
+    expect(
+      Array.from(document.body.querySelectorAll('[role="option"]'))
+        .map((option) => option.textContent)
+        .join(" "),
+    ).not.toContain("chat.manual.inactive");
+    click(selects[0]);
+    click(selects[1]);
+    const fallbackOptions = Array.from(document.body.querySelectorAll('[role="option"]'));
+    expect(fallbackOptions).toHaveLength(1);
+    expect(fallbackOptions[0].textContent).toContain("Active");
+  });
+
   it("offers only manual models as a fallback for the selected pod", async () => {
     h.pods = [
       {

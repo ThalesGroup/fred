@@ -195,13 +195,19 @@ The Models admin view SHALL separate manually declared models from models return
 
 ### Requirement: Pod defaults and global override are separate admin settings
 
-The Models view SHALL keep separate Catalog and Discovery tabs. Its Model defaults panel SHALL show Agent pods first and Platform second. Each pod SHALL offer its advertised chat profiles as a default and its manual chat profiles as a fallback. The default selector SHALL show the effective YAML value until an administrator saves an override. The Platform tab SHALL retain the manual provider/name/settings form for a global forced binding, which takes precedence over pod and team choices. Only platform administrators SHALL change either setting. When a reachable pod has no usable chat default and there is no global binding, opening Models SHALL show a required-choice modal each time, with an action to open Agent pods.
+The Models view SHALL keep separate Catalog and Discovery tabs. Its Model defaults panel SHALL show Agent pods first and Platform second. Each pod SHALL offer only its advertised chat profiles whose models are platform-enabled as defaults, and only enabled manual chat profiles as fallbacks. The API SHALL reject new selections for models without platform-wide activation. The default selector SHALL show the effective YAML value until an administrator saves an override; an existing inactive YAML or saved value SHALL remain visible as the effective setting without being offered as a new choice. The Platform tab SHALL retain the manual provider/name/settings form for a global forced binding, which takes precedence over pod and team choices. Only platform administrators SHALL change either setting. When a reachable pod has no usable chat default and there is no global binding, opening Models SHALL show a required-choice modal each time, with an action to open Agent pods.
 
 #### Scenario: Choose a discovered pod default
 
 - **GIVEN** a pod advertises a discovered chat profile
 - **WHEN** a platform administrator saves it as that pod's default
 - **THEN** managed turns on that pod use it when no higher-precedence choice exists, without changing other pods
+
+#### Scenario: Inactive model is not selectable as a pod default
+
+- **GIVEN** a pod advertises both an activated chat model and an inactive chat model
+- **WHEN** an administrator opens the pod default selector or submits an inactive profile directly to the API
+- **THEN** only the activated profile is offered and the API rejects the inactive selection
 
 #### Scenario: Global override
 
@@ -287,13 +293,13 @@ The Models admin view SHALL show each source's YAML and effective URL, last succ
 
 ### Requirement: A confirmed removed model falls back within its pod
 
-Each pod SHALL offer an optional fallback selected from its own manual chat profiles, independent of the global forced binding. If unset, the pod SHALL use its manual YAML chat default when available. On a managed turn, when the selected profile is confirmed removed by a successful source refresh, the pod SHALL resolve the selected manual profile from its current catalog, report the actual routed model, and keep the stored choice unchanged. A failed refresh, unknown profile, disabled model, or access denial SHALL NOT count as a confirmed removal. An unavailable fallback SHALL fail explicitly.
+Each pod SHALL offer an optional fallback selected from its own platform-enabled manual chat profiles, independent of the global forced binding. If unset, the pod SHALL use its manual YAML chat default when available. On a managed turn, when the selected profile is confirmed removed by a successful source refresh, the pod SHALL resolve the selected manual profile from its current catalog, report the actual routed model, and keep the stored choice unchanged. A failed refresh, unknown profile, disabled model, or access denial SHALL NOT count as a confirmed removal. An unavailable fallback SHALL fail explicitly.
 
 #### Scenario: Manual fallback selection
 
 - **GIVEN** manual and discovered chat models in the admin catalog
 - **WHEN** the administrator opens the fallback selector
-- **THEN** only that pod's manual chat profiles are offered and the chosen profile ID is saved
+- **THEN** only that pod's enabled manual chat profiles are offered and the chosen profile ID is saved
 
 #### Scenario: Selected model disappears
 
