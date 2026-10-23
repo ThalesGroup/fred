@@ -19,19 +19,10 @@
 // registered (every rendered card registers one), fetches the bytes with the live
 // bearer (usePptPreview), and draws every page vertically with react-pdf.
 //
-// pdf.js worker rule (this exact bug was fought before — see the Kea `pdfWorker.ts`
-// rationale): each `<Document>` mount MUST get its OWN module worker. A single
-// shared `GlobalWorkerOptions.workerPort` reused across remounts throws
-// "PDFWorker.fromPort - the worker is being destroyed" when a second preview opens
-// or the open deck is re-filled, because react-pdf's unmount `destroy()` races the
-// next mount on the same port. So we provision a FRESH worker per remount key (in a
-// useMemo, before the child `<Document>` reads GlobalWorkerOptions) and terminate
-// that exact instance on unmount / key change. We deliberately do NOT set a
-// module-level shared workerPort, and we do NOT rely on `workerSrc` alone (that
-// yields a "fake worker" that fails to import the bundled asset).
+// The pdf.js worker lifecycle lives in usePdfWorker.
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Document, Page, pdfjs } from "react-pdf";
+import { useEffect, useRef, useState } from "react";
+import { Document, Page } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -41,16 +32,13 @@ import { useSessionPptPreview } from "./useSessionPptPreview";
 import { usePptPreview } from "./usePptPreview";
 import PptxDownloadButton from "./PptxDownloadButton";
 import DeckSummaryButton from "./DeckSummaryButton";
+import { usePdfWorker } from "./usePdfWorker";
 import styles from "./PptPreviewPane.module.css";
 
 const PDF_SCALE = 0.95;
 
 /** react-pdf remount key when this conversation has no deck. */
 const NO_PREVIEW_KEY = "none";
-
-// Resolved by Vite to the bundled pdf.js worker asset. Kept as a URL (not a
-// `workerSrc` string) so we can spawn a fresh module Worker per Document mount.
-const pdfWorkerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url);
 
 export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
   const { t } = useTranslation();
@@ -76,79 +64,12 @@ export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
     return () => ro.disconnect();
   }, []);
 
-  // A re-fill (or switching decks) changes this key → react-pdf remounts the
-  // <Document> and we provision a fresh worker for it.
-  //
-  // The blob URL is part of it because pdf.js caches one PDFWorker per PORT: a
-  // second `getDocument` on a port whose worker is still tearing down throws
-  // "PDFWorker.fromPort - the worker is being destroyed". Keying on the deck alone
-  // let a new `file` reuse the port of the load it replaces, which is exactly that.
+  // A re-fill or another deck remounts the <Document> with a fresh worker. The blob
+  // URL is part of the key: pdf.js caches one PDFWorker per port, so a new `file`
+  // on the port of the load it replaces would hit a worker being destroyed.
   const remountKey = current ? `${current.preview_id}:${current.version}:${objectUrl ?? ""}` : NO_PREVIEW_KEY;
 
-  // Provision a fresh worker for THIS remount before the child <Document> reads
-  // GlobalWorkerOptions (useMemo runs during render, ahead of child effects). The
-  // effect below terminates the exact instance this run created.
-  const workerRef = useRef<Worker | null>(null);
-  useMemo(() => {
-    if (!objectUrl) {
-      // Nothing to load this round (no deck, or a re-fill in flight). Releasing
-      // the port is what lets the outgoing worker's cleanup see itself orphaned
-      // and terminate at once, instead of lingering until the pane unmounts.
-      pdfjs.GlobalWorkerOptions.workerPort = null;
-      workerRef.current = null;
-      return;
-    }
-    if (typeof Worker === "undefined") {
-      pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl.toString();
-      workerRef.current = null;
-      return;
-    }
-    const worker = new Worker(pdfWorkerUrl, { type: "module" });
-    workerRef.current = worker;
-    pdfjs.GlobalWorkerOptions.workerPort = worker;
-  }, [remountKey]);
-
-  // Tracks whether this component instance is currently mounted, independent of
-  // remountKey churn. StrictMode double-invokes effects (mount, cleanup, remount)
-  // synchronously in dev, so a cleanup can't tell "final unmount" from a StrictMode
-  // drill by itself — the drill flips this back to true before the deferred check
-  // below ever runs.
-  const isAliveRef = useRef(true);
-  useEffect(() => {
-    isAliveRef.current = true;
-    return () => {
-      isAliveRef.current = false;
-    };
-  }, []);
-
-  // Terminate the worker created for the current key once it is no longer the
-  // active port (the next key's useMemo has already swapped a fresh one in by
-  // the time this cleanup fires) — that one's orphaned, safe to terminate now.
-  // Otherwise this is either a StrictMode dev drill (about to remount) or the
-  // real final unmount (no next key coming, e.g. the pane's last preview closes).
-  // Unconditionally terminating here used to leave react-pdf waiting forever on a
-  // dead worker during the StrictMode drill (endless "Loading preview…"), so defer
-  // one tick: a genuine remount's isAliveRef flip, or another consumer's port swap,
-  // can win first; terminate only if neither happened by then.
-  useEffect(() => {
-    const worker = workerRef.current;
-    return () => {
-      if (!worker) return;
-      if (pdfjs.GlobalWorkerOptions.workerPort !== worker) {
-        worker.terminate();
-        return;
-      }
-      setTimeout(() => {
-        if (pdfjs.GlobalWorkerOptions.workerPort !== worker) {
-          // Some other consumer claimed the port in the meantime — orphaned now.
-          worker.terminate();
-        } else if (!isAliveRef.current) {
-          // Still nobody claimed it and this instance never came back — final unmount.
-          worker.terminate();
-        }
-      }, 0);
-    };
-  }, [remountKey]);
+  usePdfWorker(remountKey, Boolean(objectUrl));
 
   useEffect(() => {
     setNumPages(null);

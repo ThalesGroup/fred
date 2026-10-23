@@ -18,7 +18,7 @@
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Document, Page, pdfjs } from "react-pdf";
+import { Document, Page } from "react-pdf";
 import Icon from "@shared/atoms/Icon/Icon";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import Switch from "@shared/atoms/Switch/Switch";
@@ -27,13 +27,10 @@ import { Dialog } from "@shared/molecules/Dialog/Dialog.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 import type { OptionModel } from "@models/Option.model.ts";
 import type { Pattern, TemplateInventory } from "./api/pptBuilderCapabilityOpenApi";
+import { usePdfWorker } from "../ppt_filler/usePdfWorker";
 import { usePatternsPreview, type PreviewSource } from "./usePatternsPreview";
 import { hasAnalysisExclusions, kindsFor, SLIDE_KINDS, type OverridePatch, type SlideKind } from "./types";
 import styles from "./PatternReviewDialog.module.css";
-
-// A plain workerSrc (a fresh worker per load) is enough here: this dialog never
-// shares a page with the chat preview pane, which provisions its own port.
-const pdfWorkerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url);
 
 interface Props {
   open: boolean;
@@ -51,10 +48,7 @@ export function PatternReviewDialog({ open, inventory, previewSource, readOnly, 
   // A PDF that fetched but does not parse is as unavailable as a failed fetch.
   const [parseFailed, setParseFailed] = useState(false);
 
-  useMemo(() => {
-    pdfjs.GlobalWorkerOptions.workerPort = null;
-    pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl.toString();
-  }, []);
+  usePdfWorker(objectUrl ?? "none", Boolean(objectUrl));
 
   const patterns = inventory.patterns ?? [];
   const pageOf = useMemo(() => new Map(patterns.map((p, index) => [p.id, index + 1])), [patterns]);
@@ -148,7 +142,7 @@ export function PatternReviewDialog({ open, inventory, previewSource, readOnly, 
       maxWidth={1040}
     >
       {objectUrl ? (
-        <Document file={objectUrl} loading={null} error={null} onLoadError={() => setParseFailed(true)}>
+        <Document key={objectUrl} file={objectUrl} loading={null} error={null} onLoadError={() => setParseFailed(true)}>
           {body}
         </Document>
       ) : (
