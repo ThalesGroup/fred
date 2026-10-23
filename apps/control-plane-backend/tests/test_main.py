@@ -50,6 +50,7 @@ from control_plane_backend.config.models import (
 )
 from control_plane_backend.main import create_app
 from control_plane_backend.models.base import Base as CPBase
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.product import service as product_service
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
@@ -68,6 +69,7 @@ from control_plane_backend.sessions.store import (
     SessionMetadataRecord,
     SessionMetadataStore,
 )
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from control_plane_backend.teams.schemas import Team
 from control_plane_backend.users.schemas import PlatformRoleRelation, UserSummary
 from fred_core import (
@@ -2892,7 +2894,9 @@ async def test_agent_instance_store_create_overrides_sqlite_now_default(
         )
 
     try:
-        store = AgentInstanceStore(engine)
+        store = AgentInstanceStore(
+            engine, notifications=AsyncMock(spec=NotificationService)
+        )
         created = await store.create(
             AgentInstanceRecord(
                 agent_instance_id="inst-sqlite-now",
@@ -3195,7 +3199,9 @@ async def test_create_session_persists_source_runtime_id_from_live_instance(
 ) -> None:
     """Capture routing and name through the same transaction as session creation."""
     session_store = SessionMetadataStore(control_plane_sql_engine)
-    agent_store = AgentInstanceStore(control_plane_sql_engine)
+    agent_store = AgentInstanceStore(
+        control_plane_sql_engine, notifications=AsyncMock(spec=NotificationService)
+    )
     await agent_store.create(
         _make_record(agent_instance_id="instance-1", source_runtime_id="runtime-a")
     )
@@ -3499,6 +3505,7 @@ def _build_erasure_deps(
         get_task_service=lambda: task_service or _NoopTaskService(),  # type: ignore[arg-type,return-value]
         get_platform_bootstrap_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_runtime_http_client=_get_runtime_http_client,
+        get_notification_service=lambda: AsyncMock(spec=NotificationService),
     )
 
 
@@ -5990,6 +5997,10 @@ def _setup_update_team_test(
         async def transaction(self):
             yield None
 
+        @asynccontextmanager
+        async def advisory_lock(self, key, session=None):
+            yield
+
         async def get_by_team_id(self, team_id, session=None) -> TeamMetadata | None:
             return None
 
@@ -6055,15 +6066,16 @@ def _setup_update_team_test(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("starting", [JoiningMode.OPEN, JoiningMode.ON_REQUEST])
 async def test_update_team_downgrades_joining_mode_when_visibility_turns_private(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, starting: JoiningMode
 ) -> None:
-    """TEAM-10 (RFC §5.1.2): a PRIVATE team can never be OPEN. Setting
-    visibility=private on a team that's currently OPEN must silently
-    downgrade joining_mode to invite_only, not reject the request."""
+    """A PRIVATE team can be neither OPEN nor ON_REQUEST. Setting
+    visibility=private on such a team must silently downgrade joining_mode to
+    invite_only, not reject the request."""
     fake_metadata_store, rebac = _setup_update_team_test(
         monkeypatch,
-        starting_joining_mode=JoiningMode.OPEN,
+        starting_joining_mode=starting,
         starting_visibility=TeamVisibility.PUBLIC,
     )
 
@@ -6100,12 +6112,16 @@ async def test_update_team_downgrades_joining_mode_when_open_requested_on_privat
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        resp = await client.patch(
-            "/control-plane/v1/teams/thales", json={"joining_mode": "open"}
-        )
+        for requested in ("open", "on_request"):
+            resp = await client.patch(
+                "/control-plane/v1/teams/thales", json={"joining_mode": requested}
+            )
+            assert resp.status_code == 200
 
-    assert resp.status_code == 200
-    assert fake_metadata_store.calls == [("thales", {"joining_mode": "invite_only"})]
+    assert fake_metadata_store.calls == [
+        ("thales", {"joining_mode": "invite_only"}),
+        ("thales", {"joining_mode": "invite_only"}),
+    ]
     # visibility wasn't part of this request, so no ReBAC sync call is expected.
     assert rebac.revoked_team_ids == []
     assert rebac.granted_team_ids == []
@@ -6174,6 +6190,8 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
     mock_config.scheduler.enabled = False
 
     fake_deps = TeamServiceDependencies(
+        get_notification_service=lambda: AsyncMock(spec=NotificationService),
+        get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
         configuration=mock_config,
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
@@ -6254,6 +6272,8 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
     mock_config.scheduler.enabled = False
 
     fake_deps = TeamServiceDependencies(
+        get_notification_service=lambda: AsyncMock(spec=NotificationService),
+        get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
         configuration=mock_config,
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
@@ -6590,6 +6610,8 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
     fake_scheduler = type("SchedulerCfg", (), {"enabled": True})()
     fake_configuration = type("Cfg", (), {"scheduler": fake_scheduler})()
     fake_team_deps = TeamServiceDependencies(
+        get_notification_service=lambda: AsyncMock(spec=NotificationService),
+        get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
         configuration=cast(Any, fake_configuration),
         rebac=cast(Any, fake_rebac),
         scheduler_backend=SchedulerBackend.MEMORY,
@@ -6687,6 +6709,7 @@ async def test_lifecycle_run_once_executes_in_memory_backend(
             # so this is the field's own default — the endpoint itself needed
             # no change to carry it.
             "wiki_proposals": {"scanned": 0, "rejected": 0, "dry_run_actions": 0},
+            "notifications": {"deleted": 0},
         },
     }
 

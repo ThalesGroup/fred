@@ -25,7 +25,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import control_plane_backend.agent_marketplace.service as marketplace
 import control_plane_backend.product.agent_copy as agent_copy
@@ -56,7 +56,14 @@ from control_plane_backend.models.agent_marketplace_models import (
     AgentMarketplaceImportRow,
     AgentMarketplaceLikeRow,
 )
+from control_plane_backend.notifications.schemas import (
+    AgentMarketplaceRemovedNotification,
+    AgentMarketplaceRemovedPayload,
+)
+from control_plane_backend.notifications.service import NotificationService
+from control_plane_backend.notifications.store import NotificationStore
 from control_plane_backend.product.schemas import ManagedAgentInstanceSummary
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from fred_core import (
     AuthorizationError,
     KeycloakUser,
@@ -73,7 +80,7 @@ from fred_core.teams.metadata_store import (
     TeamMetadataStore,
     TeamVisibility,
 )
-from sqlalchemy import event, func, select
+from sqlalchemy import event, func, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 from test_capability_selection_1974 import _DEMO_ENTRY, _template_payload
 
@@ -118,7 +125,13 @@ class _Rebac:
     def _has(self, uid: str, permission: Any, resource_id: str) -> bool:
         if isinstance(permission, OrganizationPermission):
             return uid in self.platform_admins
-        return permission in self.perms.get(resource_id, {}).get(uid, set())
+        held = self.perms.get(resource_id, {}).get(uid, set())
+        if permission == TeamPermission.CAN_READ_MEMEBERS:
+            return bool(held)  # any team permission makes a member here
+        return permission in held
+
+    async def has_permission(self, subject, permission, resource, **_) -> bool:
+        return self._has(subject.id, permission, resource.id)
 
     async def has_user_permission(self, user, permission, resource_id, **_) -> bool:
         return self._has(user.uid, permission, resource_id)
@@ -197,6 +210,7 @@ class _Env:
     usable: dict[str, set[str] | None]
     public_template: list[bool]
     template_kwargs: dict[str, Any]
+    notifications: NotificationService
 
 
 @pytest_asyncio.fixture
@@ -226,9 +240,12 @@ async def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[
     await settings.set(
         agents_publishing_enabled=True, agents_publish_quota=2, updated_by=None
     )
-    agents = AgentInstanceStore(engine)
-    market = AgentMarketplaceStore(engine)
     rebac = _Rebac()
+    notifications = NotificationService(
+        NotificationStore(engine), get_rebac=lambda: cast(Any, rebac)
+    )
+    agents = AgentInstanceStore(engine, notifications=notifications)
+    market = AgentMarketplaceStore(engine)
     pod = _Pod()
     client = httpx.AsyncClient(transport=httpx.MockTransport(pod.handle))
     usable: dict[str, set[str] | None] = {}
@@ -273,6 +290,8 @@ async def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[
         get_agent_marketplace_store=lambda: market,
         get_agent_instance_store=lambda: agents,
         get_kpi_writer=None,
+        get_notification_service=lambda: notifications,
+        get_team_join_request_store=lambda: TeamJoinRequestStore(engine),
     )
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
@@ -293,6 +312,7 @@ async def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[
         get_team_metadata_store=lambda: teams,
         get_runtime_http_client=lambda: client,
         get_kpi_writer=lambda: None,
+        get_notification_service=lambda: notifications,
     )
     try:
         yield _Env(
@@ -308,6 +328,7 @@ async def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[
             usable=usable,
             public_template=public_template,
             template_kwargs=template_kwargs,
+            notifications=notifications,
         )
     finally:
         await client.aclose()
@@ -1466,3 +1487,299 @@ async def test_routes_answer_with_the_marketplace_error_code(
     assert refused.json()["detail"]["code"] == "marketplace_personal_space"
     assert (listed.status_code, listed.json()) == (200, [])
     assert missing.status_code == 404
+
+
+# --- publisher notifications --------------------------------------------------------
+
+_EDITOR_2 = "editor-2"
+
+
+async def _save(env: _Env, uid: str, description: str, agent_id: str = "agent-1"):
+    from control_plane_backend.product.schemas import UpdateAgentInstanceRequest
+
+    return await product_service.update_agent_instance(
+        team_id=_TEAM,
+        agent_instance_id=agent_id,
+        request=UpdateAgentInstanceRequest(description=description),
+        deps=env.deps,
+        user=_user(uid),
+    )
+
+
+async def _inbox(env: _Env, uid: str):
+    page = await env.notifications.list_page(_user(uid), limit=50, before=None)
+    return page.items
+
+
+def _removal(item: Any) -> AgentMarketplaceRemovedPayload:
+    assert isinstance(item, AgentMarketplaceRemovedNotification)
+    return item.payload
+
+
+@pytest_asyncio.fixture
+async def editors(env, monkeypatch: pytest.MonkeyPatch):
+    async def _usable(*_args, **_kwargs) -> bool:
+        return True
+
+    monkeypatch.setattr(product_service, "can_team_use_capability", _usable)
+    env.rebac.perms[_TEAM][_EDITOR_2] = set(_EDITOR_PERMS)
+    return env
+
+
+@pytest.mark.asyncio
+async def test_publish_and_republish_record_the_publisher(editors) -> None:
+    env = editors
+    await _agent(env)
+    await _publish(env)
+    assert (await env.market.get_for_agent("agent-1", _TEAM)).published_by == _EDITOR
+
+    await _publish(env, uid=_EDITOR_2, expected_version=1)
+    assert (await env.market.get_for_agent("agent-1", _TEAM)).published_by == _EDITOR_2
+
+
+@pytest.mark.asyncio
+async def test_another_editors_save_asks_the_publisher_to_republish_once(
+    editors,
+) -> None:
+    env = editors
+    await _agent(env)
+    await _publish(env)
+
+    await _save(env, _EDITOR_2, "First change")
+    await _save(env, _EDITOR_2, "Second change")
+
+    [notification] = await _inbox(env, _EDITOR)
+    assert notification.type == "agent.republish_needed"
+    assert notification.payload.editor_name == _EDITOR_2
+    assert notification.payload.agent_name == "Analyst"
+    assert notification.payload.team_name == "Alpha"
+    assert (await env.notifications.summary(_user(_EDITOR))).unseen_count == 1
+    assert await _inbox(env, _EDITOR_2) == []
+
+
+@pytest.mark.asyncio
+async def test_no_republish_request_for_the_publisher_a_no_op_or_a_legacy_entry(
+    editors,
+) -> None:
+    env = editors
+    await _agent(env)
+    await _publish(env)
+
+    await _save(env, _EDITOR, "The publisher's own change")
+    await _save(env, _EDITOR_2, "The publisher's own change")  # nothing changes
+    assert await _inbox(env, _EDITOR) == []
+
+    async with env.engine.begin() as conn:
+        await conn.execute(update(AgentMarketplaceEntryRow).values(published_by=None))
+    await _save(env, _EDITOR_2, "A change to a legacy entry")
+    assert await _inbox(env, _EDITOR) == []
+
+
+@pytest.mark.asyncio
+async def test_a_failing_notification_store_never_fails_the_save(
+    editors, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env = editors
+    await _agent(env)
+    await _publish(env)
+
+    async def _down(*_args, **_kwargs):
+        raise RuntimeError("database down")
+
+    monkeypatch.setattr(NotificationStore, "upsert", _down)
+
+    saved = await _save(env, _EDITOR_2, "Saved anyway")
+
+    assert saved is not None and saved.description == "Saved anyway"
+
+
+@pytest.mark.asyncio
+async def test_republishing_resolves_the_request(editors) -> None:
+    env = editors
+    await _agent(env)
+    await _publish(env)
+    await _save(env, _EDITOR_2, "A change")
+    await _publish(env, uid=_EDITOR_2, expected_version=1)
+
+    [handled] = await _inbox(env, _EDITOR)
+    assert handled.handled_by_name == _EDITOR_2
+    assert handled.handled_outcome == "republished"
+
+    # The new publisher is now the one asked, and their own republish clears it.
+    await _save(env, _EDITOR, "Another change")
+    assert len(await _inbox(env, _EDITOR_2)) == 1
+    await _publish(env, uid=_EDITOR_2, expected_version=2)
+    assert await _inbox(env, _EDITOR_2) == []
+
+
+@pytest.mark.asyncio
+async def test_platform_admin_removal_tells_the_publisher_with_the_reason(
+    editors,
+) -> None:
+    env = editors
+    await _agent(env)
+    await _publish(env)
+    await _save(env, _EDITOR_2, "A change")
+
+    await _unpublish(env, 1, uid=_PLATFORM, reason="Duplicate entry")
+
+    by_type = {item.type: item for item in await _inbox(env, _EDITOR)}
+    removed = _removal(by_type["agent.marketplace_removed"])
+    assert removed.reason == "removed_by_platform_admin"
+    assert removed.message == "Duplicate entry"
+    assert removed.team_name == "Alpha"
+    assert by_type["agent.republish_needed"].handled_outcome == "removed"
+
+
+@pytest.mark.asyncio
+async def test_a_publisher_who_left_the_team_is_told_nothing(editors) -> None:
+    env = editors
+    await _agent(env)
+    await _publish(env)
+    del env.rebac.perms[_TEAM][_EDITOR]
+
+    await _save(env, _EDITOR_2, "A change")
+    await _unpublish(env, 1, uid=_PLATFORM, reason="Duplicate entry")
+
+    assert await _inbox(env, _EDITOR) == []
+
+
+@pytest.mark.asyncio
+async def test_a_publisher_who_can_no_longer_edit_the_agents_is_told_nothing(
+    editors,
+) -> None:
+    env = editors
+    await _agent(env)
+    await _publish(env)
+    # Still a member, no longer an editor: they could not republish.
+    env.rebac.perms[_TEAM][_EDITOR] = {TeamPermission.CAN_USE_TEAM_AGENTS}
+
+    await _save(env, _EDITOR_2, "A change")
+    await _unpublish(env, 1, uid=_PLATFORM, reason="Duplicate entry")
+
+    assert await _inbox(env, _EDITOR) == []
+
+
+@pytest.mark.asyncio
+async def test_removal_by_the_team_notifies_nobody(editors) -> None:
+    env = editors
+    await _agent(env)
+    await _publish(env)
+
+    await _unpublish(env, 1, uid=_EDITOR_2)
+
+    assert await _inbox(env, _EDITOR) == []
+
+
+@pytest.mark.asyncio
+async def test_automatic_removal_tells_the_publisher(
+    editors, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from control_plane_backend.teams import service as team_service
+    from control_plane_backend.teams.schemas import UpdateTeamRequest
+
+    env = editors
+    await _agent(env)
+    await _publish(env)
+
+    async def _validated(user, team_id, rebac, permissions, deps):
+        return await env.teams.get_by_team_id(team_id), None
+
+    async def _projection(user, metadata, deps, token):
+        return metadata
+
+    monkeypatch.setattr(team_service, "_validate_team_and_check_permission", _validated)
+    monkeypatch.setattr(team_service, "_build_team_with_permissions", _projection)
+    await team_service.update_team(
+        _user(_ADMIN),
+        _TEAM,
+        UpdateTeamRequest(visibility=TeamVisibility.PRIVATE),
+        env.deps.team_dependencies,
+    )
+
+    [removed] = await _inbox(env, _EDITOR)
+    assert _removal(removed).reason == "team_private"
+
+
+@pytest.mark.asyncio
+async def test_bulk_switch_off_emits_one_row_per_entry_in_one_insert(
+    editors, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from control_plane_backend.marketplace_settings import service as settings_service
+    from control_plane_backend.marketplace_settings.schemas import (
+        SetTeamMarketplaceSettingsRequest,
+    )
+
+    env = editors
+    await _agent(env)
+    await _agent(env, "agent-2", name="Writer")
+    await _publish(env)
+    await _publish(env, "agent-2", uid=_EDITOR_2)
+    inserts: list[int] = []
+    upsert = NotificationStore.upsert
+
+    async def _counting(store: NotificationStore, drafts):
+        inserts.append(len(drafts))
+        return await upsert(store, drafts)
+
+    monkeypatch.setattr(NotificationStore, "upsert", _counting)
+
+    await settings_service.set_team_marketplace_settings(
+        user=_user(_PLATFORM),
+        team_id=_TEAM,
+        request=SetTeamMarketplaceSettingsRequest(
+            agents_publishing_enabled=False, agents_publish_quota=None
+        ),
+        deps=env.deps.team_dependencies,
+    )
+
+    assert inserts == [2]
+    for uid in (_EDITOR, _EDITOR_2):
+        [removed] = await _inbox(env, uid)
+        assert _removal(removed).reason == "switch_off"
+
+
+@pytest.mark.asyncio
+async def test_deactivation_by_another_editor_tells_the_publisher(editors) -> None:
+    env = editors
+    await _agent(env)
+    await _publish(env)
+
+    await env.agents.update("agent-1", _TEAM, enabled=False, updated_by=_EDITOR_2)
+    await env.agents.update("agent-1", _TEAM, enabled=True, updated_by=_EDITOR)
+    await _publish(env, expected_version=2)
+    await env.agents.update("agent-1", _TEAM, enabled=False, updated_by=_EDITOR)
+
+    [removed] = await _inbox(env, _EDITOR)
+    assert _removal(removed).reason == "deactivated"
+
+
+@pytest.mark.asyncio
+async def test_agent_deletion_resolves_the_request_and_sends_no_removal(
+    editors,
+) -> None:
+    env = editors
+    await _agent(env)
+    await _publish(env)
+    await _save(env, _EDITOR_2, "A change")
+
+    await env.agents.delete("agent-1", _TEAM, actor_uid=_EDITOR_2)
+
+    [request] = await _inbox(env, _EDITOR)
+    assert request.type == "agent.republish_needed"
+    assert request.handled_outcome == "removed"
+
+
+@pytest.mark.asyncio
+async def test_team_deletion_deletes_the_teams_notifications(editors) -> None:
+    from control_plane_backend.teams.service import delete_team
+
+    env = editors
+    await _agent(env)
+    await _publish(env)
+    await _save(env, _EDITOR_2, "A change")
+    assert len(await _inbox(env, _EDITOR)) == 1
+
+    await delete_team(_user(_PLATFORM), _TEAM, env.deps.team_dependencies)
+
+    assert await _inbox(env, _EDITOR) == []

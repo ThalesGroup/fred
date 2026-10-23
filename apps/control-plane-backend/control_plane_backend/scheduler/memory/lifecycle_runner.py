@@ -20,10 +20,12 @@ from functools import partial
 from control_plane_backend.scheduler.dependencies import LifecycleActionDependencies
 from control_plane_backend.scheduler.lifecycle_runner import (
     run_lifecycle_manager_once,
+    run_notification_expiry_once,
     run_wiki_proposal_lifecycle_once,
 )
 from control_plane_backend.scheduler.temporal.activities import (
     delete_conversation,
+    expire_notifications_and_join_requests,
     list_conversation_candidates,
     list_wiki_proposal_candidates,
     reject_wiki_proposal,
@@ -91,6 +93,16 @@ async def run_lifecycle_manager_once_in_memory(
         input_data=input_data,
         list_candidates=list_wiki_candidates_executor,
         reject_proposal=reject_wiki_proposal_executor,
+        logger=logger,
+        log_prefix="[LIFECYCLE][IN_MEMORY]",
+    )
+    result.notifications = await run_notification_expiry_once(
+        input_data=input_data,
+        expire=(
+            partial(expire_notifications_and_join_requests, deps=deps)
+            if deps is not None
+            else expire_notifications_and_join_requests
+        ),
         logger=logger,
         log_prefix="[LIFECYCLE][IN_MEMORY]",
     )

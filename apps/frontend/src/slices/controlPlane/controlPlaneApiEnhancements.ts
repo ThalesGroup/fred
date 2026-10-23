@@ -98,6 +98,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "TeamJoinLink",
     "PlatformAccessJoiners",
     "ControlPlaneAnnouncement",
+    "ControlPlaneNotification",
+    "ControlPlaneNotificationTypes",
+    "ControlPlaneTeamJoinRequest",
   ],
   endpoints: {
     validateGcuControlPlaneV1GcuPost: { invalidatesTags: ["PlatformAccess"] },
@@ -191,6 +194,30 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     withdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDelete: {
       invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    // In-app notifications: the badge count and the list carry separate ids so
+    // marking seen refreshes the badge without refetching the open list.
+    getNotificationSummaryControlPlaneV1NotificationsSummaryGet: {
+      providesTags: [{ type: "ControlPlaneNotification" as const, id: "SUMMARY" }],
+    },
+    listNotificationsControlPlaneV1NotificationsGet: {
+      providesTags: [{ type: "ControlPlaneNotification" as const, id: "LIST" }],
+    },
+    markNotificationsSeenControlPlaneV1NotificationsSeenPost: {
+      invalidatesTags: [{ type: "ControlPlaneNotification" as const, id: "SUMMARY" }],
+    },
+    deleteNotificationControlPlaneV1NotificationsNotificationIdDelete: {
+      invalidatesTags: ["ControlPlaneNotification"],
+    },
+    clearNotificationsControlPlaneV1NotificationsDelete: {
+      invalidatesTags: ["ControlPlaneNotification"],
+    },
+    // Turning a type off hides its rows, so the caller's own list refreshes too.
+    listNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGet: {
+      providesTags: ["ControlPlaneNotificationTypes"],
+    },
+    setNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePut: {
+      invalidatesTags: ["ControlPlaneNotificationTypes", "ControlPlaneNotification"],
     },
     // Team wiki (WIKI-01/02). One tag per team carries the tree; one per PAGE ID
     // carries a page's content and its history.
@@ -505,6 +532,13 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
               { type: "ControlPlaneAgentMarketplace" as const, id: "LIST" },
             ]
           : []),
+        // Leaving on_request answers the pending requests and their admin tiles.
+        ...(arg.updateTeamRequest.visibility || arg.updateTeamRequest.joining_mode
+          ? [
+              { type: "ControlPlaneTeamJoinRequest" as const, id: `team-${arg.teamId}` },
+              "ControlPlaneNotification" as const,
+            ]
+          : []),
       ],
     },
     // Platform admin edit: name, description and admins of any team.
@@ -530,6 +564,41 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         "PlatformAccess",
         { type: "ControlPlaneTeam", id: arg.teamId },
         { type: "ControlPlaneTeam", id: "LIST" },
+      ],
+    },
+    // Join requests: MINE is the caller's own list (team cards), `team-<id>`
+    // the admins' list. A decision changes the members and the admins' tiles.
+    listMyTeamJoinRequestsControlPlaneV1TeamsJoinRequestsMineGet: {
+      providesTags: [{ type: "ControlPlaneTeamJoinRequest" as const, id: "MINE" }],
+    },
+    createTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneTeamJoinRequest", id: "MINE" },
+        { type: "ControlPlaneTeamJoinRequest", id: `team-${arg.teamId}` },
+      ],
+    },
+    cancelMyTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsMineDelete: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneTeamJoinRequest", id: "MINE" },
+        { type: "ControlPlaneTeamJoinRequest", id: `team-${arg.teamId}` },
+      ],
+    },
+    listTeamJoinRequestsControlPlaneV1TeamsTeamIdJoinRequestsGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneTeamJoinRequest" as const, id: `team-${arg.teamId}` }],
+    },
+    acceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPost: {
+      invalidatesTags: (_, __, arg) => [
+        "PlatformAccess",
+        "ControlPlaneNotification",
+        { type: "ControlPlaneTeamJoinRequest", id: `team-${arg.teamId}` },
+        { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+      ],
+    },
+    refuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePost: {
+      invalidatesTags: (_, __, arg) => [
+        "ControlPlaneNotification",
+        { type: "ControlPlaneTeamJoinRequest", id: `team-${arg.teamId}` },
       ],
     },
     uploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: {
@@ -565,6 +634,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         "PlatformAccess",
         { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneTeam", id: arg.teamId },
+        // Adding someone closes their join request and its admin tiles.
+        { type: "ControlPlaneTeamJoinRequest", id: `team-${arg.teamId}` },
+        "ControlPlaneNotification",
       ],
     },
     grantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPost: {
@@ -583,9 +655,11 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneTeam", id: arg.teamId },
       ],
     },
+    // Leaving a team must also refresh the leaver's own join requests (team cards).
     removeTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDelete: {
       invalidatesTags: (_, __, arg) => [
         "PlatformAccess",
+        { type: "ControlPlaneTeamJoinRequest", id: "MINE" },
         { type: "ControlPlaneTeamMember", id: `${arg.teamId}-${arg.userId}` },
         { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneTeam", id: arg.teamId },
@@ -986,6 +1060,14 @@ export const {
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation: useUpdateTeamMutation,
   useEditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchMutation: useEditTeamRegistryMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation: useJoinTeamMutation,
+  useListMyTeamJoinRequestsControlPlaneV1TeamsJoinRequestsMineGetQuery: useMyTeamJoinRequestsQuery,
+  useCreateTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsPostMutation: useAskToJoinTeamMutation,
+  useCancelMyTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsMineDeleteMutation: useCancelTeamJoinRequestMutation,
+  useListTeamJoinRequestsControlPlaneV1TeamsTeamIdJoinRequestsGetQuery: useTeamJoinRequestsQuery,
+  useAcceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPostMutation:
+    useAcceptTeamJoinRequestMutation,
+  useRefuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePostMutation:
+    useRefuseTeamJoinRequestMutation,
   useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation: useUploadTeamAvatarMutation,
   useUploadMyAvatarControlPlaneV1UsersMeAvatarPostMutation: useUploadUserAvatarMutation,
   useDeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteMutation: useDeleteUserAvatarMutation,
@@ -1165,6 +1247,15 @@ export const {
     useLazyPatchNotePackageQuery,
   useListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery:
     useAnnouncementExposureHistoryQuery,
+  // In-app notifications.
+  useGetNotificationSummaryControlPlaneV1NotificationsSummaryGetQuery: useNotificationSummaryQuery,
+  useListNotificationsControlPlaneV1NotificationsGetQuery: useNotificationsQuery,
+  useMarkNotificationsSeenControlPlaneV1NotificationsSeenPostMutation: useMarkNotificationsSeenMutation,
+  useDeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteMutation: useDeleteNotificationMutation,
+  useClearNotificationsControlPlaneV1NotificationsDeleteMutation: useClearNotificationsMutation,
+  useListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetQuery: useNotificationTypesQuery,
+  useSetNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePutMutation:
+    useSetNotificationTypeMutation,
   // Team administrator charter acceptance.
   useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation: useAcceptTeamAdminCharterMutation,
   useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery: useGetTeamAdminCharterAcceptanceQuery,

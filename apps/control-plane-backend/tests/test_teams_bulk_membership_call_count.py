@@ -47,8 +47,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from _rebac_test_doubles import CountingRebacEngine
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.teams import service as teams_service
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from control_plane_backend.teams.schemas import UserTeamRelation
 from control_plane_backend.teams.service import _enrich_teams_with_membership
 from control_plane_backend.users.schemas import UserSummary
@@ -75,6 +77,8 @@ def _fake_deps() -> TeamServiceDependencies:
             raise AssertionError("no banner in this test")
 
     return TeamServiceDependencies(
+        get_notification_service=lambda: AsyncMock(spec=NotificationService),
+        get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
         configuration=mock_config,
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),

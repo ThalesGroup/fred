@@ -2299,7 +2299,10 @@
       "home": "Home",
       "marketplace": "Marketplace",
       "helpCenter": "Help Center",
-      "adminConsole": "Technical console"
+      "adminConsole": "Technical console",
+      "notifications": "Notifications",
+      "notificationsUnseen_one": "Notifications, {{count}} unseen",
+      "notificationsUnseen_other": "Notifications, {{count}} unseen"
     },
     "profileMenu": {
       "contactSupport": "Contact support",
@@ -2589,7 +2592,8 @@
           "platformPrompt": "Platform prompts",
           "announcements": "Announcements",
           "uiSettings": "User interface",
-          "marketplaces": "Marketplaces"
+          "marketplaces": "Marketplaces",
+          "notifications": "Notifications"
         },
         "title": "Administration spaces"
       },
@@ -2912,8 +2916,23 @@
     },
     "teamCard": {
       "join": "Join",
+      "joinFailed": "You could not join the team",
       "inviteOnly": "Invite only",
-      "memberCount": "{{count}} members"
+      "memberCount": "{{count}} members",
+      "askToJoin": "Ask to join",
+      "requestSent": "Request sent",
+      "cancelRequest": "Cancel request",
+      "cancelFailed": "Your request could not be cancelled",
+      "requestDeclined": "Request declined",
+      "askAgainAt": "Ask again from {{date}}",
+      "askDialog": {
+        "title": "Ask to join {{team}}",
+        "confirm": "Send the request",
+        "messageLabel": "Message (optional)",
+        "messageDescription": "Tell the team admins why you would like to join. Only they read it.",
+        "failed": "Your request could not be sent",
+        "failedDetail": "Try again in a moment."
+      }
     },
     "teamDescription": {
       "label": "Team description",
@@ -2943,6 +2962,13 @@
       "warnings": {
         "team_analyst": "Technical role: it also opens access to the limited conversation slices those evaluation datasets are built from. Grant it deliberately."
       }
+    },
+    "teamMemberGate": {
+      "title": "You are not a member of this team",
+      "message": "Only its members can open this team's pages.",
+      "pending": "Your request to join this team is waiting for an answer.",
+      "declined": "Your last request to join this team was declined. You can ask again from {{date}}.",
+      "browseTeams": "Browse teams"
     },
     "teamAdminCharter": {
       "accept": "Accept",
@@ -3001,7 +3027,15 @@
           "lastName": "Last name",
           "role": "Role"
         },
-        "title": "Team members"
+        "title": "Team members",
+        "joinRequests": {
+          "title": "Join requests",
+          "sentOn": "Asked on {{date}}",
+          "refusedOn": "Refused on {{date}}",
+          "accept": "Accept",
+          "refuse": "Refuse",
+          "acceptAnyway": "Accept anyway"
+        }
       },
       "navigation": {
         "leaveTeam": "Leave team",
@@ -3061,11 +3095,12 @@
         },
         "joiningMode": {
           "label": "Joining mode",
-          "support": "Users can join your team freely or by invitation only.",
+          "support": "Users can join your team freely, ask the team admins to let them in, or join by invitation only.",
           "open": "Open",
           "inviteOnly": "Invite only",
           "manual": "Manual only",
-          "privateSupport": "A private team is not listed on the marketplace: a team admin adds its members or shares an invite link."
+          "privateSupport": "A private team is not listed on the marketplace: a team admin adds its members or shares an invite link.",
+          "onRequest": "On request"
         },
         "visibility": {
           "label": "Team visibility",
@@ -4301,6 +4336,76 @@
         "marketplace_entry_not_found": "This agent is not published.",
         "marketplace_runtime_unavailable": "The service running this agent cannot be reached. The published version is unchanged; try again later.",
         "marketplace_capability_not_exportable": "The capability \"{{capability}}\" cannot be prepared for the marketplace. The published version is unchanged."
+      }
+    },
+    "notifications": {
+      "title": "Notifications",
+      "clearAll": "Clear all",
+      "close": "Close notifications",
+      "loadMore": "Show more",
+      "loadError": "Your notifications could not be loaded.",
+      "dismiss": "Dismiss notification",
+      "empty": {
+        "title": "No notifications",
+        "description": "You will be told here when something needs you."
+      },
+      "handled": "Handled",
+      "handledBy": "Handled by {{name}}",
+      "actions": {
+        "view": "View",
+        "openAgent": "Open the agent",
+        "accept": "Accept",
+        "refuse": "Refuse",
+        "openTeam": "Open the team"
+      },
+      "types": {
+        "republishNeeded": {
+          "name": "Published agent changed",
+          "description": "Sent to the person who published an agent to the marketplace when another editor changes it, so they can republish it.",
+          "title": "Published agent changed",
+          "body": "{{editor}} changed “{{agent}}” in {{team}}. Republish it to update the marketplace version.",
+          "bodyNoTeam": "{{editor}} changed “{{agent}}”. Republish it to update the marketplace version.",
+          "handledRemoved": "Resolved: the agent left the marketplace"
+        },
+        "marketplaceRemoved": {
+          "name": "Agent removed from the marketplace",
+          "description": "Sent to the person who published an agent when it leaves the marketplace without their action.",
+          "title": "Agent removed from the marketplace",
+          "body": "“{{agent}}” ({{team}}) is no longer on the marketplace. {{reason}}",
+          "bodyNoTeam": "“{{agent}}” is no longer on the marketplace. {{reason}}"
+        },
+        "unknown": {
+          "title": "Notification"
+        },
+        "joinRequested": {
+          "name": "Request to join a team",
+          "description": "Sent to a team’s administrators when someone asks to join it; requests stay in Members > Join requests.",
+          "title": "{{name}} asks to join {{team}}",
+          "acceptedBy": "Accepted by {{name}}",
+          "refusedBy": "Refused by {{name}}"
+        },
+        "joinRequestAnswered": {
+          "name": "Answer to a join request",
+          "description": "Sent to the person who asked to join a team once an administrator accepts or refuses.",
+          "acceptedTitle": "You joined {{team}}",
+          "acceptedBody": "A team admin accepted your request.",
+          "refusedTitle": "Request to join {{team}} declined",
+          "refusedBody": "A team admin declined your request. You can ask again in 24 hours."
+        }
+      },
+      "actionFailed": "The action could not be completed."
+    },
+    "notificationSettings": {
+      "title": "Notifications",
+      "subtitle": "Choose which notifications the platform sends. The choice applies to every team and every user.",
+      "hint": "Turning a type off hides the notifications of that type for everyone, until it is turned back on.",
+      "loadFailed": "The notification settings could not be loaded.",
+      "saveFailed": "The notification setting could not be saved.",
+      "toggleLabel": "Send “{{name}}” notifications",
+      "turnOff": {
+        "title": "Turn off “{{name}}”?",
+        "message": "The notifications of this type will be hidden for everyone until the type is turned back on. Nothing is deleted.",
+        "confirm": "Turn off"
       }
     }
   },

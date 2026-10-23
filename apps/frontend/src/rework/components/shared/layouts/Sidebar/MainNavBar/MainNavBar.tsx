@@ -21,7 +21,7 @@ import type { IconType } from "@shared/utils/Type.ts";
 // Medium button footprint (40px) but with the `small` tier's 1.25rem glyph.
 // `--icon-size` is set on `.btn-medium`, so an inline override (higher
 // precedence than the class) is what shrinks just the icon, not the hit area.
-const ICON_STYLE = { "--icon-size": "1.25rem" } as CSSProperties;
+export const ICON_STYLE = { "--icon-size": "1.25rem" } as CSSProperties;
 import { useTranslation } from "react-i18next";
 import { useHref, useLocation, useNavigate } from "react-router-dom";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";

@@ -31,14 +31,17 @@ primitives directly (no HTTP layer) so the invariants are unambiguous:
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from contextlib import asynccontextmanager
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.scheduler.policies.policy_models import (
     ConversationPolicyCatalog,
 )
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from control_plane_backend.teams.schemas import (
     GrantTeamMemberRoleRequest,
     TeamAdminConstraintError,
@@ -297,6 +300,8 @@ def _deps(
     config.app.personal_max_resources_storage_size = 5368709120
     store = _FakeMetadataStore(team_id, publishing_enabled=publishing_enabled)
     return TeamServiceDependencies(
+        get_notification_service=lambda: AsyncMock(spec=NotificationService),
+        get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
         configuration=config,
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),
@@ -381,6 +386,25 @@ async def test_revoke_team_member_role_removes_only_that_role() -> None:
         UserTeamRelation.TEAM_ADMIN,
         UserTeamRelation.TEAM_ANALYST,
     }
+
+
+@pytest.mark.asyncio
+async def test_revoke_team_member_role_drops_notifications_the_member_cannot_act_on() -> (
+    None
+):
+    rebac = _FakeRebac(
+        roles={"bob": {UserTeamRelation.TEAM_EDITOR, UserTeamRelation.TEAM_MEMBER}}
+    )
+    notifications = AsyncMock(spec=NotificationService)
+    deps = dataclasses.replace(
+        _deps(rebac, "fredlab"), get_notification_service=lambda: notifications
+    )
+
+    await revoke_team_member_role(
+        _user(), TeamId("fredlab"), "bob", UserTeamRelation.TEAM_EDITOR, deps
+    )
+
+    notifications.forget_lost_access.assert_awaited_once_with("bob", "fredlab")
 
 
 @pytest.mark.asyncio
@@ -1115,11 +1139,15 @@ async def test_remove_team_member_self_removal_skips_permission_check(
             matched_rule_specificity=0,
         ),
     )
-    deps = _deps(
-        rebac,
-        "fredlab",
-        get_session_store=lambda: _FakeSessionStore(),
-        get_purge_queue_store=lambda: _FakePurgeQueueStore(),
+    notifications = AsyncMock(spec=NotificationService)
+    deps = dataclasses.replace(
+        _deps(
+            rebac,
+            "fredlab",
+            get_session_store=lambda: _FakeSessionStore(),
+            get_purge_queue_store=lambda: _FakePurgeQueueStore(),
+        ),
+        get_notification_service=lambda: notifications,
     )
 
     _NoFavoritesPromptStore.cleared.clear()
@@ -1127,8 +1155,9 @@ async def test_remove_team_member_self_removal_skips_permission_check(
 
     assert rebac.team_permission_checks == []
     assert rebac.roles["caller"] == set()
-    # Leaving takes the member's favorites on this team's prompts with it.
+    # Leaving takes the member's favorites and notifications about this team with it.
     assert _NoFavoritesPromptStore.cleared == [("caller", "fredlab")]
+    notifications.delete_for_member.assert_awaited_once_with("caller", "fredlab")
 
 
 @pytest.mark.asyncio

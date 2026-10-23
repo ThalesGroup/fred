@@ -1,0 +1,8 @@
+.loading {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+  padding: var(--spacing-xl);
+  color: var(--on-surface-retreat);
+}

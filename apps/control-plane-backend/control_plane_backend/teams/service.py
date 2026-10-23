@@ -61,6 +61,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.agent_instances.store import TeamAgentsDeletion
+from control_plane_backend.agent_marketplace.notifications import notify_unpublished
 from control_plane_backend.agent_marketplace.store import (
     RemovalReason,
     RemovedEntry,
@@ -73,6 +74,7 @@ from control_plane_backend.marketplace_settings.effective import (
     load_marketplace_default,
 )
 from control_plane_backend.marketplace_settings.schemas import TeamMarketplaceView
+from control_plane_backend.notifications.service import display_name
 from control_plane_backend.product.prompt_starter_kit import (
     STARTER_CATEGORY_NAMES,
     STARTER_PROMPTS,
@@ -92,6 +94,7 @@ from control_plane_backend.scheduler.policies.retention_resolver import (
 )
 from control_plane_backend.scheduler.temporal.structures import LifecycleManagerInput
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
+from control_plane_backend.teams.join_request_store import answer_group, request_group
 from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     CreateTeamRequest,
@@ -343,6 +346,9 @@ async def delete_team(
             if deps.get_agent_instance_store is not None
             else None
         )
+        # Before the team row, so a failure here is retried rather than orphaned.
+        await deps.get_notification_service().delete_for_team(team_id)
+        await deps.get_team_join_request_store().delete_for_team(team_id)
         await store.delete(team_id)
 
     if deleted is not None:
@@ -430,6 +436,7 @@ async def rescue_team_admin(
                 user_id, UserTeamRelation.TEAM_ADMIN, deps
             ),
         )
+    await _on_team_access_changed(deps, team_id, user_id)
 
     logger.info(
         "Rescued one orphaned team via platform-admin registry action: "
@@ -499,18 +506,19 @@ async def join_default_teams_for_new_user(
     """
     teams = await _resolve_default_teams(deps)
     await asyncio.gather(
-        *(_join_unless_already_in_team(deps.rebac, team.id, user_id) for team in teams)
+        *(_join_unless_already_in_team(deps, team.id, user_id) for team in teams)
     )
 
 
 async def _join_unless_already_in_team(
-    rebac: RebacEngine, team_id: TeamId, user_id: str
+    deps: TeamServiceDependencies, team_id: TeamId, user_id: str
 ) -> None:
-    if await _get_user_roles_in_team(rebac, team_id, user_id):
+    if await _get_user_roles_in_team(deps.rebac, team_id, user_id):
         return
     await _add_team_member_relation(
-        rebac, team_id, user_id, UserTeamRelation.TEAM_MEMBER
+        deps.rebac, team_id, user_id, UserTeamRelation.TEAM_MEMBER
     )
+    await _on_team_access_changed(deps, team_id, user_id)
     logger.info("A new user joined the default team %s", team_id)
 
 
@@ -644,6 +652,7 @@ async def reconcile_team_admin_charter_roles(deps: TeamServiceDependencies) -> i
                         await _swap_team_admin_relation(
                             deps.rebac, metadata.id, user_id, promote=False
                         )
+                        await _on_team_access_changed(deps, metadata.id, user_id)
                         moved += 1
         await charter_store.set_applied_version(version or "")
     return moved
@@ -1061,6 +1070,7 @@ async def join_team(
     consistency_token = await _add_team_member_relation(
         deps.rebac, team_id, user.uid, UserTeamRelation.TEAM_MEMBER
     )
+    await _on_team_access_changed(deps, team_id, user.uid)
 
     logger.info(
         "User %s self-joined OPEN team %s (%s)", user.uid, team_id, metadata.name
@@ -1119,17 +1129,18 @@ async def update_team(
         if {"team_delete_grace", "max_idle"} & request.model_fields_set:
             await _reject_retention_overflow(team_id, request, deps)
             patch_data["retention_updated_by"] = user.uid
-        # TEAM-10 (RFC §5.1.2): a PRIVATE team can never be OPEN. Resolve
-        # what visibility/joining_mode would be *after* this patch (an
-        # untouched field keeps its current stored value) and, if that
-        # combination is invalid, downgrade joining_mode rather than reject
-        # the request — never trusting the client's belief about which
-        # field "wins".
+        # A PRIVATE team can be neither OPEN nor ON_REQUEST: judge the state
+        # *after* the patch and downgrade joining_mode rather than reject it,
+        # never trusting the client's belief about which field "wins".
         resulting_visibility = patch_data.get("visibility", metadata.visibility)
         resulting_joining_mode = patch_data.get("joining_mode", metadata.joining_mode)
         if (
             resulting_visibility == TeamVisibility.PRIVATE
-            and resulting_joining_mode == JoiningMode.OPEN
+            and resulting_joining_mode
+            in (
+                JoiningMode.OPEN,
+                JoiningMode.ON_REQUEST,
+            )
         ):
             patch_data["joining_mode"] = JoiningMode.INVITE_ONLY
         patch = TeamMetadataPatch.model_validate(patch_data)
@@ -1151,9 +1162,27 @@ async def update_team(
         except IntegrityError as exc:
             raise _name_conflict_or(exc, patch_data) from exc
         emit_unpublished(removed, actor_uid=user.uid)
+        await notify_unpublished(
+            deps.get_notification_service(),
+            removed,
+            actor_uid=user.uid,
+            actor_name=display_name(user),
+        )
         _log_rename(team_id, renamed_from, patch_data, user)
+        left_on_request = (
+            metadata.joining_mode == JoiningMode.ON_REQUEST
+            and updated is not None
+            and updated.joining_mode != JoiningMode.ON_REQUEST
+        )
         if updated is not None:
             metadata = updated
+        if left_on_request:
+            # Imported here: join_requests builds on this module's helpers.
+            from control_plane_backend.teams.join_requests import (
+                refuse_pending_join_requests,
+            )
+
+            await refuse_pending_join_requests(user, metadata, deps)
         if "visibility" in patch_data:
             # Sync the ReBAC `public` relation immediately rather than
             # waiting for the next `_list_teams` lazy backfill — mirrors
@@ -1284,6 +1313,8 @@ async def edit_team_registry(
                 _audit_registry_edit(user, team_id, [], added, removed_ids)
             raise
 
+    for user_id in [*added, *removed_ids]:
+        await _on_team_access_changed(deps, team_id, user_id)
     _log_rename(team_id, renamed_from, patch_data, user)
     if patch_data or added or removed_ids:
         _audit_registry_edit(user, team_id, sorted(patch_data), added, removed_ids)
@@ -1559,6 +1590,7 @@ async def add_team_member(
         request.user_id, request.relation, deps
     )
     await _add_team_member_relation(rebac, team_id, request.user_id, relation)
+    await _on_team_access_changed(deps, team_id, request.user_id)
 
     logger.info(
         "Added user %s as %s to team %s",
@@ -1753,6 +1785,7 @@ async def remove_team_member(
         await forget_free_joins(team_id, user_id)
         # Favorites are personal data about this team's prompts: they go with the access.
         await deps.get_prompt_store().delete_favorites_for_team(user_id, team_id)
+        await deps.get_notification_service().delete_for_member(user_id, team_id)
 
     policy = evaluate_policy_for_request(
         PolicyResolutionRequest(
@@ -1852,6 +1885,7 @@ async def grant_team_member_role(
     )
     relation = await resolve_granted_team_relation(user_id, request.relation, deps)
     await _add_team_member_relation(rebac, team_id, user_id, relation)
+    await _on_team_access_changed(deps, team_id, user_id)
 
     logger.info(
         "Granted role %s to user %s on team %s",
@@ -1933,6 +1967,7 @@ async def revoke_team_member_role(
                 rebac, team_id, user_id, UserTeamRelation.TEAM_MEMBER
             )
         await _remove_team_member_relation(rebac, team_id, user_id, relation)
+        await _on_team_access_changed(deps, team_id, user_id)
 
     logger.info(
         "Revoked role %s from user %s on team %s",
@@ -2560,6 +2595,27 @@ async def _add_team_member_relation(
     )
     invalidate_team_relations_cache(team_id)
     return result
+
+
+async def _on_team_access_changed(
+    deps: TeamServiceDependencies, team_id: TeamId, user_id: str
+) -> None:
+    """Call after any grant or revoke: a member needs no join request, so theirs
+    goes silently, and so do the notifications the user can no longer act on.
+    Best effort, never raises."""
+    notifications = deps.get_notification_service()
+    try:
+        ids = await deps.get_team_join_request_store().delete_for_member(
+            team_id, user_id
+        )
+        await notifications.delete_groups(
+            [group for i in ids for group in (request_group(i), answer_group(i))]
+        )
+        await notifications.forget_lost_access(user_id, team_id)
+    except Exception:
+        logger.warning(
+            "Failed to apply an access change team_id=%s", team_id, exc_info=True
+        )
 
 
 def _get_administer_permission_for_team_role_relation(

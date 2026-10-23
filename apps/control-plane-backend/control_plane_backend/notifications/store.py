@@ -1,0 +1,390 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Storage of notifications. No authorization here: every caller-facing method
+takes the recipient and only ever touches the rows that recipient can see:
+unexpired, and of a type the platform has not turned off."""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+from fred_core.sql import make_session_factory, use_session
+from sqlalchemy import and_, delete, func, or_, select, tuple_, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from control_plane_backend.models.base import as_utc, rowcount, utcnow
+from control_plane_backend.models.notification_models import (
+    DisabledNotificationTypeRow,
+    NotificationRow,
+)
+from control_plane_backend.notifications.schemas import NotificationPayload
+
+#: How long a notification lives after its creation.
+NOTIFICATION_TTL = timedelta(days=30)
+
+
+@dataclass(frozen=True)
+class NotificationDraft:
+    """One notification to emit, before it has an id."""
+
+    recipient_id: str
+    group_key: str
+    payload: NotificationPayload
+    team_id: str | None = None
+
+
+@dataclass(frozen=True)
+class StoredNotification:
+    id: str
+    recipient_id: str
+    type: str
+    team_id: str | None
+    group_key: str
+    payload: dict[str, Any]
+    created_at: datetime
+    expires_at: datetime
+    seen_at: datetime | None
+    handled_at: datetime | None
+    handled_by_name: str | None
+    handled_outcome: str | None
+
+
+@dataclass(frozen=True)
+class PageCursor:
+    created_at: datetime
+    id: str
+
+    def encode(self) -> str:
+        return f"{_micros(self.created_at)}.{self.id}"
+
+    @staticmethod
+    def decode(value: str) -> PageCursor:
+        """Raises `ValueError` on anything `encode` did not produce."""
+        micros, _, notification_id = value.partition(".")
+        if not notification_id:
+            raise ValueError("malformed cursor")
+        try:
+            created_at = datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(
+                microseconds=int(micros)
+            )
+        except OverflowError as exc:
+            raise ValueError("malformed cursor") from exc
+        return PageCursor(created_at=created_at, id=notification_id)
+
+
+def _micros(value: datetime) -> int:
+    delta = as_utc(value) - datetime(1970, 1, 1, tzinfo=timezone.utc)
+    return delta // timedelta(microseconds=1)
+
+
+def _to_stored(row: NotificationRow) -> StoredNotification:
+    return StoredNotification(
+        id=row.id,
+        recipient_id=row.recipient_id,
+        type=row.type,
+        team_id=row.team_id,
+        group_key=row.group_key,
+        payload=dict(row.payload),
+        created_at=as_utc(row.created_at),
+        expires_at=as_utc(row.expires_at),
+        seen_at=row.seen_at and as_utc(row.seen_at),
+        handled_at=row.handled_at and as_utc(row.handled_at),
+        handled_by_name=row.handled_by_name,
+        handled_outcome=row.handled_outcome,
+    )
+
+
+def _after(cursor: PageCursor, *, inclusive: bool = False) -> Any:
+    """Rows listed after `cursor` (newest first by created_at, then id), and
+    the cursor's own row when `inclusive`."""
+    same_time = (
+        NotificationRow.id <= cursor.id if inclusive else NotificationRow.id < cursor.id
+    )
+    return or_(
+        NotificationRow.created_at < cursor.created_at,
+        and_(NotificationRow.created_at == cursor.created_at, same_time),
+    )
+
+
+class NotificationStore:
+    def __init__(self, engine: AsyncEngine) -> None:
+        self._engine = engine
+        self._sessions = make_session_factory(engine)
+
+    def _mine(self, recipient_id: str, now: datetime) -> list[Any]:
+        return [
+            NotificationRow.recipient_id == recipient_id,
+            NotificationRow.expires_at > now,
+            NotificationRow.type.not_in(select(DisabledNotificationTypeRow.type)),
+        ]
+
+    async def upsert(self, drafts: Sequence[NotificationDraft]) -> None:
+        """Insert in one statement; an open row of the same recipient and group
+        gets the new payload and keeps its seen state."""
+        # One row per (recipient, group): a statement may not update a row twice.
+        unique = list({(d.recipient_id, d.group_key): d for d in drafts}.values())
+        if not unique:
+            return
+        now = utcnow()
+        keys = [(d.group_key, d.recipient_id) for d in unique]
+        insert = (
+            pg_insert if self._engine.dialect.name == "postgresql" else sqlite_insert
+        )
+        statement = insert(NotificationRow).values(
+            [
+                {
+                    "id": str(uuid.uuid4()),
+                    "recipient_id": d.recipient_id,
+                    "type": d.payload.TYPE.value,
+                    "team_id": d.team_id,
+                    "group_key": d.group_key,
+                    "payload": d.payload.model_dump(mode="json"),
+                    "created_at": now,
+                    "expires_at": now + NOTIFICATION_TTL,
+                }
+                for d in unique
+            ]
+        )
+        statement = statement.on_conflict_do_update(
+            index_elements=[NotificationRow.group_key, NotificationRow.recipient_id],
+            index_where=NotificationRow.handled_at.is_(None),
+            # A group key names one subject of one type: its type and team never change.
+            set_={"payload": statement.excluded.payload},
+        )
+        async with use_session(self._sessions) as s:
+            # An expired open row is invisible: replace it rather than update it.
+            await s.execute(
+                delete(NotificationRow).where(
+                    tuple_(NotificationRow.group_key, NotificationRow.recipient_id).in_(
+                        keys
+                    ),
+                    NotificationRow.handled_at.is_(None),
+                    NotificationRow.expires_at <= now,
+                )
+            )
+            await s.execute(statement)
+
+    async def resolve(
+        self,
+        group_keys: Sequence[str],
+        *,
+        actor_uid: str | None,
+        actor_name: str | None,
+        outcome: str,
+        include_handled: bool = False,
+    ) -> None:
+        """The actor's own open rows go; every other open row is marked handled.
+
+        `include_handled` also rewrites rows already handled (a decision reversed).
+        """
+        if not group_keys:
+            return
+        open_rows = [NotificationRow.group_key.in_(list(group_keys))]
+        if not include_handled:
+            open_rows.append(NotificationRow.handled_at.is_(None))
+        async with use_session(self._sessions) as s:
+            if actor_uid is not None:
+                await s.execute(
+                    delete(NotificationRow).where(
+                        *open_rows, NotificationRow.recipient_id == actor_uid
+                    )
+                )
+            await s.execute(
+                update(NotificationRow)
+                .where(*open_rows)
+                .values(
+                    handled_at=utcnow(),
+                    handled_by_name=actor_name,
+                    handled_outcome=outcome,
+                )
+            )
+
+    async def delete_groups(self, group_keys: Sequence[str]) -> None:
+        if not group_keys:
+            return
+        async with use_session(self._sessions) as s:
+            await s.execute(
+                delete(NotificationRow).where(
+                    NotificationRow.group_key.in_(list(group_keys))
+                )
+            )
+
+    async def unseen_count(self, recipient_id: str) -> int:
+        async with use_session(self._sessions) as s:
+            return (
+                await s.execute(
+                    select(func.count()).where(
+                        *self._mine(recipient_id, utcnow()),
+                        NotificationRow.seen_at.is_(None),
+                    )
+                )
+            ).scalar_one()
+
+    async def list_page(
+        self, recipient_id: str, *, limit: int, before: PageCursor | None = None
+    ) -> tuple[list[StoredNotification], PageCursor | None]:
+        """Newest first; the cursor is set when an older row remains."""
+        query = select(NotificationRow).where(*self._mine(recipient_id, utcnow()))
+        if before is not None:
+            query = query.where(_after(before))
+        query = query.order_by(
+            NotificationRow.created_at.desc(), NotificationRow.id.desc()
+        ).limit(limit + 1)
+        async with use_session(self._sessions) as s:
+            rows = [_to_stored(row) for row in (await s.execute(query)).scalars()]
+        if len(rows) <= limit:
+            return rows, None
+        last = rows[limit - 1]
+        return rows[:limit], PageCursor(created_at=last.created_at, id=last.id)
+
+    async def mark_seen(self, recipient_id: str, up_to_id: str) -> bool:
+        """Mark seen every row at or before `up_to_id`; `False` if it is not theirs."""
+        now = utcnow()
+        async with use_session(self._sessions) as s:
+            created_at = (
+                await s.execute(
+                    select(NotificationRow.created_at).where(
+                        *self._mine(recipient_id, now), NotificationRow.id == up_to_id
+                    )
+                )
+            ).scalar_one_or_none()
+            if created_at is None:
+                return False
+            await s.execute(
+                update(NotificationRow)
+                .where(
+                    *self._mine(recipient_id, now),
+                    NotificationRow.seen_at.is_(None),
+                    _after(
+                        PageCursor(created_at=created_at, id=up_to_id), inclusive=True
+                    ),
+                )
+                .values(seen_at=now)
+            )
+            return True
+
+    async def delete(self, recipient_id: str, notification_id: str) -> bool:
+        async with use_session(self._sessions) as s:
+            result = await s.execute(
+                delete(NotificationRow).where(
+                    *self._mine(recipient_id, utcnow()),
+                    NotificationRow.id == notification_id,
+                )
+            )
+            return rowcount(result) > 0
+
+    async def delete_all(self, recipient_id: str) -> None:
+        """ "Clear all": every visible row but the open decisions still waiting."""
+        decisions = [
+            p.TYPE.value for p in NotificationPayload.__subclasses__() if p.DECISION
+        ]
+        waiting = and_(
+            NotificationRow.type.in_(decisions),
+            NotificationRow.handled_at.is_(None),
+        )
+        async with use_session(self._sessions) as s:
+            await s.execute(
+                delete(NotificationRow).where(
+                    *self._mine(recipient_id, utcnow()), ~waiting
+                )
+            )
+
+    async def delete_expired(self, *, limit: int) -> int:
+        """Delete at most `limit` expired rows; returns how many went."""
+        expired = (
+            select(NotificationRow.id)
+            .where(NotificationRow.expires_at <= utcnow())
+            .limit(limit)
+        )
+        async with use_session(self._sessions) as s:
+            result = await s.execute(
+                delete(NotificationRow).where(NotificationRow.id.in_(expired))
+            )
+            return rowcount(result)
+
+    async def delete_for_user(self, recipient_id: str) -> None:
+        async with use_session(self._sessions) as s:
+            await s.execute(
+                delete(NotificationRow).where(
+                    NotificationRow.recipient_id == recipient_id
+                )
+            )
+
+    async def delete_for_member(
+        self, recipient_id: str, team_id: str, *, types: Sequence[str] | None = None
+    ) -> None:
+        """What `recipient_id` was told about a team they left, or only the
+        `types` they lost the right to receive."""
+        conditions = [
+            NotificationRow.recipient_id == recipient_id,
+            NotificationRow.team_id == team_id,
+        ]
+        if types is not None:
+            conditions.append(NotificationRow.type.in_(types))
+        async with use_session(self._sessions) as s:
+            await s.execute(delete(NotificationRow).where(*conditions))
+
+    async def delete_for_team(self, team_id: str) -> None:
+        async with use_session(self._sessions) as s:
+            await s.execute(
+                delete(NotificationRow).where(NotificationRow.team_id == team_id)
+            )
+
+    async def disabled_types(self) -> dict[str, DisabledType]:
+        """The types a platform admin turned off; a handful of rows at most."""
+        async with use_session(self._sessions) as s:
+            rows = (await s.execute(select(DisabledNotificationTypeRow))).scalars()
+            return {
+                row.type: DisabledType(
+                    disabled_by=row.disabled_by, disabled_at=as_utc(row.disabled_at)
+                )
+                for row in rows
+            }
+
+    async def disable_type(self, type_: str, *, disabled_by: str | None) -> None:
+        """Hide every notification of `type_`, sent or to come, until it is on again."""
+        async with use_session(self._sessions) as s:
+            if await s.get(DisabledNotificationTypeRow, type_) is None:
+                s.add(DisabledNotificationTypeRow(type=type_, disabled_by=disabled_by))
+
+    async def enable_type(self, type_: str) -> None:
+        async with use_session(self._sessions) as s:
+            await s.execute(
+                delete(DisabledNotificationTypeRow).where(
+                    DisabledNotificationTypeRow.type == type_
+                )
+            )
+
+
+@dataclass(frozen=True)
+class DisabledType:
+    disabled_by: str | None
+    disabled_at: datetime
+
+
+__all__ = [
+    "DisabledType",
+    "NOTIFICATION_TTL",
+    "NotificationDraft",
+    "NotificationStore",
+    "PageCursor",
+    "StoredNotification",
+]

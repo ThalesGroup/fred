@@ -14,9 +14,22 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
+from control_plane_backend.models.base import utcnow
+from control_plane_backend.models.notification_models import NotificationRow
+from control_plane_backend.notifications.schemas import (
+    TeamJoinRequestAnsweredPayload,
+)
+from control_plane_backend.notifications.store import (
+    NotificationDraft,
+    NotificationStore,
+)
+from control_plane_backend.scheduler.dependencies import LifecycleActionDependencies
+from control_plane_backend.scheduler.lifecycle_runner import (
+    run_notification_expiry_once,
+)
 from control_plane_backend.scheduler.memory.lifecycle_runner import (
     run_lifecycle_manager_once_in_memory,
 )
@@ -24,18 +37,39 @@ from control_plane_backend.scheduler.policies.policy_models import (
     ConversationLifecycleEvent,
     LifecycleTrigger,
 )
+from control_plane_backend.scheduler.temporal.activities import (
+    expire_notifications_and_join_requests,
+)
 from control_plane_backend.scheduler.temporal.structures import (
+    NOTIFICATION_EXPIRY_BATCH_SIZE,
     ConversationActionResult,
     ConversationCandidateBatch,
     DeleteConversationInput,
+    ExpireNotificationsInput,
     LifecycleManagerInput,
     ListConversationCandidatesInput,
     ListWikiProposalCandidatesInput,
+    NotificationExpiryResult,
     RejectWikiProposalInput,
     WikiProposalActionResult,
     WikiProposalCandidate,
     WikiProposalCandidateBatch,
 )
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
+from sqlalchemy import update
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+
+def _patch_no_expired_notifications(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _nothing_expired(
+        _input_data: ExpireNotificationsInput,
+    ) -> NotificationExpiryResult:
+        return NotificationExpiryResult()
+
+    monkeypatch.setattr(
+        "control_plane_backend.scheduler.memory.lifecycle_runner.expire_notifications_and_join_requests",
+        _nothing_expired,
+    )
 
 
 def _patch_empty_wiki_sweep(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -61,6 +95,7 @@ def _patch_empty_wiki_sweep(monkeypatch: pytest.MonkeyPatch) -> None:
         "control_plane_backend.scheduler.memory.lifecycle_runner.reject_wiki_proposal",
         _unreachable,
     )
+    _patch_no_expired_notifications(monkeypatch)
 
 
 @pytest.mark.asyncio
@@ -188,6 +223,7 @@ def _patch_empty_conversation_sweep(monkeypatch: pytest.MonkeyPatch) -> None:
         "control_plane_backend.scheduler.memory.lifecycle_runner.delete_conversation",
         _unreachable,
     )
+    _patch_no_expired_notifications(monkeypatch)
 
 
 @pytest.mark.asyncio
@@ -240,3 +276,94 @@ async def test_in_memory_runner_also_sweeps_wiki_proposals_in_the_same_tick(
     assert result.wiki_proposals.scanned == 1
     assert result.wiki_proposals.rejected == 1
     assert result.wiki_proposals.dry_run_actions == 0
+
+
+@pytest.mark.asyncio
+async def test_in_memory_runner_also_expires_notifications_in_the_same_tick(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    limits: list[int] = []
+
+    async def _expire(input_data: ExpireNotificationsInput) -> NotificationExpiryResult:
+        limits.append(input_data.limit)
+        return NotificationExpiryResult(deleted=3)
+
+    _patch_empty_conversation_sweep(monkeypatch)
+    _patch_empty_wiki_sweep(monkeypatch)
+    monkeypatch.setattr(
+        "control_plane_backend.scheduler.memory.lifecycle_runner.expire_notifications_and_join_requests",
+        _expire,
+    )
+
+    result = await run_lifecycle_manager_once_in_memory(LifecycleManagerInput())
+
+    assert limits == [NOTIFICATION_EXPIRY_BATCH_SIZE]
+    assert result.notifications.deleted == 3
+
+
+class _Log:
+    def info(self, msg: str, *args: object) -> None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_notification_expiry_deletes_nothing_on_a_dry_run() -> None:
+    async def _unreachable(
+        _input_data: ExpireNotificationsInput,
+    ) -> NotificationExpiryResult:  # pragma: no cover
+        raise AssertionError("a dry run deletes nothing")
+
+    result = await run_notification_expiry_once(
+        input_data=LifecycleManagerInput(dry_run=True),
+        expire=_unreachable,
+        logger=_Log(),
+        log_prefix="[TEST]",
+    )
+
+    assert result.deleted == 0
+
+
+@pytest.mark.asyncio
+async def test_the_expiry_activity_deletes_expired_rows_only(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    store = NotificationStore(control_plane_sql_engine)
+    await store.upsert(
+        [
+            NotificationDraft(
+                recipient_id="alice",
+                group_key=g,
+                payload=TeamJoinRequestAnsweredPayload(
+                    team_id="alpha", team_name="Alpha", outcome="refused"
+                ),
+            )
+            for g in ("old", "live")
+        ]
+    )
+    async with control_plane_sql_engine.begin() as conn:
+        await conn.execute(
+            update(NotificationRow)
+            .where(NotificationRow.group_key == "old")
+            .values(expires_at=utcnow() - timedelta(days=1))
+        )
+    deps = LifecycleActionDependencies(
+        get_session_store=None,  # type: ignore[arg-type]
+        get_purge_queue_store=None,  # type: ignore[arg-type]
+        erase_session=None,  # type: ignore[arg-type]
+        get_service_bearer=None,  # type: ignore[arg-type]
+        get_task_service=None,  # type: ignore[arg-type]
+        get_team_wiki_store=None,  # type: ignore[arg-type]
+        get_policy_catalog=None,  # type: ignore[arg-type]
+        get_notification_store=lambda: store,
+        get_team_join_request_store=lambda: TeamJoinRequestStore(
+            control_plane_sql_engine
+        ),
+    )
+
+    result = await expire_notifications_and_join_requests(
+        ExpireNotificationsInput(), deps=deps
+    )
+
+    assert result.deleted == 1
+    rows, _ = await store.list_page("alice", limit=50)
+    assert [row.group_key for row in rows] == ["live"]

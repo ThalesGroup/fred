@@ -27,8 +27,10 @@ from control_plane_backend.scheduler.temporal.structures import (
     ConversationActionResult,
     ConversationCandidateBatch,
     DeleteConversationInput,
+    ExpireNotificationsInput,
     ListConversationCandidatesInput,
     ListWikiProposalCandidatesInput,
+    NotificationExpiryResult,
     RejectWikiProposalInput,
     WikiProposalActionResult,
     WikiProposalCandidateBatch,
@@ -44,6 +46,9 @@ LIST_CONVERSATION_CANDIDATES_ACTIVITY_NAME = "list_conversation_candidates"
 DELETE_CONVERSATION_ACTIVITY_NAME = "delete_conversation"
 LIST_WIKI_PROPOSAL_CANDIDATES_ACTIVITY_NAME = "list_wiki_proposal_candidates"
 REJECT_WIKI_PROPOSAL_ACTIVITY_NAME = "reject_wiki_proposal"
+EXPIRE_NOTIFICATIONS_AND_JOIN_REQUESTS_ACTIVITY_NAME = (
+    "expire_notifications_and_join_requests"
+)
 
 
 def _activity_logger():
@@ -181,6 +186,25 @@ async def reject_wiki_proposal(
     return await reject_stale_wiki_proposal(candidate=input_data.candidate, deps=deps)
 
 
+async def expire_notifications_and_join_requests(
+    input_data: ExpireNotificationsInput,
+    deps: LifecycleActionDependencies | None = None,
+) -> NotificationExpiryResult:
+    """Delete at most `limit` expired notifications and as many expired team join
+    requests (memory mode and Temporal); `deleted` counts both."""
+    if deps is None:
+        raise RuntimeError(
+            "LifecycleActionDependencies are required for notification expiry."
+        )
+    notifications = await deps.get_notification_store().delete_expired(
+        limit=input_data.limit
+    )
+    requests = await deps.get_team_join_request_store().delete_expired(
+        limit=input_data.limit
+    )
+    return NotificationExpiryResult(deleted=notifications + requests)
+
+
 class LifecycleActivities:
     """
     Bind lifecycle Temporal activities to one explicit dependency bundle.
@@ -291,3 +315,10 @@ class LifecycleActivities:
         - `activities=[activities.reject_wiki_proposal]`
         """
         return await reject_wiki_proposal(input_data, deps=self._deps)
+
+    @activity.defn(name=EXPIRE_NOTIFICATIONS_AND_JOIN_REQUESTS_ACTIVITY_NAME)
+    async def expire_notifications_and_join_requests(
+        self,
+        input_data: ExpireNotificationsInput,
+    ) -> NotificationExpiryResult:
+        return await expire_notifications_and_join_requests(input_data, deps=self._deps)

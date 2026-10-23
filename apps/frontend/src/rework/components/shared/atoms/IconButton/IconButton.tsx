@@ -46,6 +46,8 @@ export interface IconButtonProps extends ComponentPropsWithoutRef<"button"> {
    * reader announces the button without it.
    */
   badgeCount?: number;
+  /** Largest count shown as-is; above it the badge reads `${badgeMax}+`. */
+  badgeMax?: number;
 }
 
 /** M3 caps the label at three digits; past that the exact number stops mattering. */
@@ -59,6 +61,7 @@ export default function IconButton({
   iconSize,
   loading = false,
   badgeCount,
+  badgeMax = BADGE_MAX,
   disabled,
   className,
   "aria-busy": callerBusy,
@@ -91,7 +94,7 @@ export default function IconButton({
     <span className={styles.badgeAnchor}>
       {button}
       <span className={styles.badge} aria-hidden="true">
-        {badgeCount > BADGE_MAX ? `${BADGE_MAX}+` : badgeCount}
+        {badgeCount > badgeMax ? `${badgeMax}+` : badgeCount}
       </span>
     </span>
   );

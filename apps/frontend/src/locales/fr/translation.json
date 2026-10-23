@@ -2299,7 +2299,10 @@
       "home": "Accueil",
       "marketplace": "Marketplace",
       "helpCenter": "Centre d'aide",
-      "adminConsole": "Console technique"
+      "adminConsole": "Console technique",
+      "notifications": "Notifications",
+      "notificationsUnseen_one": "Notifications, {{count}} non vue",
+      "notificationsUnseen_other": "Notifications, {{count}} non vues"
     },
     "profileMenu": {
       "contactSupport": "Contacter le support",
@@ -2589,7 +2592,8 @@
           "platformPrompt": "Prompts plateforme",
           "announcements": "Annonces",
           "uiSettings": "Interface utilisateur",
-          "marketplaces": "Marketplaces"
+          "marketplaces": "Marketplaces",
+          "notifications": "Notifications"
         },
         "title": "Espace administration"
       },
@@ -2912,8 +2916,23 @@
     },
     "teamCard": {
       "join": "Rejoindre",
+      "joinFailed": "Impossible de rejoindre l'équipe",
       "inviteOnly": "Sur invitation",
-      "memberCount": "{{count}} membres"
+      "memberCount": "{{count}} membres",
+      "askToJoin": "Demander à rejoindre",
+      "requestSent": "Demande envoyée",
+      "cancelRequest": "Annuler la demande",
+      "cancelFailed": "Votre demande n'a pas pu être annulée",
+      "requestDeclined": "Demande refusée",
+      "askAgainAt": "Nouvelle demande possible le {{date}}",
+      "askDialog": {
+        "title": "Demander à rejoindre {{team}}",
+        "confirm": "Envoyer la demande",
+        "messageLabel": "Message (facultatif)",
+        "messageDescription": "Expliquez aux administrateurs de l'équipe pourquoi vous souhaitez la rejoindre. Eux seuls le lisent.",
+        "failed": "Votre demande n'a pas pu être envoyée",
+        "failedDetail": "Réessayez dans un instant."
+      }
     },
     "teamDescription": {
       "label": "Description de l'équipe",
@@ -2943,6 +2962,13 @@
       "warnings": {
         "team_analyst": "Rôle technique : il ouvre aussi l'accès aux extraits de conversation limités sur lesquels ces jeux d'évaluation sont construits. À accorder en connaissance de cause."
       }
+    },
+    "teamMemberGate": {
+      "title": "Vous n'êtes pas membre de cette équipe",
+      "message": "Seuls ses membres peuvent ouvrir les pages de cette équipe.",
+      "pending": "Votre demande pour rejoindre cette équipe attend une réponse.",
+      "declined": "Votre dernière demande pour rejoindre cette équipe a été refusée. Nouvelle demande possible le {{date}}.",
+      "browseTeams": "Parcourir les équipes"
     },
     "teamAdminCharter": {
       "accept": "Accepter",
@@ -3001,7 +3027,15 @@
           "lastName": "Nom",
           "role": "Rôle"
         },
-        "title": "Membres de l'équipe"
+        "title": "Membres de l'équipe",
+        "joinRequests": {
+          "title": "Demandes d'adhésion",
+          "sentOn": "Demandé le {{date}}",
+          "refusedOn": "Refusé le {{date}}",
+          "accept": "Accepter",
+          "refuse": "Refuser",
+          "acceptAnyway": "Accepter quand même"
+        }
       },
       "navigation": {
         "leaveTeam": "Quitter l'équipe",
@@ -3061,11 +3095,12 @@
         },
         "joiningMode": {
           "label": "Mode d'adhésion",
-          "support": "Les utilisateurs peuvent rejoindre votre équipe librement ou uniquement sur invitation.",
+          "support": "Les utilisateurs peuvent rejoindre votre équipe librement, demander aux administrateurs de les accepter, ou uniquement sur invitation.",
           "open": "Ouverte",
           "inviteOnly": "Sur invitation",
           "manual": "Ajout manuel",
-          "privateSupport": "Une équipe privée n'apparaît pas sur la marketplace : un administrateur de l'équipe ajoute ses membres ou partage un lien d'invitation."
+          "privateSupport": "Une équipe privée n'apparaît pas sur la marketplace : un administrateur de l'équipe ajoute ses membres ou partage un lien d'invitation.",
+          "onRequest": "Sur demande"
         },
         "visibility": {
           "label": "Visibilité de l'équipe",
@@ -4301,6 +4336,76 @@
         "marketplace_entry_not_found": "Cet agent n'est pas publié.",
         "marketplace_runtime_unavailable": "Le service qui exécute cet agent est injoignable. La version publiée est inchangée ; réessayez plus tard.",
         "marketplace_capability_not_exportable": "La capacité « {{capability}} » ne peut pas être préparée pour la marketplace. La version publiée est inchangée."
+      }
+    },
+    "notifications": {
+      "title": "Notifications",
+      "clearAll": "Tout effacer",
+      "close": "Fermer les notifications",
+      "loadMore": "Afficher plus",
+      "loadError": "Impossible de charger vos notifications.",
+      "dismiss": "Ignorer la notification",
+      "empty": {
+        "title": "Aucune notification",
+        "description": "Vous serez prévenu ici quand quelque chose vous concerne."
+      },
+      "handled": "Traitée",
+      "handledBy": "Traitée par {{name}}",
+      "actions": {
+        "view": "Voir",
+        "openAgent": "Ouvrir l'agent",
+        "accept": "Accepter",
+        "refuse": "Refuser",
+        "openTeam": "Ouvrir l'équipe"
+      },
+      "types": {
+        "republishNeeded": {
+          "name": "Agent publié modifié",
+          "description": "Envoyée à la personne qui a publié un agent dans la marketplace quand un autre éditeur le modifie, pour qu'elle le republie.",
+          "title": "Agent publié modifié",
+          "body": "{{editor}} a modifié « {{agent}} » dans {{team}}. Republiez-le pour mettre à jour la version de la marketplace.",
+          "bodyNoTeam": "{{editor}} a modifié « {{agent}} ». Republiez-le pour mettre à jour la version de la marketplace.",
+          "handledRemoved": "Résolue : l'agent a quitté la marketplace"
+        },
+        "marketplaceRemoved": {
+          "name": "Agent retiré de la marketplace",
+          "description": "Envoyée à la personne qui a publié un agent quand il quitte la marketplace sans son intervention.",
+          "title": "Agent retiré de la marketplace",
+          "body": "« {{agent}} » ({{team}}) n'est plus sur la marketplace. {{reason}}",
+          "bodyNoTeam": "« {{agent}} » n'est plus sur la marketplace. {{reason}}"
+        },
+        "unknown": {
+          "title": "Notification"
+        },
+        "joinRequested": {
+          "name": "Demande pour rejoindre une équipe",
+          "description": "Envoyée aux administrateurs d'une équipe quand quelqu'un demande à la rejoindre ; les demandes restent dans Membres > Demandes d'adhésion.",
+          "title": "{{name}} demande à rejoindre {{team}}",
+          "acceptedBy": "Acceptée par {{name}}",
+          "refusedBy": "Refusée par {{name}}"
+        },
+        "joinRequestAnswered": {
+          "name": "Réponse à une demande d'adhésion",
+          "description": "Envoyée à la personne qui a demandé à rejoindre une équipe dès qu'un administrateur accepte ou refuse.",
+          "acceptedTitle": "Vous avez rejoint {{team}}",
+          "acceptedBody": "Un administrateur de l'équipe a accepté votre demande.",
+          "refusedTitle": "Demande pour rejoindre {{team}} refusée",
+          "refusedBody": "Un administrateur de l'équipe a refusé votre demande. Vous pourrez la renouveler dans 24 heures."
+        }
+      },
+      "actionFailed": "L'action n'a pas pu aboutir."
+    },
+    "notificationSettings": {
+      "title": "Notifications",
+      "subtitle": "Choisissez les notifications envoyées par la plateforme. Le choix s'applique à toutes les équipes et à tous les utilisateurs.",
+      "hint": "Désactiver un type masque ses notifications pour tout le monde, jusqu'à ce qu'il soit réactivé.",
+      "loadFailed": "Impossible de charger les réglages des notifications.",
+      "saveFailed": "Impossible d'enregistrer le réglage de la notification.",
+      "toggleLabel": "Envoyer les notifications « {{name}} »",
+      "turnOff": {
+        "title": "Désactiver « {{name}} » ?",
+        "message": "Les notifications de ce type seront masquées pour tout le monde jusqu'à ce que le type soit réactivé. Rien n'est supprimé.",
+        "confirm": "Désactiver"
       }
     }
   },

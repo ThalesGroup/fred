@@ -44,6 +44,7 @@ from control_plane_backend.knowledge_bases.instance_store import (
     KnowledgeBaseInstanceStore,
 )
 from control_plane_backend.knowledge_bases.store import KnowledgeBaseDefinitionStore
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.platform_prompt.store import (
     CreationAssistantSettingsStore,
     PlatformPromptStore,
@@ -118,6 +119,7 @@ class ProductServiceDependencies:
     get_task_service: Callable[[], TaskService]
     get_platform_bootstrap_store: Callable[[], PlatformBootstrapStore]
     get_runtime_http_client: Callable[[], httpx.AsyncClient]
+    get_notification_service: Callable[[], NotificationService]
     # Lets one service call batch several short reads on one pooled
     # connection; `None` (test fakes) falls back to one session per read.
     get_sql_session_factory: Callable[[], "async_sessionmaker[AsyncSession]"] | None = (
@@ -177,6 +179,7 @@ def build_product_service_dependencies(
         get_sql_session_factory=lambda: make_session_factory(
             container.get_pg_async_engine()
         ),
+        get_notification_service=container.get_notification_service,
     )
 
 

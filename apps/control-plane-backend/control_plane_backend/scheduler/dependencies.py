@@ -22,12 +22,14 @@ if TYPE_CHECKING:
     from fred_core.tasks.service import TaskService
 
     from control_plane_backend.app.container import ControlPlaneContainer
+    from control_plane_backend.notifications.store import NotificationStore
     from control_plane_backend.scheduler.policies.policy_models import (
         ConversationPolicyCatalog,
     )
     from control_plane_backend.scheduler.queue_store import PurgeQueueStore
     from control_plane_backend.sessions.erasure_service import ErasureReceipt
     from control_plane_backend.team_wiki.store import TeamWikiStore
+    from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 
 # Erase one conversation across every store and return its receipt (CTRLP-12 E1).
 # Kept as a callable on the deps bundle so the scheduler layer never imports the
@@ -69,6 +71,8 @@ class LifecycleActionDependencies:
     # WIKI-05: the wiki proposal lifecycle sweep and its retention duration.
     get_team_wiki_store: Callable[[], "TeamWikiStore"]
     get_policy_catalog: Callable[[], "ConversationPolicyCatalog"]
+    get_notification_store: Callable[[], "NotificationStore"]
+    get_team_join_request_store: Callable[[], "TeamJoinRequestStore"]
 
 
 def build_lifecycle_action_dependencies(
@@ -112,4 +116,6 @@ def build_lifecycle_action_dependencies(
         get_task_service=container.get_task_service,
         get_team_wiki_store=container.get_team_wiki_store,
         get_policy_catalog=container.get_policy_catalog,
+        get_notification_store=container.get_notification_store,
+        get_team_join_request_store=container.get_team_join_request_store,
     )

@@ -198,6 +198,10 @@ export const materialIcons = [
   "stop",
   "favorite",
   "book_2",
+  "notifications",
+  "notifications_off",
+  "sync_problem",
+  "unpublished",
 ] as const;
 
 export type MaterialIconType = (typeof materialIcons)[number];

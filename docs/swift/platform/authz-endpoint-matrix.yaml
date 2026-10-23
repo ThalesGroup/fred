@@ -498,6 +498,36 @@ operations:
     review_status: approved
     required_permission: authenticated_user # TEAM-09 — not a TeamPermission gate; server-side checks the team's stored joining_mode == OPEN and grants team_member to the caller only, never another user or role (see TeamNotOpenForJoiningError)
   - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/join-requests/mine
+    review_status: approved
+    required_permission: authenticated # teams.join_requests.list_my_join_requests. Only the caller's own unexpired requests, filtered by requester_id = caller.
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/join-requests
+    review_status: approved
+    required_permission: authenticated # teams.join_requests.create_join_request. Not a TeamPermission gate: a public team whose stored joining_mode is on_request, a caller with no role on it, the caller as the only requester. A private team answers 404 like an unknown one.
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/teams/{team_id}/join-requests/mine
+    review_status: approved
+    required_permission: authenticated # teams.join_requests.cancel_my_join_request. Deletes only the caller's own pending request.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/join-requests
+    review_status: approved
+    required_permission: can_administer_members
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/join-requests/{request_id}/accept
+    review_status: approved
+    required_permission: can_administer_members # grants team_member only, the role can_administer_members already lets an admin add
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/join-requests/{request_id}/refuse
+    review_status: approved
+    required_permission: can_administer_members
+  - service: control-plane
     method: POST
     path: /control-plane/v1/teams/{team_id}/rescue-admin
     review_status: approved
@@ -1194,6 +1224,41 @@ operations:
     path: /control-plane/v1/announcements/patch-note-announcements/{announcement_id}/seen
     review_status: pending_review
     required_permission: authenticated # Records that the caller saw that announcement (one row per user); idempotent, 404 unless the id is an announced package, and never moves the caller back to an older announcement. The user id comes from the token, never the request, so no caller can write another user's record.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/notifications/summary
+    review_status: approved
+    required_permission: authenticated # The caller's unseen, unexpired notification count; the recipient is the token's uid, never a request field. Polled by the badge every 15 s per visible tab: one count on the partial unseen index.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/notifications
+    review_status: approved
+    required_permission: authenticated # The caller's own unexpired notifications, newest first, at most 50 per page with an opaque cursor. No route creates a notification or chooses its recipients: control-plane services compute them (published_by of a marketplace entry).
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/notifications/seen
+    review_status: approved
+    required_permission: authenticated # Marks the caller's notifications seen up to `up_to`; 404 unless `up_to` is one of the caller's unexpired notifications, so another user's id reveals nothing.
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/notifications/{notification_id}
+    review_status: approved
+    required_permission: authenticated # Deletes one of the caller's notifications; another user's id answers 404. The user's own data: not audited.
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/notifications
+    review_status: approved
+    required_permission: authenticated # Clear all: deletes the caller's notifications and nobody else's, except their open join requests still waiting for a decision. Not audited.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/notification-types
+    review_status: approved
+    required_permission: can_manage_platform # NotificationService._require_manage_platform, same catch-all gate as the UI theme settings. Every type of the NotificationType enum with its platform-wide switch; no row means on.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/notification-types/{notification_type}
+    review_status: approved
+    required_permission: can_manage_platform # NotificationService._require_manage_platform. Off stops sending the type and deletes every notification of it already sent, for every recipient; on only affects new events. Unknown type answers 422 at parsing. Emits audit event platform.notification_type.updated.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/platform/announcements/patch-notes/order

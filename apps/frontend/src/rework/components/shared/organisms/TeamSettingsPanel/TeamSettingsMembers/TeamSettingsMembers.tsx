@@ -23,6 +23,7 @@ import { useTranslation } from "react-i18next";
 import { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import TeamInviteLinkDialog from "./TeamInviteLinkDialog/TeamInviteLinkDialog.tsx";
+import TeamJoinRequestsSection from "./TeamJoinRequestsSection/TeamJoinRequestsSection.tsx";
 import { getConfig } from "../../../../../../common/config";
 import styles from "./TeamSettingsMembers.module.scss";
 
@@ -70,6 +71,11 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
             )}
           </>
         }
+      />
+      <TeamJoinRequestsSection
+        teamId={team.id}
+        canAdministerMembers={can_administer_members}
+        takesRequests={team.visibility === "public" && team.joining_mode === "on_request"}
       />
       <div className={styles["team-settings-members-table-wrapper"]}>
         <TeamSettingsMembersTable team={team} search={search} />

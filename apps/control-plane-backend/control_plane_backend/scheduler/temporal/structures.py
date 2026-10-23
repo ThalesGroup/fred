@@ -38,12 +38,25 @@ class WikiProposalLifecycleResult(BaseModel):
     dry_run_actions: int = 0
 
 
+#: Most rows of each table one lifecycle tick deletes; the next tick continues.
+NOTIFICATION_EXPIRY_BATCH_SIZE = 1000
+
+
+class NotificationExpiryResult(BaseModel):
+    """Expired notifications and join requests one lifecycle tick deleted."""
+
+    deleted: int = 0
+
+
 class LifecycleManagerResult(BaseModel):
     scanned: int = 0
     deleted: int = 0
     dry_run_actions: int = 0
     wiki_proposals: WikiProposalLifecycleResult = Field(
         default_factory=WikiProposalLifecycleResult
+    )
+    notifications: NotificationExpiryResult = Field(
+        default_factory=NotificationExpiryResult
     )
 
 
@@ -96,3 +109,7 @@ class WikiProposalActionResult(BaseModel):
     # Distinct from `ok`: that is never false here (there is no failure path
     # besides an exception), this is what the tick's `rejected` count means.
     changed: bool = True
+
+
+class ExpireNotificationsInput(BaseModel):
+    limit: int = Field(default=NOTIFICATION_EXPIRY_BATCH_SIZE, ge=1, le=5000)
