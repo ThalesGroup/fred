@@ -14,10 +14,10 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Literal
 
 from fred_core.sql import make_session_factory, use_session
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -31,19 +31,6 @@ ThemeMode = Literal["light", "dark", "system"]
 Language = Literal["en", "fr"]
 TeamSortMode = Literal["recent", "alpha"]
 AgentSort = Literal["name", "created_at:desc", "updated_at:desc"]
-PaneKey = Literal[
-    "team-wiki:rail:width",
-    "import-panel:width",
-    "inline-drawer:command-prompt-panel:width",
-    "inline-drawer:debug-raw-panel:width",
-    "inline-drawer:session-attachments-panel:width",
-    "inline-drawer:document-scope-panel:width",
-    "inline-drawer:full-reasoning-panel:width",
-    "inline-drawer:skill-detail-panel:width",
-    "inline-drawer:prompt-selection-panel:width",
-    "inline-drawer:capability-side-panel:width",
-]
-PaneWidth = Annotated[int, Field(ge=180, le=1200)]
 
 
 class UserPreferences(BaseModel):
@@ -59,7 +46,6 @@ class UserPreferences(BaseModel):
     team_sort_mode: TeamSortMode = "recent"
     agent_sort: AgentSort = "name"
     trace_expanded: bool | None = None
-    pane_widths: dict[PaneKey, PaneWidth] = Field(default_factory=dict)
 
 
 class PatchUserPreferences(BaseModel):
@@ -74,7 +60,6 @@ class PatchUserPreferences(BaseModel):
     team_sort_mode: TeamSortMode | None = None
     agent_sort: AgentSort | None = None
     trace_expanded: bool | None = None
-    pane_widths: dict[PaneKey, PaneWidth] | None = Field(default=None, max_length=10)
 
     @model_validator(mode="after")
     def _nonempty(self) -> PatchUserPreferences:
@@ -96,7 +81,6 @@ def _to_preferences(row: UserPreferencesRow | None) -> UserPreferences:
             "team_sort_mode": row.team_sort_mode,
             "agent_sort": row.agent_sort,
             "trace_expanded": row.trace_expanded,
-            "pane_widths": row.pane_widths,
         }
     )
 
@@ -147,12 +131,6 @@ class UserPreferencesStore:
                 row.agent_sort = patch.agent_sort or "name"
             if "trace_expanded" in fields:
                 row.trace_expanded = patch.trace_expanded
-            if "pane_widths" in fields:
-                row.pane_widths = (
-                    {**row.pane_widths, **patch.pane_widths}
-                    if patch.pane_widths is not None
-                    else {}
-                )
             row.updated_at = utcnow()
             await session.flush()
             return _to_preferences(row)

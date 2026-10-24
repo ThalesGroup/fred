@@ -40,9 +40,6 @@ def upgrade() -> None:
         ),
         sa.Column("trace_expanded", sa.Boolean(), nullable=True),
         sa.Column(
-            "pane_widths", sa.JSON(), nullable=False, server_default=sa.text("'{}'")
-        ),
-        sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
             nullable=False,

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from control_plane_backend.models.base import Base, utcnow
@@ -39,9 +39,6 @@ class UserPreferencesRow(Base):
     )
     agent_sort: Mapped[str] = mapped_column(String(20), nullable=False, default="name")
     trace_expanded: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    pane_widths: Mapped[dict[str, int]] = mapped_column(
-        JSON, nullable=False, default=dict
-    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )

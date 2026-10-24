@@ -30,7 +30,6 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useLocalStorageState } from "../../../hooks/useLocalStorageState.ts";
-import { PANE_KEYS, persistUserPreference } from "../../../app/userPreferences.ts";
 
 interface UsePaneResizeOptions {
   /** Full localStorage key for the persisted width. */
@@ -75,7 +74,6 @@ export function usePaneResize({
   // The anchored edge does not move while dragging; captured once per drag so
   // pointermove never forces a layout read.
   const dragAnchorRef = useRef(0);
-  const finalWidthRef = useRef(width);
 
   const clamp = useCallback(
     (value: number) => {
@@ -97,12 +95,11 @@ export function usePaneResize({
       if (!pane) return;
       const rect = pane.getBoundingClientRect();
       dragAnchorRef.current = anchor === "right" ? rect.right : rect.left;
-      finalWidthRef.current = width;
       e.currentTarget.setPointerCapture(e.pointerId);
       setDragging(true);
       e.preventDefault();
     },
-    [paneRef, anchor, width],
+    [paneRef, anchor],
   );
 
   const onPointerMove = useCallback(
@@ -112,18 +109,12 @@ export function usePaneResize({
       if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
       const distance = anchor === "right" ? dragAnchorRef.current - e.clientX : e.clientX - dragAnchorRef.current;
       const next = clamp(Math.round(distance));
-      finalWidthRef.current = next;
       setWidth(next);
     },
     [clamp, setWidth, anchor],
   );
 
-  const endDrag = useCallback(() => {
-    setDragging(false);
-    if (PANE_KEYS.includes(storageKey as (typeof PANE_KEYS)[number])) {
-      persistUserPreference({ pane_widths: { [storageKey]: finalWidthRef.current } });
-    }
-  }, [storageKey]);
+  const endDrag = useCallback(() => setDragging(false), []);
 
   return {
     // Clamp on read so a persisted value left over from different bounds (or a

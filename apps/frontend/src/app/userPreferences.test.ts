@@ -37,7 +37,7 @@ beforeEach(() => {
   });
 });
 
-it("imports valid legacy choices once and ignores malformed widths", async () => {
+it("imports valid legacy choices once without importing pane widths", async () => {
   localStorage.setItem("localHook:ApplicationContextProvider.uiTheme", JSON.stringify("acme"));
   localStorage.setItem("localHook:ApplicationContextProvider.themeMode", JSON.stringify("dark"));
   localStorage.setItem("localHook:team-wiki:rail:width", JSON.stringify(450));
@@ -50,8 +50,8 @@ it("imports valid legacy choices once and ignores malformed widths", async () =>
     theme_mode: "dark",
     language: "fr",
     team_sort_mode: "alpha",
-    pane_widths: { "team-wiki:rail:width": 450, "inline-drawer:capability-side-panel:width": 180 },
   });
+  expect(readLegacyPreferences()).not.toHaveProperty("pane_widths");
   mock.responses.push({ initialized: false });
   await initializeUserPreferences("alice");
   expect(mock.writes).toHaveLength(1);
@@ -84,7 +84,6 @@ it("restores all display choices after browser storage is cleared", async () => 
     team_sort_mode: "alpha",
     agent_sort: "updated_at:desc",
     trace_expanded: false,
-    pane_widths: { "import-panel:width": 540 },
   });
   await initializeUserPreferences("alice");
   expect(localStorage.getItem("localHook:ApplicationContextProvider.uiTheme")).toBe('"cobalt"');
@@ -92,8 +91,40 @@ it("restores all display choices after browser storage is cleared", async () => 
   expect(localStorage.getItem("fred.teamSortMode")).toBe("alpha");
   expect(localStorage.getItem("fred.agentSort")).toBe("updated_at:desc");
   expect(localStorage.getItem("localHook:chatTraceExpanded")).toBe("false");
+  expect(localStorage.getItem("localHook:import-panel:width")).toBeNull();
+  expect(mock.writes).toHaveLength(0);
+});
+
+it("leaves a pane width in localStorage when server preferences hydrate", async () => {
+  localStorage.setItem("localHook:import-panel:width", "540");
+  mock.responses.push({ initialized: true, ui_theme_id: "cobalt" });
+  await initializeUserPreferences("alice");
   expect(localStorage.getItem("localHook:import-panel:width")).toBe("540");
   expect(mock.writes).toHaveLength(0);
+});
+
+it("drops pane widths from a pending legacy import created by an older frontend", async () => {
+  localStorage.setItem("localHook:import-panel:width", "540");
+  localStorage.setItem(
+    "fred.usersPreferences.pendingLegacy:alice",
+    JSON.stringify({ ui_theme_id: "cobalt", theme_mode: "dark", pane_widths: { "import-panel:width": 540 } }),
+  );
+  mock.responses.push({ initialized: false });
+  await initializeUserPreferences("alice");
+  expect(mock.writes).toEqual([{ ui_theme_id: "cobalt", theme_mode: "dark" }]);
+  expect(localStorage.getItem("localHook:import-panel:width")).toBe("540");
+  expect(localStorage.getItem("fred.usersPreferences.pendingLegacy:alice")).toBeNull();
+});
+
+it("uses current browser choices when an old pending import held only pane widths", async () => {
+  localStorage.setItem("localHook:ApplicationContextProvider.uiTheme", '"cobalt"');
+  localStorage.setItem(
+    "fred.usersPreferences.pendingLegacy:alice",
+    JSON.stringify({ pane_widths: { "import-panel:width": 540 } }),
+  );
+  mock.responses.push({ initialized: false });
+  await initializeUserPreferences("alice");
+  expect(mock.writes).toEqual([{ ui_theme_id: "cobalt" }]);
 });
 
 it("keeps legacy data eligible for import when the first server write fails", async () => {

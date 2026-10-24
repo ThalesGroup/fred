@@ -25,19 +25,6 @@ const TRACE_KEY = "localHook:chatTraceExpanded";
 const TEAM_SORT_KEY = "fred.teamSortMode";
 const AGENT_SORT_KEY = "fred.agentSort";
 const LANGUAGE_KEY = "i18nextLng";
-export const PANE_KEYS = [
-  "team-wiki:rail:width",
-  "import-panel:width",
-  "inline-drawer:command-prompt-panel:width",
-  "inline-drawer:debug-raw-panel:width",
-  "inline-drawer:session-attachments-panel:width",
-  "inline-drawer:document-scope-panel:width",
-  "inline-drawer:full-reasoning-panel:width",
-  "inline-drawer:skill-detail-panel:width",
-  "inline-drawer:prompt-selection-panel:width",
-  "inline-drawer:capability-side-panel:width",
-] as const;
-
 let activeUserId: string | null = null;
 let pendingSave: Promise<unknown> = Promise.resolve();
 let preferenceStore: (typeof import("../common/store"))["store"] | null = null;
@@ -88,12 +75,32 @@ export function readLegacyPreferences(): PatchUserPreferences {
   if (agentSort === "name" || agentSort === "created_at:desc" || agentSort === "updated_at:desc") {
     patch.agent_sort = agentSort;
   }
-  const widths: Record<string, number> = {};
-  for (const key of PANE_KEYS) {
-    const width = parsed(`localHook:${key}`);
-    if (typeof width === "number" && Number.isInteger(width) && width >= 180 && width <= 1200) widths[key] = width;
+  return patch;
+}
+
+function readPendingLegacyPreferences(value: unknown): PatchUserPreferences | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const pending = value as Record<string, unknown>;
+  const patch: PatchUserPreferences = {};
+  if (typeof pending.ui_theme_id === "string" && /^[a-z][a-z0-9-]{0,31}$/.test(pending.ui_theme_id)) {
+    patch.ui_theme_id = pending.ui_theme_id;
   }
-  if (Object.keys(widths).length) patch.pane_widths = widths;
+  if (pending.theme_mode === "light" || pending.theme_mode === "dark" || pending.theme_mode === "system") {
+    patch.theme_mode = pending.theme_mode;
+  }
+  if (pending.language === "fr" || pending.language === "en") patch.language = pending.language;
+  if (typeof pending.sidebar_collapsed === "boolean") patch.sidebar_collapsed = pending.sidebar_collapsed;
+  if (pending.team_sort_mode === "recent" || pending.team_sort_mode === "alpha") {
+    patch.team_sort_mode = pending.team_sort_mode;
+  }
+  if (
+    pending.agent_sort === "name" ||
+    pending.agent_sort === "created_at:desc" ||
+    pending.agent_sort === "updated_at:desc"
+  ) {
+    patch.agent_sort = pending.agent_sort;
+  }
+  if (typeof pending.trace_expanded === "boolean") patch.trace_expanded = pending.trace_expanded;
   return patch;
 }
 
@@ -117,10 +124,6 @@ async function writeLocalChoices(preferences: UserPreferences): Promise<void> {
   set(TRACE_KEY, JSON.stringify(preferences.trace_expanded ?? null));
   set(TEAM_SORT_KEY, preferences.team_sort_mode ?? "recent");
   set(AGENT_SORT_KEY, preferences.agent_sort ?? "name");
-  for (const key of PANE_KEYS) {
-    const width = preferences.pane_widths?.[key];
-    set(`localHook:${key}`, width === undefined ? null : JSON.stringify(width));
-  }
   const { default: i18n } = await import("../i18n");
   if (preferences.language) await i18n.changeLanguage(preferences.language);
   else await i18n.changeLanguage(navigator.language?.startsWith("fr") ? "fr" : "en");
@@ -142,10 +145,8 @@ export async function initializeUserPreferences(userId: string): Promise<void> {
     if (!owner) set(LEGACY_OWNER_KEY, userId);
     try {
       const pending: unknown = JSON.parse(get(pendingKey) ?? "null");
-      legacy =
-        pending && typeof pending === "object" && !Array.isArray(pending)
-          ? (pending as PatchUserPreferences)
-          : readLegacyPreferences();
+      const saved = readPendingLegacyPreferences(pending);
+      legacy = saved && Object.keys(saved).length ? saved : readLegacyPreferences();
     } catch {
       legacy = readLegacyPreferences();
     }

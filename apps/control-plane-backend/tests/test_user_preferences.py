@@ -33,35 +33,23 @@ async def test_preferences_round_trip_and_account_isolation(
             team_sort_mode="alpha",
             agent_sort="updated_at:desc",
             trace_expanded=False,
-            pane_widths={"team-wiki:rail:width": 180},
         ),
     )
     assert saved.initialized is True
     assert saved.ui_theme_id == "acme"
-    assert saved.pane_widths == {"team-wiki:rail:width": 180}
+    assert saved.trace_expanded is False
     assert (await store.get("bob")).initialized is False
 
     await store.patch(
         "alice",
-        PatchUserPreferences(
-            pane_widths={
-                "import-panel:width": 560,
-                "inline-drawer:capability-side-panel:width": 640,
-            }
-        ),
+        PatchUserPreferences(agent_sort="created_at:desc"),
     )
     reloaded = await store.get("alice")
     assert reloaded.theme_mode == "dark"
     assert reloaded.language == "fr"
     assert reloaded.team_sort_mode == "alpha"
-    assert reloaded.pane_widths == {
-        "team-wiki:rail:width": 180,
-        "import-panel:width": 560,
-        "inline-drawer:capability-side-panel:width": 640,
-    }
-
-    cleared = await store.patch("alice", PatchUserPreferences(pane_widths=None))
-    assert cleared.pane_widths == {}
+    assert reloaded.agent_sort == "created_at:desc"
+    assert reloaded.trace_expanded is False
 
     await store.delete("alice")
     assert (await store.get("alice")).initialized is False
@@ -76,8 +64,7 @@ async def test_preferences_round_trip_and_account_isolation(
         {"language": "de"},
         {"team_sort_mode": "random"},
         {"agent_sort": "rating"},
-        {"pane_widths": {"unknown": 400}},
-        {"pane_widths": {"import-panel:width": 50}},
+        {"pane_widths": {"import-panel:width": 400}},
         {"unrecognized": True},
     ],
 )
