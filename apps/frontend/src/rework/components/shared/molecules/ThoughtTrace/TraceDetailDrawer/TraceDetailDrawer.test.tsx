@@ -217,6 +217,89 @@ describe("TraceDetailDrawer sandbox execution", () => {
   });
 });
 
+describe("TraceDetailDrawer sandbox file search", () => {
+  it("shows the search criteria and bounded matches in tool details", () => {
+    const entry: TraceEntry = {
+      kind: "combo",
+      call: message({
+        channel: "tool_call",
+        parts: [
+          {
+            type: "tool_call",
+            call_id: "search-1",
+            name: "search_files",
+            args: { scope: "inputs", query: "POLARIS-7319" },
+          },
+        ],
+      }),
+      result: message({
+        channel: "tool_result",
+        role: "tool",
+        parts: [
+          {
+            type: "tool_result",
+            call_id: "search-1",
+            ok: true,
+            content: JSON.stringify({
+              exit_code: 0,
+              stdout: JSON.stringify({
+                paths: [],
+                matches: [{ path: "/inputs/corpus/report.txt", line: 8, text: "POLARIS-7319" }],
+                visited_files: 1,
+                visited_entries: 2,
+                truncated: false,
+                scope_available: true,
+              }),
+              stderr: "",
+              timed_out: false,
+              truncated: false,
+            }),
+            latency_ms: 42,
+          },
+        ],
+      }),
+    };
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain("rework.chatTrace.sandbox.search");
+    expect(html).toContain("POLARIS-7319");
+    expect(html).toContain("/inputs/corpus/report.txt");
+    expect(html).not.toContain("&quot;action&quot;");
+  });
+
+  it("redacts unexpected guest output from the curated search view", () => {
+    const entry: TraceEntry = {
+      kind: "combo",
+      call: message({
+        channel: "tool_call",
+        parts: [{ type: "tool_call", call_id: "search-2", name: "search_files", args: { query: "safe" } }],
+      }),
+      result: message({
+        channel: "tool_result",
+        role: "tool",
+        parts: [
+          {
+            type: "tool_result",
+            call_id: "search-2",
+            ok: true,
+            content: JSON.stringify({
+              exit_code: 0,
+              stdout: '{"private":"secret"}',
+              stderr: "secret transport detail",
+              timed_out: false,
+              truncated: false,
+            }),
+            latency_ms: 42,
+          },
+        ],
+      }),
+    };
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain("rework.chatTrace.sandbox.errorsByCode.unavailable");
+    expect(html).not.toContain("secret");
+    expect(html).not.toContain("private");
+  });
+});
+
 describe("TraceDetailDrawer read_query failure", () => {
   it("shows the submitted SQL and engine error without HTTP transport details", () => {
     const entry: TraceEntry = {

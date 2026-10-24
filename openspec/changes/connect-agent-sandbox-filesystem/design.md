@@ -22,6 +22,8 @@ See proposal.md. The broker currently accepts code only and retains a workload p
 
 6. **Attachment originals.** New fast-ingested attachments retain their original uploaded object in existing private content storage rather than discarding it. This is the source object, not a second file staged inside the VM. Retrieval checks uploader ownership and persisted session membership. Attachment and session erasure remove the object. Legacy attachments continue through their current text or tabular paths and report that original bytes are unavailable for mounted analysis.
 
+7. **Selective exploration.** The capability offers one bounded path discovery and literal text search tool through the same sandbox lease. It searches only `/inputs` and `/skills`, treats case and word separators flexibly, and returns paths, line numbers and short excerpts. Binary formats use `execute_code` with format-aware filtering. Agent guidance asks for concise answers and keeps source code and package details in tool details.
+
 ## Risks / Trade-offs
 
 - [A shared filesystem increases the Kata host/guest interface] -> Expose only a narrow read-only view through an approved volume and verify the selected runtime's volume implementation; never expose a host path or raw bucket.

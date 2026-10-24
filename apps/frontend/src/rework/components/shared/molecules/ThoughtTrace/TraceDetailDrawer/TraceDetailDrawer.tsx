@@ -187,6 +187,64 @@ function isSandboxExecution(
   );
 }
 
+type SandboxSearchOutput = {
+  paths: string[];
+  matches: { path: string; line: number; text: string }[];
+  visited_files: number;
+  visited_entries: number;
+  truncated: boolean;
+  scope_available: boolean;
+};
+
+function parseSandboxSearchOutput(stdout: string, scope: "inputs" | "skills"): SandboxSearchOutput | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const value = parsed as Record<string, unknown>;
+  const validPath = (path: unknown): path is string =>
+    typeof path === "string" && path.startsWith(`/${scope}/`) && path.length <= 512;
+  if (
+    !Array.isArray(value.paths) ||
+    value.paths.length > 50 ||
+    !value.paths.every(validPath) ||
+    !Array.isArray(value.matches) ||
+    value.matches.length > 20 ||
+    !value.matches.every((match: unknown) => {
+      if (!match || typeof match !== "object" || Array.isArray(match)) return false;
+      const item = match as Record<string, unknown>;
+      return (
+        validPath(item.path) &&
+        Number.isInteger(item.line) &&
+        (item.line as number) > 0 &&
+        typeof item.text === "string" &&
+        item.text.length <= 240
+      );
+    }) ||
+    !Number.isInteger(value.visited_files) ||
+    (value.visited_files as number) < 0 ||
+    (value.visited_files as number) > 1000 ||
+    !Number.isInteger(value.visited_entries) ||
+    (value.visited_entries as number) < 0 ||
+    (value.visited_entries as number) > 10000 ||
+    typeof value.truncated !== "boolean" ||
+    typeof value.scope_available !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    paths: value.paths,
+    matches: value.matches,
+    visited_files: value.visited_files,
+    visited_entries: value.visited_entries,
+    truncated: value.truncated,
+    scope_available: value.scope_available,
+  } as SandboxSearchOutput;
+}
+
 function SandboxToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
   const { t } = useTranslation();
   const args = toolArgs(entry.call);
@@ -249,6 +307,57 @@ function SandboxToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "comb
   );
 }
 
+function SandboxSearchDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
+  const { t } = useTranslation();
+  const args = toolArgs(entry.call);
+  if (
+    (args.scope !== "inputs" && args.scope !== "skills" && args.scope !== undefined) ||
+    (args.file_glob !== undefined && (typeof args.file_glob !== "string" || args.file_glob.length > 200)) ||
+    (args.query !== undefined && (typeof args.query !== "string" || args.query.length > 200))
+  ) {
+    return <GenericToolDetail entry={entry} />;
+  }
+
+  const result = entry.result ? parseToolResultContent(entry.result) : null;
+  const errorCode = result && typeof result.error_code === "string" ? result.error_code : null;
+  const execution = isSandboxExecution(result) ? result : null;
+  const scope = args.scope === "skills" ? "skills" : "inputs";
+  const output = execution?.exit_code === 0 ? parseSandboxSearchOutput(execution.stdout, scope) : null;
+
+  return (
+    <div className={styles.detail}>
+      <div className={styles.toolSection}>
+        <p className={styles.sectionLabel}>{t("rework.chatTrace.sandbox.search")}</p>
+        <CodeBlock
+          code={JSON.stringify(
+            { scope: args.scope ?? "inputs", file_glob: args.file_glob ?? "*", query: args.query ?? "" },
+            null,
+            2,
+          )}
+          language="json"
+        />
+      </div>
+      <div className={styles.toolSection}>
+        <p className={styles.sectionLabel}>{t("rework.chatTrace.sandbox.result")}</p>
+        {!entry.result ? (
+          <p className={styles.metaInfo}>{t("rework.chatTrace.toolStatus.running")}</p>
+        ) : output ? (
+          <>
+            {execution?.truncated && <span className={styles.metaInfo}>{t("rework.chatTrace.sandbox.truncated")}</span>}
+            <CodeBlock code={JSON.stringify(output, null, 2)} language="json" />
+          </>
+        ) : (
+          <div className={styles.errorBox}>
+            {t(
+              `rework.chatTrace.sandbox.errorsByCode.${SANDBOX_ERROR_CODES.has(errorCode ?? "") ? errorCode : "unavailable"}`,
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Fallback: redacted {action, status, latency} view for unrecognized tools. */
 function GenericToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
   const { t } = useTranslation();
@@ -266,6 +375,7 @@ function GenericToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "comb
 /** Dispatches a tool-result entry to the richest view its content shape supports. */
 function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "combo" }>; messages?: ChatMessage[] }) {
   if (toolSlug(toolName(entry.call)) === "execute_code") return <SandboxToolDetail entry={entry} />;
+  if (toolSlug(toolName(entry.call)) === "search_files") return <SandboxSearchDetail entry={entry} />;
   if (toolName(entry.call) === "ask_user") {
     const summary = messages ? hitlAnswerSummaryForTool(messages, entry.call) : null;
     if (summary) return <HitlChoiceRecap summary={summary} />;
