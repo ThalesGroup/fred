@@ -7,14 +7,14 @@
 ## 2. Authorized file gateway
 
 - [ ] 2.1 Implement an authenticated read-only source view with opaque lease handles, bounded listing and range reads; verify traversal, cross-lease, write, expiry and cache invalidation tests.
-- [ ] 2.2 Bind only a selected authorized corpus document to the view under `/inputs`, with no guest scratch copy; verify allowed, denied, missing and oversized document tests.
+- [ ] 2.2 Establish the conversation scope before execution, then enumerate readable team or personal corpus documents under `/inputs/corpus` without a selection call or guest scratch copy; verify allowed, denied, missing, oversized and newly added document tests.
 - [ ] 2.3 Retain originals of new conversation attachments in existing private content storage, authorize mounted reads by uploader and persisted session membership, and erase originals on attachment/session deletion; verify ingestion, ownership, legacy and deletion tests.
 - [ ] 2.4 Expose published platform skill scripts through a read-only `/skills` mount and reject escaping links and unsupported files; verify script source and path tests.
 
 ## 3. Agent runtime integration
 
 - [ ] 3.1 Preserve current skill and document behavior with `code_sandbox` off and declare dependency for script-based skills; verify ReAct, Deep parent and child baseline tests.
-- [ ] 3.2 Connect Deep's logical `CompositeBackend` and ReAct sandbox tools to the mounted path contract without copying source files; verify listing and source selection do not start a workload before execution.
+- [ ] 3.2 Connect Deep's logical `CompositeBackend` and ReAct sandbox tools to the mounted path contract without copying source files; remove the selection tool and verify browsing does not start a workload before execution.
 - [ ] 3.3 Gate Deep native `execute`, ReAct code execution and skill scripts through the same conversation sandbox lease and isolation profile; verify capability absence, Python file analysis and scratch reuse tests.
 
 ## 4. Integration and close-out

@@ -5,10 +5,10 @@ Code execution and agent files currently live in separate spaces. A Deep or ReAc
 ## What Changes
 
 - Expose one conversation-scoped logical workspace to Deep and ReAct with read-only `/skills` and `/inputs`, and writable `/work`. Keep Deep's existing conversation scratchpad and `/.deep` artifacts intact.
-- Mount authorized source views into the isolated workload. Serve selected corpus or conversation attachment files on demand through a read-only mount, without copying them into guest scratch or exposing backing storage credentials to guest code.
+- Mount authorized source views into the isolated workload. Serve the conversation's readable team or personal corpus documents and its retained attachments on demand through read-only directories, without a selection tool, a guest scratch copy, or backing storage credentials in guest code.
 - Run platform skill scripts and agent-generated Bash/Python against the same isolated conversation workload. Mark skills that require sandbox execution and make the interface able to accept future user-published skills without adding user skill import or management in this change.
 - Preserve all existing skill discovery, instruction loading, document reading and tabular tools when `code_sandbox` is disabled. Skills requiring execution SHALL explain that their required capability is unavailable.
-- Keep model-visible tool arguments small. Bind user, team, conversation, and file provenance privately; reject unsafe paths, oversized files, unsupported types, and missing authorization.
+- Bind user, team, conversation, and file provenance privately; filter directory listings and recheck each read, rejecting unsafe paths, oversized files, unsupported types, and missing authorization.
 - Keep the existing operator-approved isolation runtime, capacity limits, idle expiry, and admin gate for every execution path, including Deep native `execute` if exposed.
 - Provision workloads only when a conversation first executes code. Remove ready capacity controls and keep the SIG Agent Sandbox claim pool at zero replicas.
 
