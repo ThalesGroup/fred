@@ -6,7 +6,6 @@ provisioner: rclone.csi.veloxpack.io
 reclaimPolicy: Delete
 volumeBindingMode: Immediate
 parameters:
-  remote: fred
   remotePath: /
   csi.storage.k8s.io/node-publish-secret-name: "${pvc.name}"
   csi.storage.k8s.io/node-publish-secret-namespace: fred-sandbox

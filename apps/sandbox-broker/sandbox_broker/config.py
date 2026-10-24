@@ -37,6 +37,7 @@ class BrokerSettings:
     settings_token: str | None = None
     mount_provider: MountKind = "none"
     file_gateway_url: str | None = None
+    file_gateway_revoke_url: str | None = None
     file_gateway_secret: str | None = None
     file_storage_class: str | None = None
     docker_volume_plugin: str | None = None
@@ -121,6 +122,24 @@ class BrokerSettings:
                 or not url.path.endswith("/sandbox-mount")
             ):
                 raise ValueError("Sandbox file gateway requires an HTTPS mount URL")
+            if self.file_gateway_revoke_url:
+                revoke_url = urlsplit(self.file_gateway_revoke_url)
+                if (
+                    revoke_url.scheme not in {"http", "https"}
+                    or not revoke_url.hostname
+                    or (
+                        revoke_url.scheme == "http"
+                        and not revoke_url.hostname.endswith(".svc.cluster.local")
+                    )
+                    or revoke_url.username
+                    or revoke_url.password
+                    or revoke_url.query
+                    or revoke_url.fragment
+                    or not revoke_url.path.endswith("/sandbox-mount")
+                ):
+                    raise ValueError(
+                        "Sandbox file revoke URL must be a trusted mount endpoint"
+                    )
             if not self.file_gateway_secret or len(self.file_gateway_secret) < 32:
                 raise ValueError(
                     "Sandbox file gateway secret must have at least 32 characters"
@@ -134,6 +153,7 @@ class BrokerSettings:
         elif any(
             (
                 self.file_gateway_url,
+                self.file_gateway_revoke_url,
                 self.file_gateway_secret,
                 self.file_storage_class,
                 self.docker_volume_plugin,
@@ -179,6 +199,8 @@ class BrokerSettings:
             settings_token=os.getenv("SANDBOX_SETTINGS_TOKEN") or None,
             mount_provider=os.getenv("SANDBOX_MOUNT_PROVIDER", "none"),  # type: ignore[arg-type]
             file_gateway_url=os.getenv("SANDBOX_FILE_GATEWAY_URL") or None,
+            file_gateway_revoke_url=os.getenv("SANDBOX_FILE_GATEWAY_REVOKE_URL")
+            or None,
             file_gateway_secret=os.getenv("SANDBOX_FILE_GATEWAY_SECRET") or None,
             file_storage_class=os.getenv("SANDBOX_FILE_STORAGE_CLASS") or None,
             docker_volume_plugin=os.getenv("SANDBOX_DOCKER_VOLUME_PLUGIN") or None,

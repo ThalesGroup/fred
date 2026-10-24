@@ -29,6 +29,7 @@ metadata:
 rules:
   - apiGroups: [storage.k8s.io]
     resources: [storageclasses]
+    resourceNames: [fred-sandbox-webdav]
     verbs: [get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

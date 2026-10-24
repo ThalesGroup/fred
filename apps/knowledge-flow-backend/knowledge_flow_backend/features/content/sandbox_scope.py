@@ -10,6 +10,7 @@ from pathlib import PurePosixPath
 
 from fred_core.common import OwnerFilter
 from fred_core.common.team_id import is_personal_team_id
+from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.security.rebac.rebac_engine import DocumentPermission, TeamPermission
 from fred_pod.security.structure import KeycloakUser
 
@@ -24,6 +25,25 @@ class AuthorizedCorpusSource:
     document_uid: str
     name: str
     size: int
+
+
+async def scoped_authorized_tag_ids(
+    user: KeycloakUser,
+    team_id: str,
+    *,
+    context: ApplicationContext,
+    tag_service: TagService | None = None,
+) -> set[str]:
+    if isinstance(context.get_rebac_engine(), NoopRebacEngine):
+        raise PermissionError("Sandbox file mounts require access control")
+    personal = is_personal_team_id(team_id)
+    tag_ids = await (tag_service or TagService()).list_authorized_tags_ids(
+        user,
+        OwnerFilter.PERSONAL if personal else OwnerFilter.TEAM,
+        None if personal else team_id,
+    )
+    owner_id = user.uid if personal else team_id
+    return await context.get_tag_store().filter_owned_tag_ids(owner_id, tag_ids)
 
 
 async def authorize_corpus_source(
@@ -44,11 +64,7 @@ async def authorize_corpus_source(
     personal = is_personal_team_id(team_id)
     if not personal:
         await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_READ, team_id)
-    allowed_tags = await (tag_service or TagService()).list_authorized_tags_ids(
-        user,
-        OwnerFilter.PERSONAL if personal else OwnerFilter.TEAM,
-        None if personal else team_id,
-    )
+    allowed_tags = await scoped_authorized_tag_ids(user, team_id, context=context, tag_service=tag_service)
     if not set(metadata.tags.tag_ids or ()).intersection(allowed_tags):
         raise PermissionError("Document is outside the conversation scope")
     await rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)

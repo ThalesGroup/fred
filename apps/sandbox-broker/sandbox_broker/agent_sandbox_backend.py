@@ -72,6 +72,36 @@ class AgentSandboxBackend:
         container = containers[0]
         security = container.get("securityContext", {})
         pod_security = pod.get("securityContext", {})
+        expected_volumes = [
+            {"name": "scratch", "emptyDir": {"sizeLimit": "16Mi"}},
+        ]
+        if self.kubernetes.mount and workload_name:
+            expected_volumes.append(
+                {
+                    "name": "inputs",
+                    "persistentVolumeClaim": {
+                        "claimName": f"inputs-{workload_name}",
+                    },
+                }
+            )
+        if self.settings.skills_volume:
+            expected_volumes.append(
+                {
+                    "name": "skills",
+                    "persistentVolumeClaim": {
+                        "claimName": self.settings.skills_volume,
+                        "readOnly": True,
+                    },
+                }
+            )
+        volumes = pod.get("volumes")
+        if not isinstance(volumes, list) or len(volumes) != len(expected_volumes):
+            return False
+        # SIG may append claim volumes after the template's existing volumes.
+        if sorted(json.dumps(volume, sort_keys=True) for volume in volumes) != sorted(
+            json.dumps(volume, sort_keys=True) for volume in expected_volumes
+        ):
+            return False
         return (
             pod.get("runtimeClassName") == self.settings.runtime_name
             and pod.get("automountServiceAccountToken") is False
@@ -118,35 +148,6 @@ class AgentSandboxBackend:
             and container.get("resources", {}).get("limits", {}).get("memory")
             == "256Mi"
             and container.get("resources", {}).get("limits", {}).get("cpu") == "500m"
-            and pod.get("volumes")
-            == (
-                [{"name": "scratch", "emptyDir": {"sizeLimit": "16Mi"}}]
-                + (
-                    [
-                        {
-                            "name": "inputs",
-                            "persistentVolumeClaim": {
-                                "claimName": f"inputs-{workload_name}",
-                            },
-                        }
-                    ]
-                    if self.kubernetes.mount and workload_name
-                    else []
-                )
-                + (
-                    [
-                        {
-                            "name": "skills",
-                            "persistentVolumeClaim": {
-                                "claimName": self.settings.skills_volume,
-                                "readOnly": True,
-                            },
-                        }
-                    ]
-                    if self.settings.skills_volume
-                    else []
-                )
-            )
         )
 
     async def prepare(self, view_key: str | None = None) -> SandboxLease:

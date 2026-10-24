@@ -104,6 +104,12 @@ class KubernetesBackend:
             )
             if result.returncode != 0:
                 raise SandboxError("backend_failed")
+            job = await self._get_json(
+                self._kubectl("get", "job", name, "-o", "json"), "backend_failed"
+            )
+            job_uid = job.get("metadata", {}).get("uid")
+            if not isinstance(job_uid, str) or not job_uid:
+                raise SandboxError("backend_failed")
             if self.mount is not None:
                 await self.mount.attach_owner(name, "job", pvc=True)
             deadline = time.monotonic() + self.settings.preparation_timeout_seconds
@@ -128,6 +134,8 @@ class KubernetesBackend:
                         and condition.get("status") == "True"
                         for condition in status.get("conditions", [])
                     ):
+                        if not self._is_safe_admitted_pod(pod, name, job_uid):
+                            raise SandboxError("policy_unavailable")
                         pod_name = pod.get("metadata", {}).get("name")
                         if isinstance(pod_name, str) and pod_name:
                             return SandboxLease(
@@ -141,6 +149,45 @@ class KubernetesBackend:
             except Exception as exc:
                 raise SandboxPrepareLeak(lease) from exc
             raise
+
+    def _is_safe_admitted_pod(self, pod: dict[str, Any], name: str, job_uid: str) -> bool:
+        metadata = pod.get("metadata", {})
+        owner_refs = metadata.get("ownerReferences", [])
+        if not any(
+            ref.get("kind") == "Job"
+            and ref.get("name") == name
+            and ref.get("uid") == job_uid
+            and ref.get("controller") is True
+            for ref in owner_refs
+            if isinstance(ref, dict)
+        ):
+            return False
+        actual = pod.get("spec", {})
+        expected = self.job_manifest(name)["spec"]["template"]["spec"]
+        if not isinstance(actual, dict) or actual.get("initContainers") or actual.get("ephemeralContainers"):
+            return False
+        if actual.get("shareProcessNamespace", False) or actual.get("serviceAccountName", "default") != "default":
+            return False
+        for field in (
+            "runtimeClassName", "automountServiceAccountToken", "enableServiceLinks",
+            "hostNetwork", "hostPID", "hostIPC", "restartPolicy", "securityContext",
+            "volumes",
+        ):
+            if actual.get(field) != expected.get(field):
+                return False
+        containers = actual.get("containers")
+        if not isinstance(containers, list) or len(containers) != 1:
+            return False
+        container, wanted = containers[0], expected["containers"][0]
+        if not isinstance(container, dict):
+            return False
+        return all(
+            container.get(field) == wanted.get(field)
+            for field in (
+                "name", "image", "imagePullPolicy", "command", "workingDir", "env",
+                "securityContext", "resources", "volumeMounts",
+            )
+        ) and not container.get("envFrom")
 
     async def execute(
         self, lease: SandboxLease, request: SandboxRequest

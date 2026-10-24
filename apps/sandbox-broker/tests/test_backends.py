@@ -23,6 +23,28 @@ def settings(backend="docker", **overrides):
     return BrokerSettings(**values)
 
 
+def test_file_revoke_url_accepts_only_trusted_internal_http() -> None:
+    mounted = dict(
+        mount_provider="rclone_csi",
+        file_gateway_url="https://files.example/knowledge-flow/v1/sandbox-mount",
+        file_gateway_secret="s" * 32,
+        file_storage_class="fred-sandbox-webdav",
+    )
+    internal = "http://knowledge-flow-backend.fred.svc.cluster.local:8000/knowledge-flow/v1/sandbox-mount"
+    assert (
+        settings(
+            "agent_sandbox", **mounted, file_gateway_revoke_url=internal
+        ).file_gateway_revoke_url
+        == internal
+    )
+    with pytest.raises(ValueError, match="revoke URL"):
+        settings(
+            "agent_sandbox",
+            **mounted,
+            file_gateway_revoke_url="http://files.example/knowledge-flow/v1/sandbox-mount",
+        )
+
+
 class DockerRunner:
     def __init__(self, runtime="kata-runtime", timeout=False):
         self.calls = []
@@ -118,7 +140,9 @@ async def test_docker_recovery_removes_managed_workload_and_input_volume() -> No
             if args[:3] == ["docker", "volume", "ls"]:
                 self.calls.append((list(args), input_data))
                 return CommandResult(0, "inputs-fred-sbx-" + "b" * 20 + "\n", "")
-            return await super().run(args, timeout=timeout, output_limit=output_limit, input_data=input_data)
+            return await super().run(
+                args, timeout=timeout, output_limit=output_limit, input_data=input_data
+            )
 
     runner = RecoveryRunner()
     await DockerBackend(settings(), runner).recover()
@@ -234,14 +258,24 @@ class KubeRunner:
             if self.extra_policy:
                 items.append({"metadata": {"name": "allow-egress"}, "spec": {}})
             return CommandResult(0, json.dumps({"items": items}), "")
+        if "job" in args and "get" in args:
+            return CommandResult(0, json.dumps({"metadata": {"uid": "job-uid"}}), "")
         if "pods" in args:
+            pod_spec = self.manifest["spec"]["template"]["spec"]
             return CommandResult(
                 0,
                 json.dumps(
                     {
                         "items": [
                             {
-                                "metadata": {"name": "fred-sbx-pod"},
+                                "metadata": {
+                                    "name": "fred-sbx-pod",
+                                    "ownerReferences": [{
+                                        "kind": "Job", "name": self.manifest["metadata"]["name"],
+                                        "uid": "job-uid", "controller": True,
+                                    }],
+                                },
+                                "spec": pod_spec,
                                 "status": {
                                     "conditions": [{"type": "Ready", "status": "True"}]
                                 },
@@ -273,7 +307,6 @@ async def test_kubernetes_mount_creates_private_secret_and_read_only_pvc() -> No
                             "parameters": {
                                 "csi.storage.k8s.io/node-publish-secret-name": "${pvc.name}",
                                 "csi.storage.k8s.io/node-publish-secret-namespace": "fred-sandbox",
-                                "remote": "fred",
                                 "remotePath": "/",
                             },
                             "mountOptions": ["dir-cache-time=1s", "vfs-cache-mode=off"],
@@ -310,6 +343,14 @@ async def test_kubernetes_mount_creates_private_secret_and_read_only_pvc() -> No
         and secret["metadata"]["name"] == pvc["metadata"]["name"]
     )
     assert "bearer_token" in secret["stringData"]["configData"]
+    assert secret["stringData"]["remote"] == secret["metadata"]["name"]
+    assert secret["stringData"]["configData"].startswith(
+        f"[{secret['metadata']['name']}]\n"
+    )
+    assert backend.mount is not None
+    await backend.mount.create_secret("fred-sbx-second", "b" * 64)
+    second_secret = runner.manifests[-1]
+    assert second_secret["stringData"]["remote"] != secret["stringData"]["remote"]
     assert job["kind"] == "Job"
     assert any("patch" in args and "secret" in args for args in runner.calls)
     assert any("patch" in args and "pvc" in args for args in runner.calls)
@@ -390,6 +431,22 @@ async def test_kubernetes_preflight_manifest_and_single_use_lifecycle() -> None:
     assert result.stdout == "ok\n"
     assert "delete" in runner.calls[-1]
     assert "--wait=true" in runner.calls[-1]
+
+
+def test_kubernetes_rejects_admitted_pod_mutations() -> None:
+    backend = KubernetesBackend(settings("kubernetes"), KubeRunner())
+    name = "fred-sbx-test"
+    pod = {
+        "metadata": {"ownerReferences": [
+            {"kind": "Job", "name": name, "uid": "job-uid", "controller": True}
+        ]},
+        "spec": backend.job_manifest(name)["spec"]["template"]["spec"],
+    }
+    assert backend._is_safe_admitted_pod(pod, name, "job-uid")
+    pod["spec"]["containers"][0]["volumeMounts"].append(
+        {"name": "credentials", "mountPath": "/secrets"}
+    )
+    assert not backend._is_safe_admitted_pod(pod, name, "job-uid")
 
 
 @pytest.mark.asyncio
@@ -537,7 +594,6 @@ async def test_agent_sandbox_claim_injects_only_approved_inputs_volume() -> None
                             "parameters": {
                                 "csi.storage.k8s.io/node-publish-secret-name": "${pvc.name}",
                                 "csi.storage.k8s.io/node-publish-secret-namespace": "fred-sandbox",
-                                "remote": "fred",
                                 "remotePath": "/",
                             },
                             "mountOptions": ["dir-cache-time=1s", "vfs-cache-mode=off"],
@@ -687,6 +743,28 @@ async def test_agent_sandbox_skills_claim_uses_approved_read_only_volume() -> No
     lease = await backend.prepare()
     assert lease.target == lease.id
     await backend.dispose(lease)
+
+
+def test_agent_sandbox_accepts_reordered_claim_volume_without_weakening_validation() -> (
+    None
+):
+    config = settings(
+        "agent_sandbox",
+        mount_provider="rclone_csi",
+        file_gateway_url="https://files.example/knowledge-flow/v1/sandbox-mount",
+        file_gateway_secret="s" * 32,
+        file_storage_class="fred-sandbox-webdav",
+        skills_volume="fred-platform-skills",
+    )
+    backend = AgentSandboxBackend(config, AgentRunner())
+    workload = "fred-sbx-test"
+    pod = backend.kubernetes.job_manifest(workload)["spec"]["template"]["spec"]
+    pod["volumes"][1]["persistentVolumeClaim"].pop("readOnly")
+    pod["volumes"] = [pod["volumes"][0], pod["volumes"][2], pod["volumes"][1]]
+
+    assert backend._is_safe_pod_spec(pod, workload_name=workload)
+    pod["volumes"][2]["persistentVolumeClaim"]["claimName"] = "other-claim"
+    assert not backend._is_safe_pod_spec(pod, workload_name=workload)
 
 
 @pytest.mark.asyncio

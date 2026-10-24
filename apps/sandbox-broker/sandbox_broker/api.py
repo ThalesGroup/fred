@@ -83,6 +83,8 @@ def create_app(
             request.headers.get("Authorization", ""), f"Bearer {config.token}"
         ):
             return _error(401, "unauthorized")
+        if config.mount_provider == "none":
+            return _error(503, "unavailable")
         session_key = request.headers.get("X-Fred-Sandbox-Session", "")
         if not re.fullmatch(r"[a-f0-9]{64}", session_key):
             return _error(400, "invalid_request")

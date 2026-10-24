@@ -37,6 +37,9 @@ class FakeInputs(SandboxInputPort):
     def __init__(self):
         self.calls = []
 
+    async def prepare_view(self, session):
+        self.calls.append(("prepare", session))
+
     async def bind_corpus(self, document_uid, session):
         self.calls.append(("corpus", document_uid, session))
         return f"/inputs/corpus/{document_uid}/report.txt"
@@ -64,6 +67,9 @@ def test_capability_boot_and_tool_schema() -> None:
     capability = registry.capability("code_sandbox")
     assert capability.manifest.team_scope is TeamScopePolicy.ADMIN_GATED
     assert capability.manifest.execution_models == ("react", "graph")
+    assert [control.widget for control in capability.chat_controls(EmptyModel())] == [
+        "attach_files"
+    ]
     tool = capability.tools(context(FakeSandbox()))[0]
     assert set(tool.args_schema.model_json_schema()["properties"]) == {
         "language",
@@ -114,23 +120,20 @@ async def test_tool_binds_conversation_without_exposing_it_to_model() -> None:
 
 
 @pytest.mark.asyncio
-async def test_input_selection_uses_the_trusted_conversation_scope() -> None:
+async def test_execution_prepares_the_trusted_conversation_view() -> None:
     port = FakeSandbox()
     inputs = FakeInputs()
     tools = CodeSandboxCapability().tools(
         context(port, session_id="chat-1", team_id="team-1", inputs=inputs)
     )
-    assert [tool.name for tool in tools] == ["execute_code", "select_code_input"]
-    selected = await tools[1].ainvoke({"source_type": "corpus", "source_id": "doc-1"})
-    assert json.loads(selected)["path"] == "/inputs/corpus/doc-1/report.txt"
+    assert [tool.name for tool in tools] == ["execute_code"]
+    await tools[0].ainvoke({"language": "bash", "code": "ls /inputs"})
     assert inputs.calls == [
         (
-            "corpus",
-            "doc-1",
+            "prepare",
             SandboxSessionIdentity(
                 user_id="user", session_id="chat-1", team_id="team-1"
             ),
         )
     ]
-    assert port.requests == []
-    assert set(tools[1].args_schema.model_fields) == {"source_type", "source_id"}
+    assert len(port.requests) == 1

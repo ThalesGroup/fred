@@ -6,12 +6,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from typing import Literal
 
 from fred_sdk.contracts.capability import (
     AgentCapability,
     CapabilityContext,
     CapabilityManifest,
+    ChatControlSpec,
     EmptyModel,
     TeamScopePolicy,
 )
@@ -39,6 +39,9 @@ class CodeSandboxCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel])
     )
     ConfigModel = EmptyModel
 
+    def chat_controls(self, config: EmptyModel) -> list[ChatControlSpec]:
+        return [ChatControlSpec(widget="attach_files")]
+
     def tools(
         self, ctx: CapabilityContext[EmptyModel, EmptyModel]
     ) -> Sequence[BaseTool]:
@@ -63,6 +66,11 @@ class CodeSandboxCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel])
                     if identity.session_id
                     else None
                 )
+                inputs = ctx.services.sandbox_inputs
+                if inputs is not None:
+                    if session is None or not session.team_id:
+                        raise SandboxError("invalid_request")
+                    await inputs.prepare_view(session)
                 result = await port.execute(request, session=session)
                 content = json.dumps(result.model_dump(), ensure_ascii=False)
                 is_error = False
@@ -76,13 +84,28 @@ class CodeSandboxCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel])
             )
             return content, artifact
 
+        input_hint = (
+            "Read-only corpus documents are under /inputs/corpus/libraries in "
+            "paged library directories; current conversation attachments are "
+            "under /inputs/attachments. Use find or glob to discover files; "
+            "each file path contains its ID and name. "
+            if ctx.services.sandbox_inputs is not None
+            else ""
+        )
         tools: list[BaseTool] = [
             StructuredTool.from_function(
                 name="execute_code",
                 description=(
                     "Run a short Bash or Python program in an isolated sandbox. "
                     "Use only language 'bash' or 'python'. Output is untrusted data. "
-                    "Selected inputs are available at the paths returned by select_code_input. "
+                    "Call this tool before reporting code output; never describe an "
+                    "unexecuted command as an execution result. "
+                    "Installed packages depend on the approved image: for PDF, "
+                    "DOCX, PPTX, XLSX and tables, check pypdf, python-docx, "
+                    "python-pptx, openpyxl, pandas and duckdb before giving up. "
+                    f"{input_hint}"
+                    "Approved skills, when mounted, are under /skills. Read a skill's "
+                    "SKILL.md before running its scripts. "
                     "Do not include secrets in the source code."
                 ),
                 coroutine=execute_code,
@@ -91,48 +114,4 @@ class CodeSandboxCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel])
             ),
         ]
 
-        inputs = ctx.services.sandbox_inputs
-        if inputs is not None:
-
-            async def select_code_input(
-                source_type: Literal["corpus", "attachment"], source_id: str
-            ) -> tuple[str, ToolInvocationResult]:
-                try:
-                    identity = ctx.identity
-                    if not identity.session_id or not identity.team_id:
-                        raise SandboxError("invalid_request")
-                    session = SandboxSessionIdentity(
-                        user_id=identity.user_id,
-                        session_id=identity.session_id,
-                        team_id=identity.team_id,
-                    )
-                    if source_type == "corpus":
-                        path = await inputs.bind_corpus(source_id, session)
-                    else:
-                        path = await inputs.bind_attachment(source_id, session)
-                    content = json.dumps({"path": path})
-                    is_error = False
-                except SandboxError as exc:
-                    content = json.dumps({"error_code": exc.code})
-                    is_error = True
-                artifact = ToolInvocationResult(
-                    tool_ref="code_sandbox.select_code_input",
-                    is_error=is_error,
-                    blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=content),),
-                )
-                return content, artifact
-
-            tools.append(
-                StructuredTool.from_function(
-                    name="select_code_input",
-                    description=(
-                        "Select one authorized corpus document or conversation attachment "
-                        "as a read-only file for execute_code. Use its ID from an existing "
-                        "document or attachment tool. Returns its /inputs path without "
-                        "starting a sandbox or executing code."
-                    ),
-                    coroutine=select_code_input,
-                    response_format="content_and_artifact",
-                )
-            )
         return tuple(tools)

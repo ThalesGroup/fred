@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 from fred_core.common import OwnerFilter
+from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_pod.security.structure import KeycloakUser
 
 from knowledge_flow_backend.features.content.sandbox_scope import authorize_corpus_source
@@ -42,6 +43,13 @@ class _Context:
     def get_content_store(self):
         return SimpleNamespace(get_file_metadata=lambda uid: SimpleNamespace(size=self.size))
 
+    def get_tag_store(self):
+        async def filter_owned_tag_ids(owner_id, tag_ids):
+            owner_tags = {"personal-tag"} if owner_id == "u1" else {"team-tag"}
+            return tag_ids & owner_tags
+
+        return SimpleNamespace(filter_owned_tag_ids=filter_owned_tag_ids)
+
 
 class _Tags:
     def __init__(self, allowed):
@@ -73,6 +81,23 @@ async def test_personal_source_uses_personal_scope_and_document_permission() -> 
     assert source.name == "report.xlsx"
     assert tags.calls == [(OwnerFilter.PERSONAL, None)]
     assert context.checked == [("u1", "active"), ("u1", "read", "doc-1")]
+
+
+@pytest.mark.asyncio
+async def test_personal_source_excludes_shared_team_owned_tag() -> None:
+    user = KeycloakUser(uid="u1", username="u1", roles=[])
+    context = _Context(tags=("team-tag",))
+    with pytest.raises(PermissionError, match="outside the conversation scope"):
+        await authorize_corpus_source(user, "personal-1234", "doc-1", context=context, tag_service=_Tags({"team-tag"}))
+
+
+@pytest.mark.asyncio
+async def test_sandbox_files_fail_closed_without_rebac() -> None:
+    user = KeycloakUser(uid="u1", username="u1", roles=[])
+    context = _Context()
+    context.get_rebac_engine = lambda: NoopRebacEngine()
+    with pytest.raises(PermissionError, match="require access control"):
+        await authorize_corpus_source(user, "personal-1234", "doc-1", context=context, tag_service=_Tags({"team-tag"}))
 
 
 @pytest.mark.asyncio

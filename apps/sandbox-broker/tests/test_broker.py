@@ -58,7 +58,12 @@ async def test_view_key_is_workload_generation_scoped() -> None:
     second = FakeBackend()
     views = []
     for backend in (first, second):
-        app = create_app(settings(), backend)
+        app = create_app(settings(
+            mount_provider="rclone_docker",
+            file_gateway_url="https://files.example/knowledge-flow/v1/sandbox-mount",
+            file_gateway_secret="s" * 32,
+            docker_volume_plugin="rclone",
+        ), backend)
         async with (
             app.router.lifespan_context(app),
             httpx.AsyncClient(
@@ -81,6 +86,23 @@ async def test_view_key_is_workload_generation_scoped() -> None:
             ).status_code == 200
             assert backend.view_keys == [views[-1]]
     assert views[0] != views[1]
+
+
+@pytest.mark.asyncio
+async def test_view_key_fails_closed_without_mount_provider() -> None:
+    app = create_app(settings(), FakeBackend())
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client,
+    ):
+        response = await client.post("/v1/view-key", headers={
+            "Authorization": "Bearer " + "x" * 32,
+            "X-Fred-Sandbox-Session": "a" * 64,
+        })
+        assert response.status_code == 503
+        assert response.json()["error_code"] == "unavailable"
 
 
 @pytest.mark.asyncio

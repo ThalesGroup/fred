@@ -68,6 +68,10 @@ class SandboxExecutionPort(ABC):
 
 class SandboxInputPort(ABC):
     @abstractmethod
+    async def prepare_view(self, session: SandboxSessionIdentity) -> None:
+        """Authorize the conversation's live read-only input view before execution."""
+
+    @abstractmethod
     async def bind_corpus(
         self, document_uid: str, session: SandboxSessionIdentity
     ) -> str:

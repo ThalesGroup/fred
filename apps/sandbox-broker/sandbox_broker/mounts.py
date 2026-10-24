@@ -45,7 +45,7 @@ async def revoke_view(settings: BrokerSettings, key: str) -> None:
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             response = await client.delete(
-                f"{settings.file_gateway_url.rstrip('/')}/views/{key}",
+                f"{(settings.file_gateway_revoke_url or settings.file_gateway_url).rstrip('/')}/views/{key}",
                 headers={"Authorization": f"Bearer {token}"},
             )
             response.raise_for_status()
@@ -81,7 +81,6 @@ class RcloneCsiMount:
             raise SandboxError("policy_unavailable") from exc
         parameters = storage_class.get("parameters", {})
         expected_parameters = {
-            "remote": "fred",
             "remotePath": "/",
             "csi.storage.k8s.io/node-publish-secret-name": "${pvc.name}",
             "csi.storage.k8s.io/node-publish-secret-namespace": self.settings.namespace,
@@ -101,14 +100,14 @@ class RcloneCsiMount:
             raise SandboxError("policy_unavailable")
         url = f"{settings.file_gateway_url.rstrip('/')}/{key}"
         bearer = mount_bearer(settings.file_gateway_secret, key)
+        name = f"inputs-{workload_name}"
         config_data = (
-            "[fred]\n"
+            f"[{name}]\n"
             "type = webdav\n"
             f"url = {url}\n"
             "vendor = other\n"
             f"bearer_token = {bearer}\n"
         )
-        name = f"inputs-{workload_name}"
         manifest: dict[str, Any] = {
             "apiVersion": "v1",
             "kind": "Secret",
@@ -119,7 +118,7 @@ class RcloneCsiMount:
             },
             "type": "Opaque",
             "stringData": {
-                "remote": "fred",
+                "remote": name,
                 "remotePath": "/",
                 "configData": config_data,
             },

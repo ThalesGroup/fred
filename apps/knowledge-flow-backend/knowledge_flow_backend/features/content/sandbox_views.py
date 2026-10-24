@@ -1,6 +1,6 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
-"""Persist the narrow source list exposed by one conversation sandbox."""
+"""Persist conversation views and resolve their authorized live files."""
 
 from __future__ import annotations
 
@@ -10,6 +10,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from fred_core.common.team_id import is_personal_team_id
+from fred_core.security.rebac.noop_engine import NoopRebacEngine
+from fred_core.security.rebac.rebac_engine import TeamPermission
 from fred_core.sql.async_session import make_session_factory, use_session
 from fred_pod.security.structure import KeycloakUser
 from sqlalchemy import delete, text
@@ -19,7 +22,9 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.content.sandbox_scope import (
     MAX_MOUNTED_FILE_BYTES,
     authorize_corpus_source,
+    scoped_authorized_tag_ids,
 )
+from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.models.sandbox_view_models import (
     SandboxAttachmentOriginalRow,
     SandboxViewRow,
@@ -27,8 +32,9 @@ from knowledge_flow_backend.models.sandbox_view_models import (
 
 VIEW_KEY_RE = re.compile(r"[a-f0-9]{64}\Z")
 MAX_VIEW_FILES = 32
+CORPUS_PAGE_SIZE = 128
 MAX_VIEW_BYTES = 100 * 1024 * 1024
-MAX_VIEW_REQUESTS_PER_MINUTE = 120
+MAX_VIEW_REQUESTS_PER_MINUTE = 600
 VIEW_TTL = timedelta(minutes=130)
 
 
@@ -148,6 +154,129 @@ class SandboxViewStore:
         await self._bind(key, session_id, team_id, user.uid, mounted)
         return mounted
 
+    async def ensure_view(
+        self,
+        *,
+        key: str,
+        session_id: str,
+        team_id: str,
+        user: KeycloakUser,
+        context: ApplicationContext | None = None,
+    ) -> None:
+        if not VIEW_KEY_RE.fullmatch(key):
+            raise ValueError("Invalid sandbox view key")
+        context = context or ApplicationContext.get_instance()
+        await self._check_session(session_id, user.uid, team_id)
+        rebac = context.get_rebac_engine()
+        if isinstance(rebac, NoopRebacEngine):
+            raise PermissionError("Sandbox file mounts require access control")
+        await rebac.require_active_account(user.uid)
+        if not is_personal_team_id(team_id):
+            await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_READ, team_id)
+        await self._bind(key, session_id, team_id, user.uid, None)
+
+    async def corpus_libraries(self, user: KeycloakUser, team_id: str, *, context: ApplicationContext | None = None) -> set[str]:
+        context = context or ApplicationContext.get_instance()
+        return await scoped_authorized_tag_ids(user, team_id, context=context)
+
+    async def corpus_page_count(
+        self,
+        user: KeycloakUser,
+        team_id: str,
+        tag_id: str,
+        *,
+        context: ApplicationContext | None = None,
+    ) -> int:
+        context = context or ApplicationContext.get_instance()
+        if tag_id not in await self.corpus_libraries(user, team_id, context=context):
+            raise PermissionError("Library is outside the conversation scope")
+        _, total = await context.get_metadata_store().browse_metadata_in_tag(tag_id, offset=0, limit=0, sort_by="created", sort_order="asc")
+        return (total + CORPUS_PAGE_SIZE - 1) // CORPUS_PAGE_SIZE
+
+    async def corpus_page(
+        self,
+        user: KeycloakUser,
+        team_id: str,
+        tag_id: str,
+        page: int,
+        *,
+        base_path: str,
+        context: ApplicationContext | None = None,
+    ) -> tuple[list[MountedSource], int]:
+        context = context or ApplicationContext.get_instance()
+        if tag_id not in await self.corpus_libraries(user, team_id, context=context):
+            raise PermissionError("Library is outside the conversation scope")
+        if page < 0:
+            raise ValueError("Invalid corpus page")
+        docs, total = await context.get_metadata_store().browse_metadata_in_tag(
+            tag_id,
+            offset=page * CORPUS_PAGE_SIZE,
+            limit=CORPUS_PAGE_SIZE,
+            sort_by="created",
+            sort_order="asc",
+        )
+        if not docs:
+            return [], total
+        readable = await MetadataService().filter_readable_document_uids(user, [doc.document_uid for doc in docs])
+        content_store = context.get_content_store()
+        reads = asyncio.Semaphore(10)
+
+        async def resolve(metadata) -> MountedSource | None:
+            if metadata.document_uid not in readable or metadata.source.source_tag == "fast_ingest":
+                return None
+            uid, name = metadata.document_uid, metadata.document_name
+            try:
+                _safe_name(name)
+                async with reads:
+                    info = await asyncio.to_thread(content_store.get_file_metadata, uid)
+            except (FileNotFoundError, ValueError):
+                return None
+            if 0 <= info.size <= MAX_MOUNTED_FILE_BYTES:
+                return MountedSource(
+                    f"{base_path}/{uid}--{name}",
+                    "corpus",
+                    uid,
+                    name,
+                    info.size,
+                )
+            return None
+
+        results = await asyncio.gather(*(resolve(doc) for doc in docs))
+        return [source for source in results if source is not None], total
+
+    async def attachment_sources(self, session_id: str, user_id: str) -> list[MountedSource]:
+        async with use_session(self._sessions) as db:
+            rows = (
+                await db.execute(
+                    text(
+                        "SELECT a.attachment_id, a.document_uid, o.name, o.size "
+                        "FROM session_attachments a JOIN sandbox_attachment_originals o "
+                        "ON o.document_uid = a.document_uid AND o.session_id = a.session_id "
+                        "WHERE a.session_id = :session_id AND o.user_id = :user_id"
+                    ),
+                    {"session_id": session_id, "user_id": user_id},
+                )
+            ).all()
+        sources = []
+        for row in sorted(rows, key=lambda row: row.attachment_id):
+            if len(sources) >= MAX_VIEW_FILES:
+                break
+            try:
+                name = _safe_name(row.name)
+            except ValueError:
+                continue
+            if 0 <= row.size <= MAX_MOUNTED_FILE_BYTES:
+                sources.append(
+                    MountedSource(
+                        f"attachments/{row.attachment_id}/{name}",
+                        "attachment",
+                        row.document_uid,
+                        name,
+                        row.size,
+                    )
+                )
+        return sources
+
     async def bind_attachment(
         self,
         *,
@@ -191,7 +320,7 @@ class SandboxViewStore:
         await self._bind(key, session_id, team_id, user.uid, mounted)
         return mounted
 
-    async def _bind(self, key: str, session_id: str, team_id: str, user_id: str, source: MountedSource) -> None:
+    async def _bind(self, key: str, session_id: str, team_id: str, user_id: str, source: MountedSource | None) -> None:
         now = datetime.now(timezone.utc)
         async with use_session(self._sessions) as db:
             await db.execute(delete(SandboxViewRow).where(SandboxViewRow.expires_at < now))
@@ -211,16 +340,17 @@ class SandboxViewStore:
                 db.add(row)
             elif row.session_id != session_id or row.user_id != user_id or row.team_id != team_id:
                 raise PermissionError("Sandbox view access denied")
-            sources = dict(row.sources)
-            if len(sources) >= MAX_VIEW_FILES and source.path not in sources:
-                raise ValueError("Sandbox view file limit reached")
-            sources[source.path] = {
-                "kind": source.kind,
-                "uid": source.uid,
-                "name": source.name,
-                "size": source.size,
-            }
-            row.sources = sources
+            if source is not None:
+                sources = dict(row.sources)
+                if len(sources) >= MAX_VIEW_FILES and source.path not in sources:
+                    raise ValueError("Sandbox view file limit reached")
+                sources[source.path] = {
+                    "kind": source.kind,
+                    "uid": source.uid,
+                    "name": source.name,
+                    "size": source.size,
+                }
+                row.sources = sources
             row.expires_at = now + VIEW_TTL
 
     async def list_sources(self, key: str) -> tuple[SandboxViewRow | None, list[MountedSource]]:

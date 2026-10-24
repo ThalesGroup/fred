@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import mimetypes
 import os
+import re
 from contextlib import closing
 from email.utils import formatdate
 from pathlib import PurePosixPath
@@ -19,6 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 from fred_core import KeycloakUser, get_current_user
 from fred_core.common.team_id import is_personal_team_id
+from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.security.rebac.rebac_engine import TeamPermission
 from pydantic import BaseModel, Field
 
@@ -45,6 +47,11 @@ class _BindAttachment(BaseModel):
     session_id: str = Field(min_length=1)
     team_id: str = Field(min_length=1)
     attachment_id: str = Field(min_length=1)
+
+
+class _OpenView(BaseModel):
+    session_id: str = Field(min_length=1)
+    team_id: str = Field(min_length=1)
 
 
 def _gateway_secret() -> bytes:
@@ -98,6 +105,19 @@ def _child_paths(path: str, sources: list[MountedSource]) -> list[tuple[str, Mou
     return sorted(children.items())
 
 
+def _corpus_page_number(parts: list[str]) -> int:
+    if len(parts) not in {7, 8}:
+        raise FileNotFoundError
+    outer, inner, label = parts[4:7]
+    match = re.fullmatch(r"page-([0-9]{4,6})", label)
+    if not re.fullmatch(r"block-[0-9]{2}", outer) or not re.fullmatch(r"block-[0-9]{2}", inner) or match is None:
+        raise FileNotFoundError
+    page = int(match.group(1))
+    if label != f"page-{page:04d}" or page // 10000 != int(outer[6:]) or (page // 100) % 100 != int(inner[6:]):
+        raise FileNotFoundError
+    return page
+
+
 def _href(request: Request, key: str, path: str, directory: bool) -> str:
     base = request.url.path.split(f"/sandbox-mount/{key}", 1)[0]
     encoded = "/".join(quote(part, safe="") for part in path.split("/") if part)
@@ -134,6 +154,23 @@ class SandboxMountController:
         self._register_mount(mount_router)
 
     def _register_binding(self, router: APIRouter) -> None:
+        @router.post("/sandbox-mount/views/{key}")
+        async def open_view(request: Request, key: str, body: _OpenView, user: KeycloakUser = Depends(get_current_user)) -> dict[str, str]:
+            _check_bind_credential(request, key, body.session_id, user.uid, body.team_id)
+            try:
+                await self.store.ensure_view(
+                    key=key,
+                    session_id=body.session_id,
+                    team_id=body.team_id,
+                    user=user,
+                    context=self.context,
+                )
+            except (FileNotFoundError, PermissionError):
+                raise HTTPException(404, "Sandbox view is unavailable") from None
+            except ValueError:
+                raise HTTPException(400, "Sandbox view is invalid") from None
+            return {"path": "/inputs"}
+
         @router.post("/sandbox-mount/views/{key}/corpus")
         async def bind_corpus(request: Request, key: str, body: _BindCorpus, user: KeycloakUser = Depends(get_current_user)) -> dict[str, str]:
             _check_bind_credential(request, key, body.session_id, user.uid, body.team_id)
@@ -190,36 +227,103 @@ class SandboxMountController:
                 raise HTTPException(429, "Sandbox view request rate exceeded") from None
             except FileNotFoundError:
                 raise HTTPException(404, "Sandbox view is unavailable") from None
-            if path:
-                sources = [item for item in sources if item.path == path or item.path.startswith(f"{path}/")]
             if row is not None:
                 try:
                     await self.store._check_session(row.session_id, row.user_id, row.team_id)
                     rebac = self.context.get_rebac_engine()
+                    if isinstance(rebac, NoopRebacEngine):
+                        raise PermissionError("Sandbox file mounts require access control")
                     await rebac.require_active_account(row.user_id)
                     user = KeycloakUser(uid=row.user_id, username=row.user_id, roles=[])
                     if not is_personal_team_id(row.team_id):
                         await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_READ, row.team_id)
                 except Exception:
                     raise HTTPException(404, "Sandbox view is unavailable") from None
-                visible = []
-                for item in sources:
-                    try:
-                        if item.kind == "corpus":
-                            current = await authorize_corpus_source(user, row.team_id, item.uid, context=self.context)
-                            allowed = current.name == item.name and current.size == item.size
-                        elif item.kind == "attachment":
-                            original = await self.store.attachment_original(row.session_id, row.user_id, item.uid)
-                            allowed = original.name == item.name and original.size == item.size
+                parts = path.split("/") if path else []
+                children: list[tuple[str, MountedSource | None]] = []
+                directory = path in {"", "corpus", "attachments"}
+                source_verified = False
+                try:
+                    if parts and parts[0] == "corpus":
+                        if len(parts) == 1:
+                            children = [("corpus/libraries", None)]
+                            sources = []
+                        elif parts[1] == "libraries":
+                            if len(parts) == 2:
+                                libraries = await self.store.corpus_libraries(user, row.team_id, context=self.context)
+                                children = [(f"corpus/libraries/{tag_id}", None) for tag_id in sorted(libraries)]
+                                directory, sources = True, []
+                            elif len(parts) == 3:
+                                await self.store.corpus_page_count(user, row.team_id, parts[2], context=self.context)
+                                children = [(f"{path}/pages", None)]
+                                directory, sources = True, []
+                            elif len(parts) >= 4 and parts[3] == "pages":
+                                if len(parts) in {4, 5, 6, 7}:
+                                    count = await self.store.corpus_page_count(user, row.team_id, parts[2], context=self.context)
+                                    if count > 1_000_000:
+                                        raise ValueError("Corpus page limit exceeded")
+                                    if len(parts) == 4:
+                                        children = [(f"{path}/block-{index:02d}", None) for index in range(min(100, (count + 9999) // 10000))]
+                                    elif len(parts) == 5 and re.fullmatch(r"block-[0-9]{2}", parts[4]):
+                                        outer = int(parts[4][6:])
+                                        if outer * 10000 >= count:
+                                            raise FileNotFoundError
+                                        remaining = count - outer * 10000
+                                        children = [(f"{path}/block-{index:02d}", None) for index in range(min(100, (remaining + 99) // 100))]
+                                    elif len(parts) == 6 and all(re.fullmatch(r"block-[0-9]{2}", part) for part in parts[4:6]):
+                                        first = int(parts[4][6:]) * 10000 + int(parts[5][6:]) * 100
+                                        if first >= count:
+                                            raise FileNotFoundError
+                                        children = [(f"{path}/page-{index:04d}", None) for index in range(first, min(first + 100, count))]
+                                    elif len(parts) == 7:
+                                        page = _corpus_page_number(parts)
+                                        if page >= count:
+                                            raise FileNotFoundError
+                                        sources, _ = await self.store.corpus_page(user, row.team_id, parts[2], page, base_path=path, context=self.context)
+                                        children = _child_paths(path, sources)
+                                    else:
+                                        raise FileNotFoundError
+                                    directory = True
+                                elif len(parts) == 8:
+                                    _corpus_page_number(parts)
+                                    uid, marker, name = parts[7].partition("--")
+                                    if not uid or not marker:
+                                        raise FileNotFoundError
+                                    current = await authorize_corpus_source(user, row.team_id, uid, context=self.context)
+                                    metadata = await self.context.get_metadata_store().get_metadata_by_uid(uid)
+                                    if name != current.name or metadata is None or parts[2] not in (metadata.tags.tag_ids or ()):
+                                        raise FileNotFoundError
+                                    sources = [MountedSource(path, "corpus", uid, current.name, current.size)]
+                                    source_verified = True
+                                else:
+                                    raise FileNotFoundError
+                            else:
+                                sources = []
+                        elif len(parts) in {2, 3}:
+                            current = await authorize_corpus_source(user, row.team_id, parts[1], context=self.context)
+                            item = MountedSource(
+                                f"corpus/{current.document_uid}/{current.name}",
+                                "corpus",
+                                current.document_uid,
+                                current.name,
+                                current.size,
+                            )
+                            sources = [item]
+                            source_verified = True
                         else:
-                            allowed = False
-                    except Exception:
-                        allowed = False
-                    if allowed:
-                        visible.append(item)
-                sources = visible
+                            sources = []
+                    elif parts and parts[0] == "attachments":
+                        sources = await self.store.attachment_sources(row.session_id, row.user_id)
+                    else:
+                        sources = []
+                except (FileNotFoundError, PermissionError, ValueError):
+                    sources = []
+                if path:
+                    sources = [item for item in sources if item.path == path or item.path.startswith(f"{path}/")]
+            else:
+                raise HTTPException(404, "Sandbox view is unavailable")
             source = next((item for item in sources if item.path == path), None)
-            directory = path == "" or any(item.path.startswith(f"{path}/") for item in sources)
+            directory = directory or any(item.path.startswith(f"{path}/") for item in sources)
             if source is None and not directory:
                 raise HTTPException(404, "Sandbox file is unavailable")
 
@@ -232,7 +336,8 @@ class SandboxMountController:
                 root = ElementTree.Element(f"{{{DAV}}}multistatus")
                 _dav_entry(root, _href(request, key, path, directory), source.size if source is not None else None)
                 if directory and depth == "1":
-                    for child, item in _child_paths(path, sources):
+                    children = [("corpus", None), ("attachments", None)] if path == "" else children or _child_paths(path, sources)
+                    for child, item in children:
                         _dav_entry(root, _href(request, key, child, item is None), item.size if item else None)
                 return Response(
                     ElementTree.tostring(root, encoding="utf-8", xml_declaration=True),
@@ -247,9 +352,10 @@ class SandboxMountController:
             user = KeycloakUser(uid=row.user_id, username=row.user_id, roles=[])
             try:
                 if source.kind == "corpus":
-                    current = await authorize_corpus_source(user, row.team_id, source.uid, context=self.context)
-                    if current.name != source.name or current.size != source.size:
-                        raise FileNotFoundError
+                    if not source_verified:
+                        current = await authorize_corpus_source(user, row.team_id, source.uid, context=self.context)
+                        if current.name != source.name or current.size != source.size:
+                            raise FileNotFoundError
                     object_key = None
                 elif source.kind == "attachment":
                     original = await self.store.attachment_original(row.session_id, row.user_id, source.uid)
