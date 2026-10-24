@@ -34,6 +34,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CapabilityEnablementItem } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
+import type { AgentEnablement, SetOrganizationAgentDefaultApiArg } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+
 declare global {
   // eslint-disable-next-line no-var
   var IS_REACT_ACT_ENVIRONMENT: boolean;
@@ -42,6 +44,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const h = vi.hoisted(() => ({
   items: [] as CapabilityEnablementItem[],
+  organizationAgents: [] as AgentEnablement[],
+  organizationWrites: [] as SetOrganizationAgentDefaultApiArg[],
   /** Every default-on write, in call order — the sequence under test. */
   calls: [] as Array<{ id: string; on: boolean }>,
   /** Capability ids whose default-on write should reject. */
@@ -61,7 +65,15 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useOrganizationAgentsQuery: () => ({ currentData: undefined, isLoading: false, isError: false }),
+  useOrganizationAgentsQuery: () => ({ currentData: h.organizationAgents, isLoading: false, isError: false }),
+  useSetOrganizationAgentDefaultMutation: () => [
+    (args: SetOrganizationAgentDefaultApiArg) => ({ unwrap: async () => {
+      h.organizationWrites.push(args);
+      if (h.failFor.has(args.agentId)) throw new Error("boom");
+      return { capability_id: args.agentId, default_on: args.setAgentDefaultOnRequest.default_on };
+    } }),
+    { isLoading: false },
+  ],
 }));
 
 vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
@@ -176,6 +188,8 @@ let root: Root;
 
 beforeEach(() => {
   h.items = [];
+  h.organizationAgents = [];
+  h.organizationWrites = [];
   h.calls = [];
   h.failFor = new Set();
   h.errors = [];
@@ -431,5 +445,54 @@ describe("FeaturesPage default-on toggle routing", () => {
 
     expect(h.impactCalls).toEqual([]);
     expect(dialog()?.textContent).toContain("grantAllConfirm.title");
+  });
+});
+
+
+describe("organization agent default", () => {
+  const ralph = (on: boolean): AgentEnablement => ({
+    id: "template-o1", runtime_id: "native", source_id: "ralph", name: "Ralph",
+    description: "Hello world", version: "1", public_version: "0.1.0", icon: "smart_toy",
+    kind: "agent", team_scope: "admin_gated", default_on: on, default_capability_ids: [],
+  });
+  function renderOrganization(on: boolean) {
+    h.organizationAgents = [ralph(on)];
+    act(() => root.render(<FeaturesPage organizationId="O1" />));
+  }
+  const offButton = (suffix: string) => Array.from(document.querySelectorAll('[role="alertdialog"] button'))
+    .find((button) => button.textContent?.includes(`defaultOffConfirm.${suffix}`)) as HTMLElement;
+
+  it("uses the organization mutation and waits for server data to change the switch", async () => {
+    renderOrganization(false);
+    expect(container.querySelectorAll('[role="radio"]').length).toBe(4);
+    await act(async () => defaultOnSwitch()!.click());
+    expect(h.organizationWrites).toEqual([{
+      organizationId: "O1", agentId: "template-o1", setAgentDefaultOnRequest: { default_on: true },
+    }]);
+    expect(h.calls).toEqual([]);
+    expect(defaultOnSwitch()!.checked).toBe(false);
+    renderOrganization(true);
+    expect(defaultOnSwitch()!.checked).toBe(true);
+  });
+
+  it("preserves cancellation and never asks legacy instance impact", async () => {
+    renderOrganization(true);
+    act(() => defaultOnSwitch()!.click());
+    expect(dialog()?.textContent).toContain("defaultOffConfirm.organizationMessage");
+    expect(h.impactCalls).toEqual([]);
+    act(() => offButton("cancel").click());
+    expect(h.organizationWrites).toEqual([]);
+    act(() => defaultOnSwitch()!.click());
+    await act(async () => offButton("confirm").click());
+    expect(h.organizationWrites[0].setAgentDefaultOnRequest.default_on).toBe(false);
+    expect(h.calls).toEqual([]);
+  });
+
+  it("leaves the server state unchanged and reports a rejected write", async () => {
+    renderOrganization(false);
+    h.failFor.add("template-o1");
+    await act(async () => defaultOnSwitch()!.click());
+    expect(defaultOnSwitch()!.checked).toBe(false);
+    expect(h.errors).toContain("rework.admin.capabilities.defaultToggleError");
   });
 });

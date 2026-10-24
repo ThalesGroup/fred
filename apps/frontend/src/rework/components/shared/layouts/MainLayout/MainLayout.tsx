@@ -38,7 +38,11 @@ export default function MainLayout({ children, navigation = true }: PropsWithChi
   return (
     <div className={styles.mainLayout}>
       <nav className={styles.sidebar}>
-        <Sidebar navigation={navigation} platformArea={isAdmin && !organizationArea} organizationArea={organizationArea} />
+        <Sidebar
+          navigation={navigation}
+          platformArea={isAdmin && !organizationArea}
+          organizationArea={organizationArea}
+        />
       </nav>
       <main className={styles.content}>
         {navigation ? isAdmin || organizationArea ? <Outlet /> : <AdmittedWorkspace /> : children}

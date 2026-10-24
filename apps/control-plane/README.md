@@ -110,8 +110,13 @@ The existing Administration Console -> Features -> Agents tab reads this same
 catalog through `GET /control-plane/v1/organizations/{organization_id}/agents`.
 Admission, unique organization context, active lifecycle and `can_manage` on an
 organization are required; neither organization ownership alone nor platform
-roles bypass this check. The page only reads discovery: no activation, enrollment
-or instance state is inferred. The supplied local configuration disables the
+roles bypass this check. The page reads projected template identities and their organization defaults.
+Its existing switch writes `PUT /organizations/{organization_id}/agents/{agent_id}/default-on`.
+The default starts off and is stored in OpenFGA, not SQL. Turning it off preserves
+explicit team and personal-class grants. No enrollment or instance state is inferred.
+The write reuses the platform/organization locks and guards after discovery; no
+runtime call holds a SQL transaction. Templates declaring tool dependencies cannot
+be enabled by this initial integration. The supplied local configuration disables the
 external fred-agents source; with no enabled external source the embedded catalog
 requires no fred-agents process. An explicitly enabled source still fails the
 whole discovery if unavailable.

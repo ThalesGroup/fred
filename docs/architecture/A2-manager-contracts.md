@@ -23,14 +23,28 @@ unavailable.
 `spaces::authorize(..., Manage)` and an organization-kind check. The target must
 belong to the admitted caller's unique organization and be active. Organization
 ownership alone, team/project administration and platform roles confer no access.
-The response contains catalogs and template metadata, with no activation state or
-mutation. The embedded definition is `fred.github.ralph`, version `0.1.0`, provider
+The response contains `AgentEnablement` rows with runtime/template provenance and
+the OpenFGA `default_on` marker for this organization. The UI reuses the existing
+switch and confirmation with organization-scoped messages.
+`PUT /organizations/{organization_id}/agents/{agent_id}/default-on` repeats
+admission and authorization, discovers before locking, then rechecks under the
+existing platform/organization guards. It writes the template anchor and changes
+only the default marker. Dependencies are outside this initial integration: an
+activation declaring tool dependencies is refused before writes.
+Template IDs are UUIDv5, first namespaced by organization/runtime, then template;
+no mutable display name participates. `agent_template` retains the Swift
+explicit-deny, explicit-grant and personal-class precedence, evaluated in OpenFGA.
+`can_use_agent` supplies contextual reverse links from trusted space placement;
+it is not wired to enrollment or execution. The cleanup reader drains template
+references in bounded pages and retains the organization anchor until the last
+page, including orphan exception subjects. The embedded definition is `fred.github.ralph`, version `0.1.0`, provider
 `control-plane`; external-source failure still fails the whole discovery.
 
 <!-- generated: routes apps/control-plane/src/agents.rs /control-plane/v1 -->
 | Method | Path | Handler |
 | --- | --- | --- |
 | GET | `/control-plane/v1/organizations/{organization_id}/agents` | `organization_agents` |
+| PUT | `/control-plane/v1/organizations/{organization_id}/agents/{agent_id}/default-on` | `set_organization_agent_default` |
 <!-- end generated -->
 
 Every error answer is an `ErrorBody` JSON object with `detail` and `code`. An unreadable
@@ -464,6 +478,26 @@ type space
     # Explicit organization eligibility, without content access or inheritance.
     define personal_space_creator: [user]
     define can_create_personal_space: personal_space_creator
+    # Contextual reverse links supplied only after resolving a team's organization.
+    define template_team: [space]
+    define template_personal_team: [space]
+
+# Each template object belongs to exactly one organization; no global enablement.
+type agent_template
+  relations
+    define organization: [space]
+    define default_on: [space]
+    define enabled: [space]
+    define disabled: [space]
+    define personal_on: [space]
+    define personal_disabled: [space]
+    define can_manage: can_manage from organization
+    define personal_grant: template_personal_team from personal_on
+    define personal_block: template_personal_team from personal_disabled
+    define inherited_grant: template_team from default_on or personal_grant
+    define inherited: inherited_grant but not personal_block
+    define granted: enabled or inherited
+    define can_use: granted but not disabled
 
 # Mutation ordering only; these relations grant no permission.
 type revision

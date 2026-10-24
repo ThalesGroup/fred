@@ -27,7 +27,10 @@ The platform owner has governance authority, not implicit content access. The
 current frontend directs platform owners to Organizations, including accounts
 that also carry business roles. An organization administrator also has the
 existing Features entry, governed by that organization role: its Agents tab reads
-Rust discovery without global legacy catalog calls. Other business destinations
+Rust template discovery and organization defaults without global legacy catalog
+calls. Its existing default switch and withdrawal confirmation write only the
+organization's OpenFGA default; team/personal exception editing and managed
+instances are not connected by this operation. Other business destinations
 retain their existing area boundary. The browser journey above therefore uses a
 separate business account after provisioning. This is the current navigation,
 not a claim that the platform-owner role authorizes document access.

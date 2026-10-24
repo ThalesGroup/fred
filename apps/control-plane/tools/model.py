@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile the direct-role, union and parent-inheritance subset used by this service; refuse other DSL."""
+"""Compile direct roles, unions, differences and inheritance; refuse other DSL."""
 import argparse
 import json
 import re
@@ -22,7 +22,10 @@ for raw in (root / 'openfga/model.fga').read_text().splitlines():
         assert current is not None
         children = []
         direct = None
-        for term in match[2].split(' or '):
+        difference = match[2].split(' but not ')
+        if len(difference) > 2 or (len(difference) == 2 and not re.fullmatch(r'\w+', difference[1])):
+            raise ValueError('Unsupported difference syntax')
+        for term in difference[0].split(' or '):
             if direct_type := re.fullmatch(r'\[(user|revision|space)\]', term):
                 direct = direct_type[1]
                 children.append({'this': {}})
@@ -35,7 +38,10 @@ for raw in (root / 'openfga/model.fga').read_text().splitlines():
                 children.append({'computedUserset': {'relation': term}})
             else:
                 raise ValueError('Unsupported model syntax')
-        current.setdefault('relations', {})[match[1]] = children[0] if len(children) == 1 else {'union': {'child': children}}
+        expression = children[0] if len(children) == 1 else {'union': {'child': children}}
+        if len(difference) == 2:
+            expression = {'difference': {'base': expression, 'subtract': {'computedUserset': {'relation': difference[1]}}}}
+        current.setdefault('relations', {})[match[1]] = expression
         if direct:
             current.setdefault('metadata', {}).setdefault('relations', {})[match[1]] = {'directly_related_user_types': [{'type': direct}]}
     else:

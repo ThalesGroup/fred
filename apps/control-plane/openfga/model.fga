@@ -49,6 +49,26 @@ type space
     # Explicit organization eligibility, without content access or inheritance.
     define personal_space_creator: [user]
     define can_create_personal_space: personal_space_creator
+    # Contextual reverse links supplied only after resolving a team's organization.
+    define template_team: [space]
+    define template_personal_team: [space]
+
+# Each template object belongs to exactly one organization; no global enablement.
+type agent_template
+  relations
+    define organization: [space]
+    define default_on: [space]
+    define enabled: [space]
+    define disabled: [space]
+    define personal_on: [space]
+    define personal_disabled: [space]
+    define can_manage: can_manage from organization
+    define personal_grant: template_personal_team from personal_on
+    define personal_block: template_personal_team from personal_disabled
+    define inherited_grant: template_team from default_on or personal_grant
+    define inherited: inherited_grant but not personal_block
+    define granted: enabled or inherited
+    define can_use: granted but not disabled
 
 # Mutation ordering only; these relations grant no permission.
 type revision

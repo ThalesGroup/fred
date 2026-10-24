@@ -303,6 +303,12 @@
           "computedUserset": {
             "relation": "personal_space_creator"
           }
+        },
+        "template_team": {
+          "this": {}
+        },
+        "template_personal_team": {
+          "this": {}
         }
       },
       "metadata": {
@@ -360,6 +366,184 @@
             "directly_related_user_types": [
               {
                 "type": "user"
+              }
+            ]
+          },
+          "template_team": {
+            "directly_related_user_types": [
+              {
+                "type": "space"
+              }
+            ]
+          },
+          "template_personal_team": {
+            "directly_related_user_types": [
+              {
+                "type": "space"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "agent_template",
+      "relations": {
+        "organization": {
+          "this": {}
+        },
+        "default_on": {
+          "this": {}
+        },
+        "enabled": {
+          "this": {}
+        },
+        "disabled": {
+          "this": {}
+        },
+        "personal_on": {
+          "this": {}
+        },
+        "personal_disabled": {
+          "this": {}
+        },
+        "can_manage": {
+          "tupleToUserset": {
+            "tupleset": {
+              "relation": "organization"
+            },
+            "computedUserset": {
+              "relation": "can_manage"
+            }
+          }
+        },
+        "personal_grant": {
+          "tupleToUserset": {
+            "tupleset": {
+              "relation": "personal_on"
+            },
+            "computedUserset": {
+              "relation": "template_personal_team"
+            }
+          }
+        },
+        "personal_block": {
+          "tupleToUserset": {
+            "tupleset": {
+              "relation": "personal_disabled"
+            },
+            "computedUserset": {
+              "relation": "template_personal_team"
+            }
+          }
+        },
+        "inherited_grant": {
+          "union": {
+            "child": [
+              {
+                "tupleToUserset": {
+                  "tupleset": {
+                    "relation": "default_on"
+                  },
+                  "computedUserset": {
+                    "relation": "template_team"
+                  }
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "personal_grant"
+                }
+              }
+            ]
+          }
+        },
+        "inherited": {
+          "difference": {
+            "base": {
+              "computedUserset": {
+                "relation": "inherited_grant"
+              }
+            },
+            "subtract": {
+              "computedUserset": {
+                "relation": "personal_block"
+              }
+            }
+          }
+        },
+        "granted": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "enabled"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "inherited"
+                }
+              }
+            ]
+          }
+        },
+        "can_use": {
+          "difference": {
+            "base": {
+              "computedUserset": {
+                "relation": "granted"
+              }
+            },
+            "subtract": {
+              "computedUserset": {
+                "relation": "disabled"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "relations": {
+          "organization": {
+            "directly_related_user_types": [
+              {
+                "type": "space"
+              }
+            ]
+          },
+          "default_on": {
+            "directly_related_user_types": [
+              {
+                "type": "space"
+              }
+            ]
+          },
+          "enabled": {
+            "directly_related_user_types": [
+              {
+                "type": "space"
+              }
+            ]
+          },
+          "disabled": {
+            "directly_related_user_types": [
+              {
+                "type": "space"
+              }
+            ]
+          },
+          "personal_on": {
+            "directly_related_user_types": [
+              {
+                "type": "space"
+              }
+            ]
+          },
+          "personal_disabled": {
+            "directly_related_user_types": [
+              {
+                "type": "space"
               }
             ]
           }

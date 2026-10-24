@@ -1198,11 +1198,15 @@
           "subtitle": "Agents this feature breaks right now, grouped by team. Restore each team's access from Manage by team to revive them.",
           "teamCount": "{{count}} agent(s)"
         },
+        "organizationDefaultOnToast": "Default enablement applied to this organization.",
+        "organizationDefaultOffToast": "Default enablement removed in this organization.",
         "defaultOnToast": "Default-on enabled platform-wide.",
         "defaultOffToast": "Default-on disabled platform-wide.",
         "defaultOffSuspendedToast": "Default-on disabled — {{count}} dependent instance(s) suspended.",
         "defaultToggleError": "Could not change the default-on setting.",
         "defaultOffConfirm": {
+          "organizationTitle": "Turn off default enablement?",
+          "organizationMessage": "Remove inherited access to this agent in this organization? Explicit grants remain unchanged. This action does not create or stop managed instances.",
           "appTitle": "Disable application by default?",
           "appMessage": "Turning off default-on removes inherited application access from every team. Explicit team grants remain unchanged.",
           "confirm": "Disable",

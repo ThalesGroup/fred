@@ -45,6 +45,21 @@ impl Fga {
                 .page(json!({"object":format!("{kind}:"), "user":subject}), "")
                 .await?;
             for key in found {
+                if kind == "agent_template" {
+                    if key.relation == "organization" {
+                        // Keep the anchor until the object's remaining pages are drained.
+                        let (mut grants, continuation) =
+                            self.page(json!({"object":key.object}), "").await?;
+                        grants.retain(|grant| grant.relation != "organization");
+                        keys.extend(grants);
+                        if continuation.is_empty() {
+                            keys.push(key);
+                        }
+                    } else {
+                        keys.push(key);
+                    }
+                    continue;
+                }
                 let personal = match key.relation.as_str() {
                     "parent" => false,
                     "organization" => true,
@@ -58,6 +73,10 @@ impl Fga {
                 }
             }
         }
+        let mut seen = std::collections::HashSet::new();
+        keys.retain(|key| {
+            seen.insert((key.user.clone(), key.relation.clone(), key.object.clone()))
+        });
         Ok(References {
             keys: keys
                 .into_iter()
@@ -159,7 +178,7 @@ fn subject_types() -> Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn model_limits_space_subjects_to_space_objects() {
-        assert_eq!(super::subject_types().unwrap(), ["space"]);
+    fn model_space_subjects_include_template_cleanup() {
+        assert_eq!(super::subject_types().unwrap(), ["space", "agent_template"]);
     }
 }

@@ -19,6 +19,13 @@ use std::{collections::BTreeMap, time::Duration};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use uuid::Uuid;
+
+use crate::{
+    domain::{Permission, SpaceKind},
+    error::{AppError, AppResult},
+    spaces,
+};
 
 const NATIVE_RUNTIME_ID: &str = fred_rust_agent::DEFINITION.provider;
 
@@ -104,15 +111,98 @@ fn native_catalog() -> RuntimeCatalog {
     }
 }
 
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentCapabilityKind {
+    Agent,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentScopePolicy {
+    AdminGated,
+}
+
+/// The existing admin row's identity and organization default, without invented instance health.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AgentEnablement {
+    pub id: Uuid,
+    pub runtime_id: String,
+    pub source_id: String,
+    pub name: String,
+    pub description: String,
+    pub version: String,
+    pub public_version: Option<String>,
+    pub icon: String,
+    pub kind: AgentCapabilityKind,
+    pub team_scope: AgentScopePolicy,
+    pub default_on: bool,
+    pub default_capability_ids: Vec<String>,
+}
+
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SetAgentDefaultOnRequest {
+    pub default_on: bool,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct AgentDefaultOnResult {
+    pub capability_id: Uuid,
+    pub default_on: bool,
+}
+
+/// Organization namespace and unambiguous provenance determine the FGA identity, not the label.
+pub fn template_id(organization: Uuid, runtime: &str, template: &str) -> Uuid {
+    let runtime_id = Uuid::new_v5(&organization, runtime.as_bytes());
+    Uuid::new_v5(&runtime_id, template.as_bytes())
+}
+
+fn project(organization: Uuid, catalogs: Vec<RuntimeCatalog>) -> AppResult<Vec<AgentEnablement>> {
+    let mut items = Vec::new();
+    for catalog in catalogs {
+        for template in catalog.templates {
+            let dependencies = template
+                .metadata
+                .get("default_capability_ids")
+                .map(|value| serde_json::from_value::<Vec<String>>(value.clone()))
+                .transpose()
+                .context("invalid template dependencies")?
+                .unwrap_or_default();
+            items.push(AgentEnablement {
+                id: template_id(
+                    organization,
+                    &catalog.runtime_id,
+                    &template.template_agent_id,
+                ),
+                runtime_id: catalog.runtime_id.clone(),
+                source_id: template.template_agent_id,
+                name: template.title,
+                description: template.description,
+                version: "1".into(),
+                public_version: template.public_version,
+                icon: "smart_toy".into(),
+                kind: AgentCapabilityKind::Agent,
+                team_scope: AgentScopePolicy::AdminGated,
+                default_on: false,
+                default_capability_ids: dependencies,
+            });
+        }
+    }
+    Ok(items)
+}
+
 pub fn routes() -> utoipa_axum::router::OpenApiRouter<crate::api::AppState> {
-    utoipa_axum::router::OpenApiRouter::new().routes(utoipa_axum::routes!(organization_agents))
+    utoipa_axum::router::OpenApiRouter::new()
+        .routes(utoipa_axum::routes!(organization_agents))
+        .routes(utoipa_axum::routes!(set_organization_agent_default))
 }
 
 #[utoipa::path(
     get, path = "/organizations/{organization_id}/agents",
     params(("organization_id" = uuid::Uuid, Path)),
     responses(
-        (status = 200, body = [RuntimeCatalog]),
+        (status = 200, body = [AgentEnablement]),
         (status = 401, body = crate::error::ErrorBody),
         (status = 403, body = crate::error::ErrorBody),
         (status = 404, body = crate::error::ErrorBody),
@@ -124,7 +214,7 @@ async fn organization_agents(
     axum::extract::State(s): axum::extract::State<crate::api::AppState>,
     crate::onboarding::AdmittedUser(user): crate::onboarding::AdmittedUser,
     crate::extract::ApiPath(organization_id): crate::extract::ApiPath<uuid::Uuid>,
-) -> crate::error::AppResult<axum::Json<Vec<RuntimeCatalog>>> {
+) -> crate::error::AppResult<axum::Json<Vec<AgentEnablement>>> {
     let organization = crate::spaces::authorize(
         &s.pool,
         &s.fga,
@@ -136,7 +226,80 @@ async fn organization_agents(
     if organization.kind != crate::domain::SpaceKind::Organization {
         return Err(crate::error::AppError::NotFound);
     }
-    Ok(axum::Json(discover(&s.agent_catalog).await?))
+    let mut items = project(organization_id, discover(&s.agent_catalog).await?)?;
+    for item in &mut items {
+        item.default_on = s.fga.agent_default_on(organization_id, item.id).await?;
+    }
+    Ok(axum::Json(items))
+}
+
+#[utoipa::path(
+    put, path = "/organizations/{organization_id}/agents/{agent_id}/default-on",
+    params(("organization_id" = Uuid, Path), ("agent_id" = Uuid, Path)),
+    request_body = SetAgentDefaultOnRequest,
+    responses(
+        (status = 200, body = AgentDefaultOnResult),
+        (status = 401, body = crate::error::ErrorBody),
+        (status = 403, body = crate::error::ErrorBody),
+        (status = 404, body = crate::error::ErrorBody),
+        (status = 409, body = crate::error::ErrorBody),
+        (status = 500, body = crate::error::ErrorBody),
+        (status = 503, body = crate::error::ErrorBody)
+    )
+)]
+async fn set_organization_agent_default(
+    axum::extract::State(s): axum::extract::State<crate::api::AppState>,
+    crate::onboarding::AdmittedUser(user): crate::onboarding::AdmittedUser,
+    crate::extract::ApiPath((organization_id, agent_id)): crate::extract::ApiPath<(Uuid, Uuid)>,
+    crate::extract::ApiJson(body): crate::extract::ApiJson<SetAgentDefaultOnRequest>,
+) -> AppResult<axum::Json<AgentDefaultOnResult>> {
+    let organization = spaces::authorize(
+        &s.pool,
+        &s.fga,
+        &user.uid,
+        organization_id,
+        Permission::Manage,
+    )
+    .await?;
+    if organization.kind != SpaceKind::Organization {
+        return Err(AppError::NotFound);
+    }
+    // Runtime discovery never holds a SQL connection or transaction.
+    let items = project(organization_id, discover(&s.agent_catalog).await?)?;
+    let item = items
+        .iter()
+        .find(|item| item.id == agent_id)
+        .ok_or(AppError::NotFound)?;
+    if body.default_on && !item.default_capability_ids.is_empty() {
+        return Err(AppError::problem(
+            axum::http::StatusCode::CONFLICT,
+            "agent_dependencies_unavailable",
+            "Template tool dependencies are not enabled in this organization.",
+        ));
+    }
+    let (mut tx, mut guard) = spaces::lock_for(&s.pool, &s.fga, &organization).await?;
+    spaces::authorize_locked(
+        &mut tx,
+        &s.fga,
+        &user.uid,
+        organization_id,
+        Permission::Manage,
+    )
+    .await?;
+    let changed = s
+        .fga
+        .set_agent_default_on(&mut guard, organization_id, agent_id, body.default_on)
+        .await?;
+    tx.commit().await?;
+    if changed {
+        tracing::info!(target: "fred.security.audit", audit_event="agent.default_changed",
+            actor_uid=%user.uid, organization_id=%organization_id, agent_id=%agent_id,
+            default_on=body.default_on, "Organization agent default changed");
+    }
+    Ok(axum::Json(AgentDefaultOnResult {
+        capability_id: agent_id,
+        default_on: body.default_on,
+    }))
 }
 
 /// Expects a configuration accepted by [`PlatformConfig::validate`].

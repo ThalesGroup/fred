@@ -73,7 +73,7 @@ pub async fn authorize(
 }
 
 /// The same rule on the connection that already holds the organization lock.
-async fn authorize_locked(
+pub(crate) async fn authorize_locked(
     conn: &mut PgConnection,
     fga: &Fga,
     caller: &str,
@@ -332,7 +332,7 @@ async fn may_change(fga: &Fga, caller: &str, space: &Space, role: Role) -> AppRe
 
 /// Role mutations serialize with import and organization creation across organizations.
 /// Lock order is always platform, then organization; both guards fence late writes.
-async fn lock_for(
+pub(crate) async fn lock_for(
     pool: &PgPool,
     fga: &Fga,
     space: &Space,

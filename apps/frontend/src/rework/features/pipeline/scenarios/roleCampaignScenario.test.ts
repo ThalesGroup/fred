@@ -3,7 +3,10 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy at http://www.apache.org/licenses/LICENSE-2.0
 import { describe, expect, it } from "vitest";
-import type { PlatformRoleRelation, UserTeamRelation } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type {
+  PlatformRoleRelation,
+  UserTeamRelation,
+} from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { collect } from "./fakePlatform";
 import {
   recoverRoleCampaign,

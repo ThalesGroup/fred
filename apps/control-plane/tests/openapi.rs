@@ -133,6 +133,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /authorize/space",
         "post /import-export/import",
         "get /organizations/{organization_id}/agents",
+        "put /organizations/{organization_id}/agents/{agent_id}/default-on",
         "post /agents/execute/stream",
     ]
     .into_iter()
@@ -359,8 +360,7 @@ fn document_deletion_is_exposed_without_legacy_metadata_and_ingest_routes() {
     );
     for status in ["200", "202"] {
         assert_eq!(
-            document["delete"]["responses"][status]["content"]["application/json"]["schema"]
-                ["$ref"],
+            document["delete"]["responses"][status]["content"]["application/json"]["schema"]["$ref"],
             "#/components/schemas/Receipt"
         );
     }

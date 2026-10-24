@@ -1198,11 +1198,15 @@
           "subtitle": "Agents que cette fonctionnalité bloque actuellement, groupés par équipe. Rétablissez l'accès de chaque équipe depuis Gérer par équipe pour les réactiver.",
           "teamCount": "{{count}} agent(s)"
         },
+        "organizationDefaultOnToast": "Activation par défaut appliquée à cette organisation.",
+        "organizationDefaultOffToast": "Activation par défaut désactivée dans cette organisation.",
         "defaultOnToast": "Activation par défaut appliquée à toute la plateforme.",
         "defaultOffToast": "Activation par défaut désactivée sur toute la plateforme.",
         "defaultOffSuspendedToast": "Activation par défaut désactivée — {{count}} instance(s) dépendante(s) suspendue(s).",
         "defaultToggleError": "Impossible de modifier le réglage d'activation par défaut.",
         "defaultOffConfirm": {
+          "organizationTitle": "Désactiver l'activation par défaut ?",
+          "organizationMessage": "Retirer l'accès hérité à cet agent dans cette organisation ? Les autorisations explicites restent inchangées. Aucune instance gérée n'est créée ou arrêtée par cette action.",
           "appTitle": "Désactiver l'application par défaut ?",
           "appMessage": "Désactiver l'activation par défaut retire l'accès hérité à l'application pour toutes les équipes. Les autorisations explicites restent inchangées.",
           "confirm": "Désactiver",

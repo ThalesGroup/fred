@@ -675,31 +675,34 @@ it("confirms manager document deletion and reports success without using legacy 
   expect(probe.legacyRequests).toEqual([]);
 });
 
-it.each(["pending", "running"] as const)("disables manager document deletion while processing is %s", async (status) => {
-  probe.processing = {
-    "doc-0": {
-      id: "processing",
-      document_id: "doc-0",
-      status,
-      stage: "extraction",
-      profile: "fast",
-      revision: 1,
-      created_at: "2026-10-24T10:00:00Z",
-      chunks: 0,
-      vectors: 0,
-    },
-  };
-  await openDocuments();
-  await click(action("action.more"));
-  const item = [...document.querySelectorAll('[role="presentation"] li')].find((node) =>
-    node.textContent?.includes("rework.resources.action.delete"),
-  )!;
-  expect(item.getAttribute("aria-disabled")).toBe("true");
-  expect(item.textContent).toContain("rework.resources.action.deleteDisabledWhileProcessing");
-  await click(item);
-  expect(probe.confirm).toBeUndefined();
-  expect(probe.deleteDocument).not.toHaveBeenCalled();
-});
+it.each(["pending", "running"] as const)(
+  "disables manager document deletion while processing is %s",
+  async (status) => {
+    probe.processing = {
+      "doc-0": {
+        id: "processing",
+        document_id: "doc-0",
+        status,
+        stage: "extraction",
+        profile: "fast",
+        revision: 1,
+        created_at: "2026-10-24T10:00:00Z",
+        chunks: 0,
+        vectors: 0,
+      },
+    };
+    await openDocuments();
+    await click(action("action.more"));
+    const item = [...document.querySelectorAll('[role="presentation"] li')].find((node) =>
+      node.textContent?.includes("rework.resources.action.delete"),
+    )!;
+    expect(item.getAttribute("aria-disabled")).toBe("true");
+    expect(item.textContent).toContain("rework.resources.action.deleteDisabledWhileProcessing");
+    await click(item);
+    expect(probe.confirm).toBeUndefined();
+    expect(probe.deleteDocument).not.toHaveBeenCalled();
+  },
+);
 
 it("attempts every selected manager document and reports a processing conflict as a partial failure", async () => {
   probe.deleteDocument

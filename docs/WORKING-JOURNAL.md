@@ -1023,6 +1023,232 @@ par Dimi. Pas de nouvelle proposition OpenSpec : intégration de changements
 Swift existants, sans nouvelle fonctionnalité Rust.
 
 
+
+### Evaluation du prochain lot : activation des templates d'agents
+
+2026-10-24, demande de Dimi après le merge `b0baa57ec`. Evaluation seulement,
+aucune implémentation. Invariant réaffirmé : conserver TOUTE l'UI Swift, ses
+onglets et ses commandes ; raccorder progressivement une fonctionnalité sans
+supprimer ou masquer les autres. La proposition de limiter les onglets est
+abandonnée. Le natif Rust doit exercer le même parcours que fred-agents.
+
+**Référence Swift :** `6348ad2cf`,
+`control_plane_backend/product/service.py::{template_capability_id,_agent_capabilities_for_source}`
+et `capabilities/{api,service,enablement,schemas}.py` dans l'ancien backend.
+Le Control Plane projette les templates des runtimes dans le catalogue commun
+comme `kind="agent"`, avec provenance runtime/template et `ADMIN_GATED`.
+L'activation est une autorisation d'utiliser le template, pas un démarrage du
+runtime ni une création d'instance. Le défaut `default_on` est complété par les
+choix équipe `enabled/disabled/default`, où le refus explicite prévaut, et par
+la portée des espaces personnels. Retirer un défaut ne retire pas un grant
+explicite. Les dépendances par défaut sont vérifiées à l'activation. Les
+instances existantes sont suspendues/réactivées selon leurs droits effectifs.
+
+**Ecarts constatés :**
+
+| Contrat | Swift / UI conservée | Weaver actuel | Travail à évaluer |
+| --- | --- | --- | --- |
+| Catalogue administrable | `CapabilityEnablementItem`, identité runtime/template, activation et portée | `agents.rs` retourne seulement `RuntimeCatalog`/`RuntimeTemplate` ; ligne UI de découverte spécifique | Projection commune natif/externe vers un contrat d'activation généré, réutilisé par la table existante. |
+| Activation | Switch `default_on`, confirmations et retour serveur | Cellules d'activation vides, commandes désactivées | Droits canoniques OpenFGA, mutation et lecture organisationnelles, rechargement et erreurs. Aucun booléen parallèle d'autorisation dans SQL. |
+| Portée | Défaut, exceptions équipe et classe personnelle | Modèle FGA sans ressource de template activable | Isoler O1/O2 ; préciser le remplacement de la portée singleton Swift par l'organisation Weaver. Ne pas appliquer un défaut à toute la plateforme. |
+| Equipes | Matrice existante, états explicites/hérités et compteurs | Aucun branchement de la matrice sur les espaces Rust | Roster limité à l'organisation, tri-state et compteurs calculés côté serveur ; O2 sans équipe reste un cas valide. |
+| Runtime natif | Contrat SDK de templates et exécution gérée | `kind="static"` hors enum SDK (`graph/react/deep/proxy`), absence de `default_tuning` et `max_chat_input_chars`, rejet d'`agent_instance_id` | Ne pas annoncer une équivalence complète. Aligner la partie template utile au lot sans inventer une catégorie d'exécution ; l'exécution gérée est un lot distinct. |
+| Autorisation effective | `can_use` consommé par listing/enrollment/exécution | Démo directe hello-world après admission seulement | Tester le droit effectif du template ; ne pas utiliser l'endpoint direct comme preuve d'activation respectée. Raccordement instance/chat ultérieur. |
+
+**Découpage proposé, à confirmer avant implémentation :**
+
+1. Lot A, bouton existant "Activé pour tous" de l'onglet Agents : projection
+   commune, lecture + mutation du défaut au niveau de l'organisation,
+   confirmation de retrait, persistance FGA et retour serveur. Natif sans
+   dépendances comme premier cas. Même projection pour une source externe.
+   Les autres commandes restent présentes ; leur raccordement n'est pas
+   annoncé comme réalisé. Les dépendances non satisfaites d'un template externe
+   doivent être refusées explicitement, jamais ignorées pour faciliter le test.
+2. Lot B, bouton existant "Gérer par équipe" : roster de l'organisation,
+   trois positions, priorité des refus, héritage du défaut, compteurs et
+   portée personnelle à traiter sans lui substituer la liste des équipes.
+3. Lot C, instance puis usage : enrollment, états enabled/suspended,
+   exécution gérée et contrôle d'autorisation, même contrat natif/fred-agents.
+   Un défaut enregistré au lot A ne constitue pas ce parcours complet.
+
+Si l'exigence est de finir dès maintenant toute l'activation Swift, A et B
+forment le lot minimal cohérent ; un simple booléen serait insuffisant.
+Les outils/capabilities, modèles, applications et KB restent visibles et hors
+implémentation. Le mécanisme partagé d'activation des templates ne doit pas
+être confondu avec le portage fonctionnel de l'onglet Capabilities.
+
+**Matrice de validation proposée (non exécutée) :**
+
+- `o1admin` découvre le natif, active le défaut O1, recharge et retrouve l'état ;
+  une équipe sans exception, E1, hérite de l'accès. Désactivation et annulation
+  de la confirmation donnent chacune le résultat attendu.
+- `o2admin` voit le même catalogue disponible mais son défaut O2 reste inchangé,
+  même sans équipe ; aucun identifiant d'E1 n'est divulgué dans les compteurs
+  ou la matrice d'O2. Les mutations croisées sont rejetées.
+- `o1owner`, `o2owner`, root plateforme seul et les quatre comptes E1 ne peuvent
+  pas administrer cette activation organisationnelle, y compris par appel direct.
+- Pour B : E1 explicitement désactivée reste refusée quand le défaut O1 est actif ;
+  retour "par défaut" rétablit l'héritage ; grant explicite reste actif quand
+  le défaut O1 est retiré. Les lectures après reconnexion reflètent OpenFGA.
+- Même fixture de template annoncée par un runtime HTTP : identité/provenance
+  distinctes mais même projection, mêmes droits et mêmes opérations d'activation.
+  Vérifier une dépendance non disponible et un identifiant inconnu.
+- Inventaire UI inchangé ; ni onglet ni commande supprimé ; les autres fonctions
+  ne sont pas prétendues portées. Aucune activation présentée comme succès si
+  le serveur refuse l'écriture.
+
+Avant A : formaliser le contrat et les critères dans OpenSpec, vérifier la
+réutilisation des tables existantes avant tout ajout, et détailler les requêtes
+OpenFGA (types, pagination, volumes et coût selon organisations/templates/équipes).
+La gestion d'indisponibilité des runtimes diffère déjà entre Swift (agrégation
+partielle) et Weaver (échec global) ; décision explicite nécessaire avant de
+changer cette politique, sans ajouter de cache/retry pour ce lot.
+Aucun test, build, commit ou push effectué pour cette évaluation.
+
+#### Contrat du lot A - précisions validées avec Dimi le 2026-10-24
+
+Contrat préparé uniquement, sans implémentation. Les précisions ci-dessous
+actualisent l'évaluation précédente sans effacer sa trace. Référence reproductible :
+Swift `6348ad2cfd0b5b96292f51c79bba3461be555133`, second parent du merge
+`b0baa57ec00d47eb7c57a7ffa1a22f765a7ece9b` (HEAD Weaver lors de la lecture).
+Les modifications locales préexistantes, notamment ce journal et les fichiers
+frontend/tests, sont conservées. Les constats suivants viennent de lectures de
+code et de tests, pas d'une validation fonctionnelle.
+
+**Bouton Swift réellement implémenté.** La page lit `GET /admin/capabilities`
+et le registre global des équipes. Les templates publics sont projetés en
+`kind="agent"`, `ADMIN_GATED`, avec identité `agent__{runtime_id}__{agent_id}`,
+provenance séparée et `default_capability_ids`. `ADMIN_GATED` n'est pas la valeur
+du switch : celle-ci vient du marqueur OpenFGA `default_on`.
+
+- Activation sans dépendance manquante : `PUT /admin/capabilities/{id}/default-on`
+  avec `{default_on: true}`. Le serveur vérifie `can_manage`, retrouve le template,
+  refuse les réglages d'équipe obligatoires et les dépendances non `default_on`,
+  puis assure l'ancrage et écrit le marqueur sur le singleton `organization:fred`.
+- Si des dépendances connues manquent, l'UI demande confirmation, les active
+  une par une, puis active le template en dernier. Ce groupe n'est pas atomique :
+  un échec peut laisser des dépendances activées. Une dépendance absente du
+  catalogue est ignorée par l'aide UI, mais pas par le contrôle des droits serveur.
+- Désactivation : confirmation et lecture de `/revoke-impact` sans équipe cible ;
+  annuler n'écrit rien. Confirmer envoie `{default_on: false}` : seul ce marqueur
+  est retiré, les exceptions ne sont pas effacées. Les dépendances ne bloquent
+  pas ce retrait. L'aperçu en chargement ne bloque pas la confirmation.
+- Le switch reflète la lecture serveur ; la mutation invalide les lectures RTK
+  du catalogue, des instances et des autres consommateurs. Succès/erreur et
+  nombre de suspensions éventuelles alimentent les notifications.
+
+| Point | Swift vérifié | Weaver lu / contrat A |
+| --- | --- | --- |
+| Portée | Singleton `organization:fred` ; défaut, choix équipe et classe personnelle | O1 et O2 totalement isolées. Le même template a des droits propres à chaque organisation. Aucun marqueur global ni booléen SQL de substitution. |
+| Priorités | `disabled` explicite prévaut ; `enabled` explicite survit au retrait du défaut ; la classe personnelle module l'héritage | Conserver ce mécanisme OpenFGA. Le défaut couvre les équipes et espaces personnels de l'organisation, présents/futurs. L'admin pourra aussi autoriser tous ses espaces personnels indépendamment d'E1 ; édition de ces exceptions au lot B. |
+| Etat initial | Projection `ADMIN_GATED`, sans activation automatique du template | Validé : Ralph désactivé dans O1 et O2 tant qu'aucun droit n'est accordé, sans exception pour le natif. |
+| Catalogue et UI | Projection administrable et composants existants | Aujourd'hui découverte seule, cellules d'activation vides. Réutiliser table, Switch, confirmations, notifications et contrats générés ; adapter seulement branchement et textes de portée/impact nécessaires. |
+| Runtime absent | Agrégation partielle : source omise ; pas de substitut de révocation pour un template agent absent (contrairement aux modèles/apps) | Ralph embarqué ne dépend pas d'un runtime HTTP. Weaver échoue actuellement globalement si une source active échoue. Dimi demande le comportement Swift pour les futurs fred-agents ; ce raccordement ultérieur devra résoudre cet écart, sans annoncer qu'il est déjà corrigé. |
+| Dépendances | Activation refusée si un outil requis n'est pas lui-même `default_on` ; grants aux seules équipes existantes insuffisants | Hors lot A validé : Ralph est hello-world sans outils. Aucun portage de gestion des outils ni assouplissement silencieux du contrôle pour accepter un futur template dépendant. |
+| Effet du retrait | Retrait du défaut puis traitement des instances | A retire seulement le droit hérité, conserve les exceptions et ne promet ni suppression d'instance ni interruption d'exécution. Enrollment, instances et exécution gérée restent au lot C. |
+
+**Réutilisation et limites.** Weaver possède déjà l'admission, l'autorisation
+`can_manage` sur une organisation, son contrôle de cycle de vie et la découverte
+commune natif/externe (`src/agents.rs`). Les espaces personnels sont rattachés
+à une organisation, sans héritage de ses droits de contenu. Le lot A ne doit
+pas modifier cette confidentialité. Le modèle FGA actuel n'a aucun droit de
+template : la persistance et l'évaluation organisationnelles restent à implémenter.
+Les identités runtime/template restent communes ; aucune branche UI ou permission
+par nom d'agent. Les calculs locaux de permissions Swift en Python/TypeScript et
+ses exemptions par nom de templates internes ne sont pas des éléments à porter.
+
+**Instances : réserve sur la synthèse précédente.** Swift filtre le catalogue
+équipe par `can_use`, recontrôle l'enrollment et l'édition, et refuse la préparation
+d'une exécution pour une instance désactivée ou suspendue. Cependant,
+`set_capability_default_on(false)` préserve les grants explicites d'équipe sans
+recontrôler `personal_on` avant suspension ; le droit personnel peut donc rester
+accordé alors que l'instance est suspendue. La réactivation directe d'une instance
+du template vérifie son droit mais ne repasse pas par la vérification des outils
+utilisée pour les autres dépendants. Il serait inexact de résumer tout cela comme
+une suspension/réactivation toujours conforme à tous les droits et disponibilités.
+Dimi accepte de laisser la sémantique des instances hors A et de reprendre ces
+trous plus tard, sur le Control Plane consolidé. L'endpoint direct hello-world,
+admis sans contexte d'organisation et refusant `agent_instance_id`, n'est jamais
+un consommateur ni une preuve de cette activation.
+
+**Scénarios d'acceptation proposés, non exécutés.** O1 possède E1 et l'espace
+personnel d'Alice ; O2 peut ne posséder aucune équipe.
+
+1. Sans grant, Ralph apparaît désactivé dans O1 et O2. `o1admin` active le défaut
+   O1 ; rechargement/reconnexion conserve l'état lu dans OpenFGA. E1 et l'espace
+   personnel d'Alice héritent du droit ; une nouvelle équipe O1 l'hérite aussi.
+2. Le catalogue de Ralph reste découvrable par `o2admin`, mais son défaut O2 ne
+   change pas. Aucun identifiant ni compteur d'O1 ne fuit vers O2. Une lecture ou
+   mutation administrative O2 par un admin d'O1 seul est refusée, et inversement.
+   Un owner seul, un rôle plateforme seul ou un rôle E1 seul ne suffit pas.
+3. Annuler le retrait laisse le défaut intact. Confirmer le retire uniquement
+   dans O1 ; E1 sans exception perd le droit hérité. Aucun arrêt, enrollment ou
+   changement de l'endpoint direct hello-world n'est annoncé.
+4. Avec des exceptions préparées comme fixture du modèle, E1 explicitement
+   refusée reste refusée malgré le défaut ; E1 explicitement autorisée le reste
+   après retrait du défaut. Une classe personnelle autorisée garde son droit
+   après ce retrait. L'édition UI de ces exceptions n'est pas une livraison A.
+5. Refus serveur/OpenFGA : aucune notification de succès ni activation locale
+   présentée comme enregistrée. Identité inconnue refusée. Tous les onglets,
+   colonnes et commandes sont conservés ; les textes disent "cette organisation"
+   et ne promettent pas de suspension d'instances inexistantes.
+
+Décisions de périmètre ci-dessus validées par Dimi ; aucune autorisation
+d'implémenter déduite de cette préparation. Les dépendances et le runtime externe
+sortent des critères A ; leurs scénarios Swift restent à reprendre lors de leur
+raccordement. Aucune nouvelle question fonctionnelle bloquante pour ce contrat.
+Les formes exactes des tuples/routes et leurs coûts seront exposées avant le code,
+sans matrice de permissions Rust/TypeScript ni nouvelle architecture hypothétique.
+Sources Swift : `product/service.py`, `capabilities/{api,service,enablement,impact}.py`,
+`libs/fred-core/fred_core/security/rebac/schema.fga`, `FeaturesPage.tsx`,
+`capabilityEnablement.ts`, `controlPlaneApiEnhancements.ts` et
+`test_capability_enablement_1980.py`, à lire au parent indiqué ci-dessus.
+Aucun test, compilation, lint, génération, déploiement, délégation, commit ou push
+effectué pour ce contrat. Aucun changement du code ou des contrats générés.
+
+#### Lot A - raccordement local à valider, après le "go" de Dimi
+
+2026-10-24 : Dimi valide le lancement, l'extension ciblée du générateur FGA
+pour `but not`, le nettoyage des références de templates, et la convention
+existante de transaction/verrou SQL pendant OpenFGA. Aucun appel runtime sous
+transaction. Aucun changement d'instance ni application du nouveau modèle.
+
+- `agents.rs` projette les définitions natives/externes dans le même contrat de
+  ligne et lit le défaut de l'organisation. Identité UUIDv5 dérivée de
+  l'organisation, du runtime et du template. Nouvelle mutation organisationnelle
+  du défaut : admission, contexte, `can_manage`, découverte hors transaction,
+  recontrôle sous les verrous/guards existants puis écriture atomique FGA.
+- `agent_template` conserve défaut, exceptions et classe personnelle. La lecture
+  effective utilise un Check OpenFGA avec le contexte de placement de l'espace,
+  sans matrice Rust/TypeScript. La purge conserve l'ancrage jusqu'au drainage des
+  pages d'exceptions. Le modèle JSON a été régénéré par le générateur Python
+  existant, sans compilation ni validation exécutée.
+- `FeaturesPage` réutilise le switch, les cellules d'identité/actions et la
+  confirmation existants. Mutation/relecture RTK limitée à l'organisation,
+  erreurs serveur conservées, aucune requête legacy d'impact sur les instances.
+  Textes FR/EN limités à la portée organisationnelle et à l'absence d'effet sur
+  les instances. Les autres cellules et commandes gardent leur état précédent.
+- Régressions préparées (non exécutées) : héritage/exception/classe personnelle,
+  isolation des défauts, purge de plus d'une page de grants, clic/annulation/refus
+  côté UI. Inventaire OpenAPI des routes actualisé en préservant les corrections
+  de tests présentes avant ce travail.
+- README, carte des sources et annexes existantes actualisés ; coûts OpenFGA
+  dérivés du code, sans mesure. Blocs documentaires régénérés par
+  `python3 docs/architecture/tools/docs.py generate`, sans campagne de contrôle.
+
+Après autorisation explicite de Dimi, `make -C apps/control-plane generate-openapi`
+a réussi, compilation Rust comprise, puis
+`npx --no-install @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json`
+depuis `apps/frontend` a réussi. Types et hooks générés relus avec leurs callers ;
+aucun contrat généré édité manuellement. La compilation de génération ne constitue
+ni une validation TypeScript du frontend ni une validation fonctionnelle du lot.
+Le démarrage vérifie strictement le modèle FGA publié : une installation sur
+l'ancien modèle ne prendra pas ce changement automatiquement. Aucune migration
+ou réinitialisation d'instance n'est réalisée ni autorisée par ce lot.
+Tests, lint, build frontend, déploiement et validation manuelle non exécutés.
+Les modifications des autres travaux sont conservées.
+
+
 ## F-011 Découverte des définitions d'agents
 
 - 2026-10-23 : demande d'un lot minimal Rust pour interroger fred-agents, sans
@@ -1399,3 +1625,10 @@ Swift existants, sans nouvelle fonctionnalité Rust.
   pour D1 : 409 `processing_active` pendant un traitement, rétention héritée de
   l'espace, `GET /deletions` inchangé.
 
+
+- 2026-10-24 : déploiement secondaire interrompu pendant la compilation frontend
+  du lot A. Correction ciblée dans `FeaturesPage.tsx` : narrowing numérique de
+  `suspended_instances` sur la réponse Rust/legacy, et ajout de `defaultOn` aux
+  identifiants de colonnes autorisés. Aucun élément UI modifié ou supprimé.
+  Changements préexistants préservés. Aucun test, build ou déploiement relancé ;
+  validation attendue lors de la prochaine exécution par Dimi.

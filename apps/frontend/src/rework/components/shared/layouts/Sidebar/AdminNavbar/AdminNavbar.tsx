@@ -157,12 +157,14 @@ function PlatformAdminNavbar() {
     <AdminNavigation
       items={[
         ...(organization.isAdmin
-          ? [{
-              type: "link" as const,
-              label: t("rework.sidebar.admin.menu.features"),
-              icon: { category: "outlined" as const, type: "tune" as const, filled: false },
-              linkProps: { to: "/admin/features" },
-            }]
+          ? [
+              {
+                type: "link" as const,
+                label: t("rework.sidebar.admin.menu.features"),
+                icon: { category: "outlined" as const, type: "tune" as const, filled: false },
+                linkProps: { to: "/admin/features" },
+              },
+            ]
           : []),
         {
           type: "link",

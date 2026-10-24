@@ -48,8 +48,8 @@ import {
 } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import type { CapabilityEnablementItem } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { skipToken } from "@reduxjs/toolkit/query";
-import { useOrganizationAgentsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { RuntimeTemplate } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useOrganizationAgentsQuery, useSetOrganizationAgentDefaultMutation } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { AgentEnablement } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./FeaturesPage.module.css";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
 import { PlatformModelBindingsPanel } from "./PlatformModelBindingsPanel/PlatformModelBindingsPanel.tsx";
@@ -87,10 +87,9 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   const readOnly = organizationId !== undefined;
   const [kindFilter, setKindFilter] = useState<CapabilityKind>(readOnly ? "agent" : "tool");
   const discoveringAgents = readOnly && kindFilter === "agent";
-  const discovery = useOrganizationAgentsQuery(
-    discoveringAgents && organizationId ? { organizationId } : skipToken,
-    { refetchOnMountOrArgChange: true },
-  );
+  const discovery = useOrganizationAgentsQuery(discoveringAgents && organizationId ? { organizationId } : skipToken, {
+    refetchOnMountOrArgChange: true,
+  });
   const { t } = useTranslation();
   const { showSuccess, showError, showWarn } = useToast();
   const { canAdmin } = useUserCapabilities(discoveringAgents);
@@ -108,7 +107,9 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
     isLoading: isTeamsLoading,
     isError: isTeamsError,
   } = useListAllTeamsQuery({ includeMembership: false }, { skip: readOnly });
-  const [setDefaultOn, { isLoading: isTogglingDefault }] = useSetCapabilityDefaultOnMutation();
+  const [setDefaultOn, { isLoading: isTogglingLegacyDefault }] = useSetCapabilityDefaultOnMutation();
+  const [setOrganizationDefault, { isLoading: isTogglingOrganizationDefault }] = useSetOrganizationAgentDefaultMutation();
+  const isTogglingDefault = isTogglingLegacyDefault || isTogglingOrganizationDefault;
   // Per-model reasoning activation (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5).
   const [setModelReasoning, { isLoading: isTogglingReasoning }] = useSetModelReasoningMutation();
 
@@ -222,6 +223,10 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   // switch guarded against a concurrent submit without ever disabling the
   // one element that's still focused.
   const [togglingCapabilityId, setTogglingCapabilityId] = useState<string | null>(null);
+  useEffect(() => {
+    setPendingDefaultOff(null);
+  }, [organizationId, kindFilter]);
+
   // Synchronous, ref-backed guard against double-invoking applyDefaultOn for
   // the same capability id. A rapid double-click on the same row (the
   // always-undebounced "turn default-on on" path in onToggleDefault, below)
@@ -321,39 +326,50 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   // instances can be suspended, an application or a Knowledge Base only loses
   // inherited access. Naming the object is what makes the dialog truthful.
   const defaultOffCopyVariant =
-    visiblePendingDefaultOff?.kind === "app"
+    discoveringAgents
+      ? "organization"
+      : visiblePendingDefaultOff?.kind === "app"
       ? "app"
       : visiblePendingDefaultOff?.kind === "knowledge_base"
         ? "knowledgeBase"
         : "generic";
 
   const applyDefaultOn = async (capability: CapabilityEnablementItem, nextValue: boolean) => {
-    if (readOnly) return;
+    if (readOnly && !discoveringAgents) return;
     if (inFlightDefaultOnIdRef.current === capability.id) {
       return;
     }
     inFlightDefaultOnIdRef.current = capability.id;
     setTogglingCapabilityId(capability.id);
     try {
-      const result = await setDefaultOn({
-        capabilityId: capability.id,
-        setCapabilityDefaultOnRequest: { default_on: nextValue },
-      }).unwrap();
-      const suspended = result.suspended_instances ?? 0;
+      const result = organizationId
+        ? await setOrganizationDefault({
+            organizationId,
+            agentId: capability.id,
+            setAgentDefaultOnRequest: { default_on: nextValue },
+          }).unwrap()
+        : await setDefaultOn({
+            capabilityId: capability.id,
+            setCapabilityDefaultOnRequest: { default_on: nextValue },
+          }).unwrap();
+      const suspended =
+        "suspended_instances" in result && typeof result.suspended_instances === "number"
+          ? result.suspended_instances
+          : 0;
       if (suspended > 0) {
         showWarn({ summary: t("rework.admin.capabilities.defaultOffSuspendedToast", { count: suspended }) });
       } else {
         showSuccess({
-          summary: nextValue
-            ? t("rework.admin.capabilities.defaultOnToast")
-            : t("rework.admin.capabilities.defaultOffToast"),
+          summary: organizationId
+            ? t(nextValue ? "rework.admin.capabilities.organizationDefaultOnToast" : "rework.admin.capabilities.organizationDefaultOffToast")
+            : t(nextValue ? "rework.admin.capabilities.defaultOnToast" : "rework.admin.capabilities.defaultOffToast"),
         });
       }
       // A model switched off takes its reasoning down with it (REASON-01 §5.7).
       // Its own toast, in addition to the one above rather than instead of it:
       // the row's reasoning switch flips on its own when the list refetches,
       // and an unexplained state change on an admin screen reads as a bug.
-      if (result.reasoning_disabled) {
+      if ("reasoning_disabled" in result && result.reasoning_disabled) {
         showWarn({ summary: t("rework.admin.capabilities.defaultOffReasoningToast") });
       }
     } catch (error) {
@@ -365,7 +381,7 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
       const normalized = normalizeApiError(error);
       showError({
         summary: t("rework.admin.capabilities.defaultToggleError"),
-        detail: normalized.kind === "conflict" ? t("rework.admin.capabilities.defaultOnConflict") : normalized.detail,
+        detail: !organizationId && normalized.kind === "conflict" ? t("rework.admin.capabilities.defaultOnConflict") : normalized.detail,
       });
     } finally {
       inFlightDefaultOnIdRef.current = null;
@@ -437,7 +453,7 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   };
 
   const onToggleDefault = (capability: CapabilityEnablementItem) => {
-    if (readOnly) return;
+    if (readOnly && !discoveringAgents) return;
     if (capability.default_on) {
       // Turning default-on off revokes inherited access team-by-team and can
       // suspend dependent instances — confirm before firing, and preview the
@@ -447,10 +463,10 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
       // Applications have no agent-instance dependencies or suspension
       // lifecycle. Their confirmation stays generic and never asks the
       // agent-specific impact endpoint for a meaningless preview.
-      if (hasAgentInstanceLifecycle(capability.kind)) {
+      if (!discoveringAgents && hasAgentInstanceLifecycle(capability.kind)) {
         void fetchRevokeImpact({ capabilityId: capability.id });
       }
-    } else if (missingAgentDependenciesForPlatform(capability, allCapabilities).length > 0) {
+    } else if (!discoveringAgents && missingAgentDependenciesForPlatform(capability, allCapabilities).length > 0) {
       // #2470: the backend now 409s this write. Offer to grant the dependencies
       // in the same gesture rather than surfacing a refusal the admin has to
       // resolve by hand, one capability at a time, elsewhere in the table.
@@ -471,7 +487,7 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   // the preview is still loading we render nothing extra — the dialog keeps its
   // generic message and stays actionable.
   const renderImpactDetails = () => {
-    if (!visiblePendingDefaultOff || !hasAgentInstanceLifecycle(visiblePendingDefaultOff.kind)) return null;
+    if (discoveringAgents || !visiblePendingDefaultOff || !hasAgentInstanceLifecycle(visiblePendingDefaultOff.kind)) return null;
     if (revokeImpact.isFetching || !impact) return null;
     return (
       <div className={styles.impact}>
@@ -525,8 +541,9 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
     );
   };
 
-  const columns: (DataTableColumn<CapabilityEnablementItem> & { field?: "identity" | "actions" })[] = [
+  const columns: (DataTableColumn<CapabilityEnablementItem> & { field?: "defaultOn" | "identity" | "actions" })[] = [
     {
+      field: "defaultOn",
       label: t("rework.admin.capabilities.col.defaultOn"),
       size: "1fr",
       cellRenderer: (cap) => {
@@ -550,7 +567,7 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
             size="small"
             checked={cap.default_on}
             disabled={
-              readOnly ||
+              (readOnly && !discoveringAgents) ||
               blockedOn ||
               unavailableDiscoveredIds.has(cap.id) ||
               (isTogglingDefault && togglingCapabilityId !== cap.id)
@@ -619,7 +636,8 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
                       checked={cap.reasoning_enabled ?? false}
                       disabled={
                         readOnly ||
-                        unavailableDiscoveredIds.has(cap.id) || (isTogglingReasoning && togglingReasoningId !== cap.id)
+                        unavailableDiscoveredIds.has(cap.id) ||
+                        (isTogglingReasoning && togglingReasoningId !== cap.id)
                       }
                       onChange={() => void applyReasoning(cap, !(cap.reasoning_enabled ?? false))}
                       aria-label={t("rework.admin.capabilities.col.reasoning")}
@@ -767,43 +785,14 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
     },
   ];
 
-  type DiscoveredAgent = { template: RuntimeTemplate; runtimeId: string };
-  const agents: DiscoveredAgent[] = discovery.isError
-    ? []
-    : (discovery.currentData ?? []).flatMap((catalog) =>
-        catalog.templates.map((template) => ({ template, runtimeId: catalog.runtime_id })),
-      );
-  const discoveryColumns: DataTableColumn<DiscoveredAgent>[] = columns.map((column) => ({
+  const agents = discovery.isError ? [] : (discovery.currentData ?? []);
+  const discoveryColumns: DataTableColumn<AgentEnablement>[] = columns.map((column) => ({
     label: column.label,
     size: column.size,
-    cellRenderer: ({ template, runtimeId }) => {
-      // Identity and actions retain their existing positions. The discovery contract
-      // makes no assertion about activation, team reach or instance health.
-      if (column.field === "identity") {
-        return (
-          <EntityIdentity
-            name={template.title}
-            icon="tune"
-            sourceId={template.template_agent_id}
-            runtimeId={runtimeId}
-            version={template.public_version}
-          />
-        );
-      }
-      if (column.field === "actions") {
-        return (
-          <div className={styles.actionsCell}>
-            <Button
-              color="on-surface"
-              variant="outlined"
-              size="small"
-              icon={{ category: "outlined", type: "groups" }}
-              disabled
-            >
-              {t("rework.admin.capabilities.manageTeams")}
-            </Button>
-          </div>
-        );
+    cellRenderer: (agent) => {
+      // Reuse the existing controls; access and instance health are subsequent lots.
+      if (["defaultOn", "identity", "actions"].includes(column.field ?? "")) {
+        return column.cellRenderer?.(agent);
       }
       return <div className={styles.centered} />;
     },
@@ -985,6 +974,20 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
           />
         ))}
 
+      <ConfirmationDialog
+        open={visiblePendingDefaultOff !== null}
+        title={t(`rework.admin.capabilities.defaultOffConfirm.${defaultOffCopyVariant}Title`)}
+        message={t(`rework.admin.capabilities.defaultOffConfirm.${defaultOffCopyVariant}Message`)}
+        details={renderImpactDetails()}
+        confirmLabel={t("rework.admin.capabilities.defaultOffConfirm.confirm")}
+        cancelLabel={t("rework.admin.capabilities.defaultOffConfirm.cancel")}
+        criticalAction
+        onConfirm={() => {
+          if (visiblePendingDefaultOff) void applyDefaultOn(visiblePendingDefaultOff, false);
+          setPendingDefaultOff(null);
+        }}
+        onCancel={() => setPendingDefaultOff(null)}
+      />
       {!readOnly && (
         <>
           <CapabilityTeamMatrixDrawer
@@ -1026,21 +1029,6 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
             teams={teams}
             open={suspendedCapability !== null}
             onClose={() => setSuspendedCapabilityId(null)}
-          />
-
-          <ConfirmationDialog
-            open={visiblePendingDefaultOff !== null}
-            title={t(`rework.admin.capabilities.defaultOffConfirm.${defaultOffCopyVariant}Title`)}
-            message={t(`rework.admin.capabilities.defaultOffConfirm.${defaultOffCopyVariant}Message`)}
-            details={renderImpactDetails()}
-            confirmLabel={t("rework.admin.capabilities.defaultOffConfirm.confirm")}
-            cancelLabel={t("rework.admin.capabilities.defaultOffConfirm.cancel")}
-            criticalAction
-            onConfirm={() => {
-              if (visiblePendingDefaultOff) void applyDefaultOn(visiblePendingDefaultOff, false);
-              setPendingDefaultOff(null);
-            }}
-            onCancel={() => setPendingDefaultOff(null)}
           />
 
           <ConfirmationDialog

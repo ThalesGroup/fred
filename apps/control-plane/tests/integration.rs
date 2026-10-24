@@ -6200,6 +6200,9 @@ mod resource_browsing;
 #[path = "support/space_deletion.rs"]
 mod space_deletion;
 
+#[path = "support/agent_enablement.rs"]
+mod agent_enablement;
+
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn api_starts_without_temporal_and_keeps_storage_optional() {

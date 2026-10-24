@@ -254,6 +254,16 @@ const injectedRtkApi = api.injectEndpoints({
     organizationAgents: build.query<OrganizationAgentsApiResponse, OrganizationAgentsApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/agents` }),
     }),
+    setOrganizationAgentDefault: build.mutation<
+      SetOrganizationAgentDefaultApiResponse,
+      SetOrganizationAgentDefaultApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/agents/${queryArg.agentId}/default-on`,
+        method: "PUT",
+        body: queryArg.setAgentDefaultOnRequest,
+      }),
+    }),
     createSpace: build.mutation<CreateSpaceApiResponse, CreateSpaceApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces`, method: "POST", body: queryArg.createSpace }),
     }),
@@ -498,9 +508,15 @@ export type CreatePersonalSpaceApiArg = {
 };
 export type MySpacesApiResponse = /** status 200 Success */ MySpace[];
 export type MySpacesApiArg = void;
-export type OrganizationAgentsApiResponse = /** status 200 undefined */ RuntimeCatalog[];
+export type OrganizationAgentsApiResponse = /** status 200 undefined */ AgentEnablement[];
 export type OrganizationAgentsApiArg = {
   organizationId: string;
+};
+export type SetOrganizationAgentDefaultApiResponse = /** status 200 undefined */ AgentDefaultOnResult;
+export type SetOrganizationAgentDefaultApiArg = {
+  organizationId: string;
+  agentId: string;
+  setAgentDefaultOnRequest: SetAgentDefaultOnRequest;
 };
 export type CreateSpaceApiResponse = /** status 201 Success */ Space;
 export type CreateSpaceApiArg = {
@@ -964,17 +980,28 @@ export type MySpace = Space & {
   /** Effective roles, including those descending from an ancestor. */
   roles: Role[];
 };
-export type RuntimeTemplate = {
+export type AgentCapabilityKind = "agent";
+export type AgentScopePolicy = "admin_gated";
+export type AgentEnablement = {
+  default_capability_ids: string[];
+  default_on: boolean;
   description: string;
-  kind: string;
+  icon: string;
+  id: string;
+  kind: AgentCapabilityKind;
+  name: string;
   public_version?: string | null;
-  template_agent_id: string;
-  title: string;
-  [key: string]: any;
-};
-export type RuntimeCatalog = {
   runtime_id: string;
-  templates: RuntimeTemplate[];
+  source_id: string;
+  team_scope: AgentScopePolicy;
+  version: string;
+};
+export type AgentDefaultOnResult = {
+  capability_id: string;
+  default_on: boolean;
+};
+export type SetAgentDefaultOnRequest = {
+  default_on: boolean;
 };
 export type CreateSpace = {
   /** Initial administrator; creation grants the caller nothing on the new space. */
@@ -1071,6 +1098,7 @@ export const {
   useLazyMySpacesQuery,
   useOrganizationAgentsQuery,
   useLazyOrganizationAgentsQuery,
+  useSetOrganizationAgentDefaultMutation,
   useCreateSpaceMutation,
   useDeleteSpaceMutation,
   useReceiptsQuery,

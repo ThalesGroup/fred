@@ -127,13 +127,7 @@ describe("generated control-plane client", () => {
   });
 
   it("exposes no document metadata routes or provisional document mutations", () => {
-    for (const operation of [
-      "createDocument",
-      "renameDocument",
-      "ingestDocument",
-      "getDocument",
-      "listDocuments",
-    ]) {
+    for (const operation of ["createDocument", "renameDocument", "ingestDocument", "getDocument", "listDocuments"]) {
       expect(api.endpoints).not.toHaveProperty(operation);
     }
     expect(managerApi).not.toHaveProperty("useIngestDocumentMutation");
