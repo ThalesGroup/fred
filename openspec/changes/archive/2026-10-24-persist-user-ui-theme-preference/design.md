@@ -20,11 +20,11 @@ See proposal.md and specs/user-ui-preferences/spec.md. Personal theme, mode, sid
 
 ### Create `users_preferences` in Control Plane
 
-One row per authenticated `user.uid`, with that subject string as the primary key. Use typed columns for `ui_theme_id`, `theme_mode`, `language`, `sidebar_collapsed`, `team_sort_mode`, `agent_sort`, `trace_expanded` and a bounded JSON mapping `pane_widths` for the named resizable panels. Null theme ID means no explicit choice; null language follows navigator language; null trace expansion keeps today's automatic behavior. Defaults for the other fields match today's frontend defaults. The identity row in shared `users` is not guaranteed for every externally authenticated subject, so do not add a foreign key. Delete this row explicitly when deleting a user through Control Plane. One new table and one migration satisfy the requested separation without changing `fred-core`.
+One row per authenticated `user.uid`, with that subject string as the primary key. Use typed columns for `ui_theme_id`, `theme_mode`, `language`, `sidebar_collapsed`, `team_sort_mode`, `agent_sort` and `trace_expanded`. Resizable pane widths remain in browser localStorage and are absent from the database contract. Null theme ID means no explicit choice; null language follows navigator language; null trace expansion keeps today's automatic behavior. Defaults for the other fields match today's frontend defaults. The identity row in shared `users` is not guaranteed for every externally authenticated subject, so do not add a foreign key. Delete this row explicitly when deleting a user through Control Plane. One new table and one migration satisfy the requested separation without changing `fred-core`.
 
 ### Read and patch self-service preferences
 
-Add authenticated `GET` and `PATCH /control-plane/v1/users/me/preferences`. A read returns typed defaults and `initialized: false` when no row exists. PATCH accepts only known fields; omitted fields remain unchanged, and pane-width entries merge by known key. Validate all fields before writing; backend theme ID syntax matches the platform theme setting, but catalog membership is a frontend concern. The path has no user ID parameter. Partial writes avoid resetting other controls when one setting changes in a second tab. The generated Control Plane client is the sole frontend API binding.
+Add authenticated `GET` and `PATCH /control-plane/v1/users/me/preferences`. A read returns typed defaults and `initialized: false` when no row exists. PATCH accepts only known fields; omitted fields remain unchanged. Validate all fields before writing; backend theme ID syntax matches the platform theme setting, but catalog membership is a frontend concern. The path has no user ID parameter. Partial writes avoid resetting other controls when one setting changes in a second tab. The generated Control Plane client is the sole frontend API binding.
 
 ### Hydrate before rendering signed-in content
 
@@ -34,16 +34,16 @@ After OIDC login, obtain the authenticated subject ID, read this user's preferen
 
 Before the first profile read, claim the ownerless legacy keys for the first authenticated subject and copy validated values to a snapshot keyed by that subject. When the GET result says no row exists, send that snapshot in one PATCH before application content mounts. Mark that browser's legacy import complete and clear the snapshot only after the server acknowledges the write; a failed read or import remains eligible for that subject to retry while visible controls use user-scoped cache or defaults. Another account cannot consume the pending snapshot. The local keys may continue as a component cache but must not seed another account after the marker is set. Old keys have no account ID, so the initial claim can only assign them to the first authenticated user who loads this browser after upgrade. It is impossible to recover values already erased by workstation policy. The migration note describes this limitation and the UI remains editable if the imported values belong to someone else.
 
-### Keep identifiers and widths bounded
+### Keep theme identifiers stable and widths local
 
-Persist the catalog's stable string theme ID, never a list position or a generated process ID. Archive validation already rejects duplicate custom IDs and IDs colliding with `pebble`, `cobalt` or `cloud`. Document that the same theme keeps its ID across archive updates and frontend restarts. The pane-width map accepts only the known keys used by the wiki rail, import panel and named inline drawers, with positive bounded pixel values; the frontend's viewport clamp remains the final rendering guard.
+Persist the catalog's stable string theme ID, never a list position or a generated process ID. Archive validation already rejects duplicate custom IDs and IDs colliding with `pebble`, `cobalt` or `cloud`. Document that the same theme keeps its ID across archive updates and frontend restarts. Pane widths continue to use localStorage with the existing viewport clamp. They do not follow the user after browser storage is cleared.
 
 ## Risks / Trade-offs
 
 - [Legacy keys may belong to another person on a shared browser] -> Import only when the database has no row, mark the browser import complete after success, and document that the first import cannot prove ownership.
 - [Browser values were cleared before rollout] -> Use defaults; users can choose again and subsequent changes persist centrally.
 - [Preference API is unavailable] -> Use the authenticated subject's scoped cache or defaults, keep controls usable, and retry on the next load.
-- [Many rapid pane drags] -> Persist the final width when dragging ends rather than sending a request per pointer move.
+- [Browser storage is cleared] -> Resizable pane widths return to their defaults by explicit product choice; they never generate preference API writes.
 - [Concurrent updates] -> PATCH only the field changed; the same field uses last-write-wins semantics.
 
 ## Migration Plan

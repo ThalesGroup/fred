@@ -6,11 +6,11 @@ Defines how authenticated people's durable display choices are saved, restored a
 
 ### Requirement: A person owns one display-preferences record
 
-The control plane SHALL let an authenticated person read and partially update only their own preferences. The record SHALL contain a nullable theme ID, `light`/`dark`/`system` mode, nullable `en`/`fr` language, navigation-sidebar collapsed state, `recent`/`alpha` team sort, `name`/`created_at:desc`/`updated_at:desc` agent sort, nullable trace-expansion choice and a bounded map of named pane widths. The theme ID, when present, SHALL match `^[a-z][a-z0-9-]{0,31}$` and SHALL remain opaque to the control plane. An absent record SHALL return the documented defaults and be distinguishable from a saved record.
+The control plane SHALL let an authenticated person read and partially update only their own preferences. The record SHALL contain a nullable theme ID, `light`/`dark`/`system` mode, nullable `en`/`fr` language, navigation-sidebar collapsed state, `recent`/`alpha` team sort, `name`/`created_at:desc`/`updated_at:desc` agent sort and nullable trace-expansion choice. Resizable pane widths SHALL remain in browser localStorage and SHALL NOT be sent to the preferences API. The theme ID, when present, SHALL match `^[a-z][a-z0-9-]{0,31}$` and SHALL remain opaque to the control plane. An absent record SHALL return the documented defaults and be distinguishable from a saved record.
 
 #### Scenario: Save and read several choices
 
-- **WHEN** an authenticated person sets theme `acme`, mode `dark`, language `fr`, collapses the sidebar and resizes a pane
+- **WHEN** an authenticated person sets theme `acme`, mode `dark`, language `fr` and collapses the sidebar
 - **THEN** a later read for that person returns those choices, including from another browser
 
 #### Scenario: Partial update
@@ -20,8 +20,13 @@ The control plane SHALL let an authenticated person read and partially update on
 
 #### Scenario: Invalid choice
 
-- **WHEN** a person submits an invalid theme ID, mode, language, sort value or pane width
+- **WHEN** a person submits an invalid theme ID, mode, language, sort value or a pane-width field
 - **THEN** the request fails validation and no stored choice changes
+
+#### Scenario: Pane width remains browser-local
+
+- **WHEN** a person resizes a pane and later clears browser storage
+- **THEN** the pane returns to its default width and no preferences API write was made for that resize
 
 #### Scenario: Account isolation
 

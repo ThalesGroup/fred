@@ -26,8 +26,8 @@ import valid display choices still present in that browser's localStorage.
 
 ## Validation
 
-Sign in with a test account, change the theme, display mode, language and a
-layout control, then reload with browser storage cleared. Check that the same
+Sign in with a test account, change the theme, display mode, language and
+sidebar state, then reload with browser storage cleared. Check that the same
 choices return and that `users_preferences` has one row for the test subject.
 
 ## Rollback
@@ -41,5 +41,6 @@ saved after the migration.
 Browser values already erased before the upgrade cannot be recovered. Legacy
 localStorage keys do not identify their owner, so the first account to import
 from a shared browser may receive another person's display choices. Users can
-change these choices after sign-in. Resizable pane widths are clamped to the
+change these choices after sign-in. Resizable pane widths stay in localStorage,
+return to their defaults if browser storage is cleared, and are clamped to the
 current viewport when rendered.
