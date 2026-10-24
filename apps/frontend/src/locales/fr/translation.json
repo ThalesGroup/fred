@@ -2279,6 +2279,8 @@
     "helpCenter": {
       "title": "Centre d'aide",
       "languageAria": "Langue de la documentation",
+      "languageSaveFailed": "La langue de la documentation n'a pas été enregistrée",
+      "languageSaveFailedDetail": "Cette page utilise votre choix, mais votre profil reprendra l'ancienne langue la prochaine fois.",
       "sidebarAria": "Navigation du centre d'aide",
       "copyPageLink": "Copier le lien de la page",
       "copyHeadingLink": "Copier le lien de ce paragraphe",
@@ -3573,7 +3575,9 @@
         "themePebble": "Galet",
         "uiThemeAria": "Thème graphique",
         "interfaceTitle": "Interface : thème et mode",
-        "languageAria": "Langue"
+        "languageAria": "Langue",
+        "saveFailed": "Impossible d'enregistrer la préférence d'affichage",
+        "saveFailedDetail": "Votre choix précédent a été rétabli. Réessayez."
       },
       "conversationProfile": {
         "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos {{agentsNicknamePlural}} doivent s'adresser à vous.",

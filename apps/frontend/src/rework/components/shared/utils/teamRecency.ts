@@ -18,8 +18,9 @@
 // Every read/write is guarded: a blocked or full storage degrades to "no
 // recency" (falls back to alphabetical) rather than throwing.
 
+import { getCurrentUserPreferences, persistUserPreference } from "../../../../app/userPreferences";
+
 const RECENCY_KEY = "fred.teamRecency";
-const SORT_MODE_KEY = "fred.teamSortMode";
 
 export type TeamSortMode = "recent" | "alpha";
 type RecencyMap = Record<string, number>;
@@ -52,17 +53,9 @@ export function recordTeamVisit(teamId: string): void {
 }
 
 export function getTeamSortMode(): TeamSortMode {
-  try {
-    return localStorage.getItem(SORT_MODE_KEY) === "alpha" ? "alpha" : "recent";
-  } catch {
-    return "recent";
-  }
+  return getCurrentUserPreferences().team_sort_mode === "alpha" ? "alpha" : "recent";
 }
 
 export function setTeamSortMode(mode: TeamSortMode): void {
-  try {
-    localStorage.setItem(SORT_MODE_KEY, mode);
-  } catch {
-    // Persisting the preference is best-effort.
-  }
+  persistUserPreference({ team_sort_mode: mode });
 }

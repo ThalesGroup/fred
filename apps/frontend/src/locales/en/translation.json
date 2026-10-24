@@ -2279,6 +2279,8 @@
     "helpCenter": {
       "title": "Help Center",
       "languageAria": "Documentation language",
+      "languageSaveFailed": "Documentation language was not saved",
+      "languageSaveFailedDetail": "This page uses your choice, but your profile will use its previous language next time.",
       "sidebarAria": "Help Center navigation",
       "copyPageLink": "Copy the page link",
       "copyHeadingLink": "Copy the link to this paragraph",
@@ -3573,7 +3575,9 @@
         "themePebble": "Pebble",
         "uiThemeAria": "UI theme",
         "interfaceTitle": "Interface: theme and mode",
-        "languageAria": "Language"
+        "languageAria": "Language",
+        "saveFailed": "Could not save display preference",
+        "saveFailedDetail": "Your previous choice has been restored. Please try again."
       },
       "conversationProfile": {
         "placeholder": "Please indicate who you are, your professional activities, and the preferred tone or form of address for your {{agentsNicknamePlural}}.",
