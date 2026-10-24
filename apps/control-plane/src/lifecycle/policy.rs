@@ -173,39 +173,19 @@ impl LifecycleConfig {
         Ok(())
     }
 }
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Mode {
-    #[default]
-    DeferredDelete,
-    ImmediateDelete,
-}
-impl Mode {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::DeferredDelete => "deferred_delete",
-            Self::ImmediateDelete => "immediate_delete",
-        }
-    }
-}
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Action {
-    pub mode: Mode,
     pub retention: Retention,
 }
 impl Default for Action {
     fn default() -> Self {
-        Self {
-            mode: Mode::default(),
-            retention: week(),
-        }
+        Self { retention: week() }
     }
 }
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Override {
-    pub mode: Option<Mode>,
     pub retention: Option<Retention>,
 }
 #[derive(Debug, Clone, Deserialize)]
@@ -307,13 +287,10 @@ impl Catalog {
             }
         }
         let mut action = purge.default.clone();
-        if let Some(r) = chosen {
-            if let Some(v) = r.action.mode {
-                action.mode = v;
-            }
-            if let Some(v) = r.action.retention {
-                action.retention = v;
-            }
+        if let Some(r) = chosen
+            && let Some(v) = r.action.retention
+        {
+            action.retention = v;
         }
         (action, chosen.map(|r| r.rule_id.as_str()))
     }
@@ -349,13 +326,13 @@ mod tests {
     fn matching_uses_specificity_then_file_order_and_rejects_unknown_fields() {
         let id = Uuid::new_v4();
         let text = format!(
-            "version: v1\nspace_policies:\n  purge:\n    rules:\n    - rule_id: broad\n      match: {{}}\n      action: {{retention: P1D}}\n    - rule_id: kind\n      match: {{space_kind: [team]}}\n      action: {{retention: PT30S}}\n    - rule_id: id\n      match: {{space_id: '{id}'}}\n      action: {{retention: PT40S}}\n    - rule_id: exact\n      match: {{space_id: '{id}', space_kind: team}}\n      action: {{mode: immediate_delete}}\n"
+            "version: v1\nspace_policies:\n  purge:\n    rules:\n    - rule_id: broad\n      match: {{}}\n      action: {{retention: P1D}}\n    - rule_id: kind\n      match: {{space_kind: [team]}}\n      action: {{retention: PT30S}}\n    - rule_id: id\n      match: {{space_id: '{id}'}}\n      action: {{retention: PT40S}}\n    - rule_id: exact\n      match: {{space_id: '{id}', space_kind: team}}\n      action: {{retention: PT0S}}\n"
         );
         let catalog: Catalog = serde_yaml_ng::from_str(&text).unwrap();
         catalog.validate().unwrap();
         let (action, rule) = catalog.resolve(id, SpaceKind::Team);
         assert_eq!(rule, Some("exact"));
-        assert!(matches!(action.mode, Mode::ImmediateDelete));
+        assert_eq!(action.retention.0, 0);
         let (action, rule) = catalog.resolve(Uuid::new_v4(), SpaceKind::Team);
         assert_eq!(rule, Some("kind"));
         assert_eq!(action.retention.0, 30);
@@ -364,7 +341,7 @@ mod tests {
         assert_eq!(tied.resolve(id, SpaceKind::Team).1, Some("kind"));
         assert!(
             serde_yaml_ng::from_str::<Catalog>(
-                &text.replace("mode: immediate_delete", "cancel_on_rejoin: true")
+                &text.replace("retention: PT0S", "cancel_on_rejoin: true")
             )
             .is_err()
         );

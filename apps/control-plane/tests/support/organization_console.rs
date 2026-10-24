@@ -276,7 +276,7 @@ async fn organization_console_registry_pagination_excludes_retired_and_costs_one
     }
     let retired = ids.pop().unwrap();
     let deletion = Uuid::new_v4();
-    sqlx::query("insert into space_deletion(id,target_id,target_kind,organization_id,actor_subject,requested_at,due_at,mode) values($1,$2,'organization',$2,'root',now(),now(),'immediate_delete')").bind(deletion).bind(retired).execute(&e.pool).await.unwrap();
+    sqlx::query("insert into space_deletion(id,target_id,target_kind,organization_id,actor_subject,requested_at,due_at) values($1,$2,'organization',$2,'root',now(),now())").bind(deletion).bind(retired).execute(&e.pool).await.unwrap();
     sqlx::query("update space set deletion_id=$1 where id=$2")
         .bind(deletion)
         .bind(retired)

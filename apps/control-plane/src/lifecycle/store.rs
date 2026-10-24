@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-use super::policy::{Catalog, LifecycleConfig, Mode};
+use super::policy::{Catalog, LifecycleConfig};
 use crate::{
     bootstrap, db,
     domain::{Space, SpaceKind},
@@ -38,7 +38,6 @@ pub struct Receipt {
     pub actor_subject: String,
     pub requested_at: DateTime<Utc>,
     pub due_at: DateTime<Utc>,
-    pub mode: String,
     pub rule_id: Option<String>,
     pub status: Status,
     pub completed_at: Option<DateTime<Utc>>,
@@ -146,13 +145,10 @@ impl Lifecycle {
         }
         let (action, rule) = self.catalog.resolve(id, root.kind);
         let requested_at = Utc::now();
-        let due_at = match action.mode {
-            Mode::ImmediateDelete => requested_at,
-            Mode::DeferredDelete => action.retention.after(requested_at)?,
-        };
+        let due_at = action.retention.after(requested_at)?;
         let operation = Uuid::new_v4();
-        sqlx::query("insert into space_deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,mode,rule_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)")
-            .bind(operation).bind(id).bind(root.kind).bind(root.parent_id).bind(root.organization).bind(actor).bind(requested_at).bind(due_at).bind(action.mode.as_str()).bind(rule).execute(&mut *tx).await?;
+        sqlx::query("insert into space_deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
+            .bind(operation).bind(id).bind(root.kind).bind(root.parent_id).bind(root.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).execute(&mut *tx).await?;
         mark(&mut tx, id, operation).await?;
         if root.kind != SpaceKind::Project {
             discover(&mut tx, fga, &root, operation).await?;

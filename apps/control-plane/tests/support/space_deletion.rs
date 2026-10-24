@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
-use control_plane::lifecycle::{Lifecycle, Status, cleanup, policy::Mode, store};
+use control_plane::lifecycle::{Lifecycle, Status, cleanup, store};
 fn immediate() -> Lifecycle {
     let mut lifecycle = Lifecycle::default();
     lifecycle.config.enabled = true;
-    lifecycle.catalog.space_policies.purge.default.mode = Mode::ImmediateDelete;
+    lifecycle.catalog.space_policies.purge.default.retention =
+        serde_yaml_ng::from_str("PT0S").unwrap();
     lifecycle
 }
 async fn drain(e: &Env, id: Uuid) {

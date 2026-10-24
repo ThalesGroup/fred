@@ -2,6 +2,5 @@ version: v1
 space_policies:
   purge:
     default:
-      mode: deferred_delete
       retention: P7D
     rules: []

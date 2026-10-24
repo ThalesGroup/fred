@@ -83,6 +83,8 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | [F-011](#f-011-découverte-des-définitions-dagents) | Découverte des définitions d'agents | Découverte CLI implémentée ; exécution à valider | 06 à jour |
 
+| [F-012](#f-012-suppression-unifiée) | Suppression unifiée : retrait immédiat, purge différée | Conception validée par Dimi ; rien d'implémenté | 03, 04, 05, 08, A2, A3, A9 au fil des lots |
+
 ## Méthode de consolidation
 
 - 2026-10-21 : méthode durable enregistrée dans
@@ -1027,3 +1029,80 @@ n'est pas une validation fonctionnelle de l'ensemble des changements Swift.
   finalisation et demande le commit de cette passe. Cet accord porte sur le contenu
   documentaire ; il ne valide pas le parcours d'ingestion de bout en bout.
 - Aucun test applicatif, build ou déploiement lancé pour cette passe documentaire.
+
+
+## F-012 Suppression unifiée
+
+- 2026-10-24 : validation rapportée par Dimi après recompilation :
+  `make -C apps/control-plane test-lifecycle-temporal` réussit
+  (1 test, 0 échec, 25,19 s). Les 118 tests d'intégration avaient également
+  réussi lors du lancement précédent. Aucun test relancé par Codex.
+
+- 2026-10-24 : Dimi rapporte 118 tests d'intégration réussis et un échec du
+  test Temporal sur le délai de progression. Le test lançait la commande
+  `worker` supprimée ; `tests/lifecycle_temporal.rs` lance désormais `serve`,
+  utilise l'identité de test et attend le rôle de journal `api`. L'attente
+  détecte aussi la sortie du processus. Correction non exécutée ici ; aucun
+  test, build, commit ni push lancé.
+
+- 2026-10-24 : I1 implémenté : Mode retiré (policy.rs, store.rs), migration 0005, catalogue,
+  values.yaml, tests, A3 ; openapi.json, client frontend et ER à régénérer.
+
+- 2026-10-24 : lot I1 implémenté : retrait de `Mode` dans
+  `apps/control-plane/src/lifecycle/{policy,store}.rs`, migration
+  `apps/control-plane/migrations/0005_drop_deletion_mode.sql`, adaptation de
+  `apps/control-plane/tests/support/{space_deletion,organization_console}.rs`,
+  `apps/control-plane/config/lifecycle_policy_catalog.yaml`,
+  `deploy/charts/fred/values.yaml` et `docs/architecture/A3-manager-operations.md`.
+  Le helper `immediate()` désérialise `PT0S`, sans nouvelle API publique.
+  Commandes non lancées : `cargo fmt --check`,
+  `cargo clippy --lib --tests -- -D warnings`, `cargo test --lib lifecycle::policy`
+  dans `apps/control-plane` ; depuis la racine,
+  `make -C apps/control-plane test-integration CARGO_TEST_OPTS=space_deletion`,
+  `make -C apps/control-plane generate-openapi`,
+  `make -C apps/frontend update-control-plane-api`,
+  `make -C docs/architecture generate` et `make -C docs/architecture check`.
+  Restent hors périmètre : le catalogue du test `tests/lifecycle_temporal.rs`
+  contient encore `mode` et sera rejeté ; la spécification OpenSpec courante
+  décrit encore les modes, tout comme la description du reçu dans A2. Les
+  migrations appliquées, archives et fichiers générés restent inchangés. Aucune validation exécutée, aucun commit ni push.
+
+- 2026-10-24 : conception discutée et validée avec Dimi, sans OpenSpec ni issue
+  GitHub (choix explicite). Swift n'a pas de chemin unifié : document synchrone
+  dans Knowledge Flow, équipe sans purge des documents, seules les conversations
+  passent par Temporal. Le module Rust `lifecycle/` porte déjà le patron swift
+  (reçu durable, catalogue, balayage Temporal) pour les espaces sans documents.
+- Décisions :
+  1. Plus de `Mode` : une rétention par type de cible, `PT0S` pour « immédiat ».
+  2. Suppression acceptée pendant un traitement : arrêt forcé (statut `failed`)
+     dans la transaction d'acceptation ; les rappels Knowledge Flow refusent déjà
+     un traitement terminé ; le nettoyage des générations rattrape les écritures
+     tardives.
+  3. Tout le périmètre est marqué à l'acceptation (`deletion_id` sur espaces,
+     dossiers, documents) ; une seule règle : visible si espace actif et
+     `deletion_id` nul. Unicité des noms restreinte aux lignes actives ; quota sur
+     les seules lignes actives.
+  4. Effet immédiat sur toutes les lectures et sur la recherche via SQL ; contenu
+     (S3, chunks, vecteurs, lignes) purgé en différé. Exigence pour le futur lot
+     recherche : résultats confirmés par le control plane, l'index ne décide
+     jamais de la visibilité.
+  5. Toute suppression passe par `accept(target)` (202 + reçu), dossiers vides
+     compris. Points d'entrée : document, dossier, projet, équipe, organisation,
+     utilisateur.
+  6. Utilisateur : Fred ne touche jamais Keycloak/OIDC. Accès coupé à
+     l'admission pendant la purge ; ensuite, un retour SSO crée un utilisateur
+     vierge, sans liste de bannis. Root du bootstrap protégé.
+- Observabilité : pas de colonne `origin`, le `target_kind` du reçu est le
+  point d'entrée (document, dossier, projet, équipe, organisation, utilisateur) ;
+  un span par batch, audit `deletion.*` ; KPI par requête sur les reçus tant
+  qu'aucun exporteur n'existe.
+- Lots immédiats : I1 retrait de `Mode` ; I2 span `deletion` du worker ; I3
+  renommage `space_deletion` en `deletion` (workflow Temporal non renommé).
+  Prompts Codex rédigés pour I1 à I3, à relire avec Dimi avant exécution.
+- Lots prudents, prompts écrits après revue du lot précédent : P2 règle de
+  visibilité unique (`deletion_id` sur dossiers et documents) ; P3 purge des
+  documents par le worker et arrêt forcé du traitement ; P4 `DELETE` document et
+  dossier en 202 ; P5 origine utilisateur. Chaque lot met à jour arc42 pour le
+  seul comportement implémenté.
+- Aucun code modifié, aucun test, build ou déploiement lancé.
+

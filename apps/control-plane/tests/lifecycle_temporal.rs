@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Real API -> durable SQL queue -> separately launched Rust Temporal worker.
+//! Real API -> durable SQL queue -> Temporal worker hosted by the manager process.
 use control_plane::{
     api, bootstrap,
     domain::SpaceKind,
@@ -24,9 +24,9 @@ impl Drop for Workspace {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
-fn spawn_worker(config: &std::path::Path, log: &std::path::Path) -> tokio::process::Child {
+fn spawn_manager(config: &std::path::Path, log: &std::path::Path) -> tokio::process::Child {
     tokio::process::Command::new(env!("CARGO_BIN_EXE_control-plane"))
-        .arg("worker")
+        .arg("serve")
         .env("CONFIG_FILE", config)
         .env("ENV_FILE", "/nonexistent")
         .env("FRED_POSTGRES_PASSWORD", "it")
@@ -37,9 +37,17 @@ fn spawn_worker(config: &std::path::Path, log: &std::path::Path) -> tokio::proce
         .spawn()
         .unwrap()
 }
-async fn wait_for(pool: &sqlx::PgPool, id: Uuid, completed: bool) {
+async fn wait_for(
+    pool: &sqlx::PgPool,
+    id: Uuid,
+    completed: bool,
+    process: &mut tokio::process::Child,
+) {
     tokio::time::timeout(Duration::from_secs(90), async {
         loop {
+            if let Some(status) = process.try_wait().unwrap() {
+                panic!("manager exited before worker progress: {status}");
+            }
             let (folders, status): (i64, String) =
                 sqlx::query_as("select folders_deleted,status from space_deletion where id=$1")
                     .bind(id)
@@ -87,7 +95,11 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
         Workspace(std::env::temp_dir().join(format!("fred-lifecycle-{}", Uuid::new_v4())));
     std::fs::create_dir(&workspace.0).unwrap();
     let catalog = workspace.0.join("policy.yaml");
-    std::fs::write(&catalog,"version: v1\nspace_policies:\n  purge:\n    default: {mode: deferred_delete, retention: PT2S}\n").unwrap();
+    std::fs::write(
+        &catalog,
+        "version: v1\nspace_policies:\n  purge:\n    default: {retention: PT2S}\n",
+    )
+    .unwrap();
     let mut lifecycle = lifecycle::Lifecycle::default();
     lifecycle.config.enabled = true;
     lifecycle.config.sweep_interval = serde_yaml_ng::from_str("PT1S").unwrap();
@@ -134,15 +146,15 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
         .unwrap();
     let t = &lifecycle.config.temporal;
     let config = json!({"app":{"base_url":"/control-plane/v1","address":"127.0.0.1","port":0,"log_format":"json"},
-      "security":{"user":{"realm_url":"http://unreachable.invalid","client_id":"unused"},"rebac":{"api_url":e.openfga,"store_name":e.store,"create_store_if_needed":false,"sync_schema_on_init":false}},
+      "security":{"user":{"realm_url":identity.realm,"client_id":"app"},"rebac":{"api_url":e.openfga,"store_name":e.store,"create_store_if_needed":false,"sync_schema_on_init":false}},
       "storage":{"postgres":{"host":pg.host_str(),"port":pg.port().unwrap(),"username":"postgres","database":database}},
       "scheduler":{"lifecycle":{"enabled":true,"sweep_interval":"PT1S","temporal":{"host":t.host,"namespace":t.namespace,"task_queue":t.task_queue,"workflow_id_prefix":t.workflow_id_prefix}}},
       "policies":{"purge_catalog_path":catalog}});
     let config_path = workspace.0.join("config.json");
     std::fs::write(&config_path, serde_json::to_vec(&config).unwrap()).unwrap();
     let client = lifecycle::worker::connect(&lifecycle.config).await.unwrap();
-    let mut first = spawn_worker(&config_path, &workspace.0.join("first.log"));
-    wait_for(&e.pool, operation, false).await;
+    let mut first = spawn_manager(&config_path, &workspace.0.join("first.log"));
+    wait_for(&e.pool, operation, false, &mut first).await;
     first.kill().await.unwrap();
     first.wait().await.unwrap();
     let receipt = lifecycle::store::status(&e.pool, &e.fga, "root", operation)
@@ -160,11 +172,11 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
         .unwrap()
         .workflow_id
         .clone();
-    let mut second = spawn_worker(&config_path, &workspace.0.join("second.log"));
+    let mut second = spawn_manager(&config_path, &workspace.0.join("second.log"));
     lifecycle::worker::reconcile(&client, &lifecycle.config)
         .await
         .unwrap();
-    wait_for(&e.pool, operation, true).await;
+    wait_for(&e.pool, operation, true, &mut second).await;
     let done = lifecycle::store::status(&e.pool, &e.fga, "root", operation)
         .await
         .unwrap();
@@ -250,8 +262,8 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
             .status,
         Status::Completed
     );
-    let mut third = spawn_worker(&config_path, &workspace.0.join("third.log"));
-    wait_for(&e.pool, waiting_receipt.id, true).await;
+    let mut third = spawn_manager(&config_path, &workspace.0.join("third.log"));
+    wait_for(&e.pool, waiting_receipt.id, true, &mut third).await;
     // Exhausted retries persist a safe status even without clean-side writes.
     let failing = spaces::create_space(
         &e.pool,
@@ -291,7 +303,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
         .execute(&e.pool)
         .await
         .unwrap();
-    wait_for(&e.pool, failing_receipt.id, true).await;
+    wait_for(&e.pool, failing_receipt.id, true, &mut third).await;
     third.kill().await.unwrap();
     third.wait().await.unwrap();
     let mut disabled = lifecycle.config.clone();
@@ -309,7 +321,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     schedule.delete(Default::default()).await.unwrap();
     for name in ["first.log", "second.log", "third.log"] {
         let log = std::fs::read_to_string(workspace.0.join(name)).unwrap();
-        assert!(log.contains("\"service_role\":\"worker\""));
+        assert!(log.contains("\"service_role\":\"api\""));
         assert!(!log.contains("Bearer "));
         assert!(!log.contains("private dependency detail"));
         if name == "first.log" {

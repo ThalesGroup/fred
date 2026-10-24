@@ -623,7 +623,6 @@ export type Receipt = {
   error_code?: string | null;
   folders_deleted: number;
   id: string;
-  mode: string;
   organization_id: string;
   requested_at: string;
   rule_id?: string | null;
@@ -672,17 +671,21 @@ export type Manifest = {
   vector_ordinals: number[];
   vectors: number;
 };
+export type ProjectionPhase = "uncertain" | "ready" | "writing" | "applied";
 export type RetrievalWork = {
   confirmed: boolean;
   document_id: string;
   manifest: Manifest;
   operation_id: string;
+  phase: ProjectionPhase;
   restore: boolean;
   retrievable: boolean;
 };
+export type RetrievalStep = "claim" | "applied" | "confirm";
 export type RetrievalConfirmation = {
   operation_id: string;
   retrievable: boolean;
+  step?: RetrievalStep;
 };
 export type Stage = "queued" | "preparation" | "extraction" | "indexing" | "done";
 export type ProcessingStatus = "pending" | "running" | "succeeded" | "failed";

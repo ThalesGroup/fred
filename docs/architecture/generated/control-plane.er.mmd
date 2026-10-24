@@ -23,7 +23,6 @@ erDiagram
   text actor_subject
   timestamp_with_time_zone requested_at
   timestamp_with_time_zone due_at
-  text mode
   text rule_id
   text status
   timestamp_with_time_zone last_visit
@@ -62,6 +61,9 @@ erDiagram
   timestamp_with_time_zone created_at
   text object_key
   uuid quota_owner FK
+  boolean retrievable
+  jsonb retrieval_command
+  boolean retrievable_pending
 }
 "platform_bootstrap" {
   boolean singleton

@@ -171,6 +171,13 @@ scheduler:
       workflow_id_prefix: control-plane-lifecycle
       connect_timeout_seconds: 5
       rpc_timeout_seconds: 10
+
+# Read-only discovery; used by `control-plane discover-agents`.
+platform:
+  runtime_catalog_sources:
+    - runtime_id: fred-agents
+      base_url: http://localhost:8000/fred/agents/v2
+      enabled: true
 ```
 <!-- end generated -->
 
@@ -423,8 +430,9 @@ bootstrap and imported data.
 ## Space deletion lifecycle
 
 API and worker share `scheduler.lifecycle` and `policies.purge_catalog_path`.
-Omitted lifecycle configuration is disabled. The shipped catalog defaults to
-`deferred_delete` with `P7D`; `immediate_delete` still uses the worker. Rules match
+Omitted lifecycle configuration is disabled. Each rule sets a retention, with
+`P7D` as the default. Zero retention (`PT0S`) makes deletion due immediately,
+still executed by the worker. Rules match
 `space_id` and/or `space_kind`, most defined criteria first, then file order.
 An empty match object matches every space. Durations accept nonnegative ISO weeks,
 days, hours, minutes and seconds; unsupported fields, calendar/fractional durations,

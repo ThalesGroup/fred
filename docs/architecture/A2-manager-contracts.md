@@ -90,6 +90,8 @@ strict service-account protocol, then operation and actor checks.
 | --- | --- | --- |
 | GET | `/control-plane/v1/document-processing/cleanup` | `cleanup` |
 | POST | `/control-plane/v1/document-processing/cleanup` | `cleaned` |
+| GET | `/control-plane/v1/document-processing/retrievable/{id}` | `retrieval_work` |
+| POST | `/control-plane/v1/document-processing/retrievable/{id}` | `confirm_retrievable` |
 | POST | `/control-plane/v1/document-processing/{id}/abandon` | `abandon` |
 | POST | `/control-plane/v1/document-processing/{id}/claim` | `claim` |
 | POST | `/control-plane/v1/document-processing/{id}/commit` | `commit` |
@@ -99,6 +101,7 @@ strict service-account protocol, then operation and actor checks.
 | GET | `/control-plane/v1/documents/{id}/preview` | `preview` |
 | GET | `/control-plane/v1/documents/{id}/processing` | `history` |
 | POST | `/control-plane/v1/documents/{id}/processing` | `start` |
+| PUT | `/control-plane/v1/documents/{id}/retrievable` | `set_retrievable` |
 <!-- end generated -->
 
 ## Control-plane SQL catalogue
@@ -179,7 +182,6 @@ erDiagram
   text actor_subject
   timestamp_with_time_zone requested_at
   timestamp_with_time_zone due_at
-  text mode
   text rule_id
   text status
   timestamp_with_time_zone last_visit
@@ -218,6 +220,9 @@ erDiagram
   timestamp_with_time_zone created_at
   text object_key
   uuid quota_owner FK
+  boolean retrievable
+  jsonb retrieval_command
+  boolean retrievable_pending
 }
 "platform_bootstrap" {
   boolean singleton
