@@ -82,6 +82,8 @@ fred_runtime = [
   "skills/*/**/*.yaml",
   "skills/*/**/*.yml",
   "skills/*/**/*.csv",
+  "skills/*/**/*.py",
+  "skills/*/**/*.sh",
 ]
 
 [tool.pytest.ini_options]

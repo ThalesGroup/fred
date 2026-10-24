@@ -106,10 +106,12 @@ def test_package_discovery_and_read_only_reference() -> None:
         "meeting-minutes",
         "mermaid",
         "summarize-document",
+        "tabular-evidence",
         "verify-answer",
     ]
     template = catalog.read("meeting-minutes", "references/meeting-minutes-template.md")
     assert "Not specified" in template
+    assert "totals" in catalog.read("tabular-evidence", "analyze.py")
     assert "## Decisions" not in catalog.prompt
     backend = SnapshotBackend({})
     write_result = backend.write("/file", "text")

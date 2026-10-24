@@ -1,11 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: Grouped code execution trace
-The chat thought trace SHALL display a consecutive run of `execute_code` calls in one assistant turn as one expandable activity. Its heading SHALL show a bounded, single-line preview of the running command, or the latest command when none is running, truncated with an ellipsis when necessary. Expanding it SHALL show each command in chronological order with its execution status and a link to that call's existing code and result detail. Reasoning between consecutive code calls SHALL remain in sequence. A different tool, including `summarize_document`, SHALL end the current activity; a later code call SHALL start a new activity. The grouping mechanism SHALL allow another tool family to opt in through a presentation rule without changing stored trace events.
+The chat thought trace SHALL display a consecutive run of `execute_code` calls in one assistant turn as one expandable activity. Its heading SHALL show a bounded, single-line preview of the running command, or the latest command when none is running, truncated with an ellipsis when necessary. Expanding it SHALL show each command in chronological order with its Bash or Python label, a bounded single-line code preview with ellipsis when necessary, execution status, and a link to that call's existing code and result detail. Reasoning between consecutive code calls SHALL remain in sequence. A different tool, including `summarize_document`, SHALL end the current activity; a later code call SHALL start a new activity. The grouping mechanism SHALL allow another tool family to opt in through a presentation rule without changing stored trace events.
 
 #### Scenario: Multiple code calls
 - **WHEN** an agent executes Bash and Python consecutively in one turn
-- **THEN** the trace shows one code activity with two selectable commands and their individual details
+- **THEN** the trace shows one code activity with two selectable Bash/Python code previews and their individual details
 
 #### Scenario: Other tool between code calls
 - **WHEN** an agent executes code, calls `summarize_document`, and executes code again
@@ -40,6 +40,15 @@ The system SHALL present authorized agents with a conversation-scoped workspace.
 #### Scenario: Shared files within one conversation
 - **WHEN** an authorized agent reads a mounted file and runs Python again before the idle deadline
 - **THEN** both executions can read the source through the same mounted path and the second can read scratch files created by the first
+
+#### Scenario: Parallel code calls in one conversation
+- **WHEN** the agent issues concurrent code calls before the conversation's file view exists
+- **THEN** each call may open the same authorized view without a duplicate-key failure, and the view remains bound to that conversation's user and team
+
+#### Scenario: Shared approved skill source
+- **WHEN** the runtime `/` catalog and sandbox profile use the same approved skill source
+- **THEN** its skills and scripts are mounted read-only under `/skills` in the guest without copying them into its scratch or another publication store
+- **AND** a newly added source skill becomes visible in the guest after the directory cache refresh
 
 #### Scenario: Cross-conversation access
 - **WHEN** another conversation requests the same virtual path
