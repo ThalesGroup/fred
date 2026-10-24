@@ -18,7 +18,7 @@ const platformRoutes = new Set([
   "/release-notes",
 ]);
 
-/** Platform governance stays separate; Features has its own organization authority. */
+/** Platform governance stays separate; organization routes have their own authority. */
 export default function ManagerArea({ children }: PropsWithChildren) {
   const access = useManagerPlatformAdmin();
   const { pathname } = useLocation();
@@ -44,7 +44,8 @@ export default function ManagerArea({ children }: PropsWithChildren) {
     );
   }
   // This business route has its own organization guard, including for mixed roles.
-  if (["/admin", "/admin/features", "/unauthorized"].includes(pathname.replace(/\/$/, ""))) return <Outlet />;
+  if (["/admin", "/admin/features", "/admin/supervision", "/unauthorized"].includes(pathname.replace(/\/$/, "")))
+    return <Outlet />;
   if (access.isAdmin) {
     return platformRoutes.has(pathname.replace(/\/$/, "")) ? (
       <Outlet />

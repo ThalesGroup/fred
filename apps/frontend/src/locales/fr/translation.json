@@ -1119,6 +1119,68 @@
     "updateSuccess": "Mis à jour"
   },
   "rework": {
+    "supervision": {
+      "title": "Supervision de l'organisation",
+      "refresh": "Actualiser",
+      "lastSuccess": "Dernier chargement réussi : {{date}}",
+      "neverLoaded": "Aucun chargement réussi pour le moment",
+      "totals": "Totaux organisationnels",
+      "activeTeams": "Équipes actives",
+      "documents": "Documents actifs",
+      "volume": "Volume logique",
+      "vectors": "Vecteurs publiés",
+      "datasets": "Jeux de données tabulaires",
+      "publishedDocuments": "Documents publiés",
+      "chunks": "Fragments publiés",
+      "rows": "Total des lignes tabulaires",
+      "unknown": "Inconnu ou incomplet",
+      "knownRows": "Sous-total des lignes connues",
+      "unknownDatasets": "Jeux sans compte de lignes connu",
+      "failed": "Documents en échec",
+      "purgeDocuments": "Documents en attente de purge",
+      "purgeBytes": "Volume logique en attente de purge",
+      "users": "Utilisateurs distincts",
+      "complementary": "Compteurs complémentaires",
+      "processing": "Traitements en attente / en cours",
+      "noProcessing": "Aucun traitement en attente ou en cours (0).",
+      "roles": "Attributions directes par rôle",
+      "rolesHint": "Les attributions comptent les droits directs, pas des personnes distinctes. Une personne peut avoir plusieurs rôles dans plusieurs espaces.",
+      "organization_direct": "Organisation directe",
+      "teams_total": "Équipes et projets",
+      "personal_total": "Espaces personnels agrégés",
+      "teams": "Équipes",
+      "team": "Équipe",
+      "teamDetail": "Détail d'équipe",
+      "close": "Fermer le détail d'équipe",
+      "emptyTeams": "Aucune équipe sur cette page. Les totaux organisationnels restent affichés.",
+      "scopeHint": "Les équipes incluent leurs projets. Les compartiments de ressources sont disjoints ; les nombres d'utilisateurs distincts ne s'additionnent pas.",
+      "collection": "Métadonnées collectées du {{start}} au {{end}}",
+      "collectionHint": "Ces horodatages ne représentent ni un instantané atomique SQL/OpenFGA ni une vérification physique S3/OpenSearch. Le détail d'équipe a sa propre collecte.",
+      "forbidden": "Vous n'êtes pas autorisé à consulter la supervision de l'organisation.",
+      "missing": "La ressource demandée est indisponible ou n'existe pas.",
+      "contextUnavailable": "Le contexte organisationnel est indisponible, ambigu ou retiré.",
+      "dependencyUnavailable": "Un service nécessaire est indisponible. Aucun compteur n'est affiché ; la date du dernier chargement réussi reste inchangée.",
+      "loadFailed": "Le chargement a échoué. Aucun compteur n'est affiché ; la date du dernier chargement réussi reste inchangée.",
+      "statuses": {
+        "pending": "En attente",
+        "running": "En cours"
+      },
+      "stages": {
+        "queued": "File d'attente",
+        "preparation": "Préparation",
+        "extraction": "Extraction",
+        "indexing": "Indexation",
+        "done": "Terminé"
+      },
+      "roleNames": {
+        "member": "Membre",
+        "editor": "Éditeur",
+        "admin": "Administrateur",
+        "analyst": "Analyste",
+        "organization_owner": "Propriétaire de l'organisation",
+        "personal_space_creator": "Créateur d'espace personnel"
+      }
+    },
     "admin": {
       "capabilities": {
         "title": "Fonctionnalités",

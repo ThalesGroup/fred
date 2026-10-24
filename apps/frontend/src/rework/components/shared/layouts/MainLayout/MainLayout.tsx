@@ -34,7 +34,7 @@ function AdmittedWorkspace() {
 export default function MainLayout({ children, navigation = true }: PropsWithChildren<{ navigation?: boolean }>) {
   const { isAdmin } = useManagerPlatformAdmin(!navigation);
   const { pathname } = useLocation();
-  const organizationArea = pathname.replace(/\/$/, "") === "/admin/features";
+  const organizationArea = ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, ""));
   return (
     <div className={styles.mainLayout}>
       <nav className={styles.sidebar}>

@@ -5,8 +5,11 @@ import { useMySpacesQuery } from "../../../slices/controlPlane/controlPlaneApiEn
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "./crossSessionRefresh";
 
 /** Organization authority comes from manager membership, never platform roles. */
-export function useOrganizationAdmin() {
-  const query = useMySpacesQuery(undefined, crossSessionRefreshOptions(false));
+export function useOrganizationAdmin(poll = true) {
+  const query = useMySpacesQuery(undefined, {
+    ...crossSessionRefreshOptions(false),
+    ...(!poll ? { pollingInterval: 0 } : {}),
+  });
   useRefetchOnWindowFocus(query.refetch, false);
   const organization =
     !query.isError && !query.error

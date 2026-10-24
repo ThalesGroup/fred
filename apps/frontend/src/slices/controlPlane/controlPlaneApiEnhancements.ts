@@ -76,6 +76,9 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
 });
 
 export const {
+  useAuthorizeSpaceMutation,
+  useOrganizationSupervisionQuery,
+  useTeamSupervisionQuery,
   useOrganizationAgentsQuery,
   useSetOrganizationAgentDefaultMutation,
   useStartMutation,

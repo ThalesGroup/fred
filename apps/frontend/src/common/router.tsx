@@ -55,7 +55,7 @@ import { useTranslation } from "react-i18next";
 import { createBrowserRouter, Navigate, RouteObject, useParams, Outlet } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
-import { adminLandingPath, Protected } from "@core/guards/Protected";
+import { adminLandingPath, canEnterAdminSection, Protected } from "@core/guards/Protected";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { PageError } from "@components/pages/PageError/PageError.tsx";
 import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.tsx";
@@ -72,21 +72,29 @@ import AnnouncementStack from "../rework/features/announcements/AnnouncementStac
 import PatchNoteGate from "../rework/features/announcements/PatchNoteGate";
 import appStyles from "../app/App.module.css";
 
+import OrganizationSupervisionPage from "@components/pages/OrganizationSupervisionPage/OrganizationSupervisionPage";
+import {
+  OrganizationSupervisionAccessProvider,
+  useOrganizationSupervisionAccess,
+} from "@core/hooks/useOrganizationSupervisionAccess";
+
 const basename = getConfig().frontend_basename;
 
 function AdmittedContent() {
   return (
     <GcuGuard>
       <BootstrapGuard>
-        <ManagerArea>
-          <div className={appStyles.appContent}>
-            <AnnouncementStack />
-            <div className={appStyles.routedContent}>
-              <PatchNoteGate />
-              <Outlet />
+        <OrganizationSupervisionAccessProvider>
+          <ManagerArea>
+            <div className={appStyles.appContent}>
+              <AnnouncementStack />
+              <div className={appStyles.routedContent}>
+                <PatchNoteGate />
+                <Outlet />
+              </div>
             </div>
-          </div>
-        </ManagerArea>
+          </ManagerArea>
+        </OrganizationSupervisionAccessProvider>
       </BootstrapGuard>
     </GcuGuard>
   );
@@ -104,13 +112,16 @@ const OrganizationFeaturesRoute = () => {
 };
 
 const AdminIndexRoute = () => {
+  const supervision = useOrganizationSupervisionAccess();
   const { isLoading, ...capabilities } = useUserCapabilities();
   const manager = useManagerPlatformAdmin();
   const organization = useOrganizationAdmin();
   if (organization.isLoading || (organization.isFetching && !organization.currentData)) return null;
   if (organization.isAdmin) return <Navigate to="/admin/features" replace />;
   if (manager.isAdmin) return <Navigate to="/admin/organizations" replace />;
-  if (isLoading || manager.isLoading) return null;
+  if (isLoading || manager.isLoading || supervision.loading) return null;
+  if (!canEnterAdminSection({ ...capabilities, canManageFeatures: organization.isAdmin }) && supervision.allowed)
+    return <Navigate to="/admin/supervision" replace />;
   return <Navigate to={adminLandingPath({ ...capabilities, canManageFeatures: organization.isAdmin })} replace />;
 };
 
@@ -240,6 +251,10 @@ const applicationRoutes: RouteObject[] = [
       {
         path: "admin",
         element: <AdminIndexRoute />,
+      },
+      {
+        path: "admin/supervision",
+        element: <OrganizationSupervisionPage />,
       },
       {
         path: "admin/organizations",

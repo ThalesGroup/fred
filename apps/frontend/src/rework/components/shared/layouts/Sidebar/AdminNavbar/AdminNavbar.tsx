@@ -19,6 +19,7 @@ import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/N
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
 import { useLocation } from "react-router-dom";
+import { useOrganizationSupervisionAccess } from "@core/hooks/useOrganizationSupervisionAccess";
 import { useOrganizationAdmin } from "@core/hooks/useOrganizationAdmin";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { isProtectedAllowed, type ProtectedRequirement } from "@core/guards/Protected";
@@ -33,8 +34,11 @@ function BusinessAdminNavbar() {
   const { t } = useTranslation();
   const activeTaskCount = useSelector(selectActiveCount);
   const { pathname } = useLocation();
-  const capabilities = useUserCapabilities(pathname.replace(/\/$/, "") === "/admin/features");
-  const organization = useOrganizationAdmin();
+  const capabilities = useUserCapabilities(
+    ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, "")),
+  );
+  const organization = useOrganizationAdmin(pathname.replace(/\/$/, "") !== "/admin/supervision");
+  const supervision = useOrganizationSupervisionAccess();
   const manager = useManagerPlatformAdmin();
   const allItems: (NavigationMenuItemProps & { requires: ProtectedRequirement })[] = [
     {
@@ -135,6 +139,18 @@ function BusinessAdminNavbar() {
     isProtectedAllowed(item.requires, { ...capabilities, canManageFeatures: organization.isAdmin }),
   );
 
+  if (supervision.allowed) {
+    const features = navigationItems.findIndex(
+      (item) => item.type === "link" && item.linkProps.to === "/admin/features",
+    );
+    navigationItems.splice(features < 0 ? 0 : features, 0, {
+      type: "link",
+      label: t("rework.supervision.title"),
+      icon: { category: "outlined", type: "analytics", filled: false },
+      linkProps: { to: "/admin/supervision" },
+    });
+  }
+
   if (manager.isAdmin)
     navigationItems.push({
       type: "link",
@@ -153,9 +169,20 @@ export default function AdminNavbar({ platformArea = false }: { platformArea?: b
 function PlatformAdminNavbar() {
   const { t } = useTranslation();
   const organization = useOrganizationAdmin();
+  const supervision = useOrganizationSupervisionAccess();
   return (
     <AdminNavigation
       items={[
+        ...(supervision.allowed
+          ? [
+              {
+                type: "link" as const,
+                label: t("rework.supervision.title"),
+                icon: { category: "outlined" as const, type: "analytics" as const, filled: false },
+                linkProps: { to: "/admin/supervision" },
+              },
+            ]
+          : []),
         ...(organization.isAdmin
           ? [
               {

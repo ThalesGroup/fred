@@ -25,6 +25,7 @@ const ICON_STYLE = { "--icon-size": "1.25rem" } as CSSProperties;
 import { useTranslation } from "react-i18next";
 import { useHref, useLocation, useNavigate } from "react-router-dom";
 import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
+import { useOrganizationSupervisionAccess } from "@core/hooks/useOrganizationSupervisionAccess";
 import { useOrganizationAdmin } from "@core/hooks/useOrganizationAdmin";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { canEnterAdminSection } from "@core/guards/Protected";
@@ -49,8 +50,11 @@ function BusinessMainNavBar() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const capabilities = useUserCapabilities(pathname.replace(/\/$/, "") === "/admin/features");
-  const organization = useOrganizationAdmin();
+  const capabilities = useUserCapabilities(
+    ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, "")),
+  );
+  const organization = useOrganizationAdmin(pathname.replace(/\/$/, "") !== "/admin/supervision");
+  const supervision = useOrganizationSupervisionAccess();
   const manager = useManagerPlatformAdmin();
   // Basename-aware href — the Help Center opens in its own tab (HELP-01).
   const helpCenterHref = useHref("/help");
@@ -85,7 +89,11 @@ function BusinessMainNavBar() {
   // Any admin-tier role opens the console — gating the shell on canAdmin
   // alone would leave a delegated role holder with no way to reach the one
   // page they own.
-  if (manager.isAdmin || canEnterAdminSection({ ...capabilities, canManageFeatures: organization.isAdmin })) {
+  if (
+    supervision.allowed ||
+    manager.isAdmin ||
+    canEnterAdminSection({ ...capabilities, canManageFeatures: organization.isAdmin })
+  ) {
     entries.push({
       key: "admin",
       icon: "admin_panel_settings",

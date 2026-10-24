@@ -1119,6 +1119,68 @@
     "updateSuccess": "Updated"
   },
   "rework": {
+    "supervision": {
+      "title": "Organization supervision",
+      "refresh": "Refresh",
+      "lastSuccess": "Last successful load: {{date}}",
+      "neverLoaded": "No successful load yet",
+      "totals": "Organization totals",
+      "activeTeams": "Active teams",
+      "documents": "Active documents",
+      "volume": "Logical volume",
+      "vectors": "Published vectors",
+      "datasets": "Tabular datasets",
+      "publishedDocuments": "Published documents",
+      "chunks": "Published chunks",
+      "rows": "Total tabular rows",
+      "unknown": "Unknown or incomplete",
+      "knownRows": "Known row subtotal",
+      "unknownDatasets": "Datasets with unknown row count",
+      "failed": "Failed documents",
+      "purgeDocuments": "Documents awaiting purge",
+      "purgeBytes": "Logical volume awaiting purge",
+      "users": "Distinct users",
+      "complementary": "Additional counts",
+      "processing": "Pending / running processing",
+      "noProcessing": "No pending or running processing (0).",
+      "roles": "Direct role assignments",
+      "rolesHint": "Assignments count direct grants, not distinct people. A person can hold several roles across several spaces.",
+      "organization_direct": "Organization resources",
+      "teams_total": "Teams and projects",
+      "personal_total": "Personal spaces combined",
+      "teams": "Teams",
+      "team": "Team",
+      "teamDetail": "Team detail",
+      "close": "Close team detail",
+      "emptyTeams": "No teams on this page. Organization totals remain displayed.",
+      "scopeHint": "Teams include their projects. Resource compartments are disjoint; distinct user counts cannot be added together.",
+      "collection": "Metadata collected from {{start}} to {{end}}",
+      "collectionHint": "Collection timestamps do not represent an atomic SQL/OpenFGA snapshot or a physical S3/OpenSearch check. The team detail has its own collection.",
+      "forbidden": "You are not authorized to view organization supervision.",
+      "missing": "The requested resource is unavailable or does not exist.",
+      "contextUnavailable": "The organization context is unavailable, ambiguous or retired.",
+      "dependencyUnavailable": "A required service is unavailable. No counts are displayed; the last successful load date is unchanged.",
+      "loadFailed": "Loading failed. No counts are displayed; the last successful load date is unchanged.",
+      "statuses": {
+        "pending": "Pending",
+        "running": "Running"
+      },
+      "stages": {
+        "queued": "Queued",
+        "preparation": "Preparation",
+        "extraction": "Extraction",
+        "indexing": "Indexing",
+        "done": "Done"
+      },
+      "roleNames": {
+        "member": "Member",
+        "editor": "Editor",
+        "admin": "Administrator",
+        "analyst": "Analyst",
+        "organization_owner": "Organization owner",
+        "personal_space_creator": "Personal space creator"
+      }
+    },
     "admin": {
       "capabilities": {
         "title": "Features",
