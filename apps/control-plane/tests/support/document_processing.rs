@@ -1772,3 +1772,397 @@ async fn retrieval_delivery_restarts_closed_failure_and_preserves_running_execut
         .run_id;
     assert_ne!(first, resumed);
 }
+
+#[tokio::test]
+#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+async fn retired_folders_and_documents_are_absent_from_reads_and_producers() {
+    let (mut d, _processing) = Box::pin(setup()).await;
+    let space = d.folder.space_id;
+    let prefix = if d.storage.config.prefix.is_empty() {
+        String::new()
+    } else {
+        format!("{}/", d.storage.config.prefix)
+    };
+    db::rename_folder(&d.e.pool, d.folder.id, "A")
+        .await
+        .unwrap();
+    let a = d.folder.clone();
+    let b = control_plane::spaces::create_folder(
+        &d.e.pool,
+        &d.e.fga,
+        "writer",
+        space,
+        Some(a.id),
+        "B".into(),
+    )
+    .await
+    .unwrap();
+    let c = control_plane::spaces::create_folder(
+        &d.e.pool,
+        &d.e.fga,
+        "writer",
+        space,
+        None,
+        "C".into(),
+    )
+    .await
+    .unwrap();
+    let ids = [
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+    ];
+    let bytes = b"%PDF";
+    let file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(file.path(), bytes).unwrap();
+    let hash: [u8; 32] = Sha256::digest(bytes).into();
+    for (id, folder, name) in [
+        (ids[0], Some(a.id), "a.pdf"),
+        (ids[1], Some(b.id), "b.pdf"),
+        (ids[2], Some(c.id), "c.pdf"),
+        (ids[3], Some(c.id), "r.pdf"),
+    ] {
+        let key = format!("{prefix}{id}/input/{name}");
+        Box::pin(d.storage.objects.put_verified(&key, file.path(), 4, &hash))
+            .await
+            .unwrap();
+        sqlx::query("insert into document (id,space_id,folder_id,name,mime,size,sha256,created_by,object_key,quota_owner) values ($1,$2,$3,$4,'application/pdf',4,$5,'writer',$6,$2)")
+            .bind(id).bind(space).bind(folder).bind(name)
+            .bind(format!("{:x}", Sha256::digest(bytes))).bind(key)
+            .execute(&d.e.pool).await.unwrap();
+    }
+    let (status, before) = d
+        .json(
+            "reader",
+            "GET",
+            &format!("/spaces/{space}/storage"),
+            Value::Null,
+        )
+        .await;
+    assert_eq!(status, 200, "{before}");
+    assert_eq!(before["used_bytes"], 16);
+    assert_eq!(before["documents"], 4);
+
+    // Fixture only: folder/document target kinds arrive in P4; no production path marks rows.
+    // The future deadline keeps this receipt out of lifecycle sweeps.
+    let receipt = Uuid::new_v4();
+    sqlx::query("insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at) select $1,$2,'team',organization_id,organization_id,'writer',now(),now()+interval '1 year' from space where id=$2")
+        .bind(receipt).bind(space).execute(&d.e.pool).await.unwrap();
+    let mut tx = d.e.pool.begin().await.unwrap();
+    sqlx::query("update folder set deletion_id=$1 where id=any($2)")
+        .bind(receipt)
+        .bind(&[a.id, b.id][..])
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("update document set deletion_id=$1 where id=any($2)")
+        .bind(receipt)
+        .bind(&[ids[0], ids[1], ids[3]][..])
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    for suffix in ["", "&search=C", "&search=A", "&search=B", "&search=r.pdf"] {
+        let (status, page) = d
+            .json(
+                "reader",
+                "GET",
+                &format!("/spaces/{space}/entries?limit=50{suffix}"),
+                Value::Null,
+            )
+            .await;
+        assert_eq!(status, 200, "{page}");
+        let expected = if suffix.is_empty() || suffix == "&search=C" {
+            1
+        } else {
+            0
+        };
+        assert_eq!(page["total"], expected, "{page}");
+        assert_eq!(page["items"].as_array().unwrap().len(), expected as usize);
+        if expected == 1 {
+            assert_eq!(page["items"][0]["data"]["id"], c.id.to_string());
+        }
+    }
+    for suffix in [
+        "",
+        "&search=c.pdf",
+        "&search=a.pdf",
+        "&search=b.pdf",
+        "&search=r.pdf",
+    ] {
+        let (status, page) = d
+            .json(
+                "reader",
+                "GET",
+                &format!("/spaces/{space}/entries?parent_id={}{suffix}", c.id),
+                Value::Null,
+            )
+            .await;
+        assert_eq!(status, 200, "{page}");
+        let expected = if suffix.is_empty() || suffix == "&search=c.pdf" {
+            1
+        } else {
+            0
+        };
+        assert_eq!(page["total"], expected, "{page}");
+        assert_eq!(page["items"].as_array().unwrap().len(), expected as usize);
+        if expected == 1 {
+            assert_eq!(page["items"][0]["data"]["id"], ids[2].to_string());
+        }
+        assert_eq!(page["ancestors"][0]["id"], c.id.to_string());
+    }
+    for folder in [a.id, b.id] {
+        assert_eq!(
+            d.json(
+                "reader",
+                "GET",
+                &format!("/spaces/{space}/entries?parent_id={folder}"),
+                Value::Null,
+            )
+            .await
+            .0,
+            404
+        );
+    }
+    let (status, summary) = d
+        .json(
+            "reader",
+            "GET",
+            &format!("/spaces/{space}/storage"),
+            Value::Null,
+        )
+        .await;
+    assert_eq!(status, 200, "{summary}");
+    for field in ["used_bytes", "bytes"] {
+        assert_eq!(summary[field], 4);
+    }
+    assert_eq!(summary["documents"], 1);
+    assert_eq!(summary["reserved_bytes"], 0);
+    assert_eq!(
+        summary["types"],
+        json!([{"mime":"application/pdf","documents":1,"bytes":4}])
+    );
+    for id in [ids[0], ids[1], ids[3], Uuid::new_v4()] {
+        for endpoint in [
+            "content",
+            "preview?artifact=native",
+            "preview",
+            "processing",
+        ] {
+            let (status, error) = d
+                .json(
+                    "reader",
+                    "GET",
+                    &format!("/documents/{id}/{endpoint}"),
+                    Value::Null,
+                )
+                .await;
+            assert_eq!(status, 404, "{endpoint}: {error}");
+            assert_eq!(error["code"], "not_found");
+        }
+        assert_eq!(
+            d.json(
+                "reader",
+                "POST",
+                "/authorize/document",
+                json!({"document_id":id,"permission":"read"}),
+            )
+            .await,
+            (200, json!({"allowed":false}))
+        );
+    }
+    for (method, body) in [
+        ("PATCH", json!({"name":"renamed"})),
+        ("DELETE", Value::Null),
+    ] {
+        let (status, error) = d
+            .json("writer", method, &format!("/folders/{}", a.id), body)
+            .await;
+        assert_eq!(status, 404, "{error}");
+        assert_eq!(error["code"], "not_found");
+    }
+    d.folder = b;
+    assert_eq!(
+        d.upload("writer", "new.pdf", bytes, Uuid::new_v4(), None)
+            .await
+            .0,
+        404
+    );
+    assert_eq!(
+        d.json(
+            "writer",
+            "POST",
+            "/folders",
+            json!({"space_id":space,"parent_id":a.id,"name":"child"}),
+        )
+        .await
+        .0,
+        404
+    );
+    let response = d
+        .request(
+            "writer",
+            "POST",
+            &format!("/documents/{}/processing", ids[1]),
+            Body::from(json!({"profile":"fast"}).to_string()),
+            "application/json",
+            Some(Uuid::new_v4()),
+        )
+        .await;
+    let (status, error) = json_response(response).await;
+    assert_eq!(status, 404, "{error}");
+    assert_eq!(error["code"], "not_found");
+    assert_eq!(
+        d.json(
+            "writer",
+            "PUT",
+            &format!("/documents/{}/retrievable", ids[0]),
+            json!({"retrievable":true}),
+        )
+        .await
+        .0,
+        404
+    );
+
+    d.storage.cleanup_tick().await.unwrap();
+    let completed: bool = sqlx::query_scalar(
+        "select inventory_completed_at is not null from document_storage where singleton",
+    )
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    assert!(completed);
+    let original = d
+        .storage
+        .objects
+        .get(&format!("{}{}/input/a.pdf", prefix, ids[0]))
+        .await
+        .unwrap()
+        .body
+        .collect()
+        .await
+        .unwrap()
+        .into_bytes();
+    assert_eq!(original.as_ref(), bytes);
+
+    let (status, replacement) = d
+        .json(
+            "writer",
+            "POST",
+            "/folders",
+            json!({"space_id":space,"name":"A"}),
+        )
+        .await;
+    assert_eq!(status, 201, "{replacement}");
+    assert_ne!(replacement["id"], a.id.to_string());
+    assert_eq!(
+        d.json(
+            "writer",
+            "POST",
+            "/folders",
+            json!({"space_id":space,"name":"A"}),
+        )
+        .await
+        .0,
+        409
+    );
+
+    let remaining = (d.storage.config.limits.team_bytes - 4) as usize;
+    let (status, preflight) = d
+        .json(
+            "writer",
+            "POST",
+            &format!("/folders/{}/documents/preflight", c.id),
+            json!({"files":[{"name":"r.pdf","size":remaining}]}),
+        )
+        .await;
+    assert_eq!(status, 200, "{preflight}");
+    assert_eq!(preflight["conflicts"], json!([]));
+    d.folder = c.clone();
+    let (status, uploaded) = d
+        .upload(
+            "writer",
+            "r.pdf",
+            &vec![b'x'; remaining],
+            Uuid::new_v4(),
+            None,
+        )
+        .await;
+    assert_eq!(status, 201, "{uploaded}");
+    assert_ne!(uploaded["document_id"], ids[3].to_string());
+    assert_eq!(
+        d.upload("writer", "r.pdf", bytes, Uuid::new_v4(), None)
+            .await
+            .0,
+        409
+    );
+    assert_eq!(
+        d.upload("writer", "over-quota.pdf", bytes, Uuid::new_v4(), None)
+            .await
+            .0,
+        422
+    );
+    let (status, summary) = d
+        .json(
+            "reader",
+            "GET",
+            &format!("/spaces/{space}/storage"),
+            Value::Null,
+        )
+        .await;
+    assert_eq!(status, 200, "{summary}");
+    assert_eq!(summary["used_bytes"], summary["quota_bytes"]);
+    for endpoint in ["content", "preview?artifact=native"] {
+        let response = d
+            .request(
+                "reader",
+                "GET",
+                &format!("/documents/{}/{endpoint}", ids[2]),
+                Body::empty(),
+                "",
+                None,
+            )
+            .await;
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            to_bytes(response.into_body(), 1024).await.unwrap().as_ref(),
+            bytes
+        );
+    }
+    let (status, witness) = d
+        .json(
+            "reader",
+            "GET",
+            &format!("/spaces/{space}/entries?parent_id={}", c.id),
+            Value::Null,
+        )
+        .await;
+    assert_eq!(status, 200, "{witness}");
+    assert_eq!(witness["total"], 2);
+    assert_eq!(witness["items"][0]["data"]["id"], ids[2].to_string());
+    assert_eq!(witness["items"][1]["data"]["id"], uploaded["document_id"]);
+    assert_eq!(db::folder(&d.e.pool, c.id).await.unwrap().name, "C");
+    assert_eq!(db::document(&d.e.pool, ids[2]).await.unwrap().name, "c.pdf");
+    assert_eq!(
+        d.json(
+            "reader",
+            "GET",
+            &format!("/documents/{}/processing", ids[2]),
+            Value::Null,
+        )
+        .await,
+        (200, json!([]))
+    );
+    assert_eq!(
+        d.json(
+            "reader",
+            "POST",
+            "/authorize/document",
+            json!({"document_id":ids[2],"permission":"read"}),
+        )
+        .await,
+        (200, json!({"allowed":true}))
+    );
+}

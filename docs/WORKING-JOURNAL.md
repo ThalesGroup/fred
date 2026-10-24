@@ -1033,6 +1033,29 @@ n'est pas une validation fonctionnelle de l'ensemble des changements Swift.
 
 ## F-012 Suppression unifiée
 
+- 2026-10-24 : I3 committé à la demande de Dimi (`63e6a1eae`), avec les
+  changements de formatage et d'ER présents au moment de la demande.
+  Lot P2 implémenté : migration 0007, visibilité des dossiers/documents actifs,
+  unicité des noms actifs, lectures, quota et producteurs filtrés ; aucune marque
+  posée hors du test. Décision : ligne retirée = absente, sans nouveau code
+  d'erreur ; le 409 des espaces reste inchangé.
+  Exclusions conservées : inventaire des originaux (ligne marquée encore vivante),
+  contrôles des espaces contenant des documents et nettoyage lifecycle,
+  écritures du worker de traitement (état terminal à imposer en P3).
+  Un test dans `tests/support/document_processing.rs` réutilise les fixtures HTTP,
+  stockage et processing ; aucun invariant existant ne formule exactement P2.
+  Adaptation demandée par Dimi : `r.pdf` est marqué seul dans `C/` actif,
+  auprès de `c.pdf` témoin ; aucune fixture de document à la racine. Réutilisation
+  des noms par HTTP : dossier `A` à la racine et nouvel upload `r.pdf` dans `C/`.
+  Preview native également filtrée après inventaire des requêtes directes.
+  A2 mis à jour, aucun chapitre
+  principal ni bloc généré modifié ; ER à régénérer.
+  Commandes non lancées depuis la racine : `make code-quality`,
+  `make -C apps/control-plane test-integration CARGO_TEST_OPTS=retired_folders_and_documents_are_absent_from_reads_and_producers`,
+  `make -C apps/control-plane test-integration`,
+  `make -C docs/architecture generate check`.
+  Aucun test, build, cargo, make, Docker ni push lancé ; P2 non committé.
+
 - 2026-10-24 : lot I3 implémenté : reçu SQL renommé en `deletion` par la
   migration 0006, avec ses index de recherche, sa clé primaire et son unicité
   de cible ; requêtes et noms d'audit adaptés, `target_kind` ajouté à l'audit

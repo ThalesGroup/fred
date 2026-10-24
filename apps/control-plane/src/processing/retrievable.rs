@@ -150,10 +150,11 @@ impl Processing {
         let mut tx =
             spaces::authorized_write(&self.pool, &self.fga, actor, document.space_id).await?;
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), actor).await?;
-        let document: Document = sqlx::query_as("select * from document where id=$1 for update")
-            .bind(id)
-            .fetch_one(&mut *tx)
-            .await?;
+        let document: Document =
+            sqlx::query_as("select * from document where id=$1 and deletion_id is null for update")
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?;
         let row: store::Row = sqlx::query_as(
             "select * from document_processing where document_id=$1 and status='succeeded'",
         )

@@ -96,9 +96,9 @@ impl Storage {
         sqlx::query("set transaction isolation level repeatable read, read only")
             .execute(&mut *tx)
             .await?;
-        let (used_bytes,reserved_bytes,documents,bytes): (i64,i64,i64,i64) = sqlx::query_as("select coalesce((select sum(size) from document where quota_owner=$1),0)::bigint, coalesce((select sum(size) from document_upload where quota_owner=$1 and status='pending'),0)::bigint, (select count(*) from document where space_id=$2), coalesce((select sum(size) from document where space_id=$2),0)::bigint")
+        let (used_bytes,reserved_bytes,documents,bytes): (i64,i64,i64,i64) = sqlx::query_as("select coalesce((select sum(size) from document where quota_owner=$1 and deletion_id is null),0)::bigint, coalesce((select sum(size) from document_upload where quota_owner=$1 and status='pending'),0)::bigint, (select count(*) from document where space_id=$2 and deletion_id is null), coalesce((select sum(size) from document where space_id=$2 and deletion_id is null),0)::bigint")
             .bind(owner).bind(space.id).fetch_one(&mut *tx).await?;
-        let types = sqlx::query_as("with grouped as (select mime,count(*)::bigint as documents,sum(size)::bigint as bytes from document where space_id=$1 group by mime), ranked as (select *,row_number() over(order by bytes desc,mime) as rank from grouped) select case when rank<=20 then mime else 'other' end as mime,sum(documents)::bigint as documents,sum(bytes)::bigint as bytes from ranked group by 1 order by bytes desc,mime")
+        let types = sqlx::query_as("with grouped as (select mime,count(*)::bigint as documents,sum(size)::bigint as bytes from document where space_id=$1 and deletion_id is null group by mime), ranked as (select *,row_number() over(order by bytes desc,mime) as rank from grouped) select case when rank<=20 then mime else 'other' end as mime,sum(documents)::bigint as documents,sum(bytes)::bigint as bytes from ranked group by 1 order by bytes desc,mime")
             .bind(space.id).fetch_all(&mut *tx).await?;
         tx.commit().await?;
         Ok(StorageSummary {
@@ -144,7 +144,7 @@ impl Storage {
                 ));
             }
         }
-        let conflicts = sqlx::query_scalar("select name from document where space_id=$1 and folder_id=$2 and name=any($3) union select name from document_upload where space_id=$1 and folder_id=$2 and name=any($3) and status='pending' order by name")
+        let conflicts = sqlx::query_scalar("select name from document where space_id=$1 and deletion_id is null and folder_id=$2 and name=any($3) union select name from document_upload where space_id=$1 and folder_id=$2 and name=any($3) and status='pending' order by name")
             .bind(space.id).bind(id).bind(&names).fetch_all(&self.pool).await?;
         Ok(PreflightResult {
             conflicts,
@@ -202,22 +202,25 @@ impl Storage {
             sql.build_query_as().fetch_all(&mut *tx).await?;
         let folders: Vec<Uuid> = rows.iter().filter(|r| r.0 == 0).map(|r| r.1).collect();
         let documents: Vec<Uuid> = rows.iter().filter(|r| r.0 == 1).map(|r| r.1).collect();
-        let mut folder_rows: std::collections::HashMap<Uuid, Folder> =
-            sqlx::query_as::<_, Folder>("select * from folder where id=any($1)")
-                .bind(&folders)
-                .fetch_all(&mut *tx)
-                .await?
-                .into_iter()
-                .map(|f| (f.id, f))
-                .collect();
+        let mut folder_rows: std::collections::HashMap<Uuid, Folder> = sqlx::query_as::<_, Folder>(
+            "select * from folder where id=any($1) and deletion_id is null",
+        )
+        .bind(&folders)
+        .fetch_all(&mut *tx)
+        .await?
+        .into_iter()
+        .map(|f| (f.id, f))
+        .collect();
         let mut document_rows: std::collections::HashMap<Uuid, Document> =
-            sqlx::query_as::<_, Document>("select * from document where id=any($1)")
-                .bind(&documents)
-                .fetch_all(&mut *tx)
-                .await?
-                .into_iter()
-                .map(|d| (d.id, d))
-                .collect();
+            sqlx::query_as::<_, Document>(
+                "select * from document where id=any($1) and deletion_id is null",
+            )
+            .bind(&documents)
+            .fetch_all(&mut *tx)
+            .await?
+            .into_iter()
+            .map(|d| (d.id, d))
+            .collect();
         let items = rows
             .into_iter()
             .map(|r| {
@@ -268,10 +271,12 @@ impl Storage {
                 "All document transfer slots are busy",
             )
         })?;
-        let key: String = sqlx::query_scalar("select object_key from document where id=$1")
-            .bind(id)
-            .fetch_one(&self.pool)
-            .await?;
+        let key: String = sqlx::query_scalar(
+            "select object_key from document where id=$1 and deletion_id is null",
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
         if !key.starts_with(&self.prefix) {
             return Err(unavailable());
         }
@@ -384,7 +389,7 @@ fn directory_selection(
             .push(projection)
             .push(" from ")
             .push(table)
-            .push(" where space_id=")
+            .push(" where deletion_id is null and space_id=")
             .push_bind(space)
             .push(" and ")
             .push(parent);

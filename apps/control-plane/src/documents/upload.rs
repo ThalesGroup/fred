@@ -328,7 +328,7 @@ impl Storage {
         } else {
             None
         };
-        let name_taken: bool = sqlx::query_scalar("select exists(select 1 from document where space_id=$1 and folder_id=$2 and name=$3) or exists(select 1 from document_upload where space_id=$1 and folder_id=$2 and name=$3 and status='pending')")
+        let name_taken: bool = sqlx::query_scalar("select exists(select 1 from document where deletion_id is null and space_id=$1 and folder_id=$2 and name=$3) or exists(select 1 from document_upload where space_id=$1 and folder_id=$2 and name=$3 and status='pending')")
             .bind(space.id).bind(folder.id).bind(&file.name).fetch_one(&mut *tx).await?;
         if name_taken {
             return Err(conflict(
@@ -337,7 +337,7 @@ impl Storage {
             ));
         }
         let (owner, limit) = self.quota(space)?;
-        let usage: i64 = sqlx::query_scalar("select coalesce((select sum(size) from document where quota_owner=$1),0)::bigint + coalesce((select sum(size) from document_upload where quota_owner=$1 and status='pending'),0)::bigint")
+        let usage: i64 = sqlx::query_scalar("select coalesce((select sum(size) from document where deletion_id is null and quota_owner=$1),0)::bigint + coalesce((select sum(size) from document_upload where quota_owner=$1 and status='pending'),0)::bigint")
             .bind(owner).fetch_one(&mut *tx).await?;
         if file.size > limit.saturating_sub(usage) {
             return Err(AppError::problem(

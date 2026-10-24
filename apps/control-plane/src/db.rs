@@ -143,7 +143,7 @@ pub async fn insert_space(tx: &mut Transaction<'_, Postgres>, s: &Space) -> sqlx
 }
 
 pub async fn folder<'e>(pool: impl sqlx::PgExecutor<'e>, id: Uuid) -> sqlx::Result<Folder> {
-    sqlx::query_as(concat!(folder!(), " where id = $1"))
+    sqlx::query_as(concat!(folder!(), " where id = $1 and deletion_id is null"))
         .bind(id)
         .fetch_one(pool)
         .await
@@ -157,7 +157,7 @@ pub async fn folder_ancestors<'e>(
     if let Some(parent) = parent {
         let rows = sqlx::query_as::<_, Folder>(
             "with recursive ancestors as (
-                select f.*, 1 as depth from folder f where id = $1 and space_id = $2
+                select f.*, 1 as depth from folder f where id = $1 and space_id = $2 and deletion_id is null
                 union all
                 select p.*, a.depth + 1 from folder p join ancestors a
                     on p.id = a.parent_id and p.space_id = a.space_id where a.depth < 15
@@ -220,8 +220,11 @@ pub async fn delete_folder<'e>(pool: impl sqlx::PgExecutor<'e>, id: Uuid) -> sql
 }
 
 pub async fn document<'e>(ex: impl sqlx::PgExecutor<'e>, id: Uuid) -> sqlx::Result<Document> {
-    sqlx::query_as(concat!(document!(), " where id = $1"))
-        .bind(id)
-        .fetch_one(ex)
-        .await
+    sqlx::query_as(concat!(
+        document!(),
+        " where id = $1 and deletion_id is null"
+    ))
+    .bind(id)
+    .fetch_one(ex)
+    .await
 }
