@@ -10,7 +10,7 @@ use control_plane::{
     onboarding::Onboarding,
 };
 use serde_json::{Value, json};
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 use tower::ServiceExt;
 
 async fn request(
@@ -399,4 +399,200 @@ async fn organization_console_rechecks_waiting_creator_and_serializes_attachment
     );
     assert_ne!(a.is_ok(), b.is_ok());
     assert!(matches!(a.err().or(b.err()), Some(AppError::Conflict(_))));
+}
+
+// Proves: I1, I5, I23. Owner-only HTTP access, isolated totals and direct grants.
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn supervision_isolates_organizations_and_drains_role_pages() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    let other = support::member_organization(&e.pool, &e.fga, "O2", "bob")
+        .await.unwrap();
+    let project = spaces::create_space(
+        &e.pool, &e.fga, "alice", SpaceKind::Project, team.id, "Project".into(), "alice",
+    ).await.unwrap();
+    spaces::grant(&e.pool, &e.fga, &e.subjects(), "alice", org.id,
+        Role::PersonalSpaceCreator, "alice").await.unwrap();
+    let (personal, _) = spaces::create_personal_space(&e.pool, &e.fga, "alice", org.id)
+        .await.unwrap();
+    for space in [org.id, team.id, project.id, personal.id, other.id] {
+        environment::insert_document(&e.pool, &document(space, None, "one.txt"))
+            .await.unwrap();
+    }
+    bootstrap::grant_root(&e.pool, &e.fga, "root").await.unwrap();
+    let identity = support::IdentityServer::start().await;
+    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+    let observed = Fga::connect(&proxy.base, &e.store, false, false, None,
+        Some(Duration::from_secs(5))).await.unwrap().load(&e.pool).await.unwrap();
+    let app = routes(state(&e, &identity, observed).await);
+    let path = format!("/organizations/{}/supervision", org.id);
+    for (actor, expected) in [(None, 401), (Some("alice"), 403),
+        (Some("root"), 404), (Some("bob-owner"), 404)] {
+        assert_eq!(request(&app, &identity, actor, "GET", &path, Value::Null).await.0, expected);
+    }
+    *proxy.fault.lock().await = support::fga_proxy::Fault {
+        read_page_size: Some(1), ..Default::default()
+    };
+    let (status, result) = request(&app, &identity, Some("alice-owner"), "GET", &path, Value::Null).await;
+    assert_eq!(status, 200, "{result}");
+    assert_eq!(result["active_teams"], 1);
+    assert_eq!(result["totals"]["active"]["documents"], 4);
+    assert_eq!(result["organization_direct"]["active"]["documents"], 1);
+    assert_eq!(result["teams_total"]["active"]["documents"], 2);
+    assert_eq!(result["personal_total"]["active"]["documents"], 1);
+    assert_eq!(result["totals"]["distinct_users"], 2);
+    assert_eq!(result["teams_total"]["distinct_users"], 1);
+    assert_eq!(result["totals"]["published"]["total_rows"], 0);
+    assert!(!result.to_string().contains("alice"));
+    let roles = result["totals"]["direct_roles"].as_array().unwrap();
+    assert!(roles.iter().any(|r| r["role"] == "admin" && r["assignments"] == 3));
+    let fault = proxy.fault.lock().await;
+    assert!(fault.reads.iter().any(|r| r["continuation_token"] != ""));
+    assert_eq!(fault.calls.get("check"), Some(&1));
+    assert!(!fault.calls.contains_key("write"));
+    assert!(fault.peak_reads <= 8);
+    drop(fault);
+    let detail = format!("{path}/teams/{}", team.id);
+    let (status, result) = request(&app, &identity, Some("alice-owner"), "GET", &detail, Value::Null).await;
+    assert_eq!(status, 200, "{result}");
+    assert_eq!(result["team"]["counts"]["active"]["documents"], 2);
+    for id in [other.id, personal.id, project.id] {
+        assert_eq!(request(&app, &identity, Some("alice-owner"), "GET",
+            &format!("{path}/teams/{id}"), Value::Null).await.0, 404);
+    }
+    let (status, result) = request(&app, &identity, Some("bob-owner"), "GET",
+        &format!("/organizations/{}/supervision", other.id), Value::Null).await;
+    assert_eq!(status, 200, "{result}");
+    assert_eq!(result["active_teams"], 0);
+    assert_eq!(result["totals"]["active"]["documents"], 1);
+    assert_eq!(result["teams"]["items"], json!([]));
+    // The first Read is actor context; fail after the successful owner Check.
+    *proxy.fault.lock().await = support::fga_proxy::Fault {
+        fail_read_at: 2, ..Default::default()
+    };
+    let (status, error) = request(&app, &identity, Some("alice-owner"), "GET", &path, Value::Null).await;
+    assert_eq!(status, 503, "{error}");
+    assert_eq!(error["code"], "dependency_unavailable");
+    assert!(error.get("totals").is_none());
+    assert!(!error.to_string().contains("private-dependency-error"));
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn supervision_team_pagination_preserves_full_totals() {
+    let e = env().await;
+    let (org, first) = org_and_team(&e).await;
+    // Metadata-only fixtures; no grants are required for an empty collective team.
+    let mut expected = BTreeSet::from([first.id]);
+    for index in 0..101 {
+        let id = Uuid::new_v4();
+        sqlx::query("insert into space(id,kind,name,organization_id,parent_id) values($1,'team',$2,$3,$3)")
+            .bind(id).bind(format!("Page team {index}")).bind(org.id)
+            .execute(&e.pool).await.unwrap();
+        expected.insert(id);
+    }
+    environment::insert_document(&e.pool, &document(first.id, None, "one.txt"))
+        .await.unwrap();
+    let identity = support::IdentityServer::start().await;
+    let app = routes(state(&e, &identity, e.fga.clone()).await);
+    let path = format!("/organizations/{}/supervision", org.id);
+    let (status, first) = request(&app, &identity, Some("alice-owner"), "GET", &path, Value::Null).await;
+    assert_eq!(status, 200, "{first}");
+    assert_eq!(first["active_teams"], 102);
+    assert_eq!(first["teams"]["items"].as_array().unwrap().len(), 100);
+    let cursor = first["teams"]["next_cursor"].as_str().unwrap();
+    let (status, second) = request(&app, &identity, Some("alice-owner"), "GET",
+        &format!("{path}?after={cursor}"), Value::Null).await;
+    assert_eq!(status, 200, "{second}");
+    assert_eq!(first["totals"], second["totals"]);
+    assert_eq!(first["teams_total"], second["teams_total"]);
+    assert_eq!(second["teams"]["items"].as_array().unwrap().len(), 2);
+    assert!(second["teams"]["next_cursor"].is_null());
+    let actual: BTreeSet<_> = first["teams"]["items"].as_array().unwrap().iter()
+        .chain(second["teams"]["items"].as_array().unwrap())
+        .map(|t| Uuid::parse_str(t["id"].as_str().unwrap()).unwrap()).collect();
+    assert_eq!(actual, expected);
+}
+
+/// Controlled SQL history, including success followed by failure: this is a
+/// selection contract fixture, not a claim that admit permits reprocessing success.
+async fn supervision_attempt(
+    e: &Env,
+    org: Uuid,
+    doc: &Document,
+    status: &str,
+    parquet_paths: Option<&[&str]>,
+    rows: Option<i64>,
+) {
+    let id = Uuid::new_v4();
+    let manifest = parquet_paths.map(|paths| json!({
+        "generation":Uuid::new_v4(), "chunks":7, "vectors":3,
+        "vector_ordinals":[0,1,2], "rows":rows,
+        "artifacts":paths.iter().map(|path| json!({
+            "path":path, "size":1, "sha256":"a".repeat(64)
+        })).collect::<Vec<_>>()
+    }));
+    sqlx::query("insert into document_processing(
+        id,request_key,actor,installation_id,document_id,organization_id,space_id,
+        original_sha256,profile,workflow_id,submission,profile_settings,deadline_at,
+        status,stage,completed_at,manifest,chunks,vectors,rows)
+        values($1,$1,'alice',$1,$2,$3,$4,$5,'fast',$6,'{}','{}',now()+interval '1 hour',
+        $7,case when $7='pending' then 'queued' else 'done' end,
+        case when $7 in ('failed','succeeded') then now() end,$8,$9,$10,$11)")
+        .bind(id).bind(doc.id).bind(org).bind(doc.space_id).bind(&doc.sha256)
+        .bind(id.to_string()).bind(status).bind(manifest)
+        .bind(if parquet_paths.is_some() { 7_i64 } else { 0 })
+        .bind(if parquet_paths.is_some() { 3_i64 } else { 0 }).bind(rows)
+        .execute(&e.pool).await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn supervision_separates_attempts_publications_unknown_rows_and_purge() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    for (name, paths, rows) in [
+        ("published", vec!["datasets/a.parquet"], Some(12)),
+        ("zero", vec!["datasets/b.parquet"], Some(0)),
+        ("unknown", vec!["datasets/c.parquet"], None),
+        ("multiple", vec!["datasets/d.parquet", "datasets/e.parquet"], Some(99)),
+    ] {
+        let doc = document(team.id, None, name);
+        environment::insert_document(&e.pool, &doc).await.unwrap();
+        supervision_attempt(&e, org.id, &doc, "succeeded", Some(&paths), rows).await;
+        if name == "published" {
+            supervision_attempt(&e, org.id, &doc, "failed", None, None).await;
+        }
+    }
+    let retry = document(team.id, None, "retry");
+    environment::insert_document(&e.pool, &retry).await.unwrap();
+    supervision_attempt(&e, org.id, &retry, "failed", None, None).await;
+    supervision_attempt(&e, org.id, &retry, "pending", None, None).await;
+    let retired = document(team.id, None, "retired");
+    environment::insert_document(&e.pool, &retired).await.unwrap();
+    supervision_attempt(&e, org.id, &retired, "succeeded",
+        Some(&["datasets/retired.parquet"]), Some(1000)).await;
+    let deletion = Uuid::new_v4();
+    sqlx::query("insert into deletion(id,target_id,target_kind,target_parent_id,
+        organization_id,actor_subject,requested_at,due_at)
+        values($1,$2,'document',$3,$4,'alice',now(),now())")
+        .bind(deletion).bind(retired.id).bind(team.id).bind(org.id)
+        .execute(&e.pool).await.unwrap();
+    sqlx::query("update document set deletion_id=$1 where id=$2")
+        .bind(deletion).bind(retired.id).execute(&e.pool).await.unwrap();
+    let identity = support::IdentityServer::start().await;
+    let app = routes(state(&e, &identity, e.fga.clone()).await);
+    let (status, result) = request(&app, &identity, Some("alice-owner"), "GET",
+        &format!("/organizations/{}/supervision", org.id), Value::Null).await;
+    assert_eq!(status, 200, "{result}");
+    let totals = &result["totals"];
+    assert_eq!(totals["active"], json!({"documents":5,"bytes":5}));
+    assert_eq!(totals["pending_purge"], json!({"documents":1,"bytes":1}));
+    assert_eq!(totals["failed_documents"], 1);
+    assert_eq!(totals["processing"], json!([{"status":"pending","stage":"queued","documents":1}]));
+    assert_eq!(totals["published"], json!({
+        "documents":4,"chunks":28,"vectors":12,"tabular_datasets":5,
+        "known_rows":12,"datasets_with_unknown_rows":3,"total_rows":null
+    }));
 }

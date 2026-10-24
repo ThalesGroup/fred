@@ -264,6 +264,19 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setAgentDefaultOnRequest,
       }),
     }),
+    organizationSupervision: build.query<OrganizationSupervisionApiResponse, OrganizationSupervisionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/supervision`,
+        params: {
+          after: queryArg.after,
+        },
+      }),
+    }),
+    teamSupervision: build.query<TeamSupervisionApiResponse, TeamSupervisionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/supervision/teams/${queryArg.teamId}`,
+      }),
+    }),
     createSpace: build.mutation<CreateSpaceApiResponse, CreateSpaceApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces`, method: "POST", body: queryArg.createSpace }),
     }),
@@ -517,6 +530,17 @@ export type SetOrganizationAgentDefaultApiArg = {
   organizationId: string;
   agentId: string;
   setAgentDefaultOnRequest: SetAgentDefaultOnRequest;
+};
+export type OrganizationSupervisionApiResponse = /** status 200 undefined */ OrganizationSupervision;
+export type OrganizationSupervisionApiArg = {
+  organizationId: string;
+  /** Exclusive team UUID cursor; does not filter organization totals */
+  after?: string;
+};
+export type TeamSupervisionApiResponse = /** status 200 undefined */ TeamSupervisionDetail;
+export type TeamSupervisionApiArg = {
+  organizationId: string;
+  teamId: string;
 };
 export type CreateSpaceApiResponse = /** status 201 Success */ Space;
 export type CreateSpaceApiArg = {
@@ -1003,6 +1027,76 @@ export type AgentDefaultOnResult = {
 export type SetAgentDefaultOnRequest = {
   default_on: boolean;
 };
+export type DocumentCounts = {
+  /** Logical original bytes recorded in SQL, not physical storage usage. */
+  bytes: number;
+  documents: number;
+};
+export type RoleAssignments = {
+  /** Direct (user, space, role) tuples, never effective/inherited grants. */
+  assignments: number;
+  role: Role;
+};
+export type ProcessingCount = {
+  documents: number;
+  stage: Stage;
+  status: ProcessingStatus;
+};
+export type PublicationCounts = {
+  /** Committed manifest counts; no OpenSearch presence check. */
+  chunks: number;
+  datasets_with_unknown_rows: number;
+  documents: number;
+  known_rows: number;
+  /** Published datasets/*.parquet artifacts, not SQL tables. */
+  tabular_datasets: number;
+  /** Null when at least one dataset has no attributable row count. */
+  total_rows: number | null;
+  vectors: number;
+};
+export type SupervisionCounts = {
+  active: DocumentCounts;
+  /** Roles with no direct attribution are omitted (zero). */
+  direct_roles: RoleAssignments[];
+  /** Union of direct subjects; never sum role columns or child distinct counts. */
+  distinct_users: number;
+  failed_documents: number;
+  /** Remaining SQL documents retired directly or through their owning space. */
+  pending_purge: DocumentCounts;
+  /** Latest attempt per active document. Missing status/stage pairs mean zero. */
+  processing: ProcessingCount[];
+  published: PublicationCounts;
+};
+export type TeamSupervision = {
+  /** Includes the team's projects, without inherited organization roles. */
+  counts: SupervisionCounts;
+  id: string;
+  name: string;
+};
+export type SupervisionTeamsPage = {
+  items: TeamSupervision[];
+  next_cursor: string | null;
+};
+export type OrganizationSupervision = {
+  active_teams: number;
+  /** Collection bounds, not an atomic SQL/OpenFGA snapshot. */
+  collection_finished_at: string;
+  collection_started_at: string;
+  organization_direct: SupervisionCounts;
+  organization_id: string;
+  /** All personal spaces aggregated; no personal identity or space is exposed. */
+  personal_total: SupervisionCounts;
+  /** UUID ascending, at most 100 teams. Totals never depend on this page. */
+  teams: SupervisionTeamsPage;
+  teams_total: SupervisionCounts;
+  totals: SupervisionCounts;
+};
+export type TeamSupervisionDetail = {
+  collection_finished_at: string;
+  collection_started_at: string;
+  organization_id: string;
+  team: TeamSupervision;
+};
 export type CreateSpace = {
   /** Initial administrator; creation grants the caller nothing on the new space. */
   admin: string;
@@ -1099,6 +1193,10 @@ export const {
   useOrganizationAgentsQuery,
   useLazyOrganizationAgentsQuery,
   useSetOrganizationAgentDefaultMutation,
+  useOrganizationSupervisionQuery,
+  useLazyOrganizationSupervisionQuery,
+  useTeamSupervisionQuery,
+  useLazyTeamSupervisionQuery,
   useCreateSpaceMutation,
   useDeleteSpaceMutation,
   useReceiptsQuery,

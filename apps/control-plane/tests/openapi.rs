@@ -133,6 +133,8 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /authorize/space",
         "post /import-export/import",
         "get /organizations/{organization_id}/agents",
+        "get /organizations/{organization_id}/supervision",
+        "get /organizations/{organization_id}/supervision/teams/{team_id}",
         "put /organizations/{organization_id}/agents/{agent_id}/default-on",
         "post /agents/execute/stream",
     ]
@@ -193,7 +195,12 @@ fn schemas_preserve_serialized_roles_nullable_fields_and_flattening() {
     );
     assert_eq!(
         schemas["SpaceKind"]["enum"],
-        json!([SpaceKind::Organization, SpaceKind::Team, SpaceKind::Project])
+        json!([
+            SpaceKind::Organization,
+            SpaceKind::Team,
+            SpaceKind::Project,
+            SpaceKind::Personal
+        ])
     );
     let space = Space {
         id: Uuid::nil(),

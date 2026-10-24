@@ -39,12 +39,17 @@ pub enum TargetKind {
     Project,
     Document,
 }
-impl From<SpaceKind> for TargetKind {
-    fn from(kind: SpaceKind) -> Self {
+impl TryFrom<SpaceKind> for TargetKind {
+    type Error = AppError;
+
+    fn try_from(kind: SpaceKind) -> AppResult<Self> {
         match kind {
-            SpaceKind::Organization => Self::Organization,
-            SpaceKind::Team => Self::Team,
-            SpaceKind::Project => Self::Project,
+            SpaceKind::Organization => Ok(Self::Organization),
+            SpaceKind::Team => Ok(Self::Team),
+            SpaceKind::Project => Ok(Self::Project),
+            SpaceKind::Personal => Err(AppError::Conflict(
+                "standalone personal-space deletion is not supported".into(),
+            )),
         }
     }
 }
@@ -234,11 +239,7 @@ impl Lifecycle {
         let root = Space::from(db::space(&mut *tx, id).await?);
         spaces::lock_organization(&mut tx, &root).await?;
         require_active(&mut *tx, id).await?;
-        if root.personal_owner.is_some() {
-            return Err(AppError::Conflict(
-                "standalone personal-space deletion is not supported".into(),
-            ));
-        }
+        let target_kind = TargetKind::try_from(root.kind)?;
         let org_guard = fga.guard(&[Scope::Organization(root.organization)]).await?;
         platform_guard.extend(org_guard)?;
         let overlaps: bool = sqlx::query_scalar("select exists(select 1 from deletion where status <> 'completed' and organization_id = $1 and ($2 = 'organization' or target_id = $3 or target_parent_id = $3))")
@@ -251,7 +252,7 @@ impl Lifecycle {
         let due_at = action.retention.after(requested_at)?;
         let operation = Uuid::new_v4();
         sqlx::query("insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
-            .bind(operation).bind(id).bind(TargetKind::from(root.kind)).bind(root.parent_id).bind(root.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).execute(&mut *tx).await?;
+            .bind(operation).bind(id).bind(target_kind).bind(root.parent_id).bind(root.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).execute(&mut *tx).await?;
         mark(&mut tx, id, operation).await?;
         if root.kind != SpaceKind::Project {
             discover(&mut tx, fga, &root, operation).await?;
@@ -320,7 +321,7 @@ async fn discover(
         mark_children(tx, fga, root.id, true, operation).await?;
         let mut cursor = Uuid::nil();
         loop {
-            let teams: Vec<Uuid> = sqlx::query_scalar("select id from space where deletion_id = $1 and kind = 'team' and personal_owner is null and id > $2 order by id limit 96")
+            let teams: Vec<Uuid> = sqlx::query_scalar("select id from space where deletion_id = $1 and kind = 'team' and id > $2 order by id limit 96")
                 .bind(operation).bind(cursor).fetch_all(&mut **tx).await?;
             if teams.is_empty() {
                 break;

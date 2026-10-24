@@ -52,10 +52,16 @@ no data or roles are automatically removed. See [operations](A3-manager-operatio
 ## Spaces and memberships
 
 An organization is a root. A team belongs to one organization; a project belongs
-to one non-personal team. A personal space is a team with one owner, no parent and
+to one collective team. A personal space has kind `personal`, one owner, no parent and
 no project; its organization manages it. Names are unique among siblings and among
 organizations; identically named teams in different organizations remain different
 spaces. Placement is immutable.
+
+`SpaceKind` and SQL `space_kind` distinguish `organization`, `team`, `project` and
+`personal`. SQL requires `personal_owner` exactly for kind `personal` and forbids
+its parent. The owner field identifies the person; OpenFGA remains authoritative
+for their grants. Generic space creation refuses `personal`; the dedicated
+personal-space operation enforces eligibility and fixed initial member/editor roles.
 
 API creation and ZIP declarations store names in NFC without surrounding whitespace,
 then require 1..180 Unicode scalar values without control characters. Inner spaces and
@@ -101,7 +107,7 @@ personal space. Current permission still requires an OpenFGA Check.
 flowchart TB
     tsn["TSN<br/>organization<br/>path: tsn"]
     bid["BID<br/>team<br/>path: tsn, bid"]
-    alice["alice<br/>personal team<br/>path: alice"]
+    alice["alice<br/>personal space<br/>path: alice"]
     p1["Bid 2026<br/>project<br/>path: tsn, bid, p1"]
     tsn -- parent --> bid
     bid -- parent --> p1
@@ -115,11 +121,95 @@ flowchart TB
 | Bid 2026, levels `project` | Bid 2026 |
 | alice | alice |
 
-A caller may restrict a scope to some of the organization, team and project levels;
-levels only remove spaces from it.
+A caller may restrict a scope to `organization`, `team`, `project` or `personal`;
+levels only remove spaces from it. `team` excludes personal spaces. Retention
+selectors use the same strict distinction; selecting both requires both kinds.
 
 Folders classify only and carry no rights. Document metadata inherits its owning
 space's authority; read and scope probes use immutable space identifiers.
+
+## Organization supervision
+
+Supervision is a stateless read module inside Control Plane, exposed by two GET
+routes in [the HTTP catalogue](A2-manager-contracts.md#organization-supervision-api).
+It introduces no process, statistics table, cache or worker and performs no physical
+S3/OpenSearch read. Standard `AdmittedUser` admission can refresh the existing local
+identity snapshot; the supervision module itself makes no writes.
+
+### Authorization and disclosure boundary
+
+`supervision::authorize` loads an organization, resolves the caller's unique
+organization through `spaces::in_organization`, checks retirement, then asks
+OpenFGA for `can_own_organization` on that organization. The model grants this
+permission only through `organization_owner`. No platform, admin or content role
+substitutes for it. A caller holding several roles is allowed when ownership is
+among them; no content permission is additionally required.
+
+Admission errors retain the shared contract. A missing/foreign organization or
+non-organization target gives 404; ambiguous caller context gives 409; a retired
+organization gives 409 `space_pending_deletion`; missing ownership in the matching
+context gives 403. After organization authorization, team detail rejects a missing,
+foreign or non-team target with 404 and a retired team with 409. A failed OpenFGA
+context read, owner Check or grant page gives 503 `dependency_unavailable` without
+partial counts. SQL lifecycle is rechecked inside the collection transaction.
+
+Responses expose organization/team UUIDs, collective team names, collection
+timestamps and counts.
+They contain no document identifiers, names, content, artifact paths, download
+links or user identities. Personal space identifiers and names are not returned.
+Aggregate values can still reveal resource volumes and activity; access is therefore
+restricted to organization governance rather than ordinary content readers.
+
+### Scope and counter definitions
+
+`organization_direct`, `teams_total` and `personal_total` partition resource counts.
+Teams include their projects. The organization summary includes every SQL space
+with the exact `organization_id`; team detail selects the team and its projects
+within that organization. Active metrics and role enumeration exclude retired
+spaces. Retired documents remaining in SQL, including those in retired spaces,
+contribute only to `pending_purge`. Retired teams are absent from team pages but
+their remaining documents contribute to organization-level purge totals.
+
+| Output | Canonical source and counting rule | Meaning and exclusions |
+| --- | --- | --- |
+| `active_teams` | Active SQL spaces of kind `team` | Excludes personal spaces, projects and retired teams |
+| `active.documents`, `active.bytes` | Count and sum of `document.size` where both document and owning space have null `deletion_id` | Original metadata only; no upload reservations or derived bytes |
+| `pending_purge` | Remaining document rows retired directly or through their owning space, and their original sizes | Logical pending volume, not physical objects or accumulated deletion receipts |
+| `processing` | Latest attempt per active document ordered by `(created_at DESC, id DESC)`, grouped by pending/running status and stage | Absent pairs mean zero; no worker-health inference |
+| `failed_documents` | Latest attempt is failed | Historical failures replaced by another attempt do not count |
+| `published.documents`, `chunks`, `vectors` | Unique succeeded attempt per active document; committed column sums | Independent of latest attempt; no sum of generations, extracted fragments or physical index query |
+| `published.tabular_datasets` | Count of `datasets/*.parquet` paths in successful manifests, aggregated before joining document counts | Published artifacts, not CSV filenames or persistent SQL tables |
+| `known_rows`, `datasets_with_unknown_rows`, `total_rows` | Rows are attributable only when a successful manifest has exactly one Parquet and nonnull rows | Multiple Parquet artifacts or null rows make those datasets unknown; total is null if any are unknown. No dataset means zero; known zero remains zero |
+| `distinct_users`, `direct_roles` | All direct OpenFGA grants on active scoped spaces; distinct subjects and distinct `(subject, space, role)` assignments | All six canonical roles; omitted roles mean zero. No effective/inherited roles, SQL-owner-derived grants or IdP active-account inference |
+
+Distinct users are unioned, not summed across roles or compartments. Team role
+counts include direct grants on its projects but not inherited organization grants.
+Personal member/editor assignments are read from OpenFGA like other grants.
+Ingestion refuses reprocessing after success; independent publication selection
+does not introduce a new reprocessing capability.
+
+### Pagination, freshness and implementation trace
+
+Team pages are UUID-ascending, at most 100 items. `after` is exclusive; reading
+101 rows determines `next_cursor`, null at the end. Organization totals and active
+team count ignore the cursor. Pagination is exhaustive on unchanged data; a
+concurrent creation below the cursor requires restarting the traversal.
+
+Grouped SQL reads share one REPEATABLE READ READ ONLY transaction. It ends before
+grant enumeration. Collection timestamps bound observations, not an atomic
+SQL/OpenFGA snapshot; concurrent mutations can change visibility between reads.
+There is no distributed lock or consistency repair. The
+[read budget](09-quality.md#organization-supervision-read-budget) separates SQL
+and OpenFGA costs and cardinalities.
+
+Source trace: [handlers and aggregation](../../apps/control-plane/src/supervision/mod.rs),
+[wire models](../../apps/control-plane/src/supervision/models.rs),
+[SQL snapshot](../../apps/control-plane/src/supervision/store.rs),
+[publication aggregation](../../apps/control-plane/src/supervision/counts.sql),
+and [paginated direct grants](../../apps/control-plane/src/fga.rs) (`grants_on`,
+`read_keys`, `concurrently`). Regression scenarios are defined in
+[organization_console.rs](../../apps/control-plane/tests/support/organization_console.rs)
+by the three `supervision_*` tests; source references are not execution evidence.
 
 ## Platform organization administration
 

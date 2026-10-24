@@ -449,6 +449,27 @@ impl Fga {
     }
 
     /// Direct roles only; no derived role is represented as a stored grant.
+    pub(crate) async fn grants_on(
+        &self,
+        spaces: &[Uuid],
+    ) -> Result<Vec<(Uuid, Vec<(String, Role)>)>> {
+        self.concurrently(spaces, |fga, id| async move {
+            Ok(fga
+                .read_keys(json!({ "object": format!("space:{id}") }))
+                .await?
+                .into_iter()
+                .filter_map(|key| {
+                    Some((
+                        key.user.strip_prefix("user:")?.to_owned(),
+                        Role::parse(&key.relation)?,
+                    ))
+                })
+                .collect())
+        })
+        .await
+    }
+
+    /// Direct roles only; no derived role is represented as a stored grant.
     pub async fn roles_of(&self, user: &str) -> Result<Vec<(Uuid, Role)>> {
         Ok(self
             .read_keys(json!({ "user": format!("user:{user}"), "object": "space:" }))

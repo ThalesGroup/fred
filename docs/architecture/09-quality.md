@@ -8,7 +8,7 @@ explanations move between chapters.
 
 | Id | Invariant | Held by |
 | --- | --- | --- |
-| I1 | An organization is a root, a team's parent is an organization, a project's parent is a non-personal team, a personal space has no parent. Sibling names and organization names are unique. | `domain::check_parent`, `spaces` under the organization lock, organization-name index |
+| I1 | An organization is a root, a team's parent is an organization, a project's parent is a collective team. Kind `personal` requires an owner and no parent. Sibling names and organization names are unique. | `domain::check_parent`, `space_personal_identity`, `spaces` under the organization lock, organization-name index |
 | I2 | Placement is immutable: a space's kind, owner and links, a folder's space, parent and path, a document's space and folder. Names may change; the authorized deletion lifecycle removes retired space links. | SQL placement triggers; matching FGA links published with creation grants before SQL commit |
 | I3 | A document's folder, and a sub-folder's parent, belong to the same space. | composite foreign keys |
 | I4 | Holding a role on a space requires a direct content role on its parent, and a personal-space role a direct content role on its organization, under any concurrency. Inherited access does not satisfy it. Personal creation eligibility also requires direct organization content. | `spaces`, organization lock and atomic OpenFGA guard |
@@ -27,7 +27,7 @@ explanations move between chapters.
 | I18 | Import requires a platform owner, authenticated at admission and rechecked in OpenFGA at every mutation boundary, and compatible initialized state; predictable preflight failures cause no provisioning or initialization writes. | CLI read-only initialization, HTTP authority-before-upload, `Importer::preflight`, root guard |
 | I19 | A human personally accepts the active CGU before business access; consent and root bootstrap create no membership, and import accepts for nobody. | `onboarding`, `OwnUser`, `AdmittedUser`, CLI admission |
 | I20 | Editor, admin and analyst reach every descendant space, member stays local, and a personal space inherits nothing. | OpenFGA `effective_*` relations over `parent` links |
-| I21 | New organization owner grants target an existing Keycloak subject. An owner exists only on organizations, is named by platform owners, names the organization's admins, and holds no content, management or descending permission. | `spaces::may_change`, directory checks at grant/creation/import, OpenFGA `can_own_organization` |
+| I21 | New organization owner grants target an existing Keycloak subject. An owner exists only on organizations, is named by platform owners, names the organization's admins and reads its technical aggregates, without content, management or descending permission. | `spaces::may_change`, directory checks at grant/creation/import, `supervision::authorize`, OpenFGA `can_own_organization` |
 | I22 | Folder mutations recheck existence under the organization lock; deletion winning that lock prevents a waiting mutation. | HTTP handlers, SQL transaction held through commit |
 | I23 | A person holds roles in at most one organization per Fred instance. Business access requires that unique context as well as permission; platform governance is independent. | committed direct roles and placement, context validation, platform lock and guard on attachment writers |
 | I24 | Space retirement is atomic; cleanup starts no earlier than the frozen deadline, preserves retry identifiers and declares completion only after SQL/FGA cleanup. | `lifecycle`, retired consumer gates, bounded activities and receipts |
@@ -186,6 +186,31 @@ checks page/total consistency. Component tests exercise the original controls,
 stale completions, pending deletion deduplication, recovery after the last page becomes empty and document
 write refusal, alongside the separate knowledge-base consumer. These checks do not
 replace visual acceptance on a deployed instance.
+
+## Organization supervision read budget
+
+The [supervision contract](A8-organizations.md#organization-supervision) uses 8 SQL
+SELECTs for the organization summary and 10 for team detail, excluding shared
+admission. Three SELECTs establish target, caller organization and lifecycle.
+The read-only snapshot adds an organization lifecycle recheck, space inventory,
+team page and two grouped metric queries; detail adds team-kind/organization and
+team-lifecycle checks. BEGIN, SET and COMMIT are additional commands. No SQL query
+is issued per document and no transaction spans an OpenFGA call.
+
+OpenFGA costs `P_actor + 1 + sum(P_space)` client RPCs: all actor-context Read pages,
+one `can_own_organization` Check, then all Read pages filtered by exact
+`object=space:<id>` for each active scoped space. Summary reads every active space
+in the organization regardless of team pagination; detail reads the team and its
+active projects. Space reads use the existing concurrency bound of 8, with each
+space's pages sequential. Page size is server-controlled, there is no per-user
+Check and failure produces no partial success.
+
+SQL work depends on scoped spaces, documents, attempt history and published
+artifacts; remote work depends on active spaces and direct-grant pages. Request
+memory is O(spaces + grants + distinct subjects), with no document bodies loaded.
+These are source-derived costs, not measured throughput or latency guarantees.
+SQL reads share REPEATABLE READ; OpenFGA reads use HIGHER_CONSISTENCY without a
+common SQL/OpenFGA snapshot. Collection timestamps do not change that boundary.
 
 ## OpenFGA request costs
 

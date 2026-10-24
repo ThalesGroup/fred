@@ -27,6 +27,7 @@ pub enum SpaceKind {
     Organization,
     Team,
     Project,
+    Personal,
 }
 
 /// Space and folder names are stored, compared and kept unique in this form: NFC,
@@ -138,7 +139,7 @@ pub enum Role {
     Editor,
     Admin,
     Analyst,
-    /// Technical role of an organization: names its admins, reads nothing.
+    /// Technical governance and aggregates; grants no document content access.
     #[serde(rename = "organization_owner")]
     OrganizationOwner,
     #[serde(rename = "personal_space_creator")]
@@ -207,21 +208,20 @@ pub enum RuleError {
     TeamOutsideOrganization,
     #[error("a project must have a non-personal team as parent")]
     ProjectOutsideTeam,
+    #[error("a personal space must use the dedicated creation endpoint")]
+    PersonalCreationRequired,
 }
 
-/// Organization > team > project. A personal space is a team and holds no project.
+/// Organization > team > project. Personal spaces use their dedicated creation path.
 pub fn check_parent(kind: SpaceKind, parent: Option<&Space>) -> Result<(), RuleError> {
     match (kind, parent) {
         (SpaceKind::Organization, None) => Ok(()),
         (SpaceKind::Organization, Some(_)) => Err(RuleError::NestedOrganization),
         (SpaceKind::Team, Some(p)) if p.kind == SpaceKind::Organization => Ok(()),
         (SpaceKind::Team, _) => Err(RuleError::TeamOutsideOrganization),
-        (SpaceKind::Project, Some(p))
-            if p.kind == SpaceKind::Team && p.personal_owner.is_none() =>
-        {
-            Ok(())
-        }
+        (SpaceKind::Project, Some(p)) if p.kind == SpaceKind::Team => Ok(()),
         (SpaceKind::Project, _) => Err(RuleError::ProjectOutsideTeam),
+        (SpaceKind::Personal, _) => Err(RuleError::PersonalCreationRequired),
     }
 }
 
@@ -263,7 +263,7 @@ mod tests {
     fn parent_rules() {
         let org = space(SpaceKind::Organization, None, false);
         let team = space(SpaceKind::Team, Some(&org), false);
-        let personal = space(SpaceKind::Team, Some(&org), true);
+        let personal = space(SpaceKind::Personal, Some(&org), true);
         let project = space(SpaceKind::Project, Some(&team), false);
 
         assert_eq!(check_parent(SpaceKind::Organization, None), Ok(()));
@@ -271,6 +271,9 @@ mod tests {
         assert_eq!(check_parent(SpaceKind::Project, Some(&team)), Ok(()));
 
         assert!(check_parent(SpaceKind::Organization, Some(&org)).is_err());
+        assert!(check_parent(SpaceKind::Personal, None).is_err());
+        assert!(check_parent(SpaceKind::Personal, Some(&org)).is_err());
+        assert!(check_parent(SpaceKind::Team, Some(&personal)).is_err());
         assert!(check_parent(SpaceKind::Team, None).is_err());
         assert!(check_parent(SpaceKind::Team, Some(&team)).is_err());
         assert!(check_parent(SpaceKind::Project, Some(&org)).is_err());
@@ -284,7 +287,7 @@ mod tests {
         let tsn = space(SpaceKind::Organization, None, false);
         let bid = space(SpaceKind::Team, Some(&tsn), false);
         let proj = space(SpaceKind::Project, Some(&bid), false);
-        let alice = space(SpaceKind::Team, Some(&tsn), true);
+        let alice = space(SpaceKind::Personal, Some(&tsn), true);
         assert_eq!(bid.path, vec![tsn.id, bid.id]);
         assert_eq!(proj.path, vec![tsn.id, bid.id, proj.id]);
         assert_eq!(proj.organization, tsn.id);

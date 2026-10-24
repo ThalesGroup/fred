@@ -83,6 +83,7 @@ their presentation with processing unavailable in this view.
 | Grant/revoke `member`, `editor`, `analyst` - `PUT/DELETE /spaces/{id}/roles/{role}/{user}` | No | No | Yes, on target | No | No | No | None |
 | Grant/revoke team/project `admin` - same role routes | No | No | Yes, on target | No | No | No | None |
 | Grant/revoke organization `admin` - same role routes | No | No | Yes, on organization | No | Yes | No | None |
+| Read organization/team supervision - `GET /organizations/{organization_id}/supervision` and `/teams/{team_id}` suffix | No | No | No | No | Yes, on target organization | No | None |
 | Grant/revoke organization `personal_space_creator` - same role routes | No | No | Yes, on organization | No | No | No | None |
 | Grant/revoke `organization_owner` - same role routes | No | No | No | No | No | No | `platform_owner` |
 | First creation of own personal space - `POST /me/personal-space` | No alone | No alone | No | No alone | No | Yes, plus organization read | None |
@@ -91,6 +92,13 @@ their presentation with processing unavailable in this view.
 | Remove a personal-space role - `DELETE /spaces/{id}/roles/{role}/{user}` | No | No | Yes, on its organization | No | No | No | None |
 
 Conditions are part of these rights:
+
+- Supervision requires `can_own_organization` after admission, unique matching
+  organization context and lifecycle checks. It grants technical aggregates only,
+  not content, downloads or named-user listings. Team detail accepts only a
+  collective team in that organization. All OpenFGA pages must succeed; dependency
+  failure returns 503 `dependency_unavailable`, never a partial result. Exact
+  scopes, refusals and counters are in [the supervision contract](A8-organizations.md#organization-supervision).
 
 - For team/project creation, the nominated initial admin holds a direct content
   role (`member`, `editor` or `analyst`) on the parent. The creator gains no implicit
@@ -213,6 +221,7 @@ The matrices are checked against [the model](../../apps/control-plane/openfga/mo
 [HTTP handlers](../../apps/control-plane/src/api.rs),
 [original storage](../../apps/control-plane/src/documents/http.rs),
 [space governance](../../apps/control-plane/src/spaces.rs),
+[organization supervision](../../apps/control-plane/src/supervision/mod.rs),
 [platform governance](../../apps/control-plane/src/platform.rs), and
 [operator commands](../../apps/control-plane/src/main.rs).
 Role truth tables, ancestor behavior, private isolation and revocation are exercised

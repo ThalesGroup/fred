@@ -176,8 +176,8 @@ pub async fn scope(
     levels: Option<&[SpaceKind]>,
 ) -> AppResult<Vec<Uuid>> {
     let space = authorize(pool, fga, user, space_id, Permission::Read).await?;
-    let kinds: &[SpaceKind] = if space.personal_owner.is_some() {
-        &[SpaceKind::Team]
+    let kinds: &[SpaceKind] = if space.kind == SpaceKind::Personal {
+        &[SpaceKind::Personal]
     } else {
         &[SpaceKind::Organization, SpaceKind::Team, SpaceKind::Project]
     };
@@ -223,7 +223,7 @@ pub async fn memberships(pool: &PgPool, fga: &Fga, user: &str) -> AppResult<Vec<
     for kind in [SpaceKind::Organization, SpaceKind::Team] {
         let frontier: Vec<Uuid> = rows
             .values()
-            .filter(|r| r.kind == kind && r.personal_owner.is_none())
+            .filter(|r| r.kind == kind)
             .map(|r| r.id)
             .filter(|id| !descending(*id, &inherited).is_empty())
             .collect();
@@ -548,7 +548,11 @@ pub async fn create_personal_space(
     organization_id: Uuid,
 ) -> AppResult<(Space, bool)> {
     let org = load(pool, organization_id).await?;
-    domain::check_parent(SpaceKind::Team, Some(&org))?;
+    if org.kind != SpaceKind::Organization {
+        return Err(AppError::BadRequest(
+            "a personal space must belong to an organization".into(),
+        ));
+    }
     let mut tx = pool.begin().await?;
     lock_organization(&mut tx, &org).await?;
     let mut guard = fga.guard(&[Scope::Organization(org.id)]).await?;
@@ -572,7 +576,7 @@ pub async fn create_personal_space(
     let id = Uuid::new_v4();
     let space = Space::from(SpaceRow {
         id,
-        kind: SpaceKind::Team,
+        kind: SpaceKind::Personal,
         name: caller.to_string(),
         personal_owner: Some(caller.to_string()),
         parent_id: None,
@@ -613,7 +617,7 @@ pub async fn grant(
         return Err(AppError::Unprocessable(INVALID_SUBJECT.into()));
     }
     let space = load(pool, space_id).await?;
-    if space.personal_owner.is_some() {
+    if space.kind == SpaceKind::Personal {
         return Err(AppError::Conflict(PERSONAL_FIXED.into()));
     }
     let (mut tx, mut guard) = lock_for(pool, fga, &space).await?;
@@ -680,7 +684,7 @@ pub async fn revoke(
     if role != Role::OrganizationOwner {
         require_context(&mut *tx, fga, caller, space.organization).await?;
     }
-    if space.personal_owner.is_some() {
+    if space.kind == SpaceKind::Personal {
         require(fga, caller, Permission::Manage, space.organization).await?;
     } else {
         may_change(fga, caller, &space, role).await?;
@@ -693,7 +697,7 @@ pub async fn revoke(
         .map(|(_, r)| *r)
         .collect();
     if matches!(role, Role::Admin | Role::OrganizationOwner)
-        && space.personal_owner.is_none()
+        && space.kind != SpaceKind::Personal
         && on_space.contains(&role)
     {
         let holders = fga.space_holders(space.id, role).await?;

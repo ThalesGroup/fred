@@ -4269,6 +4269,17 @@ async fn scope_follows_ancestors_and_levels_only_narrow_it() {
         .unwrap()
         .0;
     assert_eq!(scope(personal.id, None).await.unwrap(), vec![personal.id]);
+    assert!(scope(personal.id, Some(vec![Team])).await.unwrap().is_empty());
+    assert_eq!(
+        scope(personal.id, Some(vec![Personal])).await.unwrap(),
+        vec![personal.id]
+    );
+    assert!(
+        scope(project.id, Some(vec![Personal]))
+            .await
+            .unwrap()
+            .is_empty()
+    );
     assert!(
         scope(personal.id, Some(vec![Organization]))
             .await
@@ -5862,6 +5873,23 @@ async fn personal_open_requires_explicit_eligibility_and_never_repairs_revocatio
     let ((personal, created_a), (other, created_b)) = (a.unwrap(), b.unwrap());
     assert_eq!(personal.id, other.id);
     assert_ne!(created_a, created_b);
+    assert_eq!(personal.kind, SpaceKind::Personal);
+    assert_eq!(personal.organization, org.id);
+    assert_eq!(personal.parent_id, None);
+    assert_eq!(personal.personal_owner.as_deref(), Some("priya"));
+    assert!(matches!(
+        spaces::create_space(
+            &e.pool,
+            &e.fga,
+            "alice",
+            SpaceKind::Personal,
+            org.id,
+            "invalid".into(),
+            "alice"
+        )
+        .await,
+        Err(AppError::BadRequest(_))
+    ));
     assert_eq!(personal.path, vec![personal.id]);
     assert!(!reads(&e, "alice", personal.id).await);
     spaces::revoke(
@@ -6026,7 +6054,7 @@ async fn personal_open_budgets_exhaust_pages_and_recheck_after_lock_wait() {
         }
     }
     // SQL also refuses a second active personal space for one owner and organization.
-    let duplicate = sqlx::query("insert into space (id, kind, name, personal_owner, organization_id) values ($1, 'team', 'priya', 'priya', $2)")
+    let duplicate = sqlx::query("insert into space (id, kind, name, personal_owner, organization_id) values ($1, 'personal', 'priya', 'priya', $2)")
         .bind(Uuid::new_v4())
         .bind(org.id)
         .execute(&e.pool)
@@ -6378,3 +6406,65 @@ mod organization_console;
 
 #[path = "support/folder_scaling.rs"]
 mod folder_scaling;
+
+// Proves: I1
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn personal_kind_migration_preserves_active_and_retired_spaces() {
+    let e = env().await;
+    let mut conn = e.pool.acquire().await.unwrap();
+    sqlx::query("create schema personal_upgrade").execute(&mut *conn).await.unwrap();
+    sqlx::query("set search_path to personal_upgrade").execute(&mut *conn).await.unwrap();
+    let migrator = sqlx::migrate!();
+    migrator.run_to(9, &mut *conn).await.unwrap();
+    let org = Uuid::new_v4();
+    let active = Uuid::new_v4();
+    let retired = Uuid::new_v4();
+    let receipt = Uuid::new_v4();
+    sqlx::query("insert into space (id,kind,name,organization_id) values ($1,'organization','Org',$1)")
+        .bind(org).execute(&mut *conn).await.unwrap();
+    sqlx::query("insert into deletion (id,target_id,target_kind,organization_id,actor_subject,requested_at,due_at) values ($1,$2,'organization',$2,'root',now(),now())")
+        .bind(receipt).bind(org).execute(&mut *conn).await.unwrap();
+    for (id, deletion) in [(active, None), (retired, Some(receipt))] {
+        sqlx::query("insert into space (id,kind,name,personal_owner,organization_id,deletion_id) values ($1,'team','Personal','alice',$2,$3)")
+            .bind(id).bind(org).bind(deletion).execute(&mut *conn).await.unwrap();
+    }
+    sqlx::query("insert into document (id,space_id,name,mime,size,sha256,created_by,object_key,quota_owner) values ($1,$2,'original.txt','text/plain',7,repeat('a',64),'alice','fixture/original',$2)")
+        .bind(Uuid::new_v4()).bind(active).execute(&mut *conn).await.unwrap();
+    let before: Vec<serde_json::Value> = sqlx::query_scalar("select to_jsonb(s) from space s order by id")
+        .fetch_all(&mut *conn).await.unwrap();
+    let documents: Vec<serde_json::Value> = sqlx::query_scalar("select to_jsonb(d) from document d order by id")
+        .fetch_all(&mut *conn).await.unwrap();
+    migrator.run(&mut *conn).await.unwrap();
+    let after: Vec<serde_json::Value> = sqlx::query_scalar("select to_jsonb(s) from space s order by id")
+        .fetch_all(&mut *conn).await.unwrap();
+    let expected: Vec<_> = before
+        .into_iter()
+        .map(|mut row| {
+            if !row["personal_owner"].is_null() {
+                row["kind"] = serde_json::json!("personal");
+            }
+            row
+        })
+        .collect();
+    assert_eq!(after, expected);
+    assert_eq!(documents, sqlx::query_scalar::<_, serde_json::Value>("select to_jsonb(d) from document d order by id")
+        .fetch_all(&mut *conn).await.unwrap());
+    for (kind, owner, parent) in [
+        ("team", Some("bob"), None),
+        ("personal", None, None),
+        ("personal", Some("bob"), Some(org)),
+    ] {
+        let result = sqlx::query("insert into space (id,kind,name,personal_owner,organization_id,parent_id) values ($1,$2::text::space_kind,'Invalid',$3,$4,$5)")
+            .bind(Uuid::new_v4()).bind(kind).bind(owner).bind(org).bind(parent)
+            .execute(&mut *conn).await;
+        assert_eq!(
+            result.unwrap_err().as_database_error().unwrap().constraint(),
+            Some("space_personal_identity")
+        );
+    }
+    let result = sqlx::query("update space set kind='team', personal_owner=null where id=$1")
+        .bind(active).execute(&mut *conn).await;
+    assert!(result.unwrap_err().to_string().contains("placement is immutable"));
+    sqlx::query("set search_path to public").execute(&mut *conn).await.unwrap();
+}

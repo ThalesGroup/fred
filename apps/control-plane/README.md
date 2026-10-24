@@ -19,6 +19,15 @@ make code-quality                     # model parity + clippy + rustfmt
 make -C ../../docs/architecture check # the dossier still matches the code
 ```
 
+## Organization supervision (API only)
+
+The existing Control Plane serves organization totals and team detail, gated by
+organization ownership. The [supervision contract](../../docs/architecture/A8-organizations.md#organization-supervision)
+defines counters, privacy boundaries, pagination and failure behavior; the
+[read budget](../../docs/architecture/09-quality.md#organization-supervision-read-budget)
+documents SQL/OpenFGA costs. The [HTTP catalogue](../../docs/architecture/A2-manager-contracts.md#organization-supervision-api)
+is generated from the handlers. There is no supervision UI or separate service.
+
 ## Embedded hello-world agent
 
 The same process serves `POST /control-plane/v1/agents/execute/stream` (under the
@@ -170,6 +179,10 @@ organization's admins and reads nothing. Platform owners name organization owner
 Space roles `member`, `editor`, `analyst` and `admin` are business roles. They are
 cumulative; admin alone does not read content. Editor, admin and analyst also apply
 to every descendant space; member stays local, and a personal space inherits nothing.
+Personal spaces have `kind: personal`, an organization attachment and an owner,
+but no parent or child projects. `team` denotes collective teams only, including
+in scope filters and lifecycle policy selectors; use `[team, personal]` explicitly
+when both kinds are intended. Personal creation keeps its dedicated endpoint.
 Organization admins create teams, team admins create projects. The last admin of a
 non-personal space, and the last owner of an organization, cannot be revoked. Capability checks and their contracts are in the
 [runtime chapter](../../docs/architecture/A1-manager-runtime.md#platform-administration-and-self-checks).
@@ -278,6 +291,13 @@ matches the binary's embedded versions and checksums, and refuses an incompatibl
 or uninitialized database. The k3d factory profile enables the chart's
 pre-install/pre-upgrade migration Job. Rebuilding the Rust
 image embeds new migration files; no manual SQL command is needed for this upgrade.
+
+Migrations 0010/0011 classify existing personal spaces as `personal`, including
+retired rows, without changing their IDs, content or OpenFGA tuples. The conversion
+holds an exclusive lock on `space` and restores its placement immutability trigger
+within the same transaction. Deploy matching API and generated clients together;
+older binaries/clients only understand the three previous kinds. Review custom
+`space_kind: team` retention rules: they no longer select personal documents.
 
 `0001_manager_schema.sql` creates the initial schema; later numbered files evolve it.
 A database whose recorded

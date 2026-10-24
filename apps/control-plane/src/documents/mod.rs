@@ -127,17 +127,14 @@ impl Storage {
     }
 
     pub(crate) fn quota(&self, space: &Space) -> AppResult<(Uuid, i64)> {
-        Ok(if space.personal_owner.is_some() {
-            (space.id, self.config.limits.personal_bytes)
-        } else {
-            match space.kind {
-                SpaceKind::Organization => (space.id, self.config.limits.organization_bytes),
-                SpaceKind::Team => (space.id, self.config.limits.team_bytes),
-                SpaceKind::Project => (
-                    space.parent_id.ok_or_else(unavailable)?,
-                    self.config.limits.team_bytes,
-                ),
-            }
+        Ok(match space.kind {
+            SpaceKind::Personal => (space.id, self.config.limits.personal_bytes),
+            SpaceKind::Organization => (space.id, self.config.limits.organization_bytes),
+            SpaceKind::Team => (space.id, self.config.limits.team_bytes),
+            SpaceKind::Project => (
+                space.parent_id.ok_or_else(unavailable)?,
+                self.config.limits.team_bytes,
+            ),
         })
     }
 

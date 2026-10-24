@@ -336,6 +336,20 @@ mod tests {
         let (action, rule) = catalog.resolve(Uuid::new_v4(), SpaceKind::Team);
         assert_eq!(rule, Some("kind"));
         assert_eq!(action.retention.0, 30);
+        let (action, rule) = catalog.resolve(Uuid::new_v4(), SpaceKind::Personal);
+        assert_eq!(rule, Some("broad"));
+        assert_eq!(action.retention.0, 86400);
+        let personal: Catalog =
+            serde_yaml_ng::from_str(&text.replace("space_kind: [team]", "space_kind: [personal]"))
+                .unwrap();
+        assert_eq!(
+            personal.resolve(Uuid::new_v4(), SpaceKind::Personal).1,
+            Some("kind")
+        );
+        assert_eq!(
+            personal.resolve(Uuid::new_v4(), SpaceKind::Team).1,
+            Some("broad")
+        );
         let mut tied = catalog.clone();
         tied.space_policies.purge.rules.pop();
         assert_eq!(tied.resolve(id, SpaceKind::Team).1, Some("kind"));

@@ -39,6 +39,8 @@ vi.mock("../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
     [
       "useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation",
       "useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation",
+      "useLazyGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery",
+      "useLazyGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery",
       "usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation",
       "usePrepareAgentExecutionMutation",
       "usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation",

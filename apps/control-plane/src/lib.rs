@@ -36,6 +36,7 @@ pub mod platform;
 pub mod processing;
 pub mod roles;
 pub mod spaces;
+pub mod supervision;
 pub mod users;
 
 pub mod provisioning;

@@ -25,7 +25,7 @@ Roles are cumulative. The table shows what each role grants **on its own**.
 | Role | Purpose | Document access |
 | --- | --- | --- |
 | Platform owner | Govern the platform and designate organization owners | None automatically |
-| Organization owner | Appoint and remove organization administrators | None automatically |
+| Organization owner | Appoint administrators and consult organization aggregates | None automatically |
 | Administrator | Manage a space and its roles; evaluation permissions | None automatically |
 | Member | Consult a space's content | Read |
 | Editor | Contribute to a space's content | Read and write |
@@ -35,6 +35,11 @@ For example, an administrator also needs a content role to browse documents.
 This separation is not a prohibition on granting oneself rights: authorized
 administrators can assign content roles under the applicable membership rules,
 and platform provisioning can grant content access explicitly.
+
+Organization supervision exposes technical counts, including personal spaces only
+as a combined total. It reveals neither document content nor user identities.
+Only the organization's owner can consult it; platform and space administrators
+need that additional role. The permission is checked on every API request.
 
 ## 3.3. Where rights apply
 

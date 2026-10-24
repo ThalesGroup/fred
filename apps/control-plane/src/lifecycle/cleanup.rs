@@ -153,7 +153,7 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
         return Ok(());
     }
     let row: Option<(Uuid, SpaceKind, bool)> = sqlx::query_as(
-        "select id, kind, personal_owner is not null from space where deletion_id = $1 order by kind desc, id limit 1",
+        "select id, kind, kind = 'personal' from space where deletion_id = $1 order by kind desc, id limit 1",
     )
     .bind(id)
     .fetch_optional(&mut *tx)
@@ -282,7 +282,7 @@ async fn orphan_batch(
         // The supported hierarchy bounds this loop to team then project. Personal
         // spaces and projects cannot have children; cycles fail closed here too.
         if personal
-            || kind == SpaceKind::Project
+            || matches!(kind, SpaceKind::Project | SpaceKind::Personal)
             || (kind == SpaceKind::Team && refs.incoming.iter().any(|(_, personal)| *personal))
         {
             return Ok(OrphanBatch::Blocked("unexpected_hierarchy"));

@@ -75,7 +75,7 @@ pub async fn personal_space<'e>(
 ) -> sqlx::Result<Option<SpaceRow>> {
     sqlx::query_as(concat!(
         space!(),
-        " where organization_id = $1 and personal_owner = $2 and deletion_id is null"
+        " where organization_id = $1 and kind = 'personal' and personal_owner = $2 and deletion_id is null"
     ))
     .bind(organization)
     .bind(owner)

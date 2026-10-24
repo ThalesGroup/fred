@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F-013](#f-013-synthese-organisationnelle-en-lecture) | Synthèse organisationnelle et détail équipe | Evaluation seulement ; définitions et contrat à décider | Aucun changement du dossier |
 | [F22](#f22-agent-rust-embarqué-hello-world) | Agent Rust embarqué, hello-world SSE | Implémenté, à valider | Hors périmètre arc42 validé |
 | [DOC-3](#doc-3-vue-densemble-de-weaver) | Vue d'ensemble de Weaver | Texte et schémas rédigés | 01 |
 | [DOC-2](#doc-2-contrat-de-lespace-personnel-à-sa-place) | Contrat de l'espace personnel déplacé hors du catalogue SQL | À jour | A2 |
@@ -1632,3 +1633,354 @@ Les modifications des autres travaux sont conservées.
   identifiants de colonnes autorisés. Aucun élément UI modifié ou supprimé.
   Changements préexistants préservés. Aucun test, build ou déploiement relancé ;
   validation attendue lors de la prochaine exécution par Dimi.
+
+## F-013 Synthese organisationnelle en lecture
+
+2026-10-24 : évaluation demandée par Dimi, sans UI, nouveau service, accès physique
+S3/OpenSearch, cache, worker ou table. Base lue : `4b19b48ab` ; branche `weaver`,
+13 commits devant la référence distante locale, arbre propre au début de cette
+évaluation. Cette fiche est le support unique de cadrage avant décisions ; toutes
+les propositions ci-dessous restent non validées. Aucun code implémenté.
+
+### Faits vérifiés par lecture
+
+- `domain.rs`, `db.rs`, `spaces.rs` : organisation > équipe > projet. Un espace
+  personnel est un `team` avec `personal_owner`, sans parent ni projet, rattaché
+  par `organization_id`. Le chemin de recherche contient les ancêtres : il ne
+  permet pas de sélectionner les descendants d'une équipe.
+- `roles.rs` et `openfga/model.fga` : `can_own_organization` ne dépend que de
+  `organization_owner`. Ni admin, ni rôle plateforme ne donne cette permission.
+  Aujourd'hui son usage documenté est la désignation des administrateurs : lui
+  ajouter les agrégats techniques est une extension à valider, sans droit contenu.
+- `documents/reads.rs::usage` distingue octets du seul espace et consommation du
+  propriétaire de quota. `Storage::quota` rattache les projets au quota équipe,
+  mais sépare organisation et personnel. Les originaux sont comptés en SQL ; les
+  réservations d'uploads et les dérivés ne sont pas des documents stockés.
+- `processing/store.rs::summaries` sélectionne la dernière tentative par
+  `(created_at,id)`. `preview.rs` sélectionne séparément le succès. La migration
+  0001 garantit au plus une tentative active et un succès par document ; les
+  états terminaux et manifestes sont immuables. `admit` refuse toute nouvelle
+  tentative après succès (`processing_exists`) : retraiter un succès puis échouer
+  n'est pas un parcours actuellement disponible. Ne pas le créer dans ce lot.
+- `publication.rs` copie les compteurs du manifeste final dans la ligne réussie.
+  Les générations intermédiaires/abandonnées et leurs réservations ne sont pas
+  des publications à additionner. `processing/cleanup.rs` protège la génération
+  publiée d'un document actif, puis nettoie les générations du document retiré.
+- Knowledge Flow `manager_processing/service.py::_commit` publie actuellement
+  `chunks=vectors=count` (ordinaux écrits), distinct du nombre de fragments issus
+  de l'extraction. Un pointeur tabulaire peut être un chunk/vecteur. Cela ne mesure
+  ni la disponibilité actuelle de l'index ni son contenu physique.
+- `LocalTabularArtifacts.put_file` produit `datasets/<hash>.parquet` ;
+  `TabularProcessor` écrit un artefact par document et transmet son `row_count`
+  via les métadonnées au `Manifest.rows` SQL. Le manifeste contient chemins,
+  tailles et empreintes, pas un nombre de lignes par artefact. Plusieurs Parquet
+  dans un manifeste ne permettraient pas d'attribuer `rows` à chacun sans autre
+  contrat. Un nom CSV n'est pas une preuve de publication tabulaire.
+- Les lectures actives utilisent `space.deletion_id IS NULL` et
+  `document.deletion_id IS NULL`. La fiche F-012 et A9 décrivent la suppression
+  document implémentée ; le chapitre 05 dit encore qu'elle est indisponible.
+  Cet écart est signalé, pas corrigé dans ce cadrage.
+- `fga.rs::read_keys` draine les pages Read en HIGHER_CONSISTENCY et rejette un
+  curseur immédiatement répété. `roles_of` est par utilisateur, `space_holders`
+  par espace/rôle. `children_of` borne la concurrence à 8. Ne pas utiliser les
+  premières pages de `references` comme inventaire exhaustif des rôles.
+- Routes réutilisables comme patrons : résumé de stockage, `GET /admin/teams`
+  (UUID, 100 lignes), `GET /admin/organizations` (101 lignes pour détecter la suite).
+  Leurs permissions plateforme/contenu ne conviennent pas à cette nouvelle vue.
+  Aucune route de synthèse organisationnelle existante identifiée. Le change
+  `add-knowledge-base-pod-metrics` exclut explicitement ces statistiques métier.
+
+### Dictionnaire proposé, à valider
+
+Périmètre actif commun : espaces SQL de l'organisation, non retirés ; documents
+non retirés. Trois compartiments disjoints : organisation directe, équipes avec
+projets, personnel agrégé. Les valeurs SQL sont celles d'une transaction courte
+REPEATABLE READ READ ONLY, terminée avant les lectures réseau OpenFGA.
+
+| Compteur | Définition et source canonique | Exclusions, fraîcheur et limites | Réutilisation |
+| --- | --- | --- | --- |
+| Equipes actives | COUNT space de type team, personal_owner nul, organisation exacte | Personnel, projets et espaces retirés exclus ; état SQL | Filtre team_registry, placement SpaceRow |
+| Documents / octets originaux | COUNT document, SUM(size) par compartiment/équipe | Uploads pending, dérivés et retirés exclus ; zéro si ensemble vide ; pas une mesure S3 | Prédicats Storage::usage, agrégation groupée à ajouter |
+| Documents en attente de purge / octets logiques | Lignes document encore présentes avec deletion_id non nul, ou espace retiré | Bloc séparé, jamais ajouté à l'actif ; ne mesure pas les objets restant physiquement ni les reçus terminés | Marqueurs F-012, jointure space/document ; pas SUM des reçus |
+| Traitements pending/running par étape | Dernière tentative par document actif, GROUP BY status,stage | Documents sans tentative exclus ; état enregistré, pas santé live du worker | Ordre de store::summaries et enums ProcessingStatus/Stage |
+| Documents en échec | Dernière tentative failed par document actif | Echecs historiques remplacés par une relance exclus ; pas de somme des tentatives | Même sélection distinct on(document_id) |
+| Documents publiés / chunks publiés / vecteurs publiés | Ligne succeeded et manifeste final du document actif ; SUM des colonnes chunks/vectors | Ni générations ni vecteurs physiques ; publication indépendante du dernier état ; documents sans succès exclus | Sélection preview, contrat publication, index unique success |
+| Jeux tabulaires publiés | Nombre de chemins datasets/*.parquet du manifeste réussi | Pas COUNT des CSV ; aucun catalogue/table SQL créé ; nommer la mesure comme artefacts publiés | Convention LocalTabularArtifacts et Manifest.artifacts en JSONB |
+| Lignes tabulaires connues / inconnues | SUM(rows) pour un document publié ayant exactement un Parquet et rows non nul ; compter séparément les jeux sans compte attribuable | Plusieurs Parquet : lignes non attribuables, inconnues ; rows nul n'est pas zéro ; zéro connu est conservé ; total nullable si couverture incomplète | Manifest.rows et artifacts ; ne pas ouvrir metadata.json/S3 |
+| Utilisateurs distincts / attributions par rôle | Union des sujets user des grants directs des espaces actifs ; attributions = tuples (sujet,espace,rôle) | Dédupliquer les personnes globalement ; ne pas sommer les colonnes ni les équipes ; pas un annuaire de comptes IdP actifs ; aucun nom/ID utilisateur retourné | read_keys, Role::parse, ensembles locaux à la requête |
+
+Les totaux d'utilisateurs incluent les rôles directs organisationnels et les
+espaces personnels ; une ligne équipe inclut uniquement les attributions directes
+sur cette équipe et ses projets, pas des droits hérités supposés. Les six rôles
+existants restent distingués, y compris organization_owner et personal_space_creator.
+Le rôle member fixe du propriétaire personnel se compte depuis FGA, pas depuis
+personal_owner. Les droits effectifs ne sont pas recalculés à partir de Role::descends.
+
+### Décisions demandées et recommandation
+
+1. Autoriser uniquement OwnOrganization sur l'organisation cible, après admission,
+   contexte unique et cycle de vie. Cumul de rôles accepté seulement si owner présent.
+2. Inclure les projets dans la ligne équipe ; cohérent avec le propriétaire de quota.
+3. Exposer organization_direct, teams_total, personal_total sans détail personnel ;
+   total organisation indépendant de la page. Les sommes de personnes ne sont pas additives.
+4. Séparer les documents retirés dans pending_purge, y compris les espaces retirés,
+   avec sous-compartiments organisation/équipes/personnel, sans détail nominatif.
+5. Compter les documents dont la dernière tentative a échoué, sans historique d'échecs.
+6. Livrer les rôles directs seulement. Un inventaire exhaustif des effectifs évalués
+   par FGA exige un contrat et un chemin de lecture supplémentaire ; aucun helper
+   existant identifié ne le fournit sans interrogation par utilisateur.
+7. Toute indisponibilité FGA : 503 dependency_unavailable, sans données partielles
+   ni faux zéros, même si la panne survient après le Check d'autorisation.
+8. Réutiliser l'admission inchangée en acceptant son effet existant : AdmittedUser
+   appelle users::snapshot, qui peut rafraîchir user_identity en annuaire local
+   (et son cache existant). Le module de synthèse ne ferait aucune écriture.
+   Si l'exigence zéro écriture couvre aussi l'admission, décider une adaptation
+   ciblée de l'admission commune avant le code ; ne pas la contourner silencieusement.
+9. Garder le retraitement après succès hors périmètre ; préparer le cas de refus
+   actuel et tester séparément la sélection publication/dernier état avec une
+   fixture contrôlée si Dimi valide ce scénario de contrat, sans modification de données réelles.
+
+### Contrat et coût proposés
+
+- GET /organizations/{organization_id}/supervision : compteurs organisationnels,
+  compartiments et page d'équipes, tri UUID ascendant, after et taille fixe 100,
+  next_cursor explicite par lecture de 101 lignes. GET du même préfixe
+  /teams/{team_id} : une équipe non personnelle et ses projets. Aucun document,
+  chemin d'artefact, identité utilisateur ou téléchargement dans la réponse.
+- Admission existante, 404 hors contexte/équipe étrangère, 403 sans owner dans
+  le contexte, 409 espace retiré/contexte ambigu, 503 dépendance indisponible.
+  Conserver ErrorBody et les extracteurs ApiPath/ApiQuery ; ni exception root
+  ni Permission::Read requise pour les agrégats techniques autorisés.
+- Plan SQL à concrétiser : 3 SELECT de garde (espace cible, organisation du
+  demandeur à partir des tuples, état lifecycle), puis 3 SELECT métier : périmètre
+  des espaces, page/identité équipe, agrégats groupés document/dernier traitement/
+  publication. Au détail, vérifier aussi l'organisation et le type de la cible.
+  Réutiliser les contrôles sans les contourner ; le décompte exact final dépendra
+  du branchement retenu. Commandes BEGIN/SET/COMMIT et admission à compter séparément.
+  Préagréger les artefacts JSON avant jointure pour ne pas multiplier les documents.
+  Totaux calculés avant application du curseur, aucun SELECT par document.
+- FGA recommandé : P_actor pages Read (roles_of pour contexte) + 1 Check
+  can_own_organization + somme(P_s) pages Read, filtre object=space:<id>, pour
+  chaque espace actif s du périmètre. Lire toutes les relations d'un espace en
+  une chaîne paginée, filtrer les rôles typés ; petit helper dans Fga réutilisant
+  read_keys, plutôt que six appels space_holders ou un appel par personne.
+  Reprendre la borne de concurrence existante 8 ; pages d'un même espace séquentielles.
+  read_keys ne fixe pas page_size : ne pas inventer un nombre fixe de tuples/page.
+- S espaces, D documents, H tentatives, A artefacts publiés, G grants directs,
+  U utilisateurs distincts déterminent le coût. SQL agrège D/H/A dans le périmètre ;
+  les lectures FGA sont O(S + pages de G), mémoire O(S+G+U) avec read_keys et les
+  ensembles. La synthèse relit tous les espaces de l'organisation pour ses totaux,
+  même si la page est petite. Aucun cache ni garantie de latence mesurée.
+- Horodatages de début/fin de collecte ; pas d'instantané commun SQL/FGA, ni de
+  garantie de pagination stable sous mutations concurrentes. Sur jeu stable,
+  parcours UUID sans perte ni doublon ; création sous le curseur exige de recommencer.
+  Ne jamais retourner un comptage tronqué en succès ; erreur plutôt que partiel.
+
+### Acceptation à préparer après décisions
+
+- O1/E1/projet et O2 sans équipe ; données O2 témoins dans chaque famille ;
+  totaux O2 à zéro seulement si son organisation directe/personnel sont aussi vides.
+- Owner autorisé, admin/plateforme/admin équipe seuls refusés par HTTP ; cumul
+  avec owner autorisé ; autre organisation non divulguée ; espace retiré refusé.
+- Un sujet avec plusieurs rôles et espaces : un distinct, plusieurs attributions ;
+  rôles hérités non présentés comme directs ; personnel agrégé sans identités.
+- Echec puis relance pending/running puis succès ; publication sélectionnée
+  séparément du dernier état ; retraitement après succès refusé selon le code actuel.
+- Suppression différée : retrait immédiat de l'actif, entrée pending_purge,
+  disparition des lignes après purge sans prétendre mesurer S3/OpenSearch.
+- Plus de 100 équipes et plusieurs pages de tuples FGA ; derniers éléments inclus,
+  totaux identiques sur chaque page à données constantes ; panne intermédiaire = 503.
+- Aucun traitement, zéro chunk, Parquet zéro ligne, rows nul, plusieurs Parquet :
+  distinguer absence de publication, zéro connu et valeur inconnue.
+
+Après validation, préparer un seul change OpenSpec pour ce nouveau contrat public
+et son autorisation ; ne pas importer d'exigences des anciennes métriques Swift.
+La fiche gardera les décisions et un lien, sans maintenir un deuxième contrat.
+OpenAPI et RTK seront générés depuis les sources : make -C apps/control-plane
+generate-openapi (compile Rust, autorisation explicite requise), puis le codegen
+RTK existant de apps/frontend. Aucun fichier généré modifié manuellement.
+Vérification actuelle : lecture seulement. Aucun test, build, lint, génération,
+appel aux données déployées, délégation, commit ou push. Aucun parcours validé
+par Dimi et aucune implémentation autorisée par cette évaluation.
+
+### Préalable demandé : distinguer le type personnel
+
+2026-10-24 : Dimi demande d'évaluer la correction du modèle avant la supervision,
+avec priorité à la cohérence des permissions, rôles et données. Evaluation en
+lecture ; le contrat de supervision ci-dessus reste non validé.
+
+Constats : `SpaceKind` est partagé par SQL, réponses API, création générique,
+filtre `AuthorizeScope.levels` et politiques de rétention. Le type `team` et
+`personal_owner` discriminent actuellement le personnel dans les memberships,
+quotas, registre, purge et `Fga::can_use_agent`. Ce dernier exige actuellement
+Team même pour le personnel. La création personnelle accorde Member ET Editor
+au propriétaire, pas seulement Member. Les tuples `space:<id>`, lien organization
+sans parent et grants personnels peuvent être conservés ; aucune nouvelle matrice
+de droits ni migration FGA n'est nécessaire pour changer le discriminant SQL.
+
+Recommandation à valider : ajouter `SpaceKind::Personal` / `kind="personal"`
+dans le modèle canonique, garder personal_owner comme identité, et faire garantir
+par SQL l'équivalence type personnel/propriétaire présent et l'absence de parent
+du personnel. Conserver organisation_id, UUID, documents, quota_owner, chemins et
+tuples FGA. Pas de type dérivé uniquement dans la supervision : il laisserait
+l'ambiguïté dans toutes les autres lectures.
+
+Périmètre minimal identifié :
+- domain/db/spaces : création personnelle dédiée, parcours et scopes, filtres
+  collectifs explicites. La création générique doit refuser Personal ; ajouter
+  la variante à l'enum partagé ne doit pas ouvrir un chemin de création avec
+  admin arbitraire, sans propriétaire ou avec un lien parent.
+- Documents : quota personnel inchangé ; rattachement des projets au quota équipe
+  inchangé. Activation d'agents : accepter Team et Personal dans le helper en
+  gardant exactement les contextes FGA actuels et leurs exceptions personnelles.
+- Lifecycle : personnel toujours non supprimable seul ; purge via organisation
+  conservée, y compris parcours des références orphelines et ordre de drainage.
+  Ne pas inventer un reçu personnel pour satisfaire un match Rust exhaustif.
+  Les règles de rétention document utilisent le type de l'espace : contrôler
+  explicitement la compatibilité des sélecteurs team lors du changement de type.
+- Migration nouvelle : convertir les lignes personnelles existantes, actives et
+  retirées. `forbid_space_move` interdit aussi le changement de kind ; la migration
+  doit organiser une exception strictement bornée à cette conversion puis conserver
+  l'immuabilité. Migrations appliquées intouchées. Aucune migration exécutée,
+  aucun historique SQL déployé ni donnée réelle inspectés ; sauvegarde et procédure
+  de déploiement restent nécessaires avant toute application. Ancien binaire/client
+  à trois variantes incompatible avec une réponse ou ligne Personal : pas de
+  coexistence annoncée sans validation.
+- API/UI : enum généré, fixtures personnelles et consommateurs des memberships,
+  navigation, ressources et contexte personnel à aligner sans changement d'écran.
+  Aucun renommage opportuniste des anciennes routes team ou relations FGA.
+- Preuves ciblées à préparer : conversion préserve IDs/données/tuples, invariants
+  SQL, refus création générique, absence héritage personnel, Member+Editor fixes,
+  isolation organisations, quota, activation agents, purge organisationnelle,
+  filtres de scope et UI conservée. Aucun test lancé.
+
+Décisions avant code : valider Personal comme type canonique ; décider si
+`levels=[team]` et les sélecteurs de rétention `space_kind: team` deviennent
+strictement collectifs. Recommandation : oui, sans alias caché ; `personal` explicite
+pour le personnel, scopes sans levels inchangés. Toute configuration existante
+qui voulait couvrir les deux devra le déclarer explicitement. La configuration
+de rétention fournie a rules: [], mais les installations externes ne sont pas
+inspectées. Ces changements de sélection doivent être assumés dans le contrat,
+pas présentés comme un renommage invisible.
+
+Après décision, un seul change OpenSpec consacré à ce préalable (contrat public
+et migration), sans commencer la supervision. Génération OpenAPI/client à prévoir
+avec autorisation de compilation. Code, schéma, modèle FGA et UI inchangés à ce
+stade ; seul ce journal est complété, aucune validation utilisateur déduite.
+
+### Préalable personal : implémentation locale
+
+2026-10-24 : Dimi valide `personal` et la séparation stricte des filtres, puis
+demande l'implémentation directe sans OpenSpec. Arc42 explicitement différé.
+
+- Type canonique ajouté ; création dédiée conservée, création générique refusée.
+  Scopes, memberships, registre collectif, quotas, rôles fixes et activation agents
+  utilisent le type. Modèle et tuples FGA inchangés ; aucun droit supplémentaire.
+- Migrations 0010/0011 préparées : ajout de la valeur enum, puis conversion des
+  espaces personnels actifs/retirés sous verrou SQL et contrainte type/propriétaire/
+  absence de parent. Protection d'immuabilité rétablie dans la transaction.
+  Aucune migration appliquée ni ancienne migration éditée.
+- Suppression autonome personnelle toujours refusée via conversion typée de la
+  cible ; purge organisationnelle et parcours des références conservés. Filtres
+  `levels` et rétention stricts, sans alias team vers personal.
+- Consommateurs Resources/navigation adaptés au discriminant, écrans et routes
+  conservés. Fixtures et tests de contrat, scope, ouverture personnelle, rétention
+  adaptés ; scénario de migration ajouté dans le fichier d'intégration existant
+  pour préserver lignes actives/retirées et documents et vérifier les contraintes.
+- README du composant précise les filtres et la compatibilité de migration.
+  Relecture seulement ; aucun test, compilation, lint, génération, déploiement,
+  commit ou push. Vérification fonctionnelle et migration restent non exécutées.
+- OpenAPI/client restent à régénérer depuis les sources avec autorisation explicite
+  de compiler. En attendant, le client à trois variantes est incompatible avec les
+  nouveaux consommateurs TypeScript : ce lot n'est pas prêt au déploiement.
+  Aucun fichier généré édité à la main. Définitions de supervision toujours en attente.
+
+- Après le "go" explicite de Dimi : `make -C apps/control-plane generate-openapi`
+  réussit, compilation Rust comprise. Puis, depuis `apps/frontend`,
+  `npx --no-install @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json`
+  réussit. OpenAPI expose les quatre types ; le seul changement du client généré
+  est l'ajout de `personal` à `SpaceKind`, relu avec les consommateurs adaptés.
+  Le blocage de génération ci-dessus est levé. Aucun test, lint, compilation
+  TypeScript, migration ou déploiement exécuté ; validation fonctionnelle toujours
+  attendue et arc42 toujours différé. Aucun commit ni push.
+
+- Dimi lance les tests frontend et rapporte des échecs au rendu DocumentWorkspace :
+  le mock commun `inactiveManagerFolders.test-support.ts` omet
+  `useDeleteDocumentMutation`, appelé par le composant même dans les fixtures
+  legacy. Hook ajouté au mock existant, comme les autres mutations inactives ;
+  aucune assertion supprimée ni comportement applicatif modifié. Correction
+  vérifiée par lecture seulement ; aucune relance de tests par l'assistant.
+
+### Supervision : décisions validées et implémentation
+
+2026-10-24 : après le préalable personal et le retour de Dimi indiquant que la
+qualité frontend passe, reprise du lot initial. Dimi valide le lot : owner seul,
+projets inclus, trois compartiments disjoints, purge séparée, dernière tentative
+pour les échecs, rôles directs seulement, panne FGA = 503 sans résultat partiel,
+admission existante conservée, retraitement après succès hors périmètre. Ces
+choix remplacent le statut « proposé » des neuf décisions ci-dessus. Travail
+direct dans le cadrage existant, sans nouveau document OpenSpec ; arc42 différé.
+
+- Module `src/supervision` enregistré dans le routeur existant : résumé et détail
+  d'équipe, contrats utoipa, extracteurs et admission communs, OwnOrganization
+  évalué par FGA. Aucun nouveau droit de contenu ni exception plateforme.
+- Agrégations SQL par espace ; dernier état distinct de la publication réussie,
+  artefacts agrégés avant jointure, valeurs inconnues conservées. Transaction
+  REPEATABLE READ READ ONLY fermée avant les lectures de rôles. Cycle de vie
+  revérifié dans la transaction pour éviter des résultats actifs après un retrait
+  intervenu entre la garde et la collecte. Aucun verrou supplémentaire.
+- Helper FGA `grants_on` réutilisant read_keys/concurrently (8), puis déduplication
+  des tuples et union des sujets. Comptages complets, aucun appel par utilisateur.
+- Coût concret remplaçant l'estimation initiale : 8 SELECT résumé / 10 détail,
+  hors admission, plus BEGIN/SET/COMMIT. FGA : P_actor Read + 1 Check + somme des
+  pages de chaque espace actif. Les totaux ne dépendent pas de la page. Contrat,
+  cardinalités, coût et limites documentés dans le README du composant.
+- Trois scénarios d'intégration préparés dans organization_console : isolation
+  O1/O2, owner et refus HTTP, personnel/projets, cumul de rôles et pages FGA ;
+  102 équipes avec totaux constants ; tentative/publi indépendante, relance après
+  échec, purge différée et lignes inconnues. Une histoire succès puis échec est
+  une fixture SQL de sélection, pas un nouveau parcours d'ingestion. Registre
+  OpenAPI attendu mis à jour. Aucun test exécuté.
+- Relecture du code et des contrats seulement à ce stade. Dimi autorise ensuite
+  explicitement la génération OpenAPI (compilation Rust comprise) et RTK ;
+  génération en cours. Pas de lint, migration, accès aux données déployées,
+  délégation, commit ou push. Validation utilisateur des parcours encore attendue.
+
+- Génération autorisée terminée : `make -C apps/control-plane generate-openapi`
+  réussit (compilation Rust incluse), puis le codegen RTK existant réussit. Client
+  généré relu : deux routes/hooks, compteurs typés et total_rows nullable ; pas de
+  modification manuelle du généré ni d'UI. Les retouches ultérieures ne portent
+  que sur la présentation du Rust, sans changement de contrat.
+  Trois tests d'intégration sont écrits mais ni compilés ni exécutés ; pas de lint.
+  La génération ne valide pas les requêtes SQL dynamiques ni les parcours HTTP.
+  Restent la validation ciblée par Dimi, les migrations personal à appliquer dans
+  son environnement selon sa procédure, et la mise à jour arc42 différée.
+
+### Arc42 : modèle personnel et supervision
+
+2026-10-24 : Dimi autorise l'alignement arc42 et demande un état final, sans récit
+progressif, avec premiers chapitres brefs et illustrés et annexes exploitables
+pour revue de sécurité. Chapitres 03/04 : portée du rôle owner, distinction du
+personnel et schéma des trois compartiments. Annexes A2/A7/A8 : contraintes SQL,
+routes, matrice d'autorisation, divulgation, dictionnaire des compteurs et
+limites de cohérence. Chapitre 09 : invariants concernés et coût source-dérivé.
+Index de lecture relié au contrat. Aucune UI de supervision inventée.
+
+Table des deux routes produite par la fonction existante du générateur documentaire,
+sans compilation ni régénération globale. Relecture des changements et des sources ;
+pas de test, lint, rendu Mermaid, make check, migration ou déploiement. Aucun code
+applicatif modifié dans cette étape. Les références aux tests désignent des scénarios,
+pas des résultats exécutés. Historique conservé dans ce journal uniquement.
+Le README du composant renvoie désormais aux annexes pour le contrat et le coût,
+sans recopier ces règles. Les autres sections et changements préexistants sont
+conservés. Cette consolidation documentaire ne vaut pas validation fonctionnelle.
+
+### Retour tests frontend : mock du pipeline
+
+2026-10-24 : Dimi rapporte 395 fichiers réussis, 1 en échec et 1 ignoré ; les
+quatre échecs concernent usePipelineRun au montage. Lecture du hook et du mock :
+les deux lazy queries prompts/session sont appelées au montage mais absentes du
+mock legacy. Ajout de ces deux exports à la liste de stubs existante dans
+usePipelineRun.test.tsx. Aucun changement applicatif, généré ou d'assertion.
+Correction relue, sans relance de tests, compilation ou lint par l'assistant.
+Le résultat après correction reste à confirmer par Dimi.

@@ -857,7 +857,7 @@ async fn team_registry(
         return Err(AppError::Forbidden);
     }
     // Registry metadata only, bounded independently of content and FGA memberships.
-    let teams: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, personal_owner, parent_id, organization_id from space where kind = 'team' and personal_owner is null and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 100")
+    let teams: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, personal_owner, parent_id, organization_id from space where kind = 'team' and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 100")
         .bind(query.after).fetch_all(&s.pool).await?;
     Ok(Json(teams.into_iter().map(Space::from).collect()))
 }
@@ -1005,6 +1005,7 @@ fn registrations() -> OpenApiRouter<AppState> {
         .routes(routes!(health))
         .merge(crate::embedded_agent::routes())
         .merge(crate::agents::routes())
+        .merge(crate::supervision::routes())
         .routes(routes!(create_space))
         .routes(routes!(grant, revoke))
         .routes(routes!(rename_folder, delete_folder))

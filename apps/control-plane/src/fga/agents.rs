@@ -47,14 +47,17 @@ impl Fga {
         space: &crate::domain::Space,
     ) -> Result<bool> {
         anyhow::ensure!(
-            space.kind == crate::domain::SpaceKind::Team,
+            matches!(
+                space.kind,
+                crate::domain::SpaceKind::Team | crate::domain::SpaceKind::Personal
+            ),
             "agent use requires a team or personal space"
         );
         let subject = format!("space:{}", space.id);
         let organization = format!("space:{}", space.organization);
         let mut context =
             vec![json!({"user":subject,"relation":"template_team","object":organization})];
-        if space.personal_owner.is_some() {
+        if space.kind == crate::domain::SpaceKind::Personal {
             context.push(
                 json!({"user":subject,"relation":"template_personal_team","object":organization}),
             );
