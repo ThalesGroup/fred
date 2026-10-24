@@ -70,15 +70,3 @@ class SandboxInputPort(ABC):
     @abstractmethod
     async def prepare_view(self, session: SandboxSessionIdentity) -> None:
         """Authorize the conversation's live read-only input view before execution."""
-
-    @abstractmethod
-    async def bind_corpus(
-        self, document_uid: str, session: SandboxSessionIdentity
-    ) -> str:
-        """Expose one authorized corpus original as a read-only guest path."""
-
-    @abstractmethod
-    async def bind_attachment(
-        self, attachment_id: str, session: SandboxSessionIdentity
-    ) -> str:
-        """Expose one conversation attachment original as a read-only guest path."""

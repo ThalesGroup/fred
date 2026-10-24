@@ -21,11 +21,11 @@ class _Store:
         self.reserved = []
         self.page_count = 1
 
-    async def list_sources(self, key):
+    async def get_view(self, key):
         assert key == KEY
         if self.revoked:
-            return None, []
-        return SimpleNamespace(session_id="chat-1", user_id="u1", team_id="team-1"), self.sources
+            return None
+        return SimpleNamespace(session_id="chat-1", user_id="u1", team_id="team-1")
 
     async def _check_session(self, session_id, user_id, team_id):
         assert (session_id, user_id, team_id) == ("chat-1", "u1", "team-1")
@@ -36,15 +36,8 @@ class _Store:
     async def revoke(self, key):
         self.revoked = True
 
-    async def bind_corpus(self, **kwargs):
-        assert kwargs["session_id"] == "chat-1"
-        return self.sources[0]
-
     async def ensure_view(self, **kwargs):
         assert kwargs["session_id"] == "chat-1"
-
-    async def corpus_sources(self, user, team_id, **kwargs):
-        return self.sources
 
     async def corpus_libraries(self, user, team_id, **kwargs):
         return {"team-tag"}
@@ -129,9 +122,6 @@ async def test_webdav_read_is_scoped_read_only_and_revocable(monkeypatch) -> Non
     root = f"/sandbox-mount/{KEY}/"
     file_url = root + "corpus/doc-1/report.txt"
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-        binding = f"/sandbox-mount/views/{KEY}/corpus"
-        payload = {"session_id": "chat-1", "team_id": "team-1", "document_uid": "doc-1"}
-        assert (await client.post(binding, json=payload)).status_code == 401
         bind_signature = hmac.new(
             SECRET.encode(),
             b"\0".join((b"fred-sandbox-files-bind-v1", KEY.encode(), b"chat-1", b"u1", b"team-1")),
@@ -143,8 +133,6 @@ async def test_webdav_read_is_scoped_read_only_and_revocable(monkeypatch) -> Non
             headers={"X-Fred-Sandbox-Bind": bind_signature},
         )
         assert opened.status_code == 200 and opened.json()["path"] == "/inputs"
-        selected = await client.post(binding, json=payload, headers={"X-Fred-Sandbox-Bind": bind_signature})
-        assert selected.status_code == 200 and selected.json()["path"] == "/inputs/corpus/doc-1/report.txt"
         assert (await client.request("PROPFIND", root)).status_code == 401
         headers = {"Authorization": f"Bearer {bearer}"}
         listing = await client.request("PROPFIND", root, headers={**headers, "Depth": "1"})

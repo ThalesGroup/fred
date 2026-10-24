@@ -40,14 +40,6 @@ class FakeInputs(SandboxInputPort):
     async def prepare_view(self, session):
         self.calls.append(("prepare", session))
 
-    async def bind_corpus(self, document_uid, session):
-        self.calls.append(("corpus", document_uid, session))
-        return f"/inputs/corpus/{document_uid}/report.txt"
-
-    async def bind_attachment(self, attachment_id, session):
-        self.calls.append(("attachment", attachment_id, session))
-        return f"/inputs/attachments/{attachment_id}/sheet.xlsx"
-
 
 def context(port, session_id=None, team_id=None, inputs=None):
     return CapabilityContext(

@@ -23,7 +23,6 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.content.sandbox_scope import (
     MAX_MOUNTED_FILE_BYTES,
-    authorize_corpus_source,
     scoped_authorized_tag_ids,
 )
 from knowledge_flow_backend.features.metadata.service import MetadataService
@@ -59,6 +58,8 @@ class SandboxViewStore:
     def __init__(self, engine: AsyncEngine) -> None:
         self._sessions = make_session_factory(engine)
         self._insert_view = postgresql_insert if engine.dialect.name == "postgresql" else sqlite_insert
+        self._cleanup_lock = asyncio.Lock()
+        self._next_cleanup_at = datetime.min.replace(tzinfo=timezone.utc)
 
     async def retain_attachment_original(
         self,
@@ -132,31 +133,6 @@ class SandboxViewStore:
         if row is None or row.user_id != user_id or row.team_id != team_id:
             raise PermissionError("Conversation access denied")
 
-    async def bind_corpus(
-        self,
-        *,
-        key: str,
-        session_id: str,
-        team_id: str,
-        user: KeycloakUser,
-        document_uid: str,
-        context: ApplicationContext | None = None,
-    ) -> MountedSource:
-        if not VIEW_KEY_RE.fullmatch(key):
-            raise ValueError("Invalid sandbox view key")
-        await self._check_session(session_id, user.uid, team_id)
-        source = await authorize_corpus_source(user, team_id, document_uid, context=context)
-        path = f"corpus/{source.document_uid}/{source.name}"
-        mounted = MountedSource(
-            path=path,
-            kind="corpus",
-            uid=source.document_uid,
-            name=source.name,
-            size=source.size,
-        )
-        await self._bind(key, session_id, team_id, user.uid, mounted)
-        return mounted
-
     async def ensure_view(
         self,
         *,
@@ -176,7 +152,7 @@ class SandboxViewStore:
         await rebac.require_active_account(user.uid)
         if not is_personal_team_id(team_id):
             await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_READ, team_id)
-        await self._bind(key, session_id, team_id, user.uid, None)
+        await self._bind_view(key, session_id, team_id, user.uid)
 
     async def corpus_libraries(self, user: KeycloakUser, team_id: str, *, context: ApplicationContext | None = None) -> set[str]:
         context = context or ApplicationContext.get_instance()
@@ -280,53 +256,10 @@ class SandboxViewStore:
                 )
         return sources
 
-    async def bind_attachment(
-        self,
-        *,
-        key: str,
-        session_id: str,
-        team_id: str,
-        user: KeycloakUser,
-        attachment_id: str,
-        context: ApplicationContext | None = None,
-    ) -> MountedSource:
-        if not VIEW_KEY_RE.fullmatch(key):
-            raise ValueError("Invalid sandbox view key")
-        context = context or ApplicationContext.get_instance()
-        await self._check_session(session_id, user.uid, team_id)
-        await context.get_rebac_engine().require_active_account(user.uid)
-        async with use_session(self._sessions) as db:
-            row = (
-                await db.execute(
-                    text(
-                        "SELECT a.name, a.document_uid, o.user_id, o.size "
-                        "FROM session_attachments a "
-                        "JOIN sandbox_attachment_originals o "
-                        "ON o.document_uid = a.document_uid AND o.session_id = a.session_id "
-                        "WHERE a.session_id = :session_id AND a.attachment_id = :attachment_id"
-                    ),
-                    {"session_id": session_id, "attachment_id": attachment_id},
-                )
-            ).first()
-        if row is None or row.user_id != user.uid:
-            raise FileNotFoundError("Attachment original is unavailable")
-        if row.size < 0 or row.size > MAX_MOUNTED_FILE_BYTES:
-            raise ValueError("Attachment exceeds the sandbox file limit")
-        name = _safe_name(row.name)
-        mounted = MountedSource(
-            path=f"attachments/{attachment_id}/{name}",
-            kind="attachment",
-            uid=row.document_uid,
-            name=name,
-            size=row.size,
-        )
-        await self._bind(key, session_id, team_id, user.uid, mounted)
-        return mounted
-
-    async def _bind(self, key: str, session_id: str, team_id: str, user_id: str, source: MountedSource | None) -> None:
+    async def _bind_view(self, key: str, session_id: str, team_id: str, user_id: str) -> None:
         now = datetime.now(timezone.utc)
+        await self._cleanup_expired(now)
         async with use_session(self._sessions) as db:
-            await db.execute(delete(SandboxViewRow).where(SandboxViewRow.expires_at < now))
             await db.execute(
                 self._insert_view(SandboxViewRow)
                 .values(
@@ -345,26 +278,25 @@ class SandboxViewStore:
             row = await db.get(SandboxViewRow, key, with_for_update=True)
             if row is None or row.session_id != session_id or row.user_id != user_id or row.team_id != team_id:
                 raise PermissionError("Sandbox view access denied")
-            if source is not None:
-                sources = dict(row.sources)
-                if len(sources) >= MAX_VIEW_FILES and source.path not in sources:
-                    raise ValueError("Sandbox view file limit reached")
-                sources[source.path] = {
-                    "kind": source.kind,
-                    "uid": source.uid,
-                    "name": source.name,
-                    "size": source.size,
-                }
-                row.sources = sources
             row.expires_at = now + VIEW_TTL
 
-    async def list_sources(self, key: str) -> tuple[SandboxViewRow | None, list[MountedSource]]:
+    async def _cleanup_expired(self, now: datetime) -> None:
+        if now < self._next_cleanup_at:
+            return
+        async with self._cleanup_lock:
+            if now < self._next_cleanup_at:
+                return
+            async with use_session(self._sessions) as db:
+                await db.execute(delete(SandboxViewRow).where(SandboxViewRow.expires_at < now))
+            self._next_cleanup_at = now + timedelta(minutes=10)
+
+    async def get_view(self, key: str) -> SandboxViewRow | None:
         if not VIEW_KEY_RE.fullmatch(key):
             raise FileNotFoundError("Sandbox view is unavailable")
         async with use_session(self._sessions) as db:
             row = await db.get(SandboxViewRow, key, with_for_update=True)
             if row is None:
-                return None, []
+                return None
             if _expired(row.expires_at):
                 raise FileNotFoundError("Sandbox view has expired")
             now = datetime.now(timezone.utc)
@@ -382,18 +314,7 @@ class SandboxViewStore:
                 expires_at = expires_at.replace(tzinfo=timezone.utc)
             if expires_at - now < timedelta(minutes=30):
                 row.expires_at = now + VIEW_TTL
-            sources: list[MountedSource] = []
-            for path, item in row.sources.items():
-                kind, uid, name, size = (
-                    item.get("kind"),
-                    item.get("uid"),
-                    item.get("name"),
-                    item.get("size"),
-                )
-                if not isinstance(kind, str) or not isinstance(uid, str) or not isinstance(name, str) or not isinstance(size, int) or size < 0:
-                    raise FileNotFoundError("Sandbox view has invalid source metadata")
-                sources.append(MountedSource(path=path, kind=kind, uid=uid, name=name, size=size))
-            return row, sources
+            return row
 
     async def revoke(self, key: str) -> None:
         if not VIEW_KEY_RE.fullmatch(key):

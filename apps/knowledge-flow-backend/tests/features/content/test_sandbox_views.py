@@ -8,8 +8,7 @@ from fred_pod.security.structure import KeycloakUser
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from knowledge_flow_backend.features.content.sandbox_scope import AuthorizedCorpusSource
-from knowledge_flow_backend.features.content.sandbox_views import MAX_VIEW_REQUESTS_PER_MINUTE, MountedSource, SandboxViewStore
+from knowledge_flow_backend.features.content.sandbox_views import MAX_VIEW_REQUESTS_PER_MINUTE, SandboxViewStore
 from knowledge_flow_backend.models.sandbox_view_models import SandboxAttachmentOriginalRow, SandboxViewRow
 
 KEY = "a" * 64
@@ -30,30 +29,6 @@ async def store():
 
 
 @pytest.mark.asyncio
-async def test_view_rejects_cross_user_or_cross_team_binding(store, monkeypatch) -> None:
-    async def authorize(user, team_id, uid, **kwargs):
-        return AuthorizedCorpusSource(uid, "report.txt", 5)
-
-    monkeypatch.setattr("knowledge_flow_backend.features.content.sandbox_views.authorize_corpus_source", authorize)
-    with pytest.raises(PermissionError):
-        await store.bind_corpus(
-            key=KEY,
-            session_id="chat-1",
-            team_id="other-team",
-            user=USER,
-            document_uid="doc-1",
-        )
-    with pytest.raises(PermissionError):
-        await store.bind_corpus(
-            key=KEY,
-            session_id="chat-1",
-            team_id="team-1",
-            user=KeycloakUser(uid="other-user", username="other-user", roles=[]),
-            document_uid="doc-1",
-        )
-
-
-@pytest.mark.asyncio
 async def test_open_view_requires_conversation_owner_and_starts_empty(store) -> None:
     async def active(user_id):
         assert user_id == USER.uid
@@ -69,25 +44,30 @@ async def test_open_view_requires_conversation_owner_and_starts_empty(store) -> 
     )
     with pytest.raises(PermissionError):
         await store.ensure_view(key=KEY, session_id="chat-1", team_id="other-team", user=USER, context=context)
+    with pytest.raises(PermissionError):
+        await store.ensure_view(
+            key=KEY,
+            session_id="chat-1",
+            team_id="team-1",
+            user=KeycloakUser(uid="other-user", username="other-user", roles=[]),
+            context=context,
+        )
     await store.ensure_view(key=KEY, session_id="chat-1", team_id="team-1", user=USER, context=context)
-    row, sources = await store.list_sources(KEY)
+    row = await store.get_view(KEY)
     assert row.user_id == USER.uid
-    assert sources == []
 
 
 @pytest.mark.asyncio
-async def test_reopening_view_preserves_owner_and_existing_sources(store) -> None:
-    source = MountedSource(path="corpus/doc-1/report.txt", kind="corpus", uid="doc-1", name="report.txt", size=5)
-    await store._bind(KEY, "chat-1", "team-1", USER.uid, source)
-    await store._bind(KEY, "chat-1", "team-1", USER.uid, None)
-    row, sources = await store.list_sources(KEY)
+async def test_reopening_view_preserves_owner(store) -> None:
+    await store._bind_view(KEY, "chat-1", "team-1", USER.uid)
+    await store._bind_view(KEY, "chat-1", "team-1", USER.uid)
+    row = await store.get_view(KEY)
     assert row is not None and row.session_id == "chat-1"
-    assert sources == [source]
 
     with pytest.raises(PermissionError):
-        await store._bind(KEY, "other-chat", "team-1", USER.uid, None)
+        await store._bind_view(KEY, "other-chat", "team-1", USER.uid)
     with pytest.raises(PermissionError):
-        await store._bind(KEY, "chat-1", "other-team", USER.uid, None)
+        await store._bind_view(KEY, "chat-1", "other-team", USER.uid)
 
 
 @pytest.mark.asyncio
@@ -194,59 +174,27 @@ async def test_corpus_page_bounds_document_reads(store, monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_new_selection_appears_in_existing_view_and_revoke_removes_it(store, monkeypatch) -> None:
-    async def authorize(user, team_id, uid, **kwargs):
-        return AuthorizedCorpusSource(uid, f"{uid}.txt", 5)
-
-    monkeypatch.setattr("knowledge_flow_backend.features.content.sandbox_views.authorize_corpus_source", authorize)
-    await store.bind_corpus(key=KEY, session_id="chat-1", team_id="team-1", user=USER, document_uid="one")
-    _, first = await store.list_sources(KEY)
-    await store.bind_corpus(key=KEY, session_id="chat-1", team_id="team-1", user=USER, document_uid="two")
-    _, second = await store.list_sources(KEY)
-    assert {source.path for source in first} == {"corpus/one/one.txt"}
-    assert {source.path for source in second} == {"corpus/one/one.txt", "corpus/two/two.txt"}
+async def test_revoke_removes_view(store) -> None:
+    await store._bind_view(KEY, "chat-1", "team-1", USER.uid)
+    assert await store.get_view(KEY) is not None
     await store.revoke(KEY)
-    assert (await store.list_sources(KEY))[1] == []
+    assert await store.get_view(KEY) is None
 
 
 @pytest.mark.asyncio
-async def test_attachment_requires_persisted_session_and_original_uploader(store) -> None:
+async def test_expired_view_cleanup_runs_periodically(store) -> None:
+    await store._bind_view(KEY, "chat-1", "team-1", USER.uid)
     async with store._sessions() as session:
         async with session.begin():
-            session.add(
-                SandboxAttachmentOriginalRow(
-                    document_uid="attachment-doc",
-                    session_id="chat-1",
-                    user_id="other-user",
-                    name="sheet.xlsx",
-                    size=128,
-                    object_key="sandbox-attachments/attachment-doc/original",
-                )
-            )
-            await session.execute(text("INSERT INTO session_attachments VALUES ('chat-1', 'attachment-1', 'sheet.xlsx', 'attachment-doc')"))
-    context = SimpleNamespace(get_rebac_engine=lambda: SimpleNamespace(require_active_account=_active))
-    with pytest.raises(FileNotFoundError):
-        await store.bind_attachment(
-            key=KEY,
-            session_id="chat-1",
-            team_id="team-1",
-            user=USER,
-            attachment_id="attachment-1",
-            context=context,
-        )
+            row = await session.get(SandboxViewRow, KEY)
+            row.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    await store._bind_view("b" * 64, "chat-1", "team-1", USER.uid)
     async with store._sessions() as session:
-        async with session.begin():
-            row = await session.get(SandboxAttachmentOriginalRow, "attachment-doc")
-            row.user_id = USER.uid
-    source = await store.bind_attachment(
-        key=KEY,
-        session_id="chat-1",
-        team_id="team-1",
-        user=USER,
-        attachment_id="attachment-1",
-        context=context,
-    )
-    assert source.path == "attachments/attachment-1/sheet.xlsx"
+        assert await session.get(SandboxViewRow, KEY) is not None
+    store._next_cleanup_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    await store._bind_view("c" * 64, "chat-1", "team-1", USER.uid)
+    async with store._sessions() as session:
+        assert await session.get(SandboxViewRow, KEY) is None
 
 
 @pytest.mark.asyncio
@@ -285,24 +233,16 @@ async def test_original_delete_is_idempotent_after_object_disappears(store) -> N
 
 
 @pytest.mark.asyncio
-async def test_view_request_rate_is_bounded(store, monkeypatch) -> None:
-    async def authorize(user, team_id, uid, **kwargs):
-        return AuthorizedCorpusSource(uid, "report.txt", 5)
-
-    monkeypatch.setattr("knowledge_flow_backend.features.content.sandbox_views.authorize_corpus_source", authorize)
-    await store.bind_corpus(key=KEY, session_id="chat-1", team_id="team-1", user=USER, document_uid="doc-1")
+async def test_view_request_rate_is_bounded(store) -> None:
+    await store._bind_view(KEY, "chat-1", "team-1", USER.uid)
     async with store._sessions() as session:
         async with session.begin():
             row = await session.get(SandboxViewRow, KEY)
             row.request_window_count = MAX_VIEW_REQUESTS_PER_MINUTE
     with pytest.raises(PermissionError, match="request rate"):
-        await store.list_sources(KEY)
+        await store.get_view(KEY)
     async with store._sessions() as session:
         async with session.begin():
             row = await session.get(SandboxViewRow, KEY)
             row.request_window_started_at = datetime.now(timezone.utc) - timedelta(minutes=2)
-    assert (await store.list_sources(KEY))[1][0].uid == "doc-1"
-
-
-async def _active(user_id: str) -> None:
-    assert user_id == USER.uid
+    assert await store.get_view(KEY) is not None

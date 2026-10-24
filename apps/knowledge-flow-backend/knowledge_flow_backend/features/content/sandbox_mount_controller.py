@@ -37,18 +37,6 @@ DAV = "DAV:"
 ElementTree.register_namespace("D", DAV)
 
 
-class _BindCorpus(BaseModel):
-    session_id: str = Field(min_length=1)
-    team_id: str = Field(min_length=1)
-    document_uid: str = Field(min_length=1)
-
-
-class _BindAttachment(BaseModel):
-    session_id: str = Field(min_length=1)
-    team_id: str = Field(min_length=1)
-    attachment_id: str = Field(min_length=1)
-
-
 class _OpenView(BaseModel):
     session_id: str = Field(min_length=1)
     team_id: str = Field(min_length=1)
@@ -171,42 +159,6 @@ class SandboxMountController:
                 raise HTTPException(400, "Sandbox view is invalid") from None
             return {"path": "/inputs"}
 
-        @router.post("/sandbox-mount/views/{key}/corpus")
-        async def bind_corpus(request: Request, key: str, body: _BindCorpus, user: KeycloakUser = Depends(get_current_user)) -> dict[str, str]:
-            _check_bind_credential(request, key, body.session_id, user.uid, body.team_id)
-            try:
-                source = await self.store.bind_corpus(
-                    key=key,
-                    session_id=body.session_id,
-                    team_id=body.team_id,
-                    user=user,
-                    document_uid=body.document_uid,
-                    context=self.context,
-                )
-            except (FileNotFoundError, PermissionError):
-                raise HTTPException(404, "Sandbox source is unavailable") from None
-            except ValueError:
-                raise HTTPException(400, "Sandbox source is invalid") from None
-            return {"path": f"/inputs/{source.path}"}
-
-        @router.post("/sandbox-mount/views/{key}/attachments")
-        async def bind_attachment(request: Request, key: str, body: _BindAttachment, user: KeycloakUser = Depends(get_current_user)) -> dict[str, str]:
-            _check_bind_credential(request, key, body.session_id, user.uid, body.team_id)
-            try:
-                source = await self.store.bind_attachment(
-                    key=key,
-                    session_id=body.session_id,
-                    team_id=body.team_id,
-                    user=user,
-                    attachment_id=body.attachment_id,
-                    context=self.context,
-                )
-            except (FileNotFoundError, PermissionError):
-                raise HTTPException(404, "Sandbox source is unavailable") from None
-            except ValueError:
-                raise HTTPException(400, "Sandbox source is invalid") from None
-            return {"path": f"/inputs/{source.path}"}
-
     def _register_mount(self, router: APIRouter) -> None:
         @router.delete("/sandbox-mount/views/{key}", status_code=204)
         async def revoke_view(request: Request, key: str) -> Response:
@@ -222,12 +174,13 @@ class SandboxMountController:
             _check_mount_credential(request, key)
             path = _safe_path(path)
             try:
-                row, sources = await self.store.list_sources(key)
+                row = await self.store.get_view(key)
             except PermissionError:
                 raise HTTPException(429, "Sandbox view request rate exceeded") from None
             except FileNotFoundError:
                 raise HTTPException(404, "Sandbox view is unavailable") from None
             if row is not None:
+                sources: list[MountedSource] = []
                 try:
                     await self.store._check_session(row.session_id, row.user_id, row.team_id)
                     rebac = self.context.get_rebac_engine()
