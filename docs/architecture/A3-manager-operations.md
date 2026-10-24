@@ -46,7 +46,7 @@ Unregistered paths and unsupported methods use the router's 404/405 responses.
 | Status | When |
 | --- | --- |
 | 400 | Unknown role name, placement rule broken (I1), malformed multipart import |
-| 401 | Missing or invalid bearer ([authentication details](03-security.md#authentication)) |
+| 401 | Missing or invalid bearer ([authentication details](A6-security.md#authentication)) |
 | 403 | Permission denied (`forbidden`), wrong bootstrap secret, `user_not_accept_gcu` |
 | 404 | Unknown id or unregistered path |
 | 405 | Unsupported method on a registered path |

@@ -1,10 +1,10 @@
-# Document journey: Priya ingests a PDF
+# Reference: document journey trace and inspection
 
-Priya belongs to TSN and has editor access to its fredlab team. In Resources she
-creates the root folder `ArxivAi`, opens it and imports `paper.pdf` with the
-`fast` processing profile. This walkthrough connects each visible action to the
-code and expected durable state. It is a replay guide, not a record of an observed
-live run. Domain rules remain in [Documents and knowledge](05-documents.md).
+Technical companion to [Priya's document journey](02.2-document-journey.md), for
+Fred developers and coding assistants. It maps the visible steps to source code,
+durable state and read-only inspection commands. This is a replay guide, not a
+record of an observed live run. The scenario uses Priya in TSN's fredlab team,
+folder `ArxivAi`, file `paper.pdf` and processing profile `fast`.
 
 ## Establish the scenario
 
@@ -46,49 +46,7 @@ base. Capture the actual network requests rather than substituting a KF URL.
 
 ## Follow the document
 
-```mermaid
-sequenceDiagram
-    actor Priya
-    participant UI as Resources
-    participant M as Manager API
-    participant FGA as OpenFGA
-    participant PG as PostgreSQL
-    participant S3
-    participant D as Manager dispatcher
-    participant T as Temporal
-    participant KF as KF worker
-    participant OS as Manager vector index
-    Priya->>UI: Create ArxivAi, import paper.pdf (fast)
-    UI->>M: POST /folders
-    M->>FGA: Check space write, advance guard
-    M->>PG: Commit folder F
-    UI->>M: POST /folders/F/documents?profile=fast (K)
-    M->>M: Spool bytes and compute SHA-256
-    M->>FGA: Recheck write, advance guard
-    M->>PG: Reserve name and bytes (pending upload)
-    M->>S3: Conditional Put original, read and verify
-    M->>FGA: Recheck write, advance guard
-    M->>PG: Commit document D, stored receipt and processing P
-    PG-->>D: Notify on commit
-    M-->>UI: Original stored, processing summary
-    D->>PG: Lease P, release SQL locks
-    D->>T: Start ProcessPush (existing payload)
-    T->>KF: Existing preparation/extraction/output activities
-    KF->>M: Claim stages, fetch authorized original
-    M->>S3: Read original
-    M-->>KF: Original bytes and scoped descriptor
-    KF->>S3: Stage derived artifacts by generation
-    KF->>M: Journal planned vector IDs
-    KF->>OS: Write and read back chunks with embeddings
-    KF->>S3: Write final artifacts including chunks.jsonl
-    KF->>M: Commit indexing manifest
-    M->>S3: Verify artifact bytes and hashes
-    M->>FGA: Recheck actor write, advance guard
-    M->>PG: Publish G, succeeded / done
-    UI->>M: Read progress and authenticated previews
-```
-
-The sequence compresses stage retries and intermediate commits. S3, OpenSearch,
+The steps below describe stage boundaries; retries can add intermediate commits. S3, OpenSearch,
 PostgreSQL and Temporal do not share one transaction. SQL publication determines
 which staged result is visible.
 
@@ -111,7 +69,7 @@ and quota without reserving either. The actual multipart upload carries `K` and
 SHA-256. A guarded transaction reserves `paper.pdf` and its bytes in
 `document_upload(status='pending')`; fredlab is the quota owner in this scenario.
 
-Manager writes and reads back the original object in the [document layout](05-documents.md#physical-object-layout). A second guarded
+Manager writes and reads back the original object in the [document layout](A9-documents.md#physical-object-layout). A second guarded
 transaction inserts `document(id=D, space_id=S, folder_id=F)`, marks the receipt
 `stored`, and creates `document_processing(id=P, status='pending', stage='queued')`.
 These three changes commit together. An omitted profile creates no processing
@@ -188,7 +146,7 @@ OpenFGA grant, legacy tag, legacy metadata-catalog row or legacy task is created
 
 Read [publication](../../apps/control-plane/src/processing/publication.rs) and
 [preview](../../apps/control-plane/src/processing/preview.rs). The exact bucket/key
-comparison with `swift` is in [physical object layout](05-documents.md#physical-object-layout).
+comparison with `swift` is in [physical object layout](A9-documents.md#physical-object-layout).
 
 ## Observe the same identities in every store
 
@@ -265,7 +223,7 @@ sha256sum /tmp/journey-original.pdf
 
 Compare byte count and SHA-256 with the selected PDF and SQL; an ETag is not a
 SHA-256 proof. Use the derived endpoint/bucket from SQL and the
-[prefix formula](05-documents.md#physical-object-layout) with `I/O/S/D/P/G`.
+[prefix formula](A9-documents.md#physical-object-layout) with `I/O/S/D/P/G`.
 List that prefix (follow pagination), then fetch each relative path in the
 published manifest and compare its size/hash. Read `output.md`, `metadata.json`
 and every record of `chunks.jsonl`. Do not expect an `ArxivAi/` S3 directory.
@@ -289,7 +247,7 @@ GET <manager-index>/_search
 This is a sample, and its total can include obsolete generations awaiting cleanup.
 For a complete comparison, use `_mget` in bounded batches with all IDs from the
 published `chunks.jsonl`. Verify each `_id`, text and metadata against that file,
-including `manager_generation=G`, and inspect a vector's `vector_field` dimension
+and inspect a vector's `vector_field` dimension
 against the configured embedding model. The published record/ID count agrees with
 the SQL manifest's `chunks`, `vectors` and `vector_ordinals` for this text PDF.
 Check the legacy index separately: this ingestion adds no legacy document there.

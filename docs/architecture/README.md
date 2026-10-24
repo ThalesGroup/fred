@@ -3,38 +3,39 @@
 A compact explanation of Fred: its user journeys, domain boundaries, security
 rules and runtime interactions. The structure adapts arc42's context, building
 blocks, runtime, cross-cutting concepts and quality views to Fred's domains.
-Read the journeys first, then follow the relevant domain chapter.
+Start with the introduction and system overview, then read the journeys and
+follow the relevant domain chapter.
 
 | Chapter | Reader's question |
 | --- | --- |
-| [2. User journeys](02-user-journeys.md) | How do the architectural rules work together in practice? |
-| [Document journey: Priya ingests a PDF](02a-document-journey.md) | What happens to one document, and how do we inspect each store? |
+| [0. Introduction](00-introduction.md) | What is Fred and what can you build with it? |
+| [1. System overview](01-system-overview.md) | What are Fred's main components? |
+| [2. Journeys](02-journeys.md) | How do the architectural rules work together in practice? |
+| [2.1. User journeys](02.1-user-journeys.md) | How does a user go from first login to creating a folder? |
+| [2.2. Document journey](02.2-document-journey.md) | How does a user import a document and read the result? |
 | [3. Security](03-security.md) | Who is authenticated, admitted and authorized, and why? |
-| [Action and role matrix](03a-action-role-matrix.md) | Exactly which actions does each role allow, at which scope, and with which additional conditions? |
-| [4. Organizations and provisioning](04-organizations.md) | How are people, spaces and their relationships organized? |
+| [4. Organizations and spaces](04-organizations.md) | How are people, spaces and their relationships organized? |
 | [5. Documents and knowledge](05-documents.md) | How does knowledge enter, circulate and leave Fred? |
 | [8. Operations](08-operations.md) | How is Fred configured, deployed and observed? |
 | [9. Quality and invariants](09-quality.md) | Which guarantees are proved, and what do they cost? |
-| [10. Feature plan](10-feature-plan.md) | Which slices exist, and which are agreed or proposed next? |
 
-The primary reading path is the user journey through folder creation, followed by
-organizations/security and the SQL catalogue. The document-ingestion journey is
-separate. The dossier describes code behavior, not proof that the current build has
+Chapter 2 groups the journeys into numbered subchapters. Start with the user
+journey through folder creation, then follow the document-ingestion journey or
+the relevant domain chapters and SQL catalogue. The dossier describes code behavior, not proof that the current build has
 passed its tests or that Dimi has validated every screen.
 
 ## Find a function
 
 | Question | Canonical explanation | Implementation entry |
 | --- | --- | --- |
-| Login, CGU, first platform owner | [Journey](02-user-journeys.md#from-an-empty-platform-to-an-organizations-first-user), [Security](03-security.md) | [Source map](../../apps/control-plane/src/README.md) rows authentication, CGU, bootstrap |
-| Organization owner/admin selection and creation | [Organization creation](02-user-journeys.md#a-platform-owner-creates-an-organization), [Organizations](04-organizations.md#platform-organization-administration) | Source map rows directory and organizations |
-| Import accounts, teams and roles | [Provisioning journey](02-user-journeys.md#provisioning-the-business-account), [ZIP contract](A2-manager-contracts.md#provisioning-declarations) | Source map row ZIP import |
-| Who can enter a space or create a folder? | [Resources journey](02-user-journeys.md#priya-opens-resources), [Action/role matrix](03a-action-role-matrix.md), [Business authorization](03-security.md#business-authorization-answer) | Source map rows spaces, authorization, folders and roles |
+| Login, CGU, first platform owner | [Journey](02.1-user-journeys.md#from-an-empty-platform-to-an-organizations-first-user), [Security](03-security.md) | [Source map](../../apps/control-plane/src/README.md) rows authentication, CGU, bootstrap |
+| Organization owner/admin selection and creation | [Organization creation](02.1-user-journeys.md#a-platform-owner-creates-an-organization), [Organizations](04-organizations.md#platform-organization-administration) | Source map rows directory and organizations |
+| Import accounts, teams and roles | [Provisioning journey](02.1-user-journeys.md#provisioning-the-business-account), [ZIP contract](A2-manager-contracts.md#provisioning-declarations) | Source map row ZIP import |
+| Who can enter a space or create a folder? | [Resources journey](02.1-user-journeys.md#priya-opens-resources), [Action/role matrix](A7-action-role-matrix.md), [Security](03-security.md) | Source map rows spaces, authorization, folders and roles |
 | Where are data and permissions stored? | [SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue), [OpenFGA model](A2-manager-contracts.md#openfga-model) | `migrations/`, `db.rs`, `openfga/model.fga` in the source map |
 | API endpoints and frontend bindings | [Generated routes](A2-manager-contracts.md#control-plane-http-surface) | Source map section contracts/generated code |
 | Startup, SQL migration or local deployment | [Operations](08-operations.md), [SQLx procedure](A3-manager-operations.md#sqlx-schema-evolution) | Source map rows startup/migrations and local profile |
-| Upload/process a PDF | [Separate document journey](02a-document-journey.md), [Documents](05-documents.md) | Source map section beyond folder creation |
-| What is implemented, agreed or proposed next? | [Feature plan](10-feature-plan.md) | Implementation entry of each slice |
+| Upload/process a PDF | [Document journey](02.2-document-journey.md), [Documents](05-documents.md) | Source map section beyond folder creation |
 
 Follow this map before searching historical OpenSpec changes or Swift documentation.
 For an audit, trace the named UI consumer through the handler, authorization and
@@ -52,15 +53,21 @@ in progress, not verified architecture.
 Exact implementation detail is available without making it the main reading path:
 [control-plane runtime](A1-manager-runtime.md), [schemas and contracts](A2-manager-contracts.md),
 the [SQL table catalogue](A2-manager-contracts.md#control-plane-sql-catalogue),
-and [control-plane operations](A3-manager-operations.md). Generated blocks remain tied to
+[control-plane operations](A3-manager-operations.md), the
+[document journey trace and inspection](A4-document-journey.md), and
+[user journey contracts and implementation](A5-user-journeys.md),
+[security mechanisms](A6-security.md), the [action and role matrix](A7-action-role-matrix.md),
+[organization and provisioning contracts](A8-organizations.md), and
+[document storage and processing](A9-documents.md).
+Generated blocks remain tied to
 source code; they are references, not another handwritten API specification.
 
 ## Reconstruction method
 
 The [reconstruction method](../../.agents/skills/fred-reconstruction-method/SKILL.md)
 defines how this dossier converges with the implementation: current journeys and
-schemas, a separately labelled [feature plan](10-feature-plan.md), and key design decisions. Proposed
-features are not implemented guarantees. Superseded RFC/OpenSpec prose leaves the
+schemas and key design decisions. A feature overview describes Fred's product
+capabilities; implementation plans belong in RFCs or OpenSpec, outside this dossier. Superseded RFC/OpenSpec prose leaves the
 active corpus only after its useful information and consumers are reconciled.
 The [review prompt](../../.agents/skills/fred-reconstruction-method/references/review-prompt.md)
 provides a bounded, independent audit request.

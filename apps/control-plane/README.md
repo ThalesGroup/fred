@@ -95,7 +95,7 @@ omitted platform configuration yields an empty array.
 This operator command uses a 10-second timeout per source and exits with an error
 if any source fails, without printing a partial catalog. It does not start the API,
 connect to SQL/OpenFGA, persist definitions or enroll instances. `serve` does not
-poll runtimes. See [agents](../../docs/architecture/06-agents.md).
+poll runtimes. This command does not enroll or execute agents.
 
 ## Background tasks
 

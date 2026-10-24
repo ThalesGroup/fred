@@ -1,4 +1,6 @@
-# Action and role matrix
+# Reference: action and role matrix
+
+Companion to the [Security chapter](03-security.md).
 
 This reference describes the implemented **control-plane Rust** contract on the
 organization/team/project model. It covers every registered HTTP operation,

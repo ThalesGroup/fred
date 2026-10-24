@@ -1,9 +1,9 @@
-# 2. User journeys
+# Reference: user journey contracts and implementation
 
-This chapter follows the current browser journey from first login to creating a
-folder. It describes the Rust control-plane and the existing Fred frontend, using
-the local three-application profile. Uploading or processing a document is a
-separate [document journey](02a-document-journey.md).
+Technical companion to the [user journeys](02.1-user-journeys.md), for Fred
+developers and coding assistants. It retains admission, provisioning, directory
+and folder contracts, persisted effects and links to implementation. These
+contracts describe behavior; they are not a record of a manually validated run.
 
 ## From an empty platform to an organization's first user
 
@@ -17,20 +17,6 @@ separate [document journey](02a-document-journey.md).
 | 6. Choose a space | The user selects an accessible team, or opens their entitled personal space. | The existing space navigation opens. | Personal-space creation, when requested and allowed, creates a `space` row and its roles. Reopening reuses it. |
 | 7. Open Resources | The user opens Resources in that space. | The current directory lists its folders/documents, with loading, empty and error states. | Browsing creates nothing. |
 | 8. Create a folder | A user with write permission enters a folder name and confirms. | The dialog closes after success and the directory refreshes. | One `folder` row, in the selected space and optional parent folder. No object, vector or document-processing job is created. |
-
-```mermaid
-flowchart TD
-    login[Sign in] --> terms[Accept current terms]
-    terms --> owner[First platform owner: bootstrap]
-    owner --> provision[Import organization, teams and explicit roles]
-    provision --> change[Sign in as a business user]
-    change --> ownterms[Accept own terms]
-    ownterms --> space[Select a readable space]
-    space --> resources[Open Resources]
-    resources --> write{Write permission?}
-    write -- Yes --> folder[Create folder]
-    write -- No --> read[Browse only]
-```
 
 Bootstrap is a one-time operation. Once completed it is not reopened by changing
 the token or removing roles. An interrupted ownership grant can be retried only by

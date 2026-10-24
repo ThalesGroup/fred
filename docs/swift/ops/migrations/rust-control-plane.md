@@ -83,7 +83,7 @@ host, namespace and base queue. Namespace history retention must exceed
 
 Use the same endpoint, bucket and prefix for originals and derived artifacts.
 Restrict worker credentials to output paths, including listing; KF obtains
-originals through manager. The [canonical layout](../../../architecture/05-documents.md#physical-object-layout)
+originals through manager. The [canonical layout](../../../architecture/A9-documents.md#physical-object-layout)
 preserves Swift names and adds only immutable processing generations below output.
 Disable legacy PDF expiry and keep legacy corpus mutation credentials away from
 manager documents. GCS/S3NS enforcement must be validated with the actual API and

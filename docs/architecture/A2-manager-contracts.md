@@ -12,7 +12,7 @@ and the unique organization context described in [Organizations](04-organization
 returns 409 for contradictory attachments. No organization request parameter
 selects a tenant. Business routes answer a missing or foreign space with 404, then a
 retired one with 409 `space_pending_deletion`, then a missing permission with 403
-([security](03-security.md#business-authorization-answer)). Authorization probes return
+([security](A6-security.md#business-authorization-answer)). Authorization probes return
 `allowed: false` for each of these refusals and for a missing document, and 409 for
 an ambiguous context. A role grant answers 422 for a malformed subject,
 one unknown to the user directory or a tuple OpenFGA rejects as invalid, 409 when its

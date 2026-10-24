@@ -2,7 +2,7 @@
 
 Questions to resolve when scoping a feature on the organization/team/project model.
 This is a scoping checklist, not the account of current behavior. The implemented
-[first-user journey](../../architecture/02-user-journeys.md) has its single home in
+[first-user journey](../../architecture/02.1-user-journeys.md) has its single home in
 the Fred architecture dossier. Buildable deltas belong in OpenSpec and work tracking
 belongs in GitHub issues.
 

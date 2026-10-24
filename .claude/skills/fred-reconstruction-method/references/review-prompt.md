@@ -23,10 +23,11 @@ not as implicit permission to fix, deploy, reset or publish.
 > level. A system overview is not a deployment inventory. Unagreed sections must
 > remain empty; request editorial agreement before filling or substantially
 > rewriting them. Do not award completeness for generic filler.
-> Check that arc42 describes the actual journey in plain language, precisely
-> documents every relevant SQL table and authority boundary, and links each feature
-> to its source. Keep proposed features and open design choices explicitly separate
-> from implemented behavior. Identify relevant old RFC/OpenSpec content to reconcile
+> Apply the mandatory fred-architecture skill: main chapters explain current Fred
+> for architects, clients and security readers. Keep SQL inventories and all source
+> references in technical annexes, with useful links to the human explanations.
+> Keep proposed features and open design choices outside arc42.
+> Identify relevant old RFC/OpenSpec content to reconcile
 > into the canonical corpus; do not delete anything during this review.
 >
 > Return findings by severity with exact file/symbol or line, concrete trigger,

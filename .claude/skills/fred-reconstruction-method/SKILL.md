@@ -62,67 +62,17 @@ is absent. Dependencies necessary to exercise the slice cannot be silently exclu
   migration. SQL, OpenFGA and object storage have distinct owners. Applied SQLx
   migrations are immutable; a new database starts from the full migration chain.
 
-## Build the future corpus in arc42
+## Maintain the architecture dossier
 
-### Agree the editorial intent before filling a section
+Read the checkout's `.agents/skills/fred-architecture/SKILL.md`. It is the
+canonical editorial policy and supersedes this method's former feature-plan
+and proposed-decision exceptions. Maintain a compact explanation of current Fred
+for architects, clients and security readers. Put all code references and source
+maps in technical annexes. Keep proposals and work history outside the dossier.
 
-Do not populate or substantially rewrite an architecture section merely because its
-heading exists or a request asks for a complete dossier. First propose to Dimi the
-reader's question, intended scope and a short outline; wait for agreement before
-writing its body. An explicit request for a specific correction already authorizes
-that correction: do not ask again. Leave an unagreed section empty rather than fill
-it with generic prose, implementation inventory or a placeholder explanation.
-This rule takes precedence over automatic documentation-completion requirements.
-
-Each section answers its own question at one level of detail:
-
-- **System overview**: what the system is for, whom it serves, its boundary, principal
-  responsibilities and interactions with its environment. Do not substitute a local
-  deployment table, runtime command, component inventory or list of databases.
-- **User journey**: actor, prerequisites, actions, visible results and refusal cases.
-- **Data model**: entities, meaning, relationships, constraints and ownership.
-- **Operations/deployment**: environments, configuration, commands and topology.
-- **Design decisions**: the question, chosen solution, reasons and consequences.
-
-A true statement is not automatically relevant to a section. Exclude detail that
-does not answer its reader's question; link to its proper home only where useful.
-Avoid filler such as "the frontend exposes journeys" or "PostgreSQL holds data".
-Use precise domain statements supported by evidence. Do not replace absent product
-intent with guesses derived from the current implementation. If intent is unclear,
-ask Dimi. Correctness, relevance and placement all matter; word count does not.
-
-Reuse the existing dossier, not a second architecture tree. Give these three views
-separate, explicitly labelled homes within arc42:
-
-1. **Current implementation**: precise journeys, permissions, contracts, deployment
-   boundary and SQL catalogue. Include every application table, keys, constraints,
-   indexes, ownership and the meaning of relationships absent from SQL. Generate
-   schema/API references from their source when possible; distinguish SQL guarantees
-   from application guarantees and generator limitations.
-2. **Feature plan**: one indexed list of accepted/current features and explicitly
-   proposed next slices. For each: stable ID, user outcome, scope/exclusions,
-   prerequisites, acceptance scenario, current implementation reference and state
-   (proposed, agreed, implemented, verified). Link evidence rather than duplicate
-   the journal or issue tracker. Dimi chooses ordering; never invent a backlog to
-   fill a template. A future row is not authorization to implement it.
-3. **Key design decisions**: stable ID, question, current/accepted/proposed status,
-   decision, reason, constraints/trade-offs, affected features and code. Preserve
-   meaningful unresolved alternatives; do not manufacture an ADR for every detail.
-   An unresolved choice must not appear as an implemented guarantee.
-
-These plan/decision views are deliberate exceptions to current-state-only prose;
-their status is explicit. Reuse existing arc42 sections where suitable; introduce a
-single dedicated feature-plan or decision page only if no existing home serves it.
-The working journal remains outside the dossier and records execution/review status.
-
-Maintain two complementary maps, linked from AGENTS.md:
-
-- arc42: question/feature -> useful contract, journey, SQL or decision section;
-- code: feature -> actual UI consumer, handler, domain owner, authorization,
-  persistence/configuration and focused tests, with a link back to arc42.
-
-Use file paths and stable symbols rather than copied implementation prose or line
-numbers that immediately drift. Test presence is not proof of a passing test.
+For the accepted slice, reconcile the relevant explanation and annex references
+with the actual implementation. Do not turn bounded reconstruction work into a
+rewrite of unrelated chapters or an inventory in the main reading path.
 
 ## Independent review and correction loop
 
@@ -156,8 +106,8 @@ During an authorized corpus-consolidation pass, inventory only documents relevan
 to the accepted scope. For each old RFC/spec/change, determine whether it contains:
 
 - a current contract/decision: preserve its substance in the canonical arc42 section;
-- an unresolved useful choice: retain it once in the design-decision view;
-- a future feature Dimi wants: reference it once in the feature plan;
+- an unresolved useful choice: retain it in RFC/OpenSpec outside arc42;
+- a future feature Dimi wants: retain it in planning outside arc42;
 - obsolete or duplicated content: retire it after its unique information is accounted for.
 
 Update inbound links, generators, skills and CI consumers before deleting a referenced
@@ -173,10 +123,8 @@ resolve that dependency or record the precise remaining blocker. An archive stil
 present must be clearly historical and excluded from the normal reading path, not
 another active authority. Creating this skill alone does not authorize that cleanup.
 
-For this reconstruction, accepted feature/design entries can carry the agreed scope
-and criteria instead of adding another RFC/OpenSpec package. Do not duplicate them
-solely to satisfy legacy process wording; preserve executable contracts that remain
-required. Other repository workflows continue to apply outside this reconstruction.
+Planning and acceptance criteria remain outside arc42. Follow the repository's
+applicable planning workflow without duplicating current architectural explanations.
 
 ## Completion means evidence, not reassurance
 

@@ -81,7 +81,7 @@ in the preparation script.
 
 ## Read the storage and authority model
 
-The [canonical layout](../../docs/architecture/05-documents.md#physical-object-layout)
+The [canonical layout](../../docs/architecture/A9-documents.md#physical-object-layout)
 preserves the Swift documents bucket, here `app-content-documents`, and its
 document-local input/output roots. Immutable generation directories fence stale
 processing writes. `app-content-objects` and `filesystem` keep their existing use.
@@ -108,7 +108,7 @@ repair/deletion against manager content.
 
 ## First PDF validation
 
-Follow the [PDF user journey](../../docs/architecture/02a-document-journey.md):
+Follow the [PDF user journey](../../docs/architecture/02.2-document-journey.md):
 create/open a folder as an editor, upload a text PDF with profile `fast`, observe
 the stored original and processing progress, then reload, inspect File/Raw and
 download the original. Compare SHA-256 before and after.

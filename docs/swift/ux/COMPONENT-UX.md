@@ -5395,7 +5395,7 @@ processing completion have separate outcomes. Reload reads persisted processing
 summaries; failed attempts can be retried without a local File. Both directory
 chips and import cards translate the same stable manager error codes. Preview
 loads authenticated manager artifacts, with bounded raw text and local images.
-The [Resources journey](../../architecture/02-user-journeys.md#priya-opens-resources)
+The [Resources journey](../../architecture/02.1-user-journeys.md#priya-opens-resources)
 defines user behavior and authority. Existing Knowledge Flow consumers retain their
 own bindings.
 

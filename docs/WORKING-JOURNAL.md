@@ -67,9 +67,9 @@ fiche plutôt que d'effacer les résultats précédents.
 | [F02](#f02-attente-du-verrou-des-écritures) | Attente bornée sans connexion retenue | Tests automatisés validés | 03, 09, A1 |
 | [F01](#f01-coût-du-contexte-organisation) | Placement SQL immuable et contexte commun | Tests automatisés validés | 03, 04, A1/A2/A3, 09 |
 | [F-001](#f-001-environnement-de-développement) | Déploiement secondaire, renommage control-plane | Correction à valider après renommage | [Opérations](architecture/08-operations.md), à reporter |
-| [F-002](#f-002-bootstrap-administrateur) | Bootstrap administrateur plateforme et CGU | Validé par Dimi | [Parcours](architecture/02-user-journeys.md), [sécurité](architecture/03-security.md) |
+| [F-002](#f-002-bootstrap-administrateur) | Bootstrap administrateur plateforme et CGU | Validé par Dimi | [Parcours](architecture/02.1-user-journeys.md), [sécurité](architecture/03-security.md) |
 | [F-003](#f-003-organisation-et-équipe) | Création d'organisation et d'équipe | À parcourir | [Organisations](architecture/04-organizations.md) |
-| [F-004](#f-004-ingestion-dun-pdf) | Ingestion d'un PDF par un utilisateur d'organisation | À parcourir | [Parcours document](architecture/02a-document-journey.md), [documents](architecture/05-documents.md) |
+| [F-004](#f-004-ingestion-dun-pdf) | Ingestion d'un PDF par un utilisateur d'organisation | À parcourir | [Parcours document](architecture/02.2-document-journey.md), [documents](architecture/05-documents.md) |
 | [F-005](#f-005-import-du-bundle-de-démonstration) | Import du bundle de démonstration | Prochaine étape de Dimi | [Organisations](architecture/04-organizations.md) |
 
 | [F-006](#f-006-durée-dune-relance-identique) | Durée des relances identiques | Optimisation implémentée, durée à valider | Opérations, à reporter si optimisé |
@@ -1011,3 +1011,19 @@ n'est pas une validation fonctionnelle de l'ensemble des changements Swift.
   publication et dispatch : pending, running, succeeded, failed ; les retries
   d'activités restent dans running, la relance explicite crée une nouvelle tentative.
   Aucun build, test ou validation du rendu Mermaid exécuté.
+
+
+## DOC-4 Dossier humain et périmètre Weaver
+
+- 2026-10-24 : passe éditoriale avec Dimi sur l'introduction, la vue d'ensemble,
+  les journeys, la sécurité, les organisations et les documents. Texte court,
+  schémas lisibles, vues fonctionnelles et techniques séparées ; détails déplacés
+  dans les annexes A4 à A9. Liens actualisés après renumérotation des journeys.
+- Skill partagé `fred-architecture` ajouté, lecture obligatoire via AGENTS.md et
+  CLAUDE.md. Retrait des consignes qui plaçaient un feature plan dans arc42.
+- Agents, conversations et extensions non câblés dans Weaver retirés du dossier,
+  ainsi que le feature plan. La découverte CLI seule ne valide pas leur intégration.
+- Dimi accepte de conserver le dossier jusqu'à l'ingestion native en cours de
+  finalisation et demande le commit de cette passe. Cet accord porte sur le contenu
+  documentaire ; il ne valide pas le parcours d'ingestion de bout en bout.
+- Aucun test applicatif, build ou déploiement lancé pour cette passe documentaire.

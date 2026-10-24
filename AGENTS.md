@@ -4,6 +4,11 @@
 agents. The team is moving away from Claude/Anthropic tooling; the workflow
 must remain usable through ordinary repository files and command-line tools.
 
+At the start of every Fred task, read
+[fred-architecture](.agents/skills/fred-architecture/SKILL.md). This shared skill
+is mandatory for Codex, Claude and other coding assistants. Its editorial policy
+applies to every feature change and architecture edit.
+
 Before changing code or documentation, read:
 
 1. This root `AGENTS.md`.
@@ -56,24 +61,20 @@ review and close-out requirements below and in legacy guidance or skills.
 Use [fred-reconstruction-method](.agents/skills/fred-reconstruction-method/SKILL.md)
 for an explicitly requested reconstruction convergence or corpus review. It defines
 bounded completeness, independent review, the committed reference and the canonical
-arc42/source maps. For this workflow, arc42 also carries a clearly separated feature
-plan and key design decisions; proposals never masquerade as implemented behavior.
-Accepted entries there may replace new RFC/OpenSpec planning packages for the same
-slice. Scoped, authorized consolidation retires superseded prose only after preserving
-its useful contracts and resolving consumers. These reconstruction-specific rules
-supersede conflicting legacy planning/archive rules below; they do not authorize
-unrequested tests, commits, publication, resets or unrelated archive deletion.
+arc42/source maps. The mandatory fred-architecture skill governs the dossier:
+current human-readable architecture and technical annexes, with no feature plan
+or proposed decisions. Scoped, authorized consolidation retires superseded prose
+only after preserving useful contracts and resolving consumers. It does not
+authorize unrequested tests, commits, publication, resets or unrelated deletion.
 
-## Architecture writing requires an agreed scope
+## Architecture maintenance
 
-Before filling or substantially rewriting an arc42 section, agree its reader's
-question, scope and short outline with Dimi. A request for an exact correction
-already authorizes it; do not ask again. Otherwise leave the section empty rather
-than synthesize filler. A request for a complete dossier is not permission to
-invent its editorial content. A system overview explains purpose, actors, boundary
-and principal responsibilities, not local deployment details or storage inventory.
-Keep journeys, data models, operations and decisions in their respective homes.
-This rule overrides automatic documentation-completion instructions below.
+Apply [fred-architecture](.agents/skills/fred-architecture/SKILL.md) when adding or
+changing a feature: update its existing architectural explanation and relevant
+technical annexes as part of the work. No separate documentation request is needed.
+Follow the agreed editorial scope; clarify genuinely new section scope instead of
+filling headings with implementation inventories. This policy supersedes older
+instructions that defer architecture updates or put plans inside arc42.
 
 ## Locating reconstruction code and documentation
 
@@ -91,7 +92,8 @@ When continuing Dimi's incremental Rust reconstruction, first read
 Update its indexed feature records after each meaningful step: observations,
 focused changes, explicit user validation, pending architecture updates and next
 step. Preserve the existing frontend, including nonfunctional screens, unless
-Dimi requests a specific adaptation. Update architecture chapters on request;
+Dimi requests a specific adaptation. Keep affected architecture chapters current
+as part of feature work under fred-architecture;
 do not confuse an implemented change with a validated user journey.
 
 ## OpenSpec - team choice, under evaluation
@@ -208,7 +210,7 @@ do not silently drop a supported role, accept an ineffective grant, weaken a
 check, or defer a known weakness within the step. Source inconsistencies must
 be resolved explicitly, with regression coverage, rather than copied blindly.
 Feature boundaries do not excuse incomplete behavior within an accepted step.
-Use the [user journeys](docs/architecture/02-user-journeys.md) to explain each
+Use the [user journeys](docs/architecture/02.1-user-journeys.md) to explain each
 implemented entry point, and the [reconstruction checklist](docs/swift/design/FRED-RECONSTRUCTION-CHECKLIST.md)
 to check prerequisites while scoping the next feature.
 

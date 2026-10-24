@@ -59,9 +59,9 @@ mutate the user's running installation. Do not implement fixes as part of the au
 ## Establish the contract before judging it
 
 Read the [arc42 entry point](../../../docs/architecture/README.md),
-[user journeys](../../../docs/architecture/02-user-journeys.md),
+[user journeys](../../../docs/architecture/02.1-user-journeys.md),
 [security](../../../docs/architecture/03-security.md),
-[action/role matrix](../../../docs/architecture/03a-action-role-matrix.md),
+[action/role matrix](../../../docs/architecture/A7-action-role-matrix.md),
 [quality invariants](../../../docs/architecture/09-quality.md), and the relevant
 domain chapters and A1/A2/A3 manager references. Use the
 [reconstruction checklist](../../../docs/swift/design/FRED-RECONSTRUCTION-CHECKLIST.md)

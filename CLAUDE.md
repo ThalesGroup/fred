@@ -3,6 +3,12 @@
 Audience: AI assistants (Claude Code) only. This file is operational — it tells you
 _how to work_ in this repository. Human developers start with `docs/swift/README.md`.
 
+At the start of every Fred task, read
+[fred-architecture](.claude/skills/fred-architecture/SKILL.md), shared with Codex
+through `.agents/skills`. Its editorial policy is mandatory: keep the human-facing
+architecture current with feature changes and put code references in annexes.
+It supersedes older guidance about architecture content and update timing.
+
 ---
 
 ## Prime directive — extend, do not duplicate

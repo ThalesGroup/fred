@@ -2,7 +2,7 @@
 
 This is the component-level reference behind the domain chapters. Its sequences
 and choices apply to manager; they are not a topology or execution contract for
-all Fred components. Start with [User journeys](02-user-journeys.md) and
+all Fred components. Start with [User journeys](02.1-user-journeys.md) and
 [Security](03-security.md).
 
 ## Dependencies
@@ -46,7 +46,7 @@ flowchart LR
 | Postgres | Its tables in the `fred` database | [model and contracts](A2-manager-contracts.md), Schema |
 | S3 | Conditional Put, verified Get, Delete and paginated List | [original storage](#original-storage) |
 | Temporal | Manager-owned lifecycle and delivery of existing KF ProcessPush | [lifecycle](#space-deletion-lifecycle) |
-| Clients | Public configuration and health; authenticated onboarding and business routes | [HTTP surface](A2-manager-contracts.md#control-plane-http-surface) and [authentication](03-security.md#authentication) |
+| Clients | Public configuration and health; authenticated onboarding and business routes | [HTTP surface](A2-manager-contracts.md#control-plane-http-surface) and [authentication](A6-security.md#authentication) |
 | Services acting for a user | `/authorize/document`, `/authorize/scope` | [runtime reference](A1-manager-runtime.md), Search scope |
 
 
