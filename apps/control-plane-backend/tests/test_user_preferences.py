@@ -8,11 +8,11 @@ from control_plane_backend.users.preferences import (
     PatchUserPreferences,
     UserPreferencesStore,
 )
-from pydantic import ValidationError
 from fastapi import FastAPI
 from fred_core import KeycloakUser
 from fred_core.security.oidc import get_current_user_before_gcu
 from httpx import ASGITransport, AsyncClient
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 

@@ -70,16 +70,16 @@ from control_plane_backend.users.dependencies import (
 from control_plane_backend.users.platform_roles import (
     grant_platform_role as grant_platform_role_from_service,
 )
-from control_plane_backend.users.preferences import (
-    PatchUserPreferences,
-    UserPreferences,
-    UserPreferencesStore,
-)
 from control_plane_backend.users.platform_roles import (
     list_platform_roles as list_platform_roles_from_service,
 )
 from control_plane_backend.users.platform_roles import (
     revoke_platform_role as revoke_platform_role_from_service,
+)
+from control_plane_backend.users.preferences import (
+    PatchUserPreferences,
+    UserPreferences,
+    UserPreferencesStore,
 )
 from control_plane_backend.users.schemas import (
     AccountSuspensionDisabledError,
@@ -157,7 +157,9 @@ def _get_announcement_store(request: Request) -> AnnouncementStore:
 
 
 def _get_user_preferences_store(request: Request) -> UserPreferencesStore:
-    return UserPreferencesStore(get_application_container(request).get_pg_async_engine())
+    return UserPreferencesStore(
+        get_application_container(request).get_pg_async_engine()
+    )
 
 
 def _parse_user_uuid(user: KeycloakUser) -> UUID:
