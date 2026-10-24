@@ -518,6 +518,8 @@ _(none)_
 
 #### Resolved
 
+- **Sandbox command previews (2026-10-25)** - Group and child rows favor a search, filter, or control-flow line over imports, path setup, and comments. `...` marks code before or after that one-line excerpt; the full source and result remain in the tool detail.
+
 - **Reasoning rows still repeated a rephrased preamble (2026-09-14, #2666)** — the fix below
   only trimmed sentences identical character for character to the _previous_ block. Models
   rarely restate verbatim ("L'utilisateur demande…" → "L'utilisateur a demandé…"), so on six

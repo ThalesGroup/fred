@@ -149,6 +149,7 @@ describe("ThoughtTrace code groups", () => {
     renderTrace([first]);
     const group = groups()[0];
     expect(group.textContent).toContain("find /inputs -name '*.csv'");
+    expect(group.textContent).toContain("find /inputs -name '*.csv' ...");
     expect(group.textContent).not.toContain("echo hidden");
     act(() => group.click());
 
@@ -166,17 +167,71 @@ describe("ThoughtTrace code groups", () => {
   });
 
   it("bounds a long command preview and keeps it on one line", () => {
-    renderTrace([call("c1", "execute_code", `python ${"x".repeat(200)}\nprint('later')`, 1)]);
+    renderTrace([call("c1", "execute_code", `grep ${"x".repeat(200)}\necho later`, 1)]);
     const text = groups()[0].textContent ?? "";
     expect(text).toContain("...");
-    expect(text).not.toContain("print('later')");
+    expect(text).not.toContain("echo later");
     expect(text).not.toContain("\n");
     act(() => groups()[0].click());
     const child = [...container.querySelectorAll("button")].find((button) =>
-      button.textContent?.startsWith("Bashpython "),
+      button.textContent?.startsWith("Bashgrep "),
     );
     expect(child?.textContent).toContain("...");
-    expect(child?.textContent).not.toContain("print('later')");
+    expect(child?.textContent).not.toContain("echo later");
+  });
+
+  it("skips Python imports and marks omitted code in the group and child previews", () => {
+    renderTrace([
+      call(
+        "c1",
+        "execute_code",
+        "from pypdf import PdfReader\nfrom pathlib import Path\nfor pdf in Path('/inputs/attachments').glob('*.pdf'):\n    print(pdf.name)",
+        1,
+        "python",
+      ),
+    ]);
+    expect(groups()[0].textContent).toContain("... for pdf in Path('/inputs/attachments').glob('*.pdf'): ...");
+    expect(groups()[0].textContent).not.toContain("from pypdf import PdfReader");
+    act(() => groups()[0].click());
+    const child = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Python... for pdf"),
+    );
+    expect(child?.textContent).toContain("glob('*.pdf'): ...");
+    expect(child?.getAttribute("aria-label")).toContain("Python. ... for pdf");
+  });
+
+  it("previews a PDF search instead of its import, path assignment, or comments", () => {
+    renderTrace([
+      call(
+        "c1",
+        "execute_code",
+        'from pypdf import PdfReader\n# Open the PDF\npdf_path = "/inputs/attachments/report.pdf"\nreader = PdfReader(pdf_path)\nfor page in reader.pages:\n    text = page.extract_text()\n    # Find the incident\n    if "HELIOS-4821" in text:\n        print(text)',
+        1,
+        "python",
+      ),
+    ]);
+    expect(groups()[0].textContent).toContain('... if "HELIOS-4821" in text: ...');
+    expect(groups()[0].textContent).not.toContain("from pypdf import PdfReader");
+    expect(groups()[0].textContent).not.toContain("pdf_path");
+  });
+
+  it("prefers a search over Python and Bash setup guards", () => {
+    renderTrace([
+      call(
+        "c1",
+        "execute_code",
+        'if __name__ == "__main__":\n    for path in Path("/inputs").glob("*.pdf"):\n        print(path)',
+        1,
+        "python",
+      ),
+      result("c1", 2),
+      call("c2", "execute_code", 'if [ -f "$file" ]; then\ngrep -in "incident" "$file"\nfi', 3),
+    ]);
+    expect(groups()[0].textContent).toContain('grep -in "incident" "$file"');
+    expect(groups()[0].textContent).not.toContain('if [ -f "$file" ]');
+    act(() => groups()[0].click());
+    expect(container.textContent).toContain('... for path in Path("/inputs").glob("*.pdf"): ...');
+    expect(container.textContent).not.toContain('if __name__ == "__main__"');
   });
 
   it("splits groups at a write_todos call that the ordinary trace hides", () => {
