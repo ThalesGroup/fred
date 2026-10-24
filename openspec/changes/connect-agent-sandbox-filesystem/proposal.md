@@ -11,6 +11,7 @@ Code execution and agent files currently live in separate spaces. A Deep or ReAc
 - Bind user, team, conversation, and file provenance privately; filter directory listings and recheck each read, rejecting unsafe paths, oversized files, unsupported types, and missing authorization.
 - Keep the existing operator-approved isolation runtime, capacity limits, idle expiry, and admin gate for every execution path, including Deep native `execute` if exposed.
 - Provision workloads only when a conversation first executes code. Remove ready capacity controls and keep the SIG Agent Sandbox claim pool at zero replicas.
+- Group consecutive code executions in the thought trace as one expandable activity, while preserving individual tool details and breaking the group at any other tool.
 
 ## Capabilities
 

@@ -24,11 +24,16 @@ import {
   traceEntryKey,
   traceRows,
   traceSummary,
+  toolArgs,
   toolCallId,
+  toolName,
+  toolSlug,
 } from "../../../../utils/traceUtils";
+import { groupTraceRows, type TraceGroupRule } from "../../../../utils/traceGrouping";
 import { useTraceExpansion } from "../../../../core/hooks/useTraceExpansion";
 import { ReasoningRow } from "./ReasoningRow/ReasoningRow";
 import { TraceEntryRow } from "./TraceEntryRow/TraceEntryRow";
+import { ToolTraceGroup } from "./ToolTraceGroup/ToolTraceGroup";
 import styles from "./ThoughtTrace.module.css";
 
 interface ThoughtTraceProps {
@@ -68,6 +73,31 @@ function useSummaryLabel(summary: TraceSummary): string {
 /** Stable empty identity, so the collapsed memo never yields a new array. */
 const EMPTY_ROWS: TraceRow[] = [];
 
+const GROUP_RULES: TraceGroupRule[] = [
+  {
+    id: "code-sandbox",
+    titleKey: "rework.chatTrace.toolLabels.codeSandbox",
+    itemKey: "rework.chatTrace.toolGroups.command",
+    countKey: "rework.chatTrace.toolGroups.commands",
+    matches: (entry) => toolSlug(toolName(entry.call)) === "execute_code",
+    preview: (entry) => {
+      const code = toolArgs(entry.call).code;
+      if (typeof code !== "string") return "";
+      const firstLine =
+        code
+          .split(/\r?\n/)
+          .find((line) => line.trim())
+          ?.trim()
+          .replace(/\s+/g, " ") ?? "";
+      return firstLine.length > 120 ? `${firstLine.slice(0, 117)}...` : firstLine;
+    },
+    itemMeta: (entry) => {
+      const language = toolArgs(entry.call).language;
+      return language === "bash" ? "Bash" : language === "python" ? "Python" : "";
+    },
+  },
+];
+
 export function ThoughtTrace({
   messages,
   done = false,
@@ -86,6 +116,7 @@ export function ThoughtTrace({
   // conversation on every token — and traceRows flattens markdown. Behind the
   // toggle, a long history's collapsed traces cost nothing per token.
   const rows = useMemo(() => (expanded ? traceRows(entries) : EMPTY_ROWS), [entries, expanded]);
+  const displayItems = useMemo(() => groupTraceRows(rows, GROUP_RULES, messages), [rows, messages]);
 
   if (entries.length === 0) return null;
 
@@ -108,21 +139,25 @@ export function ThoughtTrace({
           tool steps alternate rather than being stacked into two lanes. */}
       {expanded && (
         <div className={styles.body}>
-          {rows.map(({ entry, lane, index, reasoningText, restated }) =>
-            lane === "reasoning" ? (
+          {displayItems.map((item) => {
+            if (item.kind === "group") {
+              return <ToolTraceGroup key={item.key} group={item} pendingToolCallIds={pendingToolCallIds} />;
+            }
+            const { entry, lane, reasoningText, restated } = item.row;
+            return lane === "reasoning" ? (
               <ReasoningRow key={traceEntryKey(entry)} entry={entry} text={reasoningText ?? ""} restated={restated} />
             ) : (
               <TraceEntryRow
                 key={traceEntryKey(entry)}
                 entry={entry}
-                index={index}
+                index={item.index}
                 pendingToolCallIds={pendingToolCallIds}
                 hitlAnswerSummary={
                   entry.kind === "combo" ? hitlAnswerSummariesByCallId?.[toolCallId(entry.call)] : undefined
                 }
               />
-            ),
-          )}
+            );
+          })}
         </div>
       )}
     </div>

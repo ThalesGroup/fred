@@ -24,6 +24,8 @@ See proposal.md. The broker currently accepts code only and retains a workload p
 
 7. **Selective code queries.** Keep `execute_code` as the sole sandbox tool. Its model-facing guidance asks the agent to discover likely filenames, search text with literal or escaped case-insensitive spelling-variant patterns, bound both match count and excerpt length, and filter document pages or tabular rows before printing results. The code and output remain in tool details; the final answer summarizes the finding. This is guidance for generated Bash or Python, not a new search service or a security boundary. Broker output and resource limits still apply.
 
+8. **Grouped trace presentation.** Fold consecutive `execute_code` calls within one assistant turn into an expandable visual activity. Its single-line heading previews a bounded first line of the running command, or the latest command after completion, with visual ellipsis. Keep each real call and result addressable through its existing detail drawer. Intervening reasoning stays in chronological order inside the expanded activity; any different tool ends the activity, and a later code call starts another. Implement the fold with a reusable rule and group renderer so other tool families can opt in later without a sandbox-specific trace pipeline. No backend event or tool contract changes.
+
 ## Risks / Trade-offs
 
 - [A shared filesystem increases the Kata host/guest interface] -> Expose only a narrow read-only view through an approved volume and verify the selected runtime's volume implementation; never expose a host path or raw bucket.

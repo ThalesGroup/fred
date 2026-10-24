@@ -1,5 +1,28 @@
 ## ADDED Requirements
 
+### Requirement: Grouped code execution trace
+The chat thought trace SHALL display a consecutive run of `execute_code` calls in one assistant turn as one expandable activity. Its heading SHALL show a bounded, single-line preview of the running command, or the latest command when none is running, truncated with an ellipsis when necessary. Expanding it SHALL show each command in chronological order with its execution status and a link to that call's existing code and result detail. Reasoning between consecutive code calls SHALL remain in sequence. A different tool, including `summarize_document`, SHALL end the current activity; a later code call SHALL start a new activity. The grouping mechanism SHALL allow another tool family to opt in through a presentation rule without changing stored trace events.
+
+#### Scenario: Multiple code calls
+- **WHEN** an agent executes Bash and Python consecutively in one turn
+- **THEN** the trace shows one code activity with two selectable commands and their individual details
+
+#### Scenario: Other tool between code calls
+- **WHEN** an agent executes code, calls `summarize_document`, and executes code again
+- **THEN** the trace shows a code activity, the ordinary summary tool step, and a separate code activity in that order
+
+#### Scenario: Tool represented outside the trace
+- **WHEN** an agent executes code, calls `write_todos` whose plan is shown elsewhere, and executes code again
+- **THEN** the trace still shows two separate code activities
+
+#### Scenario: Cancelled execution
+- **WHEN** a user cancels approval of a code call in an expanded activity
+- **THEN** that command is shown as cancelled rather than failed
+
+#### Scenario: Streaming update
+- **WHEN** another code call arrives while a code activity is already displayed
+- **THEN** its command appears in that activity without changing the identity or selected detail of earlier calls
+
 ### Requirement: On-demand conversation workload
 The broker SHALL create no idle sandbox workload before execution. It SHALL create at most one isolated workload for a conversation on its first execution, reuse it until the configured inactivity deadline, and destroy it when the deadline expires. Admin and operator settings SHALL NOT permit a positive preloaded capacity. A SIG Agent Sandbox pool object MAY exist only with zero replicas if required for claims.
 

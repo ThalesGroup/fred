@@ -1899,6 +1899,11 @@
         "running": "En cours",
         "success": "Succès"
       },
+      "toolGroups": {
+        "command": "Commande {{number}}",
+        "commands_one": "{{count}} commande",
+        "commands_other": "{{count}} commandes"
+      },
       "toolLabels": {
         "codeSandbox": "Exécution du code dans un espace isolé",
         "selectCodeInput": "Préparation d'un fichier pour l'analyse",

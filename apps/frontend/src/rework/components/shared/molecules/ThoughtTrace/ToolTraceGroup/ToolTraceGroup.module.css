@@ -1,0 +1,163 @@
+.group {
+  --trace-marker-y: 16px;
+
+  position: relative;
+  min-width: 0;
+}
+
+.group::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--trace-rail-x);
+  transform: translateX(-50%);
+  background: var(--outline-muted);
+  width: 1px;
+  content: "";
+}
+
+.heading {
+  display: flex;
+  position: relative;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  padding: var(--spacing-2xs) var(--spacing-s);
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.heading:hover,
+.heading:focus-visible,
+.child:hover,
+.child:focus-visible {
+  outline: none;
+  background: var(--state-on-surface-focused);
+}
+
+.marker {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.dot,
+.childDot {
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1.5px var(--surface-main);
+  border-radius: 50%;
+  width: 9px;
+  height: 9px;
+}
+
+.dot {
+  position: relative;
+  z-index: 1;
+}
+
+.dot_ok {
+  background: var(--success);
+}
+.dot_error {
+  background: var(--error);
+}
+.dot_pending {
+  background: var(--tertiary);
+}
+.dot_awaiting_confirmation {
+  background: var(--warning);
+}
+
+.index {
+  width: 18px;
+  color: var(--on-surface-retreat);
+  font-variant-numeric: tabular-nums;
+}
+
+.title {
+  max-width: 35%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.count {
+  flex-shrink: 0;
+}
+
+.count,
+.meta,
+.childStatus,
+.latency {
+  color: var(--on-surface-retreat);
+}
+
+.count::before {
+  margin-right: var(--spacing-2xs);
+  content: "·";
+}
+
+.preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview::before {
+  margin-right: var(--spacing-2xs);
+  content: "·";
+}
+
+.children {
+  --trace-rail-x: 16.5px;
+  --trace-line-h: 1.125rem;
+
+  display: flex;
+  flex-direction: column;
+  margin-left: 28px;
+}
+
+.child {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  padding: var(--spacing-2xs) var(--spacing-s);
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+  text-align: left;
+}
+
+.childTitle,
+.meta,
+.childStatus,
+.latency {
+  white-space: nowrap;
+}
+
+.childStatus {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.latency {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
