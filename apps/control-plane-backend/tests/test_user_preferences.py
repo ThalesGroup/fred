@@ -32,12 +32,10 @@ async def test_preferences_round_trip_and_account_isolation(
             sidebar_collapsed=True,
             team_sort_mode="alpha",
             agent_sort="updated_at:desc",
-            trace_expanded=False,
         ),
     )
     assert saved.initialized is True
     assert saved.ui_theme_id == "acme"
-    assert saved.trace_expanded is False
     assert (await store.get("bob")).initialized is False
 
     await store.patch(
@@ -49,7 +47,6 @@ async def test_preferences_round_trip_and_account_isolation(
     assert reloaded.language == "fr"
     assert reloaded.team_sort_mode == "alpha"
     assert reloaded.agent_sort == "created_at:desc"
-    assert reloaded.trace_expanded is False
 
     await store.delete("alice")
     assert (await store.get("alice")).initialized is False
@@ -65,6 +62,7 @@ async def test_preferences_round_trip_and_account_isolation(
         {"team_sort_mode": "random"},
         {"agent_sort": "rating"},
         {"pane_widths": {"import-panel:width": 400}},
+        {"trace_expanded": True},
         {"unrecognized": True},
     ],
 )

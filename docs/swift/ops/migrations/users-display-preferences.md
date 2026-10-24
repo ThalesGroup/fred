@@ -41,6 +41,6 @@ saved after the migration.
 
 Personal choices from old browser storage are not migrated. An absent row or
 failed preference read uses defaults for that load; the next load retries the
-database read. Resizable pane widths stay in localStorage, return to their
-defaults if browser storage is cleared, and are clamped to the current viewport
-when rendered.
+database read. Resizable pane widths and trace expansion stay in localStorage
+and return to their defaults if browser storage is cleared. Pane widths are
+clamped to the current viewport when rendered.

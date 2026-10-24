@@ -6,7 +6,7 @@ Defines how authenticated people's durable display choices are saved, restored a
 
 ### Requirement: A person owns one display-preferences record
 
-The control plane SHALL let an authenticated person read and partially update only their own preferences. The record SHALL contain a nullable theme ID, `light`/`dark`/`system` mode, nullable `en`/`fr` language, navigation-sidebar collapsed state, `recent`/`alpha` team sort, `name`/`created_at:desc`/`updated_at:desc` agent sort and nullable trace-expansion choice. Resizable pane widths SHALL remain in browser localStorage and SHALL NOT be sent to the preferences API. The theme ID, when present, SHALL match `^[a-z][a-z0-9-]{0,31}$` and SHALL remain opaque to the control plane. An absent record SHALL return the documented defaults and be distinguishable from a saved record.
+The control plane SHALL let an authenticated person read and partially update only their own preferences. The record SHALL contain a nullable theme ID, `light`/`dark`/`system` mode, nullable `en`/`fr` language, navigation-sidebar collapsed state, `recent`/`alpha` team sort, `name`/`created_at:desc`/`updated_at:desc` agent sort. Resizable pane widths and trace expansion SHALL remain in browser localStorage and SHALL NOT be sent to the preferences API. The theme ID, when present, SHALL match `^[a-z][a-z0-9-]{0,31}$` and SHALL remain opaque to the control plane. An absent record SHALL return the documented defaults and be distinguishable from a saved record.
 
 #### Scenario: Save and read several choices
 
@@ -20,13 +20,18 @@ The control plane SHALL let an authenticated person read and partially update on
 
 #### Scenario: Invalid choice
 
-- **WHEN** a person submits an invalid theme ID, mode, language, sort value or a pane-width field
+- **WHEN** a person submits an invalid theme ID, mode, language, sort value or a browser-local display field
 - **THEN** the request fails validation and no stored choice changes
 
 #### Scenario: Pane width remains browser-local
 
 - **WHEN** a person resizes a pane and later clears browser storage
 - **THEN** the pane returns to its default width and no preferences API write was made for that resize
+
+#### Scenario: Trace expansion remains browser-local
+
+- **WHEN** a person expands or collapses a thought trace and later clears browser storage
+- **THEN** the trace returns to its automatic default and no preferences API write was made for that toggle
 
 #### Scenario: Account isolation
 
@@ -40,7 +45,7 @@ The control plane SHALL let an authenticated person read and partially update on
 
 ### Requirement: Database values alone initialize personal preferences
 
-After authentication, the frontend SHALL initialize personal display preferences only from the authenticated person's database response. An absent record or failed read SHALL apply documented defaults. Existing personal browser values SHALL NOT seed the database, initialize signed-in preferences or act as a read-failure fallback. Personal display controls SHALL use in-memory state after the database read and SHALL NOT mirror those preferences to browser storage. Resizable pane widths remain browser-local.
+After authentication, the frontend SHALL initialize database-backed display preferences only from the authenticated person's database response. An absent record or failed read SHALL apply documented defaults. Existing browser values SHALL NOT seed the database, initialize database-backed preferences or act as a fallback when their database read fails. Database-backed display controls SHALL use in-memory state after the database read and SHALL NOT mirror those preferences to browser storage. Resizable pane widths and trace expansion remain browser-local.
 
 #### Scenario: First load after upgrade
 
@@ -79,7 +84,7 @@ The frontend SHALL resolve the signed-in person's database preferences against t
 #### Scenario: Shared browser
 
 - **WHEN** another person signs in on a browser with a previous person's local choices
-- **THEN** the new person's application content uses only the new person's preferences or defaults
+- **THEN** the new person's database-backed content uses only the new person's preferences or defaults
 
 ### Requirement: Theme IDs remain stable across restarts
 

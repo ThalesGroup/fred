@@ -89,14 +89,12 @@ it("restores all display choices after browser storage is cleared", async () => 
     sidebar_collapsed: true,
     team_sort_mode: "alpha",
     agent_sort: "updated_at:desc",
-    trace_expanded: false,
   });
   await initializeUserPreferences("alice");
   expect(getCurrentUserPreferences().ui_theme_id).toBe("cobalt");
   expect(getCurrentUserPreferences().sidebar_collapsed).toBe(true);
   expect(getCurrentUserPreferences().team_sort_mode).toBe("alpha");
   expect(getCurrentUserPreferences().agent_sort).toBe("updated_at:desc");
-  expect(getCurrentUserPreferences().trace_expanded).toBe(false);
   expect(localStorage.getItem("localHook:ApplicationContextProvider.uiTheme")).toBeNull();
   expect(localStorage.getItem("localHook:import-panel:width")).toBeNull();
   expect(mock.writes).toHaveLength(0);

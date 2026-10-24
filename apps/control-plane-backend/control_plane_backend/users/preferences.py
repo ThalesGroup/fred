@@ -45,7 +45,6 @@ class UserPreferences(BaseModel):
     sidebar_collapsed: bool = False
     team_sort_mode: TeamSortMode = "recent"
     agent_sort: AgentSort = "name"
-    trace_expanded: bool | None = None
 
 
 class PatchUserPreferences(BaseModel):
@@ -59,7 +58,6 @@ class PatchUserPreferences(BaseModel):
     sidebar_collapsed: bool | None = None
     team_sort_mode: TeamSortMode | None = None
     agent_sort: AgentSort | None = None
-    trace_expanded: bool | None = None
 
     @model_validator(mode="after")
     def _nonempty(self) -> PatchUserPreferences:
@@ -80,7 +78,6 @@ def _to_preferences(row: UserPreferencesRow | None) -> UserPreferences:
             "sidebar_collapsed": row.sidebar_collapsed,
             "team_sort_mode": row.team_sort_mode,
             "agent_sort": row.agent_sort,
-            "trace_expanded": row.trace_expanded,
         }
     )
 
@@ -129,8 +126,6 @@ class UserPreferencesStore:
                 row.team_sort_mode = patch.team_sort_mode or "recent"
             if "agent_sort" in fields:
                 row.agent_sort = patch.agent_sort or "name"
-            if "trace_expanded" in fields:
-                row.trace_expanded = patch.trace_expanded
             row.updated_at = utcnow()
             await session.flush()
             return _to_preferences(row)

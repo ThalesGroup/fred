@@ -9,7 +9,7 @@
 - [x] 2.1 Regenerate the Control Plane OpenAPI client and wire generated preference endpoints; verify the generated types match the backend schema.
 - [x] 2.2 Hydrate preferences before signed-in content paints only from the database response or defaults; remove legacy import and browser-cache fallback, and verify retained old browser values, absent row, failed read, account switch and pre-auth theme boot in focused tests.
 - [x] 2.3 Persist theme, mode, language and sidebar changes through partial updates; verify each control restores its confirmed state after a browser wipe and errors do not leave a false saved choice.
-- [x] 2.4 Persist team and agent sorts and trace expansion; keep named pane widths browser-local and verify a resize sends no preferences request.
+- [x] 2.4 Persist team and agent sorts; keep named pane widths and trace expansion browser-local and verify neither control sends a preferences request.
 
 ## 3. Documentation and completion
 

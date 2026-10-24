@@ -38,7 +38,6 @@ def upgrade() -> None:
         sa.Column(
             "agent_sort", sa.String(length=20), nullable=False, server_default="name"
         ),
-        sa.Column("trace_expanded", sa.Boolean(), nullable=True),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),

@@ -4049,7 +4049,6 @@ export type UserPreferences = {
   sidebar_collapsed?: boolean;
   team_sort_mode?: "recent" | "alpha";
   agent_sort?: "name" | "created_at:desc" | "updated_at:desc";
-  trace_expanded?: boolean | null;
 };
 export type PatchUserPreferences = {
   ui_theme_id?: string | null;
@@ -4058,7 +4057,6 @@ export type PatchUserPreferences = {
   sidebar_collapsed?: boolean | null;
   team_sort_mode?: ("recent" | "alpha") | null;
   agent_sort?: ("name" | "created_at:desc" | "updated_at:desc") | null;
-  trace_expanded?: boolean | null;
 };
 export type UserTeamRelation = "team_admin" | "pending_team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type JoiningMode = "open" | "invite_only";

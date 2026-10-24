@@ -13,7 +13,10 @@
 // limitations under the License.
 
 import { useCallback, useRef, useState } from "react";
-import { persistUserPreference, useCurrentUserPreference } from "../../../app/userPreferences";
+import { useLocalStorageState } from "../../../hooks/useLocalStorageState";
+
+/** localStorage key (namespaced by `useLocalStorageState` itself). */
+export const TRACE_EXPANDED_PREFERENCE_KEY = "chatTraceExpanded";
 
 /**
  * Whether one trace block is expanded, from the three inputs that can decide it.
@@ -48,7 +51,7 @@ export function resolveTraceExpanded(
  * flip every other trace already on screen.
  */
 export function useTraceExpansion(done: boolean): { expanded: boolean; toggle: () => void } {
-  const preference = useCurrentUserPreference("trace_expanded", null);
+  const [preference, setPreference] = useLocalStorageState<boolean | null>(TRACE_EXPANDED_PREFERENCE_KEY, null);
   const mountPreference = useRef(preference).current;
   const [override, setOverride] = useState<boolean | null>(null);
   // Captured at mount, not latched over time. `done` comes from the LAST
@@ -62,8 +65,8 @@ export function useTraceExpansion(done: boolean): { expanded: boolean; toggle: (
   const toggle = useCallback(() => {
     const next = !expanded;
     setOverride(next);
-    persistUserPreference({ trace_expanded: next });
-  }, [expanded]);
+    setPreference(next);
+  }, [expanded, setPreference]);
 
   return { expanded, toggle };
 }
