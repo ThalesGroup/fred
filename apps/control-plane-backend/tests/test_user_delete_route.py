@@ -85,6 +85,7 @@ class _Deployment:
     rebac: AccountStatusRebacEngine
     identity: _IdentityProvider
     calls: list[str]
+    preferences_deleted: list[str]
 
 
 @asynccontextmanager
@@ -110,6 +111,11 @@ async def _deployment(
     async def no_seen(_user_id: str) -> None:
         calls.append("delete_patch_note_seen")
 
+    preferences_deleted: list[str] = []
+
+    async def no_preferences(user_id: str) -> None:
+        preferences_deleted.append(user_id)
+
     container = SimpleNamespace(
         get_rebac_engine=lambda: engine_under_test,
         get_pg_async_engine=object,
@@ -126,6 +132,9 @@ async def _deployment(
     app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
         uid="synthetic-admin", username="synthetic-admin", roles=[]
     )
+    app.dependency_overrides[users_api._get_user_preferences_store] = lambda: (
+        SimpleNamespace(delete=no_preferences)
+    )
     app.dependency_overrides[get_user_service_dependencies] = lambda: SimpleNamespace(
         configuration=SimpleNamespace(
             security=SimpleNamespace(user_directory=user_directory),
@@ -137,7 +146,9 @@ async def _deployment(
     )
     transport = ASGITransport(app=app, raise_app_exceptions=False)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        yield _Deployment(client, engine_under_test, identity, calls)
+        yield _Deployment(
+            client, engine_under_test, identity, calls, preferences_deleted
+        )
 
 
 async def _assert_banned(rebac: AccountStatusRebacEngine) -> None:
@@ -173,6 +184,7 @@ async def test_delete_bans_before_identity_deletion() -> None:
         await _assert_banned(deployment.rebac)
         assert ban(_PERSON) in deployment.rebac.relations
         assert deployment.identity.accounts == {_BYSTANDER}
+        assert deployment.preferences_deleted == [_PERSON]
 
 
 @pytest.mark.asyncio

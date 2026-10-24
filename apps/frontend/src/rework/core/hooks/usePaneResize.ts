@@ -108,7 +108,8 @@ export function usePaneResize({
       // emits moves too, but never holds the capture.
       if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
       const distance = anchor === "right" ? dragAnchorRef.current - e.clientX : e.clientX - dragAnchorRef.current;
-      setWidth(clamp(Math.round(distance)));
+      const next = clamp(Math.round(distance));
+      setWidth(next);
     },
     [clamp, setWidth, anchor],
   );

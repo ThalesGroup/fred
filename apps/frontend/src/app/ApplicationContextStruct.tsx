@@ -61,10 +61,10 @@ export interface ApplicationContextStruct {
   /**
    * Sets the theme mode.
    */
-  setThemeMode: (mode: ThemeMode) => void;
+  setThemeMode: (mode: ThemeMode, onError?: (error: unknown) => void) => void;
 
   /**
    * Sets the UI theme.
    */
-  setUiTheme: (theme: UiTheme) => void;
+  setUiTheme: (theme: UiTheme, onError?: (error: unknown) => void) => void;
 }
