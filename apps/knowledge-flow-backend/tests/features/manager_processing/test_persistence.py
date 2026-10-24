@@ -259,6 +259,101 @@ def test_cleanup_preserves_published_ordinals_and_does_not_ack_remote_failure(mo
         assert all(not ack.objects_empty for ack in acknowledgments)
 
 
+@pytest.mark.parametrize("remaining", [0, 1])
+@pytest.mark.parametrize("object_count", [0, 200, 201])
+def test_cleanup_purges_document_and_does_not_ack_remaining_vectors(monkeypatch, descriptor, remaining, object_count):
+    from knowledge_flow_backend.features.manager_processing import cleanup
+
+    prefix = f"derived/{descriptor.work.document_id}/output/{descriptor.work.installation_id}/"
+    candidate = {
+        "work": descriptor.work.model_dump(mode="json"),
+        "generation": str(descriptor.generation),
+        "output_prefix": prefix,
+        "cursor": 0,
+        "chunks": 0,
+        "batch": 200,
+        "preserve_objects": False,
+        "protected_ordinals": [],
+        "purge_document": True,
+    }
+    second_document = str(uuid4())
+    second_prefix = f"derived/{second_document}/output/{descriptor.work.installation_id}/"
+    second = {
+        **candidate,
+        "work": {**candidate["work"], "document_id": second_document, "processing_id": str(uuid4())},
+        "generation": str(uuid4()),
+        "output_prefix": second_prefix,
+    }
+    processed_prefix = second_prefix if remaining else prefix
+    acknowledgments = []
+    events = []
+
+    class Client:
+        def __init__(self, *_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def get(self, _):
+            return [candidate, second] if remaining else [candidate]
+
+        def post(self, path, body):
+            assert path == "/document-processing/cleanup"
+            events.append("ack")
+            acknowledgments.append(body)
+
+    def delete(*, document_uid):
+        assert document_uid in (str(descriptor.work.document_id), second_document)
+        events.append("delete_vectors")
+
+    def count(*, document_uid):
+        assert document_uid in (str(descriptor.work.document_id), second_document)
+        events.append("count_vectors")
+        return remaining if document_uid == str(descriptor.work.document_id) else 0
+
+    def objects(bucket, **kwargs):
+        assert bucket == "derived"
+        assert kwargs == {"prefix": processed_prefix, "recursive": True}
+        events.append("list_objects")
+        for i in range(object_count):
+            yield SimpleNamespace(object_name=f"{processed_prefix}{i}")
+
+    def remove(bucket, key):
+        assert bucket == "derived"
+        events.append(key)
+
+    vectors = SimpleNamespace(delete_vectors_for_document=delete, get_document_chunk_count=count)
+    artifacts = SimpleNamespace(bucket="derived", client=SimpleNamespace(list_objects=objects, remove_object=remove))
+    monkeypatch.setattr(cleanup, "ManagerClient", Client)
+    monkeypatch.setattr(cleanup, "Artifacts", lambda _: artifacts)
+    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace(enabled=True)), get_manager_vector_store=lambda: vectors)
+    if remaining:
+        cleanup.sweep(context)
+        assert all(ack.work.document_id != descriptor.work.document_id for ack in acknowledgments)
+        assert len(acknowledgments) == 1
+        ack = acknowledgments[0]
+        assert ack.work.model_dump(mode="json") == second["work"]
+        assert str(ack.generation) == second["generation"]
+        assert ack.purge_document
+        assert ack.cursor == ack.next_cursor == 0
+        assert ack.objects_empty == (object_count <= 200)
+        assert events == ["delete_vectors", "count_vectors", "delete_vectors", "count_vectors", "list_objects", *[f"{second_prefix}{i}" for i in range(min(object_count, 200))], "ack"]
+    else:
+        cleanup.sweep(context)
+        assert events == ["delete_vectors", "count_vectors", "list_objects", *[f"{prefix}{i}" for i in range(min(object_count, 200))], "ack"]
+        assert len(acknowledgments) == 1
+        ack = acknowledgments[0]
+        assert ack.purge_document
+        assert ack.work == descriptor.work
+        assert ack.generation == descriptor.generation
+        assert ack.cursor == ack.next_cursor == 0
+        assert ack.objects_empty == (object_count <= 200)
+
+
 @pytest.mark.parametrize("rendered", [True, False])
 def test_extraction_child_freezes_profile_before_context_and_requires_office_preview(monkeypatch, descriptor, tmp_path, rendered):
     import tempfile

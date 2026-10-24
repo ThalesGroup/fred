@@ -461,6 +461,9 @@ backlog, failures or overlap skips, completion after its due time takes roughly
 sweep (normally less than `I`). Retries after ambiguous effects can advance work
 within the same sweep; outages and long sweeps can extend the delay without bound.
 
+The worker purges documents marked by its operation once their derived results
+are cleaned, before folders and spaces; it never deletes an unmarked document.
+
 Folder batches remove at most 1000 current leaves. A chain of 15 folders therefore
 needs 15 successful folder batches, followed by tuple cleanup and a separate SQL
 space-removal batch. For one space with at most 96 direct tuples, this is at least

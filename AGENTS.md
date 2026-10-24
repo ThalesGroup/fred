@@ -56,6 +56,64 @@ a push or publication. State accurately which validation was not performed.
 This working mode takes precedence over the automatic workflow, verification,
 review and close-out requirements below and in legacy guidance or skills.
 
+## Rust engineering baseline
+
+Apply these rules to Rust implementation and review, including the Control Plane
+and its embedded agent. This is Fred's shared baseline for Codex and Claude;
+no external prompt collection is required. Keep the incremental workflow above.
+
+### Safety, ownership and errors
+
+- Prefer immutability, explicit ownership and simple, zero-cost abstractions.
+  Do not add traits, generics or indirection without a concrete need.
+- Do not introduce `unsafe` code unless explicitly requested by the developer
+  with an architectural justification; document the safety invariants if used.
+- Avoid `unwrap()` and `expect()` in production paths. Propagate errors with `?`
+  and use existing typed errors (`thiserror`, `AppError` or the component's
+  equivalent). Keep internal error detail out of public responses and secrets
+  out of logs. Distinguish startup failures from recoverable request errors.
+- Prefer borrowing (`&str`, slices) when appropriate and avoid unnecessary
+  allocations and clones. Owned values are appropriate when data must outlive
+  a call or move into a task; cloning an `Arc` is not a deep data copy.
+
+### Async, concurrency and SQLx
+
+- Never hold a `std::sync::MutexGuard` across `.await`. Keep synchronous lock
+  sections short; use `tokio::sync::Mutex` only when async locking is needed.
+  Avoid holding any lock across network I/O when the operation can be separated.
+- Do not block Tokio executor threads with synchronous I/O or CPU-heavy work.
+  Use async APIs or bounded `spawn_blocking` work where appropriate; account for
+  the fact that started blocking work cannot simply be aborted.
+- Prefer standard Tokio primitives and bounded channels for agent/event loops.
+  Use `mpsc`, `oneshot` or `broadcast` according to delivery semantics; handle
+  backpressure, closed receivers and broadcast lag explicitly. Keep async traits
+  minimal and make `Send` requirements match how tasks are actually executed.
+- Bound concurrent executions and outbound-call durations. Tie work to its
+  owning request/run, propagate cancellation, and stop stream producers when
+  the SSE client disconnects. Avoid detached tasks without an explicit owner
+  and shutdown policy. Do not assume dropping a future undoes remote effects.
+- Reuse configured SQLx pools. Never retain a transaction or checked-out SQL
+  connection throughout an LLM call or SSE stream; scope database work narrowly.
+- Prefer compile-time checked `query!`/`query_as!` where the project's schema or
+  prepared offline metadata supports them. Otherwise use parameterized queries
+  with explicit typed results (`query_as` and `sqlx::FromRow`). `FromRow` alone
+  does not validate SQL at compile time. Never interpolate untrusted SQL values.
+
+### Structure and verification
+
+- Separate domain logic, wire models and Axum handlers with small modules;
+  follow existing component boundaries without inventing layers for trivial code.
+  Reuse Fred's contracts and authorization mechanisms at HTTP boundaries.
+- Match APIs and features to the dependency versions in Cargo manifests and
+  lockfiles. Avoid adding dependencies for behavior already supplied locally.
+- Deliver complete file edits with necessary imports and error handling. When
+  code snippets are requested, make them self-contained or clearly identify
+  their integration context; do not present pseudocode as compilable Rust.
+- Review likely compiler and Clippy issues before handing back code, including
+  ownership, `Send` bounds, lock lifetimes and unused results. Static reasoning
+  is not a successful build. Follow the incremental mode for running checks and
+  report exactly which compilation, lint and tests were or were not performed.
+
 ## Dimi's reconstruction method
 
 Use [fred-reconstruction-method](.agents/skills/fred-reconstruction-method/SKILL.md)

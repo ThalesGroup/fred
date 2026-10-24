@@ -162,8 +162,10 @@ erDiagram
 "space" }o--o| "deletion" : "deletion_id"
 "space" }o--|| "space" : "organization_id"
 "space" }o--o| "space" : "parent_id"
+"folder" }o--o| "deletion" : "deletion_id"
 "folder" }o--|| "space" : "space_id"
 "folder" }o--|| "folder" : "parent_id, space_id"
+"document" }o--o| "deletion" : "deletion_id"
 "document" }o--|| "space" : "quota_owner"
 "document" }o--|| "space" : "space_id"
 "document" }o--|| "folder" : "folder_id, space_id"
@@ -189,6 +191,7 @@ erDiagram
   text error_code
   bigint folders_deleted
   bigint spaces_deleted
+  bigint documents_deleted
 }
 "space" {
   uuid id
@@ -207,6 +210,7 @@ erDiagram
   text name
   text path
   timestamp_with_time_zone created_at
+  uuid deletion_id FK
 }
 "document" {
   uuid id
@@ -223,6 +227,7 @@ erDiagram
   boolean retrievable
   jsonb retrieval_command
   boolean retrievable_pending
+  uuid deletion_id FK
 }
 "platform_bootstrap" {
   boolean singleton
@@ -500,7 +505,8 @@ concurrent external changes remain subject to the additive replay contract.
 
 `DELETE /spaces/{id}` returns a `Receipt`: operation/target/organization identifiers,
 root-parent recovery snapshot, actor subject, frozen request/due timestamps and
-mode/rule, status, safe error code, SQL deletion counters and completion time.
+mode/rule, status, safe error code, SQL deletion counters (`documents_deleted`,
+`folders_deleted`, `spaces_deleted`) and completion time.
 It returns 202 while pending and 200 on completed replay. `GET /deletions/{operation_id}`
 returns that receipt after a fresh platform capability check. No names, bearer,
 content or canonical grants are retained in it.

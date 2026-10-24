@@ -3,6 +3,9 @@
 Audience: AI assistants (Claude Code) only. This file is operational — it tells you
 _how to work_ in this repository. Human developers start with `docs/swift/README.md`.
 
+For Rust tasks, follow the shared
+[Rust engineering baseline in AGENTS.md](AGENTS.md#rust-engineering-baseline).
+
 At the start of every Fred task, read
 [fred-architecture](.claude/skills/fred-architecture/SKILL.md), shared with Codex
 through `.agents/skills`. Its editorial policy is mandatory: keep the human-facing

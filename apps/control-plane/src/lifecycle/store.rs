@@ -42,6 +42,7 @@ pub struct Receipt {
     pub status: Status,
     pub completed_at: Option<DateTime<Utc>>,
     pub error_code: Option<String>,
+    pub documents_deleted: i64,
     pub folders_deleted: i64,
     pub spaces_deleted: i64,
 }

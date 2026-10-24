@@ -75,28 +75,85 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
                 .await?,
         )?;
     }
-    let docs: bool = sqlx::query_scalar("select exists(select 1 from document where space_id in (select id from space where deletion_id = $1)) or exists(select 1 from document_upload where status = 'pending' and space_id in (select id from space where deletion_id = $1))").bind(id).fetch_one(&mut *tx).await?;
+    let docs: bool = sqlx::query_scalar("select exists(select 1 from document where deletion_id is distinct from $1 and space_id in (select id from space where deletion_id = $1)) or exists(select 1 from document_upload where status = 'pending' and space_id in (select id from space where deletion_id = $1))").bind(id).fetch_one(&mut *tx).await?;
+    if docs {
+        sqlx::query("update deletion set status = 'blocked', error_code = 'unsupported_documents' where id = $1")
+            .bind(id).execute(&mut *tx).await?;
+        tx.commit().await?;
+        return Ok(());
+    }
+    let remaining: i64 = sqlx::query_scalar("select count(*) from document where deletion_id = $1")
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
+    if remaining > 0 {
+        if !guard_present {
+            sqlx::query("update deletion set status = 'blocked', error_code = 'missing_organization_guard' where id = $1")
+                .bind(id).execute(&mut *tx).await?;
+            tx.commit().await?;
+            return Ok(());
+        }
+        let ready: Vec<Uuid> = sqlx::query_scalar(
+            "select d.id from document d
+             where d.deletion_id = $1
+               and not exists (
+                   select 1 from document_processing p
+                   where p.document_id = d.id
+                     and (p.status in ('pending', 'running') or exists (
+                         select 1 from jsonb_array_elements(p.generations) g
+                         where (g->>'cleaned')::boolean is distinct from true
+                     ))
+               )
+             order by d.id limit 100 for update of d skip locked",
+        )
+        .bind(id)
+        .fetch_all(&mut *tx)
+        .await?;
+        if ready.is_empty() {
+            tracing::info!(remaining, "waiting for derived cleanup");
+        } else {
+            // Delete all attempts together so retry_of references disappear in the same statement.
+            sqlx::query("delete from document_processing where document_id = any($1)")
+                .bind(&ready)
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query(
+                "delete from document_upload where document_id = any($1) and status = 'stored'",
+            )
+            .bind(&ready)
+            .execute(&mut *tx)
+            .await?;
+            let deleted =
+                sqlx::query("delete from document where id = any($1) and deletion_id = $2")
+                    .bind(&ready)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?
+                    .rows_affected();
+            fga.fence(&mut guard).await?;
+            sqlx::query(
+                "update deletion set documents_deleted = documents_deleted + $2 where id = $1",
+            )
+            .bind(id)
+            .bind(deleted as i64)
+            .execute(&mut *tx)
+            .await?;
+            tracing::info!(documents_deleted = deleted, "Documents purged");
+        }
+        tx.commit().await?;
+        return Ok(());
+    }
     let refs = fga.references(space).await?;
     let manifest_count: i64 =
         sqlx::query_scalar("select count(*) from space where deletion_id = $1")
             .bind(id)
             .fetch_one(&mut *tx)
             .await?;
-    let error = if docs {
-        Some("unsupported_documents")
-    } else if !guard_present
+    if !guard_present
         && !(kind == SpaceKind::Organization && manifest_count == 1 && refs.keys.is_empty())
     {
-        Some("missing_organization_guard")
-    } else {
-        None
-    };
-    if let Some(code) = error {
-        sqlx::query("update deletion set status = 'blocked', error_code = $2 where id = $1")
-            .bind(id)
-            .bind(code)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query("update deletion set status = 'blocked', error_code = 'missing_organization_guard' where id = $1")
+            .bind(id).execute(&mut *tx).await?;
         tx.commit().await?;
         return Ok(());
     }

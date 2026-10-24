@@ -1002,6 +1002,7 @@ pub fn routes(state: AppState) -> Router {
 fn registrations() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(health))
+        .merge(crate::embedded_agent::routes())
         .routes(routes!(create_space))
         .routes(routes!(grant, revoke))
         .routes(routes!(rename_folder, delete_folder))

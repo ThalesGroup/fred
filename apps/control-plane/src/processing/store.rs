@@ -67,9 +67,9 @@ impl Row {
         }
         Ok(())
     }
-    pub fn prefix(&self, root: &str, generation: Uuid) -> String {
+    pub fn document_prefix(&self, root: &str) -> String {
         format!(
-            "{}{}/output/{}/{}/{generation}/",
+            "{}{}/output/{}/",
             if root.is_empty() {
                 String::new()
             } else {
@@ -77,6 +77,12 @@ impl Row {
             },
             self.summary.document_id,
             self.installation_id,
+        )
+    }
+    pub fn prefix(&self, root: &str, generation: Uuid) -> String {
+        format!(
+            "{}{}/{generation}/",
+            self.document_prefix(root),
             self.summary.id
         )
     }

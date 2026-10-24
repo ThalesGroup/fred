@@ -21,6 +21,23 @@ def sweep(context):
         for candidate in candidates:
             work = Work.model_validate(candidate["work"])
             generation = UUID(candidate["generation"])
+            if candidate.get("purge_document"):
+                if vectors is None:
+                    vectors = context.get_manager_vector_store()
+                vectors.delete_vectors_for_document(document_uid=str(work.document_id))
+                if vectors.get_document_chunk_count(document_uid=str(work.document_id)) > 0:
+                    logging.getLogger(__name__).info("Document vector cleanup will retry: %s", work.document_id)
+                    continue
+                objects = list(itertools.islice(artifacts.client.list_objects(artifacts.bucket, prefix=candidate["output_prefix"], recursive=True), 201))
+                for item in objects[:200]:
+                    if item.object_name is None:
+                        raise RuntimeError("Invalid object cleanup response")
+                    artifacts.client.remove_object(artifacts.bucket, item.object_name)
+                client.post(
+                    "/document-processing/cleanup",
+                    Cleaned(work=work, generation=generation, cursor=0, next_cursor=0, objects_empty=len(objects) <= 200, purge_document=True),
+                )
+                continue
             start = candidate["cursor"]
             end = min(candidate["chunks"], start + candidate["batch"])
             if end > start:

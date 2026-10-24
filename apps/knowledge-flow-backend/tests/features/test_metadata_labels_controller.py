@@ -24,7 +24,6 @@ calling service methods directly in Python.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -35,7 +34,6 @@ from fred_core import KeycloakUser, RebacDisabledResult, get_current_user
 from fred_core.documents.document_structures import DocumentMetadata, Identity, SourceInfo, SourceType
 from fred_core.documents.postgres_document_store import PostgresDocumentMetadataStore
 from fred_core.models.base import Base
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.metadata.controller import MetadataController
@@ -57,8 +55,8 @@ def _doc(uid: str) -> DocumentMetadata:
 
 
 @pytest_asyncio.fixture
-async def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'labels_controller.sqlite3'}")
+async def client(sqlite_engine, monkeypatch: pytest.MonkeyPatch):
+    engine = sqlite_engine
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     store = PostgresDocumentMetadataStore(engine)

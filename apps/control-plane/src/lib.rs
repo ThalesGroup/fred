@@ -24,6 +24,7 @@ pub mod config;
 pub mod db;
 pub mod documents;
 pub mod domain;
+pub mod embedded_agent;
 pub mod error;
 pub mod extract;
 pub mod fga;

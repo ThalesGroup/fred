@@ -41,7 +41,6 @@ from fred_core.documents.document_structures import (
     SourceType,
     Tagging,
 )
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from knowledge_flow_backend.features.metadata import service as service_module
 from knowledge_flow_backend.features.metadata.service import MetadataService
@@ -122,7 +121,7 @@ class _FakeMetadataStore:
         self.save_sessions.append(session)
 
 
-def _install_fakes(monkeypatch, *, tag_owner: str, known_teams: set[str]) -> tuple[list[tuple[str, int]], list[tuple[str, int]]]:
+def _install_fakes(monkeypatch, engine, *, tag_owner: str, known_teams: set[str]) -> tuple[list[tuple[str, int]], list[tuple[str, int]]]:
     """Wire the ambient singletons `_adjust_team_storage` reaches for.
 
     Returns the two recording lists: team increments and user increments, each
@@ -148,11 +147,7 @@ def _install_fakes(monkeypatch, *, tag_owner: str, known_teams: set[str]) -> tup
     monkeypatch.setattr(service_module, "TeamMetadataStore", _FakeTeamStore)
     monkeypatch.setattr(service_module, "get_user_store", lambda: _FakeUserStore())
 
-    # A real (empty) SQLite engine: the delete+release path now opens a genuine
-    # transaction, and the fakes assert on the deltas that reach it. Nothing is
-    # written to this database — it exists so the transaction boundary is real.
-    engine = create_async_engine("sqlite+aiosqlite://")
-
+    # The fixture owns the real SQLite engine used for the transaction boundary.
     fake_context = SimpleNamespace(
         get_tag_store=lambda: SimpleNamespace(
             get_tag_by_id=_make_async(SimpleNamespace(id="tag-1", owner_id=tag_owner)),
@@ -191,9 +186,9 @@ def _user(uid: str) -> KeycloakUser:
 
 
 @pytest.mark.asyncio
-async def test_deleting_a_team_document_releases_the_team_counter(monkeypatch) -> None:
+async def test_deleting_a_team_document_releases_the_team_counter(monkeypatch, sqlite_engine) -> None:
     """AC1 — a team-owned document's bytes come off every applicable team counter."""
-    team_increments, _ = _install_fakes(monkeypatch, tag_owner="team-a", known_teams={"team-a"})
+    team_increments, _ = _install_fakes(monkeypatch, sqlite_engine, tag_owner="team-a", known_teams={"team-a"})
     metadata = _make_metadata("doc-1", tag_ids=["tag-1"])
     service = _build_service(_FakeMetadataStore(metadata), _PermissiveRebac(team_owners=["team-a"]))
 
@@ -203,7 +198,7 @@ async def test_deleting_a_team_document_releases_the_team_counter(monkeypatch) -
 
 
 @pytest.mark.asyncio
-async def test_deleting_a_personal_document_releases_the_owning_users_counter(monkeypatch) -> None:
+async def test_deleting_a_personal_document_releases_the_owning_users_counter(monkeypatch, sqlite_engine) -> None:
     """AC2 — the bytes come off the counter of the user who OWNS the tag.
 
     A real personal tag carries the owner's uid, not the literal "personal":
@@ -214,7 +209,7 @@ async def test_deleting_a_personal_document_releases_the_owning_users_counter(mo
     """
     owner_uid = str(uuid4())
     deleter_uid = str(uuid4())
-    team_increments, user_increments = _install_fakes(monkeypatch, tag_owner=owner_uid, known_teams=set())
+    team_increments, user_increments = _install_fakes(monkeypatch, sqlite_engine, tag_owner=owner_uid, known_teams=set())
     metadata = _make_metadata("doc-2", tag_ids=["tag-1"])
     service = _build_service(_FakeMetadataStore(metadata), _PermissiveRebac(team_owners=[]))
 
@@ -225,7 +220,7 @@ async def test_deleting_a_personal_document_releases_the_owning_users_counter(mo
 
 
 @pytest.mark.asyncio
-async def test_removing_the_last_tag_releases_using_the_pre_removal_tags(monkeypatch) -> None:
+async def test_removing_the_last_tag_releases_using_the_pre_removal_tags(monkeypatch, sqlite_engine) -> None:
     """AC3 — and the regression this path is most likely to hit again.
 
     `remove_tag_id_from_document` empties `metadata.tags.tag_ids` *before* it
@@ -233,7 +228,7 @@ async def test_removing_the_last_tag_releases_using_the_pre_removal_tags(monkeyp
     `_adjust_team_storage` bail at its `if not all_tags` guard and release
     nothing at all — silently, since it swallows its own errors.
     """
-    team_increments, _ = _install_fakes(monkeypatch, tag_owner="team-a", known_teams={"team-a"})
+    team_increments, _ = _install_fakes(monkeypatch, sqlite_engine, tag_owner="team-a", known_teams={"team-a"})
     metadata = _make_metadata("doc-3", tag_ids=["tag-1"])
     service = _build_service(_FakeMetadataStore(metadata), _PermissiveRebac(team_owners=["team-a"]))
 
@@ -243,10 +238,10 @@ async def test_removing_the_last_tag_releases_using_the_pre_removal_tags(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_repeated_delete_does_not_decrement_twice(monkeypatch) -> None:
+async def test_repeated_delete_does_not_decrement_twice(monkeypatch, sqlite_engine) -> None:
     """AC4 — the second delete finds no metadata row and must release nothing;
     a retried delete would otherwise hand back the same bytes on every attempt."""
-    team_increments, _ = _install_fakes(monkeypatch, tag_owner="team-a", known_teams={"team-a"})
+    team_increments, _ = _install_fakes(monkeypatch, sqlite_engine, tag_owner="team-a", known_teams={"team-a"})
     metadata = _make_metadata("doc-4", tag_ids=["tag-1"])
     store = _FakeMetadataStore(metadata)
     service = _build_service(store, _PermissiveRebac(team_owners=["team-a"]))
@@ -260,7 +255,7 @@ async def test_repeated_delete_does_not_decrement_twice(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_concurrent_loser_does_not_release_the_same_bytes(monkeypatch) -> None:
+async def test_a_concurrent_loser_does_not_release_the_same_bytes(monkeypatch, sqlite_engine) -> None:
     """#2149 review finding — the delete is the exactly-once gate.
 
     `DocumentMetadataRow` has no `version_id_col`, so before the store used a
@@ -269,7 +264,7 @@ async def test_a_concurrent_loser_does_not_release_the_same_bytes(monkeypatch) -
     concurrent tag removals and then re-upload to the full limit. The store now
     reports whether *this* call removed the row; the loser must release nothing.
     """
-    team_increments, _ = _install_fakes(monkeypatch, tag_owner="team-a", known_teams={"team-a"})
+    team_increments, _ = _install_fakes(monkeypatch, sqlite_engine, tag_owner="team-a", known_teams={"team-a"})
     metadata = _make_metadata("doc-7", tag_ids=["tag-1"])
     store = _FakeMetadataStore(metadata)
     service = _build_service(store, _PermissiveRebac(team_owners=["team-a"]))
@@ -286,10 +281,10 @@ async def test_a_concurrent_loser_does_not_release_the_same_bytes(monkeypatch) -
 
 
 @pytest.mark.asyncio
-async def test_a_failed_metadata_delete_releases_nothing(monkeypatch) -> None:
+async def test_a_failed_metadata_delete_releases_nothing(monkeypatch, sqlite_engine) -> None:
     """AC5 — the row is still there, so the bytes are still occupied. Releasing
     them here would credit quota for a document that was never removed."""
-    team_increments, _ = _install_fakes(monkeypatch, tag_owner="team-a", known_teams={"team-a"})
+    team_increments, _ = _install_fakes(monkeypatch, sqlite_engine, tag_owner="team-a", known_teams={"team-a"})
     metadata = _make_metadata("doc-5", tag_ids=["tag-1"])
     store = _FakeMetadataStore(metadata, delete_raises=RuntimeError("postgres is down"))
     service = _build_service(store, _PermissiveRebac(team_owners=["team-a"]))
@@ -301,11 +296,11 @@ async def test_a_failed_metadata_delete_releases_nothing(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_deleting_a_document_with_no_recorded_size_is_a_no_op(monkeypatch) -> None:
+async def test_deleting_a_document_with_no_recorded_size_is_a_no_op(monkeypatch, sqlite_engine) -> None:
     """A document ingested before size tracking has `file_size_bytes=None`.
     Releasing `None` as 0 keeps the counter untouched instead of crashing the
     delete or writing a bogus delta."""
-    team_increments, _ = _install_fakes(monkeypatch, tag_owner="team-a", known_teams={"team-a"})
+    team_increments, _ = _install_fakes(monkeypatch, sqlite_engine, tag_owner="team-a", known_teams={"team-a"})
     metadata = _make_metadata("doc-6", tag_ids=["tag-1"], size=None)
     service = _build_service(_FakeMetadataStore(metadata), _PermissiveRebac(team_owners=["team-a"]))
 
@@ -315,7 +310,7 @@ async def test_deleting_a_document_with_no_recorded_size_is_a_no_op(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_a_tag_change_commits_the_save_and_the_charge_together(monkeypatch) -> None:
+async def test_a_tag_change_commits_the_save_and_the_charge_together(monkeypatch, sqlite_engine) -> None:
     """#2149 review — the tag move and the quota move must be one transaction.
 
     They used to be two: `save_metadata` committed first, and `_adjust_team_storage`
@@ -323,7 +318,7 @@ async def test_a_tag_change_commits_the_save_and_the_charge_together(monkeypatch
     charge behind with no signal. Asserting both receive the *same* live session is
     what proves they share a transaction.
     """
-    team_increments, _ = _install_fakes(monkeypatch, tag_owner="team-a", known_teams={"team-a"})
+    team_increments, _ = _install_fakes(monkeypatch, sqlite_engine, tag_owner="team-a", known_teams={"team-a"})
     metadata = _make_metadata("doc-tagmove", tag_ids=["tag-1"])
     store = _FakeMetadataStore(metadata)
     service = _build_service(store, _PermissiveRebac(team_owners=["team-a"]))
@@ -352,13 +347,13 @@ async def test_a_tag_change_commits_the_save_and_the_charge_together(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_adding_a_tag_still_persists_the_document(monkeypatch) -> None:
+async def test_adding_a_tag_still_persists_the_document(monkeypatch, sqlite_engine) -> None:
     """Caller wiring, not just the helper: `add_tag_id_to_document` must still save.
 
     The previous test called `_save_and_move_storage` directly, so deleting the
     `save_metadata` call inside it would not have failed anything (#2149 review).
     """
-    _install_fakes(monkeypatch, tag_owner="team-a", known_teams={"team-a"})
+    _install_fakes(monkeypatch, sqlite_engine, tag_owner="team-a", known_teams={"team-a"})
     metadata = _make_metadata("doc-add", tag_ids=[])
     store = _FakeMetadataStore(metadata)
     service = _build_service(store, _PermissiveRebac(team_owners=["team-a"]))
@@ -371,10 +366,10 @@ async def test_adding_a_tag_still_persists_the_document(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_no_op_tag_change_still_persists_the_document(monkeypatch) -> None:
+async def test_a_no_op_tag_change_still_persists_the_document(monkeypatch, sqlite_engine) -> None:
     """Early-return branch: identical tag sets, or a document with no recorded
     size, must still save the metadata — sessionless, since no counter moves."""
-    team_increments, user_increments = _install_fakes(monkeypatch, tag_owner="team-a", known_teams={"team-a"})
+    team_increments, user_increments = _install_fakes(monkeypatch, sqlite_engine, tag_owner="team-a", known_teams={"team-a"})
     metadata = _make_metadata("doc-noop", tag_ids=["tag-1"], size=None)
     store = _FakeMetadataStore(metadata)
     service = _build_service(store, _PermissiveRebac(team_owners=["team-a"]))
@@ -386,7 +381,7 @@ async def test_a_no_op_tag_change_still_persists_the_document(monkeypatch) -> No
 
 
 @pytest.mark.asyncio
-async def test_re_adding_a_present_tag_reasserts_its_rebac_parent(monkeypatch) -> None:
+async def test_re_adding_a_present_tag_reasserts_its_rebac_parent(monkeypatch, sqlite_engine) -> None:
     """A retry after a failed ReBAC write must converge.
 
     The ReBAC parent write runs after the metadata+quota commit, so a failure
@@ -394,7 +389,7 @@ async def test_re_adding_a_present_tag_reasserts_its_rebac_parent(monkeypatch) -
     lands on the "already present" branch, which used to short-circuit and make
     that state permanent (#2149 review finding).
     """
-    _install_fakes(monkeypatch, tag_owner="team-a", known_teams={"team-a"})
+    _install_fakes(monkeypatch, sqlite_engine, tag_owner="team-a", known_teams={"team-a"})
     metadata = _make_metadata("doc-retry", tag_ids=["tag-1"])
     service = _build_service(_FakeMetadataStore(metadata), _PermissiveRebac(team_owners=["team-a"]))
 
@@ -411,7 +406,7 @@ async def test_re_adding_a_present_tag_reasserts_its_rebac_parent(monkeypatch) -
 
 
 @pytest.mark.asyncio
-async def test_a_counter_failure_aborts_the_tag_change_instead_of_being_swallowed(monkeypatch) -> None:
+async def test_a_counter_failure_aborts_the_tag_change_instead_of_being_swallowed(monkeypatch, sqlite_engine) -> None:
     """The load-bearing behaviour change, and previously untested.
 
     `_save_and_move_storage` no longer routes through `_adjust_team_storage`, which
@@ -419,7 +414,7 @@ async def test_a_counter_failure_aborts_the_tag_change_instead_of_being_swallowe
     rather than committing the tag and losing the charge in a log line
     (#2149 review finding).
     """
-    _install_fakes(monkeypatch, tag_owner="team-a", known_teams={"team-a"})
+    _install_fakes(monkeypatch, sqlite_engine, tag_owner="team-a", known_teams={"team-a"})
     metadata = _make_metadata("doc-fail", tag_ids=[])
     service = _build_service(_FakeMetadataStore(metadata), _PermissiveRebac(team_owners=["team-a"]))
     service._set_tag_as_parent_in_rebac = _make_async(None)  # type: ignore[method-assign]

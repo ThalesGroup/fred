@@ -527,6 +527,7 @@ async fn processing_admission_fences_publication_and_original_survival() {
             cursor: candidate.cursor,
             next_cursor: candidate.chunks,
             objects_empty: !candidate.preserve_objects,
+            purge_document: false,
         })
         .await
         .unwrap();
@@ -2165,4 +2166,358 @@ async fn retired_folders_and_documents_are_absent_from_reads_and_producers() {
         .await,
         (200, json!({"allowed":true}))
     );
+}
+
+// Acceptance will set these marks in P3b; this fixture alone bypasses its document guard.
+async fn mark_document_team(d: &Documents) -> Uuid {
+    let id = Uuid::new_v4();
+    let mut tx = d.e.pool.begin().await.unwrap();
+    sqlx::query("insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at) select $1,id,'team',parent_id,organization_id,'writer',now(),now() from space where id=$2")
+        .bind(id).bind(d.folder.space_id).execute(&mut *tx).await.unwrap();
+    sqlx::query("update space set deletion_id=$1 where id=$2")
+        .bind(id)
+        .bind(d.folder.space_id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("update folder set deletion_id=$1 where space_id=$2")
+        .bind(id)
+        .bind(d.folder.space_id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("update document set deletion_id=$1 where space_id=$2")
+        .bind(id)
+        .bind(d.folder.space_id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    id
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
+    use control_plane::domain::SpaceKind;
+    use control_plane::error::AppError;
+    use control_plane::lifecycle::{Receipt, Status, cleanup};
+    use control_plane::spaces;
+    let (mut d, p) = Box::pin(setup()).await;
+    let processing = admit(&d, &p, "D1.txt").await;
+    let work = store::row(&d.e.pool, processing).await.unwrap().work();
+    let preparation = p
+        .claim(claim(&work, Stage::Preparation, Uuid::new_v4(), 1))
+        .await
+        .unwrap();
+    commit(&p, &preparation, &[("policy.json", b"{}")], 0).await;
+    let extraction = p
+        .claim(claim(&work, Stage::Extraction, Uuid::new_v4(), 1))
+        .await
+        .unwrap();
+    commit(
+        &p,
+        &extraction,
+        &[("output.md", b"kept"), ("metadata.json", b"{}")],
+        0,
+    )
+    .await;
+    let indexing = p
+        .claim(claim(&work, Stage::Indexing, Uuid::new_v4(), 1))
+        .await
+        .unwrap();
+    p.plan_vectors(control_plane::processing::cleanup::VectorPlan {
+        work: work.clone(),
+        generation: indexing.generation,
+        count: 400,
+    })
+    .await
+    .unwrap();
+    let done = commit(
+        &p,
+        &indexing,
+        &[
+            ("output.md", b"kept"),
+            ("metadata.json", b"{}"),
+            ("chunks.jsonl", b"{}"),
+        ],
+        400,
+    )
+    .await;
+    assert_eq!(done.status, ProcessingStatus::Succeeded);
+    let (status, upload) = d
+        .upload("writer", "D2.txt", b"unprocessed", Uuid::new_v4(), None)
+        .await;
+    assert_eq!(status, 201, "{upload}");
+    let d2: Uuid = upload["document_id"].as_str().unwrap().parse().unwrap();
+    let originals: Vec<String> =
+        sqlx::query_scalar("select object_key from document where id=any($1)")
+            .bind(&[work.document_id, d2][..])
+            .fetch_all(&d.e.pool)
+            .await
+            .unwrap();
+    assert_eq!(originals.len(), 2);
+
+    let target = d.folder.clone();
+    let organization: Uuid = sqlx::query_scalar("select organization_id from space where id=$1")
+        .bind(target.space_id)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    let other = spaces::create_space(
+        &d.e.pool,
+        &d.e.fga,
+        "alice",
+        SpaceKind::Team,
+        organization,
+        "Witness".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    crate::grant(&d.e, other.id, Role::Editor, "writer").await;
+    d.folder = spaces::create_folder(
+        &d.e.pool,
+        &d.e.fga,
+        "writer",
+        other.id,
+        None,
+        "Witness".into(),
+    )
+    .await
+    .unwrap();
+    let (status, witness) = d
+        .upload("writer", "W.txt", b"witness", Uuid::new_v4(), None)
+        .await;
+    assert_eq!(status, 201, "{witness}");
+    let witness: Uuid = witness["document_id"].as_str().unwrap().parse().unwrap();
+    let witness_key: String = sqlx::query_scalar("select object_key from document where id=$1")
+        .bind(witness)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    d.folder = target.clone();
+    let mut row = store::row(&d.e.pool, processing).await.unwrap();
+    for generation in row.generations.iter_mut() {
+        generation.expires_at = chrono::Utc::now() - chrono::Duration::minutes(2);
+        if generation.id == indexing.generation {
+            generation.cleanup_cursor = 200;
+        }
+    }
+    sqlx::query("update document_processing set generations=$2 where id=$1")
+        .bind(processing)
+        .bind(&row.generations)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    assert!(matches!(
+        p.cleaned(control_plane::processing::cleanup::Cleaned {
+            work: work.clone(),
+            generation: indexing.generation,
+            cursor: 0,
+            next_cursor: 0,
+            objects_empty: true,
+            purge_document: true,
+        })
+        .await,
+        Err(AppError::Problem {
+            code: "stale_generation",
+            ..
+        })
+    ));
+    let operation = mark_document_team(&d).await;
+    assert!(matches!(
+        p.cleaned(control_plane::processing::cleanup::Cleaned {
+            work: work.clone(),
+            generation: indexing.generation,
+            cursor: 200,
+            next_cursor: 400,
+            objects_empty: true,
+            purge_document: false,
+        })
+        .await,
+        Err(AppError::Problem {
+            code: "stale_generation",
+            ..
+        })
+    ));
+    assert!(
+        store::row(&d.e.pool, processing)
+            .await
+            .unwrap()
+            .generations
+            .iter()
+            .all(|g| !g.cleaned)
+    );
+
+    cleanup::batch(&d.e.pool, &d.e.fga, operation)
+        .await
+        .unwrap();
+    let receipt: Receipt = sqlx::query_as("select * from deletion where id=$1")
+        .bind(operation)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(receipt.status, Status::Running);
+    assert_eq!(receipt.documents_deleted, 1);
+    assert!(receipt.error_code.is_none());
+    let remaining: Vec<Uuid> = sqlx::query_scalar("select id from document where deletion_id=$1")
+        .bind(operation)
+        .fetch_all(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(remaining, vec![work.document_id]);
+    cleanup::batch(&d.e.pool, &d.e.fga, operation)
+        .await
+        .unwrap();
+    let receipt: Receipt = sqlx::query_as("select * from deletion where id=$1")
+        .bind(operation)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(receipt.status, Status::Running);
+    assert_eq!(receipt.documents_deleted, 1);
+    assert!(receipt.error_code.is_none());
+
+    sqlx::query("update document_processing set cleanup_due_at=clock_timestamp() where id=$1")
+        .bind(processing)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    let candidates = p.cleanup_candidates().await.unwrap();
+    assert_eq!(candidates.len(), 1);
+    let candidate = candidates.into_iter().next().unwrap();
+    assert!(candidate.purge_document);
+    assert_eq!(candidate.generation, indexing.generation);
+    assert_eq!(
+        candidate.output_prefix,
+        row.document_prefix(&p.config.derived.prefix)
+    );
+    assert_eq!(
+        (candidate.chunks, candidate.cursor, candidate.batch),
+        (0, 0, 200)
+    );
+    assert!(!candidate.preserve_objects);
+    assert!(candidate.protected_ordinals.is_empty());
+    let objects = p
+        .derived
+        .list(&candidate.output_prefix, None, 1000)
+        .await
+        .unwrap();
+    assert!(objects.next.is_none());
+    for (key, _, _) in objects.objects {
+        p.derived.delete(&key).await.unwrap();
+    }
+    p.cleaned(control_plane::processing::cleanup::Cleaned {
+        work: candidate.work,
+        generation: candidate.generation,
+        cursor: 0,
+        next_cursor: 0,
+        objects_empty: true,
+        purge_document: true,
+    })
+    .await
+    .unwrap();
+    let cleaned = store::row(&d.e.pool, processing).await.unwrap();
+    assert!(
+        cleaned
+            .generations
+            .iter()
+            .all(|g| g.cleaned && g.reserved_bytes == 0 && g.cleanup_cursor == 0)
+    );
+    for _ in 0..20 {
+        cleanup::batch(&d.e.pool, &d.e.fga, operation)
+            .await
+            .unwrap();
+        let receipt: Receipt = sqlx::query_as("select * from deletion where id=$1")
+            .bind(operation)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+        if receipt.status == Status::Completed {
+            break;
+        }
+    }
+    let receipt: Receipt = sqlx::query_as("select * from deletion where id=$1")
+        .bind(operation)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(receipt.status, Status::Completed);
+    assert_eq!(receipt.documents_deleted, 2);
+    assert_eq!(receipt.folders_deleted, 1);
+    assert_eq!(receipt.spaces_deleted, 1);
+    assert!(receipt.error_code.is_none());
+    let leftovers: bool = sqlx::query_scalar("select exists(select 1 from document where id=any($1)) or exists(select 1 from document_processing where document_id=any($1)) or exists(select 1 from document_upload where document_id=any($1)) or exists(select 1 from folder where id=$2) or exists(select 1 from space where id=$3)")
+        .bind(&[work.document_id, d2][..]).bind(target.id).bind(target.space_id).fetch_one(&d.e.pool).await.unwrap();
+    assert!(!leftovers);
+    d.storage.cleanup_tick().await.unwrap();
+    for key in originals {
+        assert!(d.storage.objects.get(&key).await.is_err());
+    }
+    assert!(d.storage.objects.get(&witness_key).await.is_ok());
+    let response = d
+        .request(
+            "writer",
+            "GET",
+            &format!("/documents/{witness}/content"),
+            Body::empty(),
+            "",
+            None,
+        )
+        .await;
+    assert_eq!(response.status(), 200);
+    assert_eq!(
+        to_bytes(response.into_body(), 100).await.unwrap().as_ref(),
+        b"witness"
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+async fn lifecycle_waits_for_running_retired_document() {
+    use control_plane::lifecycle::{Receipt, Status, cleanup};
+    let (d, p) = Box::pin(setup()).await;
+    let processing = admit(&d, &p, "running.txt").await;
+    let work = store::row(&d.e.pool, processing).await.unwrap().work();
+    p.claim(claim(&work, Stage::Preparation, Uuid::new_v4(), 1))
+        .await
+        .unwrap();
+    let operation = mark_document_team(&d).await;
+    let mut row = store::row(&d.e.pool, processing).await.unwrap();
+    assert_eq!(row.summary.status, ProcessingStatus::Running);
+    for generation in row.generations.iter_mut() {
+        generation.expires_at = chrono::Utc::now() - chrono::Duration::minutes(2);
+        generation.cleaned = true;
+    }
+    sqlx::query("update document_processing set generations=$2,cleanup_due_at=clock_timestamp() where id=$1")
+        .bind(processing).bind(&row.generations).execute(&d.e.pool).await.unwrap();
+    assert!(p.cleanup_candidates().await.unwrap().is_empty());
+    for _ in 0..2 {
+        cleanup::batch(&d.e.pool, &d.e.fga, operation)
+            .await
+            .unwrap();
+        let receipt: Receipt = sqlx::query_as("select * from deletion where id=$1")
+            .bind(operation)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+        assert_eq!(receipt.status, Status::Running);
+        assert_eq!(receipt.documents_deleted, 0);
+        assert!(receipt.error_code.is_none());
+        let present: bool = sqlx::query_scalar("select exists(select 1 from document where id=$1)")
+            .bind(work.document_id)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+        assert!(present);
+        assert_eq!(
+            store::row(&d.e.pool, processing)
+                .await
+                .unwrap()
+                .summary
+                .status,
+            ProcessingStatus::Running
+        );
+    }
 }

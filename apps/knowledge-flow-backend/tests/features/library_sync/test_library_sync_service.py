@@ -242,8 +242,8 @@ def scheduler(app_context, monkeypatch) -> Scheduler:
     return stage
 
 
-@pytest.fixture
-def storage_accounting(app_context, monkeypatch) -> None:
+@pytest_asyncio.fixture
+async def storage_accounting(app_context, monkeypatch):
     """Let the quota counters move somewhere inert.
 
     Removing a document deletes its row and releases its storage in one real
@@ -251,7 +251,9 @@ def storage_accounting(app_context, monkeypatch) -> None:
     engine provides it. Which counter moves by how much is the storage-release
     tests' subject, not this file's.
     """
-    app_context.get_instance()._pg_async_engine = create_async_engine("sqlite+aiosqlite://")
+    ctx = app_context.get_instance()
+    engine = create_async_engine("sqlite+aiosqlite://")
+    ctx._pg_async_engine = engine
 
     class _InertTeamStore:
         def __init__(self, engine):
@@ -269,6 +271,12 @@ def storage_accounting(app_context, monkeypatch) -> None:
 
     monkeypatch.setattr(metadata_service_module, "TeamMetadataStore", _InertTeamStore)
     monkeypatch.setattr(metadata_service_module, "get_user_store", lambda: _InertUserStore())
+
+    try:
+        yield
+    finally:
+        await engine.dispose()
+        ctx._pg_async_engine = None
 
 
 @pytest_asyncio.fixture

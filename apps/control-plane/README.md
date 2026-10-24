@@ -19,6 +19,14 @@ make code-quality                     # model parity + clippy + rustfmt
 make -C ../../docs/architecture check # the dossier still matches the code
 ```
 
+## Embedded hello-world agent
+
+The same process serves `POST /control-plane/v1/agents/execute/stream` (under the
+configured base URL). It uses the existing authentication and consent checks and
+streams Fred runtime events for `agent_id: "hello-world"`. See the
+[agent library](agent/README.md) for the curl command and supported request subset.
+No additional server or deployment is required.
+
 ## From scratch (fred-deployment-factory)
 
 **Host run, after `make docker-up` or `make k3d-up`:**

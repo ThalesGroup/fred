@@ -16,6 +16,7 @@
 import os
 
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
 from fred_core import (
     M2MSecurity,
@@ -33,6 +34,7 @@ from fred_core.documents.document_store import BaseDocumentMetadataStore as Base
 from fred_core.documents.document_structures import DocumentMetadata
 from langchain_community.embeddings import FakeEmbeddings
 from pydantic import AnyHttpUrl, AnyUrl
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import (
@@ -297,6 +299,16 @@ def app_context(monkeypatch, fake_embedder):
     ctx = ApplicationContext(config)
     ctx._metadata_store_instance = _InMemoryTestMetadataStore()
     return ctx
+
+
+@pytest_asyncio.fixture
+async def sqlite_engine(tmp_path):
+    """Close SQLite connections before pytest tears down the owning event loop."""
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'test.sqlite3'}")
+    try:
+        yield engine
+    finally:
+        await engine.dispose()
 
 
 @pytest.fixture(scope="function")

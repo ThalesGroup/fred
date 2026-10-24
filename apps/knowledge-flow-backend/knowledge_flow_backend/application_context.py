@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import asyncio
-import atexit
 import importlib
 import importlib.util
 import logging
@@ -525,13 +523,6 @@ class ApplicationContext:
         pg_cfg = self.configuration.storage.postgres
         pg_async_engine = create_async_engine_from_config(pg_cfg)
 
-        def _dispose_async_engine():
-            try:
-                asyncio.run(pg_async_engine.dispose())
-            except Exception:
-                logger.debug("[SQL] Async engine dispose at exit failed", exc_info=True)
-
-        atexit.register(_dispose_async_engine)
         logger.info("[SQL] Shared Postgres async initialized.")
         init_user_store(pg_async_engine)
         return pg_async_engine

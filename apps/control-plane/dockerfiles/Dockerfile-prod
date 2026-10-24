@@ -11,9 +11,10 @@ RUN apt-get update && \
 
 WORKDIR /workspace
 
-# Third-party dependencies only, from the manifests alone, so this layer changes
-# only with the lock.
+# Cache dependency compilation, including the small embedded agent library.
 COPY Cargo.toml Cargo.lock ./
+COPY agent/Cargo.toml ./agent/Cargo.toml
+COPY agent/src ./agent/src
 RUN mkdir src && echo "fn main() {}" > src/main.rs && \
     cargo build --release --locked && \
     rm -rf src

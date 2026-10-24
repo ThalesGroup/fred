@@ -26,10 +26,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import pytest_asyncio
 from fred_core import RebacDisabledResult, TagPermission
 from fred_core.documents.document_structures import (
     DocumentMetadata,
@@ -42,7 +42,7 @@ from fred_core.documents.label_models import DocumentLabelRow
 from fred_core.documents.postgres_document_store import PostgresDocumentMetadataStore
 from fred_core.models.base import Base
 from sqlalchemy import insert
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from knowledge_flow_backend.features.metadata import service as service_module
 from knowledge_flow_backend.features.metadata.service import (
@@ -52,11 +52,11 @@ from knowledge_flow_backend.features.metadata.service import (
 )
 
 
-async def _make_sqlite_engine(tmp_path: Path, filename: str) -> AsyncEngine:
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / filename}")
-    async with engine.begin() as conn:
+@pytest_asyncio.fixture
+async def metadata_engine(sqlite_engine: AsyncEngine) -> AsyncEngine:
+    async with sqlite_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    return engine
+    return sqlite_engine
 
 
 def _doc(uid: str, *, tag_ids: list[str] | None = None) -> DocumentMetadata:
@@ -115,8 +115,8 @@ def _build_service(engine: AsyncEngine, rebac: _FakeRebac, monkeypatch: pytest.M
 
 
 @pytest.mark.asyncio
-async def test_add_then_remove_returns_the_canonical_stored_set(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "basic.sqlite3")
+async def test_add_then_remove_returns_the_canonical_stored_set(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
 
@@ -128,8 +128,8 @@ async def test_add_then_remove_returns_the_canonical_stored_set(tmp_path, monkey
 
 
 @pytest.mark.asyncio
-async def test_add_updates_modified_and_last_modified_by(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "audit_add.sqlite3")
+async def test_add_updates_modified_and_last_modified_by(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(), monkeypatch)
     doc = _doc("doc-1")
     await service.metadata_store.save_metadata(doc)
@@ -147,11 +147,11 @@ async def test_add_updates_modified_and_last_modified_by(tmp_path, monkeypatch) 
 
 
 @pytest.mark.asyncio
-async def test_remove_of_an_absent_label_still_updates_the_audit_trail(tmp_path, monkeypatch) -> None:
+async def test_remove_of_an_absent_label_still_updates_the_audit_trail(metadata_engine, monkeypatch) -> None:
     """Idempotent at the label-set level, but the request was real: the
     pre-relational-table behavior always touched the audit trail on a
     requested remove, even a no-op one."""
-    engine = await _make_sqlite_engine(tmp_path, "audit_remove.sqlite3")
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(), monkeypatch)
     doc = _doc("doc-1")
     await service.metadata_store.save_metadata(doc)
@@ -170,8 +170,8 @@ async def test_remove_of_an_absent_label_still_updates_the_audit_trail(tmp_path,
 
 
 @pytest.mark.asyncio
-async def test_a_genuinely_empty_patch_does_not_touch_the_audit_trail(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "audit_noop.sqlite3")
+async def test_a_genuinely_empty_patch_does_not_touch_the_audit_trail(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(), monkeypatch)
     doc = _doc("doc-1")
     await service.metadata_store.save_metadata(doc)
@@ -187,8 +187,8 @@ async def test_a_genuinely_empty_patch_does_not_touch_the_audit_trail(tmp_path, 
 
 
 @pytest.mark.asyncio
-async def test_add_is_idempotent_through_the_service(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "idempotent.sqlite3")
+async def test_add_is_idempotent_through_the_service(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
 
@@ -199,8 +199,8 @@ async def test_add_is_idempotent_through_the_service(tmp_path, monkeypatch) -> N
 
 
 @pytest.mark.asyncio
-async def test_remove_is_idempotent_through_the_service(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "idempotent_remove.sqlite3")
+async def test_remove_is_idempotent_through_the_service(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
 
@@ -210,8 +210,8 @@ async def test_remove_is_idempotent_through_the_service(tmp_path, monkeypatch) -
 
 
 @pytest.mark.asyncio
-async def test_mutation_refused_without_document_update_permission(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "denied.sqlite3")
+async def test_mutation_refused_without_document_update_permission(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(denied={"doc-1"}), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
 
@@ -222,8 +222,8 @@ async def test_mutation_refused_without_document_update_permission(tmp_path, mon
 
 
 @pytest.mark.asyncio
-async def test_mutation_on_a_missing_document_raises_not_found(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "missing.sqlite3")
+async def test_mutation_on_a_missing_document_raises_not_found(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(), monkeypatch)
 
     with pytest.raises(MetadataNotFound):
@@ -231,8 +231,8 @@ async def test_mutation_on_a_missing_document_raises_not_found(tmp_path, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_empty_document_uid_is_rejected(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "empty_uid.sqlite3")
+async def test_empty_document_uid_is_rejected(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(), monkeypatch)
 
     with pytest.raises(InvalidMetadataRequest):
@@ -240,9 +240,9 @@ async def test_empty_document_uid_is_rejected(tmp_path, monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_label_in_both_add_and_remove_ends_up_absent(tmp_path, monkeypatch) -> None:
+async def test_a_label_in_both_add_and_remove_ends_up_absent(metadata_engine, monkeypatch) -> None:
     """Documented conflict rule: remove wins."""
-    engine = await _make_sqlite_engine(tmp_path, "conflict.sqlite3")
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
 
@@ -252,8 +252,8 @@ async def test_a_label_in_both_add_and_remove_ends_up_absent(tmp_path, monkeypat
 
 
 @pytest.mark.asyncio
-async def test_an_empty_request_is_an_idempotent_no_op(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "empty_request.sqlite3")
+async def test_an_empty_request_is_an_idempotent_no_op(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
     await service.add_label_to_document(_user(), "doc-1", "DAT", "u-1")
@@ -264,7 +264,7 @@ async def test_an_empty_request_is_an_idempotent_no_op(tmp_path, monkeypatch) ->
 
 
 @pytest.mark.asyncio
-async def test_labels_are_an_unordered_set_represented_alphabetically(tmp_path, monkeypatch) -> None:
+async def test_labels_are_an_unordered_set_represented_alphabetically(metadata_engine, monkeypatch) -> None:
     """Contract: `document_labels` has no insertion-order column by design —
     labels form a set, and every read path (this mutation response,
     hydration, vocabulary, resolution) renders that set in a deterministic
@@ -272,7 +272,7 @@ async def test_labels_are_an_unordered_set_represented_alphabetically(tmp_path, 
     (frontend chip list, the document_label_search capability's
     list_documents_by_label tool) depends on insertion order — see
     FILESYSTEM.md 'Business labels vs. scope tags'."""
-    engine = await _make_sqlite_engine(tmp_path, "ordering_contract.sqlite3")
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
 
@@ -282,8 +282,8 @@ async def test_labels_are_an_unordered_set_represented_alphabetically(tmp_path, 
 
 
 @pytest.mark.asyncio
-async def test_two_concurrent_adds_of_different_labels_both_survive(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "concurrent.sqlite3")
+async def test_two_concurrent_adds_of_different_labels_both_survive(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
 
@@ -296,11 +296,11 @@ async def test_two_concurrent_adds_of_different_labels_both_survive(tmp_path, mo
 
 
 @pytest.mark.asyncio
-async def test_concurrent_retrievable_toggle_does_not_erase_a_label(tmp_path, monkeypatch) -> None:
+async def test_concurrent_retrievable_toggle_does_not_erase_a_label(metadata_engine, monkeypatch) -> None:
     """A label add racing an unrelated metadata field's own read-modify-write
     save (`update_document_retrievable`) must not lose the label — the two no
     longer touch the same storage at all."""
-    engine = await _make_sqlite_engine(tmp_path, "concurrent_other_field.sqlite3")
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
 
@@ -316,8 +316,8 @@ async def test_concurrent_retrievable_toggle_does_not_erase_a_label(tmp_path, mo
 
 
 @pytest.mark.asyncio
-async def test_get_documents_with_label_only_returns_readable_documents(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "search_scoped.sqlite3")
+async def test_get_documents_with_label_only_returns_readable_documents(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(readable_uids={"doc-1"}), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
     await service.metadata_store.save_metadata(_doc("doc-2"))  # not readable by this user
@@ -330,8 +330,8 @@ async def test_get_documents_with_label_only_returns_readable_documents(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_get_documents_with_label_returns_everything_when_rebac_disabled(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "search_disabled.sqlite3")
+async def test_get_documents_with_label_returns_everything_when_rebac_disabled(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(disabled=True), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
     await service.metadata_store.add_label("doc-1", "DAT")
@@ -342,8 +342,8 @@ async def test_get_documents_with_label_returns_everything_when_rebac_disabled(t
 
 
 @pytest.mark.asyncio
-async def test_get_document_uids_with_any_label_unions_multiple_labels(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "any_label_union.sqlite3")
+async def test_get_document_uids_with_any_label_unions_multiple_labels(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(readable_uids={"doc-1", "doc-2", "doc-3"}), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
     await service.metadata_store.save_metadata(_doc("doc-2"))
@@ -358,8 +358,8 @@ async def test_get_document_uids_with_any_label_unions_multiple_labels(tmp_path,
 
 
 @pytest.mark.asyncio
-async def test_get_document_uids_with_any_label_only_returns_readable_documents(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "any_label_scoped.sqlite3")
+async def test_get_document_uids_with_any_label_only_returns_readable_documents(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(readable_uids={"doc-1"}), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
     await service.metadata_store.save_metadata(_doc("doc-2"))  # not readable by this user
@@ -370,8 +370,8 @@ async def test_get_document_uids_with_any_label_only_returns_readable_documents(
 
 
 @pytest.mark.asyncio
-async def test_get_document_uids_with_any_label_returns_empty_set_for_no_labels(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "any_label_empty.sqlite3")
+async def test_get_document_uids_with_any_label_returns_empty_set_for_no_labels(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
     await service.metadata_store.add_label("doc-1", "DAT")
@@ -381,8 +381,8 @@ async def test_get_document_uids_with_any_label_returns_empty_set_for_no_labels(
 
 
 @pytest.mark.asyncio
-async def test_get_documents_by_uids_only_returns_readable_documents(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "by_uids_scoped.sqlite3")
+async def test_get_documents_by_uids_only_returns_readable_documents(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(readable_uids={"doc-1"}), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
     await service.metadata_store.save_metadata(_doc("doc-2"))  # not readable by this user
@@ -393,8 +393,8 @@ async def test_get_documents_by_uids_only_returns_readable_documents(tmp_path, m
 
 
 @pytest.mark.asyncio
-async def test_get_documents_by_uids_returns_everything_when_rebac_disabled(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "by_uids_disabled.sqlite3")
+async def test_get_documents_by_uids_returns_everything_when_rebac_disabled(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(disabled=True), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
 
@@ -404,16 +404,16 @@ async def test_get_documents_by_uids_returns_everything_when_rebac_disabled(tmp_
 
 
 @pytest.mark.asyncio
-async def test_get_documents_by_uids_returns_empty_for_empty_input(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "by_uids_empty.sqlite3")
+async def test_get_documents_by_uids_returns_empty_for_empty_input(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(), monkeypatch)
 
     assert await service.get_documents_by_uids(_user(), []) == []
 
 
 @pytest.mark.asyncio
-async def test_list_document_labels_never_reveals_a_label_only_on_unreadable_documents(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "vocab_scoped.sqlite3")
+async def test_list_document_labels_never_reveals_a_label_only_on_unreadable_documents(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(readable_uids={"doc-1"}), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
     await service.metadata_store.save_metadata(_doc("doc-2"))
@@ -426,8 +426,8 @@ async def test_list_document_labels_never_reveals_a_label_only_on_unreadable_doc
 
 
 @pytest.mark.asyncio
-async def test_list_document_labels_returns_empty_when_the_user_can_read_nothing(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "vocab_none.sqlite3")
+async def test_list_document_labels_returns_empty_when_the_user_can_read_nothing(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(readable_uids=set()), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
     await service.metadata_store.add_label("doc-1", "DAT")
@@ -436,13 +436,13 @@ async def test_list_document_labels_returns_empty_when_the_user_can_read_nothing
 
 
 @pytest.mark.asyncio
-async def test_a_stale_save_cannot_reintroduce_a_label_removed_after_the_snapshot(tmp_path, monkeypatch) -> None:
+async def test_a_stale_save_cannot_reintroduce_a_label_removed_after_the_snapshot(metadata_engine, monkeypatch) -> None:
     """Reproduces the exact lost-update scenario `_persist_metadata_and_follow_up`
     used to allow: a long-running activity loads a `DocumentMetadata` snapshot while
     it still carries 'DAT', the user removes 'DAT' through the canonical
     mutator in the meantime, and the activity's later save of its now-stale
     snapshot must not resurrect 'DAT'."""
-    engine = await _make_sqlite_engine(tmp_path, "stale_snapshot.sqlite3")
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1", tag_ids=[]))
     await service.add_label_to_document(_user(), "doc-1", "DAT", "u-1")
@@ -465,10 +465,10 @@ async def test_a_stale_save_cannot_reintroduce_a_label_removed_after_the_snapsho
 
 
 @pytest.mark.asyncio
-async def test_a_stale_save_does_not_erase_a_label_added_after_the_snapshot(tmp_path, monkeypatch) -> None:
+async def test_a_stale_save_does_not_erase_a_label_added_after_the_snapshot(metadata_engine, monkeypatch) -> None:
     """Symmetric case: a label added AFTER a stale snapshot was taken must
     survive a later save of that (label-less) snapshot."""
-    engine = await _make_sqlite_engine(tmp_path, "stale_snapshot_add.sqlite3")
+    engine = metadata_engine
     service = _build_service(engine, _FakeRebac(), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1", tag_ids=[]))
 
@@ -484,8 +484,8 @@ async def test_a_stale_save_does_not_erase_a_label_added_after_the_snapshot(tmp_
 
 
 @pytest.mark.asyncio
-async def test_label_lookups_cover_a_folder_larger_than_the_authorization_inventory(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "large_folder.sqlite3")
+async def test_label_lookups_cover_a_folder_larger_than_the_authorization_inventory(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
     uids = [f"doc-{index:04}" for index in range(1500)]
     service = _build_service(engine, _FakeRebac(readable_uids=set(uids), readable_tags={"lib-shared"}), monkeypatch)
     async with AsyncSession(engine) as session, session.begin():
@@ -501,24 +501,21 @@ async def test_label_lookups_cover_a_folder_larger_than_the_authorization_invent
 
 
 @pytest.mark.asyncio
-async def test_label_pages_count_and_slice_only_checked_candidates(tmp_path, monkeypatch) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "checked_pages.sqlite3")
-    try:
-        service = _build_service(engine, _FakeRebac(readable_uids={"b", "d", "f"}, readable_tags={"folder"}), monkeypatch)
-        for uid in ["a", "b", "c", "d", "e", "f"]:
-            await service.metadata_store.save_metadata(_doc(uid, tag_ids=["folder"]))
-            await service.metadata_store.add_label(uid, "shared")
-        await service.metadata_store.add_label("a", "secret")
+async def test_label_pages_count_and_slice_only_checked_candidates(metadata_engine, monkeypatch) -> None:
+    engine = metadata_engine
+    service = _build_service(engine, _FakeRebac(readable_uids={"b", "d", "f"}, readable_tags={"folder"}), monkeypatch)
+    for uid in ["a", "b", "c", "d", "e", "f"]:
+        await service.metadata_store.save_metadata(_doc(uid, tag_ids=["folder"]))
+        await service.metadata_store.add_label(uid, "shared")
+    await service.metadata_store.add_label("a", "secret")
 
-        first, total = await service.get_documents_with_label_page(_user(), "shared", offset=0, limit=2)
-        second, second_total = await service.get_documents_with_label_page(_user(), "shared", offset=2, limit=2)
-        last, last_total = await service.get_documents_with_label_page(_user(), "shared", offset=3, limit=2)
+    first, total = await service.get_documents_with_label_page(_user(), "shared", offset=0, limit=2)
+    second, second_total = await service.get_documents_with_label_page(_user(), "shared", offset=2, limit=2)
+    last, last_total = await service.get_documents_with_label_page(_user(), "shared", offset=3, limit=2)
 
-        assert [doc.document_uid for doc in first] == ["b", "d"]
-        assert [doc.document_uid for doc in second] == ["f"]
-        assert last == []
-        assert total == second_total == last_total == 3
-        assert await service.get_document_uids_with_any_label(_user(), ["shared", "secret"]) == {"b", "d", "f"}
-        assert await service.list_document_labels(_user()) == ["shared"]
-    finally:
-        await engine.dispose()
+    assert [doc.document_uid for doc in first] == ["b", "d"]
+    assert [doc.document_uid for doc in second] == ["f"]
+    assert last == []
+    assert total == second_total == last_total == 3
+    assert await service.get_document_uids_with_any_label(_user(), ["shared", "secret"]) == {"b", "d", "f"}
+    assert await service.list_document_labels(_user()) == ["shared"]

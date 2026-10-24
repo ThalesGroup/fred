@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F22](#f22-agent-rust-embarqué-hello-world) | Agent Rust embarqué, hello-world SSE | Implémenté, à valider | Hors périmètre arc42 validé |
 | [DOC-3](#doc-3-vue-densemble-de-weaver) | Vue d'ensemble de Weaver | Texte et schémas rédigés | 01 |
 | [DOC-2](#doc-2-contrat-de-lespace-personnel-à-sa-place) | Contrat de l'espace personnel déplacé hors du catalogue SQL | À jour | A2 |
 | [DOC-1](#doc-1-carte-des-sources-exacte) | Carte des sources exacte pour Resources et l'autorisation | À jour | Carte des sources, README d'arc42 |
@@ -1033,6 +1034,49 @@ n'est pas une validation fonctionnelle de l'ensemble des changements Swift.
 
 ## F-012 Suppression unifiée
 
+- 2026-10-24 : correction de la fixture S3 après reproduction des 19 échecs
+  d'intégration : SeaweedFS refusait les écritures avec 0,47 % d'espace libre
+  sur le disque hôte, sous son seuil de 1 %. `tests/support/content_bucket.rs`
+  place désormais les données jetables dans un tmpfs borné à 256 Mio par
+  conteneur. Aucun comportement de production modifié, aucune adaptation arc42
+  nécessaire. Validation exécutée : contrat SeaweedFS ciblé réussi, puis
+  `make -C apps/control-plane test-integration` réussi (121 tests, 0 échec,
+  60,84 s), y compris les deux tests P3a. Aucun commit ni push.
+
+- 2026-10-24 : lot P3a implémenté : migration 0008 et compteur `documents_deleted`,
+  purge bornée des documents marqués après nettoyage des résultats dérivés.
+  Correction après revue : le curseur d'une génération publiée pouvait laisser
+  des vecteurs protégés derrière lui ; la purge par document remplace ce balayage
+  pour les documents retirés. Les deux discriminants `Cleanup.purge_document`
+  et `Cleaned.purge_document` distinguent les modes ; un compte rendu dont le mode
+  ne correspond pas à l'état retiré est refusé. Knowledge Flow modifié avec
+  l'accord de Dimi : suppression des vecteurs par document, comptage avant
+  acquittement et suppression bornée des objets du préfixe de l'installation.
+  Si le comptage voit encore des vecteurs (visibilité OpenSearch différée après
+  `delete_by_query`), un log info est émis sans acquittement ni exception ; le
+  balayage continue avec le candidat suivant. La suppression idempotente est
+  rejouée au prochain cycle. Le test vérifie aussi le traitement et l'acquittement
+  d'un second candidat dans la même liste.
+  Marques encore posées uniquement par les tests ; acceptation inchangée.
+  Tests Rust adaptés (curseur à 200 sur 400 chunks, modes périmé et inverse) et
+  tests Python ajoutés (objets 0/200/201, vecteurs restants sans acquittement).
+  Le test actif conserve ses assertions ; seul le champ Rust obligatoire
+  `purge_document: false` est ajouté. Annexes A2/A3/A9 adaptées.
+  L'entrée `/apps/control-plane/agent/` de `.gitignore` est retirée
+  (déjà absente au début de cette correction).
+  Limite connue : après suppression des lignes du document, ses vecteurs ne
+  sont plus rebalayés ; une écriture zombie au-delà du bail + 60 s ne serait
+  pas rattrapée. Les originaux S3 restent couverts par l'inventaire sans fin.
+  Commandes non lancées : `make code-quality`,
+  `make -C apps/control-plane test-integration`,
+  `make -C apps/control-plane test-lifecycle-temporal`,
+  `make -C apps/knowledge-flow-backend test-one TEST=tests/features/manager_processing/test_persistence.py`,
+  `make -C apps/control-plane generate-openapi`,
+  `make -C apps/frontend update-control-plane-api`,
+  `make -C docs/architecture generate check`.
+  Aucun test, build, cargo, make, Docker, commit ni push lancé ; validation et
+  régénération OpenAPI/client/ER restent à effectuer.
+
 - 2026-10-24 : I3 committé à la demande de Dimi (`63e6a1eae`), avec les
   changements de formatage et d'ER présents au moment de la demande.
   Lot P2 implémenté : migration 0007, visibilité des dossiers/documents actifs,
@@ -1155,4 +1199,36 @@ n'est pas une validation fonctionnelle de l'ensemble des changements Swift.
   dossier en 202 ; P5 origine utilisateur. Chaque lot met à jour arc42 pour le
   seul comportement implémenté.
 - Aucun code modifié, aucun test, build ou déploiement lancé.
+- 2026-10-24 (revue) : P3 scindé en P3a (le worker purge les documents marqués
+  de son opération une fois leurs générations nettoyées ; acceptation inchangée,
+  marques posées par les tests seulement) et P3b (l'acceptation marque dossiers
+  et documents, arrête les traitements en cours, lève le refus des espaces avec
+  documents). Knowledge Flow traite 404 et 409 comme des erreurs permanentes
+  non relancées (`client.py`) : aucune différence de comportement entre les deux.
+- 2026-10-24 : répartition validée par Dimi. Le Control Plane décide et purge
+  SQL, originaux S3 et tuples OpenFGA ; Knowledge Flow reste l'exécutant des
+  données qu'il écrit (chunks, vecteurs, objets dérivés) par le protocole de
+  nettoyage des générations, sans jamais décider d'une suppression. Les anciens
+  chemins de suppression propres à Knowledge Flow (swift) sont des candidats au
+  retrait lors d'une consolidation ultérieure, hors lots P3.
 
+
+## F22 Agent Rust embarqué hello-world
+
+- 2026-10-24 : Dimi choisit une bibliothèque dans `apps/control-plane/agent/`,
+  versionnée et liée au control-plane, pour garder un seul processus/déploiement.
+- Conversion du serveur autonome en bibliothèque ; route du control-plane
+  `POST /control-plane/v1/agents/execute/stream`, admission via `AdmittedUser`,
+  extraction/erreurs JSON communes, enregistrement OpenAPI commun. La route sert
+  seulement `hello-world` ; aucune donnée métier, instance gérée ou connexion LLM.
+- Flux Fred `status`, deux `assistant_delta`, puis `final`, sans sentinelle.
+  Aucun producteur détaché ni connexion SQL conservée pendant le flux.
+- Cargo.lock actualisé hors ligne (une dépendance locale ajoutée), Dockerfile
+  adapté pour embarquer les sources. Serveur TLS et Makefile autonomes supprimés.
+- Documentation locale : `apps/control-plane/agent/README.md`, README du composant
+  et carte des sources. Pas de parcours frontend ajouté. Le dossier arc42 reste
+  dans son périmètre validé ; raccordement agent à y reporter après validation.
+- Validation : relecture seulement ; aucun build, test ou déploiement lancé.
+  OpenAPI/client générés non régénérés (la génération compile le binaire).
+- Prochaine étape : compilation et appel manuel du hello-world par Dimi ; vérifier
+  le flux via le proxy HTTPS du déploiement avant de brancher un modèle.

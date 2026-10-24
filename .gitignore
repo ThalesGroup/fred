@@ -244,3 +244,4 @@ apps/knowledge-flow-backend/models/
 # Generated local delegation identities (never tokens or secrets)
 /apps/*/config/.delegation.local.json
 /apps/*/config/.delegation.local.tmp
+

@@ -270,7 +270,11 @@ Manager verifies artifact sizes/hashes before the final guarded transaction chec
 current actor access and CGU and publishes the manifest. A stale activity cannot
 replace a committed stage or terminal outcome. Cleanup journals bounded vector
 identifiers and objects, repeats sweeps for late writes, and preserves originals
-and published generations. Failure retains the original and a safe stage/error.
+and published generations of active documents. Once processing is terminal and
+all its leases have expired for 60 seconds, purging a retired document removes
+all its vectors and all its derived objects for the installation, never the
+original. A cleanup report whose mode does not match the document's retirement
+state is rejected. Failure retains the original and a safe stage/error.
 
 Resources and the import panel read persisted summaries, including after reload.
 Existing File/Raw preview modes read authenticated manager endpoints, with native

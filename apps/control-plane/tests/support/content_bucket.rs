@@ -39,6 +39,10 @@ impl Bucket {
                 &name,
                 "-p",
                 "127.0.0.1::8333",
+                // Keep disposable data independent of the host disk's free-space
+                // threshold, with a fixed memory limit per fixture.
+                "--tmpfs",
+                "/tmp:rw,size=256m",
                 "-v",
                 &volume,
                 "chrislusf/seaweedfs:4.29",

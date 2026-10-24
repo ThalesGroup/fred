@@ -707,6 +707,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "flate2",
+ "fred-rust-agent",
  "futures",
  "jsonwebtoken",
  "percent-encoding",
@@ -1316,6 +1317,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8878864ba14bb86e818a412bfd6f18f9eabd4ec0f008a28e8f7eb61db532fcf9"
 dependencies = [
  "futures-core",
+]
+
+[[package]]
+name = "fred-rust-agent"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "utoipa",
 ]
 
 [[package]]

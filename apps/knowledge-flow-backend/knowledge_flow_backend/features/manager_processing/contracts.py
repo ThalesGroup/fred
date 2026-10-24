@@ -110,6 +110,7 @@ class Cleaned(Contract):
     cursor: int
     next_cursor: int
     objects_empty: bool
+    purge_document: bool = False
 
 
 class RetrievalWork(Contract):
