@@ -30434,6 +30434,34 @@
                   ],
                   "type": "object"
                 },
+                "platform": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "runtime_catalog_sources": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "base_url": {
+                            "type": "string"
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "runtime_id": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "runtime_id",
+                          "base_url"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                },
                 "policies": {
                   "additionalProperties": false,
                   "properties": {
@@ -32196,6 +32224,34 @@
                     "base_url",
                     "port"
                   ],
+                  "type": "object"
+                },
+                "platform": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "runtime_catalog_sources": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "base_url": {
+                            "type": "string"
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "runtime_id": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "runtime_id",
+                          "base_url"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
                   "type": "object"
                 },
                 "policies": {

@@ -80,6 +80,8 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | [F-010](#f-010-périmètre-de-revue-et-préparation-du-commit) | Parcours, SQL, cartes et limites de livraison | Relu indépendamment, validation exécution non faite | À jour pour le périmètre décrit |
 
+| [F-011](#f-011-découverte-des-définitions-dagents) | Découverte des définitions d'agents | Découverte CLI implémentée ; exécution à valider | 06 à jour |
+
 ## Méthode de consolidation
 
 - 2026-10-21 : méthode durable enregistrée dans
@@ -951,3 +953,45 @@ Autres résolutions du merge :
 Aucun test, build ou déploiement exécuté pour cette résolution. Le schéma Helm
 est régénéré à partir des schémas de configuration existants. Cette résolution
 n'est pas une validation fonctionnelle de l'ensemble des changements Swift.
+
+
+## F-011 Découverte des définitions d'agents
+
+- 2026-10-23 : demande d'un lot minimal Rust pour interroger fred-agents, sans
+  inscription d'agent dans une organisation, équipe ou projet ; frontend exclu.
+- Audit du code Swift (`fb61751ee`) : `product/service.py`,
+  `_fetch_runtime_templates_uncached`, lit `GET /agents/templates` depuis
+  `platform.runtime_catalog_sources` ; `list_agent_templates` agrège les résultats
+  en mémoire. Aucune persistance SQL des définitions dans ce flux.
+- `models/agent_instance_models.py` définit `agent_instance`, avec `team_id`
+  obligatoire ; `enroll_agent_instance` appelle le store pour créer une instance
+  lors de son inscription dans une équipe. Cette table ne constitue pas un
+  catalogue de définitions indépendant des équipes.
+- Choix soumis à Dimi : reproduire la découverte en direct Swift ou introduire
+  explicitement un catalogue persistant distinct. Aucun code ni migration ajoutés
+  avant cette clarification ; mise à jour arc42 en attente du comportement retenu.
+- Préparation du démarrage : le profil fred-agents sélectionné par `config/.env`
+  est `configuration_prod.yaml`. Aucun listener local sur les ports configurés
+  5432 (PostgreSQL), 8080 (Keycloak), 9080 (OpenFGA). `make run` applique aussi
+  les migrations runtime/capabilities ; non lancé. Aucun test, build, changement
+  d'infrastructure, commit ou publication effectué.
+
+- Décision explicite de Dimi : reproduire la découverte en direct Swift, sans
+  catalogue persistant. Lot local : `agents.rs`, configuration facultative
+  `platform.runtime_catalog_sources`, commande opérateur `discover-agents`.
+  GET public `/agents/templates`, 10 secondes par source, métadonnées conservées
+  et regroupées par runtime. Aucun endpoint HTTP, frontend, SQL ou enrollment.
+  La commande échoue explicitement si une source échoue ; cette différence avec
+  l'agrégation métier Swift best-effort est décrite dans le README et arc42 06.
+- Schéma de configuration aligné manuellement sur les nouveaux types Rust, puis
+  schéma Helm régénéré depuis les schémas des composants. Génération Rust du
+  schéma et compilation non exécutées ; équivalence générateur à valider.
+  Aucun test ni démarrage effectué ; dépendances locales toujours à préparer.
+- 2026-10-23, audit et corrections : schémas de configuration et Helm identiques
+  à leur génération. Tests unitaires ajoutés dans `agents.rs` (validation,
+  regroupement, source désactivée non appelée, échec global sur 500, JSON invalide
+  ou redirection, cause conservée si injoignable). Messages de validation nommant
+  la source, `runtime_id` sans espaces de bord, validation unique au chargement,
+  `yes()` réutilisé. Clippy, fmt et `cargo test` verts ; tests d'intégration non
+  lancés. arc42 (bloc généré A3, matrice 03a, décision D23) reporté à un lot séparé.
+

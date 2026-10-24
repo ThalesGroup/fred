@@ -65,11 +65,37 @@ manager consent or bootstrap records.
 | Command | Purpose |
 | --- | --- |
 | `control-plane serve` | HTTP API and its background tasks (default) |
+| `control-plane discover-agents` | Reads public templates from enabled configured runtimes; JSON output, no SQL or enrollment |
 | `control-plane migrate` | Applies pending SQL migrations from `DATABASE_URL` |
 | `control-plane generate-openapi` | Prints the HTTP contract, without configuration or services |
 | `control-plane generate-config-schema` | Prints the configuration JSON Schema |
 | `control-plane processing-schema` | Prints the wire contracts shared with the Knowledge Flow worker |
 | `control-plane import-provisioning <bundle.zip> --token-file <path>` | Authenticated additive import ([below](#import-a-provisioning-bundle)) |
+
+## Discover agent definitions
+
+`control-plane discover-agents` loads the usual `ENV_FILE` and `CONFIG_FILE`,
+then calls each enabled `platform.runtime_catalog_sources` entry:
+
+```yaml
+platform:
+  runtime_catalog_sources:
+    - runtime_id: fred-agents
+      base_url: http://localhost:8000/fred/agents/v2
+      enabled: true
+```
+
+From `apps/control-plane`, run `cargo run --locked -- discover-agents` after
+starting fred-agents. The runtime's public `GET /agents/templates` endpoint needs
+no bearer. Output is a JSON array of `{runtime_id, templates}`; template payloads
+retain tuning, capability metadata and additional runtime fields. Internal
+(non-public) templates are excluded. Disabled sources are not contacted; an
+omitted platform configuration yields an empty array.
+
+This operator command uses a 10-second timeout per source and exits with an error
+if any source fails, without printing a partial catalog. It does not start the API,
+connect to SQL/OpenFGA, persist definitions or enroll instances. `serve` does not
+poll runtimes. See [agents](../../docs/architecture/06-agents.md).
 
 ## Background tasks
 

@@ -37,6 +37,8 @@ pub struct Configuration {
     pub storage: StorageConfig,
     pub scheduler: SchedulerConfig,
     #[serde(default)]
+    pub platform: crate::agents::PlatformConfig,
+    #[serde(default)]
     pub policies: crate::lifecycle::policy::Policies,
 }
 
@@ -171,7 +173,7 @@ fn terms_version<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String
     Ok(version)
 }
 
-fn yes() -> bool {
+pub(crate) fn yes() -> bool {
     true
 }
 fn default_log_level() -> String {
@@ -219,6 +221,7 @@ impl Configuration {
     }
 
     pub fn validate(&self) -> Result<()> {
+        self.platform.validate()?;
         self.scheduler.lifecycle.validate()?;
         if let Some(content) = &self.storage.content {
             content.validate()?;

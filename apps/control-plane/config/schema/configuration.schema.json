@@ -84,6 +84,9 @@
         "app": {
           "$ref": "#/$defs/AppConfig"
         },
+        "platform": {
+          "$ref": "#/$defs/PlatformConfig"
+        },
         "policies": {
           "$ref": "#/$defs/Policies"
         },
@@ -337,6 +340,18 @@
       ],
       "type": "object"
     },
+    "PlatformConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "runtime_catalog_sources": {
+          "items": {
+            "$ref": "#/$defs/RuntimeCatalogSource"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "Policies": {
       "additionalProperties": false,
       "properties": {
@@ -500,6 +515,25 @@
       },
       "required": [
         "api_url"
+      ],
+      "type": "object"
+    },
+    "RuntimeCatalogSource": {
+      "additionalProperties": false,
+      "properties": {
+        "base_url": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "runtime_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "runtime_id",
+        "base_url"
       ],
       "type": "object"
     },

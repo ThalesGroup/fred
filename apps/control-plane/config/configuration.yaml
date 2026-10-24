@@ -57,3 +57,10 @@ scheduler:
       workflow_id_prefix: control-plane-lifecycle
       connect_timeout_seconds: 5
       rpc_timeout_seconds: 10
+
+# Read-only discovery; used by `control-plane discover-agents`.
+platform:
+  runtime_catalog_sources:
+    - runtime_id: fred-agents
+      base_url: http://localhost:8000/fred/agents/v2
+      enabled: true

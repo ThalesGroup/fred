@@ -20,7 +20,7 @@ use sqlx::postgres::PgPoolOptions;
 
 use control_plane::{api, auth, config::Configuration as Config, fga::Fga, logging};
 
-const USAGE: &str = "usage: control-plane [serve | migrate | generate-openapi | generate-config-schema | processing-schema | import-provisioning <bundle.zip> --token-file <path>]";
+const USAGE: &str = "usage: control-plane [serve | discover-agents | migrate | generate-openapi | generate-config-schema | processing-schema | import-provisioning <bundle.zip> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -79,6 +79,12 @@ async fn main() -> Result<()> {
             error
         }
     })?;
+    // Operator discovery prints only JSON and does not initialize SQL, FGA or HTTP.
+    if args == ["discover-agents"] {
+        let catalogs = control_plane::agents::discover(&config.platform).await?;
+        println!("{}", serde_json::to_string_pretty(&catalogs)?);
+        return Ok(());
+    }
     // Startup events wait for the configured format, as fred-pod buffers them.
     logging::init_role(
         &config.app.log_level,
