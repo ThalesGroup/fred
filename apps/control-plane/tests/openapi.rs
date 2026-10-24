@@ -105,6 +105,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /document-uploads/{id}",
         "put /document-uploads/{id}/acknowledgment",
         "get /documents/{id}/content",
+        "delete /documents/{id}",
         "post /documents/{id}/processing",
         "get /documents/{id}/processing",
         "get /documents/{id}/preview",
@@ -131,6 +132,8 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /authorize/platform",
         "post /authorize/space",
         "post /import-export/import",
+        "get /organizations/{organization_id}/agents",
+        "post /agents/execute/stream",
     ]
     .into_iter()
     .map(String::from)
@@ -272,13 +275,22 @@ fn upload_and_empty_responses_match_the_http_contract() {
         for operation in item.as_object().unwrap().values() {
             for status in ["202", "204"] {
                 if let Some(response) = operation["responses"].get(status) {
-                    if status == "202" && operation["operationId"] == "delete_space" {
+                    if status == "202"
+                        && matches!(
+                            operation["operationId"].as_str(),
+                            Some("delete_space" | "delete_document")
+                        )
+                    {
                         assert_eq!(
                             response["content"]["application/json"]["schema"]["$ref"],
                             "#/components/schemas/Receipt"
                         );
                     } else {
-                        assert!(response.get("content").is_none());
+                        assert!(
+                            response.get("content").is_none(),
+                            "{} {status}",
+                            operation["operationId"]
+                        );
                     }
                 }
             }
@@ -329,7 +341,7 @@ fn role_names_are_exact_and_unaliased() {
 }
 
 #[test]
-fn document_metadata_and_mutation_routes_are_absent() {
+fn document_deletion_is_exposed_without_legacy_metadata_and_ingest_routes() {
     let api = schema();
     let paths = &api["paths"];
     assert!(paths.get("/control-plane/v1/documents").is_none());
@@ -338,7 +350,20 @@ fn document_metadata_and_mutation_routes_are_absent() {
             .get("/control-plane/v1/documents/{id}/ingest")
             .is_none()
     );
-    assert!(paths.get("/control-plane/v1/documents/{id}").is_none());
+    let document = paths["/control-plane/v1/documents/{id}"]
+        .as_object()
+        .unwrap();
+    assert_eq!(
+        document.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["delete"]
+    );
+    for status in ["200", "202"] {
+        assert_eq!(
+            document["delete"]["responses"][status]["content"]["application/json"]["schema"]
+                ["$ref"],
+            "#/components/schemas/Receipt"
+        );
+    }
     for name in ["CreateDocument", "CreatedDocument", "IngestRequest"] {
         assert!(api["components"]["schemas"].get(name).is_none());
     }

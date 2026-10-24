@@ -28,11 +28,32 @@ pub enum Status {
     Completed,
 }
 
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema,
+)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
+pub enum TargetKind {
+    Organization,
+    Team,
+    Project,
+    Document,
+}
+impl From<SpaceKind> for TargetKind {
+    fn from(kind: SpaceKind) -> Self {
+        match kind {
+            SpaceKind::Organization => Self::Organization,
+            SpaceKind::Team => Self::Team,
+            SpaceKind::Project => Self::Project,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct Receipt {
     pub id: Uuid,
     pub target_id: Uuid,
-    pub target_kind: SpaceKind,
+    pub target_kind: TargetKind,
     pub target_parent_id: Option<Uuid>,
     pub organization_id: Uuid,
     pub actor_subject: String,
@@ -98,6 +119,87 @@ pub(crate) async fn reserved<'e>(
         .bind(parent).bind(name).fetch_one(ex).await?)
 }
 impl Lifecycle {
+    pub async fn accept_document(
+        &self,
+        pool: &PgPool,
+        fga: &Fga,
+        actor: &str,
+        document_id: Uuid,
+    ) -> AppResult<Receipt> {
+        if let Some(receipt) = sqlx::query_as::<_, Receipt>(
+            "select * from deletion where target_id = $1 and target_kind = 'document'",
+        )
+        .bind(document_id)
+        .fetch_optional(pool)
+        .await?
+        {
+            let space_id = receipt
+                .target_parent_id
+                .ok_or_else(|| anyhow::anyhow!("document deletion has no parent"))?;
+            let tx = spaces::authorized_write(pool, fga, actor, space_id).await?;
+            tx.commit().await?;
+            return Ok(receipt);
+        }
+        if !self.config.enabled {
+            return Err(AppError::Unavailable(
+                "document deletion is disabled".into(),
+            ));
+        }
+        let space_id: Uuid = sqlx::query_scalar(
+            "select space_id from document where id = $1 and deletion_id is null",
+        )
+        .bind(document_id)
+        .fetch_one(pool)
+        .await?;
+        let mut tx = spaces::authorized_write(pool, fga, actor, space_id).await?;
+        let document: Option<Uuid> = sqlx::query_scalar(
+            "select id from document where id = $1 and deletion_id is null for update",
+        )
+        .bind(document_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        // A concurrent acceptance may have retired the row while we waited for the lock.
+        if let Some(receipt) = sqlx::query_as(
+            "select * from deletion where target_id = $1 and target_kind = 'document'",
+        )
+        .bind(document_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        {
+            tx.commit().await?;
+            return Ok(receipt);
+        }
+        document.ok_or(AppError::NotFound)?;
+        let active: bool = sqlx::query_scalar(
+            "select exists(select 1 from document_processing where document_id = $1 and status in ('pending', 'running'))",
+        )
+        .bind(document_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if active {
+            return Err(AppError::problem(
+                axum::http::StatusCode::CONFLICT,
+                "processing_active",
+                "document processing is active",
+            ));
+        }
+        let space = Space::from(db::space(&mut *tx, space_id).await?);
+        let (action, rule) = self.catalog.resolve(space_id, space.kind);
+        let requested_at = Utc::now();
+        let due_at = action.retention.after(requested_at)?;
+        let operation = Uuid::new_v4();
+        let receipt = sqlx::query_as("insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning *")
+            .bind(operation).bind(document_id).bind(TargetKind::Document).bind(space_id).bind(space.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).fetch_one(&mut *tx).await?;
+        sqlx::query("update document set deletion_id = $2 where id = $1")
+            .bind(document_id)
+            .bind(operation)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        tracing::info!(target: "fred.security.audit", audit_event="deletion.accepted", target_kind="document", operation_id=%operation, document_id=%document_id, space_id=%space_id, actor_uid=actor, "Document deletion accepted");
+        Ok(receipt)
+    }
+
     pub async fn accept(
         &self,
         pool: &PgPool,
@@ -149,7 +251,7 @@ impl Lifecycle {
         let due_at = action.retention.after(requested_at)?;
         let operation = Uuid::new_v4();
         sqlx::query("insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
-            .bind(operation).bind(id).bind(root.kind).bind(root.parent_id).bind(root.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).execute(&mut *tx).await?;
+            .bind(operation).bind(id).bind(TargetKind::from(root.kind)).bind(root.parent_id).bind(root.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).execute(&mut *tx).await?;
         mark(&mut tx, id, operation).await?;
         if root.kind != SpaceKind::Project {
             discover(&mut tx, fga, &root, operation).await?;

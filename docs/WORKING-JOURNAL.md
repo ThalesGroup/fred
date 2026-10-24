@@ -1034,6 +1034,50 @@ n'est pas une validation fonctionnelle de l'ensemble des changements Swift.
 
 ## F-012 Suppression unifiée
 
+- 2026-10-24 : lot D2 implémenté localement : suppression unitaire et groupée
+  des documents manager dans `DocumentWorkspace.tsx`, confirmation existante,
+  erreurs backend et bilan partiel. Le menu lit `managerProcessing.status`
+  (pending/running) ; aucun pré-filtrage en suppression groupée ni suivi de purge.
+  `controlPlaneApiEnhancements.ts` exporte le hook généré, désactive le rejeu
+  sur 401 et invalide Documents (liste et stockage). Tests ajoutés dans
+  `DocumentWorkspace.manager.test.tsx` et `controlPlaneApi.test.ts` pour les
+  confirmations, traitements actifs, échecs partiels, détail backend et
+  DELETE suivi du rafraîchissement. Chemin tags conservé, couvert notamment
+  par `useDocumentCommands.removeFromLibrary.test.tsx` (conservation du chemin
+  du dossier) et la suppression groupée de `DocumentWorkspace.folderBulk.test.tsx`.
+  `COMPONENT-UX.md` adapté. Après revue, confirmations du seul chemin manager
+  corrigées : titre `rework.resources.action.delete` et nouvelles clés fr/en
+  `rework.resources.confirm.deleteManagerDocument`, `deleteManagerDocuments`
+  et `deleteManagerMixed` pour décrire la suppression, avec assertions adaptées.
+  Clés de l'ancien chemin tags inchangées ; `deleteManagerPartial`
+  parle désormais d'éléments en fr/en pour couvrir documents et dossiers.
+  Commandes proposées, non lancées : `make code-quality`,
+  `make -C apps/frontend test`. Aucun test, build, make, npm, commit ni push
+  exécuté ; validation fonctionnelle à effectuer. Passe arc42 réservée à D3.
+
+- 2026-10-24 : lot D1 implémenté : `DELETE /documents/{id}`, reçu document,
+  migration 0009 (`target_kind` en texte) et complétion par la purge P3a.
+  Décisions : 409 `processing_active` pour un traitement pending/running,
+  rétention héritée du catalogue de l'espace, `GET /deletions/{id}` inchangé
+  et réservé à la plateforme. Le test de parcours couvre droits, rejeu,
+  invisibilité immédiate, réutilisation du nom, attente du nettoyage dérivé,
+  purge avec/sans traitement et conservation du dossier et du témoin.
+  Limite connue : un dossier contenant un document supprimé non encore purgé
+  ne peut pas être supprimé ; `DELETE /folders/{id}` répond 409 jusqu'à la purge.
+  Observations après revue : un reçu par document rend la purge en masse lente
+  avec les réglages par défaut (100 reçus / 10 min, verrou plateforme par batch).
+  Un reçu de document non terminé bloque la suppression de son espace par
+  chevauchement ; ce point reste à traiter avec la suppression des espaces.
+  Annexes A2/A3 adaptées ; aucun chapitre principal ni bloc généré modifié.
+  Commandes non lancées : `make code-quality`,
+  `make -C apps/control-plane test-integration`,
+  `make -C apps/control-plane test-lifecycle-temporal`,
+  `make -C apps/control-plane generate-openapi`,
+  `make -C apps/frontend update-control-plane-api`,
+  `make -C docs/architecture generate check`.
+  Aucun test, build, cargo, make, Docker, commit ni push exécuté ; validation
+  et régénération OpenAPI/client/routes/ER restent à effectuer.
+
 - 2026-10-24 : correction de la fixture S3 après reproduction des 19 échecs
   d'intégration : SeaweedFS refusait les écritures avec 0,47 % d'espace libre
   sur le disque hôte, sous son seuil de 1 %. `tests/support/content_bucket.rs`
@@ -1215,6 +1259,56 @@ n'est pas une validation fonctionnelle de l'ensemble des changements Swift.
 
 ## F22 Agent Rust embarqué hello-world
 
+- 2026-10-24 : `make test-integration` reproduit un seul échec (121 réussis) :
+  le test de démarrage sans Temporal attendait encore 404 pour PATCH/DELETE
+  document. Attente PATCH corrigée en 405 ; DELETE vérifie désormais 202, le
+  reçu document en état `queued` et son lien persistant en base malgré Temporal
+  indisponible. Nouvelle exécution complète : 122 réussis, aucun échec ni test
+  ignoré. Aucun code de production modifié, aucun commit créé.
+- 2026-10-24 : correction ciblée des trois échecs OpenAPI avant les commits :
+  inventaire complété avec les deux routes agent et la suppression de document,
+  reçu `Receipt` vérifié pour les réponses de suppression `200`/`202`, absence
+  des anciennes routes document toujours contrôlée. `make test` du Control Plane
+  passe : 66 tests réussis, 124 tests avec services/navigateur ignorés par cette
+  cible. Tests d'intégration et qualité non exécutés ; aucun commit créé.
+  Correction de tests uniquement, sans changement de contrat ni impact arc42.
+- 2026-10-24 : raccordement local de Console d'administration -> Features -> Agents
+  au contexte d'organisation (`useOrganizationAdmin`, garde, navigation et layout).
+  La lecture `GET /organizations/{organization_id}/agents` réutilise la découverte
+  Rust après admission, contexte unique, cycle de vie, `can_manage` et contrôle du
+  type organisation. Aucun droit plateforme ni ownership seul ne fait exception ;
+  le cumul plateforme/admin d'organisation conserve l'accès organisationnel.
+- Identifiant et nom `fred.github.ralph`, version `0.1.0`, fournisseur
+  `control-plane`, description de démonstration sans LLM conservée. L'exécution
+  utilise le même `AGENT_ID` ; exemple HTTP mis à jour. Source fred-agents désactivée
+  dans la configuration locale fournie ; toute source externe activée conserve
+  sa politique d'échec global. Aucun service démarré ni fred-agents modifié.
+- Onglet Agents ouvert par défaut dans ce parcours, table et identité existantes,
+  sans nom d'organisation ni libellé technique ajouté. Lecture Rust uniquement ;
+  pas de projection factice en enablement. Cellules d'activation, de portée et de
+  santé sans valeur ; commandes legacy inopérantes dans le contexte organisationnel.
+  Autres onglets conservés avec leurs lectures existantes, non portés.
+- OpenAPI et client RTK régénérés depuis les sources (`make -C apps/control-plane
+  generate-openapi`, puis `npx --no-install @rtk-query/codegen-openapi
+  src/slices/controlPlane/controlPlaneOpenApiConfig.json` depuis apps/frontend).
+  Compilation strictement pour la génération autorisée explicitement par Dimi.
+  Fixtures AppState et mocks frontend adaptés, sans exécution de tests.
+- README du composant/de l'agent, carte des sources et annexes A2/A5 actualisés ;
+  bloc des routes A2 régénéré avec le générateur existant. Coût dérivé du code
+  ajouté au chapitre 09, sans mesure. Aucune validation manuelle du parcours,
+  aucun test, lint, build frontend, audit indépendant, commit, push ou déploiement.
+  Restent à valider par Dimi : affichage, accès direct/rechargement, refus API
+  (rôles insuffisants, équipe/projet, autre organisation), cumul de rôles et
+  fonctionnement sans source externe activée. Les modifications locales antérieures
+  sont conservées.
+
+- 2026-10-24 : découverte CLI du template embarqué depuis la définition de la
+  bibliothèque, sans source configurée ni appel HTTP local. Catalogue unique
+  `fred-native`, identifiant réservé et refusé pour toute source externe, même
+  désactivée. Template `hello-world`, titre `Hello World`, `kind: static` pour
+  cette réponse fixe sans LLM ni données ; aucun moteur ReAct ou Graph annoncé.
+  Sources externes et échec global conservés. Aucun raccordement UI ni changement
+  SSE. Relecture du code seulement ; aucun build, test ou déploiement exécuté.
 - 2026-10-24 : Dimi choisit une bibliothèque dans `apps/control-plane/agent/`,
   versionnée et liée au control-plane, pour garder un seul processus/déploiement.
 - Conversion du serveur autonome en bibliothèque ; route du control-plane
@@ -1232,3 +1326,12 @@ n'est pas une validation fonctionnelle de l'ensemble des changements Swift.
   OpenAPI/client générés non régénérés (la génération compile le binaire).
 - Prochaine étape : compilation et appel manuel du hello-world par Dimi ; vérifier
   le flux via le proxy HTTPS du déploiement avant de brancher un modèle.
+- 2026-10-24 : priorité recentrée par Dimi sur le cas d'usage simple : un éditeur
+  supprime un document d'un dossier, nettoyé de bout en bout par les workers du
+  Control Plane et de Knowledge Flow. Nouveau découpage : D1 `DELETE /documents/{id}`
+  (backend), D2 frontend, D3 validation k3d et passe arc42 avec Dimi. Reportés :
+  suppression d'un espace avec documents (ancien P3b : arrêt forcé, uploads en
+  cours), dossier avec contenu (P4), utilisateur (P5). Simplifications proposées
+  pour D1 : 409 `processing_active` pendant un traitement, rétention héritée de
+  l'espace, `GET /deletions` inchangé.
+

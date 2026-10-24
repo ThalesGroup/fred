@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { type PropsWithChildren } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "@shared/layouts/Sidebar/Sidebar.tsx";
 import TeamAdminCharterGate from "@shared/organisms/TeamAdminCharterGate/TeamAdminCharterGate";
 import { useTaskPolling } from "../../../../features/tasks/useTaskPolling";
@@ -33,12 +33,16 @@ function AdmittedWorkspace() {
 
 export default function MainLayout({ children, navigation = true }: PropsWithChildren<{ navigation?: boolean }>) {
   const { isAdmin } = useManagerPlatformAdmin(!navigation);
+  const { pathname } = useLocation();
+  const organizationArea = pathname.replace(/\/$/, "") === "/admin/features";
   return (
     <div className={styles.mainLayout}>
       <nav className={styles.sidebar}>
-        <Sidebar navigation={navigation} platformArea={isAdmin} />
+        <Sidebar navigation={navigation} platformArea={isAdmin && !organizationArea} organizationArea={organizationArea} />
       </nav>
-      <main className={styles.content}>{navigation ? isAdmin ? <Outlet /> : <AdmittedWorkspace /> : children}</main>
+      <main className={styles.content}>
+        {navigation ? isAdmin || organizationArea ? <Outlet /> : <AdmittedWorkspace /> : children}
+      </main>
     </div>
   );
 }

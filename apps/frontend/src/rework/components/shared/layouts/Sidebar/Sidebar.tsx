@@ -23,9 +23,11 @@ import AdminNavbar from "./AdminNavbar/AdminNavbar.tsx";
 export default function Sidebar({
   navigation = true,
   platformArea = false,
+  organizationArea = false,
 }: {
   navigation?: boolean;
   platformArea?: boolean;
+  organizationArea?: boolean;
 }) {
   const { pathname } = useLocation();
 
@@ -45,7 +47,7 @@ export default function Sidebar({
           {navigation && <MainNavBar platformArea={platformArea} />}
         </div>
         <div className={styles["user-profile-container"]}>
-          <UserProfile admitted={navigation} platformArea={platformArea} />
+          <UserProfile admitted={navigation} platformArea={platformArea} organizationArea={organizationArea} />
         </div>
       </div>
       {navigation && (

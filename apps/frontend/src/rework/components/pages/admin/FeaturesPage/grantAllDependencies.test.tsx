@@ -60,6 +60,10 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useOrganizationAgentsQuery: () => ({ currentData: undefined, isLoading: false, isError: false }),
+}));
+
 vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useAdminCapabilitiesQuery: () => ({ data: { items: h.items }, isLoading: false, isError: false }),
   useListAllTeamsQuery: () => ({ data: [], isLoading: false, isError: false }),

@@ -47,8 +47,8 @@ describe("isProtectedAllowed", () => {
     expect(isProtectedAllowed(requires, caps({ [flag]: true }))).toBe(true);
   });
 
-  it.each(REQUIREMENTS)('allows a platform_admin for requires="%s"', (requires) => {
-    expect(isProtectedAllowed(requires, caps({ canAdmin: true }))).toBe(true);
+  it.each(REQUIREMENTS)('limits a platform_admin to platform requirements: "%s"', (requires) => {
+    expect(isProtectedAllowed(requires, caps({ canAdmin: true }))).toBe(requires !== "features");
   });
 
   it.each(REQUIREMENTS)('denies a user with no role for requires="%s"', (requires) => {

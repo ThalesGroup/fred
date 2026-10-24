@@ -177,7 +177,8 @@ platform:
   runtime_catalog_sources:
     - runtime_id: fred-agents
       base_url: http://localhost:8000/fred/agents/v2
-      enabled: true
+      # Opt in only when this external runtime is running.
+      enabled: false
 ```
 <!-- end generated -->
 
@@ -438,6 +439,8 @@ An empty match object matches every space. Durations accept nonnegative ISO week
 days, hours, minutes and seconds; unsupported fields, calendar/fractional durations,
 empty match lists and overflows fail validation. Accepted deadlines never change
 when a catalog is reloaded.
+A document deletion inherits its space's retention and its receipt completes once
+the document has been purged.
 
 `control-plane serve` supervises lifecycle tasks in the same process as HTTP and
 the processing dispatcher. Acceptance and completion emit `deletion.accepted`

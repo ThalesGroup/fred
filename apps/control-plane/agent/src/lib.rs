@@ -9,7 +9,24 @@ use futures::{Stream, StreamExt, stream};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const AGENT_ID: &str = "hello-world";
+pub const AGENT_ID: &str = "fred.github.ralph";
+
+/// Descriptive metadata, independent of the host's discovery wire format.
+pub struct AgentDefinition {
+    pub id: &'static str,
+    pub title: &'static str,
+    pub version: &'static str,
+    pub provider: &'static str,
+    pub description: &'static str,
+}
+
+pub const DEFINITION: AgentDefinition = AgentDefinition {
+    id: AGENT_ID,
+    title: AGENT_ID,
+    version: "0.1.0",
+    provider: "control-plane",
+    description: "Demonstration agent replying Hello world! without an LLM or data access.",
+};
 
 // Direct-template subset of fred-sdk/contracts/execution.py::RuntimeExecuteRequest.
 #[derive(Deserialize, utoipa::ToSchema)]

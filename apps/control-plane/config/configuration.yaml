@@ -63,4 +63,5 @@ platform:
   runtime_catalog_sources:
     - runtime_id: fred-agents
       base_url: http://localhost:8000/fred/agents/v2
-      enabled: true
+      # Opt in only when this external runtime is running.
+      enabled: false

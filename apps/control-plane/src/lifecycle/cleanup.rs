@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! One bounded batch under SQL locks and FGA revisions; metadata is removed last.
-use super::{Receipt, Status};
+use super::{Receipt, Status, TargetKind};
 use crate::{
     bootstrap,
     domain::{Space, SpaceKind, SpaceRow},
@@ -56,15 +56,6 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
     });
     spaces::lock_organization(&mut tx, &organization).await?;
     let mut guard = fga.guard(&[Scope::Platform]).await?;
-    let row: Option<(Uuid, SpaceKind, bool)> = sqlx::query_as(
-        "select id, kind, personal_owner is not null from space where deletion_id = $1 order by kind desc, id limit 1",
-    )
-    .bind(id)
-    .fetch_optional(&mut *tx)
-    .await?;
-    let Some((space, kind, personal)) = row else {
-        return Err(anyhow::anyhow!("incomplete deletion lost its manifest").into());
-    };
     sqlx::query("update deletion set status = 'running', last_visit = now(), error_code = null where id = $1").bind(id).execute(&mut *tx).await?;
     let guard_present = fga
         .organization_guard_present(receipt.organization_id)
@@ -140,9 +131,36 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
             .await?;
             tracing::info!(documents_deleted = deleted, "Documents purged");
         }
+        if receipt.target_kind != TargetKind::Document {
+            tx.commit().await?;
+            return Ok(());
+        }
+    }
+    if receipt.target_kind == TargetKind::Document {
+        let remaining: bool =
+            sqlx::query_scalar("select exists(select 1 from document where deletion_id = $1)")
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?;
+        if !remaining {
+            sqlx::query("update deletion set status = 'completed', completed_at = now(), error_code = null where id = $1")
+                .bind(id).execute(&mut *tx).await?;
+        }
         tx.commit().await?;
+        if !remaining {
+            tracing::info!(target: "fred.security.audit", audit_event="deletion.completed", target_kind="document", operation_id=%id, document_id=%receipt.target_id, space_id=?receipt.target_parent_id, actor_uid=receipt.actor_subject, "Document deletion completed");
+        }
         return Ok(());
     }
+    let row: Option<(Uuid, SpaceKind, bool)> = sqlx::query_as(
+        "select id, kind, personal_owner is not null from space where deletion_id = $1 order by kind desc, id limit 1",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((space, kind, personal)) = row else {
+        return Err(anyhow::anyhow!("incomplete deletion lost its manifest").into());
+    };
     let refs = fga.references(space).await?;
     let manifest_count: i64 =
         sqlx::query_scalar("select count(*) from space where deletion_id = $1")

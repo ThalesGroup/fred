@@ -103,6 +103,7 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
     .await
     .unwrap();
     let app = control_plane::api::routes(control_plane::api::AppState {
+        agent_catalog: Default::default(),
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: std::sync::Arc::new(identity.auth().await),
@@ -421,6 +422,7 @@ async fn folder_creation_governance_contract_and_request_budget() {
     .await
     .unwrap();
     let app = control_plane::api::routes(control_plane::api::AppState {
+        agent_catalog: Default::default(),
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: std::sync::Arc::new(identity.auth().await),

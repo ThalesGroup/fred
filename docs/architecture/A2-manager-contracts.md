@@ -19,6 +19,20 @@ one unknown to the user directory or a tuple OpenFGA rejects as invalid, 409 whe
 OpenFGA guard was consumed (retry with fresh checks), and 503 when the directory is
 unavailable.
 
+`GET /organizations/{organization_id}/agents` reuses runtime discovery after
+`spaces::authorize(..., Manage)` and an organization-kind check. The target must
+belong to the admitted caller's unique organization and be active. Organization
+ownership alone, team/project administration and platform roles confer no access.
+The response contains catalogs and template metadata, with no activation state or
+mutation. The embedded definition is `fred.github.ralph`, version `0.1.0`, provider
+`control-plane`; external-source failure still fails the whole discovery.
+
+<!-- generated: routes apps/control-plane/src/agents.rs /control-plane/v1 -->
+| Method | Path | Handler |
+| --- | --- | --- |
+| GET | `/control-plane/v1/organizations/{organization_id}/agents` | `organization_agents` |
+<!-- end generated -->
+
 Every error answer is an `ErrorBody` JSON object with `detail` and `code`. An unreadable
 JSON body answers 400 `invalid_json`; path, query or body values that do not match
 their type answer 422 `invalid_fields`; an oversized JSON body answers 413
@@ -73,6 +87,7 @@ Original-storage routes use the same router/OpenAPI registration mechanism:
 | --- | --- | --- |
 | GET | `/control-plane/v1/document-uploads/{id}` | `receipt` |
 | PUT | `/control-plane/v1/document-uploads/{id}/acknowledgment` | `acknowledge` |
+| DELETE | `/control-plane/v1/documents/{id}` | `delete_document` |
 | GET | `/control-plane/v1/documents/{id}/content` | `content` |
 | POST | `/control-plane/v1/folders/{id}/documents` | `upload` |
 | POST | `/control-plane/v1/folders/{id}/documents/preflight` | `preflight` |
@@ -130,7 +145,7 @@ SQLx creates its history table itself; it is outside that generated diagram.
 | `space` | UUID `id`; kind, name, optional personal owner, required `organization_id` and optional `parent_id`, both referencing `space.id`. | Control-plane records immutable placement before publishing matching FGA links. Roles and permission evaluation remain in OpenFGA. `deletion_id` marks scheduled cleanup without removing attachment metadata. |
 | `folder` | UUID `id`; named folder, containing space, optional parent folder and UUID-based path. | Control-plane owns the hierarchy. Placement is immutable; folder and parent must belong to the same space. `deletion_id` marks a retired row: reads and producers ignore it, and name uniqueness covers only active rows. |
 | `document` | UUID `id`; name, MIME type, size, SHA-256, creator, object key and quota owner. | Metadata for a stored original. The bytes live in object storage, not PostgreSQL. Placement is immutable. `deletion_id` marks a retired row: reads and producers ignore it, and name uniqueness covers only active rows. |
-| `deletion` | UUID `id`, unique `target_id`; durable deletion request, policy, deadlines, status and progress counters. | API and lifecycle worker share operational state. Target identifiers deliberately have no foreign keys so the receipt can survive target removal. |
+| `deletion` | UUID `id`, unique `target_id`; durable deletion request, policy, deadlines, status and progress counters. | API and lifecycle worker share operational state. Target identifiers deliberately have no foreign keys so the receipt can survive target removal. `target_kind` is text constrained to `organization`, `team`, `project` or `document`. |
 | `document_upload` | UUID `id`, unique `(actor, request_key)`; upload reservation and receipt, object key, completion, retry and cleanup state. | Control-plane owns upload idempotency and reservations. Target space/folder IDs are historical references without foreign keys; the resulting document and retry predecessor have SQL links. |
 | `document_processing` | UUID `id`, unique `(actor, request_key)` and `workflow_id`; processing attempt, delivery lease, profile, generations, result and cleanup state. | Control-plane records processing orchestration. The document and space have SQL references. JSONB fields contain the submitted contract, settings and artifact metadata, not canonical authorization. |
 | `document_storage` | Boolean singleton; installation namespace, original/derived storage locations, inventory counters, cursor and lease. | Installation-wide storage binding and inventory progress, independent of any individual upload. |
@@ -178,7 +193,7 @@ erDiagram
 "deletion" {
   uuid id
   uuid target_id
-  space_kind target_kind
+  text target_kind
   uuid target_parent_id
   uuid organization_id
   text actor_subject

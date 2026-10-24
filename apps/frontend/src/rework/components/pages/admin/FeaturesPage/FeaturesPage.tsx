@@ -41,6 +41,9 @@ import {
   useSetModelReasoningMutation,
 } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import type { CapabilityEnablementItem } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { skipToken } from "@reduxjs/toolkit/query";
+import { useOrganizationAgentsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { RuntimeTemplate } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./FeaturesPage.module.css";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
 import { PlatformModelBindingsPanel } from "./PlatformModelBindingsPanel/PlatformModelBindingsPanel.tsx";
@@ -71,13 +74,22 @@ import {
 type CapabilityKind = "tool" | "agent" | "model" | "app" | "knowledge_base";
 const CORE_KIND_FILTERS: CapabilityKind[] = ["tool", "agent", "model", "knowledge_base"];
 
-export default function FeaturesPage() {
+export default function FeaturesPage({ organizationId }: { organizationId?: string } = {}) {
+  const readOnly = organizationId !== undefined;
+  const [kindFilter, setKindFilter] = useState<CapabilityKind>(readOnly ? "agent" : "tool");
+  const discoveringAgents = readOnly && kindFilter === "agent";
+  const discovery = useOrganizationAgentsQuery(
+    discoveringAgents && organizationId ? { organizationId } : skipToken,
+    { refetchOnMountOrArgChange: true },
+  );
   const { t } = useTranslation();
   const { showSuccess, showError, showWarn } = useToast();
-  const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications");
+  const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications", discoveringAgents);
   const kindFilters: CapabilityKind[] = applicationsEnabled ? [...CORE_KIND_FILTERS, "app"] : CORE_KIND_FILTERS;
 
-  const { data, isLoading, isError } = useAdminCapabilitiesQuery();
+  const legacy = useAdminCapabilitiesQuery(undefined, { skip: discoveringAgents });
+  const { data } = legacy;
+  const { isLoading, isError } = discoveringAgents ? discovery : legacy;
   // The full registry (`can_list_all_teams`), not the caller-scoped `/teams`: an admin
   // must see teams they don't belong to. The drawer only needs ids and names, so the
   // per-team membership reads are skipped.
@@ -85,7 +97,7 @@ export default function FeaturesPage() {
     data: teams = [],
     isLoading: isTeamsLoading,
     isError: isTeamsError,
-  } = useListAllTeamsQuery({ includeMembership: false });
+  } = useListAllTeamsQuery({ includeMembership: false }, { skip: readOnly });
   const [setDefaultOn, { isLoading: isTogglingDefault }] = useSetCapabilityDefaultOnMutation();
   // Per-model reasoning activation (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5).
   const [setModelReasoning, { isLoading: isTogglingReasoning }] = useSetModelReasoningMutation();
@@ -107,7 +119,6 @@ export default function FeaturesPage() {
   // admin (or another tab) in between is not re-granted.
   const [pendingGrantAll, setPendingGrantAll] = useState<CapabilityEnablementItem | null>(null);
   const [showAffected, setShowAffected] = useState(false);
-  const [kindFilter, setKindFilter] = useState<CapabilityKind>("tool");
   const activeKindFilter: CapabilityKind = !applicationsEnabled && kindFilter === "app" ? "tool" : kindFilter;
   // Which row's mutation is in flight — NOT just a boolean. Disabling every
   // switch off `isTogglingDefault` used to include the one the admin just
@@ -166,6 +177,7 @@ export default function FeaturesPage() {
         : "generic";
 
   const applyDefaultOn = async (capability: CapabilityEnablementItem, nextValue: boolean) => {
+    if (readOnly) return;
     if (inFlightDefaultOnIdRef.current === capability.id) {
       return;
     }
@@ -211,6 +223,7 @@ export default function FeaturesPage() {
   };
 
   const applyReasoning = async (capability: CapabilityEnablementItem, nextValue: boolean) => {
+    if (readOnly) return;
     if (inFlightReasoningIdRef.current === capability.id) {
       return;
     }
@@ -247,6 +260,7 @@ export default function FeaturesPage() {
    * the ordering is the guarantee.
    */
   const grantAllDefaultOn = async (capability: CapabilityEnablementItem) => {
+    if (readOnly) return;
     // Re-derived now, not at dialog-open time: the list refetches underneath an
     // open dialog, and re-granting an already-default-on dependency is a wasted
     // write the admin never asked for.
@@ -272,6 +286,7 @@ export default function FeaturesPage() {
   };
 
   const onToggleDefault = (capability: CapabilityEnablementItem) => {
+    if (readOnly) return;
     if (capability.default_on) {
       // Turning default-on off revokes inherited access team-by-team and can
       // suspend dependent instances — confirm before firing, and preview the
@@ -359,7 +374,7 @@ export default function FeaturesPage() {
     );
   };
 
-  const columns: DataTableColumn<CapabilityEnablementItem>[] = [
+  const columns: (DataTableColumn<CapabilityEnablementItem> & { field?: "identity" | "actions" })[] = [
     {
       label: t("rework.admin.capabilities.col.defaultOn"),
       size: "1fr",
@@ -383,7 +398,7 @@ export default function FeaturesPage() {
           <Switch
             size="small"
             checked={cap.default_on}
-            disabled={blockedOn || (isTogglingDefault && togglingCapabilityId !== cap.id)}
+            disabled={readOnly || blockedOn || (isTogglingDefault && togglingCapabilityId !== cap.id)}
             onChange={() => onToggleDefault(cap)}
             aria-label={t("rework.admin.capabilities.col.defaultOn")}
           />
@@ -400,6 +415,7 @@ export default function FeaturesPage() {
       },
     },
     {
+      field: "identity",
       label: t("rework.admin.capabilities.col.capability"),
       size: "2.4fr",
       cellRenderer: (cap) => (
@@ -437,7 +453,7 @@ export default function FeaturesPage() {
                     <Switch
                       size="small"
                       checked={cap.reasoning_enabled ?? false}
-                      disabled={isTogglingReasoning && togglingReasoningId !== cap.id}
+                      disabled={readOnly || (isTogglingReasoning && togglingReasoningId !== cap.id)}
                       onChange={() => void applyReasoning(cap, !(cap.reasoning_enabled ?? false))}
                       aria-label={t("rework.admin.capabilities.col.reasoning")}
                     />
@@ -522,7 +538,10 @@ export default function FeaturesPage() {
                     <button
                       type="button"
                       className={styles.healthWarnButton}
-                      onClick={() => setSuspendedCapabilityId(cap.id)}
+                      disabled={readOnly}
+                      onClick={() => {
+                        if (!readOnly) setSuspendedCapabilityId(cap.id);
+                      }}
                       aria-label={t("rework.admin.capabilities.health.suspendedAction", { count: suspended })}
                     >
                       <Icon category="outlined" type="warning" />
@@ -543,6 +562,7 @@ export default function FeaturesPage() {
           },
         ]),
     {
+      field: "actions",
       label: t("rework.admin.capabilities.col.actions"),
       // Wide enough for the one-line button at desktop widths.
       size: "1.4fr",
@@ -555,7 +575,10 @@ export default function FeaturesPage() {
             variant="outlined"
             size="small"
             icon={{ category: "outlined", type: "groups" }}
-            onClick={() => setMatrixCapabilityId(cap.id)}
+            disabled={readOnly}
+            onClick={() => {
+              if (!readOnly) setMatrixCapabilityId(cap.id);
+            }}
           >
             {t("rework.admin.capabilities.manageTeams")}
           </Button>
@@ -563,6 +586,49 @@ export default function FeaturesPage() {
       ),
     },
   ];
+
+  type DiscoveredAgent = { template: RuntimeTemplate; runtimeId: string };
+  const agents: DiscoveredAgent[] = discovery.isError
+    ? []
+    : (discovery.currentData ?? []).flatMap((catalog) =>
+        catalog.templates.map((template) => ({ template, runtimeId: catalog.runtime_id })),
+      );
+  const discoveryColumns: DataTableColumn<DiscoveredAgent>[] = columns.map((column) => ({
+    label: column.label,
+    size: column.size,
+    cellRenderer: ({ template, runtimeId }) => {
+      // Identity and actions retain their existing positions. The discovery contract
+      // makes no assertion about activation, team reach or instance health.
+      if (column.field === "identity") {
+        return (
+          <EntityIdentity
+            name={template.title}
+            icon="tune"
+            sourceId={template.template_agent_id}
+            runtimeId={runtimeId}
+            version={template.public_version}
+          />
+        );
+      }
+      if (column.field === "actions") {
+        return (
+          <div className={styles.actionsCell}>
+            <Button
+              color="on-surface"
+              variant="outlined"
+              size="small"
+              icon={{ category: "outlined", type: "groups" }}
+              disabled
+            >
+              {t("rework.admin.capabilities.manageTeams")}
+            </Button>
+          </div>
+        );
+      }
+      return <div className={styles.centered} />;
+    },
+  }));
+  const rowCount = discoveringAgents ? agents.length : capabilities.length;
 
   return (
     <div className={styles.page}>
@@ -576,7 +642,10 @@ export default function FeaturesPage() {
               variant="outlined"
               size="small"
               icon={{ category: "outlined", type: "tune" }}
-              onClick={() => setPlatformBindingsPanelOpen(true)}
+              disabled={readOnly}
+              onClick={() => {
+                if (!readOnly) setPlatformBindingsPanelOpen(true);
+              }}
             >
               {t("rework.admin.platformModelBindings.openButton")}
             </Button>
@@ -600,7 +669,7 @@ export default function FeaturesPage() {
       {isLoading && <p className={styles.status}>{t("rework.admin.capabilities.loading")}</p>}
       {isError && <p className={styles.statusError}>{t("rework.admin.capabilities.loadError")}</p>}
 
-      {!isLoading && !isError && capabilities.length === 0 && (
+      {!isLoading && !isError && rowCount === 0 && (
         <PageEmptyState
           icon="tune"
           message={t(
@@ -617,72 +686,80 @@ export default function FeaturesPage() {
         />
       )}
 
-      {!isLoading && !isError && capabilities.length > 0 && (
-        <DataTable columns={columns} data={capabilities} size="medium" />
+      {!isLoading && !isError && rowCount > 0 && (
+        discoveringAgents ? (
+          <DataTable columns={discoveryColumns} data={agents} size="medium" />
+        ) : (
+          <DataTable columns={columns} data={capabilities} size="medium" />
+        )
       )}
 
-      <CapabilityTeamMatrixDrawer
-        capability={matrixCapability}
-        // The FULL catalog, not the kind-filtered `capabilities`: an agent's
-        // dependencies are tool rows the Agents tab has filtered out (#2408).
-        allCapabilities={allCapabilities}
-        teams={teams}
-        teamsLoading={isTeamsLoading}
-        teamsError={isTeamsError}
-        open={matrixCapability !== null}
-        onClose={() => setMatrixCapabilityId(null)}
-      />
+      {!readOnly && (
+        <>
+          <CapabilityTeamMatrixDrawer
+            capability={matrixCapability}
+            // The FULL catalog, not the kind-filtered `capabilities`: an agent's
+            // dependencies are tool rows the Agents tab has filtered out (#2408).
+            allCapabilities={allCapabilities}
+            teams={teams}
+            teamsLoading={isTeamsLoading}
+            teamsError={isTeamsError}
+            open={matrixCapability !== null}
+            onClose={() => setMatrixCapabilityId(null)}
+          />
 
-      <PlatformModelBindingsPanel
-        open={platformBindingsPanelOpen}
-        onClose={() => setPlatformBindingsPanelOpen(false)}
-      />
+          <PlatformModelBindingsPanel
+            open={platformBindingsPanelOpen}
+            onClose={() => setPlatformBindingsPanelOpen(false)}
+          />
 
-      <SuspendedInstancesDrawer
-        capability={suspendedCapability}
-        teams={teams}
-        open={suspendedCapability !== null}
-        onClose={() => setSuspendedCapabilityId(null)}
-      />
+          <SuspendedInstancesDrawer
+            capability={suspendedCapability}
+            teams={teams}
+            open={suspendedCapability !== null}
+            onClose={() => setSuspendedCapabilityId(null)}
+          />
 
-      <ConfirmationDialog
-        open={visiblePendingDefaultOff !== null}
-        title={t(`rework.admin.capabilities.defaultOffConfirm.${defaultOffCopyVariant}Title`)}
-        message={t(`rework.admin.capabilities.defaultOffConfirm.${defaultOffCopyVariant}Message`)}
-        details={renderImpactDetails()}
-        confirmLabel={t("rework.admin.capabilities.defaultOffConfirm.confirm")}
-        cancelLabel={t("rework.admin.capabilities.defaultOffConfirm.cancel")}
-        criticalAction
-        onConfirm={() => {
-          if (visiblePendingDefaultOff) void applyDefaultOn(visiblePendingDefaultOff, false);
-          setPendingDefaultOff(null);
-        }}
-        onCancel={() => setPendingDefaultOff(null)}
-      />
+          <ConfirmationDialog
+            open={visiblePendingDefaultOff !== null}
+            title={t(`rework.admin.capabilities.defaultOffConfirm.${defaultOffCopyVariant}Title`)}
+            message={t(`rework.admin.capabilities.defaultOffConfirm.${defaultOffCopyVariant}Message`)}
+            details={renderImpactDetails()}
+            confirmLabel={t("rework.admin.capabilities.defaultOffConfirm.confirm")}
+            cancelLabel={t("rework.admin.capabilities.defaultOffConfirm.cancel")}
+            criticalAction
+            onConfirm={() => {
+              if (visiblePendingDefaultOff) void applyDefaultOn(visiblePendingDefaultOff, false);
+              setPendingDefaultOff(null);
+            }}
+            onCancel={() => setPendingDefaultOff(null)}
+          />
 
-      <ConfirmationDialog
-        open={pendingGrantAll !== null}
-        title={t("rework.admin.capabilities.grantAllConfirm.title")}
-        message={
-          pendingGrantAll
-            ? t("rework.admin.capabilities.grantAllConfirm.messagePlatform", {
-                agent: capabilityLabel(t, pendingGrantAll),
-                deps: dependencyLabels(
-                  t,
-                  missingAgentDependenciesForPlatform(pendingGrantAll, allCapabilities),
-                  allCapabilities,
-                ),
-              })
-            : ""
-        }
-        confirmLabel={t("rework.admin.capabilities.grantAllConfirm.confirm")}
-        cancelLabel={t("rework.admin.capabilities.grantAllConfirm.cancel")}
-        onConfirm={() => {
-          if (pendingGrantAll) void grantAllDefaultOn(pendingGrantAll);
-          setPendingGrantAll(null);
-        }}
-        onCancel={() => setPendingGrantAll(null)}
-      />
+          <ConfirmationDialog
+            open={pendingGrantAll !== null}
+            title={t("rework.admin.capabilities.grantAllConfirm.title")}
+            message={
+              pendingGrantAll
+                ? t("rework.admin.capabilities.grantAllConfirm.messagePlatform", {
+                    agent: capabilityLabel(t, pendingGrantAll),
+                    deps: dependencyLabels(
+                      t,
+                      missingAgentDependenciesForPlatform(pendingGrantAll, allCapabilities),
+                      allCapabilities,
+                    ),
+                  })
+                : ""
+            }
+            confirmLabel={t("rework.admin.capabilities.grantAllConfirm.confirm")}
+            cancelLabel={t("rework.admin.capabilities.grantAllConfirm.cancel")}
+            onConfirm={() => {
+              if (pendingGrantAll) void grantAllDefaultOn(pendingGrantAll);
+              setPendingGrantAll(null);
+            }}
+            onCancel={() => setPendingGrantAll(null)}
+          />
+        </>
+      )}
     </div>
   );
 }

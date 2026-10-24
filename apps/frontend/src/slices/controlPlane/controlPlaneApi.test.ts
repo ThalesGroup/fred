@@ -130,7 +130,6 @@ describe("generated control-plane client", () => {
     for (const operation of [
       "createDocument",
       "renameDocument",
-      "deleteDocument",
       "ingestDocument",
       "getDocument",
       "listDocuments",
@@ -210,5 +209,39 @@ it("allows same-account token refresh and refuses a late response after account 
   expect(other.user_id).toBe("other");
   expect(fetch).toHaveBeenCalledTimes(3);
   vi.mocked(KeyCloakService.GetSessionIdentity).mockReturnValue("fixture/operator");
+  store.dispatch(api.util.resetApiState());
+});
+
+it("deletes a document through the generated route and refreshes directory and storage subscriptions", async () => {
+  const { store, fetch } = setup({});
+  const directory = store.dispatch(api.endpoints.entries.initiate({ id: "space", parentId: "folder" }));
+  const storage = store.dispatch(api.endpoints.summary.initiate({ id: "space" }));
+  await Promise.all([directory.unwrap(), storage.unwrap()]);
+  fetch.mockClear();
+  const receipt: import("./controlPlaneOpenApi").Receipt = {
+    id: "receipt",
+    actor_subject: "operator",
+    organization_id: "org",
+    target_id: "doc",
+    target_kind: "document",
+    status: "queued",
+    requested_at: "2026-10-24T10:00:00Z",
+    due_at: "2026-10-24T10:00:00Z",
+    documents_deleted: 0,
+    folders_deleted: 0,
+    spaces_deleted: 0,
+  };
+  fetch.mockImplementationOnce(async () => new Response(JSON.stringify(receipt)));
+  expect(await store.dispatch(api.endpoints.deleteDocument.initiate({ id: "doc" })).unwrap()).toEqual(receipt);
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+  expect(fetch.mock.calls.map(([request]) => [request.method, new URL(request.url).pathname])).toEqual(
+    expect.arrayContaining([
+      ["DELETE", "/control-plane/v1/documents/doc"],
+      ["GET", "/control-plane/v1/spaces/space/entries"],
+      ["GET", "/control-plane/v1/spaces/space/storage"],
+    ]),
+  );
+  directory.unsubscribe();
+  storage.unsubscribe();
   store.dispatch(api.util.resetApiState());
 });

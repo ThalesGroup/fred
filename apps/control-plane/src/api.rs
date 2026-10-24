@@ -48,6 +48,7 @@ use crate::{
 
 #[derive(Clone)]
 pub struct AppState {
+    pub agent_catalog: crate::agents::PlatformConfig,
     pub auth: Arc<Authenticator>,
     pub pool: PgPool,
     pub fga: Fga,
@@ -1003,6 +1004,7 @@ fn registrations() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(health))
         .merge(crate::embedded_agent::routes())
+        .merge(crate::agents::routes())
         .routes(routes!(create_space))
         .routes(routes!(grant, revoke))
         .routes(routes!(rename_folder, delete_folder))

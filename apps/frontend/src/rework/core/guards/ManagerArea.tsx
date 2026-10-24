@@ -18,7 +18,7 @@ const platformRoutes = new Set([
   "/release-notes",
 ]);
 
-/** Platform governance never mounts the business area, including for mixed-role owners. */
+/** Platform governance stays separate; Features has its own organization authority. */
 export default function ManagerArea({ children }: PropsWithChildren) {
   const access = useManagerPlatformAdmin();
   const { pathname } = useLocation();
@@ -43,6 +43,8 @@ export default function ManagerArea({ children }: PropsWithChildren) {
       </MainLayout>
     );
   }
+  // This business route has its own organization guard, including for mixed roles.
+  if (["/admin", "/admin/features", "/unauthorized"].includes(pathname.replace(/\/$/, ""))) return <Outlet />;
   if (access.isAdmin) {
     return platformRoutes.has(pathname.replace(/\/$/, "")) ? (
       <Outlet />

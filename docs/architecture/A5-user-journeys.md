@@ -25,7 +25,10 @@ a loading or unavailable admission response is not treated as permission.
 
 The platform owner has governance authority, not implicit content access. The
 current frontend directs platform owners to Organizations, including accounts
-that also carry business roles. The browser journey above therefore uses a
+that also carry business roles. An organization administrator also has the
+existing Features entry, governed by that organization role: its Agents tab reads
+Rust discovery without global legacy catalog calls. Other business destinations
+retain their existing area boundary. The browser journey above therefore uses a
 separate business account after provisioning. This is the current navigation,
 not a claim that the platform-owner role authorizes document access.
 

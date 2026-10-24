@@ -18,7 +18,7 @@ curl --fail-with-body --no-buffer \
   --header @/absolute/path/to/bearer-header.txt \
   --header 'Content-Type: application/json' \
   --header 'Accept: text/event-stream' \
-  --data '{"agent_id":"hello-world","input":"Bonjour"}' \
+  --data '{"agent_id":"fred.github.ralph","input":"Bonjour"}' \
   http://localhost:8222/control-plane/v1/agents/execute/stream
 ```
 
@@ -37,7 +37,7 @@ verification in that deployment. The frontend is not wired to this endpoint.
 
 `POST {control-plane base_url}/agents/execute/stream` accepts the direct-template
 subset of `libs/fred-sdk/fred_sdk/contracts/execution.py::RuntimeExecuteRequest`.
-`agent_id` must be `hello-world`, and `input` must be nonblank. The answer is fixed.
+`agent_id` must be `fred.github.ralph`, and `input` must be nonblank. The answer is fixed.
 The handler in `../src/embedded_agent.rs` uses the control-plane's `ApiJson` and
 `AdmittedUser` extractors; routes and OpenAPI share the same registration.
 

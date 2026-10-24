@@ -32,8 +32,8 @@ export function resolveFrontendFeatureFlag(
 }
 
 /** Read one typed flag from the authenticated control-plane bootstrap. */
-export function useFrontendFeatureFlag(name: FrontendFeatureFlagName): FrontendFeatureFlagState {
-  const { bootstrap, isLoading } = useFrontendBootstrap();
+export function useFrontendFeatureFlag(name: FrontendFeatureFlagName, skip = false): FrontendFeatureFlagState {
+  const { bootstrap, isLoading } = useFrontendBootstrap(skip);
   return {
     enabled: resolveFrontendFeatureFlag(bootstrap?.feature_flags, name),
     isLoading,

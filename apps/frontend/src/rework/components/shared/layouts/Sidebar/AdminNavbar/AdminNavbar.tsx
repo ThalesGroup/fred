@@ -18,6 +18,8 @@ import NavPanelHeader from "@shared/molecules/NavPanelHeader/NavPanelHeader.tsx"
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
+import { useLocation } from "react-router-dom";
+import { useOrganizationAdmin } from "@core/hooks/useOrganizationAdmin";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { isProtectedAllowed, type ProtectedRequirement } from "@core/guards/Protected";
 import { selectActiveCount } from "../../../../../features/tasks/taskSlice";
@@ -30,7 +32,9 @@ import styles from "./AdminNavbar.module.css";
 function BusinessAdminNavbar() {
   const { t } = useTranslation();
   const activeTaskCount = useSelector(selectActiveCount);
-  const capabilities = useUserCapabilities();
+  const { pathname } = useLocation();
+  const capabilities = useUserCapabilities(pathname.replace(/\/$/, "") === "/admin/features");
+  const organization = useOrganizationAdmin();
   const manager = useManagerPlatformAdmin();
   const allItems: (NavigationMenuItemProps & { requires: ProtectedRequirement })[] = [
     {
@@ -128,7 +132,7 @@ function BusinessAdminNavbar() {
       requires: "platformAccess",
     });
   const navigationItems: NavigationMenuItemProps[] = allItems.filter((item) =>
-    isProtectedAllowed(item.requires, capabilities),
+    isProtectedAllowed(item.requires, { ...capabilities, canManageFeatures: organization.isAdmin }),
   );
 
   if (manager.isAdmin)
@@ -148,9 +152,18 @@ export default function AdminNavbar({ platformArea = false }: { platformArea?: b
 
 function PlatformAdminNavbar() {
   const { t } = useTranslation();
+  const organization = useOrganizationAdmin();
   return (
     <AdminNavigation
       items={[
+        ...(organization.isAdmin
+          ? [{
+              type: "link" as const,
+              label: t("rework.sidebar.admin.menu.features"),
+              icon: { category: "outlined" as const, type: "tune" as const, filled: false },
+              linkProps: { to: "/admin/features" },
+            }]
+          : []),
         {
           type: "link",
           label: t("rework.organizations.title"),

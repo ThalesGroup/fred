@@ -35,6 +35,13 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    executeStream: build.mutation<ExecuteStreamApiResponse, ExecuteStreamApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/agents/execute/stream`,
+        method: "POST",
+        body: queryArg.executeRequest,
+      }),
+    }),
     authorizeDocument: build.mutation<AuthorizeDocumentApiResponse, AuthorizeDocumentApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/authorize/document`,
@@ -139,6 +146,9 @@ const injectedRtkApi = api.injectEndpoints({
     acknowledge: build.mutation<AcknowledgeApiResponse, AcknowledgeApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/document-uploads/${queryArg.id}/acknowledgment`, method: "PUT" }),
     }),
+    deleteDocument: build.mutation<DeleteDocumentApiResponse, DeleteDocumentApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/documents/${queryArg.id}`, method: "DELETE" }),
+    }),
     content: build.query<ContentApiResponse, ContentApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/documents/${queryArg.id}/content` }),
     }),
@@ -241,6 +251,9 @@ const injectedRtkApi = api.injectEndpoints({
     mySpaces: build.query<MySpacesApiResponse, MySpacesApiArg>({
       query: () => ({ url: `/control-plane/v1/me/spaces` }),
     }),
+    organizationAgents: build.query<OrganizationAgentsApiResponse, OrganizationAgentsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/agents` }),
+    }),
     createSpace: build.mutation<CreateSpaceApiResponse, CreateSpaceApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces`, method: "POST", body: queryArg.createSpace }),
     }),
@@ -321,6 +334,11 @@ export type TeamRegistryApiArg = {
   /** Exclusive UUID cursor; at most 100 non-personal teams, ordered by ID. */
   after?: string;
 };
+export type ExecuteStreamApiResponse =
+  /** status 200 SSE data frames containing RuntimeEvent JSON; final closes the stream without a sentinel */ RuntimeEvent;
+export type ExecuteStreamApiArg = {
+  executeRequest: ExecuteRequest;
+};
 export type AuthorizeDocumentApiResponse = /** status 200 Success */ Allowed;
 export type AuthorizeDocumentApiArg = {
   authorizeDocument: AuthorizeDocument;
@@ -396,6 +414,10 @@ export type ReceiptApiArg = {
 };
 export type AcknowledgeApiResponse = unknown;
 export type AcknowledgeApiArg = {
+  id: string;
+};
+export type DeleteDocumentApiResponse = /** status 200 undefined */ Receipt | /** status 202 undefined */ Receipt;
+export type DeleteDocumentApiArg = {
   id: string;
 };
 export type ContentApiResponse = /** status 200 undefined */ string;
@@ -476,6 +498,10 @@ export type CreatePersonalSpaceApiArg = {
 };
 export type MySpacesApiResponse = /** status 200 Success */ MySpace[];
 export type MySpacesApiArg = void;
+export type OrganizationAgentsApiResponse = /** status 200 undefined */ RuntimeCatalog[];
+export type OrganizationAgentsApiArg = {
+  organizationId: string;
+};
 export type CreateSpaceApiResponse = /** status 201 Success */ Space;
 export type CreateSpaceApiArg = {
   createSpace: CreateSpace;
@@ -562,6 +588,37 @@ export type UserSummary = {
   last_name?: string | null;
   username?: string | null;
 };
+export type RuntimeEvent =
+  | {
+      kind: "status";
+      sequence: number;
+      status: string;
+    }
+  | {
+      delta: string;
+      kind: "assistant_delta";
+      sequence: number;
+    }
+  | {
+      content: string;
+      finish_reason: string;
+      kind: "final";
+      sequence: number;
+    };
+export type ExecuteRequest = {
+  agent_id?: string | null;
+  agent_instance_id?: string | null;
+  input?: string;
+  runtime_context?:
+    | {
+        [key: string]: any;
+      }
+    | {
+        [key: string]: any;
+      };
+  session_id?: string | null;
+  [key: string]: any;
+};
 export type Allowed = {
   allowed: boolean;
 };
@@ -616,9 +673,11 @@ export type BootstrapRequest = {
   token: string;
 };
 export type Status = "queued" | "running" | "retrying" | "blocked" | "completed";
+export type TargetKind = "organization" | "team" | "project" | "document";
 export type Receipt = {
   actor_subject: string;
   completed_at?: string | null;
+  documents_deleted: number;
   due_at: string;
   error_code?: string | null;
   folders_deleted: number;
@@ -629,7 +688,7 @@ export type Receipt = {
   spaces_deleted: number;
   status: Status;
   target_id: string;
-  target_kind: SpaceKind;
+  target_kind: TargetKind;
   target_parent_id?: string | null;
 };
 export type Profile = "fast" | "medium" | "rich";
@@ -649,6 +708,7 @@ export type Cleanup = {
   output_prefix: string;
   preserve_objects: boolean;
   protected_ordinals: number[];
+  purge_document: boolean;
   work: Work;
 };
 export type Cleaned = {
@@ -656,6 +716,7 @@ export type Cleaned = {
   generation: string;
   next_cursor: number;
   objects_empty: boolean;
+  purge_document?: boolean;
   work: Work;
 };
 export type Artifact = {
@@ -903,6 +964,18 @@ export type MySpace = Space & {
   /** Effective roles, including those descending from an ancestor. */
   roles: Role[];
 };
+export type RuntimeTemplate = {
+  description: string;
+  kind: string;
+  public_version?: string | null;
+  template_agent_id: string;
+  title: string;
+  [key: string]: any;
+};
+export type RuntimeCatalog = {
+  runtime_id: string;
+  templates: RuntimeTemplate[];
+};
 export type CreateSpace = {
   /** Initial administrator; creation grants the caller nothing on the new space. */
   admin: string;
@@ -944,6 +1017,7 @@ export const {
   useLazySearchOrganizationCandidatesQuery,
   useTeamRegistryQuery,
   useLazyTeamRegistryQuery,
+  useExecuteStreamMutation,
   useAuthorizeDocumentMutation,
   useAuthorizePlatformMutation,
   useAuthorizeScopeMutation,
@@ -968,6 +1042,7 @@ export const {
   useReceiptQuery,
   useLazyReceiptQuery,
   useAcknowledgeMutation,
+  useDeleteDocumentMutation,
   useContentQuery,
   useLazyContentQuery,
   usePreviewQuery,
@@ -994,6 +1069,8 @@ export const {
   useCreatePersonalSpaceMutation,
   useMySpacesQuery,
   useLazyMySpacesQuery,
+  useOrganizationAgentsQuery,
+  useLazyOrganizationAgentsQuery,
   useCreateSpaceMutation,
   useDeleteSpaceMutation,
   useReceiptsQuery,

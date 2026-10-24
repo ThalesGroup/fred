@@ -5395,6 +5395,10 @@ processing completion have separate outcomes. Reload reads persisted processing
 summaries; failed attempts can be retried without a local File. Both directory
 chips and import cards translate the same stable manager error codes. Preview
 loads authenticated manager artifacts, with bounded raw text and local images.
+Manager documents can be deleted individually or in a selection after confirmation;
+list and storage refresh after the request, with no purge progress tracking. The row
+action is disabled while manager processing is pending or running. Bulk deletion
+attempts every selected document and folder and reports partial failures.
 The [Resources journey](../../architecture/02.1-user-journeys.md#priya-opens-resources)
 defines user behavior and authority. Existing Knowledge Flow consumers retain their
 own bindings.

@@ -2408,9 +2408,12 @@
         "searchable": "Exclude from search"
       },
       "confirm": {
+        "deleteManagerDocument": "Delete \"{{name}}\"? It disappears from Resources immediately; its content is erased afterwards.",
+        "deleteManagerDocuments": "Delete the {{count}} selected documents? They disappear immediately; their content is erased afterwards.",
+        "deleteManagerMixed": "Delete {{docCount}} document(s) and {{folderCount}} folder(s)? A folder that still contains documents is kept.",
         "deleteManagerFolder": "Delete \"{{name}}\" and its subfolders? Nothing will be deleted if a document is present.",
         "deleteManagerFolders": "Delete the {{count}} selected folders and their subfolders? Each folder containing documents will be kept.",
-        "deleteManagerPartial": "{{failed}} of {{count}} folders could not be deleted. The list has been refreshed.",
+        "deleteManagerPartial": "{{failed}} of {{count}} items could not be deleted. The list has been refreshed.",
         "deleteMessage": "Remove \"{{name}}\" from this folder?",
         "deleteBulkMessage": "Remove {{count}} documents from this folder?",
         "deleteTitle": "Remove document",

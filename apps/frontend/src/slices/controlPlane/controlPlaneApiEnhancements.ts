@@ -48,6 +48,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     createOrganization: { extraOptions: { retryUnauthorized: false } },
     createFolder: { extraOptions: { retryUnauthorized: false }, invalidatesTags: ["Folders"] },
     renameFolder: { extraOptions: { retryUnauthorized: false }, invalidatesTags: ["Folders"] },
+    deleteDocument: { extraOptions: { retryUnauthorized: false }, invalidatesTags: ["Documents"] },
     deleteFolder: { extraOptions: { retryUnauthorized: false }, invalidatesTags: ["Folders"] },
     createPersonalSpace: {
       extraOptions: { retryUnauthorized: false },
@@ -68,6 +69,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
 });
 
 export const {
+  useOrganizationAgentsQuery,
   useStartMutation,
   useSetRetrievableMutation,
   useLazyPreviewQuery,
@@ -82,6 +84,7 @@ export const {
   useCreateFolderMutation,
   useRenameFolderMutation,
   useDeleteFolderMutation,
+  useDeleteDocumentMutation,
   useMeQuery,
   useMySpacesQuery,
   useCreatePersonalSpaceMutation,

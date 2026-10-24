@@ -48,6 +48,9 @@ const probe = vi.hoisted(() => ({
   fetching: false,
   creates: [] as Record<string, unknown>[],
   deletes: [] as string[],
+  deleteDocument: vi.fn().mockResolvedValue({}),
+  showSuccess: vi.fn(),
+  showError: vi.fn(),
   renames: [] as Record<string, unknown>[],
   deferDelete: false,
   deleteResolves: [] as (() => void)[],
@@ -111,6 +114,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
       },
     }),
   ],
+  useDeleteDocumentMutation: () => [(args: unknown) => ({ unwrap: () => probe.deleteDocument(args) })],
   useDeleteFolderMutation: () => [
     (args: { id: string }) => ({
       unwrap: () => {
@@ -176,7 +180,9 @@ vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () =>
     },
   }),
 }));
-vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({}) }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({ showSuccess: probe.showSuccess, showError: probe.showError }),
+}));
 vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: { id: "team-1" } }),
   useUsersByIdsQuery: () => ({ data: [] }),
@@ -233,6 +239,9 @@ async function menuAction(name: string) {
 }
 beforeEach(async () => {
   probe.documents = [];
+  probe.deleteDocument.mockReset().mockResolvedValue({});
+  probe.showSuccess.mockClear();
+  probe.showError.mockClear();
   probe.refetch.mockClear();
   probe.inclusion.mockClear();
   probe.findEntries.mockReset();
@@ -441,7 +450,7 @@ it("keeps a root-row file drop targeted at that folder in the original upload pa
   expect(probe.legacyRequests).toEqual([]);
 });
 
-it("keeps document bulk controls visible but disables processing, ZIP and deletion", async () => {
+it("keeps document bulk deletion available while ZIP and search remain unavailable", async () => {
   probe.folders = probe.folders.filter((f) => !f.parent_id);
   probe.documents = [
     {
@@ -476,7 +485,7 @@ it("keeps document bulk controls visible but disables processing, ZIP and deleti
   await act(async () => {
     (container.querySelectorAll('input[type="checkbox"]')[1] as HTMLInputElement).click();
   });
-  for (const name of ["delete", "download", "includeInSearch"]) {
+  for (const name of ["download", "includeInSearch"]) {
     const button = action(`bulkActions.${name}`) as HTMLButtonElement;
     expect(button).not.toBeNull();
     expect(button.disabled).toBe(true);
@@ -484,6 +493,7 @@ it("keeps document bulk controls visible but disables processing, ZIP and deleti
   }
   expect(probe.deletes).toEqual([]);
   expect(probe.confirm).toBeUndefined();
+  expect((action("bulkActions.delete") as HTMLButtonElement).disabled).toBe(false);
   expect(probe.legacyRequests).toEqual([]);
 });
 
@@ -631,4 +641,93 @@ it.each([true, false])("routes the unchanged inclusion menu to manager for inclu
   await click(namedButton("Library"));
   await menuAction(retrievable ? "searchable" : "includeInSearch");
   expect(probe.inclusion).toHaveBeenCalledWith({ id: "doc", setRetrievable: { retrievable: !retrievable } });
+});
+
+async function openDocuments(count = 1) {
+  probe.folders = probe.folders.slice(0, 1);
+  probe.documents = Array.from({ length: count }, (_, index) => ({
+    id: `doc-${index}`,
+    space_id: "space-1",
+    folder_id: "root-id",
+    name: `report-${index}.pdf`,
+    mime: "application/pdf",
+    size: 42,
+    sha256: "a".repeat(64),
+    created_at: "2026-10-24",
+    created_by: "writer",
+    retrievable: false,
+    retrievable_pending: false,
+  }));
+  await render();
+  await click(namedButton("Library"));
+}
+
+it("confirms manager document deletion and reports success without using legacy tags", async () => {
+  await openDocuments();
+  await menuAction("delete");
+  expect(probe.confirm?.message).toBe("rework.resources.confirm.deleteManagerDocument");
+  expect(probe.deleteDocument).not.toHaveBeenCalled();
+  await act(async () => {
+    await probe.confirm!.onConfirm();
+  });
+  expect(probe.deleteDocument).toHaveBeenCalledExactlyOnceWith({ id: "doc-0" });
+  expect(probe.showSuccess).toHaveBeenCalledWith({ summary: "documentLibrary.removeSuccess" });
+  expect(probe.legacyRequests).toEqual([]);
+});
+
+it.each(["pending", "running"] as const)("disables manager document deletion while processing is %s", async (status) => {
+  probe.processing = {
+    "doc-0": {
+      id: "processing",
+      document_id: "doc-0",
+      status,
+      stage: "extraction",
+      profile: "fast",
+      revision: 1,
+      created_at: "2026-10-24T10:00:00Z",
+      chunks: 0,
+      vectors: 0,
+    },
+  };
+  await openDocuments();
+  await click(action("action.more"));
+  const item = [...document.querySelectorAll('[role="presentation"] li')].find((node) =>
+    node.textContent?.includes("rework.resources.action.delete"),
+  )!;
+  expect(item.getAttribute("aria-disabled")).toBe("true");
+  expect(item.textContent).toContain("rework.resources.action.deleteDisabledWhileProcessing");
+  await click(item);
+  expect(probe.confirm).toBeUndefined();
+  expect(probe.deleteDocument).not.toHaveBeenCalled();
+});
+
+it("attempts every selected manager document and reports a processing conflict as a partial failure", async () => {
+  probe.deleteDocument
+    .mockResolvedValueOnce({})
+    .mockRejectedValueOnce({ status: 409, data: { detail: "processing_active" } });
+  await openDocuments(2);
+  await act(async () => {
+    (container.querySelectorAll('input[type="checkbox"]')[0] as HTMLInputElement).click();
+  });
+  await click(action("bulkActions.delete"));
+  expect(probe.confirm?.message).toBe("rework.resources.confirm.deleteManagerDocuments");
+  await act(async () => {
+    await probe.confirm!.onConfirm();
+  });
+  expect(probe.deleteDocument.mock.calls).toEqual([[{ id: "doc-0" }], [{ id: "doc-1" }]]);
+  expect(probe.showError).toHaveBeenCalledWith({
+    summary: "validation.error",
+    detail: "rework.resources.confirm.deleteManagerPartial",
+  });
+  expect(probe.showSuccess).not.toHaveBeenCalled();
+});
+
+it("shows the backend detail when a manager document deletion fails", async () => {
+  probe.deleteDocument.mockRejectedValueOnce({ status: 409, data: { detail: "processing_active" } });
+  await openDocuments();
+  await menuAction("delete");
+  await act(async () => {
+    await probe.confirm!.onConfirm();
+  });
+  expect(probe.showError).toHaveBeenCalledWith({ summary: "validation.error", detail: "processing_active" });
 });

@@ -26,8 +26,8 @@ import type { UserCapabilities } from "../../types/conversation.ts";
  * and never loses a surface to a narrower flag. `canDebug` stays
  * Keycloak-role-based: it gates a developer affordance, not an admin surface.
  */
-export function useUserCapabilities(): UserCapabilities {
-  const { bootstrap, isLoading } = useFrontendBootstrap();
+export function useUserCapabilities(skip = false): UserCapabilities {
+  const { bootstrap, isLoading } = useFrontendBootstrap(skip);
   const canDebug = KeyCloakService.GetUserRoles().includes("admin");
   const roles = bootstrap?.permissions?.platform_roles ?? [];
   return {

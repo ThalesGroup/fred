@@ -952,6 +952,7 @@ async fn governance_http_reports_effective_roles_and_checks_only_its_caller() {
         .await
         .unwrap();
     let app = routes(AppState {
+        agent_catalog: Default::default(),
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: Arc::new(server.auth().await),
@@ -1066,6 +1067,7 @@ async fn directory_grants_refuse_non_subject_mapping_and_other_realms() {
             config.security.user.claims.uid = Some("preferred_username".into());
         }
         let app = routes(AppState {
+            agent_catalog: Default::default(),
             onboarding: Default::default(),
             lifecycle: Default::default(),
             auth: Arc::new(
@@ -1550,6 +1552,7 @@ async fn provisioning_waiter_rechecks_revocation_but_not_bearer_expiry() {
         } else {
             // Admission accepts this bearer; it expires while the import waits.
             let app = routes(AppState {
+                agent_catalog: Default::default(),
                 onboarding: Default::default(),
                 lifecycle: Default::default(),
                 auth: std::sync::Arc::new(server.auth().await),
@@ -2174,6 +2177,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     .unwrap();
     proxy.fault.lock().await.calls.clear();
     let app = control_plane::api::routes(control_plane::api::AppState {
+        agent_catalog: Default::default(),
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: std::sync::Arc::new(auth),
@@ -3465,6 +3469,7 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
         .await
         .unwrap();
     let app = routes(AppState {
+        agent_catalog: Default::default(),
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: auth.clone(),
@@ -3687,6 +3692,7 @@ async fn blueprint_preflight_reads_child_names_after_organization_lock() {
         .await
         .unwrap();
     let app = control_plane::api::routes(control_plane::api::AppState {
+        agent_catalog: Default::default(),
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: std::sync::Arc::new(server.auth().await),
@@ -3730,6 +3736,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
     let e = env().await;
     let server = support::IdentityServer::start().await;
     let state = AppState {
+        agent_catalog: Default::default(),
         auth: Arc::new(server.auth().await),
         pool: e.pool.clone(),
         fga: e.fga.clone(),
@@ -4619,6 +4626,7 @@ async fn organization_owners_name_admins_and_read_nothing() {
 async fn content_app(e: &Env, identity: &support::IdentityServer) -> axum::Router {
     control_plane::api::router(
         control_plane::api::AppState {
+            agent_catalog: Default::default(),
             auth: std::sync::Arc::new(identity.auth().await),
             pool: e.pool.clone(),
             fga: e.fga.clone(),
@@ -6288,12 +6296,7 @@ async fn api_starts_without_temporal_and_keeps_storage_optional() {
         (
             reqwest::Method::PATCH,
             format!("/documents/{}", doc.id),
-            404,
-        ),
-        (
-            reqwest::Method::DELETE,
-            format!("/documents/{}", doc.id),
-            404,
+            405,
         ),
         (
             reqwest::Method::POST,
@@ -6315,6 +6318,27 @@ async fn api_starts_without_temporal_and_keeps_storage_optional() {
     assert_eq!(
         db::document(&e.pool, doc.id).await.unwrap().name,
         "kept.pdf"
+    );
+    let response = http
+        .delete(format!("{base}/documents/{}", doc.id))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 202);
+    let receipt: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(receipt["target_id"], doc.id.to_string());
+    assert_eq!(receipt["target_kind"], "document");
+    assert_eq!(receipt["status"], "queued");
+    let deletion_id: Option<Uuid> =
+        sqlx::query_scalar("select deletion_id from document where id = $1")
+            .bind(doc.id)
+            .fetch_one(&e.pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        deletion_id,
+        Some(Uuid::parse_str(receipt["id"].as_str().unwrap()).unwrap())
     );
     assert_eq!(
         http.post(format!("{base}/folders"))

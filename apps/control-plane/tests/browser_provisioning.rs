@@ -61,6 +61,7 @@ async fn provisioning_browser_journey() {
     .unwrap();
     let app = api::router(
         api::AppState {
+            agent_catalog: Default::default(),
             onboarding: (&config).into(),
             lifecycle: Default::default(),
             auth,

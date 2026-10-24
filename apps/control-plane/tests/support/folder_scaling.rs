@@ -235,6 +235,7 @@ async fn folder_scaling() {
     .unwrap();
     let app = control_plane::api::router(
         control_plane::api::AppState {
+            agent_catalog: Default::default(),
             auth: Arc::new(identity.auth().await),
             pool: e.pool.clone(),
             fga: observed,

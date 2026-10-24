@@ -6,6 +6,12 @@ use control_plane::processing::{
 };
 
 async fn setup() -> (Documents, Arc<Processing>) {
+    setup_with_lifecycle(Default::default()).await
+}
+
+async fn setup_with_lifecycle(
+    lifecycle: control_plane::lifecycle::Lifecycle,
+) -> (Documents, Arc<Processing>) {
     let mut d = Box::pin(Documents::start(1024 * 1024)).await;
     let derived = d.storage.config.clone();
     let config: ProcessingConfig = serde_json::from_value(json!({
@@ -51,6 +57,7 @@ async fn setup() -> (Documents, Arc<Processing>) {
     });
     d.app = api::router(
         api::AppState {
+            agent_catalog: Default::default(),
             pool: d.e.pool.clone(),
             fga: observed,
             auth: Arc::new(d.identity.auth().await),
@@ -58,7 +65,7 @@ async fn setup() -> (Documents, Arc<Processing>) {
             processing: Some(processing.clone()),
             directory: None,
             onboarding: Default::default(),
-            lifecycle: Default::default(),
+            lifecycle,
         },
         "/v1",
         &[],
@@ -2520,4 +2527,309 @@ async fn lifecycle_waits_for_running_retired_document() {
             ProcessingStatus::Running
         );
     }
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+async fn editor_deletes_document_without_retiring_its_folder() {
+    use control_plane::lifecycle::{Lifecycle, Receipt, Status, TargetKind, cleanup};
+    let mut lifecycle = Lifecycle::default();
+    lifecycle.config.enabled = true;
+    lifecycle.catalog.space_policies.purge.default.retention =
+        serde_yaml_ng::from_str("PT0S").unwrap();
+    let (d, p) = Box::pin(setup_with_lifecycle(lifecycle)).await;
+    db::rename_folder(&d.e.pool, d.folder.id, "F")
+        .await
+        .unwrap();
+    let processing = admit(&d, &p, "D1.txt").await;
+    let work = store::row(&d.e.pool, processing).await.unwrap().work();
+    let preparation = p
+        .claim(claim(&work, Stage::Preparation, Uuid::new_v4(), 1))
+        .await
+        .unwrap();
+    commit(&p, &preparation, &[("policy.json", b"{}")], 0).await;
+    let extraction = p
+        .claim(claim(&work, Stage::Extraction, Uuid::new_v4(), 1))
+        .await
+        .unwrap();
+    commit(
+        &p,
+        &extraction,
+        &[("output.md", b"kept"), ("metadata.json", b"{}")],
+        0,
+    )
+    .await;
+    let indexing = p
+        .claim(claim(&work, Stage::Indexing, Uuid::new_v4(), 1))
+        .await
+        .unwrap();
+    p.plan_vectors(control_plane::processing::cleanup::VectorPlan {
+        work: work.clone(),
+        generation: indexing.generation,
+        count: 400,
+    })
+    .await
+    .unwrap();
+    let done = commit(
+        &p,
+        &indexing,
+        &[
+            ("output.md", b"kept"),
+            ("metadata.json", b"{}"),
+            ("chunks.jsonl", b"{}"),
+        ],
+        400,
+    )
+    .await;
+    assert_eq!(done.status, ProcessingStatus::Succeeded);
+
+    let (status, d2) = d
+        .upload("writer", "D2.txt", b"unprocessed", Uuid::new_v4(), None)
+        .await;
+    assert_eq!(status, 201, "{d2}");
+    let d2: Uuid = d2["document_id"].as_str().unwrap().parse().unwrap();
+    let (status, witness) = d
+        .upload("writer", "W.txt", b"witness", Uuid::new_v4(), None)
+        .await;
+    assert_eq!(status, 201, "{witness}");
+    let witness: Uuid = witness["document_id"].as_str().unwrap().parse().unwrap();
+    let original: String = sqlx::query_scalar("select object_key from document where id=$1")
+        .bind(work.document_id)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    let witness_key: String = sqlx::query_scalar("select object_key from document where id=$1")
+        .bind(witness)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    let path = format!("/documents/{}", work.document_id);
+    assert_eq!(
+        d.request("reader", "DELETE", &path, Body::empty(), "", None)
+            .await
+            .status(),
+        403
+    );
+    assert_eq!(
+        d.request(
+            "writer",
+            "DELETE",
+            &format!("/documents/{}", Uuid::new_v4()),
+            Body::empty(),
+            "",
+            None
+        )
+        .await
+        .status(),
+        404
+    );
+    let (status, accepted) = json_response(
+        d.request("writer", "DELETE", &path, Body::empty(), "", None)
+            .await,
+    )
+    .await;
+    assert_eq!(status, 202, "{accepted}");
+    assert_eq!(accepted["target_kind"], "document");
+    assert_eq!(accepted["target_parent_id"], d.folder.space_id.to_string());
+    let operation: Uuid = accepted["id"].as_str().unwrap().parse().unwrap();
+    let (status, replay) = json_response(
+        d.request("writer", "DELETE", &path, Body::empty(), "", None)
+            .await,
+    )
+    .await;
+    assert_eq!(status, 202);
+    assert_eq!(replay, accepted);
+    assert_eq!(
+        d.request("reader", "DELETE", &path, Body::empty(), "", None)
+            .await
+            .status(),
+        403
+    );
+    let (status, directory) = json_response(
+        d.request(
+            "writer",
+            "GET",
+            &format!(
+                "/spaces/{}/entries?parent_id={}",
+                d.folder.space_id, d.folder.id
+            ),
+            Body::empty(),
+            "",
+            None,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(status, 200);
+    let directory = directory.to_string();
+    assert!(!directory.contains(&work.document_id.to_string()));
+    assert!(directory.contains(&witness.to_string()));
+    assert_eq!(
+        d.request(
+            "writer",
+            "GET",
+            &format!("{path}/content"),
+            Body::empty(),
+            "",
+            None
+        )
+        .await
+        .status(),
+        404
+    );
+    let (status, replacement) = d
+        .upload("writer", "D1.txt", b"replacement", Uuid::new_v4(), None)
+        .await;
+    assert_eq!(status, 201, "{replacement}");
+    assert_eq!(
+        d.request(
+            "writer",
+            "DELETE",
+            &format!("/folders/{}", d.folder.id),
+            Body::empty(),
+            "",
+            None
+        )
+        .await
+        .status(),
+        409
+    );
+
+    let active = admit(&d, &p, "running.txt").await;
+    let active_work = store::row(&d.e.pool, active).await.unwrap().work();
+    p.claim(claim(&active_work, Stage::Preparation, Uuid::new_v4(), 1))
+        .await
+        .unwrap();
+    assert_eq!(
+        store::row(&d.e.pool, active).await.unwrap().summary.status,
+        ProcessingStatus::Running
+    );
+    let (status, conflict) = json_response(
+        d.request(
+            "writer",
+            "DELETE",
+            &format!("/documents/{}", active_work.document_id),
+            Body::empty(),
+            "",
+            None,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(status, 409, "{conflict}");
+    assert_eq!(conflict["code"], "processing_active");
+    let untouched: bool = sqlx::query_scalar("select deletion_id is null and not exists(select 1 from deletion where target_id=$1) from document where id=$1")
+        .bind(active_work.document_id).fetch_one(&d.e.pool).await.unwrap();
+    assert!(untouched);
+
+    cleanup::batch(&d.e.pool, &d.e.fga, operation)
+        .await
+        .unwrap();
+    let waiting: Receipt = sqlx::query_as("select * from deletion where id=$1")
+        .bind(operation)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(waiting.status, Status::Running);
+    assert_eq!(waiting.documents_deleted, 0);
+    assert!(waiting.error_code.is_none());
+    let mut row = store::row(&d.e.pool, processing).await.unwrap();
+    for generation in row.generations.iter_mut() {
+        generation.expires_at = chrono::Utc::now() - chrono::Duration::minutes(2);
+    }
+    sqlx::query("update document_processing set generations=$2,cleanup_due_at=clock_timestamp() where id=$1")
+        .bind(processing).bind(&row.generations).execute(&d.e.pool).await.unwrap();
+    let candidates = p.cleanup_candidates().await.unwrap();
+    let candidate = candidates
+        .into_iter()
+        .find(|c| c.work.document_id == work.document_id)
+        .unwrap();
+    assert!(candidate.purge_document);
+    let objects = p
+        .derived
+        .list(&candidate.output_prefix, None, 1000)
+        .await
+        .unwrap();
+    assert!(objects.next.is_none());
+    for (key, _, _) in objects.objects {
+        p.derived.delete(&key).await.unwrap();
+    }
+    p.cleaned(control_plane::processing::cleanup::Cleaned {
+        work: candidate.work,
+        generation: candidate.generation,
+        cursor: 0,
+        next_cursor: 0,
+        objects_empty: true,
+        purge_document: true,
+    })
+    .await
+    .unwrap();
+    cleanup::batch(&d.e.pool, &d.e.fga, operation)
+        .await
+        .unwrap();
+    let completed: Receipt = sqlx::query_as("select * from deletion where id=$1")
+        .bind(operation)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(completed.target_kind, TargetKind::Document);
+    assert_eq!(completed.status, Status::Completed);
+    assert_eq!(completed.documents_deleted, 1);
+    assert_eq!(
+        (completed.folders_deleted, completed.spaces_deleted),
+        (0, 0)
+    );
+    let remains: bool = sqlx::query_scalar("select exists(select 1 from document where id=$1) or exists(select 1 from document_processing where document_id=$1) or exists(select 1 from document_upload where document_id=$1)")
+        .bind(work.document_id).fetch_one(&d.e.pool).await.unwrap();
+    assert!(!remains);
+    assert!(db::folder(&d.e.pool, d.folder.id).await.is_ok());
+    let (status, replay) = json_response(
+        d.request("writer", "DELETE", &path, Body::empty(), "", None)
+            .await,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(replay["id"], accepted["id"]);
+    d.storage.cleanup_tick().await.unwrap();
+    assert!(d.storage.objects.get(&original).await.is_err());
+    assert!(d.storage.objects.get(&witness_key).await.is_ok());
+    assert_eq!(
+        d.request(
+            "writer",
+            "GET",
+            &format!("/documents/{witness}/content"),
+            Body::empty(),
+            "",
+            None
+        )
+        .await
+        .status(),
+        200
+    );
+
+    let (status, accepted) = json_response(
+        d.request(
+            "writer",
+            "DELETE",
+            &format!("/documents/{d2}"),
+            Body::empty(),
+            "",
+            None,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(status, 202, "{accepted}");
+    let operation: Uuid = accepted["id"].as_str().unwrap().parse().unwrap();
+    cleanup::batch(&d.e.pool, &d.e.fga, operation)
+        .await
+        .unwrap();
+    let completed: Receipt = sqlx::query_as("select * from deletion where id=$1")
+        .bind(operation)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(completed.status, Status::Completed);
+    assert_eq!(completed.documents_deleted, 1);
+    assert!(db::folder(&d.e.pool, d.folder.id).await.is_ok());
 }

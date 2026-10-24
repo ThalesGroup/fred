@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useOrganizationAdmin } from "@core/hooks/useOrganizationAdmin";
 import { Navigate } from "react-router-dom";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import type { UserCapabilities } from "../../types/conversation.ts";
@@ -57,9 +58,10 @@ const REQUIREMENT_CAPABILITY: Record<ProtectedRequirement, keyof ProtectedCapabi
 };
 
 /** Pure decision, isolated from React/routing so it's trivially unit-testable.
- * `canAdmin` satisfies every requirement, mirroring the OpenFGA schema where
- * each role relation unions in `platform_admin`. */
+ * Legacy platform requirements accept `canAdmin`. Features is independently
+ * organization-scoped; callers supply its manager-derived capability. */
 export function isProtectedAllowed(requires: ProtectedRequirement, capabilities: ProtectedCapabilities): boolean {
+  if (requires === "features") return capabilities.canManageFeatures;
   if (requires === "teamRoster") {
     return capabilities.canAdmin || capabilities.canManageTeams || capabilities.canManagePlatformAccess;
   }
@@ -98,7 +100,21 @@ interface ProtectedProps {
  * `resource`/`action` `ProtectedRoute` (Keycloak-role-derived, dead since
  * AUTHZ-05 removed app roles — see `docs/swift/platform/FRONTEND-AUTHZ-PATTERN.md`).
  */
-export const Protected = ({ children, requires }: ProtectedProps) => {
+export const Protected = ({ children, requires }: ProtectedProps) =>
+  requires === "features" ? (
+    <OrganizationFeaturesGuard>{children}</OrganizationFeaturesGuard>
+  ) : (
+    <LegacyProtected requires={requires}>{children}</LegacyProtected>
+  );
+
+function OrganizationFeaturesGuard({ children }: { children: React.ReactNode }) {
+  const access = useOrganizationAdmin();
+  if (access.isLoading || (access.isFetching && !access.currentData)) return null;
+  if (!access.isAdmin) return <Navigate to="/unauthorized" replace />;
+  return <>{children}</>;
+}
+
+const LegacyProtected = ({ children, requires }: ProtectedProps) => {
   const { isLoading, ...capabilities } = useUserCapabilities();
   // On a hard refresh, `/frontend/bootstrap` hasn't resolved yet and every
   // role flag defaults to `false` — deciding here would redirect every admin

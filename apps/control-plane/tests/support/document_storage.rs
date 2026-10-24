@@ -215,6 +215,7 @@ impl Documents {
         let identity = crate::support::IdentityServer::start().await;
         let app = api::router(
             api::AppState {
+                agent_catalog: Default::default(),
                 pool: e.pool.clone(),
                 fga: observed,
                 auth: Arc::new(identity.auth().await),
@@ -479,6 +480,7 @@ async fn document_publication_rechecks_token_and_terms_without_locking_remote_io
             .unwrap();
             app = api::router(
                 api::AppState {
+                    agent_catalog: Default::default(),
                     pool: d.e.pool.clone(),
                     fga: d.e.fga.clone(),
                     auth: Arc::new(d.identity.auth().await),

@@ -186,6 +186,26 @@ async fn content(
     storage(&s)?.content(&user.uid, id).await
 }
 
+#[utoipa::path(delete,path="/documents/{id}",params(("id"=Uuid,Path)),responses((status=202,body=crate::lifecycle::Receipt),(status=200,body=crate::lifecycle::Receipt),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=429,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
+async fn delete_document(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath(id): ApiPath<Uuid>,
+) -> AppResult<(StatusCode, Json<crate::lifecycle::Receipt>)> {
+    let receipt = s
+        .lifecycle
+        .accept_document(&s.pool, &s.fga, &user.uid, id)
+        .await?;
+    Ok((
+        if receipt.status == crate::lifecycle::Status::Completed {
+            StatusCode::OK
+        } else {
+            StatusCode::ACCEPTED
+        },
+        Json(receipt),
+    ))
+}
+
 pub fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(upload).layer(DefaultBodyLimit::max(
@@ -198,6 +218,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(receipt))
         .routes(routes!(acknowledge))
         .routes(routes!(content))
+        .routes(routes!(delete_document))
         .route_layer(axum::middleware::from_fn(no_store))
 }
 

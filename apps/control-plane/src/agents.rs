@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Live runtime template discovery. No enrollment or persistent catalog.
+//! Embedded and live runtime template discovery. No enrollment or persistent catalog.
 
 use std::{collections::BTreeMap, time::Duration};
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+
+const NATIVE_RUNTIME_ID: &str = fred_rust_agent::DEFINITION.provider;
 
 #[derive(Debug, Clone, Default, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -45,6 +47,10 @@ impl PlatformConfig {
                 !id.is_empty() && id.trim() == id,
                 "runtime_id {id:?} must be nonblank, without surrounding spaces"
             );
+            ensure!(
+                id != NATIVE_RUNTIME_ID,
+                "runtime_id {id} is reserved for the embedded agent; external sources cannot use it"
+            );
             ensure!(ids.insert(id), "runtime_id {id} is duplicated");
             // Messages name the source, never base_url, which may carry credentials.
             let url = reqwest::Url::parse(&source.base_url)
@@ -63,21 +69,74 @@ impl PlatformConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct RuntimeTemplate {
     pub template_agent_id: String,
     pub title: String,
     pub description: String,
     pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_version: Option<String>,
     // Keep tuning, capabilities and future runtime metadata without a second SDK model.
     #[serde(flatten)]
     pub metadata: BTreeMap<String, serde_json::Value>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct RuntimeCatalog {
     pub runtime_id: String,
     pub templates: Vec<RuntimeTemplate>,
+}
+
+fn native_catalog() -> RuntimeCatalog {
+    let definition = fred_rust_agent::DEFINITION;
+    RuntimeCatalog {
+        runtime_id: NATIVE_RUNTIME_ID.into(),
+        templates: vec![RuntimeTemplate {
+            template_agent_id: definition.id.into(),
+            title: definition.title.into(),
+            description: definition.description.into(),
+            // Fixed response, with no ReAct loop or graph execution engine.
+            kind: "static".into(),
+            public_version: Some(definition.version.into()),
+            metadata: BTreeMap::new(),
+        }],
+    }
+}
+
+pub fn routes() -> utoipa_axum::router::OpenApiRouter<crate::api::AppState> {
+    utoipa_axum::router::OpenApiRouter::new().routes(utoipa_axum::routes!(organization_agents))
+}
+
+#[utoipa::path(
+    get, path = "/organizations/{organization_id}/agents",
+    params(("organization_id" = uuid::Uuid, Path)),
+    responses(
+        (status = 200, body = [RuntimeCatalog]),
+        (status = 401, body = crate::error::ErrorBody),
+        (status = 403, body = crate::error::ErrorBody),
+        (status = 404, body = crate::error::ErrorBody),
+        (status = 409, body = crate::error::ErrorBody),
+        (status = 500, body = crate::error::ErrorBody)
+    )
+)]
+async fn organization_agents(
+    axum::extract::State(s): axum::extract::State<crate::api::AppState>,
+    crate::onboarding::AdmittedUser(user): crate::onboarding::AdmittedUser,
+    crate::extract::ApiPath(organization_id): crate::extract::ApiPath<uuid::Uuid>,
+) -> crate::error::AppResult<axum::Json<Vec<RuntimeCatalog>>> {
+    let organization = crate::spaces::authorize(
+        &s.pool,
+        &s.fga,
+        &user.uid,
+        organization_id,
+        crate::domain::Permission::Manage,
+    )
+    .await?;
+    if organization.kind != crate::domain::SpaceKind::Organization {
+        return Err(crate::error::AppError::NotFound);
+    }
+    Ok(axum::Json(discover(&s.agent_catalog).await?))
 }
 
 /// Expects a configuration accepted by [`PlatformConfig::validate`].
@@ -86,7 +145,7 @@ pub async fn discover(config: &PlatformConfig) -> Result<Vec<RuntimeCatalog>> {
         .timeout(Duration::from_secs(10))
         .redirect(reqwest::redirect::Policy::none())
         .build()?;
-    let mut catalogs = Vec::new();
+    let mut catalogs = vec![native_catalog()];
     for source in config.runtime_catalog_sources.iter().filter(|s| s.enabled) {
         let response = client
             .get(format!(
@@ -221,11 +280,12 @@ mod tests {
         let catalogs = discover(&platform(vec![ok.clone(), disabled]))
             .await
             .unwrap();
-        assert_eq!(catalogs.len(), 1);
-        assert_eq!(catalogs[0].runtime_id, "a");
-        assert_eq!(catalogs[0].templates[0].template_agent_id, "georges");
+        assert_eq!(catalogs.len(), 2);
+        assert_eq!(catalogs[0].runtime_id, NATIVE_RUNTIME_ID);
+        assert_eq!(catalogs[1].runtime_id, "a");
+        assert_eq!(catalogs[1].templates[0].template_agent_id, "georges");
         assert_eq!(
-            catalogs[0].templates[0].metadata["max_chat_input_chars"],
+            catalogs[1].templates[0].metadata["max_chat_input_chars"],
             20000
         );
         assert_eq!(disabled_hits.load(Ordering::SeqCst), 0);

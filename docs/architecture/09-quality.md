@@ -280,6 +280,15 @@ Sources: [client](../../apps/control-plane/src/fga.rs),
 [platform mutations](../../apps/control-plane/src/platform.rs), and
 [HTTP handlers](../../apps/control-plane/src/api.rs).
 
+Organization agent discovery adds `P_u + C`: paginated direct-role Reads filtered
+by `user:<caller>` and `space:`, then one `can_manage` Check on the target. SQL
+resolves the unique organization and active lifecycle before the Check; discovery
+starts only after authorization and kind validation. No SQL lock or connection is
+held across external discovery. Role tuple volume drives `P_u`; each enabled
+external source adds one sequential HTTP request with the existing 10-second
+timeout. Navigation shares `/me/spaces` for organization authority and refreshes
+it every 60 seconds and on focus. These are source-derived costs, not measurements.
+
 ## Folder navigation and write costs
 
 Resources issues one combined directory request on entry, navigation, search, sort

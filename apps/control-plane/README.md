@@ -23,7 +23,7 @@ make -C ../../docs/architecture check # the dossier still matches the code
 
 The same process serves `POST /control-plane/v1/agents/execute/stream` (under the
 configured base URL). It uses the existing authentication and consent checks and
-streams Fred runtime events for `agent_id: "hello-world"`. See the
+streams Fred runtime events for `agent_id: "fred.github.ralph"`. See the
 [agent library](agent/README.md) for the curl command and supported request subset.
 No additional server or deployment is required.
 
@@ -73,7 +73,7 @@ manager consent or bootstrap records.
 | Command | Purpose |
 | --- | --- |
 | `control-plane serve` | HTTP API and its background tasks (default) |
-| `control-plane discover-agents` | Reads public templates from enabled configured runtimes; JSON output, no SQL or enrollment |
+| `control-plane discover-agents` | Describes the embedded agent and public templates from enabled configured runtimes; JSON output, no SQL or enrollment |
 | `control-plane migrate` | Applies pending SQL migrations from `DATABASE_URL` |
 | `control-plane generate-openapi` | Prints the HTTP contract, without configuration or services |
 | `control-plane generate-config-schema` | Prints the configuration JSON Schema |
@@ -83,7 +83,8 @@ manager consent or bootstrap records.
 ## Discover agent definitions
 
 `control-plane discover-agents` loads the usual `ENV_FILE` and `CONFIG_FILE`,
-then calls each enabled `platform.runtime_catalog_sources` entry:
+includes the embedded `control-plane` catalog without a network request or source
+configuration, then calls each enabled `platform.runtime_catalog_sources` entry:
 
 ```yaml
 platform:
@@ -98,7 +99,22 @@ starting fred-agents. The runtime's public `GET /agents/templates` endpoint need
 no bearer. Output is a JSON array of `{runtime_id, templates}`; template payloads
 retain tuning, capability metadata and additional runtime fields. Internal
 (non-public) templates are excluded. Disabled sources are not contacted; an
-omitted platform configuration yields an empty array.
+omitted platform configuration yields only `control-plane`, with one `fred.github.ralph`
+template of the same name, version `0.1.0`. This demonstration agent replies `Hello world!`
+without an LLM or data access. Its `kind` is `static`: the Rust discovery field
+is a free string, and no ReAct or Graph engine runs this fixed response.
+`control-plane` is reserved: configuring an external source with that identifier
+is rejected, even when disabled.
+
+The existing Administration Console -> Features -> Agents tab reads this same
+catalog through `GET /control-plane/v1/organizations/{organization_id}/agents`.
+Admission, unique organization context, active lifecycle and `can_manage` on an
+organization are required; neither organization ownership alone nor platform
+roles bypass this check. The page only reads discovery: no activation, enrollment
+or instance state is inferred. The supplied local configuration disables the
+external fred-agents source; with no enabled external source the embedded catalog
+requires no fred-agents process. An explicitly enabled source still fails the
+whole discovery if unavailable.
 
 This operator command uses a 10-second timeout per source and exits with an error
 if any source fails, without printing a partial catalog. It does not start the API,

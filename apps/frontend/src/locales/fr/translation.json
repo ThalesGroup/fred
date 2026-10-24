@@ -2408,9 +2408,12 @@
         "searchable": "Exclure de la recherche"
       },
       "confirm": {
+        "deleteManagerDocument": "Supprimer « {{name}} » ? Il disparaît immédiatement des ressources ; son contenu est effacé ensuite.",
+        "deleteManagerDocuments": "Supprimer les {{count}} documents sélectionnés ? Ils disparaissent immédiatement ; leur contenu est effacé ensuite.",
+        "deleteManagerMixed": "Supprimer {{docCount}} document(s) et {{folderCount}} dossier(s) ? Un dossier contenant encore des documents sera conservé.",
         "deleteManagerFolder": "Supprimer \"{{name}}\" et ses sous-dossiers ? Rien ne sera supprimé si un document est présent.",
         "deleteManagerFolders": "Supprimer les {{count}} dossiers sélectionnés et leurs sous-dossiers ? Chaque dossier contenant des documents sera conservé.",
-        "deleteManagerPartial": "{{failed}} dossiers sur {{count}} n'ont pas pu être supprimés. La liste a été actualisée.",
+        "deleteManagerPartial": "{{failed}} éléments sur {{count}} n'ont pas pu être supprimés. La liste a été actualisée.",
         "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
         "deleteBulkMessage": "Retirer {{count}} documents de ce dossier ?",
         "deleteTitle": "Retirer le document",

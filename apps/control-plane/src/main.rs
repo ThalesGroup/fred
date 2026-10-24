@@ -199,6 +199,7 @@ async fn serve(config: Config) -> Result<()> {
         _ => None,
     };
     let state = api::AppState {
+        agent_catalog: config.platform.clone(),
         processing,
         content: content.clone(),
         directory: if config.security.user_directory == control_plane::users::DirectoryKind::Local {

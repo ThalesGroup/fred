@@ -112,6 +112,7 @@ import {
   useCreateFolderMutation,
   useRenameFolderMutation,
   useDeleteFolderMutation,
+  useDeleteDocumentMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
   presentManagerDocument,
@@ -291,6 +292,7 @@ function DocumentWorkspace({
   const [findManagerEntries] = useLazyEntriesQuery();
   const [createManagerFolder] = useCreateFolderMutation();
   const [renameManagerFolder] = useRenameFolderMutation();
+  const [deleteDocument] = useDeleteDocumentMutation();
   const [deleteManagerFolder] = useDeleteFolderMutation();
   const folderDeletions = useRef(new Map<string, Promise<unknown>>());
   const deleteManagerOnce = useCallback(
@@ -1347,20 +1349,25 @@ function DocumentWorkspace({
   const bulkDelete = () => {
     if (!hasSelection) return;
     if (managerSpaceId) {
-      if (selectedDocs.length) {
-        documentsUnavailable();
-        return;
-      }
       showConfirmationDialog({
-        title: t("rework.resources.confirm.deleteTitle"),
-        message: t("rework.resources.confirm.deleteManagerFolders", { count: selectedFolders.length }),
+        title: t("rework.resources.action.delete"),
+        message:
+          selectedFolders.length === 0
+            ? t("rework.resources.confirm.deleteManagerDocuments", { count: selectedDocs.length })
+            : selectedDocs.length === 0
+              ? t("rework.resources.confirm.deleteManagerFolders", { count: selectedFolders.length })
+              : t("rework.resources.confirm.deleteManagerMixed", {
+                  folderCount: selectedFolders.length,
+                  docCount: selectedDocs.length,
+                }),
         onConfirm: async () => {
           if (!mounted.current || locationRef.current !== location || managerBulkPending.current) return;
           managerBulkPending.current = true;
           setBulkDeleting(true);
-          const outcomes = await Promise.allSettled(
-            selectedFolders.map((node) => deleteManagerOnce(node.managerFolder!.id)),
-          );
+          const outcomes = await Promise.allSettled([
+            ...selectedDocs.map((doc) => deleteDocument({ id: doc.managerDocument!.id }).unwrap()),
+            ...selectedFolders.map((node) => deleteManagerOnce(node.managerFolder!.id)),
+          ]);
           managerBulkPending.current = false;
           if (mounted.current) setBulkDeleting(false);
           if (!mounted.current || locationRef.current !== location) return;
@@ -1371,7 +1378,12 @@ function DocumentWorkspace({
               summary: t("validation.error"),
               detail: t("rework.resources.confirm.deleteManagerPartial", { failed: failures, count: outcomes.length }),
             });
-          else showSuccess?.({ summary: t("rework.resources.toast.deleteFolderSuccess") });
+          else
+            showSuccess?.({
+              summary: t(
+                selectedDocs.length ? "documentLibrary.removeSuccess" : "rework.resources.toast.deleteFolderSuccess",
+              ),
+            });
         },
       });
       return;
@@ -1642,7 +1654,9 @@ function DocumentWorkspace({
   };
 
   const moreOptionsForDoc = (doc: ResourceDocument): OptionModel<DocMenuAction>[] => {
-    const activeTask = activeDocTaskByUid.get(doc.identity.document_uid);
+    const activeTask = doc.managerDocument
+      ? doc.managerProcessing?.status === "pending" || doc.managerProcessing?.status === "running"
+      : activeDocTaskByUid.get(doc.identity.document_uid);
     const options: OptionModel<DocMenuAction>[] = [];
     // No "error detail" entry here: the per-stage messages ride the "failed"
     // StatusChip itself, on hover (#2315).
@@ -1718,19 +1732,23 @@ function DocumentWorkspace({
       );
     }
     return doc.managerDocument
-      ? options.map((option) => ({
-          ...option,
-          disabled:
-            option.value !== "download" &&
-            option.value !== "searchable" &&
-            !(option.value === "relaunch" && directory?.processing_enabled),
-          tooltip:
-            option.value !== "download" &&
-            option.value !== "searchable" &&
-            !(option.value === "relaunch" && directory?.processing_enabled)
-              ? t("rework.resources.documentsUnavailable")
-              : undefined,
-        }))
+      ? options.map((option) =>
+          option.value === "delete"
+            ? option
+            : {
+                ...option,
+                disabled:
+                  option.value !== "download" &&
+                  option.value !== "searchable" &&
+                  !(option.value === "relaunch" && directory?.processing_enabled),
+                tooltip:
+                  option.value !== "download" &&
+                  option.value !== "searchable" &&
+                  !(option.value === "relaunch" && directory?.processing_enabled)
+                    ? t("rework.resources.documentsUnavailable")
+                    : undefined,
+              },
+        )
       : options;
   };
 
@@ -1971,7 +1989,29 @@ function DocumentWorkspace({
                   if (value === "searchable") void toggleSearchable(row.doc);
                   if (value === "relaunch" && (row.doc.managerDocument || currentTag))
                     void relaunchIngestion([row.doc], currentTag?.id ?? "");
-                  if (value === "delete" && currentTag) {
+                  if (value === "delete" && row.doc.managerDocument) {
+                    const id = row.doc.managerDocument.id;
+                    showConfirmationDialog({
+                      title: t("rework.resources.action.delete"),
+                      message: t("rework.resources.confirm.deleteManagerDocument", {
+                        name: documentDisplayName(row.doc),
+                      }),
+                      onConfirm: async () => {
+                        if (!mounted.current || locationRef.current !== location) return;
+                        try {
+                          await deleteDocument({ id }).unwrap();
+                          if (mounted.current && locationRef.current === location)
+                            showSuccess?.({ summary: t("documentLibrary.removeSuccess") });
+                        } catch (e) {
+                          if (mounted.current && locationRef.current === location)
+                            showError?.({
+                              summary: t("validation.error"),
+                              detail: (e as { data?: { detail?: string } }).data?.detail ?? t("validation.error"),
+                            });
+                        }
+                      },
+                    });
+                  } else if (value === "delete" && currentTag) {
                     showConfirmationDialog({
                       title: t("rework.resources.confirm.deleteTitle"),
                       message: t("rework.resources.confirm.deleteMessage", {
@@ -2178,7 +2218,6 @@ function DocumentWorkspace({
               disabledReason={
                 managerSpaceId
                   ? {
-                      delete: selectedDocs.length ? t("rework.resources.documentsUnavailable") : undefined,
                       download: t("rework.resources.documentsUnavailable"),
                       search: t("rework.resources.documentsUnavailable"),
                       processing: directory?.processing_enabled ? undefined : t("rework.documentStorage.noProcessing"),

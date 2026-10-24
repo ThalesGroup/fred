@@ -109,6 +109,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     lifecycle.catalog = Catalog::load(catalog.to_str()).unwrap();
     let identity = support::IdentityServer::start().await;
     let app = api::routes(api::AppState {
+        agent_catalog: Default::default(),
         auth: Arc::new(identity.auth().await),
         pool: e.pool.clone(),
         fga: e.fga.clone(),

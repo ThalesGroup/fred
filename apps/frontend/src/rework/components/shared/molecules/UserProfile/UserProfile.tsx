@@ -30,16 +30,18 @@ import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 export default function UserProfile({
   admitted = false,
   platformArea = false,
+  organizationArea = false,
 }: {
   admitted?: boolean;
   platformArea?: boolean;
+  organizationArea?: boolean;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { contactSupportLink } = useFrontendProperties();
   const [open, setOpen] = useState(false);
-  const { bootstrap } = useFrontendBootstrap(!admitted || platformArea);
-  const { notes: patchNotes } = usePatchNoteHistory(!admitted || platformArea);
+  const { bootstrap } = useFrontendBootstrap(!admitted || platformArea || organizationArea);
+  const { notes: patchNotes } = usePatchNoteHistory(!admitted || platformArea || organizationArea);
   const [readingPatchNotes, setReadingPatchNotes] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);

@@ -63,6 +63,7 @@ import { getConfig } from "./config";
 
 import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
 import OrganizationsPage from "@components/pages/admin/OrganizationsPage/OrganizationsPage";
+import { useOrganizationAdmin } from "@core/hooks/useOrganizationAdmin";
 import ManagerArea from "@core/guards/ManagerArea";
 import GcuGuard from "@core/guards/GcuGuard";
 import BootstrapGuard from "@core/guards/BootstrapGuard";
@@ -97,12 +98,20 @@ const ManagedChatPageRoute = () => {
   return <ManagedChatPage key={agentInstanceId} />;
 };
 
+const OrganizationFeaturesRoute = () => {
+  const { organizationId } = useOrganizationAdmin();
+  return organizationId ? <FeaturesPage organizationId={organizationId} /> : null;
+};
+
 const AdminIndexRoute = () => {
   const { isLoading, ...capabilities } = useUserCapabilities();
   const manager = useManagerPlatformAdmin();
+  const organization = useOrganizationAdmin();
+  if (organization.isLoading || (organization.isFetching && !organization.currentData)) return null;
+  if (organization.isAdmin) return <Navigate to="/admin/features" replace />;
   if (manager.isAdmin) return <Navigate to="/admin/organizations" replace />;
   if (isLoading || manager.isLoading) return null;
-  return <Navigate to={adminLandingPath(capabilities)} replace />;
+  return <Navigate to={adminLandingPath({ ...capabilities, canManageFeatures: organization.isAdmin })} replace />;
 };
 
 const TaskPlayground = lazy(() => import("../pages/TaskPlayground"));
@@ -296,13 +305,12 @@ const applicationRoutes: RouteObject[] = [
         ),
       },
       {
-        // Platform features dashboard — capabilities, agent templates and
-        // models. Gated on `can_manage_capabilities`, the same narrow relation
-        // the backend enforces on the enablement endpoints.
+        // Existing Features surface, guarded by the user's organization admin role.
+        // Agent discovery is read-only; the Rust API checks organization can_manage.
         path: "admin/features",
         element: (
           <Protected requires="features">
-            <FeaturesPage />
+            <OrganizationFeaturesRoute />
           </Protected>
         ),
       },
