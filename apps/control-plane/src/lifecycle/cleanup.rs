@@ -41,6 +41,8 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
         .bind(id)
         .fetch_one(&mut *tx)
         .await?;
+    let target_kind = serde_json::json!(receipt.target_kind);
+    tracing::Span::current().record("target_kind", target_kind.as_str());
     if receipt.status == Status::Completed || receipt.due_at > Utc::now() {
         return Ok(());
     }

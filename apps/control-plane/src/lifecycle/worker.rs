@@ -20,6 +20,7 @@ use temporalio_sdk::{
     ActivityOptions, Runtime, Worker, WorkerOptions, WorkflowContext, WorkflowResult,
     activities::{ActivityContext, ActivityError},
 };
+use tracing::Instrument;
 use uuid::Uuid;
 
 pub struct CleanupActivities {
@@ -75,7 +76,15 @@ impl CleanupActivities {
         if !self.config.enabled {
             return Ok(());
         }
-        bounded(&ctx, cleanup::batch(&self.pool, &self.fga, operation)).await
+        bounded(
+            &ctx,
+            cleanup::batch(&self.pool, &self.fga, operation).instrument(tracing::info_span!(
+                "deletion",
+                operation_id = %operation,
+                target_kind = tracing::field::Empty,
+            )),
+        )
+        .await
     }
 }
 #[workflow]

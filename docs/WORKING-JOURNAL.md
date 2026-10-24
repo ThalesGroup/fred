@@ -1033,6 +1033,20 @@ n'est pas une validation fonctionnelle de l'ensemble des changements Swift.
 
 ## F-012 Suppression unifiée
 
+- 2026-10-24 : lot I2 implémenté dans
+  `apps/control-plane/src/lifecycle/{worker,cleanup}.rs` et
+  `docs/architecture/A3-manager-operations.md`, avec mise à jour du présent journal.
+  Le futur de `clean` porte le span `deletion` ; `batch`
+  renseigne `target_kind` après lecture du reçu via sa sérialisation API.
+  Ce champ reste absent avant cette lecture.
+  Le test existant `logging::tests::json_has_fred_core_fields_and_request_context`
+  couvre la propagation des champs du span ; aucun test ajouté.
+  Le contexte du span prévaut dans la map JSON, sans doublon : le champ
+  `operation_id` de l'audit est conservé. Commandes non lancées depuis la racine :
+  `make code-quality`, `make -C apps/control-plane test-one TEST=logging`,
+  `make -C apps/control-plane test-lifecycle-temporal`.
+  Aucun test, build, commit ni push exécuté.
+
 - 2026-10-24 : validation rapportée par Dimi après recompilation :
   `make -C apps/control-plane test-lifecycle-temporal` réussit
   (1 test, 0 échec, 25,19 s). Les 118 tests d'intégration avaient également
