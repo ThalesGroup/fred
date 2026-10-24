@@ -1900,7 +1900,6 @@
         "success": "Succès"
       },
       "toolGroups": {
-        "command": "Commande {{number}}",
         "commands_one": "{{count}} commande",
         "commands_other": "{{count}} commandes"
       },

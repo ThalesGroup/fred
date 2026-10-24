@@ -19,11 +19,10 @@ import { isToolCall, toolCallId, traceEntryKey } from "./traceUtils";
 export type TraceGroupRule = {
   id: string;
   titleKey: string;
-  itemKey: string;
   countKey: string;
   matches: (entry: ToolEntry) => boolean;
+  itemLabel: (entry: ToolEntry) => string;
   preview: (entry: ToolEntry) => string;
-  itemMeta?: (entry: ToolEntry) => string;
 };
 
 export type TraceDisplayItem =

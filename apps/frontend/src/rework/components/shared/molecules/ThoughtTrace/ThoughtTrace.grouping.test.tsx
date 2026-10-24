@@ -34,7 +34,6 @@ vi.mock("react-i18next", () => ({
       if (key === "rework.chatTrace.toolLabels.codeSandbox") return "Code in sandbox";
       if (key === "rework.chatTrace.toolGroups.commands")
         return `${values?.count} ${values?.count === 1 ? "command" : "commands"}`;
-      if (key === "rework.chatTrace.toolGroups.command") return `Command ${values?.number}`;
       if (key === "test.summaries") return `${values?.count} summaries`;
       return key;
     },
@@ -57,8 +56,8 @@ function msg(channel: ChatMessage["channel"], parts: ChatMessage["parts"], rank:
   };
 }
 
-function call(id: string, name: string, code: string, rank: number): ChatMessage {
-  return msg("tool_call", [{ type: "tool_call", call_id: id, name, args: { language: "bash", code } }], rank);
+function call(id: string, name: string, code: string, rank: number, language = "bash"): ChatMessage {
+  return msg("tool_call", [{ type: "tool_call", call_id: id, name, args: { language, code } }], rank);
 }
 
 function result(id: string, rank: number): ChatMessage {
@@ -111,7 +110,7 @@ describe("ThoughtTrace code groups", () => {
       call("c1", "execute_code", "find /inputs -name '*.txt'", 1),
       result("c1", 2),
       msg("thought", [{ type: "text", text: "Search the matching file next" }], 3),
-      call("c2", "execute_code", "grep -Fi target /inputs/a.txt", 4),
+      call("c2", "execute_code", "print('target')", 4, "python"),
       result("c2", 5),
       call("s1", "summarize_document", "", 6),
       result("s1", 7),
@@ -134,9 +133,13 @@ describe("ThoughtTrace code groups", () => {
     act(() => groups()[0].click());
     expect(container.textContent).toContain("Search the matching file next");
     const secondCommand = [...container.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("Command 2"),
+      button.textContent?.includes("Pythonprint('target')"),
     );
     expect(secondCommand).toBeDefined();
+    expect(secondCommand!.textContent).not.toContain("Command 2");
+    expect(secondCommand!.textContent).not.toContain("toolStatus.success");
+    expect(secondCommand!.getAttribute("aria-label")).toContain("Python. print('target')");
+    expect(secondCommand!.getAttribute("aria-label")).toContain("toolStatus.success");
     act(() => secondCommand!.click());
     expect(opened).toEqual(["c2"]);
   });
@@ -156,7 +159,7 @@ describe("ThoughtTrace code groups", () => {
     expect(group.getAttribute("aria-expanded")).toBe("true");
     expect(group.textContent).toContain("grep -Fi phrase /inputs/table.csv");
     const firstCommand = [...container.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("Command 1"),
+      button.textContent?.includes("Bashfind /inputs -name '*.csv'"),
     );
     act(() => firstCommand!.click());
     expect(opened).toEqual(["c1"]);
@@ -168,6 +171,12 @@ describe("ThoughtTrace code groups", () => {
     expect(text).toContain("...");
     expect(text).not.toContain("print('later')");
     expect(text).not.toContain("\n");
+    act(() => groups()[0].click());
+    const child = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.startsWith("Bashpython "),
+    );
+    expect(child?.textContent).toContain("...");
+    expect(child?.textContent).not.toContain("print('later')");
   });
 
   it("splits groups at a write_todos call that the ordinary trace hides", () => {
@@ -222,9 +231,9 @@ describe("ThoughtTrace code groups", () => {
             rule: {
               id: "summaries",
               titleKey: "test.title",
-              itemKey: "test.item",
               countKey: "test.summaries",
               matches: () => false,
+              itemLabel: () => "Summary",
               preview: () => "",
             },
           }}

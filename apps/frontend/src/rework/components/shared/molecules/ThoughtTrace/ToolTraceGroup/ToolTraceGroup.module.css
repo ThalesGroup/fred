@@ -94,9 +94,8 @@
 }
 
 .count,
-.meta,
-.childStatus,
-.latency {
+.childPreview,
+.childStatus {
   color: var(--on-surface-retreat);
 }
 
@@ -146,18 +145,26 @@
 }
 
 .childTitle,
-.meta,
-.childStatus,
-.latency {
+.childPreview,
+.childStatus {
   white-space: nowrap;
 }
 
-.childStatus {
+.childTitle {
+  flex-shrink: 0;
+}
+
+.childPreview {
+  flex: 1;
+  min-width: 7ch;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.latency {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
+.childStatus {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 25%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

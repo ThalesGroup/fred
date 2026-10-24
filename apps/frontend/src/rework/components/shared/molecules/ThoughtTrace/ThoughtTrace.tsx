@@ -77,9 +77,12 @@ const GROUP_RULES: TraceGroupRule[] = [
   {
     id: "code-sandbox",
     titleKey: "rework.chatTrace.toolLabels.codeSandbox",
-    itemKey: "rework.chatTrace.toolGroups.command",
     countKey: "rework.chatTrace.toolGroups.commands",
     matches: (entry) => toolSlug(toolName(entry.call)) === "execute_code",
+    itemLabel: (entry) => {
+      const language = toolArgs(entry.call).language;
+      return language === "bash" ? "Bash" : language === "python" ? "Python" : "Code";
+    },
     preview: (entry) => {
       const code = toolArgs(entry.call).code;
       if (typeof code !== "string") return "";
@@ -90,10 +93,6 @@ const GROUP_RULES: TraceGroupRule[] = [
           ?.trim()
           .replace(/\s+/g, " ") ?? "";
       return firstLine.length > 120 ? `${firstLine.slice(0, 117)}...` : firstLine;
-    },
-    itemMeta: (entry) => {
-      const language = toolArgs(entry.call).language;
-      return language === "bash" ? "Bash" : language === "python" ? "Python" : "";
     },
   },
 ];

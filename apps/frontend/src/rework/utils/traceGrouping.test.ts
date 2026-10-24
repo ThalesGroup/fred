@@ -19,9 +19,9 @@ import { groupTraceRows, type TraceGroupRule } from "./traceGrouping";
 const rule: TraceGroupRule = {
   id: "other-tool-family",
   titleKey: "group.title",
-  itemKey: "group.item",
   countKey: "group.count",
   matches: (entry) => entry.call.parts?.[0]?.type === "tool_call" && entry.call.parts[0].name === "summarize_document",
+  itemLabel: () => "Summary",
   preview: () => "",
 };
 

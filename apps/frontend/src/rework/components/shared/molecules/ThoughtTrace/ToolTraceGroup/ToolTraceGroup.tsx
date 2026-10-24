@@ -16,13 +16,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import type { TraceDisplayItem } from "@rework/utils/traceGrouping";
-import {
-  isCancelledByUser,
-  secondaryTextForEntry,
-  statusForEntry,
-  traceEntryKey,
-  type ToolEntry,
-} from "@rework/utils/traceUtils";
+import { isCancelledByUser, statusForEntry, traceEntryKey, type ToolEntry } from "@rework/utils/traceUtils";
 import { ReasoningRow } from "../ReasoningRow/ReasoningRow";
 import { useTraceDrawer } from "../traceDrawerContext";
 import styles from "./ToolTraceGroup.module.css";
@@ -64,8 +58,6 @@ export function ToolTraceGroup({
           : calls.some((row) => isCancelledByUser(row.entry))
             ? t("rework.chatTrace.cancelledByUser")
             : t("rework.chatTrace.toolStatus.success");
-  let commandNumber = 0;
-
   return (
     <div className={styles.group}>
       <button
@@ -101,8 +93,8 @@ export function ToolTraceGroup({
             const entry = row.entry;
             const childStatus = statusForEntry(entry, pendingToolCallIds);
             const cancelled = isCancelledByUser(entry);
-            const number = ++commandNumber;
-            const meta = group.rule.itemMeta?.(entry);
+            const itemLabel = group.rule.itemLabel(entry);
+            const itemPreview = group.rule.preview(entry);
             const statusText =
               childStatus === "ok"
                 ? t("rework.chatTrace.toolStatus.success")
@@ -118,13 +110,13 @@ export function ToolTraceGroup({
                 type="button"
                 key={traceEntryKey(entry)}
                 className={styles.child}
+                aria-label={[itemLabel, itemPreview, statusText].filter(Boolean).join(". ")}
                 onClick={() => openTrace(entry)}
               >
                 <span className={`${styles.childDot} ${styles[`dot_${childStatus}`]}`} aria-hidden="true" />
-                <span className={styles.childTitle}>{t(group.rule.itemKey, { number })}</span>
-                {meta && <span className={styles.meta}>{meta}</span>}
-                <span className={styles.childStatus}>{statusText}</span>
-                <span className={styles.latency}>{cancelled ? "" : secondaryTextForEntry(entry)}</span>
+                <span className={styles.childTitle}>{itemLabel}</span>
+                {itemPreview && <span className={styles.childPreview}>{itemPreview}</span>}
+                {childStatus !== "ok" && <span className={styles.childStatus}>{statusText}</span>}
               </button>
             );
           })}
