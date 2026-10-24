@@ -67,11 +67,11 @@ import control_plane_backend.models.task_models  # noqa: F401 — registers cp_t
 # codeql[py/unused-import]
 import control_plane_backend.models.team_admin_charter_models  # noqa: F401 - registers team_admin_charter_acceptances with Base
 import control_plane_backend.models.team_wiki_models  # noqa: F401 — registers team_wiki_pages / team_wiki_revisions with Base
-import control_plane_backend.models.users_preferences_models  # noqa: F401
 from control_plane_backend.models.base import Base
 
 import_module("control_plane_backend.models.model_discovery_models")
 import_module("control_plane_backend.models.model_display_name_models")
+import_module("control_plane_backend.models.users_preferences_models")
 
 # CoreBase tables whose migrations this tree owns — explicit names, never
 # derived from CoreBase.metadata (that would claim every backend's tables).
