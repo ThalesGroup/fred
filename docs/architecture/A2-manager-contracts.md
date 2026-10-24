@@ -130,7 +130,7 @@ SQLx creates its history table itself; it is outside that generated diagram.
 | `space` | UUID `id`; kind, name, optional personal owner, required `organization_id` and optional `parent_id`, both referencing `space.id`. | Control-plane records immutable placement before publishing matching FGA links. Roles and permission evaluation remain in OpenFGA. `deletion_id` marks scheduled cleanup without removing attachment metadata. |
 | `folder` | UUID `id`; named folder, containing space, optional parent folder and UUID-based path. | Control-plane owns the hierarchy. Placement is immutable; folder and parent must belong to the same space. |
 | `document` | UUID `id`; name, MIME type, size, SHA-256, creator, object key and quota owner. | Metadata for a stored original. The bytes live in object storage, not PostgreSQL. Placement is immutable. |
-| `space_deletion` | UUID `id`, unique `target_id`; durable deletion request, policy, deadlines, status and progress counters. | API and lifecycle worker share operational state. Target identifiers deliberately have no foreign keys so the receipt can survive target removal. |
+| `deletion` | UUID `id`, unique `target_id`; durable deletion request, policy, deadlines, status and progress counters. | API and lifecycle worker share operational state. Target identifiers deliberately have no foreign keys so the receipt can survive target removal. |
 | `document_upload` | UUID `id`, unique `(actor, request_key)`; upload reservation and receipt, object key, completion, retry and cleanup state. | Control-plane owns upload idempotency and reservations. Target space/folder IDs are historical references without foreign keys; the resulting document and retry predecessor have SQL links. |
 | `document_processing` | UUID `id`, unique `(actor, request_key)` and `workflow_id`; processing attempt, delivery lease, profile, generations, result and cleanup state. | Control-plane records processing orchestration. The document and space have SQL references. JSONB fields contain the submitted contract, settings and artifact metadata, not canonical authorization. |
 | `document_storage` | Boolean singleton; installation namespace, original/derived storage locations, inventory counters, cursor and lease. | Installation-wide storage binding and inventory progress, independent of any individual upload. |
@@ -159,7 +159,7 @@ nullability precisely; the SQL declarations and these rules define it. Deletion 
 ```mermaid
 erDiagram
 
-"space" }o--o| "space_deletion" : "deletion_id"
+"space" }o--o| "deletion" : "deletion_id"
 "space" }o--|| "space" : "organization_id"
 "space" }o--o| "space" : "parent_id"
 "folder" }o--|| "space" : "space_id"
@@ -173,7 +173,7 @@ erDiagram
 "document_processing" }o--|| "document" : "document_id"
 "document_processing" |o--o| "document_processing" : "retry_of"
 
-"space_deletion" {
+"deletion" {
   uuid id
   uuid target_id
   space_kind target_kind
@@ -357,7 +357,7 @@ indexes support the actual traversal, quota and retry paths:
 | Spaces | `space_organization_name` makes organization names unique. `space_deletion_manifest` indexes rows participating in deletion. `space_organization` and `space_parent` support foreign-key reference checks during deletion. Personal ownership is allowed only on a team; `space_personal_owner` keeps one active personal space per owner and organization and serves its lookup. |
 | Folders and documents | Composite foreign keys keep folders/documents in their containing space. `UNIQUE NULLS NOT DISTINCT` prevents duplicate sibling names, including at the root. Placement triggers prevent moves. |
 | Original documents | Size is between 0 and 104857600 bytes (100 MiB); SHA-256 is 64 lowercase hexadecimal characters. Object keys are unique. `document_quota_owner` includes sizes for quota accounting. |
-| Deletion receipts | Deadline cannot precede request time; completion timestamp agrees with status. `space_deletion_due` selects unfinished work; `space_deletion_overlap` supports overlap detection. |
+| Deletion receipts | Deadline cannot precede request time; completion timestamp agrees with status. `deletion_due` selects unfinished work; `deletion_overlap` supports overlap detection. |
 | Upload receipts | Status is `pending`, `stored` or `failed`; stored status requires a document, and pending status has no completion timestamp. Partial indexes protect active names and index active quota, unacknowledged receipts, cleanup and expiration. |
 | Processing attempts | One active and one successful attempt per document are enforced by partial unique indexes. Additional indexes cover history, delivery and cleanup. Checks bound counters and the generations array (at most 64). Triggers verify the original's space/digest and prevent changes to processing identity or terminal outcome. |
 | Pending uploads | Delete triggers on `space` and `folder` refuse removal while pending uploads reference them, despite those historical IDs having no foreign keys. |
@@ -512,7 +512,7 @@ Unsupported documents or unexpected references discovered during cleanup block t
 receipt; later sweeps resume after the cause is corrected. Completion requires all
 manifest rows and their FGA references absent.
 
-`space_deletion` records each deletion and `space.deletion_id` its manifest. The receipt has no
+`deletion` records each deletion and `space.deletion_id` its manifest. The receipt has no
 foreign key to its target, and survives physical deletion. Its parent snapshot is
 operational recovery metadata. SQL retains immutable placement on space rows;
 OpenFGA retains grants and the links evaluated by its model.

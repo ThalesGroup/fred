@@ -49,7 +49,7 @@ async fn wait_for(
                 panic!("manager exited before worker progress: {status}");
             }
             let (folders, status): (i64, String) =
-                sqlx::query_as("select folders_deleted,status from space_deletion where id=$1")
+                sqlx::query_as("select folders_deleted,status from deletion where id=$1")
                     .bind(id)
                     .fetch_one(pool)
                     .await
@@ -325,9 +325,9 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
         assert!(!log.contains("Bearer "));
         assert!(!log.contains("private dependency detail"));
         if name == "first.log" {
-            assert!(!log.contains("space.deletion.completed"));
+            assert!(!log.contains("deletion.completed"));
         } else {
-            assert!(log.contains("\"audit_event\":\"space.deletion.completed\""));
+            assert!(log.contains("\"audit_event\":\"deletion.completed\""));
         }
     }
 }

@@ -1033,6 +1033,19 @@ n'est pas une validation fonctionnelle de l'ensemble des changements Swift.
 
 ## F-012 Suppression unifiée
 
+- 2026-10-24 : lot I3 implémenté : reçu SQL renommé en `deletion` par la
+  migration 0006, avec ses index de recherche, sa clé primaire et son unicité
+  de cible ; requêtes et noms d'audit adaptés, `target_kind` ajouté à l'audit
+  d'acceptation. Pas de colonne `origin` : `target_kind` reste le point d'entrée.
+  Workflow Temporal `SpaceDeletionSweep`, schedules et préfixe inchangés ;
+  leur renommage demanderait une décision et une étape d'exploitation séparées.
+  Migrations précédentes, blocs générés et chemins des tests conservés.
+  Commandes non lancées depuis la racine : `make code-quality`,
+  `make -C apps/control-plane test-integration`,
+  `make -C apps/control-plane test-lifecycle-temporal`,
+  `make -C docs/architecture generate check` (dont régénération ER).
+  Aucun test, build, déploiement, commit ni push exécuté.
+
 - 2026-10-24 : lot I2 implémenté dans
   `apps/control-plane/src/lifecycle/{worker,cleanup}.rs` et
   `docs/architecture/A3-manager-operations.md`, avec mise à jour du présent journal.

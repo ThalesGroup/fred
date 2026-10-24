@@ -63,7 +63,7 @@ async fn permitted(fga: &Fga, actor: &str) -> AppResult<()> {
 }
 pub async fn status(pool: &PgPool, fga: &Fga, actor: &str, id: Uuid) -> AppResult<Receipt> {
     permitted(fga, actor).await?;
-    Ok(sqlx::query_as("select * from space_deletion where id = $1")
+    Ok(sqlx::query_as("select * from deletion where id = $1")
         .bind(id)
         .fetch_one(pool)
         .await?)
@@ -93,7 +93,7 @@ pub(crate) async fn reserved<'e>(
     parent: Uuid,
     name: &str,
 ) -> AppResult<bool> {
-    Ok(sqlx::query_scalar("select exists(select 1 from space_deletion d join space s on s.id = d.target_id where d.status <> 'completed' and d.target_parent_id = $1 and s.name = $2)")
+    Ok(sqlx::query_scalar("select exists(select 1 from deletion d join space s on s.id = d.target_id where d.status <> 'completed' and d.target_parent_id = $1 and s.name = $2)")
         .bind(parent).bind(name).fetch_one(ex).await?)
 }
 impl Lifecycle {
@@ -105,7 +105,7 @@ impl Lifecycle {
         id: Uuid,
     ) -> AppResult<Receipt> {
         // Repeat requests never require a target row or a running scheduler.
-        if let Some(receipt) = sqlx::query_as("select * from space_deletion where target_id = $1")
+        if let Some(receipt) = sqlx::query_as("select * from deletion where target_id = $1")
             .bind(id)
             .fetch_optional(pool)
             .await?
@@ -120,7 +120,7 @@ impl Lifecycle {
         let mut tx = bootstrap::locked(pool).await?;
         let mut platform_guard = fga.guard(&[Scope::Platform]).await?;
         permitted(fga, actor).await?;
-        if let Some(receipt) = sqlx::query_as("select * from space_deletion where target_id = $1")
+        if let Some(receipt) = sqlx::query_as("select * from deletion where target_id = $1")
             .bind(id)
             .fetch_optional(&mut *tx)
             .await?
@@ -138,7 +138,7 @@ impl Lifecycle {
         }
         let org_guard = fga.guard(&[Scope::Organization(root.organization)]).await?;
         platform_guard.extend(org_guard)?;
-        let overlaps: bool = sqlx::query_scalar("select exists(select 1 from space_deletion where status <> 'completed' and organization_id = $1 and ($2 = 'organization' or target_id = $3 or target_parent_id = $3))")
+        let overlaps: bool = sqlx::query_scalar("select exists(select 1 from deletion where status <> 'completed' and organization_id = $1 and ($2 = 'organization' or target_id = $3 or target_parent_id = $3))")
             .bind(root.organization).bind(match root.kind { SpaceKind::Organization => "organization", _ => "child" }).bind(id).fetch_one(&mut *tx).await?;
         if overlaps {
             return Err(AppError::Conflict("overlapping space deletion".into()));
@@ -147,19 +147,20 @@ impl Lifecycle {
         let requested_at = Utc::now();
         let due_at = action.retention.after(requested_at)?;
         let operation = Uuid::new_v4();
-        sqlx::query("insert into space_deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
+        sqlx::query("insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
             .bind(operation).bind(id).bind(root.kind).bind(root.parent_id).bind(root.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).execute(&mut *tx).await?;
         mark(&mut tx, id, operation).await?;
         if root.kind != SpaceKind::Project {
             discover(&mut tx, fga, &root, operation).await?;
         }
         fga.fence(&mut platform_guard).await?;
-        let receipt = sqlx::query_as("select * from space_deletion where id = $1")
+        let receipt = sqlx::query_as("select * from deletion where id = $1")
             .bind(operation)
             .fetch_one(&mut *tx)
             .await?;
         tx.commit().await?;
-        tracing::info!(target: "fred.security.audit", audit_event="space.deletion.accepted", actor_uid=actor, operation_id=%operation, space_id=%id, organization_id=%root.organization, "Space deletion accepted");
+        let target_kind = serde_json::json!(root.kind);
+        tracing::info!(target: "fred.security.audit", audit_event="deletion.accepted", target_kind=target_kind.as_str(), actor_uid=actor, operation_id=%operation, space_id=%id, organization_id=%root.organization, "Space deletion accepted");
         Ok(receipt)
     }
 }

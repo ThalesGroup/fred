@@ -440,8 +440,8 @@ empty match lists and overflows fail validation. Accepted deadlines never change
 when a catalog is reloaded.
 
 `control-plane serve` supervises lifecycle tasks in the same process as HTTP and
-the processing dispatcher. Acceptance and completion emit `space.deletion.accepted`
-and `space.deletion.completed` on `fred.security.audit` after SQL commit.
+the processing dispatcher. Acceptance and completion emit `deletion.accepted`
+and `deletion.completed` on `fred.security.audit` after SQL commit.
 Deletion worker logs inherit `operation_id` from the activity span and
 `target_kind` once the batch has read its receipt.
 Application data reset is unsupported for this Rust ingestion profile.

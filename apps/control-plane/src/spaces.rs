@@ -287,7 +287,7 @@ async fn dependents(
         ids.extend(fga.linked_to(space.id, true).await?);
     }
     let mut rows = db::spaces(&mut **tx, &ids).await?;
-    let pending: Vec<SpaceRow> = sqlx::query_as("select s.id, s.kind, s.name, s.personal_owner, s.parent_id, s.organization_id from space s join space_deletion d on d.target_id = s.id where d.status <> 'completed' and d.target_parent_id = $1")
+    let pending: Vec<SpaceRow> = sqlx::query_as("select s.id, s.kind, s.name, s.personal_owner, s.parent_id, s.organization_id from space s join deletion d on d.target_id = s.id where d.status <> 'completed' and d.target_parent_id = $1")
         .bind(space.id).fetch_all(&mut **tx).await?;
     for row in pending {
         if !rows.iter().any(|r| r.id == row.id) {

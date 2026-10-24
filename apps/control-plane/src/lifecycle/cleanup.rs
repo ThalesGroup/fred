@@ -15,12 +15,12 @@ use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 pub async fn candidates(pool: &PgPool, limit: u32) -> AppResult<Vec<Uuid>> {
-    Ok(sqlx::query_scalar("with selected as (select id from space_deletion where status <> 'completed' and due_at <= now() order by last_visit nulls first, due_at, id limit $1 for update skip locked) update space_deletion d set last_visit = now() from selected where d.id = selected.id returning d.id")
+    Ok(sqlx::query_scalar("with selected as (select id from deletion where status <> 'completed' and due_at <= now() order by last_visit nulls first, due_at, id limit $1 for update skip locked) update deletion d set last_visit = now() from selected where d.id = selected.id returning d.id")
         .bind(i64::from(limit)).fetch_all(pool).await?)
 }
 /// Recording failure is separate because a failed batch must roll back its SQL progress.
 pub async fn retrying(pool: &PgPool, id: Uuid) -> AppResult<()> {
-    sqlx::query("update space_deletion set status = 'retrying', error_code = 'dependency_unavailable', last_visit = now() where id = $1 and status <> 'completed'")
+    sqlx::query("update deletion set status = 'retrying', error_code = 'dependency_unavailable', last_visit = now() where id = $1 and status <> 'completed'")
         .bind(id).execute(pool).await?;
     Ok(())
 }
@@ -37,7 +37,7 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
         .bind(bootstrap::LOCK_KEY)
         .execute(&mut *tx)
         .await?;
-    let receipt: Receipt = sqlx::query_as("select * from space_deletion where id = $1")
+    let receipt: Receipt = sqlx::query_as("select * from deletion where id = $1")
         .bind(id)
         .fetch_one(&mut *tx)
         .await?;
@@ -65,7 +65,7 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
     let Some((space, kind, personal)) = row else {
         return Err(anyhow::anyhow!("incomplete deletion lost its manifest").into());
     };
-    sqlx::query("update space_deletion set status = 'running', last_visit = now(), error_code = null where id = $1").bind(id).execute(&mut *tx).await?;
+    sqlx::query("update deletion set status = 'running', last_visit = now(), error_code = null where id = $1").bind(id).execute(&mut *tx).await?;
     let guard_present = fga
         .organization_guard_present(receipt.organization_id)
         .await?;
@@ -92,7 +92,7 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
         None
     };
     if let Some(code) = error {
-        sqlx::query("update space_deletion set status = 'blocked', error_code = $2 where id = $1")
+        sqlx::query("update deletion set status = 'blocked', error_code = $2 where id = $1")
             .bind(id)
             .bind(code)
             .execute(&mut *tx)
@@ -105,7 +105,7 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
             OrphanBatch::Delete(keys) => fga.delete_references(&mut guard, keys).await?,
             OrphanBatch::Blocked(code) => {
                 sqlx::query(
-                    "update space_deletion set status = 'blocked', error_code = $2 where id = $1",
+                    "update deletion set status = 'blocked', error_code = $2 where id = $1",
                 )
                 .bind(id)
                 .bind(code)
@@ -121,13 +121,11 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
     if deleted > 0 {
         // Even SQL-only effects fence late producers before their transaction commits.
         fga.fence(&mut guard).await?;
-        sqlx::query(
-            "update space_deletion set folders_deleted = folders_deleted + $2 where id = $1",
-        )
-        .bind(id)
-        .bind(deleted as i64)
-        .execute(&mut *tx)
-        .await?;
+        sqlx::query("update deletion set folders_deleted = folders_deleted + $2 where id = $1")
+            .bind(id)
+            .bind(deleted as i64)
+            .execute(&mut *tx)
+            .await?;
     } else if !refs.keys.is_empty() {
         fga.delete_references(&mut guard, refs.keys).await?;
     } else {
@@ -158,18 +156,18 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
             .bind(id)
             .execute(&mut *tx)
             .await?;
-        sqlx::query("update space_deletion set spaces_deleted = spaces_deleted + 1 where id = $1")
+        sqlx::query("update deletion set spaces_deleted = spaces_deleted + 1 where id = $1")
             .bind(id)
             .execute(&mut *tx)
             .await?;
         if manifest_count == 1 {
             completed = true;
-            sqlx::query("update space_deletion set status = 'completed', completed_at = now(), error_code = null where id = $1").bind(id).execute(&mut *tx).await?;
+            sqlx::query("update deletion set status = 'completed', completed_at = now(), error_code = null where id = $1").bind(id).execute(&mut *tx).await?;
         }
     }
     tx.commit().await?;
     if completed {
-        tracing::info!(target:"fred.security.audit", audit_event="space.deletion.completed", operation_id=%id, space_id=%receipt.target_id, actor_uid=receipt.actor_subject, "Space deletion completed");
+        tracing::info!(target:"fred.security.audit", audit_event="deletion.completed", operation_id=%id, space_id=%receipt.target_id, actor_uid=receipt.actor_subject, "Space deletion completed");
     }
     Ok(())
 }

@@ -76,7 +76,7 @@ async fn lifecycle_authority_retirement_documents_and_durable_receipts() {
         l.accept(&e.pool, &e.fga, "root", team.id).await,
         Err(AppError::Conflict(_))
     ));
-    let count: i64 = sqlx::query_scalar("select count(*) from space_deletion")
+    let count: i64 = sqlx::query_scalar("select count(*) from deletion")
         .fetch_one(&e.pool)
         .await
         .unwrap();
@@ -296,7 +296,7 @@ async fn lifecycle_retention_personal_scope_and_final_guard_commit_failure() {
         Err(AppError::Conflict(_))
     ));
     e.fga.write(&mut guard, &[], &[conflicting]).await.unwrap();
-    sqlx::query("update space_deletion set requested_at=now(), due_at=now() where id=$1")
+    sqlx::query("update deletion set requested_at=now(), due_at=now() where id=$1")
         .bind(r.id)
         .execute(&e.pool)
         .await

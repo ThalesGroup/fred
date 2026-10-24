@@ -1,6 +1,6 @@
 erDiagram
 
-"space" }o--o| "space_deletion" : "deletion_id"
+"space" }o--o| "deletion" : "deletion_id"
 "space" }o--|| "space" : "organization_id"
 "space" }o--o| "space" : "parent_id"
 "folder" }o--|| "space" : "space_id"
@@ -14,7 +14,7 @@ erDiagram
 "document_processing" }o--|| "document" : "document_id"
 "document_processing" |o--o| "document_processing" : "retry_of"
 
-"space_deletion" {
+"deletion" {
   uuid id
   uuid target_id
   space_kind target_kind
