@@ -78,32 +78,6 @@ export function readLegacyPreferences(): PatchUserPreferences {
   return patch;
 }
 
-function readPendingLegacyPreferences(value: unknown): PatchUserPreferences | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const pending = value as Record<string, unknown>;
-  const patch: PatchUserPreferences = {};
-  if (typeof pending.ui_theme_id === "string" && /^[a-z][a-z0-9-]{0,31}$/.test(pending.ui_theme_id)) {
-    patch.ui_theme_id = pending.ui_theme_id;
-  }
-  if (pending.theme_mode === "light" || pending.theme_mode === "dark" || pending.theme_mode === "system") {
-    patch.theme_mode = pending.theme_mode;
-  }
-  if (pending.language === "fr" || pending.language === "en") patch.language = pending.language;
-  if (typeof pending.sidebar_collapsed === "boolean") patch.sidebar_collapsed = pending.sidebar_collapsed;
-  if (pending.team_sort_mode === "recent" || pending.team_sort_mode === "alpha") {
-    patch.team_sort_mode = pending.team_sort_mode;
-  }
-  if (
-    pending.agent_sort === "name" ||
-    pending.agent_sort === "created_at:desc" ||
-    pending.agent_sort === "updated_at:desc"
-  ) {
-    patch.agent_sort = pending.agent_sort;
-  }
-  if (typeof pending.trace_expanded === "boolean") patch.trace_expanded = pending.trace_expanded;
-  return patch;
-}
-
 function cacheKey(userId: string): string {
   return PREFIX + encodeURIComponent(userId);
 }
@@ -145,8 +119,10 @@ export async function initializeUserPreferences(userId: string): Promise<void> {
     if (!owner) set(LEGACY_OWNER_KEY, userId);
     try {
       const pending: unknown = JSON.parse(get(pendingKey) ?? "null");
-      const saved = readPendingLegacyPreferences(pending);
-      legacy = saved && Object.keys(saved).length ? saved : readLegacyPreferences();
+      legacy =
+        pending && typeof pending === "object" && !Array.isArray(pending)
+          ? (pending as PatchUserPreferences)
+          : readLegacyPreferences();
     } catch {
       legacy = readLegacyPreferences();
     }

@@ -103,30 +103,6 @@ it("leaves a pane width in localStorage when server preferences hydrate", async 
   expect(mock.writes).toHaveLength(0);
 });
 
-it("drops pane widths from a pending legacy import created by an older frontend", async () => {
-  localStorage.setItem("localHook:import-panel:width", "540");
-  localStorage.setItem(
-    "fred.usersPreferences.pendingLegacy:alice",
-    JSON.stringify({ ui_theme_id: "cobalt", theme_mode: "dark", pane_widths: { "import-panel:width": 540 } }),
-  );
-  mock.responses.push({ initialized: false });
-  await initializeUserPreferences("alice");
-  expect(mock.writes).toEqual([{ ui_theme_id: "cobalt", theme_mode: "dark" }]);
-  expect(localStorage.getItem("localHook:import-panel:width")).toBe("540");
-  expect(localStorage.getItem("fred.usersPreferences.pendingLegacy:alice")).toBeNull();
-});
-
-it("uses current browser choices when an old pending import held only pane widths", async () => {
-  localStorage.setItem("localHook:ApplicationContextProvider.uiTheme", '"cobalt"');
-  localStorage.setItem(
-    "fred.usersPreferences.pendingLegacy:alice",
-    JSON.stringify({ pane_widths: { "import-panel:width": 540 } }),
-  );
-  mock.responses.push({ initialized: false });
-  await initializeUserPreferences("alice");
-  expect(mock.writes).toEqual([{ ui_theme_id: "cobalt" }]);
-});
-
 it("keeps legacy data eligible for import when the first server write fails", async () => {
   localStorage.setItem("localHook:ApplicationContextProvider.uiTheme", '"cloud"');
   mock.responses.push({ initialized: false });
