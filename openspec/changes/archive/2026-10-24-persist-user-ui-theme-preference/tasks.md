@@ -15,5 +15,5 @@
 
 - [x] 3.1 Document stable theme IDs, the personal preference API and browser import limits in the theme guide and product contract; verify docs match implemented behavior.
 - [x] 3.2 Add the required English operator migration note and verify `make migration-check` passes.
-- [ ] 3.3 Run root `make code-quality`, relevant offline tests and the branch review procedure, resolve findings, then reconcile and archive the OpenSpec change; record exact results in the draft PR.
+- [x] 3.3 Run root `make code-quality`, relevant offline tests and the branch review procedure, resolve findings, then reconcile and archive the OpenSpec change; record exact results in the draft PR.
 - [x] 3.4 Exercise several settings for one local test user and show the resulting `users_preferences` row; verify it includes all persisted fields.
