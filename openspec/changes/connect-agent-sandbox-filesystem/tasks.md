@@ -25,3 +25,4 @@
 - [ ] 4.2 Update runtime/operator contracts, mount driver prerequisites and migration note; verify the docs distinguish tested runtimes and code-only fallback.
 - [ ] 4.3 Run targeted tests, root code quality, branch audit and independent read-only review, then push and verify all PR checks are green.
 - [ ] 4.4 Reconcile implementation with delta specs, sync and archive the OpenSpec change; verify `openspec status` and canonical spec content.
+- [x] 4.5 Remove obsolete per-file selection routes and port methods while keeping the already-deployed `sources` column compatible; consolidate Job/SIG Pod admission, verify the SIG owner chain, and throttle expired-view cleanup, preserving mounted file authorization and targeted backend tests.

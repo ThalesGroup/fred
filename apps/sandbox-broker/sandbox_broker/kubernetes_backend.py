@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import time
 from typing import Any
@@ -19,6 +20,24 @@ from .mounts import RcloneCsiMount, view_key_for_mount
 from .process_cleanup import remove_code_processes
 
 _DENY_POLICY = "fred-sandbox-deny-all"
+
+
+def has_controller_owner(
+    metadata: dict[str, Any], *, kind: str, name: str, uid: str
+) -> bool:
+    if not isinstance(metadata, dict):
+        return False
+    references = metadata.get("ownerReferences")
+    if not isinstance(references, list):
+        return False
+    return any(
+        isinstance(ref, dict)
+        and ref.get("kind") == kind
+        and ref.get("name") == name
+        and ref.get("uid") == uid
+        and ref.get("controller") is True
+        for ref in references
+    )
 
 
 class KubernetesBackend:
@@ -89,6 +108,7 @@ class KubernetesBackend:
                 raise SandboxError("policy_unavailable")
 
     async def prepare(self, view_key: str | None = None) -> SandboxLease:
+        await self.preflight()
         name = f"fred-sbx-{uuid4().hex[:20]}"
         mounted_key = view_key_for_mount(view_key) if self.mount else None
         lease = SandboxLease(id=name, target=name, view_key=mounted_key)
@@ -150,27 +170,73 @@ class KubernetesBackend:
                 raise SandboxPrepareLeak(lease) from exc
             raise
 
-    def _is_safe_admitted_pod(self, pod: dict[str, Any], name: str, job_uid: str) -> bool:
+    def _is_safe_admitted_pod(
+        self, pod: dict[str, Any], name: str, job_uid: str
+    ) -> bool:
         metadata = pod.get("metadata", {})
-        owner_refs = metadata.get("ownerReferences", [])
-        if not any(
-            ref.get("kind") == "Job"
-            and ref.get("name") == name
-            and ref.get("uid") == job_uid
-            and ref.get("controller") is True
-            for ref in owner_refs
-            if isinstance(ref, dict)
+        if not isinstance(metadata, dict) or not has_controller_owner(
+            metadata, kind="Job", name=name, uid=job_uid
         ):
             return False
-        actual = pod.get("spec", {})
-        expected = self.job_manifest(name)["spec"]["template"]["spec"]
-        if not isinstance(actual, dict) or actual.get("initContainers") or actual.get("ephemeralContainers"):
+        return self.is_safe_pod_spec(pod.get("spec"), workload_name=name)
+
+    def is_safe_pod_spec(
+        self,
+        actual: Any,
+        *,
+        workload_name: str | None = None,
+        sig_claim: bool = False,
+    ) -> bool:
+        if (
+            not isinstance(actual, dict)
+            or actual.get("initContainers")
+            or actual.get("ephemeralContainers")
+        ):
             return False
-        if actual.get("shareProcessNamespace", False) or actual.get("serviceAccountName", "default") != "default":
+        if (
+            actual.get("shareProcessNamespace", False)
+            or actual.get("serviceAccountName", "default") != "default"
+        ):
             return False
+        expected = self.job_manifest(workload_name or "template")["spec"]["template"][
+            "spec"
+        ]
+        if sig_claim and self.mount is not None and workload_name is None:
+            expected["volumes"] = [
+                volume for volume in expected["volumes"] if volume["name"] != "inputs"
+            ]
+        actual = copy.deepcopy(actual)
+        if sig_claim:
+            for field in ("hostNetwork", "hostPID", "hostIPC"):
+                actual.setdefault(field, False)
+            volumes = actual.get("volumes")
+            if not isinstance(volumes, list) or any(
+                not isinstance(volume, dict) for volume in volumes
+            ):
+                return False
+            if self.mount is not None and workload_name is not None:
+                for volume in volumes:
+                    if volume.get("name") == "inputs":
+                        claim = volume.get("persistentVolumeClaim")
+                        if not isinstance(claim, dict):
+                            return False
+                        claim.setdefault("readOnly", True)
+            actual["volumes"] = sorted(
+                volumes, key=lambda volume: volume.get("name", "")
+            )
+            expected["volumes"] = sorted(
+                expected["volumes"], key=lambda volume: volume["name"]
+            )
         for field in (
-            "runtimeClassName", "automountServiceAccountToken", "enableServiceLinks",
-            "hostNetwork", "hostPID", "hostIPC", "restartPolicy", "securityContext",
+            "runtimeClassName",
+            "automountServiceAccountToken",
+            "enableServiceLinks",
+            "hostNetwork",
+            "hostPID",
+            "hostIPC",
+            "restartPolicy",
+            "terminationGracePeriodSeconds",
+            "securityContext",
             "volumes",
         ):
             if actual.get(field) != expected.get(field):
@@ -184,8 +250,15 @@ class KubernetesBackend:
         return all(
             container.get(field) == wanted.get(field)
             for field in (
-                "name", "image", "imagePullPolicy", "command", "workingDir", "env",
-                "securityContext", "resources", "volumeMounts",
+                "name",
+                "image",
+                "imagePullPolicy",
+                "command",
+                "workingDir",
+                "env",
+                "securityContext",
+                "resources",
+                "volumeMounts",
             )
         ) and not container.get("envFrom")
 

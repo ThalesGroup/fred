@@ -14,7 +14,7 @@ from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest, SandboxResu
 from .backend import SandboxLease, SandboxPrepareLeak
 from .command import CommandRunner
 from .config import BrokerSettings
-from .kubernetes_backend import KubernetesBackend
+from .kubernetes_backend import KubernetesBackend, has_controller_owner
 from .mounts import view_key_for_mount
 
 
@@ -55,7 +55,7 @@ class AgentSandboxBackend:
         pod = spec.get("podTemplate", {}).get("spec", {})
         if spec.get(
             "networkPolicyManagement"
-        ) != "Unmanaged" or not self._is_safe_pod_spec(pod):
+        ) != "Unmanaged" or not self.kubernetes.is_safe_pod_spec(pod, sig_claim=True):
             raise SandboxError("policy_unavailable")
         if self.kubernetes.mount is not None:
             if spec.get("volumeClaimTemplatesPolicy") != "Allowed" or spec.get(
@@ -63,97 +63,7 @@ class AgentSandboxBackend:
             ):
                 raise SandboxError("policy_unavailable")
 
-    def _is_safe_pod_spec(self, pod: Any, *, workload_name: str | None = None) -> bool:
-        if not isinstance(pod, dict):
-            return False
-        containers = pod.get("containers", [])
-        if len(containers) != 1 or not isinstance(containers[0], dict):
-            return False
-        container = containers[0]
-        security = container.get("securityContext", {})
-        pod_security = pod.get("securityContext", {})
-        expected_volumes = [
-            {"name": "scratch", "emptyDir": {"sizeLimit": "16Mi"}},
-        ]
-        if self.kubernetes.mount and workload_name:
-            expected_volumes.append(
-                {
-                    "name": "inputs",
-                    "persistentVolumeClaim": {
-                        "claimName": f"inputs-{workload_name}",
-                    },
-                }
-            )
-        if self.settings.skills_volume:
-            expected_volumes.append(
-                {
-                    "name": "skills",
-                    "persistentVolumeClaim": {
-                        "claimName": self.settings.skills_volume,
-                        "readOnly": True,
-                    },
-                }
-            )
-        volumes = pod.get("volumes")
-        if not isinstance(volumes, list) or len(volumes) != len(expected_volumes):
-            return False
-        # SIG may append claim volumes after the template's existing volumes.
-        if sorted(json.dumps(volume, sort_keys=True) for volume in volumes) != sorted(
-            json.dumps(volume, sort_keys=True) for volume in expected_volumes
-        ):
-            return False
-        return (
-            pod.get("runtimeClassName") == self.settings.runtime_name
-            and pod.get("automountServiceAccountToken") is False
-            and pod.get("hostNetwork", False) is False
-            and pod.get("hostPID", False) is False
-            and pod.get("hostIPC", False) is False
-            and not pod.get("shareProcessNamespace", False)
-            and not pod.get("initContainers")
-            and not pod.get("ephemeralContainers")
-            and pod_security.get("runAsNonRoot") is True
-            and pod_security.get("runAsUser") == 65534
-            and pod_security.get("seccompProfile", {}).get("type") == "RuntimeDefault"
-            and container.get("image") == self.settings.image
-            and container.get("name") == "sandbox"
-            and container.get("command") == ["sleep", "infinity"]
-            and container.get("workingDir") == "/work"
-            and container.get("env")
-            == [
-                {"name": "HOME", "value": "/work"},
-                {"name": "PYTHONDONTWRITEBYTECODE", "value": "1"},
-            ]
-            and not container.get("envFrom")
-            and container.get("volumeMounts")
-            == (
-                [
-                    {"name": "scratch", "mountPath": "/tmp"},
-                    {"name": "scratch", "mountPath": "/work"},
-                ]
-                + (
-                    [{"name": "inputs", "mountPath": "/inputs", "readOnly": True}]
-                    if self.kubernetes.mount
-                    else []
-                )
-                + (
-                    [{"name": "skills", "mountPath": "/skills", "readOnly": True}]
-                    if self.settings.skills_volume
-                    else []
-                )
-            )
-            and security.get("allowPrivilegeEscalation") is False
-            and security.get("readOnlyRootFilesystem") is True
-            and security.get("capabilities", {}).get("drop") == ["ALL"]
-            and security.get("privileged") is not True
-            and container.get("resources", {}).get("limits", {}).get("memory")
-            == "256Mi"
-            and container.get("resources", {}).get("limits", {}).get("cpu") == "500m"
-        )
-
     async def prepare(self, view_key: str | None = None) -> SandboxLease:
-        return await self._prepare_claim(view_key)
-
-    async def _prepare_claim(self, view_key: str | None) -> SandboxLease:
         await self.preflight()
         name = f"fred-sbx-{uuid4().hex[:20]}"
         mount = self.kubernetes.mount
@@ -210,11 +120,28 @@ class AgentSandboxBackend:
             pod_name = claim.get("status", {}).get("sandbox", {}).get("name")
             if not isinstance(pod_name, str) or not pod_name:
                 raise SandboxError("backend_failed")
+            sandbox = await self._get("sandbox", pod_name)
+            sandbox_uid = sandbox.get("metadata", {}).get("uid")
+            claim_uid = claim.get("metadata", {}).get("uid")
             pod = await self._get("pod", pod_name)
             if (
-                not self._is_safe_pod_spec(pod.get("spec"), workload_name=name)
-                or pod.get("metadata", {}).get("ownerReferences", [{}])[0].get("name")
-                != pod_name
+                not isinstance(sandbox_uid, str)
+                or not isinstance(claim_uid, str)
+                or not has_controller_owner(
+                    sandbox.get("metadata", {}),
+                    kind="SandboxClaim",
+                    name=name,
+                    uid=claim_uid,
+                )
+                or not has_controller_owner(
+                    pod.get("metadata", {}),
+                    kind="Sandbox",
+                    name=pod_name,
+                    uid=sandbox_uid,
+                )
+                or not self.kubernetes.is_safe_pod_spec(
+                    pod.get("spec"), workload_name=name, sig_claim=True
+                )
             ):
                 raise SandboxError("policy_unavailable")
             return SandboxLease(id=name, target=pod_name, view_key=mounted_key)

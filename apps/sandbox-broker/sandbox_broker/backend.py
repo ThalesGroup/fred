@@ -4,8 +4,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from time import monotonic
+from dataclasses import dataclass
 from typing import Protocol
 
 from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest, SandboxResult
@@ -16,7 +15,6 @@ class SandboxLease:
     id: str
     target: str
     view_key: str | None = None
-    prepared_at: float = field(default_factory=monotonic)
 
 
 class SandboxPrepareLeak(SandboxError):

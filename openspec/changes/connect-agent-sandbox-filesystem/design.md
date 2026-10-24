@@ -28,6 +28,10 @@ The approved skill directory is a shared source, mounted read-only by both the a
 
 8. **Grouped trace presentation.** Fold consecutive `execute_code` calls within one assistant turn into an expandable visual activity. Its single-line heading previews a bounded first line of the running command, or the latest command after completion, with visual ellipsis. Each expanded row starts with Bash or Python from the call arguments, then a bounded, ellipsized first line of code. Keep each real call and result addressable through its existing detail drawer. Intervening reasoning stays in chronological order inside the expanded activity; any different tool ends the activity, and a later code call starts another. Implement the fold with a reusable rule and group renderer so other tool families can opt in later without a sandbox-specific trace pipeline. No backend event or tool contract changes.
 
+9. **Keep one live file and workload admission path.** The file view stores conversation identity, expiry and quotas; its legacy `sources` column remains empty for databases that already applied the in-flight migration. Remove the unused per-file binding port and routes because `/inputs` discovers and authorizes files on each read. Job and SIG workloads share one approved Pod-spec check, with only the SIG claim volume and Kubernetes defaulted false fields normalized. For SIG, verify the Claim -> Sandbox -> Pod controller-owner chain by UID before executing code. Recheck cluster policy before each new Job.
+
+10. **Bound expired-view cleanup work.** Existing views still fail closed at expiry. Purge expired rows at most once per ten minutes per Knowledge Flow process on the next view creation, instead of making every code execution scan the full view table.
+
 ## Risks / Trade-offs
 
 - [A shared filesystem increases the Kata host/guest interface] -> Expose only a narrow read-only view through an approved volume and verify the selected runtime's volume implementation; never expose a host path or raw bucket.

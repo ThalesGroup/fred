@@ -270,10 +270,14 @@ class KubeRunner:
                             {
                                 "metadata": {
                                     "name": "fred-sbx-pod",
-                                    "ownerReferences": [{
-                                        "kind": "Job", "name": self.manifest["metadata"]["name"],
-                                        "uid": "job-uid", "controller": True,
-                                    }],
+                                    "ownerReferences": [
+                                        {
+                                            "kind": "Job",
+                                            "name": self.manifest["metadata"]["name"],
+                                            "uid": "job-uid",
+                                            "controller": True,
+                                        }
+                                    ],
                                 },
                                 "spec": pod_spec,
                                 "status": {
@@ -437,9 +441,11 @@ def test_kubernetes_rejects_admitted_pod_mutations() -> None:
     backend = KubernetesBackend(settings("kubernetes"), KubeRunner())
     name = "fred-sbx-test"
     pod = {
-        "metadata": {"ownerReferences": [
-            {"kind": "Job", "name": name, "uid": "job-uid", "controller": True}
-        ]},
+        "metadata": {
+            "ownerReferences": [
+                {"kind": "Job", "name": name, "uid": "job-uid", "controller": True}
+            ]
+        },
         "spec": backend.job_manifest(name)["spec"]["template"]["spec"],
     }
     assert backend._is_safe_admitted_pod(pod, name, "job-uid")
@@ -549,6 +555,26 @@ class AgentRunner(KubeRunner):
                 ),
                 "",
             )
+        if "sandbox" in args and "get" in args:
+            return CommandResult(
+                0,
+                json.dumps(
+                    {
+                        "metadata": {
+                            "uid": "sandbox-uid",
+                            "ownerReferences": [
+                                {
+                                    "kind": "SandboxClaim",
+                                    "name": self.claim_name,
+                                    "uid": "claim-uid",
+                                    "controller": True,
+                                }
+                            ],
+                        }
+                    }
+                ),
+                "",
+            )
         if "pod" in args and "get" in args:
             pod_spec = KubernetesBackend(settings("kubernetes"), self).job_manifest(
                 "x"
@@ -564,7 +590,14 @@ class AgentRunner(KubeRunner):
                 json.dumps(
                     {
                         "metadata": {
-                            "ownerReferences": [{"name": self.claim_name}],
+                            "ownerReferences": [
+                                {
+                                    "kind": "Sandbox",
+                                    "name": self.claim_name,
+                                    "uid": "sandbox-uid",
+                                    "controller": True,
+                                }
+                            ],
                             "creationTimestamp": "2026-10-22T00:00:02Z",
                         },
                         "spec": pod_spec,
@@ -654,7 +687,14 @@ async def test_agent_sandbox_claim_injects_only_approved_inputs_volume() -> None
                     json.dumps(
                         {
                             "metadata": {
-                                "ownerReferences": [{"name": self.claim_name}]
+                                "ownerReferences": [
+                                    {
+                                        "kind": "Sandbox",
+                                        "name": self.claim_name,
+                                        "uid": "sandbox-uid",
+                                        "controller": True,
+                                    }
+                                ]
                             },
                             "spec": pod,
                         }
@@ -724,7 +764,14 @@ async def test_agent_sandbox_skills_claim_uses_approved_read_only_volume() -> No
                     json.dumps(
                         {
                             "metadata": {
-                                "ownerReferences": [{"name": self.claim_name}]
+                                "ownerReferences": [
+                                    {
+                                        "kind": "Sandbox",
+                                        "name": self.claim_name,
+                                        "uid": "sandbox-uid",
+                                        "controller": True,
+                                    }
+                                ]
                             },
                             "spec": pod,
                         }
@@ -762,9 +809,53 @@ def test_agent_sandbox_accepts_reordered_claim_volume_without_weakening_validati
     pod["volumes"][1]["persistentVolumeClaim"].pop("readOnly")
     pod["volumes"] = [pod["volumes"][0], pod["volumes"][2], pod["volumes"][1]]
 
-    assert backend._is_safe_pod_spec(pod, workload_name=workload)
+    assert backend.kubernetes.is_safe_pod_spec(
+        pod, workload_name=workload, sig_claim=True
+    )
     pod["volumes"][2]["persistentVolumeClaim"]["claimName"] = "other-claim"
-    assert not backend._is_safe_pod_spec(pod, workload_name=workload)
+    assert not backend.kubernetes.is_safe_pod_spec(
+        pod, workload_name=workload, sig_claim=True
+    )
+
+
+def test_agent_sandbox_rejects_security_drift_in_template_and_pod() -> None:
+    backend = AgentSandboxBackend(settings("agent_sandbox"), AgentRunner())
+    pod = backend.kubernetes.job_manifest("fred-sbx-test")["spec"]["template"]["spec"]
+    assert backend.kubernetes.is_safe_pod_spec(pod, sig_claim=True)
+    assert backend.kubernetes.is_safe_pod_spec(
+        pod, workload_name="fred-sbx-test", sig_claim=True
+    )
+    for field, value in (
+        ("enableServiceLinks", True),
+        ("restartPolicy", "Always"),
+    ):
+        changed = json.loads(json.dumps(pod))
+        changed[field] = value
+        assert not backend.kubernetes.is_safe_pod_spec(changed, sig_claim=True)
+    changed = json.loads(json.dumps(pod))
+    changed["securityContext"]["runAsGroup"] = 0
+    assert not backend.kubernetes.is_safe_pod_spec(changed, sig_claim=True)
+    changed = json.loads(json.dumps(pod))
+    changed["containers"][0]["resources"]["requests"]["memory"] = "1Mi"
+    assert not backend.kubernetes.is_safe_pod_spec(changed, sig_claim=True)
+
+
+@pytest.mark.asyncio
+async def test_agent_sandbox_rejects_claimed_pod_without_owner_chain() -> None:
+    class MissingOwnerRunner(AgentRunner):
+        async def run(self, args, *, timeout, output_limit=65536, input_data=None):
+            result = await super().run(
+                args, timeout=timeout, output_limit=output_limit, input_data=input_data
+            )
+            if "sandbox" in args and "get" in args:
+                item = json.loads(result.stdout)
+                item["metadata"]["ownerReferences"] = []
+                return CommandResult(0, json.dumps(item), "")
+            return result
+
+    backend = AgentSandboxBackend(settings("agent_sandbox"), MissingOwnerRunner())
+    with pytest.raises(SandboxError, match="policy_unavailable"):
+        await backend.prepare()
 
 
 @pytest.mark.asyncio
