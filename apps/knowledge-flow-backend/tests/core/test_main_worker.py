@@ -68,9 +68,11 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
         max_concurrent_workflow_tasks: int = 1,
         max_concurrent_activities: int = 1,
         pdf_render_ttl_days: int = 30,
+        manager_processing: bool = False,
     ) -> None:
         """Capture the Temporal config passed to the worker and yield once."""
         observed["temporal_config"] = temporal_config
+        observed["manager_processing"] = manager_processing
         observed["roles"] = roles
         observed["max_concurrent_workflow_tasks"] = max_concurrent_workflow_tasks
         observed["max_concurrent_activities"] = max_concurrent_activities
@@ -140,6 +142,7 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
     assert observed["max_concurrent_workflow_tasks"] == 4
     assert observed["max_concurrent_activities"] == 6
     assert observed["pdf_render_ttl_days"] == 45
+    assert observed["manager_processing"] is False
     # The role is what decides the queue polled and the registrations; the worker
     # derives both from it, so nothing here spells a queue name out.
     assert observed["roles"] == [IngestionWorkerRole.extraction_rich]

@@ -57,6 +57,7 @@ class _FakeMetadata:
     def __init__(self, *, document_uid: str, document_name: str) -> None:
         self.document_uid = document_uid
         self.document_name = document_name
+        self.source = SimpleNamespace(source_tag="fred")
         self.processing = SimpleNamespace(stages={})
         self.errors: list[tuple[object, str]] = []
 
@@ -139,7 +140,7 @@ async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
     # holds whatever extraction does — so it is intercepted rather than spawned.
     extracted: dict[str, object] = {}
 
-    async def _fake_extract_document(*, input_path, output_dir, metadata, profile, stage, started_at, in_process_fallback) -> None:
+    async def _fake_extract_document(*, input_path, output_dir, metadata, profile, stage, started_at, in_process_fallback, manager_job_json=None) -> None:
         extracted.update({"input_path": input_path, "output_dir": output_dir, "stage": stage})
 
     monkeypatch.setattr(
@@ -202,7 +203,11 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
         def process_output(self, user, file_name_for_processing, output_dir, metadata, profile):
             return metadata
 
-    fake_app_context = SimpleNamespace(is_tabular_file=lambda _: True, is_spreadsheet_file=lambda _: False)
+    fake_app_context = SimpleNamespace(
+        configuration=SimpleNamespace(manager_processing=None),
+        is_tabular_file=lambda _: True,
+        is_spreadsheet_file=lambda _: False,
+    )
 
     monkeypatch.setattr(
         "knowledge_flow_backend.features.ingestion.ingestion_service.get_ingestion_service",
@@ -263,7 +268,11 @@ async def test_output_process_uses_permission_checked_metadata_writer(tmp_path, 
         def process_output(self, user, file_name_for_processing, output_dir, metadata, profile):
             return metadata
 
-    fake_app_context = SimpleNamespace(is_tabular_file=lambda _: True, is_spreadsheet_file=lambda _: False)
+    fake_app_context = SimpleNamespace(
+        configuration=SimpleNamespace(manager_processing=None),
+        is_tabular_file=lambda _: True,
+        is_spreadsheet_file=lambda _: False,
+    )
     checked_service = _FakeService()
 
     monkeypatch.setattr(
