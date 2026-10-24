@@ -65,7 +65,7 @@ export default function HomeNavPanel() {
     };
   }, [me.data?.user_id]);
   const org = spaces.data?.find((space) => space.kind === "organization");
-  const personal = spaces.data?.find((space) => space.personal_owner === me.data?.user_id);
+  const personal = spaces.data?.find((space) => space.kind === "personal" && space.personal_owner === me.data?.user_id);
   const canOpen =
     !spaces.isError && !me.isError && org && me.data && (org.roles.includes("personal_space_creator") || personal);
   const activatePersonal = async () => {
@@ -106,7 +106,7 @@ export default function HomeNavPanel() {
 
   const collaborativeTeams = spaces.isError
     ? []
-    : (spaces.currentData ?? []).filter((space) => space.kind !== "organization" && !space.personal_owner);
+    : (spaces.currentData ?? []).filter((space) => space.kind === "team" || space.kind === "project");
   const query = search.trim().toLowerCase();
   const visibleTeams = query
     ? collaborativeTeams.filter((team) => team.name.toLowerCase().includes(query))

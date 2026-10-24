@@ -65,7 +65,13 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   }),
   useMySpacesQuery: () => ({
     ...probe.managerProbe,
-    currentData: [{ id: "team-1", personal_owner: probe.isPersonalTeam ? "admin" : null }],
+    currentData: [
+      {
+        id: "team-1",
+        kind: probe.isPersonalTeam ? "personal" : "team",
+        personal_owner: probe.isPersonalTeam ? "admin" : null,
+      },
+    ],
   }),
 }));
 vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({

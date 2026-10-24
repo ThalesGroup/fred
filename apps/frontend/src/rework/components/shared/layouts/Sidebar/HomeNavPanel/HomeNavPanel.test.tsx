@@ -29,7 +29,7 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
       { id: "org", kind: "organization", path: ["org"], name: "Demo", roles: state.roles },
       { id: "fredlab", kind: "team", name: "fredlab", roles: ["admin", "editor", "analyst"] },
       ...(state.personal
-        ? [{ id: "personal", kind: "team", name: "priya", personal_owner: "priya", roles: ["member"] }]
+        ? [{ id: "personal", kind: "personal", name: "priya", personal_owner: "priya", roles: ["member"] }]
         : []),
     ];
     return {

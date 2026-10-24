@@ -37,7 +37,7 @@ export default function TeamResourcesPage() {
   const { teamId = "" } = useParams<{ teamId: string }>();
   const userId = KeyCloakService.GetUserId() ?? "";
   const memberships = useMySpacesQuery();
-  const isPersonalTeam = Boolean(memberships.currentData?.find((space) => space.id === teamId)?.personal_owner);
+  const isPersonalTeam = memberships.currentData?.find((space) => space.id === teamId)?.kind === "personal";
   const fsTeamId = teamId;
   const [statsOpen, setStatsOpen] = useState(false);
   const corpusStats = useSummaryQuery({ id: teamId }, { refetchOnMountOrArgChange: true });

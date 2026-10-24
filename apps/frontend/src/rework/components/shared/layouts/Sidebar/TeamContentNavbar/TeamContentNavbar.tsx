@@ -65,7 +65,7 @@ export default function TeamContentNavbar() {
   const { teamId, isPersonalTeam: legacyPersonalTeam, selectedTeam, canOpenTeamSettings } = useSelectedTeam();
   const memberships = useMySpacesQuery(undefined, { refetchOnMountOrArgChange: 60 });
   const space = !memberships.isError ? memberships.currentData?.find((item) => item.id === teamId) : undefined;
-  const isPersonalTeam = space ? !!space.personal_owner : legacyPersonalTeam;
+  const isPersonalTeam = space ? space.kind === "personal" : legacyPersonalTeam;
   const { bootstrap } = useFrontendBootstrap();
 
   // Record every entry into a team so the Home nav-panel switcher can offer a

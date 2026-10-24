@@ -573,7 +573,7 @@ export type RevokePlatformRoleApiArg = {
   user: string;
   role: PlatformRole;
 };
-export type SpaceKind = "organization" | "team" | "project";
+export type SpaceKind = "organization" | "team" | "project" | "personal";
 export type Space = {
   id: string;
   kind: SpaceKind;

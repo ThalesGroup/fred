@@ -48,7 +48,10 @@ import {
 } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import type { CapabilityEnablementItem } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { skipToken } from "@reduxjs/toolkit/query";
-import { useOrganizationAgentsQuery, useSetOrganizationAgentDefaultMutation } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import {
+  useOrganizationAgentsQuery,
+  useSetOrganizationAgentDefaultMutation,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { AgentEnablement } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./FeaturesPage.module.css";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
@@ -108,7 +111,8 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
     isError: isTeamsError,
   } = useListAllTeamsQuery({ includeMembership: false }, { skip: readOnly });
   const [setDefaultOn, { isLoading: isTogglingLegacyDefault }] = useSetCapabilityDefaultOnMutation();
-  const [setOrganizationDefault, { isLoading: isTogglingOrganizationDefault }] = useSetOrganizationAgentDefaultMutation();
+  const [setOrganizationDefault, { isLoading: isTogglingOrganizationDefault }] =
+    useSetOrganizationAgentDefaultMutation();
   const isTogglingDefault = isTogglingLegacyDefault || isTogglingOrganizationDefault;
   // Per-model reasoning activation (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5).
   const [setModelReasoning, { isLoading: isTogglingReasoning }] = useSetModelReasoningMutation();
@@ -325,10 +329,9 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   // Each kind loses something different when default-on goes off: agent
   // instances can be suspended, an application or a Knowledge Base only loses
   // inherited access. Naming the object is what makes the dialog truthful.
-  const defaultOffCopyVariant =
-    discoveringAgents
-      ? "organization"
-      : visiblePendingDefaultOff?.kind === "app"
+  const defaultOffCopyVariant = discoveringAgents
+    ? "organization"
+    : visiblePendingDefaultOff?.kind === "app"
       ? "app"
       : visiblePendingDefaultOff?.kind === "knowledge_base"
         ? "knowledgeBase"
@@ -361,7 +364,11 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
       } else {
         showSuccess({
           summary: organizationId
-            ? t(nextValue ? "rework.admin.capabilities.organizationDefaultOnToast" : "rework.admin.capabilities.organizationDefaultOffToast")
+            ? t(
+                nextValue
+                  ? "rework.admin.capabilities.organizationDefaultOnToast"
+                  : "rework.admin.capabilities.organizationDefaultOffToast",
+              )
             : t(nextValue ? "rework.admin.capabilities.defaultOnToast" : "rework.admin.capabilities.defaultOffToast"),
         });
       }
@@ -381,7 +388,10 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
       const normalized = normalizeApiError(error);
       showError({
         summary: t("rework.admin.capabilities.defaultToggleError"),
-        detail: !organizationId && normalized.kind === "conflict" ? t("rework.admin.capabilities.defaultOnConflict") : normalized.detail,
+        detail:
+          !organizationId && normalized.kind === "conflict"
+            ? t("rework.admin.capabilities.defaultOnConflict")
+            : normalized.detail,
       });
     } finally {
       inFlightDefaultOnIdRef.current = null;
@@ -487,7 +497,8 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   // the preview is still loading we render nothing extra — the dialog keeps its
   // generic message and stays actionable.
   const renderImpactDetails = () => {
-    if (discoveringAgents || !visiblePendingDefaultOff || !hasAgentInstanceLifecycle(visiblePendingDefaultOff.kind)) return null;
+    if (discoveringAgents || !visiblePendingDefaultOff || !hasAgentInstanceLifecycle(visiblePendingDefaultOff.kind))
+      return null;
     if (revokeImpact.isFetching || !impact) return null;
     return (
       <div className={styles.impact}>

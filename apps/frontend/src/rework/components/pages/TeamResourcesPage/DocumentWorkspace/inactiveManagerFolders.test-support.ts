@@ -13,5 +13,6 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useCreateFolderMutation: () => [vi.fn()],
   useRenameFolderMutation: () => [vi.fn()],
   useDeleteFolderMutation: () => [vi.fn()],
+  useDeleteDocumentMutation: () => [vi.fn()],
   useSetRetrievableMutation: () => [vi.fn()],
 }));

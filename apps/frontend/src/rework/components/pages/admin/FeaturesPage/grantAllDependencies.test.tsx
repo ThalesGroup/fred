@@ -34,7 +34,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CapabilityEnablementItem } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
-import type { AgentEnablement, SetOrganizationAgentDefaultApiArg } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type {
+  AgentEnablement,
+  SetOrganizationAgentDefaultApiArg,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -67,11 +70,13 @@ vi.mock("react-i18next", () => ({
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useOrganizationAgentsQuery: () => ({ currentData: h.organizationAgents, isLoading: false, isError: false }),
   useSetOrganizationAgentDefaultMutation: () => [
-    (args: SetOrganizationAgentDefaultApiArg) => ({ unwrap: async () => {
-      h.organizationWrites.push(args);
-      if (h.failFor.has(args.agentId)) throw new Error("boom");
-      return { capability_id: args.agentId, default_on: args.setAgentDefaultOnRequest.default_on };
-    } }),
+    (args: SetOrganizationAgentDefaultApiArg) => ({
+      unwrap: async () => {
+        h.organizationWrites.push(args);
+        if (h.failFor.has(args.agentId)) throw new Error("boom");
+        return { capability_id: args.agentId, default_on: args.setAgentDefaultOnRequest.default_on };
+      },
+    }),
     { isLoading: false },
   ],
 }));
@@ -448,27 +453,41 @@ describe("FeaturesPage default-on toggle routing", () => {
   });
 });
 
-
 describe("organization agent default", () => {
   const ralph = (on: boolean): AgentEnablement => ({
-    id: "template-o1", runtime_id: "native", source_id: "ralph", name: "Ralph",
-    description: "Hello world", version: "1", public_version: "0.1.0", icon: "smart_toy",
-    kind: "agent", team_scope: "admin_gated", default_on: on, default_capability_ids: [],
+    id: "template-o1",
+    runtime_id: "native",
+    source_id: "ralph",
+    name: "Ralph",
+    description: "Hello world",
+    version: "1",
+    public_version: "0.1.0",
+    icon: "smart_toy",
+    kind: "agent",
+    team_scope: "admin_gated",
+    default_on: on,
+    default_capability_ids: [],
   });
   function renderOrganization(on: boolean) {
     h.organizationAgents = [ralph(on)];
     act(() => root.render(<FeaturesPage organizationId="O1" />));
   }
-  const offButton = (suffix: string) => Array.from(document.querySelectorAll('[role="alertdialog"] button'))
-    .find((button) => button.textContent?.includes(`defaultOffConfirm.${suffix}`)) as HTMLElement;
+  const offButton = (suffix: string) =>
+    Array.from(document.querySelectorAll('[role="alertdialog"] button')).find((button) =>
+      button.textContent?.includes(`defaultOffConfirm.${suffix}`),
+    ) as HTMLElement;
 
   it("uses the organization mutation and waits for server data to change the switch", async () => {
     renderOrganization(false);
     expect(container.querySelectorAll('[role="radio"]').length).toBe(4);
     await act(async () => defaultOnSwitch()!.click());
-    expect(h.organizationWrites).toEqual([{
-      organizationId: "O1", agentId: "template-o1", setAgentDefaultOnRequest: { default_on: true },
-    }]);
+    expect(h.organizationWrites).toEqual([
+      {
+        organizationId: "O1",
+        agentId: "template-o1",
+        setAgentDefaultOnRequest: { default_on: true },
+      },
+    ]);
     expect(h.calls).toEqual([]);
     expect(defaultOnSwitch()!.checked).toBe(false);
     renderOrganization(true);
