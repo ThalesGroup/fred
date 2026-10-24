@@ -353,6 +353,8 @@ const GetSessionIdentity = (): string | null => {
   return JSON.stringify([GetTokenParsed()?.iss, DEV_USERNAME]);
 };
 
+const GetIdentityProvider = (): "keycloak" | "oidc" | null => (isSecurityEnabled ? identityProvider : null);
+
 export const KeyCloakService = {
   CallLogin: Login,
   CallLogout: Logout,
@@ -370,4 +372,5 @@ export const KeyCloakService = {
   ensureFreshToken,
   GetRefreshToken,
   GetKeycloakRealmConfig,
+  GetIdentityProvider,
 };

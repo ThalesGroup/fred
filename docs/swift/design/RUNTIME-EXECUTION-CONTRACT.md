@@ -3768,6 +3768,12 @@ model knows which it is.
   same first-seen rule as `description`. `CapabilityCatalogEntry` carries it
   as `model_display_name`; the multi-pod union keeps a name authored on one pod
   when another serves the model unnamed.
+- An optional `discovery` source in `models_catalog.yaml` turns an
+  OpenAI-compatible `GET /models` inventory into chat profiles at pod startup.
+  The route advertises that resolved startup snapshot, including optional
+  `context_window_tokens`, `max_input_tokens` and `max_output_tokens`. Static
+  catalogs retain their file-read behavior. See `LLM_ROUTING_FRED.md` for the
+  operator contract.
 - The frontend prefers that string verbatim, then prettifies the real model
   `name`, then falls back to splitting the capability id.
 
@@ -4272,7 +4278,7 @@ pod's `models_catalog.yaml`.
 
 | Field | Meaning |
 | ----- | ------- |
-| `default_chat_profile_id: str \| None` | This pod's `default_profile_by_capability.chat` — the LOWEST precedence level. `None` when the catalog declares no chat default. |
+| `default_chat_profile_id: str \| None` | This pod's effective manual chat default - the LOWEST precedence level. An explicit `default_profile_by_capability.chat` wins; otherwise the sole manual chat profile is inferred. `None` when neither rule selects one. |
 | `agent_chat_profile_overrides: dict[str, str]` | This pod's ops-authored `agent_profile_overrides`, RESTRICTED to entries targeting a chat profile — the HIGHEST level below the platform binding. |
 
 Both are pod-level, not per-model, so they sit beside `models` rather than on

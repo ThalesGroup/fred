@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import {
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
   useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation,
   useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation,
+  useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   useLazyGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
+  useLazyGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
+  useLazyGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
   usePrepareAgentExecutionMutation,
   usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation,
@@ -30,22 +33,14 @@ import {
   useLazyListTagsQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { awaitIngestion, streamAgentTurn, uploadDocument } from "./actions";
-import type { PipelineDeps, Scenario, StepReport } from "./types";
+import { expectRefused } from "./scenarios/runScope";
+import type { PipelineDeps, Scenario } from "./types";
+import { useScenarioRun, type PipelineRun } from "./useScenarioRun";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import { personalTeamId } from "../../components/shared/utils/teamId";
 
-export interface PipelineRun {
-  steps: StepReport[];
-  isRunning: boolean;
-  start: () => void;
-}
-
-/**
- * Generic runner: binds the real product hooks into the PipelineDeps contract,
- * runs ANY scenario, and tracks each step for the UI. The admin self-test page
- * passes the self-test scenario; a future eval-demo page passes its own.
- */
-export function usePipelineRun(scenario: Scenario): PipelineRun {
+/** Binds the real product hooks into the PipelineDeps contract, as the signed-in admin. */
+export function usePipelineDeps(): PipelineDeps {
   // Canonical personal-team id (`personal-<uid>`), NOT the bare "personal" alias.
   // The control-plane accepts both (teams/system.py), but the agent pod is now the
   // OpenFGA authority and checks ReBAC against the canonical id only — the bare
@@ -56,6 +51,9 @@ export function usePipelineRun(scenario: Scenario): PipelineRun {
   const [deleteTag] = useDeleteTagMutation();
   const [prepareExecution] = usePrepareAgentExecutionMutation();
   const [listTemplates] = useLazyGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery();
+  const [listAgents] = useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery();
+  const [listPrompts] = useLazyGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery();
+  const [readSession] = useLazyGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery();
   const [enrollInstance] = usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation();
   const [deleteInstance] =
     useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation();
@@ -66,21 +64,7 @@ export function usePipelineRun(scenario: Scenario): PipelineRun {
   const [patchSession] = usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation();
   const [deleteSessionMutation] = useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation();
 
-  const [steps, setSteps] = useState<StepReport[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
-  const controllerRef = useRef<AbortController | null>(null);
-
-  const report = useCallback((step: StepReport) => {
-    setSteps((prev) => {
-      const i = prev.findIndex((s) => s.id === step.id);
-      if (i === -1) return [...prev, step];
-      const next = [...prev];
-      next[i] = step;
-      return next;
-    });
-  }, []);
-
-  const deps: PipelineDeps = useMemo(
+  return useMemo(
     () => ({
       teamId,
       createLibrary: async (name) => {
@@ -95,11 +79,26 @@ export function usePipelineRun(scenario: Scenario): PipelineRun {
         const tags = await listTags({}).unwrap();
         return tags.filter((t) => t.type === "document").map((t) => ({ id: t.id, name: t.name }));
       },
+      verifyDeleted: async (kind, id) => {
+        if (kind === "session") {
+          await expectRefused(() => readSession({ teamId, sessionId: id }).unwrap(), "reading a deleted session", [
+            404,
+          ]);
+          return;
+        }
+        const ids =
+          kind === "library"
+            ? (await listTags({}).unwrap()).filter((tag) => tag.type === "document").map((tag) => tag.id)
+            : kind === "agent"
+              ? (await listAgents({ teamId }).unwrap()).map((agent) => agent.agent_instance_id)
+              : (await listPrompts({ teamId }).unwrap()).map((prompt) => prompt.id);
+        if (ids.includes(id)) throw new Error(`${kind} ${id} is still listed after deletion`);
+      },
       ingestDocument: async (libraryId, file, signal) => {
         const taskId = await uploadDocument(libraryId, file);
         await awaitIngestion(taskId, signal);
       },
-      provisionAgentInstance: async (sourceAgentId, tuningFieldValues, signal) => {
+      provisionAgentInstance: async (sourceAgentId, tuningFieldValues, signal, runToken) => {
         signal?.throwIfAborted();
         // 1. Find the template (composite template_id) for this agent definition.
         //    include_non_public so the internal self-test agent is discoverable
@@ -108,12 +107,14 @@ export function usePipelineRun(scenario: Scenario): PipelineRun {
         signal?.throwIfAborted();
         const template = templates.find((t) => t.source_agent_id === sourceAgentId && t.status !== "unavailable");
         if (!template) return null;
-        // Each run owns its new instance; concurrent runs keep theirs.
+        // Names are unique per team, so a fixed name left behind by an
+        // interrupted run would refuse every later enrollment.
+        const suffix = runToken ?? crypto.randomUUID().slice(0, 8);
         const created = await enrollInstance({
           teamId,
           createAgentInstanceRequest: {
             template_id: template.template_id,
-            display_name: "Self-test (auto)",
+            display_name: `Self-test (auto) ${suffix}`,
             usage_statement: "Automated internal self-test pipeline run — not a production agent.",
             ...(tuningFieldValues ? { tuning_field_values: tuningFieldValues } : {}),
           },
@@ -131,7 +132,7 @@ export function usePipelineRun(scenario: Scenario): PipelineRun {
       deleteContextPrompt: async (promptId) => {
         await deletePrompt({ teamId, promptId }).unwrap();
       },
-      createSession: async (agentInstanceId) => {
+      createSession: async (agentInstanceId, runToken) => {
         // The session id is frontend-generated (CreateSessionRequest.session_id).
         const sessionId = crypto.randomUUID();
         await postSession({
@@ -139,7 +140,7 @@ export function usePipelineRun(scenario: Scenario): PipelineRun {
           createSessionRequest: {
             session_id: sessionId,
             agent_instance_id: agentInstanceId,
-            title: "Self-test (auto)",
+            title: `Self-test (auto) ${runToken ?? sessionId.slice(0, 8)}`,
           },
         }).unwrap();
         return sessionId;
@@ -187,6 +188,9 @@ export function usePipelineRun(scenario: Scenario): PipelineRun {
       createTag,
       deleteTag,
       listTags,
+      listAgents,
+      listPrompts,
+      readSession,
       prepareExecution,
       listTemplates,
       enrollInstance,
@@ -198,19 +202,10 @@ export function usePipelineRun(scenario: Scenario): PipelineRun {
       deleteSessionMutation,
     ],
   );
+}
 
-  const start = useCallback(() => {
-    controllerRef.current?.abort();
-    const controller = new AbortController();
-    controllerRef.current = controller;
-    setSteps([]);
-    setIsRunning(true);
-    void scenario(deps, report, controller.signal).finally(() => {
-      if (!controller.signal.aborted) setIsRunning(false);
-    });
-  }, [deps, report, scenario]);
+export type { PipelineRun };
 
-  useEffect(() => () => controllerRef.current?.abort(), []);
-
-  return { steps, isRunning, start };
+export function usePipelineRun(scenario: Scenario): PipelineRun {
+  return useScenarioRun(scenario, usePipelineDeps());
 }

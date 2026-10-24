@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { identityProbeScenario } from "./scenarios/identityProbeScenario";
 import { runStep } from "./step";
 import { authzProbeScenario, type AuthzProbeDeps } from "./scenarios/authzProbeScenario";
-import { loginWithPassword } from "./keycloakDirectGrant";
 import type { StepReport } from "./types";
+import { useRunner } from "./useScenarioRun";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import { isPersonalTeamId } from "../../components/shared/utils/teamId";
 import type { PermissionSummary, Team } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
@@ -34,7 +34,7 @@ interface BootstrapResponse {
   permissions?: PermissionSummary;
 }
 
-async function authedFetch(
+export async function authedFetch(
   path: string,
   token?: string,
   init?: { method?: string; body?: unknown },
@@ -63,7 +63,7 @@ async function authedFetch(
  * relative control-plane paths the generated RTK Query client uses, bound to
  * an explicit token instead of the app's own session (see the module doc in
  * `scenarios/authzProbeScenario.ts` for why). */
-const deps: AuthzProbeDeps = {
+export const authzProbeDeps: AuthzProbeDeps = {
   fetchBootstrapFlags: async (token) => {
     const { status, body } = await authedFetch("/control-plane/v1/frontend/bootstrap", token);
     if (status !== 200) throw new Error(`GET /frontend/bootstrap: HTTP ${status}`);
@@ -71,6 +71,7 @@ const deps: AuthzProbeDeps = {
     return {
       isPlatformAdmin: roles.includes("platform_admin"),
       isPlatformObserver: roles.includes("platform_observer"),
+      canListAllTeams: roles.some((role) => ["platform_admin", "team_manager", "feature_manager"].includes(role)),
     };
   },
   fetchOwnTeamIds: async (token) => {
@@ -102,34 +103,31 @@ const deps: AuthzProbeDeps = {
   },
   fetchTeamPermissions: async (token, teamId) => {
     const { status, body } = await authedFetch(`/control-plane/v1/teams/${encodeURIComponent(teamId)}`, token);
-    if (status !== 200) return [];
+    if (status !== 200) throw new Error(`GET /teams/${teamId}: HTTP ${status}`);
     return (body as TeamWithPermissionsResponse)?.permissions ?? [];
   },
   probeTeamWriteAccess: async (token, teamId) => {
     const marker = (globalThis.crypto?.randomUUID?.() ?? `${Math.random()}`).slice(0, 8);
+    const name = `fred-authz-selftest-${marker}`;
     const { status, body } = await authedFetch(`/control-plane/v1/teams/${encodeURIComponent(teamId)}/prompts`, token, {
       method: "POST",
       body: {
-        name: `fred-authz-selftest-${marker}`,
+        name,
         text: "Authorization self-test probe — safe to delete, cleaned up automatically.",
       },
     });
     const allowed = status === 200 || status === 201;
-    return { status, createdId: allowed ? ((body as PromptResponse)?.id ?? null) : null };
+    const createdId = allowed ? ((body as PromptResponse)?.id ?? null) : null;
+    if (allowed && !createdId)
+      throw new Error(`POST /teams/${teamId}/prompts: HTTP ${status} without prompt id; check ${name} for cleanup`);
+    return { status, createdId };
   },
   cleanupTeamWrite: async (token, teamId, promptId) => {
-    try {
-      await authedFetch(
-        `/control-plane/v1/teams/${encodeURIComponent(teamId)}/prompts/${encodeURIComponent(promptId)}`,
-        token,
-        {
-          method: "DELETE",
-        },
-      );
-    } catch {
-      // Best-effort — a failed cleanup must not crash the self-test. The prompt
-      // is clearly named (`fred-authz-selftest-*`) and safe to remove manually.
-    }
+    const path = `/control-plane/v1/teams/${encodeURIComponent(teamId)}/prompts/${encodeURIComponent(promptId)}`;
+    const { status } = await authedFetch(path, token, { method: "DELETE" });
+    if (status !== 204) throw new Error(`DELETE ${path}: HTTP ${status}`);
+    const read = await authedFetch(path, token);
+    if (read.status !== 404) throw new Error(`GET ${path} after deletion: HTTP ${read.status}`);
   },
 };
 
@@ -137,68 +135,36 @@ export interface AuthzProbeRun {
   steps: StepReport[];
   isRunning: boolean;
   /** Run the probe against the current admin's own session — always available. */
-  runForMyself: () => void;
-  runIdentity: () => void;
-  /** Log in as `username`/`password` (short-lived, discarded after the run — see
-   * `keycloakDirectGrant.ts`) and run the same probe against that account. */
-  runForProfile: (username: string, password: string) => void;
+  runForMyself: () => Promise<void>;
+  runIdentity: () => Promise<void>;
 }
 
 export function useAuthzProbeRun(): AuthzProbeRun {
-  const [steps, setSteps] = useState<StepReport[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
+  const { steps, isRunning, run } = useRunner();
 
-  const report = useCallback((step: StepReport) => {
-    setSteps((prev) => {
-      const i = prev.findIndex((s) => s.id === step.id);
-      if (i === -1) return [...prev, step];
-      const next = [...prev];
-      next[i] = step;
-      return next;
-    });
-  }, []);
-
-  const runForMyself = useCallback(() => {
-    const token = KeyCloakService.GetToken();
-    if (!token) return;
-    setSteps([]);
-    setIsRunning(true);
-    void authzProbeScenario(token, token, deps, report).finally(() => setIsRunning(false));
-  }, [report]);
-
-  const runIdentity = useCallback(() => {
-    setSteps([]);
-    setIsRunning(true);
-    void (async () => {
-      const token = await runStep(report, "identity-session", "Refresh the current session credential", async () => {
-        if (!(await KeyCloakService.ensureFreshToken(30)))
-          throw new Error("Sign in again before running the JWT checks");
-        const value = KeyCloakService.GetToken();
-        if (!value) throw new Error("No session credential");
-        return { value };
-      });
-      if (token) await identityProbeScenario(token, KeyCloakService.GetUserId(), authedFetch, report);
-    })().finally(() => setIsRunning(false));
-  }, [report]);
-
-  const runForProfile = useCallback(
-    (username: string, password: string) => {
-      const adminToken = KeyCloakService.GetToken();
-      const realmConfig = KeyCloakService.GetKeycloakRealmConfig();
-      if (!adminToken || !realmConfig) return;
-      setSteps([]);
-      setIsRunning(true);
-      void (async () => {
-        const targetToken = await runStep(report, "login-as", `Log in as ${username}`, async () => {
-          const token = await loginWithPassword(realmConfig, username, password);
-          return { value: token, detail: `authenticated as ${username}` };
-        });
-        if (!targetToken) return;
-        await authzProbeScenario(adminToken, targetToken, deps, report);
-      })().finally(() => setIsRunning(false));
-    },
-    [report],
+  const runForMyself = useCallback(
+    () =>
+      run(async (report) => {
+        const token = KeyCloakService.GetToken();
+        if (token) await authzProbeScenario(token, token, authzProbeDeps, report);
+      }),
+    [run],
   );
 
-  return { steps, isRunning, runForMyself, runForProfile, runIdentity };
+  const runIdentity = useCallback(
+    () =>
+      run(async (report) => {
+        const token = await runStep(report, "identity-session", "Refresh the current session credential", async () => {
+          if (!(await KeyCloakService.ensureFreshToken(30)))
+            throw new Error("Sign in again before running the JWT checks");
+          const value = KeyCloakService.GetToken();
+          if (!value) throw new Error("No session credential");
+          return { value };
+        });
+        if (token) await identityProbeScenario(token, KeyCloakService.GetUserId(), authedFetch, report);
+      }),
+    [run],
+  );
+
+  return { steps, isRunning, runForMyself, runIdentity };
 }

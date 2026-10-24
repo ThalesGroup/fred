@@ -25,6 +25,16 @@
   font: var(--font-body-small);
 }
 
+.currentProfileId {
+  display: inline-block;
+  vertical-align: bottom;
+  max-width: 100%;
+  overflow: hidden;
+  font-family: var(--font-family-mono, monospace);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .statusError {
   margin: 0;
   color: var(--error);
@@ -81,8 +91,62 @@
   padding-top: var(--spacing-s);
 }
 
+.advanced {
+  border-top: 1px solid var(--outline-variant);
+  padding-top: var(--spacing-s);
+}
+
+.advanced summary {
+  cursor: pointer;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.advancedForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  margin-top: var(--spacing-s);
+}
+
 .formActions {
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-s);
+}
+
+.podList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.podRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  padding: var(--spacing-m);
+}
+
+.podHeading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.podHeading code {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  overflow-wrap: anywhere;
+}
+
+.podFallback {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border-top: 1px solid var(--outline-variant);
+  padding-top: var(--spacing-m);
 }

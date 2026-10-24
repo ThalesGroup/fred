@@ -959,6 +959,70 @@ est régénéré à partir des schémas de configuration existants. Cette résol
 n'est pas une validation fonctionnelle de l'ensemble des changements Swift.
 
 
+
+## 2026-10-24 - Merge Swift dans Weaver
+
+Intégration demandée par Dimi de `origin/swift` (`6348ad2cf`) dans `weaver`
+(`3eecfd82f`), base commune `fb61751ee`. Onze commits entrants, 284 fichiers
+modifiés côté Swift. Checkout initial propre ; point de retour local
+`backup/weaver-before-swift-20261024` sur `3eecfd82f`.
+
+### Résolutions
+
+- Suppression de `apps/control-plane-backend` conservée, nouveaux fichiers
+  inclus. Les quatre tests Python que Git proposait de déplacer dans
+  `apps/control-plane/tests` sont également écartés. Aucun changement du code
+  Rust, de ses migrations SQLx ou de son client généré.
+- UI Swift conservée : auto-tests par familles, campagne de rôles, découverte
+  et présentation des modèles, aperçus Mermaid thémés et export SVG.
+  Leurs appels Python restent dans `legacyControlPlane`, comme les autres
+  écrans non encore raccordés au Rust ; les nouveaux imports et mocks suivent
+  cette séparation. Le client généré Swift est repris du commit entrant avec
+  seulement la relocalisation du transport `controlPlaneApi` vers
+  `legacyControlPlaneApi`, sans modification de contrat ni régénération.
+- Fonctionnalités conserve la découverte Rust des agents par organisation,
+  l'onglet Agents initial, les gardes et les commandes legacy désactivées dans
+  ce contexte. Les ajouts Swift sur les modèles sont fusionnés dans la même page.
+- `KeycloakService` conserve l'identité de session Weaver et ajoute la lecture
+  du type de fournisseur Swift. PgVector conserve les opérations de chunk
+  Weaver et ajoute la synchronisation des dossiers Swift.
+- Les corrections Knowledge Flow, les évolutions SDK/runtime, les dépendances
+  frontend, la configuration de découverte fred-agents et la documentation Swift
+  sont intégrées. Leur présence ne prouve pas un parcours Weaver fonctionnel.
+
+### Fonctionnalités du backend supprimé à réévaluer
+
+Chemins ci-dessous relatifs à `apps/control-plane-backend/` dans le commit Swift.
+Le code et les tests restent consultables par `git show 6348ad2cf:<chemin>`.
+
+| Apport Swift | Sources et contrats conservés dans l'historique | Réévaluation Weaver |
+| --- | --- | --- |
+| Découverte de modèles sur endpoints compatibles, rafraîchissement, URL administrable, détails et modèles retirés (`484d7439c`, #3230/#3231) | `control_plane_backend/model_discovery/{api,service,schemas,store}.py`, `models/model_discovery_models.py`, tests `test_live_model_discovery.py`, `test_model_discovery_projection.py` | Reprendre le besoin avec le catalogue Rust ; définir les droits d'administration des URL et les garanties de transport des credentials. Non porté par ce merge. |
+| Défauts et fallbacks chat par pod, projection des profils et révisions de découverte vers le runtime (même commit) | `product/{service,schemas,dependencies}.py`, `routing_policy/{service,schemas}.py`, `app/context.py`, `main.py`, `models/table_ownership.py`, migrations `7e0d93f21c6a_repair_applied_pod_defaults.py` et `b42e9f19d4ca_model_display_name_overrides.py` | Réévaluer avec l'exécution et le routage Rust. Les migrations Alembic ne sont pas transférées dans SQLx. Voir aussi `test_model_discovery_migration.py`, `test_platform_model_binding.py`, `test_routing_policy.py`. |
+| Noms de modèles éditables, métadonnées de capacités et limites de tokens (même commit) | `capabilities/{api,catalog,schemas,service,display_name_store}.py`, `models/model_display_name_models.py`, tests `test_model_display_name_override.py`, `test_model_capability_projection.py` | UI et contrat legacy conservés ; persistance et projection Rust à évaluer. Les écritures de binding/URL ont une autorité plateforme dédiée dans `organization_authz.py`, à conserver lors du portage. |
+| Mise à jour d'instances d'agents exemptées du contrôle de capacité pour les auto-tests (`3273bad7f`, #3244) | `product/service.py`, `tests/test_capability_selection_1974.py` ; note `fix-self-test-agent-updates` | À revoir lors du portage des instances et auto-tests ; ne pas introduire une exemption globale dans le Rust. |
+| Liste des sessions d'une équipe publique exigeant `CAN_READ_CONVERSATIONS` (`882454069`, #3210) | `product/api.py`, `tests/test_product_api_authz.py` ; note `team-sessions-membership.md` | À reprendre avec les conversations ; accès à une équipe publique ne vaut pas accès à ses sessions. La campagne UI reste fondée sur les rôles Swift et ne valide pas les nouveaux comptes O1/O2/E1. |
+
+Couverture associée également écartée avec le backend :
+`test_capability_enablement_1980.py`, `test_main.py`, `tests/conftest.py`.
+`pyrightconfig.json` est un changement d'outillage Python, sans portage Rust.
+
+Autres apports intégrés à vérifier dans les parcours correspondants :
+synchronisation des dossiers dans les vecteurs (#3245), isolation des aperçus
+bruts (#3246), exclusion des vecteurs de sessions de l'audit corpus (#3247),
+rafraîchissement OpenSearch après suppression (#3248), retrievability PgVector
+(#3249), découverte SDK/runtime (#3231), Mermaid (#3256), publication frontend
+(#3276) et runbook de rollback Compose (#3113).
+
+Validation de résolution : lecture des conflits et comparaison des versions,
+absence de marqueurs et d'entrées Git non fusionnées vérifiée avant commit.
+Aucun test, compilation, contrôle qualité, déploiement ni push exécuté.
+Les tests existants sont conservés et les mocks de Fonctionnalités adaptés ;
+la compilation frontend et les validations fonctionnelles restent à effectuer
+par Dimi. Pas de nouvelle proposition OpenSpec : intégration de changements
+Swift existants, sans nouvelle fonctionnalité Rust.
+
+
 ## F-011 Découverte des définitions d'agents
 
 - 2026-10-23 : demande d'un lot minimal Rust pour interroger fred-agents, sans

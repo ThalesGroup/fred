@@ -71,6 +71,10 @@ class ModelRoutingResolver:
         for agent_id, profile_id in policy.agent_profile_overrides.items():
             profile = self._profiles_by_id.get(profile_id)
             if profile is None:
+                if profile_id in policy.unavailable_discovered_chat_profile_ids:
+                    overrides_by_capability.setdefault(ModelCapability.CHAT, {})[
+                        agent_id
+                    ] = profile_id
                 continue
             overrides_by_capability.setdefault(profile.capability, {})[agent_id] = (
                 profile_id
@@ -95,9 +99,8 @@ class ModelRoutingResolver:
         return self._agent_overrides_by_capability.get(capability, {})
 
     def default_profile_id_for(self, capability: ModelCapability) -> str | None:
-        """This pod's `default_profile_by_capability` entry, or `None` when the
-        catalog declares no default for `capability` — the lowest precedence
-        level, and the last thing standing between a turn and a `ValueError`."""
+        """This pod's effective default for `capability`, or `None` when none
+        exists. It is the lowest routing precedence level."""
 
         return self._policy.default_profile_by_capability.get(capability)
 
@@ -126,8 +129,8 @@ class ModelRoutingResolver:
         if request.agent_id is not None:
             profile_id = self._policy.agent_profile_overrides.get(request.agent_id)
             if profile_id is not None:
-                profile = self._profile(profile_id)
-                if profile.capability == request.capability:
+                profile = self._profiles_by_id.get(profile_id)
+                if profile is not None and profile.capability == request.capability:
                     return ModelSelection(
                         source=ModelSelectionSource.AGENT_OVERRIDE,
                         capability=request.capability,

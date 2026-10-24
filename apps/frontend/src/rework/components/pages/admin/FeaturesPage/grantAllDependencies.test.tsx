@@ -66,6 +66,12 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
 
 vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useAdminCapabilitiesQuery: () => ({ data: { items: h.items }, isLoading: false, isError: false }),
+  useModelDiscoveryQuery: () => ({ data: { sources: [] } }),
+  usePodChatDefaultsQuery: () => ({ data: { pods: [] }, isFetching: false, isError: false }),
+  useRefreshModelDiscoveryMutation: () => [
+    () => ({ unwrap: async () => ({ sources: [] }) }),
+    { isLoading: false, isError: false },
+  ],
   useListAllTeamsQuery: () => ({ data: [], isLoading: false, isError: false }),
   useSetCapabilityDefaultOnMutation: () => [
     (args: { capabilityId: string; setCapabilityDefaultOnRequest: { default_on: boolean } }) => ({
@@ -112,6 +118,10 @@ vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhanceme
   }),
   useSetPlatformModelBindingMutation: () => [vi.fn(), { isLoading: false }],
   useDeletePlatformModelBindingMutation: () => [vi.fn(), { isLoading: false }],
+  usePlatformModelFallbackQuery: () => ({ data: { binding: null }, isLoading: false, isError: false }),
+  useSetPlatformModelFallbackMutation: () => [vi.fn(), { isLoading: false }],
+  useDeletePlatformModelFallbackMutation: () => [vi.fn(), { isLoading: false }],
+  useSetModelDiscoveryUrlMutation: () => [vi.fn(), { isLoading: false }],
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
@@ -129,6 +139,10 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
 // irrelevant to the agent-only flow above.
 vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
   useFrontendFeatureFlag: () => ({ enabled: h.applicationsEnabled, isLoading: false }),
+}));
+
+vi.mock("@rework/core/hooks/useUserCapabilities", () => ({
+  useUserCapabilities: () => ({ canAdmin: true }),
 }));
 
 vi.mock("./SuspendedInstancesDrawer", () => ({ SuspendedInstancesDrawer: () => null }));

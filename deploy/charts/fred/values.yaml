@@ -855,6 +855,14 @@ applications:
     # CUSTOMIZE: update default_profile_by_capability to select default models.
     models_catalog:
       version: v1
+      discovery: null
+      # To discover chat models, replace null with a list (one or more endpoints):
+      # discovery:
+      #   - source_id: primary-gateway
+      #     base_url: https://gateway.example/v1
+      #     include_model_ids: [chat-small, chat-large]
+      # Add another list entry for each additional endpoint. Set OPENAI_API_KEY
+      # in the pod environment and retain a static chat default below.
       common_model_settings:
         max_retries: 0
         timeout:

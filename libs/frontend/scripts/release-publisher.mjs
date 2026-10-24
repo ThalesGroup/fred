@@ -366,6 +366,7 @@ export async function reconcileSelected({
 }
 
 export async function verifyPublishedMember({
+  candidate,
   member,
   expected,
   contract,
@@ -375,7 +376,23 @@ export async function verifyPublishedMember({
 }) {
   const root = await mkdtemp(path.join(os.tmpdir(), "fred-published-release-"));
   try {
-    const evidence = { packages: { [member.id]: expected } };
+    assert(
+      candidate?.selected?.some(({ id }) => id === member.id),
+      "published member is missing from the retained candidate",
+    );
+    const evidence = {
+      packages: Object.fromEntries(
+        candidate.selected.map(({ id, coordinate }) => [
+          id,
+          { coordinate, integrity: candidate.archives[id].integrity },
+        ]),
+      ),
+    };
+    assert.deepEqual(
+      evidence.packages[member.id],
+      expected,
+      "member evidence differs from the retained candidate",
+    );
     const registryPackage = await resolvePackage({
       coordinate: expected.coordinate,
       registry: contract.registry,

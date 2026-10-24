@@ -11,259 +11,117 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
-import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
-import Select from "@shared/molecules/Select/Select.tsx";
-import type { OptionModel } from "@models/Option.model.ts";
-import { usePipelineRun } from "../../../../features/pipeline/usePipelineRun";
-import { selfTestScenario } from "../../../../features/pipeline/scenarios/selfTestScenario";
-import { webResearchScenario } from "../../../../features/pipeline/scenarios/webResearchScenario";
-import {
-  credentialExpiryScenario,
-  expiryWaitSeconds,
-} from "../../../../features/pipeline/scenarios/credentialExpiryScenario";
-import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
-import { MAX_HOLD_MINUTES } from "../../../../features/pipeline/types";
-import { useAuthzProbeRun } from "../../../../features/pipeline/useAuthzProbeRun";
-import { useListUsersQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
-import { KeyCloakService } from "../../../../../security/KeycloakService";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
-import { StepReportPanel } from "./StepReportPanel";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
+import { useSelfTestFamilies } from "../../../../features/pipeline/families";
+import { AuthorizationExtras } from "./AuthorizationExtras";
+import { FamilySection } from "./FamilySection";
+import { buildCombinedReport } from "./report";
 import styles from "./SelfTestPage.module.css";
 
-interface SectionProps {
-  /** Avoid overlapping diagnostics in the same page. */
-  busy: boolean;
-  onRunningChange: (running: boolean) => void;
-}
-
-function FunctionalSelfTestSection({ busy, onRunningChange }: SectionProps) {
+export default function SelfTestPage() {
   const { t } = useTranslation();
-  const { steps, isRunning, start } = usePipelineRun(selfTestScenario);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const families = useSelfTestFamilies();
+  const [extrasRunning, setExtrasRunning] = useState(false);
+  const [runningAll, setRunningAll] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const busy = runningAll || extrasRunning || families.some((f) => f.run.isRunning);
+  const hasSteps = families.some((f) => f.run.steps.length > 0);
 
-  useEffect(() => onRunningChange(isRunning), [isRunning, onRunningChange]);
+  // Sequential, so each family keeps the one-run-at-a-time rule; a failure never stops the next.
+  const runAll = async () => {
+    setRunningAll(true);
+    try {
+      for (const family of families) {
+        if (!mounted.current) break;
+        try {
+          await family.run.start();
+        } catch {
+          // The family's own report already shows what it reached; the next one still runs.
+        }
+      }
+    } finally {
+      if (mounted.current) setRunningAll(false);
+    }
+  };
 
-  return (
-    <section className={styles.testSection}>
-      <div className={styles.header}>
-        <h2 className={styles.title}>{t("rework.selftest.functional.title")}</h2>
-        <Button
-          color="primary"
-          variant="filled"
-          size="medium"
-          icon={{ category: "outlined", type: "check_circle", filled: false }}
-          onClick={start}
-          disabled={busy}
-        >
-          {isRunning ? t("rework.selftest.report.running") : t("rework.selftest.functional.run")}
-        </Button>
-      </div>
-      <p className={styles.subtitle}>{t("rework.selftest.functional.subtitle")}</p>
-      <StepReportPanel steps={steps} isRunning={isRunning} emptyLabel={t("rework.selftest.report.empty")} />
-    </section>
-  );
-}
-
-function WebResearchSelfTestSection({ busy, onRunningChange }: SectionProps) {
-  const { t } = useTranslation();
-  const { steps, isRunning, start } = usePipelineRun(webResearchScenario);
-
-  useEffect(() => onRunningChange(isRunning), [isRunning, onRunningChange]);
-
-  return (
-    <section className={styles.testSection}>
-      <div className={styles.header}>
-        <h2 className={styles.title}>{t("rework.selftest.web.title")}</h2>
-        <Button
-          color="primary"
-          variant="filled"
-          size="medium"
-          icon={{ category: "outlined", type: "travel_explore", filled: false }}
-          onClick={start}
-          disabled={busy}
-        >
-          {isRunning ? t("rework.selftest.report.running") : t("rework.selftest.web.run")}
-        </Button>
-      </div>
-      <p className={styles.subtitle}>{t("rework.selftest.web.subtitle")}</p>
-      <StepReportPanel steps={steps} isRunning={isRunning} emptyLabel={t("rework.selftest.report.empty")} />
-    </section>
-  );
-}
-
-function AuthzSelfTestSection({ busy, onRunningChange }: SectionProps) {
-  const { t } = useTranslation();
-  const { steps, isRunning, runForMyself, runForProfile } = useAuthzProbeRun();
-  const identityRun = useAuthzProbeRun();
-  const { data: users } = useListUsersQuery();
-  const [username, setUsername] = useState<string | undefined>(undefined);
-  const [password, setPassword] = useState("");
-  const realmConfig = useMemo(() => KeyCloakService.GetKeycloakRealmConfig(), []);
-  const expiryScenario = useMemo(() => credentialExpiryScenario(), []);
-  const expiryRun = usePipelineRun(expiryScenario);
-  // The wait is quoted from the session as it was when the notice opened, so
-  // the figure the admin accepts is the one the run then uses.
-  const [pendingExpiry, setPendingExpiry] = useState<{ waitSeconds: number | null } | null>(null);
-
-  useEffect(
-    () => onRunningChange(isRunning || expiryRun.isRunning || identityRun.isRunning),
-    [isRunning, expiryRun.isRunning, identityRun.isRunning, onRunningChange],
-  );
-
-  const userOptions: OptionModel<string>[] = useMemo(
-    () =>
-      (users ?? [])
-        .filter((u) => u.username)
-        .map((u) => ({ key: u.id, value: u.username as string, label: u.username as string })),
-    [users],
-  );
-
-  const handleRunForProfile = () => {
-    if (!username || !password) return;
-    runForProfile(username, password);
-    setPassword("");
+  const copyAll = async () => {
+    const sections = families.map((f) => ({
+      title: t(`rework.selftest.families.${f.id}.title`),
+      steps: f.run.steps,
+    }));
+    if (await writeRichClipboard("", buildCombinedReport(sections, window.location.origin, new Date()))) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    }
   };
 
   return (
-    <section className={styles.testSection}>
-      <div className={styles.header}>
-        <h2 className={styles.title}>{t("rework.selftest.authz.title")}</h2>
-        <Button
-          color="primary"
-          variant="filled"
-          size="medium"
-          icon={{ category: "outlined", type: "admin_panel_settings", filled: false }}
-          onClick={runForMyself}
-          disabled={busy}
-        >
-          {isRunning ? t("rework.selftest.report.running") : t("rework.selftest.authz.runSelf")}
-        </Button>
-      </div>
-      <p className={styles.subtitle}>{t("rework.selftest.authz.subtitle")}</p>
-
-      {realmConfig && (
-        <div className={styles.testProfilePanel}>
-          <h3 className={styles.testProfileTitle}>{t("rework.selftest.authz.testProfile.title")}</h3>
-          <>
-            <div className={styles.testProfileFields}>
-              <Select
-                size="medium"
-                options={userOptions}
-                value={username}
-                onChange={setUsername}
-                label={t("rework.selftest.authz.testProfile.usernameLabel")}
-                placeholder={t("rework.selftest.authz.testProfile.usernamePlaceholder")}
-              />
-              <TextInput
-                type="password"
-                label={t("rework.selftest.authz.testProfile.passwordLabel")}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-              <Button
-                color="secondary"
-                variant="outlined"
-                size="medium"
-                onClick={handleRunForProfile}
-                disabled={busy || !username || !password}
-              >
-                {t("rework.selftest.authz.testProfile.run")}
-              </Button>
-            </div>
-            <p className={styles.testProfileCaption}>{t("rework.selftest.authz.testProfile.caption")}</p>
-          </>
-        </div>
-      )}
-
-      <StepReportPanel steps={steps} isRunning={isRunning} emptyLabel={t("rework.selftest.report.empty")} />
-
-      <section className={styles.testSection}>
-        <div className={styles.header}>
-          <h3 className={styles.title}>{t("rework.selftest.authz.identityTitle")}</h3>
-          <Button
-            color="primary"
-            variant="filled"
-            size="medium"
-            icon={{ category: "outlined", type: "check_circle", filled: false }}
-            onClick={identityRun.runIdentity}
-            disabled={busy}
-          >
-            {t("rework.selftest.authz.identityRun")}
-          </Button>
-        </div>
-        <p className={styles.subtitle}>{t("rework.selftest.authz.identityDescription")}</p>
-        <StepReportPanel
-          steps={identityRun.steps}
-          isRunning={identityRun.isRunning}
-          emptyLabel={t("rework.selftest.report.empty")}
-        />
-      </section>
-
-      {KeyCloakService.GetToken() && (
-        <section className={styles.testSection}>
-          <div className={styles.header}>
-            <h3 className={styles.testProfileTitle}>{t("rework.selftest.authz.expiry.title")}</h3>
+    <div className={styles.page}>
+      <PageHeader
+        title={t("rework.selftest.page.title")}
+        subtitle={t("rework.selftest.page.subtitle")}
+        actions={
+          <div className={styles.pageActions}>
             <Button
               color="secondary"
               variant="outlined"
               size="medium"
-              icon={{ category: "outlined", type: "schedule", filled: false }}
-              onClick={() =>
-                setPendingExpiry({ waitSeconds: expiryWaitSeconds(KeyCloakService.GetTokenSecondsLeft()) })
-              }
+              icon={{ category: "outlined", type: "content_copy", filled: false }}
+              onClick={() => void copyAll()}
+              disabled={!hasSteps || busy}
+            >
+              {copied ? t("rework.selftest.report.copied") : t("rework.selftest.page.copyAll")}
+            </Button>
+            <Button
+              color="primary"
+              variant="filled"
+              size="medium"
+              icon={{ category: "outlined", type: "rocket_launch", filled: false }}
+              onClick={() => void runAll()}
               disabled={busy}
             >
-              {t("rework.selftest.authz.expiry.run")}
+              {runningAll ? t("rework.selftest.report.running") : t("rework.selftest.page.runAll")}
             </Button>
           </div>
-          <p className={styles.testProfileCaption}>
-            {t("rework.selftest.authz.expiry.caption", { maxMinutes: MAX_HOLD_MINUTES })}
-          </p>
-          <ConfirmationDialog
-            open={pendingExpiry !== null}
-            title={t("rework.selftest.authz.expiry.warning.title")}
-            message={
-              pendingExpiry?.waitSeconds
-                ? t("rework.selftest.authz.expiry.warning.message", {
-                    minutes: Math.max(1, Math.round(pendingExpiry.waitSeconds / 60)),
-                  })
-                : t("rework.selftest.authz.expiry.warning.messageUnknownWait")
-            }
-            confirmLabel={t("rework.selftest.authz.expiry.warning.confirm")}
-            cancelLabel={t("common.cancel")}
-            onConfirm={() => {
-              setPendingExpiry(null);
-              expiryRun.start();
-            }}
-            onCancel={() => setPendingExpiry(null)}
-          />
-          <StepReportPanel
-            steps={expiryRun.steps}
-            isRunning={expiryRun.isRunning}
-            emptyLabel={t("rework.selftest.report.empty")}
-          />
-        </section>
-      )}
-    </section>
-  );
-}
-
-export default function SelfTestPage() {
-  const { t } = useTranslation();
-  const [functionalRunning, setFunctionalRunning] = useState(false);
-  const [authzRunning, setAuthzRunning] = useState(false);
-  const [webRunning, setWebRunning] = useState(false);
-  const busy = functionalRunning || authzRunning || webRunning;
-
-  return (
-    <div className={styles.page}>
-      <PageHeader title={t("rework.selftest.page.title")} />
-      <FunctionalSelfTestSection busy={busy} onRunningChange={setFunctionalRunning} />
-      <AuthzSelfTestSection busy={busy} onRunningChange={setAuthzRunning} />
-      <WebResearchSelfTestSection busy={busy} onRunningChange={setWebRunning} />
+        }
+      />
+      <ServiceNotice
+        icon="schedule"
+        color="info"
+        title={t("rework.selftest.page.durationTitle")}
+        description={t("rework.selftest.page.durationDescription")}
+      />
+      {families.map((family) => (
+        <FamilySection
+          key={family.id}
+          family={family}
+          busy={busy}
+          notice={
+            family.id === "authorization" ? (
+              <ServiceNotice
+                icon="info"
+                color="info"
+                title={t("rework.selftest.authz.notice.title")}
+                description={t("rework.selftest.authz.notice.description")}
+              />
+            ) : undefined
+          }
+        >
+          {family.id === "authorization" && <AuthorizationExtras busy={busy} onRunningChange={setExtrasRunning} />}
+        </FamilySection>
+      ))}
     </div>
   );
 }

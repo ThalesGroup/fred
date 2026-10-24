@@ -72,6 +72,9 @@ class _FakeChunkStore(BaseVectorStore):
     def ann_search(self, query, *, k, search_filter=None):
         raise NotImplementedError
 
+    def set_document_tag_ids(self, *, document_uid, tag_ids):
+        raise NotImplementedError
+
     def get_chunks_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
         if self._unsupported:
             raise NotImplementedError

@@ -17,6 +17,20 @@ import type { Reporter } from "./types";
 /** Throw from a step body to report it as skipped (a precondition was missing). */
 export class SkipStep extends Error {}
 
+/** A readable message for an Error or a generated-client failure (`{ status, data }`). */
+export function describeError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === "object" && "status" in err) {
+    const { status, data, error } = err as { status: unknown; data?: unknown; error?: unknown };
+    const body = data && typeof data === "object" && "detail" in data ? (data as { detail: unknown }).detail : data;
+    const detail = body ?? error;
+    const text =
+      detail === undefined || detail === null ? "" : typeof detail === "string" ? detail : JSON.stringify(detail);
+    return text ? `HTTP ${String(status)}: ${text}` : `HTTP ${String(status)}`;
+  }
+  return String(err);
+}
+
 /**
  * Run one named step: report running, then passed / failed / skipped with timing.
  * Returns the step's value, or null if it failed or was skipped — so a scenario
@@ -41,7 +55,7 @@ export async function runStep<T>(
     if (err instanceof SkipStep) {
       report({ id, title, status: "skipped", detail: err.message, optional, durationMs });
     } else {
-      report({ id, title, status: "failed", error: (err as Error)?.message ?? String(err), optional, durationMs });
+      report({ id, title, status: "failed", error: describeError(err), optional, durationMs });
     }
     return null;
   }

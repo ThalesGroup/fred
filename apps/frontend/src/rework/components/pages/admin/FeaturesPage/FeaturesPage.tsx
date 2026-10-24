@@ -28,17 +28,23 @@ import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Confirm
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/LocalizedDataTable.tsx";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
+import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { toIconType } from "@shared/utils/Type.ts";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
+import { useUserCapabilities } from "@rework/core/hooks/useUserCapabilities";
 import {
   useAdminCapabilitiesQuery,
   useLazyCapabilityRevokeImpactQuery,
   useListAllTeamsQuery,
   useSetCapabilityDefaultOnMutation,
   useSetModelReasoningMutation,
+  useModelDiscoveryQuery,
+  usePodChatDefaultsQuery,
+  usePlatformModelBindingQuery,
+  useRefreshModelDiscoveryMutation,
 } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import type { CapabilityEnablementItem } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { skipToken } from "@reduxjs/toolkit/query";
@@ -60,6 +66,9 @@ import {
   personalSpaceCount,
   requiresTeamSettings,
 } from "./capabilityEnablement";
+import { ModelIdentityCell } from "./ModelIdentityCell";
+import { ModelDiscoveryStatus, UnverifiedRuntimeWarning } from "./ModelDiscoveryStatus";
+import { partitionDiscoveredModels, splitModelSections } from "./modelSections";
 
 // "tool" (MCP servers, etc.) vs "agent" (a control-plane-side projection of
 // an agent template into this same catalog, CAPAB-01 RFC §8.6) vs "model" (a
@@ -84,11 +93,12 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   );
   const { t } = useTranslation();
   const { showSuccess, showError, showWarn } = useToast();
+  const { canAdmin } = useUserCapabilities(discoveringAgents);
   const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications", discoveringAgents);
   const kindFilters: CapabilityKind[] = applicationsEnabled ? [...CORE_KIND_FILTERS, "app"] : CORE_KIND_FILTERS;
 
   const legacy = useAdminCapabilitiesQuery(undefined, { skip: discoveringAgents });
-  const { data } = legacy;
+  const { data, refetch: refetchCapabilities } = legacy;
   const { isLoading, isError } = discoveringAgents ? discovery : legacy;
   // The full registry (`can_list_all_teams`), not the caller-scoped `/teams`: an admin
   // must see teams they don't belong to. The drawer only needs ids and names, so the
@@ -111,6 +121,8 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   const [matrixCapabilityId, setMatrixCapabilityId] = useState<string | null>(null);
   const [suspendedCapabilityId, setSuspendedCapabilityId] = useState<string | null>(null);
   const [platformBindingsPanelOpen, setPlatformBindingsPanelOpen] = useState(false);
+  const [noDefaultModalOpen, setNoDefaultModalOpen] = useState(false);
+  const [noDefaultModalPending, setNoDefaultModalPending] = useState(false);
   const [pendingDefaultOff, setPendingDefaultOff] = useState<CapabilityEnablementItem | null>(null);
   // #2470: an agent template whose dependencies are not default-on, waiting for
   // the admin to confirm granting them alongside it. Holds the capability the
@@ -119,7 +131,86 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   // admin (or another tab) in between is not re-granted.
   const [pendingGrantAll, setPendingGrantAll] = useState<CapabilityEnablementItem | null>(null);
   const [showAffected, setShowAffected] = useState(false);
+  const [modelTab, setModelTab] = useState<"manual" | "discovered">("manual");
+  const [modelDefaultsInitialTab, setModelDefaultsInitialTab] = useState<"platform" | "pods">("pods");
+  const [modelFilter, setModelFilter] = useState("");
   const activeKindFilter: CapabilityKind = !applicationsEnabled && kindFilter === "app" ? "tool" : kindFilter;
+  const { data: discoveryStatus, refetch: refetchDiscoveryStatus } = useModelDiscoveryQuery(undefined, {
+    skip: activeKindFilter !== "model",
+  });
+  const {
+    data: podDefaults,
+    isFetching: podDefaultsFetching,
+    isError: podDefaultsError,
+  } = usePodChatDefaultsQuery(undefined, { skip: activeKindFilter !== "model" });
+  const {
+    data: platformModelBinding,
+    isLoading: platformModelBindingLoading,
+    isError: platformModelBindingError,
+  } = usePlatformModelBindingQuery(undefined, {
+    skip: activeKindFilter !== "model",
+  });
+  const [refreshDiscovery, discoveryRefresh] = useRefreshModelDiscoveryMutation();
+  const [modelInventoryReady, setModelInventoryReady] = useState(false);
+  const [modelSourceCheckReady, setModelSourceCheckReady] = useState(false);
+  const [modelRefreshError, setModelRefreshError] = useState<string | null>(null);
+  const [unverifiedModelRuntimes, setUnverifiedModelRuntimes] = useState<{ runtime_id: string; base_url: string }[]>(
+    [],
+  );
+  const [verifiedModelSourceIds, setVerifiedModelSourceIds] = useState<string[] | null>(null);
+  const refreshModels = useCallback(async () => {
+    try {
+      const result = await refreshDiscovery().unwrap();
+      setModelRefreshError(result.refresh_error ?? null);
+      setUnverifiedModelRuntimes(result.unverified_runtimes ?? []);
+      setVerifiedModelSourceIds(result.verified_source_ids ?? null);
+      if (result.verified_source_ids?.length === 0 && !result.unverified_runtimes?.length) {
+        setModelTab("manual");
+      }
+    } catch {
+      setModelRefreshError(t("rework.admin.capabilities.discovery.refreshFailed"));
+      setUnverifiedModelRuntimes([]);
+      setVerifiedModelSourceIds(null);
+    }
+    await Promise.all([refetchCapabilities(), refetchDiscoveryStatus()]);
+  }, [refreshDiscovery, refetchCapabilities, refetchDiscoveryStatus, t]);
+  useEffect(() => {
+    if (activeKindFilter !== "model") return;
+    let mounted = true;
+    setModelInventoryReady(false);
+    setModelSourceCheckReady(false);
+    setVerifiedModelSourceIds(null);
+    setUnverifiedModelRuntimes([]);
+    void refetchDiscoveryStatus().then(
+      (result) => {
+        if (mounted && !(result && "error" in result && result.error)) setModelSourceCheckReady(true);
+      },
+      () => undefined,
+    );
+    void refreshModels().then(
+      () => {
+        if (mounted) setModelInventoryReady(true);
+      },
+      () => {
+        if (mounted) setModelInventoryReady(true);
+      },
+    );
+    return () => {
+      mounted = false;
+    };
+  }, [activeKindFilter, refetchDiscoveryStatus, refreshModels]);
+  const currentVerifiedSourceIds =
+    verifiedModelSourceIds ?? (modelSourceCheckReady ? (discoveryStatus?.verified_source_ids ?? null) : null);
+  const currentUnverifiedRuntimes =
+    modelInventoryReady && verifiedModelSourceIds !== null
+      ? unverifiedModelRuntimes
+      : (discoveryStatus?.unverified_runtimes ?? unverifiedModelRuntimes);
+  const discoveryConfigurationReady = modelSourceCheckReady || modelInventoryReady;
+  const verifiedDiscoverySources = currentVerifiedSourceIds !== null && currentUnverifiedRuntimes.length === 0;
+  const discoverySources = verifiedDiscoverySources
+    ? (discoveryStatus?.sources ?? []).filter((source) => currentVerifiedSourceIds?.includes(source.source_id))
+    : (discoveryStatus?.sources ?? []);
+  const newModelIds = new Set(discoverySources.flatMap((source) => source.new_ids ?? []));
   // Which row's mutation is in flight — NOT just a boolean. Disabling every
   // switch off `isTogglingDefault` used to include the one the admin just
   // clicked, which still holds native focus at that instant: yanking
@@ -156,6 +247,65 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   // after tools already shipped) — an absent value is a tool, same default
   // as the backend's own `CapabilityEnablementItem.kind`.
   const capabilities = allCapabilities.filter((cap) => (cap.kind ?? "tool") === activeKindFilter);
+  const { manual: manualModels, discovered: advertisedDiscoveredModels } = splitModelSections(capabilities);
+  const activeDiscoveredModels = verifiedDiscoverySources
+    ? advertisedDiscoveredModels.filter((model) =>
+        currentVerifiedSourceIds?.includes(model.model_discovery_source_id ?? ""),
+      )
+    : advertisedDiscoveredModels;
+  const { listed: discoveredModels, unavailableIds: unavailableDiscoveredIds } = partitionDiscoveredModels(
+    activeDiscoveredModels,
+    discoverySources,
+  );
+  const hasDiscovery =
+    discoveryConfigurationReady &&
+    (verifiedDiscoverySources
+      ? (currentVerifiedSourceIds?.length ?? 0) > 0
+      : Boolean(discoverySources.length || advertisedDiscoveredModels.length));
+  const visibleCapabilities = activeKindFilter === "model" && !hasDiscovery ? manualModels : capabilities;
+  useEffect(() => {
+    if (
+      !noDefaultModalPending ||
+      activeKindFilter !== "model" ||
+      isLoading ||
+      platformModelBindingLoading ||
+      podDefaultsFetching ||
+      (!podDefaults && !podDefaultsError) ||
+      !modelInventoryReady
+    )
+      return;
+    setNoDefaultModalPending(false);
+    if (
+      canAdmin &&
+      !isError &&
+      !platformModelBindingError &&
+      !podDefaultsError &&
+      !modelRefreshError &&
+      !platformModelBinding?.binding &&
+      podDefaults?.pods?.some((pod) => pod.reachable && !pod.effective_profile_id)
+    ) {
+      setNoDefaultModalOpen(true);
+    }
+  }, [
+    activeKindFilter,
+    canAdmin,
+    isError,
+    isLoading,
+    modelInventoryReady,
+    modelRefreshError,
+    noDefaultModalPending,
+    platformModelBinding?.binding,
+    platformModelBindingError,
+    platformModelBindingLoading,
+    podDefaults,
+    podDefaultsError,
+    podDefaultsFetching,
+  ]);
+  const visibleModels = (modelTab === "manual" ? manualModels : discoveredModels).filter((model) =>
+    [model.model_display_name, model.name, model.id, ...(model.model_runtime_ids ?? [])]
+      .filter(Boolean)
+      .some((value) => value!.toLocaleLowerCase().includes(modelFilter.trim().toLocaleLowerCase())),
+  );
   const rowIsUnused = (capability: CapabilityEnablementItem) =>
     hasAgentInstanceLifecycle(capability.kind) ? isUnused(capability) : enabledTeamCount(capability) === 0;
 
@@ -163,7 +313,8 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   // Every drawer mutation invalidates and refetches the list; a snapshot taken
   // at open time would keep the drawer's tri-state frozen while the table
   // behind it updates.
-  const matrixCapability = capabilities.find((cap) => cap.id === matrixCapabilityId) ?? null;
+  const matrixCapability =
+    capabilities.find((cap) => cap.id === matrixCapabilityId && !unavailableDiscoveredIds.has(cap.id)) ?? null;
   const suspendedCapability = capabilities.find((cap) => cap.id === suspendedCapabilityId) ?? null;
   const visiblePendingDefaultOff = applicationsEnabled || pendingDefaultOff?.kind !== "app" ? pendingDefaultOff : null;
   // Each kind loses something different when default-on goes off: agent
@@ -398,7 +549,12 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
           <Switch
             size="small"
             checked={cap.default_on}
-            disabled={readOnly || blockedOn || (isTogglingDefault && togglingCapabilityId !== cap.id)}
+            disabled={
+              readOnly ||
+              blockedOn ||
+              unavailableDiscoveredIds.has(cap.id) ||
+              (isTogglingDefault && togglingCapabilityId !== cap.id)
+            }
             onChange={() => onToggleDefault(cap)}
             aria-label={t("rework.admin.capabilities.col.defaultOn")}
           />
@@ -417,17 +573,25 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
     {
       field: "identity",
       label: t("rework.admin.capabilities.col.capability"),
-      size: "2.4fr",
-      cellRenderer: (cap) => (
-        <EntityIdentity
-          name={capabilityLabel(t, cap)}
-          icon={toIconType(cap.icon, "tune")}
-          sourceId={cap.source_id}
-          runtimeId={cap.runtime_id}
-          version={cap.public_version}
-          dimmed={rowIsUnused(cap)}
-        />
-      ),
+      size: "3fr",
+      cellRenderer: (cap) =>
+        cap.kind === "model" ? (
+          <ModelIdentityCell
+            capability={cap}
+            dimmed={false}
+            unavailable={unavailableDiscoveredIds.has(cap.id)}
+            isNew={newModelIds.has(cap.id)}
+          />
+        ) : (
+          <EntityIdentity
+            name={capabilityLabel(t, cap)}
+            icon={toIconType(cap.icon, "tune")}
+            sourceId={cap.source_id}
+            runtimeId={cap.runtime_id}
+            version={cap.public_version}
+            dimmed={rowIsUnused(cap)}
+          />
+        ),
     },
     // Reasoning activation (REASON-01 §5) — a models-only column, so it is
     // absent entirely from the tool/agent views rather than rendered blank.
@@ -438,7 +602,7 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
       ? [
           {
             label: t("rework.admin.capabilities.col.reasoning"),
-            size: "1fr",
+            size: "1.1fr",
             cellRenderer: (cap: CapabilityEnablementItem) => {
               // §5.3: no reasoning-capable profile means NO control at all, not
               // a disabled one. Aptitude is declared in models_catalog.yaml —
@@ -453,7 +617,10 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
                     <Switch
                       size="small"
                       checked={cap.reasoning_enabled ?? false}
-                      disabled={readOnly || (isTogglingReasoning && togglingReasoningId !== cap.id)}
+                      disabled={
+                        readOnly ||
+                        unavailableDiscoveredIds.has(cap.id) || (isTogglingReasoning && togglingReasoningId !== cap.id)
+                      }
                       onChange={() => void applyReasoning(cap, !(cap.reasoning_enabled ?? false))}
                       aria-label={t("rework.admin.capabilities.col.reasoning")}
                     />
@@ -466,31 +633,40 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
       : []),
     {
       label: t("rework.admin.capabilities.col.enabledTeams"),
-      // Wider than the other 1fr columns: the two reach badges (teams,
-      // personal spaces) need to sit side by side on one line, not wrap.
-      size: "1.6fr",
+      size: "1fr",
       cellRenderer: (cap) => {
         const count = enabledTeamCount(cap);
         const personal = hasAgentInstanceLifecycle(cap.kind) ? personalSpaceCount(cap) : 0;
-        // Personal-class reach is additive to the team count — "12 teams" over
-        // "40 personal spaces", one line each — because personal spaces are
-        // deliberately not in `total_team_count` (RFC §8.4). A zero part says
-        // nothing, so it is dropped; `null` personal means "reaches personal
-        // spaces, roster unknown".
-        const parts: string[] = [];
+        // Personal spaces have their own denominator; keep separate badges.
+        const parts: { icon: "groups" | "person"; value: string; label: string }[] = [];
         if (count !== null && count > 0) {
-          parts.push(t("rework.admin.capabilities.enabledTeams.teams", { count }));
+          parts.push({
+            icon: "groups",
+            value: String(count),
+            label: t("rework.admin.capabilities.enabledTeams.teams", { count }),
+          });
         }
         if (personal === null) {
-          parts.push(t("rework.admin.capabilities.enabledTeams.personalUnknown"));
+          parts.push({
+            icon: "person",
+            value: "?",
+            label: t("rework.admin.capabilities.enabledTeams.personalUnknown"),
+          });
         } else if (personal > 0) {
-          parts.push(t("rework.admin.capabilities.enabledTeams.personal", { count: personal }));
+          parts.push({
+            icon: "person",
+            value: String(personal),
+            label: t("rework.admin.capabilities.enabledTeams.personal", { count: personal }),
+          });
         }
         const stack = (
-          <span className={`${styles.countStack} ${rowIsUnused(cap) ? styles.dimmed : ""}`}>
+          <span
+            className={`${styles.countStack} ${rowIsUnused(cap) && !unavailableDiscoveredIds.has(cap.id) ? styles.dimmed : ""}`}
+          >
             {parts.map((part) => (
-              <span key={part} className={styles.count}>
-                {part}
+              <span key={part.icon} className={styles.count} aria-label={part.label} title={part.label}>
+                <Icon category="outlined" type={part.icon} />
+                {part.value}
               </span>
             ))}
           </span>
@@ -521,7 +697,7 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
       : [
           {
             label: t("rework.admin.capabilities.col.health"),
-            size: "1fr",
+            size: activeKindFilter === "model" ? "0.9fr" : "1fr",
             cellRenderer: (cap: CapabilityEnablementItem) => {
               // Resting health straight from the aggregate list: agents this
               // capability breaks AT REST (`suspended_instances`) vs. agents whose pod
@@ -531,7 +707,11 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
               const unknown = cap.health_unknown_instances ?? 0;
               return (
                 <div className={styles.centered}>
-                  {suspended > 0 ? (
+                  {unavailableDiscoveredIds.has(cap.id) ? (
+                    <span className={styles.healthUnavailable}>
+                      {t("rework.admin.capabilities.discovery.unavailable")}
+                    </span>
+                  ) : suspended > 0 ? (
                     // Clickable: opens the drill-down of which agents, in which team,
                     // this capability breaks at rest. A button, not a span, so
                     // it is keyboard-reachable and announced as actionable.
@@ -564,21 +744,21 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
     {
       field: "actions",
       label: t("rework.admin.capabilities.col.actions"),
-      // Wide enough for the one-line button at desktop widths.
-      size: "1.4fr",
+      // Keep the icon and label clear of the outline at desktop widths.
+      size: "1.55fr",
       cellRenderer: (cap) => (
         // Dimmed but never disabled: an unused capability is exactly the one an
         // admin opens to grant its first team.
-        <div className={`${styles.actionsCell} ${rowIsUnused(cap) ? styles.dimmed : ""}`}>
+        <div
+          className={`${styles.actionsCell} ${rowIsUnused(cap) && !unavailableDiscoveredIds.has(cap.id) ? styles.dimmed : ""}`}
+        >
           <Button
             color="on-surface"
             variant="outlined"
             size="small"
             icon={{ category: "outlined", type: "groups" }}
-            disabled={readOnly}
-            onClick={() => {
-              if (!readOnly) setMatrixCapabilityId(cap.id);
-            }}
+            onClick={() => setMatrixCapabilityId(cap.id)}
+            disabled={readOnly || unavailableDiscoveredIds.has(cap.id)}
           >
             {t("rework.admin.capabilities.manageTeams")}
           </Button>
@@ -628,7 +808,7 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
       return <div className={styles.centered} />;
     },
   }));
-  const rowCount = discoveringAgents ? agents.length : capabilities.length;
+  const rowCount = discoveringAgents ? agents.length : visibleCapabilities.length;
 
   return (
     <div className={styles.page}>
@@ -636,7 +816,8 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
         title={t("rework.admin.capabilities.title")}
         subtitle={t("rework.admin.capabilities.subtitle")}
         actions={
-          activeKindFilter === "model" && (
+          activeKindFilter === "model" &&
+          canAdmin && (
             <Button
               color="on-surface"
               variant="outlined"
@@ -644,7 +825,9 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
               icon={{ category: "outlined", type: "tune" }}
               disabled={readOnly}
               onClick={() => {
-                if (!readOnly) setPlatformBindingsPanelOpen(true);
+                if (readOnly) return;
+                setModelDefaultsInitialTab("pods");
+                setPlatformBindingsPanelOpen(true);
               }}
             >
               {t("rework.admin.platformModelBindings.openButton")}
@@ -658,7 +841,17 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
             variant="radio"
             aria-label={t("rework.admin.capabilities.kindFilter.aria")}
             selectedIndex={kindFilters.indexOf(activeKindFilter)}
-            onSelectedIndexChange={(index) => setKindFilter(kindFilters[index])}
+            onSelectedIndexChange={(index) => {
+              const next = kindFilters[index];
+              if (next === "model") {
+                setModelInventoryReady(false);
+                setModelSourceCheckReady(false);
+                setVerifiedModelSourceIds(null);
+                setUnverifiedModelRuntimes([]);
+              }
+              setKindFilter(next);
+              setNoDefaultModalPending(next === "model");
+            }}
             items={kindFilters.map((kind) => ({
               label: t(`rework.admin.capabilities.kindFilter.${kind}`),
             }))}
@@ -668,36 +861,135 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
 
       {isLoading && <p className={styles.status}>{t("rework.admin.capabilities.loading")}</p>}
       {isError && <p className={styles.statusError}>{t("rework.admin.capabilities.loadError")}</p>}
+      {activeKindFilter === "model" && !discoveryConfigurationReady && !isLoading && !isError && (
+        <p className={styles.status}>{t("rework.admin.capabilities.discovery.refreshing")}</p>
+      )}
 
-      {!isLoading && !isError && rowCount === 0 && (
-        <PageEmptyState
-          icon="tune"
-          message={t(
-            activeKindFilter === "agent"
-              ? "rework.admin.capabilities.emptyAgents"
-              : activeKindFilter === "model"
-                ? "rework.admin.capabilities.emptyModels"
-                : activeKindFilter === "app"
-                  ? "rework.admin.capabilities.emptyApps"
-                  : activeKindFilter === "knowledge_base"
-                    ? "rework.admin.capabilities.emptyKnowledgeBases"
-                    : "rework.admin.capabilities.empty",
+      {activeKindFilter === "model" && hasDiscovery && (
+        <div className={styles.modelToolbar}>
+          <ButtonGroup
+            size="2xs"
+            color="secondary"
+            variant="radio"
+            aria-label={t("rework.admin.capabilities.discovery.tabAria")}
+            selectedIndex={modelTab === "manual" ? 0 : 1}
+            onSelectedIndexChange={(index) => setModelTab(index === 0 ? "manual" : "discovered")}
+            items={[
+              { label: t("rework.admin.capabilities.discovery.manualSection") },
+              { label: t("rework.admin.capabilities.discovery.discoveredSection") },
+            ]}
+          />
+        </div>
+      )}
+
+      {activeKindFilter === "model" && hasDiscovery && modelTab === "discovered" && (
+        <ModelDiscoveryStatus
+          data={discoveryStatus ? { ...discoveryStatus, sources: discoverySources } : undefined}
+          discoveredSourceIds={discoveredModels.flatMap((model) =>
+            model.model_discovery_source_id ? [model.model_discovery_source_id] : [],
           )}
+          refreshing={discoveryRefresh.isLoading || !modelInventoryReady}
+          refreshError={discoveryRefresh.isError || Boolean(modelRefreshError)}
+          refreshErrorMessage={modelRefreshError}
+          unverifiedRuntimes={currentUnverifiedRuntimes}
+          verifiedSourceIds={currentVerifiedSourceIds ?? []}
         />
       )}
 
-      {!isLoading && !isError && rowCount > 0 && (
-        discoveringAgents ? (
-          <DataTable columns={discoveryColumns} data={agents} size="medium" />
-        ) : (
-          <DataTable columns={columns} data={capabilities} size="medium" />
-        )
+      {activeKindFilter === "model" && discoveryConfigurationReady && !hasDiscovery && (
+        <UnverifiedRuntimeWarning runtimes={currentUnverifiedRuntimes} />
       )}
+
+      {!isLoading &&
+        !isError &&
+        (activeKindFilter !== "model" || discoveryConfigurationReady) &&
+        rowCount === 0 &&
+        !(activeKindFilter === "model" && hasDiscovery) && (
+          <PageEmptyState
+            icon="tune"
+            message={t(
+              activeKindFilter === "agent"
+                ? "rework.admin.capabilities.emptyAgents"
+                : activeKindFilter === "model"
+                  ? "rework.admin.capabilities.emptyModels"
+                  : activeKindFilter === "app"
+                    ? "rework.admin.capabilities.emptyApps"
+                    : activeKindFilter === "knowledge_base"
+                      ? "rework.admin.capabilities.emptyKnowledgeBases"
+                      : "rework.admin.capabilities.empty",
+            )}
+          />
+        )}
+
+      {!isLoading &&
+        !isError &&
+        (activeKindFilter !== "model" || discoveryConfigurationReady) &&
+        (rowCount > 0 || (activeKindFilter === "model" && hasDiscovery)) &&
+        (discoveringAgents ? (
+          <DataTable columns={discoveryColumns} data={agents} size="medium" />
+        ) : activeKindFilter === "model" && hasDiscovery ? (
+          <section
+            className={styles.modelSection}
+            aria-label={t(`rework.admin.capabilities.discovery.${modelTab}Section`)}
+          >
+            <div className={styles.modelListToolbar}>
+              {modelTab === "discovered" && (
+                <Button
+                  color="on-surface"
+                  variant="outlined"
+                  size="small"
+                  icon={{ category: "outlined", type: "refresh" }}
+                  disabled={discoveryRefresh.isLoading || !modelInventoryReady}
+                  onClick={() => void refreshModels()}
+                >
+                  {t("rework.admin.capabilities.discovery.refresh")}
+                </Button>
+              )}
+              <div className={styles.modelFilter}>
+                <SearchInput
+                  size="small"
+                  ariaLabel={t("rework.admin.capabilities.discovery.filter")}
+                  clearAriaLabel={t("rework.admin.capabilities.discovery.clearFilter")}
+                  placeholder={t("rework.admin.capabilities.discovery.filter")}
+                  value={modelFilter}
+                  onChange={setModelFilter}
+                />
+              </div>
+            </div>
+            {visibleModels.length === 0 ? (
+              <p className={styles.status}>
+                {t(
+                  modelFilter
+                    ? "rework.admin.capabilities.discovery.noMatches"
+                    : `rework.admin.capabilities.discovery.empty${modelTab === "manual" ? "Manual" : "Discovered"}`,
+                )}
+              </p>
+            ) : (
+              <DataTable
+                columns={columns}
+                data={visibleModels}
+                rowKey={(capability) => capability.id}
+                rowClassName={(capability) =>
+                  unavailableDiscoveredIds.has(capability.id) ? styles.unavailableRow : undefined
+                }
+                size="medium"
+              />
+            )}
+          </section>
+        ) : (
+          <DataTable
+            columns={columns}
+            data={visibleCapabilities}
+            rowKey={(capability) => capability.id}
+            size="medium"
+          />
+        ))}
 
       {!readOnly && (
         <>
           <CapabilityTeamMatrixDrawer
             capability={matrixCapability}
+            unavailable={matrixCapability !== null && unavailableDiscoveredIds.has(matrixCapability.id)}
             // The FULL catalog, not the kind-filtered `capabilities`: an agent's
             // dependencies are tool rows the Agents tab has filtered out (#2408).
             allCapabilities={allCapabilities}
@@ -711,6 +1003,22 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
           <PlatformModelBindingsPanel
             open={platformBindingsPanelOpen}
             onClose={() => setPlatformBindingsPanelOpen(false)}
+            initialTab={modelDefaultsInitialTab}
+          />
+
+          <ConfirmationDialog
+            open={noDefaultModalOpen}
+            title={t("rework.admin.platformModelBindings.noPlatformDefaultTitle")}
+            message={t("rework.admin.platformModelBindings.noPlatformDefault")}
+            confirmLabel={t("rework.admin.platformModelBindings.chooseModel")}
+            showCancel={false}
+            dismissible={false}
+            onConfirm={() => {
+              setNoDefaultModalOpen(false);
+              setModelDefaultsInitialTab("pods");
+              setPlatformBindingsPanelOpen(true);
+            }}
+            onCancel={() => setNoDefaultModalOpen(false)}
           />
 
           <SuspendedInstancesDrawer

@@ -62,6 +62,7 @@ import {
 
 interface CapabilityTeamMatrixDrawerProps {
   capability: CapabilityEnablementItem | null;
+  unavailable?: boolean;
   /** The FULL unfiltered catalog, not the kind-filtered view: an agent's
    * `default_capability_ids` name tool capabilities, which the Agents tab has
    * already filtered out. Needed to tell whether each dependency is usable by
@@ -120,6 +121,7 @@ const PERSONAL_TOAST_KEYS = {
 
 export function CapabilityTeamMatrixDrawer({
   capability,
+  unavailable = false,
   allCapabilities,
   teams,
   teamsLoading,
@@ -465,6 +467,7 @@ export function CapabilityTeamMatrixDrawer({
   const selectPersonalChoice = (current: TeamCapabilityChoice, next: TeamCapabilityChoice) => {
     if (busy || next === current) return;
     if (next === "enabled") {
+      if (unavailable) return;
       // Required team settings still hard-block: there is no form on this
       // synthetic class row to fill them in with (§8.4).
       if (requiresSettings) return;
@@ -481,6 +484,7 @@ export function CapabilityTeamMatrixDrawer({
   const selectChoice = (teamId: string, current: TeamCapabilityChoice, next: TeamCapabilityChoice) => {
     if (busy || next === current) return;
     if (next === "enabled") {
+      if (unavailable) return;
       if (!capability) return;
       // #2470: a grant the backend would 409 (#2408) still must not reach the
       // wire — but instead of doing nothing, offer to grant the missing
@@ -516,6 +520,9 @@ export function CapabilityTeamMatrixDrawer({
         {capability && (
           <div className={styles.body}>
             <p className={styles.hint}>{t("rework.admin.capabilities.matrix.subtitle")}</p>
+            {unavailable && (
+              <p className={styles.hint}>{t("rework.admin.capabilities.discovery.unavailableGrantHint")}</p>
+            )}
 
             {status === "loading" && (
               <p className={`${styles.hint} ${styles.loadingHint}`} role="status">
@@ -567,7 +574,7 @@ export function CapabilityTeamMatrixDrawer({
                         // opens the "Enable all" confirmation. Only required
                         // team settings still hard-block, because this synthetic
                         // class row has no form to fill them in with.
-                        const enableBlocked = displayChoice !== "enabled" && requiresSettings;
+                        const enableBlocked = displayChoice !== "enabled" && (requiresSettings || unavailable);
                         return (
                           <li
                             key={PERSONAL_SCOPE_ROW_ID}
@@ -664,7 +671,10 @@ export function CapabilityTeamMatrixDrawer({
                                 onSelectedIndexChange={(index) => selectChoice(team.id, displayChoice, CHOICES[index])}
                                 items={CHOICES.map((target) => ({
                                   label: t(CHOICE_LABEL_KEY[target]),
-                                  disabled: busy || (target === "enabled" && isEditing),
+                                  disabled:
+                                    busy ||
+                                    (target === "enabled" &&
+                                      (isEditing || (unavailable && displayChoice !== "enabled"))),
                                 }))}
                               />
                             </div>

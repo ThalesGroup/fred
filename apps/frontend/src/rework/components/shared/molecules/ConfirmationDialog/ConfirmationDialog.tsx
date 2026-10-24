@@ -29,6 +29,7 @@ interface ConfirmationDialogProps {
   details?: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
+  showCancel?: boolean;
   criticalAction?: boolean;
   /** Override the cancel/dismiss button's emphasis — default "outlined", or
    *  "filled" when `criticalAction` is set. */
@@ -42,7 +43,7 @@ interface ConfirmationDialogProps {
   confirmVariant?: ButtonVariant;
   confirmDisabled?: boolean;
   /** False for a choice the user must make explicitly: neither the scrim nor
-   *  Escape closes the dialog, only its two buttons. */
+   *  Escape closes the dialog. */
   dismissible?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -55,6 +56,7 @@ export function ConfirmationDialog({
   details,
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
+  showCancel = true,
   criticalAction = false,
   cancelVariant,
   cancelColor,
@@ -75,7 +77,7 @@ export function ConfirmationDialog({
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const callbacks = useRef({ onCancel, dismissible });
   callbacks.current = { onCancel, dismissible };
-  // Focus lands on Cancel, the safe choice, once the portal has mounted the dialog.
+  // Focus lands on Cancel when present, otherwise on the single action.
   const attachDialog = useCallback((node: HTMLDivElement | null) => {
     dialogRef.current = node;
     node?.querySelector<HTMLElement>("[data-autofocus]")?.focus();
@@ -131,21 +133,24 @@ export function ConfirmationDialog({
             {details}
           </div>
           <div className={styles.actions}>
-            <Button
-              color={resolvedCancelColor}
-              variant={resolvedCancelVariant}
-              size="medium"
-              onClick={onCancel}
-              data-autofocus
-            >
-              {cancelLabel}
-            </Button>
+            {showCancel && (
+              <Button
+                color={resolvedCancelColor}
+                variant={resolvedCancelVariant}
+                size="medium"
+                onClick={onCancel}
+                data-autofocus
+              >
+                {cancelLabel}
+              </Button>
+            )}
             <Button
               color={criticalAction ? "error" : "primary"}
               variant={resolvedConfirmVariant}
               size="medium"
               disabled={confirmDisabled}
               onClick={onConfirm}
+              data-autofocus={showCancel ? undefined : true}
             >
               {confirmLabel}
             </Button>

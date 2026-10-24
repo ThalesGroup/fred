@@ -2154,7 +2154,9 @@ per-model off switch in place _before_ levels 3–4 widen exposure to it (RFC §
 | --------------------------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `CapabilityEnablementItem.thinking_profile_ids`     | `GET /admin/capabilities` | The model's `supports_thinking` profile ids, from the pod. **Empty ⇒ the admin row shows no reasoning control at all**                                                |
 | `CapabilityEnablementItem.reasoning_enabled`        | `GET /admin/capabilities` | Current activation; `false` when no row is stored                                                                                                                     |
-| `CapabilityEnablementItem.model_display_name`       | `GET /admin/capabilities` | The model's ops-authored label, carried from the catalog entry. The admin table prefers it over `name`, which gateway siblings split by `model_id` share (2026-09-14) |
+| `CapabilityEnablementItem.model_display_name`       | `GET /admin/capabilities` | Effective display name. A saved administrator override takes priority over the pod catalog label; `name` remains the upstream wire id. |
+| `CapabilityEnablementItem.model_display_name_override` | `GET /admin/capabilities` | Saved administrator label, if any. The admin UI edits this value and can clear it to restore the pod label or identifier fallback. |
+| `CapabilityEnablementItem.model_context_window_tokens`, `model_max_input_tokens`, `model_max_output_tokens` | `GET /admin/capabilities` | Optional advisory token limits from the pod inventory. Missing metadata renders no value and never changes enablement. |
 | `CapabilityCatalogEntry.model_thinking_profile_ids` | catalog projection        | Carried verbatim from `GET /agents/models-catalog`, same as `model_profile_ids`. Absent on a pre-REASON-01 pod ⇒ reads as "cannot reason", the safe direction         |
 | `ExecutionPreparation.reasoning_enabled_model_ids`  | prepare-execution         | The activation snapshot the runtime enforces against                                                                                                                  |
 
@@ -2773,11 +2775,10 @@ retries once on the concurrent first-insert race (two admins, or a client
 retry, both observing no row and both attempting an insert on the single-row
 primary key) rather than surfacing a raw `IntegrityError` as a bare 500.
 
-**Authorization:** `organization_authz.require_manage_capabilities`
-(`organization#can_manage_capabilities`, §51), the same shared gate as
-`GET /admin/capabilities` — no team dimension (this is a platform-wide
-routing assertion, not a per-team permission, same reasoning as
-`model_reasoning`).
+**Authorization:** `GET` uses `organization_authz.require_manage_capabilities`
+(`organization#can_manage_capabilities`, §51). `PUT` and `DELETE` require
+`can_manage_platform`, since advanced binding settings can redirect a pod's
+provider credential to a new host. The binding has no team dimension.
 
 **API:** `GET`/`PUT`/`DELETE /control-plane/v1/admin/platform/model-bindings`
 — no `{model_capability}` path segment (chat-only, nothing to select
@@ -3916,9 +3917,10 @@ still gates import/export, tasks and platform reset.
 surface moves off `can_manage_platform` onto `can_manage_capabilities`: the
 seven `/control-plane/v1/admin/capabilities*` routes (aggregate list,
 revoke-impact preview, per-team enable/disable, default-on, personal-scope,
-model reasoning) and the `GET`/`PUT`/`DELETE`
-`/control-plane/v1/admin/platform/model-bindings` trio, which is a panel of
-that same page. Paths are unchanged. `capability#can_manage` — the per-object
+model reasoning) and `GET /control-plane/v1/admin/platform/model-bindings`.
+The binding's `PUT` and `DELETE` require `can_manage_platform` because its
+advanced URL settings can redirect a provider credential. Paths are unchanged.
+`capability#can_manage` — the per-object
 gate every enablement mutation resolves through — is redefined from
 `platform_admin from organization` to `can_manage_capabilities from
 organization`; without that, a `feature_manager` would pass the org gate and

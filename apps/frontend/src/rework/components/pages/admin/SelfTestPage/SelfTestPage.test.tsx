@@ -33,15 +33,21 @@ const h = vi.hoisted(() => ({
     realm: string;
     clientId: string;
   } | null,
-  // The functional scenario is mocked to a known identity, so the pipeline-run
-  // mock can tell the two runs apart: the page now wraps the expiry one.
-  functionalScenario: async () => {},
+  provider: "keycloak" as "keycloak" | "oidc" | null,
+  pastedTokens: [] as string[],
+  teamsError: false,
+  campaignRunning: false,
+  recoveryNeeded: false,
+  campaignCalls: [] as Array<{ username?: string; password?: string; token?: string; recovery?: boolean }>,
   expiryScenario: async () => {},
   steps: {
     expiry: [{ id: "expiry-turn", title: "EXPIRY_STEP", status: "passed" as const }],
-    functional: [{ id: "create-folder", title: "FUNCTIONAL_STEP", status: "passed" as const }],
     authz: [{ id: "bootstrap-flags", title: "AUTHZ_STEP", status: "passed" as const }],
   },
+  familyRunning: false,
+  started: [] as string[],
+  // Families resolve in order; "knowledge" fails, which must not stop the next.
+  families: ["identity", "knowledge", "agents", "authorization"],
   factoryCalls: [] as (CredentialExpiryInput | undefined)[],
   expiryStarted: 0,
   expiryRunning: false,
@@ -70,37 +76,62 @@ vi.mock("../../../../features/pipeline/scenarios/credentialExpiryScenario", asyn
   },
 }));
 
-vi.mock("../../../../features/pipeline/scenarios/selfTestScenario", () => ({
-  selfTestScenario: h.functionalScenario,
-}));
-
 vi.mock("../../../../features/pipeline/usePipelineRun", () => ({
-  usePipelineRun: (scenario: Scenario) => {
-    const isExpiry = scenario !== h.functionalScenario;
-    return {
-      steps: isExpiry ? h.steps.expiry : h.steps.functional,
-      isRunning: isExpiry && h.expiryRunning,
-      start: () => {
-        if (!isExpiry) return;
-        h.expiryStarted += 1;
-        void scenario({} as never, () => {}, new AbortController().signal);
-      },
-    };
-  },
+  usePipelineRun: (scenario: Scenario) => ({
+    steps: h.steps.expiry,
+    isRunning: h.expiryRunning,
+    start: async () => {
+      h.expiryStarted += 1;
+      await scenario({} as never, () => {}, new AbortController().signal);
+    },
+  }),
 }));
 
-vi.mock("../../../../features/pipeline/useAuthzProbeRun", () => ({
-  useAuthzProbeRun: () => ({
-    steps: h.steps.authz,
-    isRunning: false,
-    runForMyself: vi.fn(),
-    runIdentity: vi.fn(),
-    runForProfile: vi.fn(),
+vi.mock("../../../../features/pipeline/families", () => ({
+  useSelfTestFamilies: () =>
+    h.families.map((id) => ({
+      id,
+      icon: "check_circle",
+      run: {
+        steps: [
+          { id: `${id}-step`, title: `${id.toUpperCase()}_STEP`, status: id === "knowledge" ? "failed" : "passed" },
+        ],
+        isRunning: h.familyRunning,
+        start: async () => {
+          h.started.push(id);
+          if (id === "knowledge") throw new Error("knowledge family crashed");
+        },
+      },
+    })),
+}));
+
+vi.mock("../../../../features/pipeline/useRoleCampaignRun", () => ({
+  useRoleCampaignRun: () => ({
+    steps: [],
+    isRunning: h.campaignRunning,
+    hasRecovery: h.recoveryNeeded,
+    runForProfile: async (username: string, password: string) => {
+      h.campaignCalls.push({ username, password });
+    },
+    runForToken: async (token: string) => {
+      h.campaignCalls.push({ token });
+    },
+    recover: async () => {
+      h.campaignCalls.push({ recovery: true });
+    },
   }),
 }));
 
 vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useListUsersQuery: () => ({ data: [{ id: "u-2", username: h.otherAccount }] }),
+  useListAllTeamsQuery: () => ({
+    data: [
+      { id: "team-a", name: "Team A" },
+      { id: "team-b", name: "Team B" },
+      { id: "personal-a", name: "Personal A" },
+    ],
+    isError: h.teamsError,
+  }),
 }));
 
 vi.mock("../../../../../security/KeycloakService", () => ({
@@ -108,6 +139,7 @@ vi.mock("../../../../../security/KeycloakService", () => ({
     GetUserName: () => h.signedIn,
     GetToken: () => "session-token",
     GetKeycloakRealmConfig: () => h.realmConfig,
+    GetIdentityProvider: () => h.provider,
     GetTokenSecondsLeft: () => h.tokenSecondsLeft,
   },
 }));
@@ -123,8 +155,15 @@ beforeEach(() => {
   h.factoryCalls.length = 0;
   h.expiryStarted = 0;
   h.expiryRunning = false;
+  h.familyRunning = false;
+  h.started.length = 0;
   h.tokenSecondsLeft = 285;
   h.realmConfig = { url: "https://auth.example/", realm: "test-realm", clientId: "web-app" };
+  h.provider = "keycloak";
+  h.teamsError = false;
+  h.campaignRunning = false;
+  h.recoveryNeeded = false;
+  h.campaignCalls.length = 0;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -144,6 +183,10 @@ function buttonLabelled(key: string): HTMLButtonElement {
   const button = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes(key));
   if (!button) throw new Error(`no button for ${key}`);
   return button;
+}
+
+function buttonsLabelled(key: string): HTMLButtonElement[] {
+  return Array.from(container.querySelectorAll("button")).filter((b) => b.textContent?.includes(key));
 }
 
 function passwordInput(): HTMLInputElement {
@@ -259,13 +302,17 @@ describe("SelfTestPage credential-expiry check", () => {
       root.render(<SelfTestPage />);
     });
 
-    expect(buttonLabelled("rework.selftest.functional.run").disabled).toBe(true);
-    expect(buttonLabelled("rework.selftest.authz.runSelf").disabled).toBe(true);
+    for (const button of buttonsLabelled("rework.selftest.family.run")) expect(button.disabled).toBe(true);
+    expect(buttonLabelled("rework.selftest.page.runAll").disabled).toBe(true);
+    expect(buttonLabelled("rework.selftest.page.copyAll").disabled).toBe(true);
     expect(buttonLabelled("rework.selftest.authz.expiry.run").disabled).toBe(true);
   });
 
   it("reports into its own panel, beside the authorization probe's", () => {
-    expect(container.textContent).toContain("AUTHZ_STEP");
+    expect(container.textContent).not.toContain("EXPIRY_STEP");
+    act(() => {
+      for (const button of container.querySelectorAll<HTMLButtonElement>('[aria-expanded="false"]')) button.click();
+    });
     expect(container.textContent).toContain("EXPIRY_STEP");
     expect(container.textContent).toContain("rework.selftest.authz.expiry.title");
   });
@@ -275,8 +322,8 @@ describe("SelfTestPage credential-expiry check", () => {
     expect(fr.rework.selftest.authz.expiry.title).toBe("Accès de l'agent après l'expiration de votre session");
   });
 
-  it("keeps expiry available for OIDC while hiding password login", () => {
-    // The realm is read once per mount, so this needs a fresh one.
+  it("offers a token instead of an account/password for OIDC", () => {
+    h.provider = "oidc";
     h.realmConfig = null;
     act(() => root.unmount());
     root = createRoot(container);
@@ -285,6 +332,141 @@ describe("SelfTestPage credential-expiry check", () => {
     });
 
     expect(container.textContent).toContain("rework.selftest.authz.expiry.title");
+    expect(container.textContent).toContain("rework.selftest.authz.testProfile.tokenLabel");
+    expect(container.textContent).not.toContain("rework.selftest.authz.testProfile.passwordLabel");
+    expect(container.textContent).not.toContain("rework.selftest.authz.testProfile.usernameLabel");
+    expect(en.rework.selftest.authz.testProfile.tokenCaption).toContain("API access token");
+    expect(fr.rework.selftest.authz.testProfile.tokenCaption).toContain("jeton d'accès API");
+  });
+
+  it("keeps the account and password form for Keycloak", () => {
+    expect(container.textContent).toContain("rework.selftest.authz.testProfile.usernameLabel");
+    expect(container.textContent).toContain("rework.selftest.authz.testProfile.passwordLabel");
+    expect(container.textContent).not.toContain("rework.selftest.authz.testProfile.tokenLabel");
+  });
+
+  it("hides both credential forms when authentication is disabled", () => {
+    h.provider = null;
+    h.realmConfig = null;
+    act(() => root.unmount());
+    root = createRoot(container);
+    act(() => root.render(<SelfTestPage />));
     expect(container.textContent).not.toContain("rework.selftest.authz.testProfile.title");
+  });
+});
+
+describe("SelfTestPage families", () => {
+  it("renders one section per family, in registry order", () => {
+    const order = Array.from(container.querySelectorAll("[data-family]")).map((s) => s.getAttribute("data-family"));
+    expect(order).toEqual(h.families);
+    expect(order[order.length - 1]).toBe("authorization");
+    expect(container.textContent).toContain("rework.selftest.families.knowledge.title");
+  });
+
+  it("explains the authorization checks and the separate two-account and expiry runs", () => {
+    const authorization = container.querySelector('[data-family="authorization"]');
+    expect(authorization?.textContent).toContain("rework.selftest.authz.notice.title");
+    expect(authorization?.textContent).toContain("rework.selftest.authz.notice.description");
+    expect(container.querySelector('[data-family="agents"]')?.textContent).not.toContain(
+      "rework.selftest.authz.notice.title",
+    );
+    expect(en.rework.selftest.authz.notice.description).toContain("second account");
+    expect(en.rework.selftest.authz.notice.description).toContain("Run all");
+    expect(fr.rework.selftest.authz.notice.description).toContain("second compte");
+    expect(fr.rework.selftest.authz.notice.description).toContain("Tout lancer");
+  });
+
+  it("announces how long a full run takes, in English and French", () => {
+    expect(container.textContent).toContain("rework.selftest.page.durationTitle");
+    expect(en.rework.selftest.page.durationTitle).toBe("A full run takes 5 to 10 minutes");
+    expect(fr.rework.selftest.page.durationTitle).toBe("Un run complet prend 5 à 10 minutes");
+  });
+
+  it("runs every family in order and keeps going after one fails", async () => {
+    await act(async () => {
+      buttonLabelled("rework.selftest.page.runAll").dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+    expect(h.started).toEqual(h.families);
+    // The long session-expiry check is never part of Run all.
+    expect(h.expiryStarted).toBe(0);
+  });
+
+  it("keeps the authorization extras inside the authorization family", () => {
+    const authorization = container.querySelector('[data-family="authorization"]');
+    expect(authorization?.textContent).toContain("rework.selftest.authz.expiry.title");
+    expect(container.querySelector('[data-family="knowledge"]')?.textContent).not.toContain(
+      "rework.selftest.authz.expiry.title",
+    );
+  });
+
+  it("names every family in English and French", () => {
+    for (const id of h.families) {
+      const key = id as keyof typeof en.rework.selftest.families;
+      expect(en.rework.selftest.families[key].title).toBeTruthy();
+      expect(fr.rework.selftest.families[key].title).toBeTruthy();
+    }
+  });
+});
+
+describe("automatic role campaign controls", () => {
+  it("offers only the automatic second-account campaign, with no expected-role or team selection", () => {
+    expect(container.textContent).not.toContain("rework.selftest.authz.roles.comparePlatform");
+    expect(container.textContent).not.toContain("rework.selftest.authz.roles.addTeam");
+    expect(container.textContent).not.toContain("rework.selftest.authz.testProfile.run");
+    expect(container.querySelectorAll('button[aria-haspopup="listbox"]')).toHaveLength(1);
+  });
+
+  const runKey = "rework.selftest.authz.campaign.run";
+  it("requires credentials and confirmation before changing roles", () => {
+    expect(buttonLabelled(runKey).disabled).toBe(true);
+    selectAnotherAccount();
+    typePassword("dedicated-password");
+    act(() => buttonLabelled(runKey).click());
+    expect(h.campaignCalls).toEqual([]);
+    expect(dialogText()).toContain("rework.selftest.authz.campaign.confirmation");
+    clickDialog("rework.selftest.authz.campaign.confirm");
+    expect(h.campaignCalls).toEqual([{ username: h.otherAccount, password: "dedicated-password" }]);
+    expect(passwordInput().value).toBe("");
+  });
+  it("does not launch when confirmation is dismissed", () => {
+    selectAnotherAccount();
+    typePassword("dedicated-password");
+    act(() => buttonLabelled(runKey).click());
+    clickDialog("common.cancel");
+    expect(h.campaignCalls).toEqual([]);
+  });
+  it("uses the separate Entra token and clears the input on confirmation", () => {
+    h.provider = "oidc";
+    h.realmConfig = null;
+    act(() => root.unmount());
+    root = createRoot(container);
+    act(() => root.render(<SelfTestPage />));
+    typePassword("second-access-token");
+    act(() => buttonLabelled(runKey).click());
+    clickDialog("rework.selftest.authz.campaign.confirm");
+    expect(h.campaignCalls).toEqual([{ token: "second-access-token" }]);
+    expect(passwordInput().value).toBe("");
+  });
+  it("excludes the campaign from Run all", async () => {
+    await act(async () => buttonLabelled("rework.selftest.page.runAll").click());
+    expect(h.campaignCalls).toEqual([]);
+  });
+  it("offers recovery and blocks another campaign", () => {
+    h.recoveryNeeded = true;
+    act(() => root.render(<SelfTestPage />));
+    selectAnotherAccount();
+    typePassword("dedicated-password");
+    expect(buttonLabelled(runKey).disabled).toBe(true);
+    expect(container.textContent).toContain("rework.selftest.authz.campaign.recoveryNotice");
+    act(() => buttonLabelled("rework.selftest.authz.campaign.recover").click());
+    expect(h.campaignCalls).toEqual([{ recovery: true }]);
+  });
+  it("locks other runs during campaign and recovery", () => {
+    h.campaignRunning = true;
+    act(() => root.render(<SelfTestPage />));
+    expect(buttonLabelled("rework.selftest.page.runAll").disabled).toBe(true);
+    expect(buttonLabelled("rework.selftest.authz.expiry.run").disabled).toBe(true);
   });
 });
