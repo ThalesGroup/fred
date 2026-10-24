@@ -1,12 +1,11 @@
 # Agent sandbox: k3d browser evidence
 
-These captures show real Fred conversations on `k3d-fred-secondary` on 24 October 2026. The test agent had only `code_sandbox` enabled. The guest used gVisor, SIG Agent Sandbox with a zero-replica WarmPool, and read-only rclone CSI mounts. The corpus and attachment files are synthetic. Each chat capture shows the grouped code activity; each detail capture shows the actual command and result.
+These captures show real Fred conversations on `k3d-fred-secondary` on 24-25 October 2026. The test agent had only `code_sandbox` enabled. The guest used gVisor, SIG Agent Sandbox with a zero-replica WarmPool, and read-only rclone CSI mounts. The corpus and attachment files are synthetic. The skill, PDF attachment and large corpus captures were refreshed on 25 October after the clean install and UI update. Each chat capture shows grouped code activity with useful one-line excerpts and `...` where code is omitted; each detail capture shows the actual command and result.
 
-The cluster was deleted and rebuilt with the factory `make k3d-up`, `make k3d-sandbox-up`, `make k3d-sandbox-files-demo` and `make k3d-app` targets. `make k3d-sandbox-smoke` passed Bash, Python, gVisor, zero warm replicas and a read-only CSI file read. No Kubernetes resource name or persistent volume was edited by hand.
+The cluster was deleted and rebuilt with the factory `make k3d-wipe`, `make k3d-up`, `make k3d-sandbox-smoke`, `make k3d-sandbox-files-demo` and `make k3d-app` targets. The smoke passed Bash, Python, gVisor, zero warm replicas and a read-only CSI file read. No Kubernetes resource name or persistent volume was edited by hand.
 
 | Scenario | Observed result | Chat | Tool detail |
 | --- | --- | --- | --- |
-| Grouped code trace | Consecutive calls form one expandable activity. Each row starts with Bash or Python and shows an ellipsized command preview. | [Narrow layout](73-code-preview-narrow.png) | [Selected command](73-code-preview-detail.png) |
 | Mounted platform skill and script | Bash listed the seven platform skills, read `tabular-evidence/SKILL.md`, and ran its mounted Python script against a CSV in the team corpus. All four commands succeeded after the concurrent view fix; totals were operations 75, research 120 and support 40. | [Chat and grouped calls](86-skill_clean-chat.png) | [Bash skill listing](86-skill_clean-ls-detail.png), [script and result](86-skill_clean-detail.png) |
 | Mounted skills, read-only | The agent read the platform `tabular-evidence` skill's Markdown in the same conversation, then a write under `/skills` failed with `EROFS` (errno 30). | [Chat](85-skill-readonly-chat.png) | [Denied write](85-skill-readonly-detail.png) |
 | Excel from team corpus | Python `openpyxl` opened the original workbook read-only, filtered Lyon and Paris, and returned weighted margins of 41.22% and 38.02%. | [Chat](81-excel-chat.png) | [Python and result](81-excel-detail.png) |
