@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from knowledge_flow_backend.features.content.sandbox_scope import AuthorizedCorpusSource
-from knowledge_flow_backend.features.content.sandbox_views import MAX_VIEW_REQUESTS_PER_MINUTE, SandboxViewStore
+from knowledge_flow_backend.features.content.sandbox_views import MAX_VIEW_REQUESTS_PER_MINUTE, MountedSource, SandboxViewStore
 from knowledge_flow_backend.models.sandbox_view_models import SandboxAttachmentOriginalRow, SandboxViewRow
 
 KEY = "a" * 64
@@ -73,6 +73,21 @@ async def test_open_view_requires_conversation_owner_and_starts_empty(store) -> 
     row, sources = await store.list_sources(KEY)
     assert row.user_id == USER.uid
     assert sources == []
+
+
+@pytest.mark.asyncio
+async def test_reopening_view_preserves_owner_and_existing_sources(store) -> None:
+    source = MountedSource(path="corpus/doc-1/report.txt", kind="corpus", uid="doc-1", name="report.txt", size=5)
+    await store._bind(KEY, "chat-1", "team-1", USER.uid, source)
+    await store._bind(KEY, "chat-1", "team-1", USER.uid, None)
+    row, sources = await store.list_sources(KEY)
+    assert row is not None and row.session_id == "chat-1"
+    assert sources == [source]
+
+    with pytest.raises(PermissionError):
+        await store._bind(KEY, "other-chat", "team-1", USER.uid, None)
+    with pytest.raises(PermissionError):
+        await store._bind(KEY, "chat-1", "other-team", USER.uid, None)
 
 
 @pytest.mark.asyncio

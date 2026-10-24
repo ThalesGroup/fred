@@ -16,6 +16,8 @@ from fred_core.security.rebac.rebac_engine import TeamPermission
 from fred_core.sql.async_session import make_session_factory, use_session
 from fred_pod.security.structure import KeycloakUser
 from sqlalchemy import delete, text
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -56,6 +58,7 @@ class MountedSource:
 class SandboxViewStore:
     def __init__(self, engine: AsyncEngine) -> None:
         self._sessions = make_session_factory(engine)
+        self._insert_view = postgresql_insert if engine.dialect.name == "postgresql" else sqlite_insert
 
     async def retain_attachment_original(
         self,
@@ -324,9 +327,9 @@ class SandboxViewStore:
         now = datetime.now(timezone.utc)
         async with use_session(self._sessions) as db:
             await db.execute(delete(SandboxViewRow).where(SandboxViewRow.expires_at < now))
-            row = await db.get(SandboxViewRow, key, with_for_update=True)
-            if row is None:
-                row = SandboxViewRow(
+            await db.execute(
+                self._insert_view(SandboxViewRow)
+                .values(
                     key=key,
                     session_id=session_id,
                     user_id=user_id,
@@ -337,8 +340,10 @@ class SandboxViewStore:
                     request_window_started_at=now,
                     request_window_count=0,
                 )
-                db.add(row)
-            elif row.session_id != session_id or row.user_id != user_id or row.team_id != team_id:
+                .on_conflict_do_nothing(index_elements=[SandboxViewRow.key])
+            )
+            row = await db.get(SandboxViewRow, key, with_for_update=True)
+            if row is None or row.session_id != session_id or row.user_id != user_id or row.team_id != team_id:
                 raise PermissionError("Sandbox view access denied")
             if source is not None:
                 sources = dict(row.sources)
