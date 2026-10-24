@@ -1901,7 +1901,6 @@
       },
       "toolLabels": {
         "codeSandbox": "Running code in an isolated space",
-        "searchSandboxFiles": "Searching available files",
         "selectCodeInput": "Preparing a file for analysis",
         "askUser": "Requesting information from the user",
         "readSkillFile": "Reading skill file",
@@ -1915,7 +1914,6 @@
         "fetchUrl": "Reading a web page"
       },
       "sandbox": {
-        "search": "Search criteria",
         "code": "Code",
         "result": "Result",
         "exitCode": "Exit code: {{code}}",

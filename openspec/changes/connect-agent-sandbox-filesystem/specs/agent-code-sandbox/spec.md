@@ -46,17 +46,6 @@ The system SHALL use the existing admin-gated `code_sandbox` capability for ever
 - **WHEN** an authorized agent invokes a published skill script
 - **THEN** it runs in the isolated conversation workload with no extra credentials, network access, or host mounts
 
-### Requirement: Selective sandbox file exploration
-The `code_sandbox` capability SHALL provide bounded path discovery and literal text search within its authorized mounts. Search SHALL return only short matching excerpts and paths, support case-insensitive word-separator variants, and never grant broader filesystem access than code execution in that conversation. Agent guidance SHALL prefer selective extraction from PDF, office and tabular files and SHALL keep executed source code and package versions out of the user-facing answer. The tool details remain available for inspection.
-
-#### Scenario: Large text document
-- **WHEN** an agent searches for a field in a large mounted text document
-- **THEN** the tool returns matching line excerpts and file paths within fixed result and scan limits instead of the whole document
-
-#### Scenario: File discovery
-- **WHEN** an agent searches mounted paths by glob without text
-- **THEN** it receives a bounded file listing from its authorized view
-
 ### Requirement: Bounded mounted file access
 The system SHALL enforce per-file, per-conversation, read-volume and path limits at the source-view boundary. It SHALL reject traversal, escaping links, special files, unsupported paths and arbitrary model-provided host paths. The mounted view SHALL be bound to one active conversation lease. The broker SHALL revoke that binding and remove scratch files on expiry or disposal.
 
