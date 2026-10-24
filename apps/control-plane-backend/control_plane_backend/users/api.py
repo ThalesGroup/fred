@@ -446,6 +446,9 @@ async def delete_user(
     ],
     prompt_store: Annotated[PromptStore, Depends(_get_prompt_store)],
     announcement_store: Annotated[AnnouncementStore, Depends(_get_announcement_store)],
+    preferences_store: Annotated[
+        UserPreferencesStore, Depends(_get_user_preferences_store)
+    ],
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
     await rebac.check_user_permission_or_raise(
@@ -461,7 +464,7 @@ async def delete_user(
         if not rebac.requires_active_accounts:
             raise AccountSuspensionDisabledError()
         await rebac.suspend_account(user_id)
-        await _get_user_preferences_store(request).delete(user_id)
+        await preferences_store.delete(user_id)
         await _mark_user_join_history_deleted(request, user_id)
         return
 
@@ -474,7 +477,7 @@ async def delete_user(
     # Before the account, so a failure here is retried rather than orphaned.
     await prompt_store.delete_favorites_for_user(user_id)
     await announcement_store.delete_seen_for_user(user_id)
-    await _get_user_preferences_store(request).delete(user_id)
+    await preferences_store.delete(user_id)
     await remove_user_avatar(user_id, deps)
     try:
         await delete_user_from_service(admin, user_id)

@@ -86,16 +86,18 @@ class PatchUserPreferences(BaseModel):
 def _to_preferences(row: UserPreferencesRow | None) -> UserPreferences:
     if row is None:
         return UserPreferences()
-    return UserPreferences(
-        initialized=True,
-        ui_theme_id=row.ui_theme_id,
-        theme_mode=row.theme_mode,
-        language=row.language,
-        sidebar_collapsed=row.sidebar_collapsed,
-        team_sort_mode=row.team_sort_mode,
-        agent_sort=row.agent_sort,
-        trace_expanded=row.trace_expanded,
-        pane_widths=row.pane_widths,
+    return UserPreferences.model_validate(
+        {
+            "initialized": True,
+            "ui_theme_id": row.ui_theme_id,
+            "theme_mode": row.theme_mode,
+            "language": row.language,
+            "sidebar_collapsed": row.sidebar_collapsed,
+            "team_sort_mode": row.team_sort_mode,
+            "agent_sort": row.agent_sort,
+            "trace_expanded": row.trace_expanded,
+            "pane_widths": row.pane_widths,
+        }
     )
 
 
