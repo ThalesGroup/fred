@@ -2,6 +2,20 @@
 
 ## Agent definitions, instances and configuration
 
+```mermaid
+sequenceDiagram
+    actor Operator
+    participant CP as Control Plane
+    participant AP as Agentic Pod
+    Operator->>CP: discover-agents
+    loop Each enabled runtime
+        CP->>AP: GET /agents/templates
+        AP-->>CP: Public definitions, tuning and capabilities
+    end
+    CP-->>Operator: JSON catalogue grouped by runtime
+```
+
+
 The operator command `control-plane discover-agents` reads public definitions
 live from the runtimes declared in `platform.runtime_catalog_sources`. Each enabled
 source receives `GET <base_url>/agents/templates`, with a 10-second timeout.

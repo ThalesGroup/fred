@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [DOC-3](#doc-3-vue-densemble-de-weaver) | Vue d'ensemble de Weaver | Texte et schémas rédigés | 01 |
 | [DOC-2](#doc-2-contrat-de-lespace-personnel-à-sa-place) | Contrat de l'espace personnel déplacé hors du catalogue SQL | À jour | A2 |
 | [DOC-1](#doc-1-carte-des-sources-exacte) | Carte des sources exacte pour Resources et l'autorisation | À jour | Carte des sources, README d'arc42 |
 | [F16](#f16-noms-et-usage-cli-exacts) | Noms, commentaires et usage CLI exacts | Tests ciblés validés ; validation finale | README du composant, 09 (bloc généré) |
@@ -995,3 +996,18 @@ n'est pas une validation fonctionnelle de l'ensemble des changements Swift.
   `yes()` réutilisé. Clippy, fmt et `cargo test` verts ; tests d'intégration non
   lancés. arc42 (bloc généré A3, matrice 03a, décision D23) reporté à un lot séparé.
 
+
+## DOC-3 Vue d'ensemble de Weaver
+
+- 2026-10-23 : à la demande de Dimi, le chapitre 1 contient uniquement le
+  diagramme général : UI, Control Plane, Knowledge Flow, Agentic Pod, Temporal
+  et Shared Infrastructure. Les liens invisibles organisent les blocs sans
+  représenter les interactions. Les séquences seront traitées ultérieurement.
+- Aucun changement de code ou de déploiement ; aucun build ou test lancé.
+
+- Premier incrément de diagrammes ajouté sur accord de Dimi : découverte opérateur
+  dans le chapitre 6 ; séquence de traitement et états d'une tentative dans le
+  chapitre 5. Chapitre 1 conservé inchangé. États relus dans models/store,
+  publication et dispatch : pending, running, succeeded, failed ; les retries
+  d'activités restent dans running, la relance explicite crée une nouvelle tentative.
+  Aucun build, test ou validation du rendu Mermaid exécuté.

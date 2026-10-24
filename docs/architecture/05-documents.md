@@ -170,6 +170,73 @@ See the [Resources journey](02-user-journeys.md#priya-opens-resources),
 
 ## Processing a stored original
 
+### Component interactions
+
+Successful processing of an upload with a selected profile:
+
+```mermaid
+sequenceDiagram
+    participant UI as UI
+    participant CP as Control Plane
+    participant T as Temporal
+    participant KF as Knowledge Flow
+    UI->>CP: Upload document with processing profile
+    CP->>CP: Store original and record processing request
+    CP-->>UI: Document and processing identifiers
+    CP->>T: Start ProcessPush workflow
+    T->>KF: Run processing activities
+    KF->>CP: Claim work and request original
+    CP-->>KF: Processing context and original
+    KF->>KF: Prepare, extract and index
+    KF->>CP: Submit output manifest
+    CP->>CP: Verify outputs and access, publish result
+    CP-->>KF: Publication confirmed
+    UI->>CP: Read processing status
+    CP-->>UI: succeeded / done
+```
+
+Storage operations and intermediate stage callbacks are detailed in the
+[document journey](02a-document-journey.md#follow-the-document).
+
+### Processing attempt states
+
+These are the persisted `status` values for one attempt:
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending: Processing request committed
+    pending --> running: First activity claims preparation
+    pending --> failed: Delivery deadline or workflow failure
+    running --> running: Next stage or activity retry
+    running --> succeeded: Final manifest verified and published
+    running --> failed: Execution deadline or workflow failure
+    succeeded --> [*]
+    failed --> [*]
+
+    note right of pending
+        stage = queued
+    end note
+    note right of running
+        stage = preparation, extraction, indexing
+        Activity retries keep the same processing attempt.
+    end note
+    note right of succeeded
+        stage = done
+    end note
+    note right of failed
+        An explicit retry creates a new pending attempt.
+        retry_of references this failed attempt.
+        The original document is retained.
+    end note
+```
+
+State definitions: [models.rs](../../apps/control-plane/src/processing/models.rs).
+Transitions: [admission and claims](../../apps/control-plane/src/processing/store.rs),
+[publication](../../apps/control-plane/src/processing/publication.rs),
+[dispatch and deadlines](../../apps/control-plane/src/processing/dispatch.rs).
+
+### Processing behavior
+
 An upload with a profile publishes the original and its processing intent in one
 transaction. An editor can also process a stored-only document or explicitly retry
 a failed attempt without another file transfer. One active attempt and one linked
