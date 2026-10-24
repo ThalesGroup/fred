@@ -22,15 +22,31 @@ def upgrade() -> None:
         "users_preferences",
         sa.Column("user_id", sa.String(), primary_key=True),
         sa.Column("ui_theme_id", sa.String(length=32), nullable=True),
-        sa.Column("theme_mode", sa.String(length=6), nullable=False, server_default="system"),
-        sa.Column("language", sa.String(length=2), nullable=True),
-        sa.Column("sidebar_collapsed", sa.Boolean(), nullable=False, server_default=sa.false()),
-        sa.Column("team_sort_mode", sa.String(length=6), nullable=False, server_default="recent"),
-        sa.Column("agent_sort", sa.String(length=20), nullable=False, server_default="name"),
-        sa.Column("trace_expanded", sa.Boolean(), nullable=True),
-        sa.Column("pane_widths", sa.JSON(), nullable=False, server_default=sa.text("'{}'")),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")
+            "theme_mode", sa.String(length=6), nullable=False, server_default="system"
+        ),
+        sa.Column("language", sa.String(length=2), nullable=True),
+        sa.Column(
+            "sidebar_collapsed", sa.Boolean(), nullable=False, server_default=sa.false()
+        ),
+        sa.Column(
+            "team_sort_mode",
+            sa.String(length=6),
+            nullable=False,
+            server_default="recent",
+        ),
+        sa.Column(
+            "agent_sort", sa.String(length=20), nullable=False, server_default="name"
+        ),
+        sa.Column("trace_expanded", sa.Boolean(), nullable=True),
+        sa.Column(
+            "pane_widths", sa.JSON(), nullable=False, server_default=sa.text("'{}'")
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
     )
 

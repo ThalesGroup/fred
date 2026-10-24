@@ -31,11 +31,17 @@ class UserPreferencesRow(Base):
     ui_theme_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     theme_mode: Mapped[str] = mapped_column(String(6), nullable=False, default="system")
     language: Mapped[str | None] = mapped_column(String(2), nullable=True)
-    sidebar_collapsed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    team_sort_mode: Mapped[str] = mapped_column(String(6), nullable=False, default="recent")
+    sidebar_collapsed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    team_sort_mode: Mapped[str] = mapped_column(
+        String(6), nullable=False, default="recent"
+    )
     agent_sort: Mapped[str] = mapped_column(String(20), nullable=False, default="name")
     trace_expanded: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    pane_widths: Mapped[dict[str, int]] = mapped_column(JSON, nullable=False, default=dict)
+    pane_widths: Mapped[dict[str, int]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )
