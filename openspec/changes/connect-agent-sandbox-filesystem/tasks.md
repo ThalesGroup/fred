@@ -16,6 +16,7 @@
 - [ ] 3.1 Preserve current skill and document behavior with `code_sandbox` off and declare dependency for script-based skills; verify ReAct, Deep parent and child baseline tests.
 - [ ] 3.2 Connect Deep's logical `CompositeBackend` and ReAct sandbox tools to the mounted path contract without copying source files; remove the selection tool and verify browsing does not start a workload before execution.
 - [ ] 3.3 Gate Deep native `execute`, ReAct code execution and skill scripts through the same conversation sandbox lease and isolation profile; verify capability absence, Python file analysis and scratch reuse tests.
+- [x] 3.4 Guide `execute_code` to use selective Bash or Python queries over mounted files, then verify a real conversation keeps large source content out of the tool result and final answer.
 
 ## 4. Integration and close-out
 

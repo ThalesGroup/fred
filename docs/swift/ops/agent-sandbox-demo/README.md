@@ -12,6 +12,8 @@ The cluster inventory was checked with `kubectl --context k3d-fred-secondary get
 
 | Scenario | Observation | Chat | Tool detail |
 | --- | --- | --- | --- |
+| Small 4, code-only selective text lookup | With `execute_code` as the sole sandbox tool, a fresh conversation used two Bash calls: a bounded path discovery and a case-insensitive separator-aware `grep`. It returned one matching line, 8538, from the 1.1 MB corpus original and answered with the owner, date and risk. | [Chat](69-code-only-small-grep-chat.png) | [Code and one-line result](69-code-only-small-grep-code-tool.png) |
+| Medium 3.5, code-only Excel calculation | In a separate conversation, five `execute_code` calls located the workbook and computed weighted margins. The final Python program used `openpyxl` in read-only mode, filtered Lyon and Paris rows, and printed only the two requested percentages: 41.22% and 38.02%. | [Chat](71-code-only-medium-xlsx-final-chat.png) | [Code](71-code-only-medium-xlsx-final-code-tool.png), [result](71-code-only-medium-xlsx-final-code-result.png) |
 | Small 4, fresh team corpus | Bash `find` traversed the fixed `pages/block-00/block-00/page-0000` WebDAV tree; `grep -n` found `POLARIS-7319` on line 8538 with the correct owner, deadline and risk. | [Chat](60-fresh-small-paged-corpus-chat.png) | [Code](60-fresh-small-paged-corpus-tool.png), [result](60-fresh-small-paged-corpus-tool-result.png) |
 | Small 4, same conversation, mounted Python skill | Read `/skills/tabular-evidence/SKILL.md`, found the mounted CSV and ran `/skills/tabular-evidence/analyze.py`. It returned operations 75, research 120, support 40 and physical CSV line 5. | [Chat](61-fresh-small-python-skill-chat.png) | [Code](61-fresh-small-python-skill-tool.png), [result](61-fresh-small-python-skill-tool-result.png) |
 | Medium 3.5, separate conversation, Excel | Used pandas on the original mounted workbook, combined the sheets and computed weighted margins: Lyon 41.22%, Paris 38.02%. | [Chat](62-fresh-medium-xlsx-chat.png) | [Code](62-fresh-medium-xlsx-tool.png), [result](62-fresh-medium-xlsx-tool-result.png) |
@@ -19,6 +21,8 @@ The cluster inventory was checked with `kubectl --context k3d-fred-secondary get
 | Large 4, separate conversation, isolation probe | Found no service-account token, `kubectl`, Docker socket or `/host` path. Writes to `/inputs` and `/skills` failed with read-only filesystem errors; TCP connections to the local Kubernetes API IP and metadata IP were refused. These are local probe results, not a complete isolation proof. | [Chat](64-fresh-large-security-chat.png) | [Code](64-fresh-large-security-tool.png), [result](64-fresh-large-security-tool-result.png) |
 
 The fixed page path remains stable when a library grows from 100 to 101 pages; a focused WebDAV test verifies this boundary. The authorized document is checked on each read. A full-page rclone scan and FGA latency at thousands of concurrent users have not yet been measured.
+
+The selective-query guidance is model-facing advice rather than enforced query planning. Exploratory Small 4 runs needed three and eleven code calls before the grep-first guidance produced the two-call result above. The eleven-call run first tried `rg`, which was absent from the guest image, then searched Office files before using `grep`. An exploratory Medium 3.5 run printed five filtered spreadsheet rows; after the output guidance was tightened, the final run printed only the two aggregates. These are individual runs, not performance distributions.
 
 ## What worked
 

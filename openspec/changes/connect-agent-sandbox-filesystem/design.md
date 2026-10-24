@@ -22,6 +22,8 @@ See proposal.md. The broker currently accepts code only and retains a workload p
 
 6. **Attachment originals.** New fast-ingested attachments retain their original uploaded object in existing private content storage rather than discarding it. This is the source object, not a second file staged inside the VM. Retrieval checks uploader ownership and persisted session membership. Attachment and session erasure remove the object. Legacy attachments continue through their current text or tabular paths and report that original bytes are unavailable for mounted analysis.
 
+7. **Selective code queries.** Keep `execute_code` as the sole sandbox tool. Its model-facing guidance asks the agent to discover likely filenames, search text with literal or escaped case-insensitive spelling-variant patterns, bound both match count and excerpt length, and filter document pages or tabular rows before printing results. The code and output remain in tool details; the final answer summarizes the finding. This is guidance for generated Bash or Python, not a new search service or a security boundary. Broker output and resource limits still apply.
+
 ## Risks / Trade-offs
 
 - [A shared filesystem increases the Kata host/guest interface] -> Expose only a narrow read-only view through an approved volume and verify the selected runtime's volume implementation; never expose a host path or raw bucket.
