@@ -25,7 +25,7 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useContext, useRef } from "react";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
 import { uiThemeLabel, type UiTheme } from "../../../../app/uiThemes.ts";
-import { saveUserPreference } from "../../../../app/userPreferences.ts";
+import { saveUserPreference, updateCurrentUserPreference } from "../../../../app/userPreferences.ts";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { Link, useNavigate } from "react-router-dom";
@@ -69,6 +69,7 @@ export default function UserSettingsPage() {
     void saveUserPreference({ language })
       .then(() => {
         confirmedLanguage.current = language;
+        updateCurrentUserPreference({ language });
       })
       .catch((error) => {
         if (change === languageChange.current) {

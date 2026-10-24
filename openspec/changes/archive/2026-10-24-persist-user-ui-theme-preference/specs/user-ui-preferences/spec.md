@@ -38,37 +38,47 @@ The control plane SHALL let an authenticated person read and partially update on
 - **WHEN** a person's account is deleted through the Control Plane
 - **THEN** that person's preferences record is deleted with the account
 
-### Requirement: Existing browser choices can seed a new record
+### Requirement: Database values alone initialize personal preferences
 
-After authentication, when no database record exists, the frontend SHALL import valid legacy display choices still present in that browser into the authenticated person's record and mark the browser import complete only after a successful save. It SHALL NOT seed another person's record from those legacy keys or overwrite an existing database record with browser data. Browser data that has already been erased SHALL use defaults. The migration note SHALL make clear that legacy keys do not identify their owner on a shared browser.
+After authentication, the frontend SHALL initialize personal display preferences only from the authenticated person's database response. An absent record or failed read SHALL apply documented defaults. Existing personal browser values SHALL NOT seed the database, initialize signed-in preferences or act as a read-failure fallback. Personal display controls SHALL use in-memory state after the database read and SHALL NOT mirror those preferences to browser storage. Resizable pane widths remain browser-local.
 
 #### Scenario: First load after upgrade
 
-- **WHEN** a person signs in with no database record and their browser still holds a valid theme and language choice
-- **THEN** those choices seed their database record and are restored on a later browser with cleared storage
+- **WHEN** a person signs in with no database record and their browser still holds an old theme or language choice
+- **THEN** signed-in content uses the platform theme default, system mode, navigator language and other documented defaults, and no import PATCH occurs
 
-#### Scenario: Existing database choice wins
+#### Scenario: Saved database choice
 
-- **WHEN** a person signs in with a saved database record and older browser values
-- **THEN** the database values win and the older values do not overwrite the record
+- **WHEN** a person signs in with a saved database record and different browser values
+- **THEN** the database values initialize signed-in content and the browser values do not overwrite the record
 
-#### Scenario: Browser was already wiped
+#### Scenario: Failed database read
 
-- **WHEN** neither a database record nor legacy browser choices exist
-- **THEN** the frontend uses the platform theme default, system mode, navigator language and other documented defaults
+- **WHEN** the preference API read fails while the browser retains an older personal choice
+- **THEN** signed-in content uses defaults for that load, without applying the browser choice or writing it to the database
+
+#### Scenario: Failed display-preference save
+
+- **WHEN** a sidebar or sort change cannot be saved after a bounded transient retry
+- **THEN** the control returns to the last confirmed database value rather than presenting an unsaved choice as durable
+
+#### Scenario: Help language during a preference outage
+
+- **WHEN** a person switches Help Center language while the preference API is unavailable
+- **THEN** the documentation changes language immediately and a warning explains that the profile choice was not saved
 
 ### Requirement: Preferences resolve before application content paints
 
-The frontend SHALL resolve the signed-in person's database preferences against the current installed and offered theme catalog before painting application content. It MAY use a browser cache scoped by authenticated user ID while loading. It SHALL NOT apply another person's cached choice to the signed-in person's content. On a failed preference read, it SHALL use that person's scoped cache when available, otherwise defaults, and retry on a later load.
+The frontend SHALL resolve the signed-in person's database preferences against the current installed and offered theme catalog before painting application content. Before authentication, the static theme boot MAY use public platform settings and OS color mode but SHALL NOT read a personal browser theme or mode choice. On a failed preference read, the frontend SHALL use defaults and retry on a later load.
 
 #### Scenario: New browser
 
-- **WHEN** a person signs in from a browser without a scoped cache
+- **WHEN** a person signs in from a new browser
 - **THEN** the frontend loads the database preferences before painting application content
 
 #### Scenario: Shared browser
 
-- **WHEN** another person signs in on a browser with a previous person's scoped cache
+- **WHEN** another person signs in on a browser with a previous person's local choices
 - **THEN** the new person's application content uses only the new person's preferences or defaults
 
 ### Requirement: Theme IDs remain stable across restarts

@@ -32,6 +32,7 @@ vi.mock("react-i18next", () => ({
 vi.mock("../../../../app/userPreferences.ts", () => ({
   persistUserPreference: vi.fn(),
   saveUserPreference: vi.fn(),
+  updateCurrentUserPreference: vi.fn(),
 }));
 
 vi.mock("../../../../security/KeycloakService.ts", () => ({

@@ -21,8 +21,9 @@ No configuration changes are required.
 
 Apply the Control Plane Alembic migration that creates `users_preferences` before
 rolling out the new Control Plane and frontend images. No existing table is
-renamed. Existing users start without a row. Their first authenticated load can
-import valid display choices still present in that browser's localStorage.
+renamed. Existing users start without a row and see the documented defaults.
+They choose their durable display settings again after rollout. Browser values
+from an older deployment are ignored and do not populate the new table.
 
 ## Validation
 
@@ -38,9 +39,8 @@ saved after the migration.
 
 ## Limitations
 
-Browser values already erased before the upgrade cannot be recovered. Legacy
-localStorage keys do not identify their owner, so the first account to import
-from a shared browser may receive another person's display choices. Users can
-change these choices after sign-in. Resizable pane widths stay in localStorage,
-return to their defaults if browser storage is cleared, and are clamped to the
-current viewport when rendered.
+Personal choices from old browser storage are not migrated. An absent row or
+failed preference read uses defaults for that load; the next load retries the
+database read. Resizable pane widths stay in localStorage, return to their
+defaults if browser storage is cleared, and are clamped to the current viewport
+when rendered.

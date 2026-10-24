@@ -13,21 +13,17 @@
 // limitations under the License.
 
 import { createContext, PropsWithChildren, useEffect, useRef, useState } from "react";
-import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { ApplicationContextStruct, ThemeMode } from "./ApplicationContextStruct.tsx";
 import { getPlatformUiThemes } from "../common/config.tsx";
 import { useFrontendConfigQuery } from "../slices/controlPlane/controlPlaneApiEnhancements";
-import { saveUserPreference, persistUserPreference } from "./userPreferences";
-import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "../rework/core/hooks/crossSessionRefresh";
 import {
-  cachePlatformUiThemes,
-  computeDarkMode,
-  offeredUiThemes,
-  resolveUiTheme,
-  THEME_MODE_STORAGE_KEY,
-  UI_THEME_STORAGE_KEY,
-  UiTheme,
-} from "./uiThemes.ts";
+  saveUserPreference,
+  persistUserPreference,
+  updateCurrentUserPreference,
+  useCurrentUserPreference,
+} from "./userPreferences";
+import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "../rework/core/hooks/crossSessionRefresh";
+import { cachePlatformUiThemes, computeDarkMode, offeredUiThemes, resolveUiTheme, UiTheme } from "./uiThemes.ts";
 
 /**
  * Our application context.
@@ -42,15 +38,12 @@ const getSystemDarkMode = (): boolean => {
 };
 
 export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useLocalStorageState(
-    "ApplicationContextProvider.isSidebarCollapsed",
-    false,
-  );
+  const isSidebarCollapsed = useCurrentUserPreference("sidebar_collapsed", false);
   // Default to "system" so the first load honours the OS preference (prefers-color-scheme);
   // an explicit Light/Dark/System choice is also saved in the user's profile.
-  const [themeMode, setStoredThemeMode] = useLocalStorageState<ThemeMode>(THEME_MODE_STORAGE_KEY, "system");
+  const themeMode = useCurrentUserPreference("theme_mode", "system") as ThemeMode;
   // null = no choice yet, so the platform default can apply (see resolveUiTheme).
-  const [storedUiTheme, setStoredUiTheme] = useLocalStorageState<UiTheme | null>(UI_THEME_STORAGE_KEY, null);
+  const storedUiTheme = useCurrentUserPreference("ui_theme_id", null);
   const confirmedMode = useRef(themeMode);
   const confirmedTheme = useRef(storedUiTheme);
   const modeChange = useRef(0);
@@ -77,20 +70,19 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
 
   const toggleSidebar = () => {
     const next = !isSidebarCollapsed;
-    setIsSidebarCollapsed(next);
     persistUserPreference({ sidebar_collapsed: next });
   };
 
   const setThemeMode = (mode: ThemeMode, onError?: (error: unknown) => void) => {
     const change = ++modeChange.current;
-    setStoredThemeMode(mode);
+    updateCurrentUserPreference({ theme_mode: mode });
     void saveUserPreference({ theme_mode: mode })
       .then(() => {
         confirmedMode.current = mode;
       })
       .catch((error) => {
         if (change === modeChange.current) {
-          setStoredThemeMode(confirmedMode.current);
+          updateCurrentUserPreference({ theme_mode: confirmedMode.current });
           onError?.(error);
         }
       });
@@ -98,14 +90,14 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
 
   const setUiTheme = (theme: UiTheme, onError?: (error: unknown) => void) => {
     const change = ++themeChange.current;
-    setStoredUiTheme(theme);
+    updateCurrentUserPreference({ ui_theme_id: theme });
     void saveUserPreference({ ui_theme_id: theme })
       .then(() => {
         confirmedTheme.current = theme;
       })
       .catch((error) => {
         if (change === themeChange.current) {
-          setStoredUiTheme(confirmedTheme.current);
+          updateCurrentUserPreference({ ui_theme_id: confirmedTheme.current });
           onError?.(error);
         }
       });

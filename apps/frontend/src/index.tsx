@@ -70,13 +70,13 @@ const startApp = async () => {
   console.info("Starting Fred UI...");
   try {
     await Promise.all([loadConfig(), loadThemeTranslations()]);
-    // theme-boot.js used the cached platform settings; apply the fresh ones before anything renders.
+    // Use fresh public settings until the signed-in user's database choices load.
     applyResolvedTheme(getPlatformUiThemes());
     console.info("Configuration loaded successfully");
     KeyCloakService.CallLogin(async () => {
       const userId = KeyCloakService.GetUserId();
-      if (userId) await initializeUserPreferences(userId);
-      applyResolvedTheme(getPlatformUiThemes());
+      const preferences = await initializeUserPreferences(userId);
+      applyResolvedTheme(getPlatformUiThemes(), preferences.ui_theme_id ?? null, preferences.theme_mode ?? "system");
       const root = createRoot(document.getElementById("root"), { onCaughtError: reportCaughtReactError });
       root.render(
         <StrictMode>

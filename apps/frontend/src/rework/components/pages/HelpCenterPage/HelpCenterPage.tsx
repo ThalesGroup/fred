@@ -24,7 +24,8 @@ import HelpSidebar from "./HelpSidebar";
 import HelpArticle from "./HelpArticle";
 import HelpSearch from "./HelpSearch";
 import styles from "./HelpCenterPage.module.scss";
-import { persistUserPreference } from "../../../../app/userPreferences";
+import { saveUserPreference, updateCurrentUserPreference } from "../../../../app/userPreferences";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 
 /** App-language → help-content language ("fr-FR" → "fr"; anything non-English falls back to fr). */
 function appLangToHelpLang(appLanguage: string | undefined): HelpLang {
@@ -41,6 +42,7 @@ export default function HelpCenterPage() {
   const params = useParams<{ lang: string; sectionId: string; pageId: string }>();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
+  const { showError } = useToast();
   const { contactSupportLink } = useFrontendProperties();
 
   const lang = isHelpLang(params.lang) ? params.lang : null;
@@ -72,10 +74,19 @@ export default function HelpCenterPage() {
 
   const switchLanguage = (target: HelpLang) => {
     if (target === lang) return;
-    persistUserPreference({ language: target });
     // Same page in the target language when it exists, else the section index.
     const twin = getHelpPage(target, section.id, pageId);
     navigate(twin ? helpPagePath(target, section.id, pageId) : `/help/${target}/${section.id}`);
+    void saveUserPreference({ language: target })
+      .then(() => {
+        updateCurrentUserPreference({ language: target });
+      })
+      .catch(() =>
+        showError({
+          summary: t("rework.helpCenter.languageSaveFailed"),
+          detail: t("rework.helpCenter.languageSaveFailedDetail"),
+        }),
+      );
   };
 
   return (

@@ -1,6 +1,6 @@
 ## Context
 
-See proposal.md and specs/user-ui-preferences/spec.md. Personal theme, mode, sidebar, trace choice and pane widths use `useLocalStorageState`; language uses i18next's `i18nextLng` key; the team and agent sort controls write localStorage directly. `public/theme-boot.js` reads global theme keys before login. The managed workstation can erase all browser storage on restart. `platform_ui_settings` is the administrator's separate default/visibility record. The Control Plane already owns personal product data and `/users/me` routes.
+See proposal.md and specs/user-ui-preferences/spec.md. Before this change, personal display controls use browser storage for runtime state. After this change, database values are loaded into account-specific in-memory state. Pane widths retain browser storage. `public/theme-boot.js` may read the public platform catalog and settings but not personal theme or mode keys. The managed workstation can erase browser storage on restart. `platform_ui_settings` is the administrator's separate default/visibility record. The Control Plane already owns personal product data and `/users/me` routes.
 
 ## Goals / Non-Goals
 
@@ -12,7 +12,7 @@ See proposal.md and specs/user-ui-preferences/spec.md. Personal theme, mode, sid
 
 **Non-Goals:**
 
-- Store browser-only activity/recovery data: team visit timestamps, unfinished imports, conversation caches, open panels tied to a session or per-conversation todo state.
+- Store browser-only activity/recovery data: team visit timestamps, conversation caches, open panels tied to a session or per-conversation todo state.
 - Sync security or notice acknowledgements: tool approval grants, upload warning acknowledgements and announcement dismissals keep their existing lifecycle.
 - Store theme ZIP/CSS/assets in PostgreSQL or change administrator theme settings.
 
@@ -28,11 +28,11 @@ Add authenticated `GET` and `PATCH /control-plane/v1/users/me/preferences`. A re
 
 ### Hydrate before rendering signed-in content
 
-After OIDC login, obtain the authenticated subject ID, read this user's preference through the generated API client and apply the result to the existing frontend state before mounting application content. If the API fails, a cache keyed by that subject may be used; otherwise use defaults. The static boot script may color only the empty document from public platform settings before identity is known. Theme ID resolution still uses `resolveUiTheme` and retains hidden or absent saved IDs. On a successful read, refresh the scoped cache; changes to a control patch its field and update the cache. Save failures restore the last confirmed value for explicit profile controls and report the error. Browser-local storage may remain as an implementation cache for components, but is not authoritative after hydration.
+After OIDC login, obtain the authenticated subject ID, read this user's preference through the generated API client and apply the result to in-memory frontend controls before mounting application content. An absent row or failed read applies documented defaults; the frontend never reads personal browser keys to seed or recover database preferences. The static boot script uses only public platform settings and the OS color mode before identity is known. Theme ID resolution still uses `resolveUiTheme` and retains hidden or absent saved IDs. Changes to a control patch its field. Convenience controls retry transient failures once in write order, then restore the last confirmed database value if the save still fails. Explicit profile controls report failed saves. The Help Center language switch remains usable during a preference API outage and warns when its route-local choice was not saved. Personal controls do not read or write localStorage; separate tabs cannot exchange one account's display choices through origin-wide storage events.
 
-### Import old browser values once
+### Start existing users from database defaults
 
-Before the first profile read, claim the ownerless legacy keys for the first authenticated subject and copy validated values to a snapshot keyed by that subject. When the GET result says no row exists, send that snapshot in one PATCH before application content mounts. Mark that browser's legacy import complete and clear the snapshot only after the server acknowledges the write; a failed read or import remains eligible for that subject to retry while visible controls use user-scoped cache or defaults. Another account cannot consume the pending snapshot. The local keys may continue as a component cache but must not seed another account after the marker is set. Old keys have no account ID, so the initial claim can only assign them to the first authenticated user who loads this browser after upgrade. It is impossible to recover values already erased by workstation policy. The migration note describes this limitation and the UI remains editable if the imported values belong to someone else.
+The migration creates an empty table. A GET without a row returns typed defaults and `initialized: false`; it does not trigger a PATCH. The frontend applies those defaults even when a browser still contains personal choices from an older deployment. A failed GET also applies defaults for that load and retries on the next load. No one-time import marker, pending snapshot or per-user browser fallback is needed.
 
 ### Keep theme identifiers stable and widths local
 
@@ -40,12 +40,11 @@ Persist the catalog's stable string theme ID, never a list position or a generat
 
 ## Risks / Trade-offs
 
-- [Legacy keys may belong to another person on a shared browser] -> Import only when the database has no row, mark the browser import complete after success, and document that the first import cannot prove ownership.
-- [Browser values were cleared before rollout] -> Use defaults; users can choose again and subsequent changes persist centrally.
-- [Preference API is unavailable] -> Use the authenticated subject's scoped cache or defaults, keep controls usable, and retry on the next load.
+- [Existing browser choices differ from database defaults] -> Apply the database response or documented defaults before rendering signed-in content; never import the old browser values.
+- [Preference API is unavailable] -> Use defaults for this load, keep controls usable, and retry on the next load.
 - [Browser storage is cleared] -> Resizable pane widths return to their defaults by explicit product choice; they never generate preference API writes.
 - [Concurrent updates] -> PATCH only the field changed; the same field uses last-write-wins semantics.
 
 ## Migration Plan
 
-Apply the additive `users_preferences` table migration before deploying the new Control Plane and frontend. Existing users have no row and receive defaults or a first-load import. Rollback to older application images leaves the table unused. Dropping it would discard choices saved after rollout. The operator note specifies the sequence, validation, rollback and limitation of already-erased browser data.
+Apply the additive `users_preferences` table migration before deploying the new Control Plane and frontend. Existing users have no row and receive defaults; they choose their durable settings again. Rollback to older application images leaves the table unused. Dropping it would discard choices saved after rollout. The operator note specifies the sequence, validation, rollback and browser-local width behavior.

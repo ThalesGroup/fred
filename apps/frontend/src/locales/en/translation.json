@@ -2267,6 +2267,8 @@
     "helpCenter": {
       "title": "Help Center",
       "languageAria": "Documentation language",
+      "languageSaveFailed": "Documentation language was not saved",
+      "languageSaveFailedDetail": "This page uses your choice, but your profile will use its previous language next time.",
       "sidebarAria": "Help Center navigation",
       "copyPageLink": "Copy the page link",
       "copyHeadingLink": "Copy the link to this paragraph",

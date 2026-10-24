@@ -5170,8 +5170,8 @@ theme by the existing platform fallback rules. Account deletion removes the
 preference row.
 
 The frontend reads the database record after login and before painting signed-in
-content. On first load after upgrade, an absent row can be seeded from valid
-legacy localStorage values still present in that browser. The keys do not record
-which account set them, and values erased before rollout cannot be recovered.
-A user-scoped browser cache is only a startup/failure fallback; the database is
-authoritative after a successful read.
+content. An absent row or failed read applies documented defaults. Existing
+personal localStorage values do not seed the row or serve as a fallback; the
+frontend applies the database response or defaults to in-memory controls and
+does not mirror personal choices to localStorage. Before login, theme boot uses only public
+platform settings and the OS color mode. Resizable pane widths remain local.

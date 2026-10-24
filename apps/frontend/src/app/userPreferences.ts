@@ -13,158 +13,92 @@
 // limitations under the License.
 
 import type { PatchUserPreferences, UserPreferences } from "../slices/controlPlane/controlPlaneOpenApi";
+import { useSyncExternalStore } from "react";
 
-const PREFIX = "fred.usersPreferences:";
-const IMPORTED_KEY = "fred.usersPreferences.legacyImported";
-const LEGACY_OWNER_KEY = "fred.usersPreferences.legacyImportOwner";
-const PENDING_LEGACY_PREFIX = "fred.usersPreferences.pendingLegacy:";
-const THEME_KEY = "localHook:ApplicationContextProvider.uiTheme";
-const MODE_KEY = "localHook:ApplicationContextProvider.themeMode";
-const SIDEBAR_KEY = "localHook:ApplicationContextProvider.isSidebarCollapsed";
-const TRACE_KEY = "localHook:chatTraceExpanded";
-const TEAM_SORT_KEY = "fred.teamSortMode";
-const AGENT_SORT_KEY = "fred.agentSort";
-const LANGUAGE_KEY = "i18nextLng";
+// Personal preferences come from the database; old browser keys are ignored.
+let currentPreferences: UserPreferences = {};
+let confirmedPreferences: UserPreferences = {};
+const listeners = new Set<() => void>();
 let activeUserId: string | null = null;
 let pendingSave: Promise<unknown> = Promise.resolve();
 let preferenceStore: (typeof import("../common/store"))["store"] | null = null;
 let preferenceApi: (typeof import("../slices/controlPlane/controlPlaneOpenApi"))["controlPlaneApi"] | null = null;
+const preferenceRevisions = new Map<keyof UserPreferences, number>();
 
-function get(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
+export function getCurrentUserPreferences(): UserPreferences {
+  return currentPreferences;
 }
 
-function set(key: string, value: string | null): void {
-  try {
-    if (value === null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
-  } catch {
-    // Browser storage is optional; the server remains authoritative.
-  }
+export function setCurrentUserPreferences(preferences: UserPreferences): void {
+  currentPreferences = preferences;
+  listeners.forEach((listener) => listener());
 }
 
-function parsed(key: string): unknown {
-  const raw = get(key);
-  if (raw === null) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+export function updateCurrentUserPreference(patch: PatchUserPreferences): void {
+  setCurrentUserPreferences({ ...currentPreferences, ...patch });
 }
 
-export function readLegacyPreferences(): PatchUserPreferences {
-  const patch: PatchUserPreferences = {};
-  const theme = parsed(THEME_KEY);
-  if (typeof theme === "string" && /^[a-z][a-z0-9-]{0,31}$/.test(theme)) patch.ui_theme_id = theme;
-  const mode = parsed(MODE_KEY);
-  if (mode === "light" || mode === "dark" || mode === "system") patch.theme_mode = mode;
-  const sidebar = parsed(SIDEBAR_KEY);
-  if (typeof sidebar === "boolean") patch.sidebar_collapsed = sidebar;
-  const trace = parsed(TRACE_KEY);
-  if (typeof trace === "boolean") patch.trace_expanded = trace;
-  const language = get(LANGUAGE_KEY)?.slice(0, 2);
-  if (language === "fr" || language === "en") patch.language = language;
-  const teamSort = get(TEAM_SORT_KEY);
-  if (teamSort === "recent" || teamSort === "alpha") patch.team_sort_mode = teamSort;
-  const agentSort = get(AGENT_SORT_KEY);
-  if (agentSort === "name" || agentSort === "created_at:desc" || agentSort === "updated_at:desc") {
-    patch.agent_sort = agentSort;
-  }
-  return patch;
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }
 
-function cacheKey(userId: string): string {
-  return PREFIX + encodeURIComponent(userId);
+export function useCurrentUserPreference<K extends keyof UserPreferences, T extends UserPreferences[K]>(
+  key: K,
+  fallback: T,
+): Exclude<UserPreferences[K], undefined> | T {
+  return useSyncExternalStore(
+    subscribe,
+    () => currentPreferences[key] ?? fallback,
+    () => fallback,
+  ) as Exclude<UserPreferences[K], undefined> | T;
 }
 
-function readCache(userId: string): UserPreferences | null {
-  try {
-    const raw = get(cacheKey(userId));
-    return raw ? (JSON.parse(raw) as UserPreferences) : null;
-  } catch {
-    return null;
-  }
-}
-
-async function writeLocalChoices(preferences: UserPreferences): Promise<void> {
-  set(THEME_KEY, JSON.stringify(preferences.ui_theme_id ?? null));
-  set(MODE_KEY, JSON.stringify(preferences.theme_mode ?? "system"));
-  set(SIDEBAR_KEY, JSON.stringify(preferences.sidebar_collapsed ?? false));
-  set(TRACE_KEY, JSON.stringify(preferences.trace_expanded ?? null));
-  set(TEAM_SORT_KEY, preferences.team_sort_mode ?? "recent");
-  set(AGENT_SORT_KEY, preferences.agent_sort ?? "name");
+async function applyPreferences(preferences: UserPreferences): Promise<void> {
+  confirmedPreferences = preferences;
+  setCurrentUserPreferences(preferences);
   const { default: i18n } = await import("../i18n");
   if (preferences.language) await i18n.changeLanguage(preferences.language);
   else await i18n.changeLanguage(navigator.language?.startsWith("fr") ? "fr" : "en");
 }
 
-export async function initializeUserPreferences(userId: string): Promise<void> {
+export async function initializeUserPreferences(userId: string | null): Promise<UserPreferences> {
+  activeUserId = userId;
+  if (!userId) {
+    const defaults: UserPreferences = {};
+    await applyPreferences(defaults);
+    return defaults;
+  }
   const [{ store }, { controlPlaneApi }] = await Promise.all([
     import("../common/store"),
     import("../slices/controlPlane/controlPlaneOpenApi"),
   ]);
   preferenceStore = store;
   preferenceApi = controlPlaneApi;
-  activeUserId = userId;
-  const pendingKey = PENDING_LEGACY_PREFIX + encodeURIComponent(userId);
-  const owner = get(LEGACY_OWNER_KEY);
-  const canImport = get(IMPORTED_KEY) !== "1" && (!owner || owner === userId);
-  let legacy: PatchUserPreferences = {};
-  if (canImport) {
-    if (!owner) set(LEGACY_OWNER_KEY, userId);
-    try {
-      const pending: unknown = JSON.parse(get(pendingKey) ?? "null");
-      legacy =
-        pending && typeof pending === "object" && !Array.isArray(pending)
-          ? (pending as PatchUserPreferences)
-          : readLegacyPreferences();
-    } catch {
-      legacy = readLegacyPreferences();
-    }
-    if (Object.keys(legacy).length) set(pendingKey, JSON.stringify(legacy));
-  }
   const request = store.dispatch(
     controlPlaneApi.endpoints.getMyPreferencesControlPlaneV1UsersMePreferencesGet.initiate(undefined, {
       forceRefetch: true,
     }),
   );
   try {
-    let preferences = await request.unwrap();
-    if (!preferences.initialized && canImport) {
-      if (Object.keys(legacy).length) {
-        const write = store.dispatch(
-          controlPlaneApi.endpoints.patchMyPreferencesControlPlaneV1UsersMePreferencesPatch.initiate({
-            patchUserPreferences: legacy,
-          }),
-        );
-        try {
-          preferences = await write.unwrap();
-          set(IMPORTED_KEY, "1");
-        } finally {
-          write.reset();
-        }
-      }
-    }
-    if (canImport) {
-      set(IMPORTED_KEY, "1");
-      set(LEGACY_OWNER_KEY, null);
-      set(pendingKey, null);
-    }
-    set(cacheKey(userId), JSON.stringify(preferences));
-    await writeLocalChoices(preferences);
+    const preferences = await request.unwrap();
+    await applyPreferences(preferences);
+    return preferences;
   } catch {
-    await writeLocalChoices(readCache(userId) ?? {});
+    const defaults: UserPreferences = {};
+    await applyPreferences(defaults);
+    return defaults;
   } finally {
     request.unsubscribe();
   }
 }
 
-export async function saveUserPreference(patch: PatchUserPreferences): Promise<void> {
+function isTransientPreferenceError(error: unknown): boolean {
+  const status = (error as { status?: number | string })?.status;
+  return status === "FETCH_ERROR" || status === "TIMEOUT_ERROR" || (typeof status === "number" && status >= 500);
+}
+
+export async function saveUserPreference(patch: PatchUserPreferences, retryTransient = false): Promise<void> {
   if (!activeUserId) return;
   const userId = activeUserId;
   const save = pendingSave.then(async () => {
@@ -172,16 +106,22 @@ export async function saveUserPreference(patch: PatchUserPreferences): Promise<v
     const store = preferenceStore;
     const controlPlaneApi = preferenceApi;
     if (!store || !controlPlaneApi) return;
-    const request = store.dispatch(
-      controlPlaneApi.endpoints.patchMyPreferencesControlPlaneV1UsersMePreferencesPatch.initiate({
-        patchUserPreferences: patch,
-      }),
-    );
-    try {
-      const preferences = await request.unwrap();
-      set(cacheKey(userId), JSON.stringify(preferences));
-    } finally {
-      request.reset();
+    for (let attempt = 0; attempt < (retryTransient ? 2 : 1); attempt++) {
+      if (activeUserId !== userId) return;
+      const request = store.dispatch(
+        controlPlaneApi.endpoints.patchMyPreferencesControlPlaneV1UsersMePreferencesPatch.initiate({
+          patchUserPreferences: patch,
+        }),
+      );
+      try {
+        await request.unwrap();
+        if (activeUserId === userId) confirmedPreferences = { ...confirmedPreferences, ...patch };
+        return;
+      } catch (error) {
+        if (attempt > 0 || !retryTransient || !isTransientPreferenceError(error)) throw error;
+      } finally {
+        request.reset();
+      }
     }
   });
   pendingSave = save.catch(() => undefined);
@@ -189,7 +129,28 @@ export async function saveUserPreference(patch: PatchUserPreferences): Promise<v
 }
 
 export function persistUserPreference(patch: PatchUserPreferences): void {
-  void saveUserPreference(patch).catch(() => {
-    // Local controls remain usable until the server is reachable again.
+  const userId = activeUserId;
+  const keys = Object.keys(patch) as (keyof UserPreferences)[];
+  const revisions = keys.map((key) => {
+    const revision = (preferenceRevisions.get(key) ?? 0) + 1;
+    preferenceRevisions.set(key, revision);
+    return revision;
   });
+  updateCurrentUserPreference(patch);
+  void (async () => {
+    try {
+      await saveUserPreference(patch, true);
+      return;
+    } catch (error) {
+      if (activeUserId !== userId) return;
+      const rollback: UserPreferences = { ...currentPreferences };
+      keys.forEach((key, index) => {
+        if (preferenceRevisions.get(key) === revisions[index]) {
+          Object.assign(rollback, { [key]: confirmedPreferences[key] });
+        }
+      });
+      setCurrentUserPreferences(rollback);
+      console.error("Could not save user preferences", error);
+    }
+  })();
 }
