@@ -52,6 +52,7 @@
 - [x] 9.3 `render.py`: agent notes for a hidden unit (`share`) and for `show` on another type; summary code `chart_shows_shares` (`fill.py`)
 - [x] 9.4 `changes.py`: edit path `chart.show`; `tools.py`: `show` in the chart fields, `chart.show` among the edit paths, the "set show: 'value'" sentence
 - [x] 9.5 Frontend: `chart_shows_shares` in `DeckSummaryButton.tsx` and `locales/{en,fr}`
+- [x] 9.6 `charts.pie_show`: `both` on values in `%` shows each value once (live eval printed "45%" and "45 %"). Test: `test_chart_slides.py::test_a_pie_of_percentages_asked_both_prints_each_value_once`
 - Verification: `test_chart_slides.py` (aliases and loose words, default, `labels` still categories, unknown word revision, chart XML per mode, both notes, `chart.show` edit, tool description), `DeckSummaryButton.test.tsx`; evidence PDF of one pie in the three modes
 
 ## Phase B — the template's own example chart (after the owner has tested phase A)

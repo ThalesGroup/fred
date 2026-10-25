@@ -992,8 +992,12 @@ def _stress_label(plot: Any, index: int, light: bool = False) -> None:
 
 def pie_show(chart: PlanChart) -> str:
     """What a pie's labels show unless asked: data with a unit (already %, M€)
-    shows its own values, a share of their sum would misstate them."""
-    return chart.show or ("value" if (chart.unit or "").strip() else "share")
+    shows its own values, a share of their sum would misstate them. Values in %
+    are their share already: 'both' would print each one twice."""
+    unit = (chart.unit or "").strip()
+    if chart.show == "both" and unit == "%":
+        return "value"
+    return chart.show or ("value" if unit else "share")
 
 
 def _round_labels(labels: Any, show: str, fmt: str) -> None:

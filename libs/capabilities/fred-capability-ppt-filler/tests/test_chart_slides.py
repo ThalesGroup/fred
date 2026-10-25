@@ -780,6 +780,16 @@ def test_a_pie_of_data_with_a_unit_shows_its_values_unless_asked(builtin):
     assert labels.find(qn("c:showPercent")).get("val") == "1"
 
 
+def test_a_pie_of_percentages_asked_both_prints_each_value_once(builtin):
+    """Values in % are their share already: 'both' printed "45%" and "45 %"."""
+    template, inventory = builtin
+    rates = {**PIE, "unit": "%", "show": "both"}
+    labels = _labels_xml(_chart(_render(template, inventory, _chart_slide(rates))))
+    assert labels.find(qn("c:showVal")).get("val") == "1"
+    assert labels.find(qn("c:showPercent")).get("val") == "0"
+    assert labels.find(qn("c:separator")) is None
+
+
 def test_a_unit_hidden_by_percentages_is_told(builtin):
     template, inventory = builtin
     result = _render(
