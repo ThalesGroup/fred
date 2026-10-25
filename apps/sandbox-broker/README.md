@@ -46,7 +46,7 @@ enforces NetworkPolicy. OpenShell is not integrated here.
 | `SANDBOX_DOCKER_VOLUME_PLUGIN` | Enabled, approved Docker volume plugin name for `rclone_docker` |
 | `SANDBOX_SKILLS_VOLUME` | Optional approved PVC name (Kubernetes) or Docker volume name mounted read-only at `/skills` |
 
-The agent pod needs `FRED_SANDBOX_BROKER_URL`, `FRED_SANDBOX_BROKER_TOKEN`, and a trusted CA for the broker certificate. The URL must use HTTPS unless it points to loopback. Its tool schema contains only `language` and `code`; the runtime derives an opaque session key from user, team and conversation identity. Never put credentials in code. Grant the capability to a team through Fred's normal admin gate. The capability remains unavailable without a configured broker. Each execution starts a fresh Bash or Python process, so files persist within a conversation but interpreter variables do not.
+The agent pod needs `FRED_SANDBOX_BROKER_URL`, `FRED_SANDBOX_BROKER_TOKEN`, and a trusted CA for the broker certificate. The URL must use HTTPS unless it points to loopback. Its tool schema contains only `code`, a Bash script executed with `/bin/bash -c`; invoke Python explicitly from that script. The runtime derives an opaque session key from user, team and conversation identity. Never put credentials in code. Grant the capability to a team through Fred's normal admin gate. The capability remains unavailable without a configured broker. Each execution starts a fresh Bash process, so files persist within a conversation but interpreter variables do not.
 
 ### Platform admin controls
 

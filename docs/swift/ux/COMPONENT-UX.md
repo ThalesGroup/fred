@@ -518,7 +518,7 @@ _(none)_
 
 #### Resolved
 
-- **Sandbox command previews (2026-10-25)** - Group and child rows favor a search, filter, or control-flow line over imports, path setup, and comments. `...` marks code before or after that one-line excerpt; the full source and result remain in the tool detail.
+- **Sandbox command previews (2026-10-25)** - Group and child rows show the first nonblank line of the submitted Bash script, such as `python - <<'PY'`, without a language prefix. `...` marks following lines; the full script and result remain in the tool detail.
 
 - **Reasoning rows still repeated a rephrased preamble (2026-09-14, #2666)** — the fix below
   only trimmed sentences identical character for character to the _previous_ block. Models
@@ -798,8 +798,8 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
 
 #### Resolved
 
-- **Code sandbox detail (2026-10-23)** - `execute_code` shows the submitted source
-  in a code block highlighted as Bash or Python, followed by stdout, stderr, exit code, and any
+- **Code sandbox detail (2026-10-23)** - `execute_code` shows the submitted Bash script
+  in a code block, followed by stdout, stderr, exit code, and any
   timeout or truncation notice. Broker failures use localized error codes; malformed
   responses do not expose raw payloads.
 
