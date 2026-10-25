@@ -422,7 +422,7 @@
     "composerPlaceholder": "Posez votre question, ou tapez / pour une commande",
     "pendingMessages": {
       "label": "Messages en attente",
-      "now": "Maintenant",
+      "steer": "Réorienter",
       "actions": "Actions du message",
       "edit": "Modifier",
       "remove": "Supprimer",

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DragEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
@@ -43,6 +43,8 @@ import {
 import { MAX_TURN_PROMPTS, usablePromptList } from "@rework/utils/skillInvocation";
 import { isAgentTodoSnapshotSettled, latestAgentTodoSnapshot, presentAgentTodos } from "../../../utils/agentTodo";
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
+import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover";
+import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
 import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
 import { rememberPanelClosed, rememberPanelOpen } from "../../../features/capabilities/capabilityPanelMemory";
@@ -154,6 +156,8 @@ type ActivePushDrawer =
 const MODEL_READ_MIN_AGE_MS = 30_000;
 
 export default function ManagedChatPage() {
+  const pendingListId = useId();
+  const [pendingExpanded, setPendingExpanded] = useState(true);
   const { t, i18n } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
   const { teamId, agentInstanceId } = useParams<{ teamId: string; agentInstanceId: string }>();
@@ -1018,58 +1022,99 @@ export default function ManagedChatPage() {
                       </p>
                     )}
                     {(chat.pendingMessages?.length ?? 0) > 0 && (
-                      <div
-                        className={styles.pendingMessages}
-                        role="list"
-                        aria-label={t("chatbot.pendingMessages.label")}
-                      >
-                        {chat.pendingMessages?.map((message) => (
-                          <div className={styles.pendingMessage} role="listitem" key={message.id}>
-                            <span className={styles.pendingMessageText} title={message.text}>
-                              {message.text}
-                            </span>
-                            {message.status === "offered" ? (
-                              <span className={styles.pendingStatus}>{t("chatbot.pendingMessages.offered")}</span>
-                            ) : message.status === "uncertain" ? (
-                              <>
-                                <span className={styles.pendingStatus}>{t("chatbot.pendingMessages.uncertain")}</span>
-                                <button
-                                  type="button"
-                                  className={styles.pendingNow}
-                                  disabled={chat.waitResponse}
-                                  title={t("chatbot.pendingMessages.retryWarning")}
-                                  onClick={() => chat.retryPendingMessage(message.id)}
-                                >
-                                  {t("chatbot.pendingMessages.retry")}
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                {chat.waitResponse && (
-                                  <button
-                                    type="button"
-                                    className={styles.pendingNow}
-                                    onClick={() => void chat.forcePendingMessage(message.id)}
-                                  >
-                                    {t("chatbot.pendingMessages.now")}
-                                  </button>
+                      <section className={styles.pendingMessages} aria-label={t("chatbot.pendingMessages.label")}>
+                        <button
+                          type="button"
+                          className={styles.pendingToggle}
+                          aria-expanded={pendingExpanded}
+                          aria-controls={pendingExpanded ? pendingListId : undefined}
+                          onClick={() => setPendingExpanded((value) => !value)}
+                        >
+                          <span>{t("chatbot.pendingMessages.label")}</span>
+                          <span className={styles.pendingCount}>{chat.pendingMessages?.length}</span>
+                          <Icon category="outlined" type={pendingExpanded ? "expand_less" : "expand_more"} />
+                        </button>
+                        {pendingExpanded && (
+                          <ul id={pendingListId} className={styles.pendingList}>
+                            {chat.pendingMessages?.map((message) => (
+                              <li className={styles.pendingMessage} key={message.id}>
+                                <span className={styles.pendingMessageText} title={message.text}>
+                                  {message.text}
+                                </span>
+                                {message.status === "offered" ? (
+                                  <span className={styles.pendingStatus}>{t("chatbot.pendingMessages.offered")}</span>
+                                ) : message.status === "uncertain" ? (
+                                  <>
+                                    <span className={styles.pendingStatus}>
+                                      {t("chatbot.pendingMessages.uncertain")}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className={styles.pendingAction}
+                                      disabled={chat.waitResponse}
+                                      aria-label={`${t("chatbot.pendingMessages.retry")}: ${message.text}`}
+                                      title={t("chatbot.pendingMessages.retryWarning")}
+                                      onClick={() => chat.retryPendingMessage(message.id)}
+                                    >
+                                      {t("chatbot.pendingMessages.retry")}
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    {chat.waitResponse && (
+                                      <button
+                                        type="button"
+                                        className={styles.pendingAction}
+                                        aria-label={`${t("chatbot.pendingMessages.steer")}: ${message.text}`}
+                                        onClick={() => void chat.forcePendingMessage(message.id)}
+                                      >
+                                        {t("chatbot.pendingMessages.steer")}
+                                      </button>
+                                    )}
+                                    <ComposerActionsMenu
+                                      icon={{ category: "outlined", type: "more_horiz" }}
+                                      align="right"
+                                      size="2xs"
+                                      portal
+                                      openAriaLabel={`${t("chatbot.pendingMessages.actions")}: ${message.text}`}
+                                      dialogAriaLabel={`${t("chatbot.pendingMessages.actions")}: ${message.text}`}
+                                    >
+                                      {({ closeMenu }) => (
+                                        <MenuPopover
+                                          dense
+                                          groups={[
+                                            [
+                                              <MenuPopoverItem
+                                                key="edit"
+                                                icon={{ category: "outlined", type: "edit" }}
+                                                label={t("chatbot.pendingMessages.edit")}
+                                                onClick={() => {
+                                                  closeMenu();
+                                                  chat.editPendingMessage(message.id);
+                                                }}
+                                              />,
+                                              <MenuPopoverItem
+                                                key="remove"
+                                                icon={{ category: "outlined", type: "delete" }}
+                                                label={t("chatbot.pendingMessages.remove")}
+                                                danger
+                                                onClick={() => {
+                                                  closeMenu();
+                                                  chat.removePendingMessage(message.id);
+                                                }}
+                                              />,
+                                            ],
+                                          ]}
+                                        />
+                                      )}
+                                    </ComposerActionsMenu>
+                                  </>
                                 )}
-                                <details className={styles.pendingMenu}>
-                                  <summary aria-label={t("chatbot.pendingMessages.actions")}>...</summary>
-                                  <div className={styles.pendingMenuItems}>
-                                    <button type="button" onClick={() => chat.editPendingMessage(message.id)}>
-                                      {t("chatbot.pendingMessages.edit")}
-                                    </button>
-                                    <button type="button" onClick={() => chat.removePendingMessage(message.id)}>
-                                      {t("chatbot.pendingMessages.remove")}
-                                    </button>
-                                  </div>
-                                </details>
-                              </>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </section>
                     )}
                     {composer}
                     <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>

@@ -326,86 +326,97 @@
   margin: 0 auto;
   border: 1px solid var(--outline-muted);
   border-bottom: 0;
-  border-radius: var(--radius-m) var(--radius-m) 0 0;
-  background: var(--surface-container);
+  border-radius: var(--radius-s) var(--radius-s) 0 0;
+  background: var(--surface-container-low);
+  padding-bottom: var(--radius-m);
   width: calc(100% - var(--spacing-l) - var(--spacing-l));
   max-width: var(--composer-max-width);
   overflow: visible;
+  color: var(--on-surface);
+}
+
+.pendingToggle {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--radius-s) var(--radius-s) 0 0;
+  background: transparent;
+  padding: var(--spacing-xs) var(--spacing-s);
+  width: 100%;
+  color: var(--on-surface);
+  font: var(--font-label-large);
+  text-align: left;
+}
+
+.pendingToggle:hover {
+  background: var(--state-on-surface-hover);
+}
+
+.pendingToggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.pendingToggle > :last-child {
+  color: var(--on-surface-muted);
+  font-size: 1rem;
+}
+
+.pendingCount {
+  color: var(--on-surface-muted);
+  font: var(--font-label-medium);
+}
+
+.pendingList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  border-top: 1px solid var(--outline-muted);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  max-height: min(35vh, 16rem);
+  overflow-y: auto;
+  list-style: none;
 }
 
 .pendingMessage {
   display: flex;
   align-items: center;
-  gap: var(--spacing-s);
-  padding: var(--spacing-xs) var(--spacing-m);
-  min-height: 2.5rem;
-  color: var(--on-surface);
-}
-
-.pendingMessage + .pendingMessage {
-  border-top: 1px solid var(--outline-muted);
+  gap: var(--spacing-xs);
+  min-width: 0;
+  min-height: 1.5rem;
+  font: var(--font-body-small);
 }
 
 .pendingMessageText {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.pendingNow,
-.pendingMenu button,
-.pendingMenu summary {
+.pendingAction {
   cursor: pointer;
   border: 0;
   background: transparent;
-  color: var(--on-surface);
-  font: inherit;
-}
-
-.pendingNow {
+  padding: 0 var(--spacing-2xs);
   color: var(--primary);
+  font: inherit;
   white-space: nowrap;
 }
 
-.pendingNow:disabled {
+.pendingAction:disabled {
   opacity: 0.5;
   cursor: default;
 }
 
 .pendingStatus {
   color: var(--on-surface-muted);
-}
-
-.pendingMenu {
-  position: relative;
-}
-
-.pendingMenu summary {
-  padding: var(--spacing-xs);
-  list-style: none;
-}
-
-.pendingMenu summary::-webkit-details-marker {
-  display: none;
-}
-
-.pendingMenuItems {
-  display: grid;
-  position: absolute;
-  right: var(--spacing-s);
-  bottom: auto;
-  border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-s);
-  background: var(--surface-container-high);
-  padding: var(--spacing-xs);
-  min-width: 8rem;
-}
-
-.pendingMenuItems button {
-  padding: var(--spacing-xs) var(--spacing-s);
-  text-align: left;
+  white-space: nowrap;
 }
 
 .todoPanelSlot {

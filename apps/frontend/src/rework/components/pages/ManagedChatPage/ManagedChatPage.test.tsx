@@ -307,10 +307,6 @@ vi.mock("../../../features/capabilities/ComposerOptionChips", () => ({
   COMPOSER_CHIP_WIDGETS: new Set<string>(),
   ComposerOptionChips: () => null,
 }));
-vi.mock("@shared/molecules/ComposerActionsMenu/ComposerActionsMenu", () => ({
-  ComposerActionsMenu: () => null,
-}));
-
 import ManagedChatPage from "./ManagedChatPage";
 
 const PANEL_KEY = "writable_document:writable_document_pane";
@@ -442,8 +438,12 @@ describe("ManagedChatPage pending messages", () => {
     expect(html).toContain("first question");
     expect(html).toContain("second question");
     expect(html.indexOf("first question")).toBeLessThan(html.indexOf("second question"));
-    expect(html).toContain("chatbot.pendingMessages.now");
+    expect(html).toContain("chatbot.pendingMessages.steer");
     expect(html).toContain("chatbot.pendingMessages.actions");
+    expect(html).toContain('aria-label="chatbot.pendingMessages.steer: first question"');
+    expect(html).toContain('aria-label="chatbot.pendingMessages.actions: second question"');
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain("more_horiz");
   });
 });
 
