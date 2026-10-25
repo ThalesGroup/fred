@@ -29,6 +29,9 @@ class _Backend:
         self.prepared = 0
         self.resumed = 0
         self.suspended = 0
+        self.renewed: list[int] = []
+        self.suspend_deadlines: list[int] = []
+        self.resume_deadlines: list[int] = []
         self.active = 0
         self.peak = 0
         self.gate = asyncio.Event()
@@ -48,14 +51,16 @@ class _Backend:
         return SandboxLease(name, name, view_key)
 
     async def resume(self, name: str, view_key: str) -> SandboxLease:
+        self.resume_deadlines.append(self.renewed[-1])
         self.resumed += 1
         return SandboxLease(name, name, view_key)
 
     async def suspend(self, name: str) -> None:
+        self.suspend_deadlines.append(self.renewed[-1])
         self.suspended += 1
 
     async def renew(self, lease: SandboxLease, seconds: int) -> None:
-        return None
+        self.renewed.append(seconds)
 
     async def execute(
         self, lease: SandboxLease, request: SandboxRequest
@@ -176,7 +181,8 @@ async def test_admin_cap_is_shared_before_next_admission() -> None:
         """INSERT INTO sandbox_settings
            (id,idle_minutes,max_active_sessions,updated_at)
            VALUES ('default',20,2,now())
-           ON CONFLICT (id) DO UPDATE SET max_active_sessions=2"""
+           ON CONFLICT (id) DO UPDATE SET idle_minutes=20,
+           max_active_sessions=2"""
     )
     config = BrokerSettings(
         backend="agent_sandbox",
@@ -202,6 +208,36 @@ async def test_admin_cap_is_shared_before_next_admission() -> None:
         assert (
             await first.execute("e" * 64, "a" * 64, SandboxRequest(code="first"))
         ).stdout == "first"
+        assert backend.renewed[-1] == 20 * 60
+        await database.execute(
+            """UPDATE sandbox_conversation_leases
+               SET last_used_at=now()-interval '3 minutes' WHERE session_key=$1""",
+            "e" * 64,
+        )
+        await second.sweep()
+        assert backend.suspended == 1
+        assert backend.suspend_deadlines[-1] == (
+            20 * 60 + config.preparation_timeout_seconds + 30
+        )
+        assert backend.renewed[-1] == 120 * 60
+        await database.execute(
+            "UPDATE sandbox_settings SET idle_minutes=60 WHERE id='default'"
+        )
+        await database.execute(
+            """UPDATE sandbox_conversation_leases
+               SET last_used_at=now()-interval '25 minutes' WHERE session_key=$1""",
+            "e" * 64,
+        )
+        assert await second.view_key("e" * 64, "a" * 64) == old_view
+        assert (
+            await second.execute("e" * 64, "a" * 64, SandboxRequest(code="extended"))
+        ).stdout == "extended"
+        assert backend.prepared == 1
+        assert backend.resumed == 1
+        assert backend.resume_deadlines[-1] == (
+            60 * 60 + config.execution_timeout_seconds + 30
+        )
+        assert backend.renewed[-1] == 60 * 60
         await database.execute(
             "UPDATE sandbox_settings SET max_active_sessions=1 WHERE id='default'"
         )
@@ -212,6 +248,17 @@ async def test_admin_cap_is_shared_before_next_admission() -> None:
         await database.execute(
             "UPDATE sandbox_settings SET idle_minutes=1 WHERE id='default'"
         )
+        await database.execute(
+            """UPDATE sandbox_conversation_leases
+               SET last_used_at=now()-interval '40 seconds' WHERE session_key=$1""",
+            "e" * 64,
+        )
+        await second.sweep()
+        assert backend.suspended == 2
+        assert backend.suspend_deadlines[-1] == (
+            60 + config.preparation_timeout_seconds + 30
+        )
+        assert backend.renewed[-1] == 120 * 60
         await database.execute(
             """UPDATE sandbox_conversation_leases
                SET last_used_at=now()-interval '70 seconds' WHERE session_key=$1""",

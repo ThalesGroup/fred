@@ -27,6 +27,7 @@ _CAPACITY_LOCK = 748142927
 _OWNER_SECONDS = 45
 _HEARTBEAT_SECONDS = 10
 _SWEEP_SECONDS = 10
+_MAX_ADMIN_IDLE_SECONDS = 120 * 60
 _ACTIVE_STATES = ("preparing", "running", "suspending", "resuming", "deleting")
 
 
@@ -84,7 +85,7 @@ class SharedConversationPool:
             await self._database.close()
 
     def _active_idle_seconds(self, idle_seconds: int) -> int:
-        return min(self.settings.active_idle_seconds, max(1, idle_seconds - 1))
+        return min(self.settings.active_idle_seconds, max(1, idle_seconds - 30))
 
     async def view_key(self, key: str, tenant: str) -> str:
         row = await self._ensure(key, tenant)
@@ -138,6 +139,11 @@ class SharedConversationPool:
                     lease = await self.backend.prepare(view, name=name)
                 elif previous_state in {"suspended", "resuming", "suspending"}:
                     await self.backend.preflight()
+                    idle_seconds, _ = await self._policy(self._db())
+                    await self.backend.renew(
+                        SandboxLease(name, name, view_key_for_mount(view)),
+                        idle_seconds + self.settings.execution_timeout_seconds + 30,
+                    )
                     lease = await self.backend.resume(name, view_key_for_mount(view))
                 else:
                     await self.backend.preflight()
@@ -174,7 +180,15 @@ class SharedConversationPool:
                         await self._dispose(key, owner, name, view)
                 elif lease is not None and not isinstance(exc, asyncio.CancelledError):
                     try:
+                        idle_seconds, _ = await self._policy(self._db())
+                        await self.backend.renew(
+                            lease,
+                            idle_seconds
+                            + self.settings.preparation_timeout_seconds
+                            + 30,
+                        )
                         await self.backend.suspend(name)
+                        await self.backend.renew(lease, _MAX_ADMIN_IDLE_SECONDS)
                         await self._mark_suspended(key, owner)
                     except Exception:
                         logger.exception("Unable to suspend failed sandbox execution")
@@ -507,7 +521,15 @@ class SharedConversationPool:
             elif row.state == "preparing":
                 await self._dispose(row.session_key, owner, name, self._view_key(row))
             elif row.state in {"running", "resuming", "suspending"}:
+                await self.backend.renew(
+                    SandboxLease(name, name, view_key_for_mount(self._view_key(row))),
+                    idle_seconds + self.settings.preparation_timeout_seconds + 30,
+                )
                 await self.backend.suspend(name)
+                await self.backend.renew(
+                    SandboxLease(name, name, view_key_for_mount(self._view_key(row))),
+                    _MAX_ADMIN_IDLE_SECONDS,
+                )
                 await self._db().execute(
                     """UPDATE sandbox_conversation_leases SET state='suspended',
                        owner_token=NULL, owner_expires_at=NULL, updated_at=now()

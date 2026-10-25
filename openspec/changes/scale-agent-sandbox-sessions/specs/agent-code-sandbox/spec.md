@@ -38,6 +38,10 @@ The system SHALL privately bind executions to user, team and conversation identi
 - **WHEN** the same authorized conversation executes code after its pod was suspended but before final expiry
 - **THEN** its private workload is resumed and can read its prior `/work` files
 
+#### Scenario: Admin extends inactivity before expiry
+- **WHEN** an admin increases the inactivity limit while the conversation's sandbox is suspended and still within the new limit
+- **THEN** its private workspace remains resumable until the new limit is reached
+
 #### Scenario: Concurrent calls on different replicas
 - **WHEN** the same conversation submits two code calls through separate brokers
 - **THEN** those calls execute serially in one conversation workspace
