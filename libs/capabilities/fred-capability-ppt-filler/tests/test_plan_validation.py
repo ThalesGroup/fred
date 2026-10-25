@@ -93,16 +93,61 @@ async def test_the_first_build_returns_the_outline_and_stores_the_plan(
 
 
 @pytest.mark.asyncio
-async def test_a_deck_not_ending_on_the_closing_is_refused_then_retried(monkeypatch):
-    """Nothing is appended: the closing counts within the slide count asked."""
-    build = await build_tool(monkeypatch, _first_turn(), validate_plan=True)
-    refused, result = await build(slides=DECK, no_closing=None)
-    assert refused.startswith("No deck was built") and not result.is_error
-    assert '"closing": "missing"' in refused
-    text, _ = await build(slides=[*DECK, {"title": "Merci"}], no_closing=None)
-    assert text.startswith("Plan proposed"), text
-    assert any(line.startswith("4. closing — Merci") for line in text.splitlines())
-    assert not any(line.startswith("5.") for line in text.splitlines())
+async def test_the_closing_is_added_at_build_never_in_the_outline(monkeypatch):
+    """Owner decision: the closing is outside the slide count asked, so the
+    outline the user reviews shows only the slides sent."""
+    first = await build_tool(monkeypatch, _first_turn(), validate_plan=True)
+    proposed, _ = await first(slides=DECK)
+    assert proposed.startswith("Plan proposed"), proposed
+    assert not any(line.startswith("4.") for line in proposed.splitlines())
+    workspace = FakeWorkspace()
+    build = await build_tool(
+        monkeypatch,
+        answered(proposed) + [HumanMessage(content="Ok")],
+        validate_plan=True,
+        workspace=workspace,
+    )
+    text, _ = await build(slides=DECK)
+    assert text.startswith("Delivered"), text
+    assert tools._CLOSING_ADDED in text
+    assert len(deck(workspace).slides) == 4
+    opted = FakeWorkspace()
+    build = await build_tool(monkeypatch, _first_turn(), workspace=opted)
+    text, _ = await build(slides=DECK, no_closing=True)
+    assert len(deck(opted).slides) == 3 and tools._CLOSING_ADDED not in text
+
+
+@pytest.mark.asyncio
+async def test_a_revision_keeps_the_closing_unless_the_user_opts_out(
+    monkeypatch, deck_plan_store
+):
+    workspace = FakeWorkspace()
+    build = await build_tool(monkeypatch, _first_turn(), workspace=workspace)
+    text, _ = await build(slides=DECK)
+    assert len(deck(workspace).slides) == 4
+
+    async def revised(changes, **kwargs):
+        workspace = FakeWorkspace()
+        build = await build_tool(
+            monkeypatch,
+            answered(text) + [HumanMessage(content="Modifie")],
+            workspace=workspace,
+        )
+        done, _ = await build(changes=changes, **kwargs)
+        assert done.startswith("Delivered"), done
+        return done, deck(workspace).slides
+
+    retitled = [{"op": "edit", "slide": 2, "field": "title", "value": "Autre"}]
+    text, slides = await revised(retitled)
+    assert len(slides) == 4 and tools._CLOSING_ADDED not in text
+    # Removed without the opt-out, it comes back; with it, it stays out.
+    _, slides = await revised([{"op": "remove", "slide": 4}])
+    assert len(slides) == 4
+    text, slides = await revised([{"op": "remove", "slide": 4}], no_closing=True)
+    assert len(slides) == 3
+    retitled[0]["value"] = "Encore"
+    _, slides = await revised(retitled)
+    assert len(slides) == 3  # the opt-out stays with the deck
 
 
 @pytest.mark.asyncio
@@ -153,7 +198,7 @@ async def test_a_correction_applies_to_the_proposed_plan(monkeypatch):
     )
     text, _ = await build(changes=[{"op": "remove", "slide": 3}])
     assert text.startswith("Delivered"), text
-    assert len(deck(workspace).slides) == 2
+    assert len(deck(workspace).slides) == 3  # the closing added at build
 
 
 @pytest.mark.asyncio

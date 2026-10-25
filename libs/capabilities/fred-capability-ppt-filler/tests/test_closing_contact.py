@@ -13,8 +13,8 @@
 # limitations under the License.
 
 """Closing slides: a contact design only when the user gave a contact, a
-thank-you design otherwise, and a new deck refused unless it ends on one or the
-user opted out (synthetic template, plus the reference corporate template when
+thank-you design otherwise, and a built deck that ends on one, added outside the
+slide count, unless the user opted out (synthetic template, plus the reference corporate template when
 `PPT_BUILDER_REFERENCE_TEMPLATE` points at it)."""
 
 from __future__ import annotations
@@ -32,7 +32,12 @@ from fred_capability_ppt_filler.builder.assign import assign
 from fred_capability_ppt_filler.builder.models import Pattern, TemplateInventory
 from fred_capability_ppt_filler.builder.plan import DeckPlan
 from fred_capability_ppt_filler.builder.render import render_deck
-from fred_capability_ppt_filler.builder.tools import _unclosed, offered_kinds
+from fred_capability_ppt_filler.builder.tools import (
+    _args_schema,
+    _closed,
+    _description,
+    offered_kinds,
+)
 from pptx import Presentation
 from pptx.util import Inches
 
@@ -197,37 +202,75 @@ def test_reference_template_picks_thanks_or_contact():
     assert _contact_roles(chosen) == ["contact_email", "contact_phone"]
 
 
-# --- a new deck must end on a closing slide --------------------------------------
+# --- the built deck ends on a closing slide, outside the slide count -------------
 
 
-def _missing(content: bytes, slides: List[dict], opted_out: bool = False) -> bool:
+def _ended(content: bytes, slides: List[dict], opted_out: bool = False):
+    """The plan as the build closes it, whether a closing was added, and its
+    assignment."""
     inventory = _inventory(content)
-    plan = DeckPlan.model_validate({"slides": slides})
-    return _unclosed(plan, offered_kinds(inventory), opted_out)
+    plan = DeckPlan.model_validate({"slides": slides, "no_closing": opted_out})
+    closed, added = _closed(plan, offered_kinds(inventory))
+    assignment = assign(inventory, closed)
+    assert not assignment.problems
+    return closed, added, assignment
 
 
-def test_a_deck_not_ending_on_a_closing_is_refused():
-    assert _missing(_template(_contact_slide, _thanks_slide), [COVER, POINTS])
+def test_a_deck_without_a_contact_gets_the_thanks_slide_after_its_slides():
+    template = _template(_contact_slide, _thanks_slide)
+    plan, added, assignment = _ended(template, [COVER, POINTS])
+    assert added and len(plan.slides) == 3 and plan.slides[-1].title == "Merci"
+    pattern = assignment.patterns[-1]
+    assert pattern is not None and pattern.label == "Merci"
+
+
+def test_a_deck_whose_last_slide_gives_the_contact_keeps_it():
+    last = {"title": "Contact", "bullets": ["Jean Dupont"], "email": EMAIL}
+    template = _template(_contact_slide, _thanks_slide)
+    plan, added, assignment = _ended(template, [COVER, POINTS, last])
+    assert not added and len(plan.slides) == 3
+    pattern = assignment.patterns[-1]
+    assert pattern is not None and _contact_roles(pattern)
+
+
+def test_a_user_who_opted_out_gets_no_closing_slide():
+    template = _template(_contact_slide, _thanks_slide)
+    plan, added, _ = _ended(template, [COVER, POINTS], opted_out=True)
+    assert not added and len(plan.slides) == 2
+
+
+def test_a_template_without_a_closing_slide_gets_none_added():
+    plan, added, _ = _ended(_template(), [COVER, POINTS])
+    assert not added and len(plan.slides) == 2
 
 
 @pytest.mark.parametrize(
-    "last",
-    [
-        THANKS,
-        {"title": "Questions ?"},
-        {"title": "Fin", "kind": "closing"},
-        {"title": "Contact", "bullets": ["Jean Dupont"], "email": EMAIL},
-    ],
+    "last", [THANKS, {"title": "Questions ?"}, {"title": "Fin", "kind": "closing"}]
 )
-def test_a_deck_ending_on_a_closing_is_accepted(last):
+def test_a_deck_already_ending_on_a_closing_gets_no_second_one(last):
     template = _template(_contact_slide, _thanks_slide)
-    assert not _missing(template, [COVER, POINTS, last])
+    plan, added, assignment = _ended(template, [COVER, POINTS, last])
+    assert not added and len(plan.slides) == 3
+    pattern = assignment.patterns[-1]
+    assert pattern is not None and pattern.kind == "closing"
 
 
-def test_a_user_who_opted_out_needs_no_closing_slide():
+def test_an_english_deck_ends_on_thank_you():
+    points = {"title": "The context", "bullets": ["A growing market", "Two sites"]}
+    cover = {"title": "Project X", "subtitle": "Kick-off review"}
+    plan, added, _ = _ended(_template(_thanks_slide), [cover, points])
+    assert added and plan.slides[-1].title == "Thank you"
+
+
+def test_four_slides_asked_get_the_closing_as_a_fifth():
+    """Owner decision: the closing is outside the slide count asked."""
     template = _template(_contact_slide, _thanks_slide)
-    assert not _missing(template, [COVER, POINTS], opted_out=True)
+    plan, added, _ = _ended(template, [COVER, POINTS, POINTS, POINTS])
+    assert added and len(plan.slides) == 5 and plan.slides[-1].title == "Merci"
 
 
-def test_a_template_without_a_closing_slide_needs_none():
-    assert not _missing(_template(), [COVER, POINTS])
+def test_the_guidance_puts_the_closing_outside_the_slide_count():
+    inventory = _inventory(_template(_contact_slide, _thanks_slide))
+    assert "outside any slide count" in _description(inventory, "template_slide", 2)
+    field = _args_schema(inventory).model_json_schema()["properties"]["no_closing"]
+    assert "a slide count is never a reason" in field["description"]

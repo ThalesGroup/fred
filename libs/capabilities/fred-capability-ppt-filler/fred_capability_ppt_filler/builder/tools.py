@@ -560,8 +560,8 @@ def _schema_for(
 
 
 _NO_CLOSING = (
-    "true only when the user explicitly asked for no closing slide or for another last "
-    "slide (a slide count is not that)."
+    "true only when the user explicitly asked for no closing or final slide; a slide "
+    "count is never a reason."
 )
 _SHOW_TAKEAWAYS = (
     "true only when the user explicitly asks to show the key messages (takeaways) on "
@@ -694,19 +694,31 @@ def _to_plan(validated: Any) -> DeckPlan:
         audience=validated.audience,
         main_message=validated.main_message,
         show_takeaways=bool(getattr(validated, "show_takeaways", None)),
+        no_closing=bool(getattr(validated, "no_closing", None)),
     )
 
 
-def _unclosed(plan: DeckPlan, kinds: Sequence[str], opted_out: bool) -> bool:
-    """Whether a new deck misses the template's closing slide the user did not
-    opt out of: it is refused, never appended, so a slide count asked holds."""
+_THANKS = {"fr": "Merci", "en": "Thank you"}
+_CLOSING_ADDED = (
+    "The last slide, a thank-you closing, was added after the slides sent: it is "
+    "outside any slide count asked."
+)
+
+
+def _closed(plan: DeckPlan, kinds: Sequence[str]) -> Tuple[DeckPlan, bool]:
+    """The built deck ends on the template's closing slide, outside the slide
+    count asked, unless the user opted out: a thank-you one appended when the
+    last slide is not a closing. True when one was appended."""
     slides = [s for s in plan.slides if s.invalid_entry is None]
-    return not (
-        opted_out
+    if (
+        plan.no_closing
         or "closing" not in kinds
         or not any(has_content(s) for s in slides)
         or ends_on_closing(slides[-1])
-    )
+    ):
+        return plan, False
+    thanks = SlidePlan(title=_THANKS[speaker.plan_language(plan)], kind="closing")
+    return plan.model_copy(update={"slides": [*plan.slides, thanks]}), True
 
 
 def _shown_takeaways(plan: DeckPlan) -> DeckPlan:
@@ -1368,15 +1380,6 @@ _UNCHANGED = (
 )
 # A resend that keeps the deck but loses its cover is an edit gone wrong (an
 # added first slide written over it), never a new deck.
-_UNCLOSED = (
-    "No deck was built: the deck must end on a closing slide (kind closing). Make the "
-    "last slide a closing, counted within any slide count the user asked for: drop or "
-    "merge a content slide rather than add one. Set no_closing: true only if the user "
-    "asked for no closing slide."
-    + _NEXT_CALL
-    + "\n"
-    + json.dumps({"status": "needs_revision", "closing": "missing"})
-)
 _COVER_DROPPED = (
     "No deck was built: this resends the user's deck with most of its slides but without "
     "its cover. Keep the cover: to add a slide at the start, send only `changes` with an "
@@ -1516,7 +1519,11 @@ def _description(
     if "cover" in kinds:
         rules += " A first slide of only a title and subtitle is the cover."
     if "closing" in kinds:
-        rules += " A closing slide can only be the last one; a new deck ends on one."
+        rules += (
+            " A closing slide can only be the last one. The tool adds a thank-you closing"
+            " after your slides, outside any slide count asked: write one only to give"
+            " the user's contact details."
+        )
     if takeaway_zones(inventory):
         rules += (
             " Takeaways stay in the speaker notes; set show_takeaways: true only when the "
@@ -1726,12 +1733,16 @@ def build_builder_tools(
                     + "\n".join(exc.problems)
                 )
             show = getattr(validated, "show_takeaways", None)
+            no_closing = getattr(validated, "no_closing", None)
             plan = changed.model_copy(
                 update={
                     "file_name": validated.file_name or changed.file_name,
                     "audience": validated.audience or changed.audience,
                     "main_message": validated.main_message or changed.main_message,
                     "show_takeaways": changed.show_takeaways if show is None else show,
+                    "no_closing": changed.no_closing
+                    if no_closing is None
+                    else no_closing,
                 }
             )
             # Rebuilt, an identical deck would read as a change done.
@@ -1743,15 +1754,14 @@ def build_builder_tools(
             ):
                 return _answer(_UNCHANGED)
 
-        if base is None and _unclosed(
-            plan, offered, bool(getattr(validated, "no_closing", None))
-        ):
-            return _answer(_UNCLOSED)
         delivered = await previous_deck(None) if base is None else None
         if delivered is not None:
             if cover_dropped(delivered, plan, _kinds(inventory)):
                 return _answer(_COVER_DROPPED)
             plan = repinned(delivered, plan, _kinds(inventory))
+            # A resend that does not say keeps the delivered deck's opt-out.
+            if getattr(validated, "no_closing", None) is None:
+                plan = plan.model_copy(update={"no_closing": delivered.no_closing})
 
         call_key = json.dumps(kwargs, sort_keys=True, default=_jsonable) + (
             base.model_dump_json() if base is not None else ""
@@ -1784,6 +1794,19 @@ def build_builder_tools(
         prefetched = (
             await _prefetch_image_bytes(image_ids, services) if image_ids else {}
         )
+        # The user validated the plan: its slides stay as they agreed.
+        answered = validate_plan and plan_approved(history())
+        proposing = (
+            validate_plan
+            and not answered
+            and not (
+                validated.skip_plan and quoted_by_user(validated.skip_plan, history())
+            )
+            and not await delivered_before(base)
+        )
+        # Added only to a deck that is built: the outline the user reviews
+        # shows the slides sent, so nothing in it reads as one too many.
+        plan, closing_added = (plan, False) if proposing else _closed(plan, offered)
         sent = plan
         # Only the slides `changes` touch are checked: an edit is never refused
         # over a slide it leaves as it was.
@@ -1815,8 +1838,6 @@ def build_builder_tools(
         # sent to the model no longer shows it; read only when an ask would follow.
         if repeats and (base is not None or deck_delivered(history())):
             repeats = []
-        # The user validated the plan: its slides stay as they agreed.
-        answered = validate_plan and plan_approved(history())
         if answered:
             repeats = []
         if assignment.problems:
@@ -1839,14 +1860,7 @@ def build_builder_tools(
         if repeats:
             refused(plan)
             return _variety_revision(repeats, assignment)
-        if (
-            validate_plan
-            and not answered
-            and not (
-                validated.skip_plan and quoted_by_user(validated.skip_plan, history())
-            )
-            and not await delivered_before(base)
-        ):
+        if proposing:
             proposed = plan.model_copy(update={"proposed": True, "delivered": False})
             turn_base[:] = [proposed]
             await plans.write(proposed)
@@ -1969,7 +1983,8 @@ def build_builder_tools(
             + assignment.notes
             + _cleared_lines(cleared, plan, numbers)
             + _after_cover_lines(after_cover, numbers)
-            + left_out_series(capped, deck.slides),
+            + left_out_series(capped, deck.slides)
+            + ([_CLOSING_ADDED] if closing_added else []),
         )
         capped.clear()
         notes = delta + _designs_line(inventory, deck.slides, patterns) + notes

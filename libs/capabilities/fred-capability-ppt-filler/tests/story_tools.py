@@ -103,17 +103,7 @@ async def build_tool(
         return request
 
     await middleware.awrap_model_call(_Request(history, middleware.tools), _handler)
-    coroutine = {t.name: cast(Any, t) for t in middleware.tools}[
-        BUILD_TOOL_NAME
-    ].coroutine
-
-    async def _build(**kwargs: Any):
-        # These decks are not about the closing slide: pass no_closing=None to
-        # get the refusal of a deck that does not end on one.
-        kwargs.setdefault("no_closing", True)
-        return await coroutine(**kwargs)
-
-    return _build
+    return {t.name: cast(Any, t) for t in middleware.tools}[BUILD_TOOL_NAME].coroutine
 
 
 def answered(text: str, user: str = USER) -> List[Any]:

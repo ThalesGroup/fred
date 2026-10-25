@@ -1316,6 +1316,8 @@ class DeckPlan(BaseModel):
     delivered: SkipJsonSchema[bool] = False
     # Shown to the user as an outline, waiting for their answer.
     proposed: SkipJsonSchema[bool] = False
+    # The user asked for no closing slide: the build adds none to this deck.
+    no_closing: SkipJsonSchema[bool] = False
 
     @field_validator("file_name", "audience", "main_message", mode="before")
     @classmethod

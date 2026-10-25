@@ -1044,4 +1044,5 @@ def apply_changes(
         audience=base.audience,
         main_message=base.main_message,
         show_takeaways=base.show_takeaways,
+        no_closing=base.no_closing,
     )
