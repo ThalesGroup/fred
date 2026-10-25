@@ -1743,6 +1743,39 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.pendingMessages).toEqual([]);
   });
 
+  it("starts a new turn when an accepted steer misses the final model boundary after HITL", async () => {
+    chatSseWaitResponse = true;
+    let resolveResume: (reached: boolean) => void = () => {};
+    sendHitlResumeMock.mockImplementationOnce(() => new Promise<boolean>((resolve) => (resolveResume = resolve)));
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("focus on Marseille"));
+    await act(async () => latest.handleSend());
+    const id = latest.pendingMessages[0].id;
+    await act(async () => latest.forcePendingMessage(id));
+    act(() => capturedOnAwaitingHuman?.(awaitingHumanEvent));
+    chatSseWaitResponse = false;
+    await act(async () => rerender());
+
+    act(() => latest.handleHitlAnswer("proceed"));
+    chatSseWaitResponse = true;
+    await act(async () => {
+      resolveResume(true);
+      await Promise.resolve();
+    });
+    expect(latest.pendingMessages[0]).toMatchObject({ id, status: "offered" });
+
+    sendMock.mockImplementationOnce(async () => {
+      capturedOnTurnStarted?.();
+      return true;
+    });
+    chatSseWaitResponse = false;
+    await act(async () => rerender());
+    await act(async () => rerender());
+    expect(sendMock).toHaveBeenCalledWith("focus on Marseille", "session-1", expect.anything(), undefined, undefined);
+    expect(latest.pendingMessages).toEqual([]);
+  });
+
   it("keeps a forced row offered when human-input resume preflight fails", async () => {
     chatSseWaitResponse = true;
     let resolveResume: (reached: boolean) => void = () => {};
