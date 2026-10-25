@@ -28,8 +28,10 @@
 
 ## 4. Evidence and close-out
 
-- [ ] 4.1 `eval/prompts.py`: storytelling prompts (prompts added 2026-10-15; metrics and the run pending) with provided documents (the repro request, a "données indicatives" request, a "no titles" request, user-typed figures); metrics: takeaway present, kind and emphasis consistent with the takeaway, refusals per check, false spot-check refusals, first-call success, rounds per deck, tool-schema size before/after
-- [ ] 4.2 Evidence PDFs on the built-in template with `mistral-medium`: the repro deck before / after (no mixed-unit chart, figures slide instead of a crammed subtitle, short titles with takeaways in the notes), an illustrative deck showing the caption, a `validate_plan` session (outline, correction, build)
+4.1 and 4.2 deferred by the owner on 2026-10-25 to #3289 (follow-up issue); no task left for them here.
+
+- Deferred to #3289: 4.1 `eval/prompts.py`: storytelling prompts (prompts added 2026-10-15; metrics and the run pending) with provided documents (the repro request, a "données indicatives" request, a "no titles" request, user-typed figures); metrics: takeaway present, kind and emphasis consistent with the takeaway, refusals per check, false spot-check refusals, first-call success, rounds per deck, tool-schema size before/after
+- Deferred to #3289: 4.2 Evidence PDFs on the built-in template with `mistral-medium`: the repro deck before / after (no mixed-unit chart, figures slide instead of a crammed subtitle, short titles with takeaways in the notes), an illustrative deck showing the caption, a `validate_plan` session (outline, correction, build)
 - [x] 4.3 Help Center `features/capabilities.md` fr + en: takeaways and short titles, sources and illustrative data, the "Validate the plan before building" setting (non-technical wording)
 - [x] 4.4 Package `README.md` storytelling section; a line in the capability's migration note (impact none)
 - [x] 4.5 Package `make test`, `ruff check` (incl. `--select I`), `ruff format --check`, basedpyright with its baseline; `fred-performance-reviewer` on the spot-check (per-call history scan); `openspec validate ppt-builder-storytelling --strict`

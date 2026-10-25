@@ -37,4 +37,4 @@ Linked issue: #3144. Apply after `ppt-builder-charts`, `ppt-builder-more-chart-t
 - [x] 6.2 Help Center fr+en `guides/prepare-powerpoint-template.md`, package `README.md` (D9)
 - [x] 6.3 Migration-note line in `docs/swift/ops/migrations/ppt-builder-capability.md` (impact none, patch)
 - [x] 6.4 Package `make test`, `ruff check` (incl. `--select I`), `ruff format --check`, basedpyright; `openspec validate ppt-builder-multi-chart-slides --strict`
-- [ ] 6.5 Test on the owner's template: the 2-chart and 4-chart example slides are offered and filled; `verification.md` with test counts and evidence; archive after the three changes it extends (done: owner's template and evidence; remaining: archive)
+- [x] 6.5 Test on the owner's template: the 2-chart and 4-chart example slides are offered and filled; `verification.md` with test counts and evidence; archive after the three changes it extends (done: owner's template and evidence; remaining: archive)
