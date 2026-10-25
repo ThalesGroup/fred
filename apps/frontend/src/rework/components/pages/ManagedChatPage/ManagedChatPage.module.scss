@@ -417,6 +417,12 @@
 .pendingSend {
   flex-shrink: 0;
   border-radius: var(--radius-full);
+  height: 1.25rem;
+}
+
+.pendingSend > div {
+  padding-inline: var(--spacing-2xs);
+  font: var(--font-label-medium);
 }
 
 .pendingStatus {
