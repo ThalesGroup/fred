@@ -320,11 +320,106 @@
   z-index: 2;
 }
 
-.todoPanelSlot {
+.pendingMessages {
   position: relative;
-  flex-shrink: 0;
   z-index: 1;
-  margin-bottom: calc(0px - var(--radius-m) - var(--spacing-s));
+  margin: 0 auto var(--spacing-xs);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-low);
+  width: calc(100% - var(--spacing-l) - var(--spacing-l));
+  max-width: var(--composer-max-width);
+  overflow: visible;
+  color: var(--on-surface);
+}
+
+.pendingToggle {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--radius-s) var(--radius-s) 0 0;
+  background: transparent;
+  padding: var(--spacing-xs) var(--spacing-s);
+  width: 100%;
+  color: var(--on-surface);
+  font: var(--font-label-large);
+  text-align: left;
+}
+
+.pendingToggle:hover {
+  background: var(--state-on-surface-hover);
+}
+
+.pendingToggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.pendingToggle > :last-child {
+  color: var(--on-surface-muted);
+  font-size: 1rem;
+}
+
+.pendingCount {
+  color: var(--on-surface-muted);
+  font: var(--font-label-medium);
+}
+
+.pendingList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  border-top: 1px solid var(--outline-muted);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  max-height: min(35vh, 16rem);
+  overflow-y: auto;
+  list-style: none;
+}
+
+.pendingMessage {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  min-height: 1.5rem;
+  font: var(--font-body-small);
+}
+
+.pendingMessageText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pendingAction {
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  padding: 0 var(--spacing-2xs);
+  color: var(--primary);
+  font: inherit;
+  white-space: nowrap;
+}
+
+.pendingAction:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.pendingStatus {
+  color: var(--on-surface-muted);
+  white-space: nowrap;
+}
+
+.todoPanelSlot {
+  flex-shrink: 0;
+  margin-bottom: var(--spacing-xs);
   padding: var(--spacing-xs) var(--spacing-l) 0;
 }
 

@@ -66,6 +66,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeEvent,
     RuntimeServices,
     StatusRuntimeEvent,
+    SteeredUserMessageRuntimeEvent,
     ThoughtDeltaEvent,
     ThoughtEndEvent,
     ThoughtStartEvent,
@@ -700,7 +701,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 agent_stream = self._compiled_agent.astream(
                     graph_input,
                     config=_to_runnable_config(config),
-                    stream_mode=["messages", "updates"],
+                    stream_mode=["messages", "updates", "custom"],
                 )
             else:
                 agent_stream = self._compiled_agent.astream(
@@ -716,9 +717,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     break
                 mode, update = _split_stream_event_mode(raw_event)
 
-                if (
-                    mode == "custom"
-                    and isinstance(update, StatusRuntimeEvent)
+                if mode == "custom" and (
+                    isinstance(update, SteeredUserMessageRuntimeEvent)
+                    or isinstance(update, StatusRuntimeEvent)
                     and update.skill_load is not None
                 ):
                     yield update.model_copy(update={"sequence": sequence})

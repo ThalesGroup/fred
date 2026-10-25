@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DragEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
@@ -43,6 +43,8 @@ import {
 import { MAX_TURN_PROMPTS, usablePromptList } from "@rework/utils/skillInvocation";
 import { isAgentTodoSnapshotSettled, latestAgentTodoSnapshot, presentAgentTodos } from "../../../utils/agentTodo";
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
+import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover";
+import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
 import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
 import { rememberPanelClosed, rememberPanelOpen } from "../../../features/capabilities/capabilityPanelMemory";
@@ -80,6 +82,7 @@ import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import Button from "@shared/atoms/Button/Button";
 import { resolveAgentIcon } from "@shared/utils/agentIcon";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
@@ -154,6 +157,8 @@ type ActivePushDrawer =
 const MODEL_READ_MIN_AGE_MS = 30_000;
 
 export default function ManagedChatPage() {
+  const pendingListId = useId();
+  const [pendingExpanded, setPendingExpanded] = useState(true);
   const { t, i18n } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
   const { teamId, agentInstanceId } = useParams<{ teamId: string; agentInstanceId: string }>();
@@ -164,6 +169,7 @@ export default function ManagedChatPage() {
   }
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const pendingToggleRef = useRef<HTMLButtonElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // The capability side-panel and the session attachments drawer are both
   // `InlineDrawer layout="push"` — sharing one slot keeps at most one open at
@@ -641,6 +647,15 @@ export default function ManagedChatPage() {
     (chat.sessionId !== null && chat.resumingAgentQuestionSessionId === chat.sessionId);
   const composerControlsDisabled =
     chat.executionDisabled || chat.waitResponse || chat.isLoadingHistory || awaitingHumanAnswer;
+  const composerInputDisabled = chat.executionDisabled || chat.isLoadingHistory || awaitingHumanAnswer;
+  const focusAfterPendingAction = () => {
+    if (composerInputDisabled) {
+      if ((chat.pendingMessages?.length ?? 0) > 1) pendingToggleRef.current?.focus();
+      else scrollContainerRef.current?.focus();
+    } else {
+      setFocusEndRequestId((n) => n + 1);
+    }
+  };
 
   // Slash commands and inline skills. Owns the menu and resolves the
   // first token on submit, so `Tab` then `Enter` and `Enter` from the open
@@ -731,8 +746,8 @@ export default function ManagedChatPage() {
       aboveFieldSlot={
         !chat.executionDisabled && commands.menu ? <CommandMenu {...commands.menu} teamName={team?.name} /> : undefined
       }
-      disabled={composerControlsDisabled}
-      sendDisabled={composerControlsDisabled || chat.attachmentsUploading || chat.inputTooLong}
+      disabled={composerInputDisabled}
+      sendDisabled={composerInputDisabled || chat.attachmentsUploading || chat.inputTooLong}
       characterCount={chat.inputCharacterCount}
       characterLimit={chat.maxChatInputChars}
       enableVoiceInput
@@ -952,6 +967,9 @@ export default function ManagedChatPage() {
                   <div
                     className={`${styles.chatArea} ${isInitialState ? styles.chatAreaInitial : ""}`}
                     ref={scrollContainerRef}
+                    tabIndex={-1}
+                    role="region"
+                    aria-label={t("chatbot.conversationAriaLabel")}
                   >
                     {isInitialState ? (
                       <div className={styles.initialStage}>
@@ -1015,6 +1033,106 @@ export default function ManagedChatPage() {
                       <p className={styles.conversationNotice} role="status">
                         {t("chatbot.historyUnavailable")}
                       </p>
+                    )}
+                    {(chat.pendingMessages?.length ?? 0) > 0 && (
+                      <section className={styles.pendingMessages} aria-label={t("chatbot.pendingMessages.label")}>
+                        <button
+                          type="button"
+                          ref={pendingToggleRef}
+                          className={styles.pendingToggle}
+                          aria-expanded={pendingExpanded}
+                          aria-controls={pendingExpanded ? pendingListId : undefined}
+                          onClick={() => setPendingExpanded((value) => !value)}
+                        >
+                          <span>{t("chatbot.pendingMessages.label")}</span>
+                          <span className={styles.pendingCount}>{chat.pendingMessages?.length}</span>
+                          <Icon category="outlined" type={pendingExpanded ? "expand_less" : "expand_more"} />
+                        </button>
+                        {pendingExpanded && (
+                          <ul id={pendingListId} className={styles.pendingList}>
+                            {chat.pendingMessages?.map((message) => (
+                              <li className={styles.pendingMessage} key={message.id}>
+                                <span className={styles.pendingMessageText} title={message.text}>
+                                  {message.text}
+                                </span>
+                                {message.status === "offered" ? (
+                                  <span className={styles.pendingStatus}>{t("chatbot.pendingMessages.offered")}</span>
+                                ) : message.status === "uncertain" ? (
+                                  <>
+                                    <span className={styles.pendingStatus}>
+                                      {t("chatbot.pendingMessages.uncertain")}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className={styles.pendingAction}
+                                      disabled={chat.waitResponse}
+                                      aria-label={`${t("chatbot.pendingMessages.retry")}: ${message.text}`}
+                                      title={t("chatbot.pendingMessages.retryWarning")}
+                                      onClick={() => chat.retryPendingMessage(message.id)}
+                                    >
+                                      {t("chatbot.pendingMessages.retry")}
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    {chat.waitResponse && (
+                                      <Button
+                                        type="button"
+                                        color="secondary"
+                                        variant="tonal"
+                                        size="2xs"
+                                        aria-label={`${t("chatbot.pendingMessages.send")}: ${message.text}`}
+                                        onClick={() => void chat.forcePendingMessage(message.id)}
+                                      >
+                                        {t("chatbot.pendingMessages.send")}
+                                      </Button>
+                                    )}
+                                    <ComposerActionsMenu
+                                      icon={{ category: "outlined", type: "more_horiz" }}
+                                      align="right"
+                                      size="2xs"
+                                      portal
+                                      openAriaLabel={`${t("chatbot.pendingMessages.actions")}: ${message.text}`}
+                                      dialogAriaLabel={`${t("chatbot.pendingMessages.actions")}: ${message.text}`}
+                                    >
+                                      {({ closeMenu }) => (
+                                        <MenuPopover
+                                          dense
+                                          groups={[
+                                            [
+                                              <MenuPopoverItem
+                                                key="edit"
+                                                icon={{ category: "outlined", type: "edit" }}
+                                                label={t("chatbot.pendingMessages.edit")}
+                                                onClick={() => {
+                                                  closeMenu();
+                                                  focusAfterPendingAction();
+                                                  chat.editPendingMessage(message.id);
+                                                }}
+                                              />,
+                                              <MenuPopoverItem
+                                                key="remove"
+                                                icon={{ category: "outlined", type: "delete" }}
+                                                label={t("chatbot.pendingMessages.remove")}
+                                                danger
+                                                onClick={() => {
+                                                  closeMenu();
+                                                  focusAfterPendingAction();
+                                                  chat.removePendingMessage(message.id);
+                                                }}
+                                              />,
+                                            ],
+                                          ]}
+                                        />
+                                      )}
+                                    </ComposerActionsMenu>
+                                  </>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </section>
                     )}
                     {composer}
                     <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>

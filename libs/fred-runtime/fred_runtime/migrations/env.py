@@ -26,6 +26,7 @@ from fred_runtime.app.config_loader import load_agent_pod_config
 from fred_runtime.app.web_research_activity import (
     WebResearchActivityRow,
 )
+from fred_runtime.runtime_support.turn_steering import _turns
 
 # Alembic Config object — provides access to values in alembic.ini.
 config = context.config
@@ -41,6 +42,7 @@ if config.config_file_name is not None:
 _runtime_metadata = MetaData()
 cast(Table, SessionHistoryRow.__table__).to_metadata(_runtime_metadata)
 cast(Table, WebResearchActivityRow.__table__).to_metadata(_runtime_metadata)
+_turns.to_metadata(_runtime_metadata)
 
 run_migrations_offline, run_migrations_online = make_alembic_env(
     target_metadata=_runtime_metadata,

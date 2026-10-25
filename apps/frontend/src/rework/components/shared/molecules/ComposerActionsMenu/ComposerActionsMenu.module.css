@@ -25,6 +25,17 @@
   left: 0;
 }
 
+.menu[data-align="right"] {
+  right: 0;
+  left: auto;
+}
+
+.menu[data-portal="true"] {
+  position: fixed;
+  left: auto;
+  z-index: 10;
+}
+
 .menuBody {
   display: flex;
 }
