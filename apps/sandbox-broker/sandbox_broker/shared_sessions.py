@@ -46,8 +46,6 @@ class SharedConversationPool:
     def __init__(self, backend: AgentSandboxBackend, settings: BrokerSettings) -> None:
         self.backend = backend
         self.settings = settings
-        self.idle_seconds = settings.idle_timeout_seconds
-        self.max_sessions = settings.max_sandboxes
         self._database: asyncpg.Pool | None = None
         self._worker: asyncio.Task[None] | None = None
         self._prepare_count = 0
@@ -85,13 +83,8 @@ class SharedConversationPool:
         if self._database is not None:
             await self._database.close()
 
-    async def configure(self, *, idle_seconds: int, max_sessions: int) -> None:
-        self.idle_seconds = idle_seconds
-        self.max_sessions = min(max_sessions, self.settings.max_sandboxes)
-
-    @property
-    def active_idle_seconds(self) -> int:
-        return min(self.settings.active_idle_seconds, max(1, self.idle_seconds - 1))
+    def _active_idle_seconds(self, idle_seconds: int) -> int:
+        return min(self.settings.active_idle_seconds, max(1, idle_seconds - 1))
 
     async def view_key(self, key: str, tenant: str) -> str:
         row = await self._ensure(key, tenant)
@@ -159,9 +152,10 @@ class SharedConversationPool:
                 self._prepare_count += 1
                 self._prepare_seconds += monotonic() - preparation_started
                 await self._mark_running(key, owner, name)
+                idle_seconds, _ = await self._policy(self._db())
                 await self.backend.renew(
                     lease,
-                    self.idle_seconds + self.settings.execution_timeout_seconds + 30,
+                    idle_seconds + self.settings.execution_timeout_seconds + 30,
                 )
                 result = await asyncio.wait_for(
                     self.backend.execute(lease, request),
@@ -170,7 +164,8 @@ class SharedConversationPool:
                 if result.timed_out:
                     await self._dispose(key, owner, name, view)
                 else:
-                    await self.backend.renew(lease, self.idle_seconds)
+                    idle_seconds, _ = await self._policy(self._db())
+                    await self.backend.renew(lease, idle_seconds)
                     await self._finish(key, owner)
                 return result
             except BaseException as exc:
@@ -229,7 +224,7 @@ class SharedConversationPool:
                         """SELECT *, last_used_at < now() - ($2 * interval '1 second') AS expired
                            FROM sandbox_conversation_leases WHERE session_key=$1""",
                         key,
-                        self.idle_seconds,
+                        (await self._policy(connection))[0],
                     )
                     if data is None or data["tenant_key"] != tenant:
                         raise SandboxError("unauthorized")
@@ -289,7 +284,7 @@ class SharedConversationPool:
                             """SELECT count(*) FROM sandbox_conversation_leases
                                WHERE state IN ('preparing','resuming')"""
                         )
-                        limit = await self._capacity_limit(connection)
+                        _, limit = await self._policy(connection)
                         first = await connection.fetchval(
                             """SELECT t.id FROM sandbox_wait_tickets t
                                JOIN sandbox_conversation_leases s
@@ -437,6 +432,7 @@ class SharedConversationPool:
 
     async def sweep(self) -> None:
         try:
+            idle_seconds, _ = await self._policy(self._db())
             rows = await self._db().fetch(
                 """SELECT session_key, tenant_key, workspace_id, view_epoch,
                    state, resource_name, owner_token,
@@ -453,8 +449,8 @@ class SharedConversationPool:
                    ORDER BY CASE WHEN state='deleting' OR
                      last_used_at < now() - ($1 * interval '1 second')
                      THEN 0 ELSE 1 END, last_used_at LIMIT 100""",
-                self.idle_seconds,
-                self.active_idle_seconds,
+                idle_seconds,
+                self._active_idle_seconds(idle_seconds),
             )
             for data in rows:
                 if (
@@ -485,6 +481,7 @@ class SharedConversationPool:
         if not delete and row.state in {"new", "suspended"}:
             return
         try:
+            idle_seconds, _ = await self._policy(self._db())
             status = await self._db().execute(
                 """UPDATE sandbox_conversation_leases SET owner_token=$2,
                    owner_expires_at=now()+($3 * interval '1 second'),
@@ -498,7 +495,7 @@ class SharedConversationPool:
                 owner,
                 _OWNER_SECONDS,
                 delete,
-                self.idle_seconds if delete else self.active_idle_seconds,
+                idle_seconds if delete else self._active_idle_seconds(idle_seconds),
                 row.state == "deleting",
                 row.workspace_id,
                 row.view_epoch,
@@ -556,13 +553,17 @@ class SharedConversationPool:
             raise SandboxError("unavailable")
         return self._database
 
-    async def _capacity_limit(
+    async def _policy(
         self, connection: asyncpg.Connection | asyncpg.Pool
-    ) -> int:
-        admin_limit = await connection.fetchval(
-            "SELECT max_active_sessions FROM sandbox_settings WHERE id='default'"
+    ) -> tuple[int, int]:
+        row = await connection.fetchrow(
+            "SELECT idle_minutes, max_active_sessions FROM sandbox_settings WHERE id='default'"
         )
-        return min(self.max_sessions, admin_limit if admin_limit is not None else 8)
+        if row is None:
+            return 1200, min(self.settings.max_sandboxes, 8)
+        return row["idle_minutes"] * 60, min(
+            self.settings.max_sandboxes, row["max_active_sessions"]
+        )
 
     async def statistics(self) -> dict[str, int]:
         row = await self._db().fetchrow(
@@ -577,7 +578,7 @@ class SharedConversationPool:
         waiting = await self._db().fetchval(
             "SELECT count(*) FROM sandbox_wait_tickets WHERE expires_at >= now()"
         )
-        limit = await self._capacity_limit(self._db())
+        idle_seconds, limit = await self._policy(self._db())
         assert row is not None
         return {
             "allocated": row["allocated"],
@@ -586,6 +587,7 @@ class SharedConversationPool:
             "retained": row["retained"],
             "waiting": waiting,
             "limit": limit,
+            "idle_timeout_seconds": idle_seconds,
         }
 
     async def prometheus(self) -> str:

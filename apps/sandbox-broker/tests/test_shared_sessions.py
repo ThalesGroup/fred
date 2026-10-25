@@ -198,6 +198,7 @@ async def test_admin_cap_is_shared_before_next_admission() -> None:
     try:
         await first.start()
         await second.start()
+        old_view = await first.view_key("e" * 64, "a" * 64)
         assert (
             await first.execute("e" * 64, "a" * 64, SandboxRequest(code="first"))
         ).stdout == "first"
@@ -208,6 +209,16 @@ async def test_admin_cap_is_shared_before_next_admission() -> None:
             await second.execute("f" * 64, "b" * 64, SandboxRequest(code="second"))
         assert backend.prepared == 1
         assert (await second.statistics())["limit"] == 1
+        await database.execute(
+            "UPDATE sandbox_settings SET idle_minutes=1 WHERE id='default'"
+        )
+        await database.execute(
+            """UPDATE sandbox_conversation_leases
+               SET last_used_at=now()-interval '70 seconds' WHERE session_key=$1""",
+            "e" * 64,
+        )
+        assert await second.view_key("e" * 64, "a" * 64) != old_view
+        assert (await second.statistics())["idle_timeout_seconds"] == 60
     finally:
         await first.close()
         await second.close()

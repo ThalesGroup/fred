@@ -60,8 +60,13 @@ def create_app(
                 max_sessions=config.max_sandboxes,
             )
             sessions.start()
-        sync = SettingsSync(config, sessions)
-        sync.start()
+        sync = (
+            SettingsSync(config, sessions)
+            if isinstance(sessions, ConversationPool)
+            else None
+        )
+        if sync is not None:
+            sync.start()
         app.state.settings = config
         app.state.pool = pool
         app.state.sessions = sessions
@@ -69,7 +74,8 @@ def create_app(
         try:
             yield
         finally:
-            await sync.close()
+            if sync is not None:
+                await sync.close()
             await sessions.close()
             if pool is not None:
                 await pool.close()
@@ -83,10 +89,7 @@ def create_app(
                 stats = await app.state.sessions.statistics()
             except Exception:
                 return _error(503, "unavailable")
-            return {
-                **stats,
-                "idle_timeout_seconds": app.state.sessions.idle_seconds,
-            }
+            return stats
         return {
             "allocated": app.state.pool.allocated_count if app.state.pool else 0,
             "limit": app.state.settings.max_sandboxes,

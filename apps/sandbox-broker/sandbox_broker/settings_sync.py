@@ -12,7 +12,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .config import BrokerSettings
 from .sessions import ConversationPool
-from .shared_sessions import SharedConversationPool
 
 _REFRESH_SECONDS = 30
 logger = logging.getLogger(__name__)
@@ -29,7 +28,7 @@ class SettingsSync:
     def __init__(
         self,
         settings: BrokerSettings,
-        sessions: ConversationPool | SharedConversationPool,
+        sessions: ConversationPool,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.settings = settings
