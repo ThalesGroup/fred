@@ -60,7 +60,7 @@ async def _built(monkeypatch, slides, user: str = USER, workspace=None):
 async def test_the_takeaway_opens_the_notes_and_never_reaches_the_slide(monkeypatch):
     text, result, workspace = await _built(monkeypatch, DECK)
     assert text.startswith("Delivered"), text
-    _, points, chart = deck(workspace).slides
+    _, points, chart, _closing = deck(workspace).slides
     assert notes(points).split("\n") == [POINTS["takeaway"], "Insister sur l'Italie."]
     assert notes(chart).split("\n") == [CHART["takeaway"], "Source : rapport RH 2025"]
     for slide, sent in ((points, POINTS), (chart, CHART)):
@@ -169,7 +169,7 @@ async def test_a_french_deck_is_built_with_french_spacing(monkeypatch):
     }
     text, _, workspace = await _built(monkeypatch, [COVER, spaced, labelled])
     assert text.startswith("Delivered"), text
-    _, points, chart = deck(workspace).slides
+    _, points, chart, _closing = deck(workspace).slides
     assert any("Italie\u00a0: 40\u202f000 personnes" in t for t in texts(points))
     (frame,) = [s for s in chart.shapes if getattr(s, "has_chart", False)]
     assert frame.chart.plots[0].categories[0] == "Italie\u00a0: 1\u202f200"
