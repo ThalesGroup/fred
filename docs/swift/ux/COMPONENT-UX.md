@@ -518,7 +518,7 @@ _(none)_
 
 #### Resolved
 
-- **Sandbox command previews (2026-10-25)** - Group and child rows show the first nonblank line of the submitted Bash script, such as `python - <<'PY'`, without a language prefix. `...` marks following lines; the full script and result remain in the tool detail.
+- **Sandbox command previews (2026-10-25)** - The group heading retains the command count and active command preview. A short leading shell comment labels a multiline script in the heading and child row; it describes intent, not execution evidence. An unlabeled heredoc uses a localized neutral script label and counts only source lines between its delimiters. If the delimiter is missing, the label omits the count. Ordinary commands show their bounded first line and `...` when more lines follow. The full script and result remain in the tool detail.
 
 - **Reasoning rows still repeated a rephrased preamble (2026-09-14, #2666)** — the fix below
   only trimmed sentences identical character for character to the _previous_ block. Models

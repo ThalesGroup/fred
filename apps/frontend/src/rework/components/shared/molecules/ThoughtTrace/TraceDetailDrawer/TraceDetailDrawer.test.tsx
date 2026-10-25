@@ -139,7 +139,7 @@ describe("TraceDetailDrawer sandbox execution", () => {
   }
 
   it("shows the submitted shell command invoking Python and its stdout", () => {
-    const entry = sandboxEntry("python -c 'print(42)'", {
+    const entry = sandboxEntry("# Print the answer\npython -c 'print(42)'", {
       exit_code: 0,
       stdout: "hello\n",
       stderr: "",
@@ -151,6 +151,7 @@ describe("TraceDetailDrawer sandbox execution", () => {
     expect(html).toContain("rework.chatTrace.sandbox.code");
     expect(html).toContain('data-language="bash"');
     expect(html).toContain("python -c &#x27;print(42)&#x27;");
+    expect(html).toContain("# Print the answer");
     expect(html).toContain("rework.chatTrace.sandbox.result");
     expect(html).toContain("rework.chatTrace.sandbox.output");
     expect(html).toContain("hello\n");

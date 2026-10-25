@@ -73,28 +73,36 @@ function useSummaryLabel(summary: TraceSummary): string {
 /** Stable empty identity, so the collapsed memo never yields a new array. */
 const EMPTY_ROWS: TraceRow[] = [];
 
-function codePreview(code: string): string {
-  const lines = code
-    .split(/\r?\n/)
-    .map((line) => line.trim().replace(/\s+/g, " "))
-    .filter(Boolean);
-  const preview = `${lines[0] ?? ""}${lines.length > 1 ? " ..." : ""}`;
+function codePreview(code: string, scriptLabel: (kind: "python" | "shell", count?: number) => string): string {
+  const lines = code.trimEnd().split(/\r?\n/);
+  const visibleLines = lines
+    .map((line, index) => ({ text: line.trim().replace(/\s+/g, " "), index }))
+    .filter(({ text }) => Boolean(text));
+  const firstIndex = visibleLines[0]?.text.startsWith("#!") && visibleLines.length > 1 ? 1 : 0;
+  const first = visibleLines[firstIndex]?.text ?? "";
+  const intent = visibleLines.length > firstIndex + 1 ? /^#\s+(.+)$/.exec(first)?.[1] : undefined;
+  const heredoc = /^(.*?)\s*<<(-?)(?:'([^']+)'|"([^"]+)"|([A-Za-z_][A-Za-z_0-9]*))(?:\s+#.*)?\s*$/.exec(first);
+  const delimiter = heredoc?.[3] ?? heredoc?.[4] ?? heredoc?.[5];
+  const closeIndex = delimiter
+    ? lines.findIndex((line, index) => {
+        if (index <= visibleLines[firstIndex].index) return false;
+        return (heredoc?.[2] ? line.replace(/^\t+/, "") : line) === delimiter;
+      })
+    : -1;
+  const python =
+    /^(?:(?:uv\s+run|env(?:\s+[A-Za-z_]\w*=\S+)*)\s+)?(?:\S*\/)?python(?:3(?:\.\d+)?)?(?:\s+-[A-Za-z0-9]*)*$/.test(
+      heredoc?.[1]?.trim() ?? "",
+    );
+  const preview = intent
+    ? intent
+    : heredoc
+      ? scriptLabel(
+          python ? "python" : "shell",
+          closeIndex < 0 ? undefined : closeIndex - visibleLines[firstIndex].index - 1,
+        )
+      : `${first}${visibleLines.length > firstIndex + 1 ? " ..." : ""}`;
   return preview.length > 120 ? `${preview.slice(0, 117).trimEnd()}...` : preview;
 }
-
-const GROUP_RULES: TraceGroupRule[] = [
-  {
-    id: "code-sandbox",
-    titleKey: "rework.chatTrace.toolLabels.codeSandbox",
-    countKey: "rework.chatTrace.toolGroups.commands",
-    matches: (entry) => toolSlug(toolName(entry.call)) === "execute_code",
-    itemLabel: () => "",
-    preview: (entry) => {
-      const code = toolArgs(entry.call).code;
-      return typeof code === "string" ? codePreview(code) : "";
-    },
-  },
-];
 
 export function ThoughtTrace({
   messages,
@@ -103,6 +111,28 @@ export function ThoughtTrace({
   hitlAnswerSummariesByCallId,
 }: ThoughtTraceProps) {
   const { t } = useTranslation();
+  const groupRules = useMemo<TraceGroupRule[]>(
+    () => [
+      {
+        id: "code-sandbox",
+        titleKey: "rework.chatTrace.toolLabels.codeSandbox",
+        countKey: "rework.chatTrace.toolGroups.commands",
+        matches: (entry) => toolSlug(toolName(entry.call)) === "execute_code",
+        itemLabel: () => "",
+        preview: (entry) => {
+          const code = toolArgs(entry.call).code;
+          return typeof code === "string"
+            ? codePreview(code, (kind, count) =>
+                count === undefined
+                  ? t(`rework.chatTrace.toolGroups.${kind}ScriptUncounted`)
+                  : t(`rework.chatTrace.toolGroups.${kind}Script`, { count }),
+              )
+            : "";
+        },
+      },
+    ],
+    [t],
+  );
   // Memoized: this fold runs on every streamed delta, and the page re-renders
   // for reasons of its own on top of that.
   const entries = useMemo(() => groupTraceEntries(messages), [messages]);
@@ -114,7 +144,7 @@ export function ThoughtTrace({
   // conversation on every token — and traceRows flattens markdown. Behind the
   // toggle, a long history's collapsed traces cost nothing per token.
   const rows = useMemo(() => (expanded ? traceRows(entries) : EMPTY_ROWS), [entries, expanded]);
-  const displayItems = useMemo(() => groupTraceRows(rows, GROUP_RULES, messages), [rows, messages]);
+  const displayItems = useMemo(() => groupTraceRows(rows, groupRules, messages), [rows, groupRules, messages]);
 
   if (entries.length === 0) return null;
 

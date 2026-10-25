@@ -1901,7 +1901,13 @@
       },
       "toolGroups": {
         "commands_one": "{{count}} commande",
-        "commands_other": "{{count}} commandes"
+        "commands_other": "{{count}} commandes",
+        "pythonScript_one": "Script Python ({{count}} ligne)",
+        "pythonScript_other": "Script Python ({{count}} lignes)",
+        "pythonScriptUncounted": "Script Python",
+        "shellScript_one": "Script shell ({{count}} ligne)",
+        "shellScript_other": "Script shell ({{count}} lignes)",
+        "shellScriptUncounted": "Script shell"
       },
       "toolLabels": {
         "codeSandbox": "Exécution du code dans un espace isolé",

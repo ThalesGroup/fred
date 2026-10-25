@@ -34,6 +34,12 @@ vi.mock("react-i18next", () => ({
       if (key === "rework.chatTrace.toolLabels.codeSandbox") return "Code in sandbox";
       if (key === "rework.chatTrace.toolGroups.commands")
         return `${values?.count} ${values?.count === 1 ? "command" : "commands"}`;
+      if (key === "rework.chatTrace.toolGroups.pythonScript")
+        return `Python script (${values?.count} ${values?.count === 1 ? "line" : "lines"})`;
+      if (key === "rework.chatTrace.toolGroups.shellScript")
+        return `Shell script (${values?.count} ${values?.count === 1 ? "line" : "lines"})`;
+      if (key === "rework.chatTrace.toolGroups.pythonScriptUncounted") return "Python script";
+      if (key === "rework.chatTrace.toolGroups.shellScriptUncounted") return "Shell script";
       if (key === "test.summaries") return `${values?.count} summaries`;
       return key;
     },
@@ -176,7 +182,7 @@ describe("ThoughtTrace code groups", () => {
     expect(child?.textContent).not.toContain("echo later");
   });
 
-  it("shows the Python shell launcher and marks its omitted body", () => {
+  it("hides an unlabeled Python heredoc launcher behind a neutral script label", () => {
     renderTrace([
       call(
         "c1",
@@ -185,27 +191,75 @@ describe("ThoughtTrace code groups", () => {
         1,
       ),
     ]);
-    expect(groups()[0].textContent).toContain("python - <<'PY' ...");
+    expect(groups()[0].textContent).toContain("Python script (3 lines)");
+    expect(groups()[0].textContent).not.toContain("<<'PY'");
     expect(groups()[0].textContent).not.toContain("from pypdf import PdfReader");
     act(() => groups()[0].click());
     const child = [...container.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("python - <<'PY' ..."),
+      button.textContent?.includes("Python script (3 lines)"),
     );
     expect(child?.textContent).not.toContain("from pypdf");
-    expect(child?.getAttribute("aria-label")).toContain("python - <<'PY' ...");
+    expect(child?.getAttribute("aria-label")).toContain("Python script (3 lines)");
   });
 
-  it("keeps the submitted shell command rather than selecting an internal search line", () => {
+  it("uses a leading intent comment without guessing a Python body line", () => {
     renderTrace([
       call(
         "c1",
         "execute_code",
-        "python - <<'PY'\nfrom pypdf import PdfReader\nif \"HELIOS-4821\" in text:\n    print(text)\nPY",
+        "# Search HELIOS-4821 in the attached PDF\npython - <<'PY'\nfrom pypdf import PdfReader\nif \"HELIOS-4821\" in text:\n    print(text)\nPY",
         1,
       ),
     ]);
-    expect(groups()[0].textContent).toContain("python - <<'PY' ...");
+    expect(groups()[0].textContent).toContain("Search HELIOS-4821 in the attached PDF");
+    expect(groups()[0].textContent).not.toContain("<<'PY'");
     expect(groups()[0].textContent).not.toContain('if "HELIOS-4821"');
+  });
+
+  it("keeps the command count and current intent in the group heading", () => {
+    renderTrace([
+      call("c1", "execute_code", "# Locate the workbook\nfind /inputs -name '*.xlsx'", 1),
+      result("c1", 2),
+      call("c2", "execute_code", "# Calculate the Lyon margin\npython - <<'PY'\nprint(41.22)\nPY", 3),
+    ]);
+    expect(groups()[0].textContent).toContain("2 commands");
+    expect(groups()[0].textContent).toContain("Calculate the Lyon margin");
+    expect(groups()[0].textContent).not.toContain("Locate the workbook");
+    act(() => groups()[0].click());
+    expect(container.textContent).toContain("Locate the workbook");
+    expect(container.textContent).toContain("Calculate the Lyon margin");
+  });
+
+  it("uses a neutral shell label for another heredoc", () => {
+    renderTrace([call("c1", "execute_code", "cat <<EOF\nhello\nEOF", 1)]);
+    expect(groups()[0].textContent).toContain("Shell script (1 line)");
+    expect(groups()[0].textContent).not.toContain("<<EOF");
+  });
+
+  it.each([
+    "python <<'PY'",
+    "python3 -u - <<'PY'",
+    "/usr/bin/python3.12 <<'PY'",
+    "python<<'PY'",
+    "python - <<'PY' # calculate answer",
+  ])("recognizes a Python heredoc launched with %s", (launcher) => {
+    renderTrace([call("c1", "execute_code", `${launcher}\nprint(42)\nPY`, 1)]);
+    expect(groups()[0].textContent).toContain("Python script (1 line)");
+  });
+
+  it("does not claim a source line count for an unfinished heredoc", () => {
+    renderTrace([call("c1", "execute_code", "python <<'PY'\nprint(42)", 1)]);
+    expect(groups()[0].textContent).toContain("Python script");
+    expect(groups()[0].textContent).not.toContain("lines");
+    expect(groups()[0].textContent).not.toContain("<<'PY'");
+  });
+
+  it("recognizes an intent comment after a shell shebang", () => {
+    renderTrace([
+      call("c1", "execute_code", "#!/bin/bash\n# Search the mounted corpus\ngrep -Fi term /inputs/corpus/file", 1),
+    ]);
+    expect(groups()[0].textContent).toContain("Search the mounted corpus");
+    expect(groups()[0].textContent).not.toContain("#!/bin/bash");
   });
 
   it("splits groups at a write_todos call that the ordinary trace hides", () => {
