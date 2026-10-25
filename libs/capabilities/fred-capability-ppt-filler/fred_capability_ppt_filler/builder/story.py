@@ -212,30 +212,62 @@ def _reach(chart: PlanChart, amounts: Sequence[Optional[float]]) -> float:
 
 
 # A large amount written in text, its currency after (1 250 000 €) or before
-# ($1,250,000); "450 k€" or "$500k" already carry a scale and do not match.
+# ($1,250,000), or a range of two (450 000–520 000 €); "450 k€" or "$500k"
+# already carry a scale and do not match. Never inside an identifier or a path
+# (REF-120000€, p=1250000€), a plain negative amount (-120 000 €) still matches.
 _FIGURE = r"\d{1,3}(?:[ \u00a0\u202f,.]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?"
+_GLUED = r"[\w/\\=.,#&?@]"
+_DASH = r"[ \u00a0\u202f]?[–-][ \u00a0\u202f]?"
 _TEXT_AMOUNT = re.compile(
-    rf"(?<![\d.,])(?:(?P<after>{_FIGURE})(?P<space>[ \u00a0\u202f]?)(?P<sign>[€$£])"
-    rf"|(?P<lead>[€$£])(?P<before>{_FIGURE})(?![\d.,]|\s?(?:bn|Md|[kKmMB])(?![^\W\d_])))"
+    rf"(?<!{_GLUED})(?<!{_GLUED}[-–+\u2212])"
+    rf"(?:(?P<after>{_FIGURE})(?:(?P<dash>{_DASH})(?P<high>{_FIGURE}))?"
+    rf"(?P<space>[ \u00a0\u202f]?)(?P<sign>[€$£])"
+    rf"|(?P<lead>[€$£])(?P<before>{_FIGURE})"
+    rf"(?:(?P<dash2>{_DASH})(?P<lead2>[€$£])?(?P<high2>{_FIGURE}))?"
+    rf"(?![\d.,]|\s?(?:bn|Md|[kKmMB])(?![^\W\d_])))"
 )
+_GROUPED = re.compile(r"\d{1,3}([ \u00a0\u202f,.])\d{3}")
 _Model = TypeVar("_Model", bound=BaseModel)
 
 
 def rescaled_text(text: str, language: str) -> str:
     """Amounts of ``text`` past `_LARGE` in the scale that keeps them short:
-    ``520 000 €`` → ``520 k€``, ``$1,250,000`` → ``$1.25M``."""
+    ``520 000 €`` → ``520 k€``, ``$1,250,000`` → ``$1.25M``, both ends of a
+    range in one scale. An amount grouped with the deck's decimal mark
+    ($1,250,000 in a French deck) is another convention: left as written."""
     mark = "," if language == "fr" else "."
 
     def amount(match: re.Match[str]) -> str:
-        value, _ = read_number(match["after"] or match["before"], mark)
-        if value is None or abs(value) < _LARGE:
+        figures = [
+            f
+            for f in (
+                match["after"] or match["before"],
+                match["high"] or match["high2"],
+            )
+            if f
+        ]
+        if any((g := _GROUPED.match(f)) and g.group(1) == mark for f in figures):
             return match.group()
-        target = _magnitude([value], 1e3)
-        shown = f"{round(value / target, 2):g}".replace(".", mark)
+        values = [read_number(f, mark)[0] for f in figures]
+        if any(v is None for v in values):
+            return match.group()
+        numbers = [v for v in values if v is not None]
+        if max(map(abs, numbers)) < _LARGE:
+            return match.group()
+        target = _magnitude(numbers, 1e3)
+        rounded = [round(v / target, 2) for v in numbers]
+        if len(rounded) > 1 and min(map(abs, rounded)) < 1:
+            return match.group()  # 10–120 000 € would read 0,01–120 k€
+        low, *high = [f"{r:g}".replace(".", mark) for r in rounded]
         prefix = _PREFIX_OF["fr" if language == "fr" else "en"][target]
         if match["after"]:
-            return f"{shown}{match['space']}{prefix}{match['sign']}"
-        return f"{match['lead']}{shown}{prefix}"
+            span = f"{low}{match['dash']}{high[0]}" if high else low
+            return f"{span}{match['space']}{prefix}{match['sign']}"
+        if not high:
+            return f"{match['lead']}{low}{prefix}"
+        lead2 = match["lead2"] or ""
+        first = f"{low}{prefix}" if lead2 else low
+        return f"{match['lead']}{first}{match['dash2']}{lead2}{high[0]}{prefix}"
 
     return _TEXT_AMOUNT.sub(amount, text)
 

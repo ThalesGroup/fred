@@ -296,6 +296,47 @@ def test_text_amounts_are_spelled_in_the_deck_s_language():
     assert slide.bullets == ["Revenue: $1.25M", "Cost: 2.5 bn€"]
 
 
+@pytest.mark.parametrize(
+    "written, shown",
+    [
+        # Both ends of a range in one scale, whichever dash joins them.
+        ("450 000–520 000 €", "450–520 k€"),
+        ("450 000-520 000 €", "450-520 k€"),
+        ("1 200 000 – 2 500 000 €", "1,2 – 2,5 M€"),
+        # A low end that would read below 1 leaves the range as written.
+        ("10-120 000 €", "10-120 000 €"),
+        # Rounded to 1 000 of a scale, the amount moves up one.
+        ("999 999 €", "1 M€"),
+        ("999 600 €", "999,6 k€"),
+        # Identifiers and paths are no amounts; a plain negative one is.
+        ("REF-120000€", "REF-120000€"),
+        (".../p=1250000€", ".../p=1250000€"),
+        ("-120 000 €", "-120 k€"),
+        ("perte : -120 000 €", "perte : -120 k€"),
+        # Grouped with the deck's decimal mark: another convention, left as is.
+        ("$1,250,000", "$1,250,000"),
+        ("1 250 000 €", "1,25 M€"),
+    ],
+)
+def test_text_ranges_rounding_and_identifiers(written, shown):
+    assert _text(bullets=[written]).bullets == [shown]
+
+
+@pytest.mark.parametrize(
+    "written, shown",
+    [
+        ("$450,000–520,000", "$450–520k"),
+        ("$450,000-$520,000", "$450k-$520k"),
+        ("1.250.000 €", "1.250.000 €"),
+        # The largest scale caps it: no prefix past a billion.
+        ("$12,000,000,000,000", "$12000bn"),
+    ],
+)
+def test_english_text_ranges_and_conventions(written, shown):
+    english = "The revenue of the group"
+    assert _text(english, bullets=[written]).bullets == [shown]
+
+
 def test_a_billion_scale_is_spelled_in_the_deck_s_language():
     english = "The revenue of the group"
     assert _rescaled(["2 500 000 000 €", "900 000 000 €"], title=english)[1] == "bn€"
