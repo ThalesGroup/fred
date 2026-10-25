@@ -30,6 +30,7 @@ from pydantic import BaseModel
 from fred_capability_ppt_filler.builder import charts, notes
 from fred_capability_ppt_filler.builder.assign import SlideProblem
 from fred_capability_ppt_filler.builder.plan import (
+    STACKED_TYPES,
     XY_TYPES,
     DeckPlan,
     PlanChart,
@@ -150,12 +151,15 @@ def rescaled_chart(chart: PlanChart, language: str) -> Optional[PlanChart]:
             amounts.append(None if value is None or scale is None else value * scale[1])
     known = [a for a in amounts if a is not None]
     current = next(iter(factors)) if factors else given[1] if given else 1.0
-    if not mixed and (not known or max(map(abs, known)) / current < _LARGE):
+    reach = _reach(chart, amounts)
+    # 2 500 k€ reads as 2,5 M€; a bare unit keeps 1 500 € as written.
+    least = _LARGE if current == 1.0 else 1e3
+    if not mixed and (not known or reach / current < least):
         return None
     if mixed and given:
         target = given[1]
     else:
-        target = _magnitude(known)
+        target = _magnitude([reach])
     if not mixed and target == current:
         return None
     (base,) = bases
@@ -176,7 +180,30 @@ def rescaled_chart(chart: PlanChart, language: str) -> Optional[PlanChart]:
         )
         for s in chart.series
     ]
-    return chart.model_copy(update={"series": series, "unit": label})
+    update: Dict[str, Any] = {"series": series, "unit": label}
+    if chart.unit and label and label != chart.unit:
+        # "CA (k€)" over an axis in M€ would contradict it.
+        named = re.compile(rf"(?<![\w/]){re.escape(chart.unit)}(?![\w/])")
+        for field in ("title", "y_title"):
+            text = getattr(chart, field, None)
+            if text:
+                update[field] = named.sub(label, text)
+    return chart.model_copy(update=update)
+
+
+def _reach(chart: PlanChart, amounts: Sequence[Optional[float]]) -> float:
+    """The largest amount the value axis shows: a stacked chart's largest total."""
+    if chart.type not in STACKED_TYPES or chart.stacked_as == "percent":
+        return max((abs(a) for a in amounts if a is not None), default=0.0)
+    values = iter(amounts)
+    rows = [[next(values) or 0.0 for _ in s.values] for s in chart.series]
+    return max(
+        (
+            max(sum(v for v in c if v > 0), -sum(v for v in c if v < 0))
+            for c in zip(*rows)
+        ),
+        default=0.0,
+    )
 
 
 # A large amount written in text, its currency after (1 250 000 €) or before

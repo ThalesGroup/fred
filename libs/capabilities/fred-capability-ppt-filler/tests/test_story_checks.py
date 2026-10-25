@@ -215,6 +215,52 @@ def test_amounts_in_several_scales_of_one_unit_are_put_in_one(values, unit, expe
     assert tuple(got) == expected and problems == []
 
 
+def test_a_stacked_chart_is_scaled_from_its_largest_total():
+    """2 500 k€ on the axis reads 2,5 M€: the stacked totals set the scale."""
+    chart = {
+        "type": "stacked_bar",
+        "title": "CA par région et produit (k€)",
+        "unit": "k€",
+        "categories": ["T1", "T2", "T3", "T4"],
+        "series": [
+            {"name": "Logiciel", "values": [950, 1025, 1100, 1200]},
+            {"name": "Services", "values": [590, 645, 690, 740]},
+        ],
+    }
+    plan = story.rescaled(
+        DeckPlan.model_validate({"slides": [COVER, _slide(chart=chart)]})
+    )
+    scaled = plan.slides[1].chart
+    assert scaled is not None and scaled.unit == "M€"
+    assert scaled.series[0].values == [0.95, 1.025, 1.1, 1.2]
+    assert scaled.title == "CA par région et produit (M€)"
+    # Unstacked, the largest value (1 200 k€) sets it: 1,2 M€ too.
+    alone = (
+        story.rescaled(
+            DeckPlan.model_validate(
+                {"slides": [COVER, _slide(chart={**chart, "type": "bar"})]}
+            )
+        )
+        .slides[1]
+        .chart
+    )
+    assert alone is not None and alone.unit == "M€"
+    # Below 1 000 of the unit, a scaled one stays as written.
+    small = {
+        **chart,
+        "series": [{"name": "S", "values": [420, 455]}],
+        "categories": ["T1", "T2"],
+    }
+    kept = (
+        story.rescaled(
+            DeckPlan.model_validate({"slides": [COVER, _slide(chart=small)]})
+        )
+        .slides[1]
+        .chart
+    )
+    assert kept is not None and kept.unit == "k€"
+
+
 def _text(title: str = "Le chiffre d'affaires", **fields: Any) -> Any:
     plan = DeckPlan.model_validate({"slides": [COVER, _slide(title=title, **fields)]})
     return story.rescaled(plan).slides[1]
