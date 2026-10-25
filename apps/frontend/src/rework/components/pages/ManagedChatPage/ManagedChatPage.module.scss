@@ -320,6 +320,92 @@
   z-index: 2;
 }
 
+.pendingMessages {
+  margin: 0 auto;
+  border: 1px solid var(--outline-muted);
+  border-bottom: 0;
+  border-radius: var(--radius-m) var(--radius-m) 0 0;
+  background: var(--surface-container);
+  width: calc(100% - var(--spacing-l) - var(--spacing-l));
+  max-width: var(--composer-max-width);
+  overflow: visible;
+}
+
+.pendingMessage {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  padding: var(--spacing-xs) var(--spacing-m);
+  min-height: 2.5rem;
+  color: var(--on-surface);
+}
+
+.pendingMessage + .pendingMessage {
+  border-top: 1px solid var(--outline-muted);
+}
+
+.pendingMessageText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pendingNow,
+.pendingMenu button,
+.pendingMenu summary {
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  color: var(--on-surface);
+  font: inherit;
+}
+
+.pendingNow {
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.pendingNow:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.pendingStatus {
+  color: var(--on-surface-muted);
+}
+
+.pendingMenu {
+  position: relative;
+}
+
+.pendingMenu summary {
+  padding: var(--spacing-xs);
+  list-style: none;
+}
+
+.pendingMenu summary::-webkit-details-marker {
+  display: none;
+}
+
+.pendingMenuItems {
+  display: grid;
+  position: absolute;
+  right: var(--spacing-s);
+  bottom: auto;
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-high);
+  padding: var(--spacing-xs);
+  min-width: 8rem;
+}
+
+.pendingMenuItems button {
+  padding: var(--spacing-xs) var(--spacing-s);
+  text-align: left;
+}
+
 .todoPanelSlot {
   position: relative;
   flex-shrink: 0;

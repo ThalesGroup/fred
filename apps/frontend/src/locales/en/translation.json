@@ -420,6 +420,19 @@
       "runErrorTooMany": "A message can hold at most {{limit}} prompt commands. Remove a few, then send again."
     },
     "composerPlaceholder": "Ask your question, or type / for a command",
+    "pendingMessages": {
+      "label": "Pending messages",
+      "now": "Now",
+      "actions": "Message actions",
+      "edit": "Edit",
+      "remove": "Remove",
+      "offered": "Sending...",
+      "uncertain": "Check delivery",
+      "retry": "Send again",
+      "retryWarning": "Check the conversation first. This may send a duplicate message.",
+      "textOnly": "Only plain text can wait during an active turn",
+      "forceUnavailable": "Could not send into the active turn. The message is still pending."
+    },
     "newConversation": "New conversation",
     "uiParts": {
       "ariaLabel": "Agent cards",

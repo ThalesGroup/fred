@@ -101,6 +101,8 @@ vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
 // render, re-firing the sessionId-change reset effect forever (observed as
 // an OOM from an actual infinite render loop while writing this test).
 const sendMock = vi.fn(async (..._args: unknown[]) => true);
+const steerActiveTurnMock = vi.fn(async (..._args: unknown[]) => "accepted");
+let chatSseWaitResponse = false;
 const prepareChatControlsMock = vi.fn(async () => ({}));
 const chatSseResetMock = vi.fn();
 // Default: the resume reached the backend. `useManagedChat` calls `.then()` on
@@ -123,6 +125,7 @@ let capturedOnTurnRejected: ((draft: string, sessionId: string) => void) | undef
 let capturedIsTurnCurrent: ((sessionId: string) => boolean) | undefined;
 let capturedOnError: ((msg: string) => void) | undefined;
 let capturedOnAwaitingHuman: ((event: unknown) => void) | undefined;
+let capturedOnSteeredMessage: ((messageId: string, sessionId: string) => void) | undefined;
 vi.mock("@hooks/useChatSse", () => ({
   useChatSse: (params: {
     flushPendingWrites?: (sid: string | null) => Promise<boolean>;
@@ -131,6 +134,7 @@ vi.mock("@hooks/useChatSse", () => ({
     isTurnCurrent?: (sessionId: string) => boolean;
     onError?: (msg: string) => void;
     onAwaitingHuman?: (event: unknown) => void;
+    onSteeredMessage?: (messageId: string, sessionId: string) => void;
   }) => {
     capturedFlushPendingWrites = params.flushPendingWrites;
     capturedOnTurnStarted = params.onTurnStarted;
@@ -138,12 +142,14 @@ vi.mock("@hooks/useChatSse", () => ({
     capturedIsTurnCurrent = params.isTurnCurrent;
     capturedOnError = params.onError;
     capturedOnAwaitingHuman = params.onAwaitingHuman;
+    capturedOnSteeredMessage = params.onSteeredMessage;
     return {
       messages: chatSseMessages,
-      waitResponse: false,
+      waitResponse: chatSseWaitResponse,
       chatControls: chatSseChatControls,
       maxChatInputChars: chatSseMaxChatInputChars,
       prepareChatControls: prepareChatControlsMock,
+      steerActiveTurn: steerActiveTurnMock,
       send: sendMock,
       sendHitlResume: sendHitlResumeMock,
       abort: abortMock,
@@ -335,6 +341,7 @@ describe("useManagedChat — session write reliability", () => {
     hostEffectiveModel = undefined;
     clearSessionHistoryCache();
     chatSseMessages = [];
+    chatSseWaitResponse = false;
     chatSseMaxChatInputChars = undefined;
     registerSessionImpl = async () => ({});
     patchSessionImpl = async () => ({});
@@ -359,6 +366,7 @@ describe("useManagedChat — session write reliability", () => {
     // assert on: an uncleared spy is a silent cross-test dependency either way.
     for (const mock of [
       sendMock,
+      steerActiveTurnMock,
       sendHitlResumeMock,
       prepareChatControlsMock,
       chatSseResetMock,
@@ -369,6 +377,7 @@ describe("useManagedChat — session write reliability", () => {
       showErrorMock,
       notifyApiErrorMock,
       chatAttachmentsValue.clearReadyAttachments,
+      chatAttachmentsValue.addFiles,
     ]) {
       mock.mockReset();
     }
@@ -380,6 +389,7 @@ describe("useManagedChat — session write reliability", () => {
     capturedIsTurnCurrent = undefined;
     capturedOnError = undefined;
     capturedOnAwaitingHuman = undefined;
+    capturedOnSteeredMessage = undefined;
   });
 
   afterEach(async () => {
@@ -1606,6 +1616,145 @@ describe("useManagedChat — session write reliability", () => {
     });
     rerender();
   };
+
+  it("queues, edits, and removes text while the agent is working", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("first"));
+    await act(async () => latest.handleSend());
+    expect(latest.pendingMessages.map((message) => message.text)).toEqual(["first"]);
+    expect(latest.input).toBe("");
+    expect(sendMock).not.toHaveBeenCalled();
+
+    const id = latest.pendingMessages[0].id;
+    act(() => latest.editPendingMessage(id));
+    expect(latest.input).toBe("first");
+    expect(latest.pendingMessages).toEqual([]);
+    await act(async () => latest.handleSend());
+    act(() => latest.removePendingMessage(latest.pendingMessages[0].id));
+    expect(latest.pendingMessages).toEqual([]);
+  });
+
+  it("keeps a forced row until the runtime confirms delivery", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("change course"));
+    await act(async () => latest.handleSend());
+    const id = latest.pendingMessages[0].id;
+    await act(async () => latest.forcePendingMessage(id));
+    expect(steerActiveTurnMock).toHaveBeenCalledWith("session-1", id, "change course");
+    expect(latest.pendingMessages[0].status).toBe("offered");
+    act(() => capturedOnSteeredMessage?.(id, "session-1"));
+    expect(latest.pendingMessages).toEqual([]);
+  });
+
+  it("holds uncertain delivery until the person retries", async () => {
+    chatSseWaitResponse = true;
+    steerActiveTurnMock.mockResolvedValueOnce("uncertain");
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("change course"));
+    await act(async () => latest.handleSend());
+    const id = latest.pendingMessages[0].id;
+    await act(async () => latest.forcePendingMessage(id));
+    expect(latest.pendingMessages[0].status).toBe("uncertain");
+    chatSseWaitResponse = false;
+    await act(async () => rerender());
+    expect(sendMock).not.toHaveBeenCalled();
+    act(() => latest.retryPendingMessage(id));
+    await act(async () => rerender());
+    expect(sendMock).toHaveBeenCalledWith("change course", "session-1", expect.anything(), undefined, undefined);
+  });
+
+  it("sends queued text after the active turn ends", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("next"));
+    await act(async () => latest.handleSend());
+    sendMock.mockImplementationOnce(async () => {
+      capturedOnTurnStarted?.();
+      return true;
+    });
+    chatSseWaitResponse = false;
+    await act(async () => rerender());
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock.mock.calls[0][0]).toBe("next");
+    expect(latest.pendingMessages).toEqual([]);
+  });
+
+  it("holds queued text while a human-input prompt is pending", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("next"));
+    await act(async () => latest.handleSend());
+    act(() => capturedOnAwaitingHuman?.(awaitingHumanEvent));
+    chatSseWaitResponse = false;
+    await act(async () => rerender());
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(latest.pendingMessages[0]).toMatchObject({ text: "next", status: "waiting" });
+  });
+
+  it("starts only the first queued turn while it is running", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("first"));
+    await act(async () => latest.handleSend());
+    act(() => latest.setInput("second"));
+    await act(async () => latest.handleSend());
+    let finishFirst: ((accepted: boolean) => void) | undefined;
+    sendMock.mockImplementationOnce(async () => {
+      capturedOnTurnStarted?.();
+      return new Promise<boolean>((resolve) => {
+        finishFirst = resolve;
+      });
+    });
+    chatSseWaitResponse = false;
+    await act(async () => rerender());
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock.mock.calls[0][0]).toBe("first");
+    expect(latest.pendingMessages.map((message) => message.text)).toEqual(["second"]);
+    await act(async () => finishFirst?.(true));
+  });
+
+  it("pauses a rejected queued turn until an explicit resend", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("next"));
+    await act(async () => latest.handleSend());
+    sendMock.mockImplementationOnce(async () => {
+      capturedOnTurnStarted?.();
+      capturedOnTurnRejected?.("next", "session-1");
+      return false;
+    });
+    chatSseWaitResponse = false;
+    await act(async () => rerender());
+    await act(async () => rerender());
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(latest.pendingMessages[0]).toMatchObject({ text: "next", status: "uncertain" });
+  });
+
+  it("restores a queued turn when the stream fails before acceptance", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("next"));
+    await act(async () => latest.handleSend());
+    sendMock.mockImplementationOnce(async () => {
+      capturedOnTurnStarted?.();
+      capturedOnError?.("network failure");
+      return false;
+    });
+    chatSseWaitResponse = false;
+    await act(async () => rerender());
+    expect(latest.pendingMessages[0]).toMatchObject({ text: "next", status: "uncertain" });
+    expect(sendMock).toHaveBeenCalledTimes(1);
+  });
 
   const toolApprovalEvent = {
     ...awaitingHumanEvent,

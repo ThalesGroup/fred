@@ -34,6 +34,7 @@ import type {
   RuntimeErrorEvent,
   ExecutionInterruptedRuntimeEvent,
   RuntimeExecuteRequest,
+  SteeredUserMessageRuntimeEvent,
   StatusRuntimeEvent,
   ThoughtDeltaEvent,
   ThoughtEndEvent,
@@ -174,6 +175,7 @@ async function verifyTokenStillUsable(): Promise<string | null> {
 // ── SSE event union ───────────────────────────────────────────────────────────
 
 type AnyRuntimeEvent =
+  | ({ kind: "steered_user_message" } & SteeredUserMessageRuntimeEvent)
   | ({ kind: "assistant_delta" } & AssistantDeltaRuntimeEvent)
   | ({ kind: "awaiting_human" } & AwaitingHumanRuntimeEvent)
   | ({ kind: "final" } & FinalRuntimeEvent)
@@ -258,6 +260,7 @@ export type RuntimeAwaitingHumanEvent = {
 export type ChatSseCallbacks = {
   onBindDraftAgentToSessionId?: (sessionId: string) => void;
   onTurnPersisted?: (sessionId: string) => void;
+  onSteeredMessage?: (messageId: string, sessionId: string) => void;
   onAwaitingHuman?: (event: RuntimeAwaitingHumanEvent) => void;
   onError?: (message: string) => void;
   /**
@@ -312,6 +315,7 @@ export function useChatSse(
     teamId,
     onBindDraftAgentToSessionId,
     onTurnPersisted,
+    onSteeredMessage,
     onAwaitingHuman,
     onError,
     onTurnStarted,
@@ -476,6 +480,20 @@ export function useChatSse(
         });
 
       switch (event.kind) {
+        case "steered_user_message": {
+          emit({
+            session_id: sessionId,
+            exchange_id: exchangeId,
+            rank: rankRef.current++,
+            timestamp: ts,
+            role: "user",
+            channel: "final",
+            parts: [{ type: "text", text: event.content }],
+            metadata: { extras: { steered_message_id: event.message_id } },
+          });
+          onSteeredMessage?.(event.message_id, sessionId);
+          break;
+        }
         case "assistant_delta": {
           if (deltaRankRef.current === null) {
             deltaRankRef.current = rankRef.current++;
@@ -829,7 +847,16 @@ export function useChatSse(
           break;
       }
     },
-    [onAwaitingHuman, onBindDraftAgentToSessionId, onTurnPersisted, onTurnRejected, onError, dropOptimisticTurn, i18n],
+    [
+      onAwaitingHuman,
+      onBindDraftAgentToSessionId,
+      onTurnPersisted,
+      onSteeredMessage,
+      onTurnRejected,
+      onError,
+      dropOptimisticTurn,
+      i18n,
+    ],
   );
 
   const streamToMessages = useCallback(
@@ -1587,12 +1614,45 @@ export function useChatSse(
     [teamId, agentInstanceId, prepareExecution, applyPreparation],
   );
 
+  const steerActiveTurn = useCallback(
+    async (sessionId: string, messageId: string, input: string): Promise<"accepted" | "rejected" | "uncertain"> => {
+      let requestStarted = false;
+      try {
+        const prep = await prepareExecution({ teamId, agentInstanceId, sessionId }).unwrap();
+        const streamPath = runtimeExecuteStreamPath(prep.execute_stream_url);
+        const path = streamPath.replace(/\/execute\/stream$/, `/sessions/${encodeURIComponent(sessionId)}/steer`);
+        await KeyCloakService.ensureFreshToken(TURN_TOKEN_HARD_FLOOR_S);
+        requestStarted = true;
+        const steeringRequest: RuntimeExecuteRequest = {
+          agent_instance_id: agentInstanceId,
+          session_id: sessionId,
+          input,
+          runtime_context: { team_id: canonicalizeRuntimeTeamId(teamId) },
+        };
+        const response = await fetch(`${path}?message_id=${encodeURIComponent(messageId)}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${KeyCloakService.GetToken() ?? ""}`,
+          },
+          body: JSON.stringify(steeringRequest),
+        });
+        if (response.ok) return "accepted";
+        return response.status < 500 ? "rejected" : "uncertain";
+      } catch {
+        return requestStarted ? "uncertain" : "rejected";
+      }
+    },
+    [teamId, agentInstanceId, prepareExecution],
+  );
+
   return {
     messages,
     waitResponse,
     chatControls,
     maxChatInputChars,
     prepareChatControls,
+    steerActiveTurn,
     send,
     sendHitlResume,
     abort,

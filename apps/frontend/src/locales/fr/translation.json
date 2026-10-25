@@ -420,6 +420,19 @@
       "runErrorTooMany": "Un message peut contenir au plus {{limit}} commandes de prompt. Retirez-en quelques-unes, puis envoyez à nouveau."
     },
     "composerPlaceholder": "Posez votre question, ou tapez / pour une commande",
+    "pendingMessages": {
+      "label": "Messages en attente",
+      "now": "Maintenant",
+      "actions": "Actions du message",
+      "edit": "Modifier",
+      "remove": "Supprimer",
+      "offered": "Envoi...",
+      "uncertain": "Vérifier l'envoi",
+      "retry": "Renvoyer",
+      "retryWarning": "Vérifiez d'abord la conversation. Le message pourrait être envoyé deux fois.",
+      "textOnly": "Seul un message texte simple peut attendre pendant ce tour",
+      "forceUnavailable": "Envoi impossible pendant ce tour. Le message reste en attente."
+    },
     "newConversation": "Nouvelle conversation",
     "uiParts": {
       "ariaLabel": "Cartes de l'agent",

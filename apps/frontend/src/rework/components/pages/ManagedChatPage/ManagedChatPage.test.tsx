@@ -427,6 +427,26 @@ const baseChatValue = (messages: Record<string, unknown>[]) => {
   };
 };
 
+describe("ManagedChatPage pending messages", () => {
+  it("keeps the composer open and stacks pending rows above it", () => {
+    chatValue = {
+      ...baseChatValue([]),
+      waitResponse: true,
+      pendingMessages: [
+        { id: "first", text: "first question", status: "waiting" },
+        { id: "second", text: "second question", status: "waiting" },
+      ],
+    };
+    const html = renderToStaticMarkup(<ManagedChatPage />);
+    expect(html).toContain('data-composer-disabled="false"');
+    expect(html).toContain("first question");
+    expect(html).toContain("second question");
+    expect(html.indexOf("first question")).toBeLessThan(html.indexOf("second question"));
+    expect(html).toContain("chatbot.pendingMessages.now");
+    expect(html).toContain("chatbot.pendingMessages.actions");
+  });
+});
+
 describe("ManagedChatPage agent todo panel", () => {
   const todoCall = (todos: Record<string, unknown>[]) => ({
     session_id: "session-1",

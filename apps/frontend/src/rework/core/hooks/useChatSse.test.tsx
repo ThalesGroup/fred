@@ -126,6 +126,7 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
     onTurnStarted: () => onTurnStartedMock(),
     onTurnRejected: (draft, sessionId) => onTurnRejectedMock(draft, sessionId),
     onAwaitingHuman: (event) => onAwaitingHumanMock(event),
+    onSteeredMessage: (messageId, sessionId) => onSteeredMessageMock(messageId, sessionId),
     isTurnCurrent,
     isExecutionAllowed,
   });
@@ -140,6 +141,7 @@ const onErrorMock = vi.fn();
 const onTurnStartedMock = vi.fn();
 const onTurnRejectedMock = vi.fn();
 const onAwaitingHumanMock = vi.fn();
+const onSteeredMessageMock = vi.fn();
 
 describe("useChatSse — send() ordering barrier and prepare-execution failure handling", () => {
   let container: HTMLDivElement;
@@ -163,6 +165,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     onTurnStartedMock.mockClear();
     onTurnRejectedMock.mockClear();
     onAwaitingHumanMock.mockClear();
+    onSteeredMessageMock.mockClear();
     dispatchMock.mockClear();
     prepareExecutionCalls.length = 0;
     prepareExecutionImpl = async () => ({
@@ -375,6 +378,48 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       fetchSpy.mockRestore();
     },
   );
+
+  it("posts steering through the prepared runtime URL", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 202 }));
+    mount();
+    let accepted = "rejected";
+    await act(async () => {
+      accepted = await latest.steerActiveTurn("session-1", "message-1", "new direction");
+    });
+    expect(accepted).toBe("accepted");
+    expect(fetchSpy.mock.calls[0][0]).toBe("/runtime/agents-v2/agents/sessions/session-1/steer?message_id=message-1");
+    const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+    expect(body).toMatchObject({ agent_instance_id: "agent-1", session_id: "session-1", input: "new direction" });
+    fetchSpy.mockRestore();
+  });
+
+  it("reports uncertain steering when the request loses its response", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network lost"));
+    mount();
+    let outcome = "rejected";
+    await act(async () => {
+      outcome = await latest.steerActiveTurn("session-1", "message-1", "new direction");
+    });
+    expect(outcome).toBe("uncertain");
+    fetchSpy.mockRestore();
+  });
+
+  it("shows an injected user message only after its delivery event", async () => {
+    const event = { kind: "steered_user_message", message_id: "message-1", content: "new direction", sequence: 1 };
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(`data: ${JSON.stringify(event)}\n\n`, { status: 200 }));
+    mount();
+    await act(async () => {
+      await latest.send("original", "session-1");
+    });
+    expect(onSteeredMessageMock).toHaveBeenCalledWith("message-1", "session-1");
+    expect(latest.messages.filter((message) => message.role === "user").map((message) => message.parts[0])).toEqual([
+      { type: "text", text: "original" },
+      { type: "text", text: "new direction" },
+    ]);
+    fetchSpy.mockRestore();
+  });
 
   it("calls prepare-execution and fires onTurnStarted exactly once when the write barrier reports success", async () => {
     flushPendingWrites = async () => true;
