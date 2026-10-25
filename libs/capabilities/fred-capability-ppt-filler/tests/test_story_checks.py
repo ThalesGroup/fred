@@ -208,6 +208,8 @@ def _rescaled(
         ),
         # Short enough already: left as written.
         (["1 500 €", "2 300 €"], None, ([1500.0, 2300.0], "€")),
+        # Rounded to 1 000 k€, the largest amount moves up a scale.
+        ([999999, 500000], "€", ([0.999999, 0.5], "M€")),
     ],
 )
 def test_amounts_in_several_scales_of_one_unit_are_put_in_one(values, unit, expected):

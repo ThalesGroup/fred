@@ -116,12 +116,17 @@ def _scale(unit: str) -> Optional[Tuple[str, float]]:
     return None
 
 
+_FACTORS = (1.0, 1e3, 1e6, 1e9)
+
+
 def _magnitude(amounts: Sequence[float], least: float = 1.0) -> float:
-    """The scale that puts the largest amount in [1, 1000): 2 450 000 → 1e6."""
+    """The scale that puts the largest amount in [1, 1000) once rounded to two
+    decimals: 2 450 000 → 1e6, 999 999 → 1e6 (not "1000 k"). Capped at 1e9."""
     top = max(map(abs, amounts), default=0.0)
-    return max(
-        (f for f in (1.0, 1e3, 1e6, 1e9) if f >= least and top >= f), default=least
-    )
+    factor = max((f for f in _FACTORS if f >= least and top >= f), default=least)
+    if round(top / factor, 2) >= 1000 and factor < _FACTORS[-1]:
+        factor *= 1000
+    return factor
 
 
 def rescaled_chart(chart: PlanChart, language: str) -> Optional[PlanChart]:
