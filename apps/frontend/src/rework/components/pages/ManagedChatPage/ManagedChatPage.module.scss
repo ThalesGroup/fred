@@ -418,10 +418,8 @@
 }
 
 .todoPanelSlot {
-  position: relative;
   flex-shrink: 0;
-  z-index: 1;
-  margin-bottom: calc(0px - var(--radius-m) - var(--spacing-s));
+  margin-bottom: var(--spacing-xs);
   padding: var(--spacing-xs) var(--spacing-l) 0;
 }
 

@@ -16,10 +16,8 @@
 
 .root {
   border: 1px solid var(--outline-muted);
-  border-bottom: 0;
-  border-radius: var(--radius-s) var(--radius-s) 0 0;
+  border-radius: var(--radius-m);
   background: var(--surface-container-low);
-  padding-bottom: calc(var(--radius-m) + var(--spacing-s));
   overflow: hidden;
   color: var(--on-surface);
 }
