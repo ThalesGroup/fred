@@ -180,4 +180,13 @@ Use this optional profile when active Pods must be bounded independently of the 
    ```
 
 5. Put the sandbox RuntimeClass on an approved node group using `RuntimeClass.scheduling.nodeSelector` and tolerations. Measure and declare `RuntimeClass.overhead.podFixed` for the actual Kata or gVisor runtime, then configure the node autoscaler from those measured Pod requests plus CPU, memory, PID, IP and CSI limits. Kata includes a guest kernel and VM memory overhead; gVisor uses a userspace kernel. Neither eliminates the per-Pod Kubernetes object cost. Test cold start, active reuse and resume latency separately. Keep a small active cap until a 50/100/250/500/1,000-user ramp with real `/inputs` and `/skills` reaches the intended production ceiling.
+
+   For example, label nodes `fred.sandbox/runtime=kata` or `fred.sandbox/runtime=gvisor` and put the matching selector on each RuntimeClass. These labels are examples; the actual handler names, tolerations and `overhead.podFixed` values come from the cluster operator's runtime installation and measurements:
+
+   ```yaml
+   scheduling:
+     nodeSelector:
+       fred.sandbox/runtime: gvisor # use kata for the Kata RuntimeClass
+   ```
+
 6. Observe `GET /healthz` and `GET /metrics` on the broker Service. The shared profile reports active, preparing, suspended, retained and waiting counts, plus local preparation duration and admission refusals. Use `kubectl -n fred-sandbox get sandboxclaim,sandbox,pod,pvc` to compare the counts, `kubectl -n fred-sandbox-system get deploy fred-sandbox-broker` to confirm broker replicas, and `kubectl get runtimeclass <name> -o yaml` to inspect scheduling and overhead. During a database outage, new admission fails closed; existing claims retain their server-side shutdown time. Do not switch back to the process-local profile while shared claims remain: its startup cleanup would delete them. Drain and expire the shared sessions first.

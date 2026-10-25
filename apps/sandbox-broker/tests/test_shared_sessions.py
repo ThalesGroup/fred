@@ -96,6 +96,8 @@ async def test_shared_admission_resume_and_restart() -> None:
         coordinator_dsn=dsn,
         workspace_storage_class="local-path",
         max_retained_sessions=3,
+        max_queue_length=1,
+        max_queue_per_tenant=1,
         queue_wait_seconds=3,
     )
     backend = _Backend()
@@ -151,6 +153,8 @@ async def test_shared_admission_resume_and_restart() -> None:
                 "UPDATE sandbox_conversation_leases SET last_used_at=now()-interval '130 seconds' WHERE session_key=$1",
                 "a" * 64,
             )
+        with pytest.raises(SandboxError, match="busy"):
+            await second.execute("c" * 64, "e" * 64, SandboxRequest(code="third"))
         await second.sweep()
         assert (await waiting).stdout == "other"
         assert backend.prepared == 2
