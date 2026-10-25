@@ -156,11 +156,10 @@ class DockerBackend:
     async def execute(
         self, lease: SandboxLease, request: SandboxRequest
     ) -> SandboxResult:
-        interpreter = "/bin/bash" if request.language == "bash" else "python"
         try:
             try:
                 result = await self.runner.run(
-                    ["docker", "exec", lease.target, interpreter, "-c", request.code],
+                    ["docker", "exec", lease.target, "/bin/bash", "-c", request.code],
                     timeout=self.settings.execution_timeout_seconds,
                     output_limit=self.settings.output_limit_bytes,
                 )
@@ -198,7 +197,14 @@ class DockerBackend:
                 raise SandboxError("backend_failed")
             await self._remove(container_id)
         volumes = await self.runner.run(
-            ["docker", "volume", "ls", "-q", "--filter", "label=fred.sandbox/managed=true"],
+            [
+                "docker",
+                "volume",
+                "ls",
+                "-q",
+                "--filter",
+                "label=fred.sandbox/managed=true",
+            ],
             timeout=10,
         )
         if volumes.returncode != 0:

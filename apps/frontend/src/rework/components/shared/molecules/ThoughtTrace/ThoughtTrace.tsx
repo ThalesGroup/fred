@@ -78,20 +78,7 @@ function codePreview(code: string): string {
     .split(/\r?\n/)
     .map((line) => line.trim().replace(/\s+/g, " "))
     .filter(Boolean);
-  const priority = (line: string): number => {
-    if (/^(?:#|import\s|from\s+\S+\s+import\s)/.test(line)) return -1;
-    if (/^(?:if|elif)\b/.test(line) && /["'][^"']+["']\s+in\b/.test(line)) return 6;
-    if (/\b(?:grep|find|glob|rglob|search|filter)\b/.test(line)) return 5;
-    if (/^if\s+__name__\b/.test(line)) return 0;
-    if (/^(?:for|while|if|elif)\b/.test(line)) return 3;
-    if (/\b(?:print|return)\s*\(/.test(line)) return 2;
-    return 1;
-  };
-  const best = lines.reduce(
-    (selected, line, index) => (priority(line) > priority(lines[selected] ?? "") ? index : selected),
-    0,
-  );
-  const preview = `${best ? "... " : ""}${lines[best] ?? ""}${best < lines.length - 1 ? " ..." : ""}`;
+  const preview = `${lines[0] ?? ""}${lines.length > 1 ? " ..." : ""}`;
   return preview.length > 120 ? `${preview.slice(0, 117).trimEnd()}...` : preview;
 }
 
@@ -101,10 +88,7 @@ const GROUP_RULES: TraceGroupRule[] = [
     titleKey: "rework.chatTrace.toolLabels.codeSandbox",
     countKey: "rework.chatTrace.toolGroups.commands",
     matches: (entry) => toolSlug(toolName(entry.call)) === "execute_code",
-    itemLabel: (entry) => {
-      const language = toolArgs(entry.call).language;
-      return language === "bash" ? "Bash" : language === "python" ? "Python" : "Code";
-    },
+    itemLabel: () => "",
     preview: (entry) => {
       const code = toolArgs(entry.call).code;
       return typeof code === "string" ? codePreview(code) : "";

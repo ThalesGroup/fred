@@ -43,7 +43,7 @@ async def test_adapter_sends_only_code_contract_and_maps_broker_error() -> None:
     )
     assert adapter._client.timeout.read is not None
     assert adapter._client.timeout.read >= 438
-    request = SandboxRequest(language="python", code="print('ok')")
+    request = SandboxRequest(code="python -c 'print(\"ok\")'")
     assert (await adapter.execute(request)).stdout == "ok\n"
     assert seen[0].url.path == "/v1/execute"
     assert seen[0].headers["Authorization"] == f"Bearer {'x' * 32}"
@@ -66,7 +66,7 @@ async def test_adapter_scopes_session_header_to_private_identity() -> None:
         token="x" * 32,
         transport=httpx.MockTransport(handler),
     )
-    request = SandboxRequest(language="bash", code="true")
+    request = SandboxRequest(code="true")
     first = SandboxSessionIdentity(user_id="user-a", session_id="chat-1")
     second = SandboxSessionIdentity(user_id="user-b", session_id="chat-1")
     await adapter.execute(request, session=first)

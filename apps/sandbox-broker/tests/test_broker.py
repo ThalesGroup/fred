@@ -58,12 +58,15 @@ async def test_view_key_is_workload_generation_scoped() -> None:
     second = FakeBackend()
     views = []
     for backend in (first, second):
-        app = create_app(settings(
-            mount_provider="rclone_docker",
-            file_gateway_url="https://files.example/knowledge-flow/v1/sandbox-mount",
-            file_gateway_secret="s" * 32,
-            docker_volume_plugin="rclone",
-        ), backend)
+        app = create_app(
+            settings(
+                mount_provider="rclone_docker",
+                file_gateway_url="https://files.example/knowledge-flow/v1/sandbox-mount",
+                file_gateway_secret="s" * 32,
+                docker_volume_plugin="rclone",
+            ),
+            backend,
+        )
         async with (
             app.router.lifespan_context(app),
             httpx.AsyncClient(
@@ -81,7 +84,7 @@ async def test_view_key_is_workload_generation_scoped() -> None:
                 await client.post(
                     "/v1/execute",
                     headers=headers,
-                    json={"language": "bash", "code": "true"},
+                    json={"code": "true"},
                 )
             ).status_code == 200
             assert backend.view_keys == [views[-1]]
@@ -97,10 +100,13 @@ async def test_view_key_fails_closed_without_mount_provider() -> None:
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client,
     ):
-        response = await client.post("/v1/view-key", headers={
-            "Authorization": "Bearer " + "x" * 32,
-            "X-Fred-Sandbox-Session": "a" * 64,
-        })
+        response = await client.post(
+            "/v1/view-key",
+            headers={
+                "Authorization": "Bearer " + "x" * 32,
+                "X-Fred-Sandbox-Session": "a" * 64,
+            },
+        )
         assert response.status_code == 503
         assert response.json()["error_code"] == "unavailable"
 
@@ -116,16 +122,17 @@ async def test_broker_auth_and_execution_contract() -> None:
         ) as client,
     ):
         assert (
-            await client.post("/v1/execute", json={"language": "bash", "code": "pwd"})
+            await client.post("/v1/execute", json={"code": "pwd"})
         ).status_code == 401
         response = await client.post(
             "/v1/execute",
             headers={"Authorization": "Bearer " + "x" * 32},
-            json={"language": "python", "code": "print(1)"},
+            json={"code": "python -c 'print(1)'"},
         )
         assert response.status_code == 200
         assert response.json()["stdout"] == "ready"
-        assert fake.requests[0][1].language == "python"
+        assert fake.requests[0][1].code == "python -c 'print(1)'"
+        assert len(fake.prepared) == 1
     assert fake.prepared[0] in fake.disposed
 
 
@@ -160,7 +167,7 @@ async def test_conversation_reuses_workload_and_never_shares_it() -> None:
         ) as client,
     ):
         headers = {"Authorization": "Bearer " + "x" * 32}
-        body = {"language": "bash", "code": "pwd"}
+        body = {"code": "pwd"}
         for key in ("a" * 64, "a" * 64, "b" * 64):
             response = await client.post(
                 "/v1/execute",
@@ -188,7 +195,7 @@ async def test_conversation_idle_expiry_replaces_workload() -> None:
     pool = OnDemandCapacity(fake, settings(warm_pool_size=0, cold_start_on_miss=True))
     await pool.start()
     sessions = ConversationPool(pool, idle_seconds=1200, max_sessions=1)
-    request = SandboxRequest(language="bash", code="pwd")
+    request = SandboxRequest(code="pwd")
     await sessions.execute("a", request)
     first_view = fake.view_keys[0]
     sessions._sessions["a"].last_used = monotonic() - 1201
@@ -217,7 +224,7 @@ async def test_failed_retained_workload_is_replaced_on_retry() -> None:
     pool = OnDemandCapacity(fake, settings(warm_pool_size=0, cold_start_on_miss=True))
     await pool.start()
     sessions = ConversationPool(pool, max_sessions=1)
-    request = SandboxRequest(language="python", code="print(1)")
+    request = SandboxRequest(code="python -c 'print(1)'")
     with pytest.raises(SandboxError, match="backend_failed"):
         await sessions.execute("same", request)
     for _ in range(100):
@@ -295,7 +302,7 @@ async def test_reducing_active_limit_evicts_oldest_idle_conversation() -> None:
     )
     await pool.start()
     sessions = ConversationPool(pool, max_sessions=2)
-    request = SandboxRequest(language="bash", code="pwd")
+    request = SandboxRequest(code="pwd")
     await sessions.execute("old", request)
     await sessions.execute("new", request)
     await sessions.configure(idle_seconds=1200, max_sessions=1)
@@ -329,11 +336,9 @@ async def test_reducing_active_limit_retires_inflight_conversation() -> None:
     )
     await pool.start()
     sessions = ConversationPool(pool, max_sessions=2)
-    running = asyncio.create_task(
-        sessions.execute("old", SandboxRequest(language="bash", code="slow"))
-    )
+    running = asyncio.create_task(sessions.execute("old", SandboxRequest(code="slow")))
     await fake.started.wait()
-    await sessions.execute("new", SandboxRequest(language="bash", code="pwd"))
+    await sessions.execute("new", SandboxRequest(code="pwd"))
     await sessions.configure(idle_seconds=1200, max_sessions=1)
     assert sessions._sessions["old"].retire
     fake.finish.set()

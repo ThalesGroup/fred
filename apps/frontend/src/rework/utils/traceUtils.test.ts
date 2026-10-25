@@ -414,6 +414,12 @@ describe("isCancelledByUser", () => {
     expect(statusForEntry({ kind: "combo", call, result })).toBe("error");
   });
 
+  it("marks a failed sandbox command red without treating the tool transport as failed", () => {
+    const call = toolCallMsg("c1", "execute_code");
+    const result = toolResultMsg("c1", JSON.stringify({ exit_code: 127, stdout: "", stderr: "not found" }), true);
+    expect(statusForEntry({ kind: "combo", call, result })).toBe("error");
+  });
+
   it("returns 'awaiting_confirmation' for a combo whose call_id is in the pending HITL id list", () => {
     const call = toolCallMsg("c1", "summarize_document");
     expect(statusForEntry({ kind: "combo", call }, ["c1"])).toBe("awaiting_confirmation");

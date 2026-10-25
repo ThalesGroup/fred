@@ -56,8 +56,8 @@ function msg(channel: ChatMessage["channel"], parts: ChatMessage["parts"], rank:
   };
 }
 
-function call(id: string, name: string, code: string, rank: number, language = "bash"): ChatMessage {
-  return msg("tool_call", [{ type: "tool_call", call_id: id, name, args: { language, code } }], rank);
+function call(id: string, name: string, code: string, rank: number): ChatMessage {
+  return msg("tool_call", [{ type: "tool_call", call_id: id, name, args: { code } }], rank);
 }
 
 function result(id: string, rank: number): ChatMessage {
@@ -110,7 +110,7 @@ describe("ThoughtTrace code groups", () => {
       call("c1", "execute_code", "find /inputs -name '*.txt'", 1),
       result("c1", 2),
       msg("thought", [{ type: "text", text: "Search the matching file next" }], 3),
-      call("c2", "execute_code", "print('target')", 4, "python"),
+      call("c2", "execute_code", "python -c 'print(42)'", 4),
       result("c2", 5),
       call("s1", "summarize_document", "", 6),
       result("s1", 7),
@@ -132,13 +132,11 @@ describe("ThoughtTrace code groups", () => {
 
     act(() => groups()[0].click());
     expect(container.textContent).toContain("Search the matching file next");
-    const secondCommand = [...container.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("Pythonprint('target')"),
-    );
+    const secondCommand = container.querySelector<HTMLButtonElement>('button[aria-label^="python -c"]');
     expect(secondCommand).toBeDefined();
     expect(secondCommand!.textContent).not.toContain("Command 2");
     expect(secondCommand!.textContent).not.toContain("toolStatus.success");
-    expect(secondCommand!.getAttribute("aria-label")).toContain("Python. print('target')");
+    expect(secondCommand!.getAttribute("aria-label")).toContain("python -c 'print(42)'");
     expect(secondCommand!.getAttribute("aria-label")).toContain("toolStatus.success");
     act(() => secondCommand!.click());
     expect(opened).toEqual(["c2"]);
@@ -160,7 +158,7 @@ describe("ThoughtTrace code groups", () => {
     expect(group.getAttribute("aria-expanded")).toBe("true");
     expect(group.textContent).toContain("grep -Fi phrase /inputs/table.csv");
     const firstCommand = [...container.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("Bashfind /inputs -name '*.csv'"),
+      button.textContent?.includes("find /inputs -name '*.csv' ..."),
     );
     act(() => firstCommand!.click());
     expect(opened).toEqual(["c1"]);
@@ -173,65 +171,41 @@ describe("ThoughtTrace code groups", () => {
     expect(text).not.toContain("echo later");
     expect(text).not.toContain("\n");
     act(() => groups()[0].click());
-    const child = [...container.querySelectorAll("button")].find((button) =>
-      button.textContent?.startsWith("Bashgrep "),
-    );
+    const child = [...container.querySelectorAll("button")].find((button) => button.textContent?.startsWith("grep "));
     expect(child?.textContent).toContain("...");
     expect(child?.textContent).not.toContain("echo later");
   });
 
-  it("skips Python imports and marks omitted code in the group and child previews", () => {
+  it("shows the Python shell launcher and marks its omitted body", () => {
     renderTrace([
       call(
         "c1",
         "execute_code",
-        "from pypdf import PdfReader\nfrom pathlib import Path\nfor pdf in Path('/inputs/attachments').glob('*.pdf'):\n    print(pdf.name)",
+        "python - <<'PY'\nfrom pypdf import PdfReader\nfor page in reader.pages:\n    print(page)\nPY",
         1,
-        "python",
       ),
     ]);
-    expect(groups()[0].textContent).toContain("... for pdf in Path('/inputs/attachments').glob('*.pdf'): ...");
+    expect(groups()[0].textContent).toContain("python - <<'PY' ...");
     expect(groups()[0].textContent).not.toContain("from pypdf import PdfReader");
     act(() => groups()[0].click());
     const child = [...container.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("Python... for pdf"),
+      button.textContent?.includes("python - <<'PY' ..."),
     );
-    expect(child?.textContent).toContain("glob('*.pdf'): ...");
-    expect(child?.getAttribute("aria-label")).toContain("Python. ... for pdf");
+    expect(child?.textContent).not.toContain("from pypdf");
+    expect(child?.getAttribute("aria-label")).toContain("python - <<'PY' ...");
   });
 
-  it("previews a PDF search instead of its import, path assignment, or comments", () => {
+  it("keeps the submitted shell command rather than selecting an internal search line", () => {
     renderTrace([
       call(
         "c1",
         "execute_code",
-        'from pypdf import PdfReader\n# Open the PDF\npdf_path = "/inputs/attachments/report.pdf"\nreader = PdfReader(pdf_path)\nfor page in reader.pages:\n    text = page.extract_text()\n    # Find the incident\n    if "HELIOS-4821" in text:\n        print(text)',
+        "python - <<'PY'\nfrom pypdf import PdfReader\nif \"HELIOS-4821\" in text:\n    print(text)\nPY",
         1,
-        "python",
       ),
     ]);
-    expect(groups()[0].textContent).toContain('... if "HELIOS-4821" in text: ...');
-    expect(groups()[0].textContent).not.toContain("from pypdf import PdfReader");
-    expect(groups()[0].textContent).not.toContain("pdf_path");
-  });
-
-  it("prefers a search over Python and Bash setup guards", () => {
-    renderTrace([
-      call(
-        "c1",
-        "execute_code",
-        'if __name__ == "__main__":\n    for path in Path("/inputs").glob("*.pdf"):\n        print(path)',
-        1,
-        "python",
-      ),
-      result("c1", 2),
-      call("c2", "execute_code", 'if [ -f "$file" ]; then\ngrep -in "incident" "$file"\nfi', 3),
-    ]);
-    expect(groups()[0].textContent).toContain('grep -in "incident" "$file"');
-    expect(groups()[0].textContent).not.toContain('if [ -f "$file" ]');
-    act(() => groups()[0].click());
-    expect(container.textContent).toContain('... for path in Path("/inputs").glob("*.pdf"): ...');
-    expect(container.textContent).not.toContain('if __name__ == "__main__"');
+    expect(groups()[0].textContent).toContain("python - <<'PY' ...");
+    expect(groups()[0].textContent).not.toContain('if "HELIOS-4821"');
   });
 
   it("splits groups at a write_todos call that the ordinary trace hides", () => {

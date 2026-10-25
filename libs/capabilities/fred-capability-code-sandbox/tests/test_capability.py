@@ -24,13 +24,14 @@ class FakeSandbox(SandboxExecutionPort):
         self.requests = []
         self.sessions = []
         self.error: str | None = None
+        self.result = SandboxResult(exit_code=0, stdout="42\n", stderr="")
 
     async def execute(self, request, session: SandboxSessionIdentity | None = None):
         self.requests.append(request)
         self.sessions.append(session)
         if self.error:
             raise SandboxError(self.error)
-        return SandboxResult(exit_code=0, stdout="42\n", stderr="")
+        return self.result
 
 
 class FakeInputs(SandboxInputPort):
@@ -63,10 +64,7 @@ def test_capability_boot_and_tool_schema() -> None:
         "attach_files"
     ]
     tool = capability.tools(context(FakeSandbox()))[0]
-    assert set(tool.args_schema.model_json_schema()["properties"]) == {
-        "language",
-        "code",
-    }
+    assert set(tool.args_schema.model_json_schema()["properties"]) == {"code"}
     with pytest.raises(RuntimeError, match="configured execution broker"):
         capability.tools(context(None))
 
@@ -80,20 +78,31 @@ async def test_tool_executes_and_reports_bounded_error() -> None:
             "type": "tool_call",
             "name": "execute_code",
             "id": "call-1",
-            "args": {"language": "python", "code": "print(42)"},
+            "args": {"code": "python -c 'print(42)'"},
         }
     )
     assert json.loads(result.content)["stdout"] == "42\n"
     assert not result.artifact.is_error
-    assert port.requests[0].language == "python"
+    assert port.requests[0].code == "python -c 'print(42)'"
     assert port.sessions[0] is None
+    port.result = SandboxResult(exit_code=127, stdout="", stderr="command not found")
+    result = await tool.ainvoke(
+        {
+            "type": "tool_call",
+            "name": "execute_code",
+            "id": "call-failed",
+            "args": {"code": "missing-command"},
+        }
+    )
+    assert not result.artifact.is_error
+    assert json.loads(result.content)["exit_code"] == 127
     port.error = "runtime_unavailable"
     result = await tool.ainvoke(
         {
             "type": "tool_call",
             "name": "execute_code",
             "id": "call-2",
-            "args": {"language": "bash", "code": "echo hi"},
+            "args": {"code": "echo hi"},
         }
     )
     assert result.artifact.is_error
@@ -104,11 +113,11 @@ async def test_tool_executes_and_reports_bounded_error() -> None:
 async def test_tool_binds_conversation_without_exposing_it_to_model() -> None:
     port = FakeSandbox()
     tool = CodeSandboxCapability().tools(context(port, session_id="chat-1"))[0]
-    await tool.ainvoke({"language": "bash", "code": "echo ok"})
+    await tool.ainvoke({"code": "echo ok"})
     assert port.sessions[0] == SandboxSessionIdentity(
         user_id="user", session_id="chat-1"
     )
-    assert set(tool.args_schema.model_fields) == {"language", "code"}
+    assert set(tool.args_schema.model_fields) == {"code"}
 
 
 @pytest.mark.asyncio
@@ -119,7 +128,7 @@ async def test_execution_prepares_the_trusted_conversation_view() -> None:
         context(port, session_id="chat-1", team_id="team-1", inputs=inputs)
     )
     assert [tool.name for tool in tools] == ["execute_code"]
-    await tools[0].ainvoke({"language": "bash", "code": "ls /inputs"})
+    await tools[0].ainvoke({"code": "ls /inputs"})
     assert inputs.calls == [
         (
             "prepare",

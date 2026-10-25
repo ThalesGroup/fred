@@ -44,7 +44,7 @@ def main() -> int:
             headers["X-Fred-Sandbox-Session"] = session_key
         request = Request(
             f"{base_url}/v1/execute",
-            data=json.dumps({"language": "python", "code": "print('ok')"}).encode(),
+            data=json.dumps({"code": "python -c 'print(\"ok\")'"}).encode(),
             headers=headers,
             method="POST",
         )

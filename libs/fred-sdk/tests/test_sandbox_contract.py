@@ -3,18 +3,14 @@ from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest, SandboxResu
 from pydantic import ValidationError
 
 
-def test_sandbox_request_rejects_unsupported_language_and_runtime_arguments() -> None:
+def test_sandbox_request_rejects_runtime_arguments() -> None:
     with pytest.raises(ValidationError):
-        SandboxRequest.model_validate({"language": "javascript", "code": "1 + 1"})
-    with pytest.raises(ValidationError):
-        SandboxRequest.model_validate(
-            {"language": "python", "code": "print(1)", "runtime": "runc"}
-        )
+        SandboxRequest.model_validate({"code": "echo ready", "runtime": "runc"})
 
 
 def test_sandbox_contract_bounds_source_and_output() -> None:
     with pytest.raises(ValidationError):
-        SandboxRequest(language="python", code="x" * 16_385)
+        SandboxRequest(code="x" * 16_385)
     with pytest.raises(ValidationError):
         SandboxResult(exit_code=0, stdout="x" * 16_385, stderr="")
 

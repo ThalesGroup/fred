@@ -265,12 +265,11 @@ class KubernetesBackend:
     async def execute(
         self, lease: SandboxLease, request: SandboxRequest
     ) -> SandboxResult:
-        interpreter = "/bin/bash" if request.language == "bash" else "python"
         try:
             try:
                 result = await self.runner.run(
                     self._kubectl(
-                        "exec", lease.target, "--", interpreter, "-c", request.code
+                        "exec", lease.target, "--", "/bin/bash", "-c", request.code
                     ),
                     timeout=self.settings.execution_timeout_seconds,
                     output_limit=self.settings.output_limit_bytes,

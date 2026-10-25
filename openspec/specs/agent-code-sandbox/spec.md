@@ -2,20 +2,20 @@
 
 ## Purpose
 
-Allow a configured Fred agent to execute short Bash or Python programs in an isolated, disposable environment through a backend-neutral contract.
+Allow a configured Fred agent to execute short Bash scripts, including calls to installed interpreters, in an isolated, disposable environment through a backend-neutral contract.
 
 ## Requirements
 
 ### Requirement: Agent code execution tool
-The system SHALL offer an admin-gated agent capability that accepts only a language (`bash` or `python`) and source code from the model. The tool SHALL return exit status and bounded stdout and stderr, or an explicit execution error.
+The system SHALL offer an admin-gated `execute_code(code)` tool whose sole model-visible argument is a bounded Bash script. Kubernetes, SIG Agent Sandbox and Docker backends SHALL execute it through `/bin/bash -c`; Python and other installed interpreters SHALL be invoked explicitly by the script. The tool SHALL return exit status and bounded stdout and stderr, or an explicit execution error. Unexpected request fields SHALL be rejected before provisioning a workload.
 
-#### Scenario: Python execution succeeds
-- **WHEN** an authorized agent calls the tool with Python source that exits successfully
-- **THEN** the tool returns the program output and exit status zero
+#### Scenario: Python through Bash
+- **WHEN** an authorized agent submits `python - <<'PY'` followed by Python source and the closing delimiter
+- **THEN** the isolated workload runs the Python program and returns its output and exit status
 
-#### Scenario: Unsupported language
-- **WHEN** the model requests a language other than Bash or Python
-- **THEN** the tool rejects the request before creating a sandbox
+#### Scenario: Unexpected request field
+- **WHEN** a caller sends an extra argument with code
+- **THEN** validation rejects the request without creating a workload
 
 ### Requirement: Isolation is explicit and mandatory
 The system MUST run every sandbox workload with an operator-selected, non-default isolation runtime. It MUST reject execution when the configured runtime is missing, unsupported, or unverifiable and MUST NOT fall back to the host process or default OCI runtime.

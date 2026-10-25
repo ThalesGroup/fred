@@ -114,7 +114,7 @@ export function ToolTraceGroup({
                 onClick={() => openTrace(entry)}
               >
                 <span className={`${styles.childDot} ${styles[`dot_${childStatus}`]}`} aria-hidden="true" />
-                <span className={styles.childTitle}>{itemLabel}</span>
+                {itemLabel && <span className={styles.childTitle}>{itemLabel}</span>}
                 {itemPreview && <span className={styles.childPreview}>{itemPreview}</span>}
                 {childStatus !== "ok" && <span className={styles.childStatus}>{statusText}</span>}
               </button>

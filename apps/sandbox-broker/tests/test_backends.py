@@ -156,9 +156,7 @@ async def test_docker_requires_isolated_runtime_and_hardens_container() -> None:
     backend = DockerBackend(settings(), runner)
     await backend.preflight()
     lease = await backend.prepare()
-    result = await backend.execute(
-        lease, SandboxRequest(language="python", code="print(42)")
-    )
+    result = await backend.execute(lease, SandboxRequest(code="python -c 'print(42)'"))
     await backend.dispose(lease)
     args = next(args for args, _ in runner.calls if args[:2] == ["docker", "run"])
     for option in (
@@ -176,6 +174,11 @@ async def test_docker_requires_isolated_runtime_and_hardens_container() -> None:
     ):
         assert option in args
     assert result.stdout == "42\n" and result.truncated
+    assert any(
+        args[3:] == ["/bin/bash", "-c", "python -c 'print(42)'"]
+        for args, _ in runner.calls
+        if args[:2] == ["docker", "exec"]
+    )
     assert runner.calls[-1][0][:3] == ["docker", "rm", "--force"]
     with pytest.raises(SandboxError, match="runtime_unavailable"):
         await DockerBackend(settings(), DockerRunner("runc")).preflight()
@@ -186,9 +189,7 @@ async def test_docker_timeout_still_allows_forced_cleanup() -> None:
     runner = DockerRunner(timeout=True)
     backend = DockerBackend(settings(), runner)
     lease = await backend.prepare()
-    assert (
-        await backend.execute(lease, SandboxRequest(language="bash", code="sleep 99"))
-    ).timed_out
+    assert (await backend.execute(lease, SandboxRequest(code="sleep 99"))).timed_out
     await backend.dispose(lease)
     assert runner.calls[-1][0][:3] == ["docker", "rm", "--force"]
 
@@ -208,9 +209,7 @@ async def test_docker_rejects_reuse_when_process_cleanup_fails() -> None:
     backend = DockerBackend(settings(), runner)
     lease = await backend.prepare()
     with pytest.raises(SandboxError, match="backend_failed"):
-        await backend.execute(
-            lease, SandboxRequest(language="bash", code="echo finished")
-        )
+        await backend.execute(lease, SandboxRequest(code="echo finished"))
     await backend.dispose(lease)
 
 
@@ -417,9 +416,7 @@ async def test_kubernetes_preflight_manifest_and_single_use_lifecycle() -> None:
     backend = KubernetesBackend(settings("kubernetes"), runner)
     await backend.preflight()
     lease = await backend.prepare()
-    result = await backend.execute(
-        lease, SandboxRequest(language="bash", code="echo ok")
-    )
+    result = await backend.execute(lease, SandboxRequest(code="echo ok"))
     await backend.dispose(lease)
     job = runner.manifest
     assert job["kind"] == "Job"
@@ -433,6 +430,11 @@ async def test_kubernetes_preflight_manifest_and_single_use_lifecycle() -> None:
     assert container["securityContext"]["capabilities"]["drop"] == ["ALL"]
     assert job["spec"]["activeDeadlineSeconds"] > 3600
     assert result.stdout == "ok\n"
+    assert any(
+        args[-4:] == ["--", "/bin/bash", "-c", "echo ok"]
+        for args in runner.calls
+        if "exec" in args
+    )
     assert "delete" in runner.calls[-1]
     assert "--wait=true" in runner.calls[-1]
 
@@ -864,9 +866,7 @@ async def test_agent_sandbox_claim_lifecycle_and_expiry() -> None:
     backend = AgentSandboxBackend(settings("agent_sandbox"), runner)
     await backend.preflight()
     lease = await backend.prepare()
-    result = await backend.execute(
-        lease, SandboxRequest(language="bash", code="echo ok")
-    )
+    result = await backend.execute(lease, SandboxRequest(code="echo ok"))
     await backend.renew(lease, 1200)
     await backend.dispose(lease)
     assert runner.manifest["kind"] == "SandboxClaim"

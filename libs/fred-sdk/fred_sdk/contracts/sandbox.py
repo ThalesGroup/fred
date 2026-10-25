@@ -5,18 +5,16 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-
-SandboxLanguage = Literal["bash", "python"]
 
 
 class SandboxRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    language: SandboxLanguage
-    code: str = Field(min_length=1, max_length=16_384)
+    code: str = Field(
+        min_length=1, max_length=16_384, description="Bash script to run in the sandbox"
+    )
 
 
 class SandboxSessionIdentity(BaseModel):

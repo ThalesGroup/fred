@@ -1,11 +1,24 @@
+## MODIFIED Requirements
+
+### Requirement: Agent code execution tool
+The system SHALL expose an admin-gated `execute_code(code)` tool whose sole model-visible argument is a bounded Bash script. Kubernetes, SIG Agent Sandbox and Docker backends SHALL execute it through `/bin/bash -c`; Python and other installed interpreters SHALL be invoked explicitly by the script. The tool SHALL return exit status and bounded stdout and stderr, or an explicit execution error. Unexpected request fields SHALL be rejected before provisioning a workload.
+
+#### Scenario: Python through Bash
+- **WHEN** an authorized agent submits `python - <<'PY'` followed by Python source and the closing delimiter
+- **THEN** the isolated workload runs the Python program and returns its output and exit status
+
+#### Scenario: Unexpected request field
+- **WHEN** a caller sends an extra argument with code
+- **THEN** validation rejects the request without creating a workload
+
 ## ADDED Requirements
 
 ### Requirement: Grouped code execution trace
-The chat thought trace SHALL display a consecutive run of `execute_code` calls in one assistant turn as one expandable activity. Its heading SHALL show a bounded, single-line preview of the running command, or the latest command when none is running, truncated with an ellipsis when necessary. Expanding it SHALL show each command in chronological order with its Bash or Python label, a bounded single-line code preview with ellipsis when necessary, execution status, and a link to that call's existing code and result detail. Reasoning between consecutive code calls SHALL remain in sequence. A different tool, including `summarize_document`, SHALL end the current activity; a later code call SHALL start a new activity. The grouping mechanism SHALL allow another tool family to opt in through a presentation rule without changing stored trace events.
+The chat thought trace SHALL display a consecutive run of `execute_code` calls in one assistant turn as one expandable activity. Its heading SHALL show a bounded, single-line preview of the running command, or the latest command when none is running. Expanding it SHALL show each submitted shell command in chronological order without an inferred language prefix, with `...` when code follows the previewed first line, execution status, and a link to that call's full code and result detail. Reasoning between consecutive code calls SHALL remain in sequence. A different tool, including `summarize_document`, SHALL end the current activity; a later code call SHALL start a new activity. The grouping mechanism SHALL allow another tool family to opt in through a presentation rule without changing stored trace events.
 
 #### Scenario: Multiple code calls
-- **WHEN** an agent executes Bash and Python consecutively in one turn
-- **THEN** the trace shows one code activity with two selectable Bash/Python code previews and their individual details
+- **WHEN** an agent executes a Bash command and a Bash script invoking Python consecutively in one turn
+- **THEN** the trace shows one code activity with two selectable command previews and their individual details
 
 #### Scenario: Other tool between code calls
 - **WHEN** an agent executes code, calls `summarize_document`, and executes code again
@@ -18,6 +31,10 @@ The chat thought trace SHALL display a consecutive run of `execute_code` calls i
 #### Scenario: Cancelled execution
 - **WHEN** a user cancels approval of a code call in an expanded activity
 - **THEN** that command is shown as cancelled rather than failed
+
+#### Scenario: Command exits unsuccessfully
+- **WHEN** a Bash script exits with a nonzero status or times out
+- **THEN** its trace row and activity are marked as failed while its exit status and bounded output remain available in the detail
 
 #### Scenario: Streaming update
 - **WHEN** another code call arrives while a code activity is already displayed

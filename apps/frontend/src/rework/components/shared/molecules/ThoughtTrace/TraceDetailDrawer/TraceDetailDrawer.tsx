@@ -190,9 +190,8 @@ function isSandboxExecution(
 function SandboxToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
   const { t } = useTranslation();
   const args = toolArgs(entry.call);
-  const language = args.language === "python" || args.language === "bash" ? args.language : null;
   const code = typeof args.code === "string" ? args.code : null;
-  if (!language || code === null) return <GenericToolDetail entry={entry} />;
+  if (code === null) return <GenericToolDetail entry={entry} />;
 
   const result = entry.result ? parseToolResultContent(entry.result) : null;
   const errorCode = result && typeof result.error_code === "string" ? result.error_code : null;
@@ -202,7 +201,7 @@ function SandboxToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "comb
     <div className={styles.detail}>
       <div className={styles.toolSection}>
         <p className={styles.sectionLabel}>{t("rework.chatTrace.sandbox.code")}</p>
-        <CodeBlock code={code} language={language} />
+        <CodeBlock code={code} language="bash" />
       </div>
       <div className={styles.toolSection}>
         <p className={styles.sectionLabel}>{t("rework.chatTrace.sandbox.result")}</p>

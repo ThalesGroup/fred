@@ -111,12 +111,19 @@ function message(overrides: Partial<ChatMessage>): ChatMessage {
 }
 
 describe("TraceDetailDrawer sandbox execution", () => {
-  function sandboxEntry(language: string, code: string, content?: unknown, ok = true): TraceEntry {
+  function sandboxEntry(code: string, content?: unknown, ok = true): TraceEntry {
     return {
       kind: "combo",
       call: message({
         channel: "tool_call",
-        parts: [{ type: "tool_call", call_id: "sandbox-1", name: "execute_code", args: { language, code } }],
+        parts: [
+          {
+            type: "tool_call",
+            call_id: "sandbox-1",
+            name: "execute_code",
+            args: { code },
+          },
+        ],
       }),
       result:
         content === undefined
@@ -131,8 +138,8 @@ describe("TraceDetailDrawer sandbox execution", () => {
     };
   }
 
-  it("shows the submitted Python code and its stdout", () => {
-    const entry = sandboxEntry("python", "print('hello')", {
+  it("shows the submitted shell command invoking Python and its stdout", () => {
+    const entry = sandboxEntry("python -c 'print(42)'", {
       exit_code: 0,
       stdout: "hello\n",
       stderr: "",
@@ -142,8 +149,8 @@ describe("TraceDetailDrawer sandbox execution", () => {
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
     expect(html).toContain("<header>Running code in an isolated space");
     expect(html).toContain("rework.chatTrace.sandbox.code");
-    expect(html).toContain('data-language="python"');
-    expect(html).toContain("print(&#x27;hello&#x27;)");
+    expect(html).toContain('data-language="bash"');
+    expect(html).toContain("python -c &#x27;print(42)&#x27;");
     expect(html).toContain("rework.chatTrace.sandbox.result");
     expect(html).toContain("rework.chatTrace.sandbox.output");
     expect(html).toContain("hello\n");
@@ -152,7 +159,7 @@ describe("TraceDetailDrawer sandbox execution", () => {
   });
 
   it("shows Bash, standard error and execution limits", () => {
-    const entry = sandboxEntry("bash", "echo failed >&2", {
+    const entry = sandboxEntry("echo failed >&2", {
       exit_code: 2,
       stdout: "",
       stderr: "failed\n",
@@ -171,15 +178,15 @@ describe("TraceDetailDrawer sandbox execution", () => {
 
   it("shows the code while running and a bounded broker error when execution fails", () => {
     const running = renderToStaticMarkup(
-      <TraceDetailDrawer entry={sandboxEntry("python", "print(1)")} onClose={() => undefined} />,
+      <TraceDetailDrawer entry={sandboxEntry("python -c 'print(1)'")} onClose={() => undefined} />,
     );
-    expect(running).toContain('data-language="python"');
+    expect(running).toContain('data-language="bash"');
     expect(running).toContain("print(1)");
     expect(running).toContain("rework.chatTrace.toolStatus.running");
 
     const failed = renderToStaticMarkup(
       <TraceDetailDrawer
-        entry={sandboxEntry("python", "print(1)", { error_code: "runtime_unavailable", details: "private" }, false)}
+        entry={sandboxEntry("python -c 'print(1)'", { error_code: "runtime_unavailable", details: "private" }, false)}
         onClose={() => undefined}
       />,
     );
@@ -188,7 +195,7 @@ describe("TraceDetailDrawer sandbox execution", () => {
 
     const malformed = renderToStaticMarkup(
       <TraceDetailDrawer
-        entry={sandboxEntry("python", "print(1)", { stdout: "private transport details" }, false)}
+        entry={sandboxEntry("python -c 'print(1)'", { stdout: "private transport details" }, false)}
         onClose={() => undefined}
       />,
     );
@@ -201,7 +208,7 @@ describe("TraceDetailDrawer sandbox execution", () => {
       kind: "combo",
       call: message({
         channel: "tool_call",
-        parts: [{ type: "tool_call", call_id: "sandbox-1", name: "execute_code", args: { code: "secret code" } }],
+        parts: [{ type: "tool_call", call_id: "sandbox-1", name: "execute_code", args: { unexpected: "secret code" } }],
       }),
       result: message({
         channel: "tool_result",

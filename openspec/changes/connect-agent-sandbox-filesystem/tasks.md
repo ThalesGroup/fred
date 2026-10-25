@@ -18,6 +18,7 @@
 - [ ] 3.3 Gate Deep native `execute`, ReAct code execution and skill scripts through the same conversation sandbox lease and isolation profile; verify capability absence, Python file analysis and scratch reuse tests.
 - [x] 3.4 Guide `execute_code` to use selective Bash or Python queries over mounted files, then verify a real conversation keeps large source content out of the tool result and final answer.
 - [x] 3.5 Group consecutive code calls in the thought trace through a reusable presentation rule, preview the active command on one ellipsized line, preserve individual details and chronology, and verify that another tool splits groups and streaming calls append to the current group.
+- [x] 3.6 Replace the language-selecting sandbox request with one Bash script argument across the capability, SDK, broker backends, smoke test and UI; verify explicit Python invocation, command previews, and strict rejection of the removed argument.
 
 ## 4. Integration and close-out
 
