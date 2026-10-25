@@ -71,6 +71,7 @@ from control_plane_backend.models.base import Base
 
 import_module("control_plane_backend.models.model_discovery_models")
 import_module("control_plane_backend.models.model_display_name_models")
+import_module("control_plane_backend.models.users_preferences_models")
 
 # CoreBase tables whose migrations this tree owns — explicit names, never
 # derived from CoreBase.metadata (that would claim every backend's tables).

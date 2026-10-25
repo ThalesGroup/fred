@@ -16,11 +16,13 @@
 // The agents page sort survives leaving and coming back to the page.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setCurrentUserPreferences } from "../../../../app/userPreferences";
 import { DEFAULT_AGENT_SORT, getStoredAgentSort, storeAgentSort } from "./agentSort";
 
 afterEach(() => {
   vi.unstubAllGlobals();
   localStorage.clear();
+  setCurrentUserPreferences({});
 });
 
 describe("stored agent sort", () => {
@@ -35,6 +37,7 @@ describe("stored agent sort", () => {
 
   it("ignores an unknown stored value", () => {
     localStorage.setItem("fred.agentSort", "size:desc");
+    setCurrentUserPreferences({});
     expect(getStoredAgentSort()).toBe(DEFAULT_AGENT_SORT);
   });
 
@@ -44,6 +47,6 @@ describe("stored agent sort", () => {
     };
     vi.stubGlobal("localStorage", { getItem: blocked, setItem: blocked });
     expect(() => storeAgentSort("updated_at:desc")).not.toThrow();
-    expect(getStoredAgentSort()).toBe(DEFAULT_AGENT_SORT);
+    expect(getStoredAgentSort()).toBe("updated_at:desc");
   });
 });

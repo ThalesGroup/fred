@@ -483,6 +483,9 @@ def _delete_user_app(content_store: _FakeContentStore, calls: list[str]) -> Fast
     app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
         uid="synthetic-admin", username="synthetic-admin", roles=[]
     )
+    app.dependency_overrides[users_api._get_user_preferences_store] = lambda: (
+        SimpleNamespace(delete=lambda _user_id: _noop())
+    )
     app.dependency_overrides[get_user_service_dependencies] = lambda: SimpleNamespace(
         configuration=SimpleNamespace(
             security=SimpleNamespace(user_directory="keycloak")

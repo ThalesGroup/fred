@@ -5150,3 +5150,28 @@ removes that source on the next request. Suspension, terms and resource checks
 remain independent. `team_manager` has no Platform Access authority, including
 Free links. `platform_admin` inherits both delegated surfaces through the
 OpenFGA role unions. Deploy the OpenFGA model before the backend and frontend.
+
+## 69. Contract Notes - personal display preferences (2026-10-24)
+
+`users_preferences` has one row per authenticated subject ID. It stores the
+selected UI theme ID, light/dark/system mode, language (`en` or `fr`), navigation
+sidebar collapsed state, and team and agent sort modes.
+Resizable pane widths and trace expansion remain in browser localStorage and are not sent to the
+preferences API. An absent row uses the frontend's
+existing defaults. The table is separate from `platform_ui_settings`, which
+continues to hold the administrator's platform-wide default and hidden themes.
+
+`GET /control-plane/v1/users/me/preferences` returns these typed values and an
+`initialized` flag. `PATCH` at the same path changes only submitted fields;
+the authenticated subject is the sole row key, with no target-user parameter.
+The backend validates theme ID shape, not catalog membership. A saved ID can
+remain when its theme is hidden or absent; the frontend resolves the visible
+theme by the existing platform fallback rules. Account deletion removes the
+preference row.
+
+The frontend reads the database record after login and before painting signed-in
+content. An absent row or failed read applies documented defaults. Existing
+personal localStorage values do not seed the row or serve as a fallback; the
+frontend applies the database response or defaults to in-memory controls and
+does not mirror database-backed choices to localStorage. Before login, theme boot uses only public
+platform settings and the OS color mode. Resizable pane widths and trace expansion remain local.
