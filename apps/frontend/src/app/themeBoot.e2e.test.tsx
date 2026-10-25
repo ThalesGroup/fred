@@ -13,57 +13,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The boot script must read exactly what the profile page writes: drive the
-// real provider, then replay theme-boot.js against the same localStorage.
+// Before login, the boot script uses public settings and ignores personal keys.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { runInNewContext } from "node:vm";
-import { act, useContext, useEffect } from "react";
-import { createRoot } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
-vi.mock("../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
-  useFrontendConfigQuery: () => ({ data: undefined, refetch: () => {} }),
-}));
-
-import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
+import { expect, it } from "vitest";
 
 const BOOT_SCRIPT = readFileSync(path.resolve(__dirname, "../../public/theme-boot.js"), "utf8");
 
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-
-function ChooseTheme() {
-  const { setUiTheme, setThemeMode } = useContext(ApplicationContext);
-  useEffect(() => {
-    setUiTheme("cloud");
-    setThemeMode("dark");
-  }, [setUiTheme, setThemeMode]);
-  return null;
-}
-
-afterEach(() => window.localStorage.clear());
-
-describe("theme-boot.js after a choice made in the app", () => {
-  it("applies the theme and mode the provider stored", async () => {
-    const container = document.createElement("div");
-    const root = createRoot(container);
-    await act(async () => {
-      root.render(
-        <ApplicationContextProvider>
-          <ChooseTheme />
-        </ApplicationContextProvider>,
-      );
-    });
-    await act(async () => root.unmount());
-
-    const attributes: Record<string, string> = {};
-    runInNewContext(BOOT_SCRIPT, {
-      window: { localStorage: window.localStorage, matchMedia: () => ({ matches: false }) },
-      document: { documentElement: { setAttribute: (name: string, value: string) => (attributes[name] = value) } },
-    });
-    expect(attributes).toEqual({
-      "data-ui-theme": "cloud",
-      "data-ui-base-theme": "cloud",
-      "data-theme": "dark",
-    });
+it("ignores retained personal theme and mode keys before authentication", () => {
+  const storage: Record<string, string> = {
+    "localHook:ApplicationContextProvider.uiTheme": '"cloud"',
+    "localHook:ApplicationContextProvider.themeMode": '"dark"',
+    "localHook:ApplicationContextProvider.platformUiThemes": JSON.stringify({ default_theme: "cobalt" }),
+  };
+  const attributes: Record<string, string> = {};
+  runInNewContext(BOOT_SCRIPT, {
+    window: {
+      localStorage: { getItem: (key: string) => storage[key] ?? null },
+      matchMedia: () => ({ matches: false }),
+    },
+    document: { documentElement: { setAttribute: (name: string, value: string) => (attributes[name] = value) } },
+  });
+  expect(attributes).toEqual({
+    "data-ui-theme": "cobalt",
+    "data-ui-base-theme": "cobalt",
+    "data-theme": "light",
   });
 });

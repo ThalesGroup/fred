@@ -87,6 +87,8 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /gcu",
         "post /bootstrap/platform-admin",
         "get /me",
+        "get /users/me/preferences",
+        "patch /users/me/preferences",
         "get /me/spaces",
         "post /me/personal-space",
         "post /spaces",

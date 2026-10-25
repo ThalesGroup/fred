@@ -59,7 +59,8 @@ import {
   normalizeAgentName,
   takenAgentNames,
 } from "./agentNames.ts";
-import { getStoredAgentSort, sortAgents, storeAgentSort, type AgentSortValue } from "./agentSort.ts";
+import { sortAgents, storeAgentSort, type AgentSortValue } from "./agentSort.ts";
+import { useCurrentUserPreference } from "../../../../app/userPreferences.ts";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import TeamDescriptionReminder from "@shared/organisms/TeamDescriptionReminder/TeamDescriptionReminder.tsx";
 import { useUsersByIdsQuery } from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
@@ -161,9 +162,8 @@ export default function TeamAgentsPage() {
     cause: RepublishProposalCause;
   } | null>(null);
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<AgentSortValue>(getStoredAgentSort);
+  const sort = useCurrentUserPreference("agent_sort", "name") as AgentSortValue;
   const changeSort = (next: AgentSortValue) => {
-    setSort(next);
     storeAgentSort(next);
   };
 

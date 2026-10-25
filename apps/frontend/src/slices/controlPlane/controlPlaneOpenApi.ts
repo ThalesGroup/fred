@@ -351,6 +351,16 @@ const injectedRtkApi = api.injectEndpoints({
     spaceAgentTemplates: build.query<SpaceAgentTemplatesApiResponse, SpaceAgentTemplatesApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-templates` }),
     }),
+    getMyPreferences: build.query<GetMyPreferencesApiResponse, GetMyPreferencesApiArg>({
+      query: () => ({ url: `/control-plane/v1/users/me/preferences` }),
+    }),
+    patchMyPreferences: build.mutation<PatchMyPreferencesApiResponse, PatchMyPreferencesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/me/preferences`,
+        method: "PATCH",
+        body: queryArg.patchUserPreferences,
+      }),
+    }),
     listPlatformRoles: build.query<ListPlatformRolesApiResponse, ListPlatformRolesApiArg>({
       query: () => ({ url: `/control-plane/v1/users/platform-roles` }),
     }),
@@ -644,6 +654,12 @@ export type UpdateAgentInstanceApiArg = {
 export type SpaceAgentTemplatesApiResponse = /** status 200 undefined */ AgentTemplateSummary[];
 export type SpaceAgentTemplatesApiArg = {
   spaceId: string;
+};
+export type GetMyPreferencesApiResponse = /** status 200 undefined */ UserPreferences;
+export type GetMyPreferencesApiArg = void;
+export type PatchMyPreferencesApiResponse = /** status 200 undefined */ UserPreferences;
+export type PatchMyPreferencesApiArg = {
+  patchUserPreferences: PatchUserPreferences;
 };
 export type ListPlatformRolesApiResponse = /** status 200 Success */ Grant[];
 export type ListPlatformRolesApiArg = void;
@@ -1317,6 +1333,27 @@ export type AgentTemplateSummary = {
   team_instantiable: boolean;
   template_id: string;
 };
+export type AgentSort = "name" | "created_at:desc" | "updated_at:desc";
+export type Language = "en" | "fr";
+export type TeamSortMode = "recent" | "alpha";
+export type ThemeMode = "light" | "dark" | "system";
+export type UserPreferences = {
+  agent_sort: AgentSort;
+  initialized: boolean;
+  language?: Language | null;
+  sidebar_collapsed: boolean;
+  team_sort_mode: TeamSortMode;
+  theme_mode: ThemeMode;
+  ui_theme_id?: string | null;
+};
+export type PatchUserPreferences = {
+  agent_sort?: AgentSort | null;
+  language?: Language | null;
+  sidebar_collapsed?: boolean | null;
+  team_sort_mode?: TeamSortMode | null;
+  theme_mode?: ThemeMode | null;
+  ui_theme_id?: string | null;
+};
 export type Grant = {
   role: PlatformRole;
   user_id: string;
@@ -1407,6 +1444,9 @@ export const {
   useUpdateAgentInstanceMutation,
   useSpaceAgentTemplatesQuery,
   useLazySpaceAgentTemplatesQuery,
+  useGetMyPreferencesQuery,
+  useLazyGetMyPreferencesQuery,
+  usePatchMyPreferencesMutation,
   useListPlatformRolesQuery,
   useLazyListPlatformRolesQuery,
   useGrantPlatformRoleMutation,

@@ -38,6 +38,7 @@ pub mod processing;
 pub mod roles;
 pub mod spaces;
 pub mod supervision;
+pub mod user_preferences;
 pub mod users;
 
 pub mod provisioning;

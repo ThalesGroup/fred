@@ -27,15 +27,11 @@ vi.mock("../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => 
   useFrontendConfigQuery: () => ({ data: undefined, refetch: () => {} }),
 }));
 
+import { setCurrentUserPreferences } from "./userPreferences";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
-import {
-  applyResolvedTheme,
-  cachePlatformUiThemes,
-  PLATFORM_UI_THEMES_CACHE_KEY,
-  UI_THEME_STORAGE_KEY,
-  type UiTheme,
-} from "./uiThemes";
+import { applyResolvedTheme, cachePlatformUiThemes, PLATFORM_UI_THEMES_CACHE_KEY, type UiTheme } from "./uiThemes";
 
+const UI_THEME_STORAGE_KEY = "ApplicationContextProvider.uiTheme";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 async function providerTheme(): Promise<UiTheme> {
@@ -59,6 +55,7 @@ async function providerTheme(): Promise<UiTheme> {
 afterEach(() => {
   window.localStorage.clear();
   h.platform = null;
+  setCurrentUserPreferences({});
 });
 
 describe("theme applied before render vs provider", () => {
@@ -69,8 +66,9 @@ describe("theme applied before render vs provider", () => {
     { name: "offered choice", stored: "cloud", expected: "cloud" },
   ])("agree with platform settings: $name", async ({ stored, expected }) => {
     h.platform = platform;
+    setCurrentUserPreferences({ ui_theme_id: stored ?? null });
     if (stored) window.localStorage.setItem(localStorageKey(UI_THEME_STORAGE_KEY), JSON.stringify(stored));
-    applyResolvedTheme(platform);
+    applyResolvedTheme(platform, stored ?? null);
     expect(document.documentElement.getAttribute("data-ui-theme")).toBe(expected);
     expect(await providerTheme()).toBe(expected);
     // Resolving never rewrites the user's own choice.

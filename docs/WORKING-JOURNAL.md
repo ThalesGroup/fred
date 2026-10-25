@@ -92,6 +92,8 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | [F-012](#f-012-suppression-unifiée) | Suppression unifiée : retrait immédiat, purge différée | Conception validée par Dimi ; rien d'implémenté | 03, 04, 05, 08, A2, A3, A9 au fil des lots |
 
+| [F26](#f26-fusion-swift-et-préférences-utilisateur) | Fusion Swift : préférences personnelles en Rust | Implémenté ; validation fonctionnelle à faire | 02.1, A1, carte des sources |
+
 ## Méthode de consolidation
 
 - 2026-10-21 : méthode durable enregistrée dans
@@ -2333,3 +2335,24 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
   Clippy passe ; rustfmt retrouve les seuls écarts préexistants. Le rendu k3d de
   cette sélection passe avec les images du chart, sans build ni déploiement.
   Un commit local conserve le lot ; aucun push tant que les blocages persistent.
+
+
+## F26 Fusion Swift et préférences utilisateur
+
+- 2026-10-25 : résolution de `git merge swift` à la demande de Dimi. Le commit
+  entrant `def85bedd` ajoute les préférences personnelles. Conservation des
+  adaptations Weaver du profil et des shells ; apports frontend Swift conservés.
+- Les fichiers Python supprimés ne sont pas rétablis. GET/PATCH des préférences
+  portés dans `user_preferences.rs`, migration additive SQLx 0013 et client RTK
+  régénéré. Identité propre avant CGU via OwnUser, valeurs typées, null/defaults,
+  champs inconnus refusés, PATCH atomique conservant les champs omis.
+- Tests Python entrants remplacés par des cas Rust pour valeurs par défaut,
+  isolation, validation, CGU, usurpation de sujet, services, concurrence et null.
+  Inventaire OpenAPI et mocks frontend adaptés. Tests non exécutés.
+- La suppression de comptes n’existe pas encore dans le Control Plane Rust.
+  Son futur portage doit supprimer users_preferences pour le sujet supprimé,
+  comme le nouveau contrat Swift ; ne pas confondre départ d’organisation et
+  suppression de compte. Aucun endpoint de suppression ajouté dans cette fusion.
+- Génération OpenAPI/client uniquement, avec compilation du générateur ; aucune
+  migration appliquée, campagne de tests/qualité, installation, déploiement,
+  commit ou push. Parcours manuel et validation PostgreSQL à faire par Dimi.

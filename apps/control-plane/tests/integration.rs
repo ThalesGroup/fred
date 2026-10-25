@@ -6517,3 +6517,6 @@ async fn personal_kind_migration_preserves_active_and_retired_spaces() {
 
 #[path = "support/agent_instances.rs"]
 mod agent_instances;
+
+#[path = "support/user_preferences.rs"]
+mod user_preferences;

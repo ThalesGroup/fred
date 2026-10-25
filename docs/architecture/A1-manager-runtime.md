@@ -181,11 +181,21 @@ query shared with navigation, and its organization from `/me/spaces`. It hides c
 when the response belongs to another authenticated subject. With authentication
 disabled, it matches manager's fixed mock subject `admin`.
 
-Preferences use the existing application context, local storage and i18n.
+Display preferences use the application context and i18n after startup loads
+`GET /users/me/preferences` through the generated Rust client.
+`user_preferences.rs` serves GET/PATCH with `OwnUser` before consent, deriving
+the subject from verified identity and refusing service accounts and asserted
+query subjects. Migration `0013_user_preferences.sql` stores one row per subject;
+the optional UUID identity snapshot cannot own it. An atomic SQL upsert changes
+only supplied columns; explicit null restores defaults. Theme IDs stay opaque
+and syntax-validated. Missing rows/read failures use defaults; old personal
+browser values never initialize or populate the database. Pane widths and trace
+expansion remain browser-local. The focused integration cases live in
+`tests/support/user_preferences.rs`.
 Legal content and static release notes use their existing markdown loaders.
 The consultation route mounts the accepted content without the acceptance
 mutation wrapper. The profile renders initials and mounts no Python bootstrap
-or avatar subscription. These pages add no backend endpoint or persisted model.
+or avatar subscription.
 
 ## Frontend resource browsing
 

@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { createContext, PropsWithChildren, useEffect, useState } from "react";
-import { useLocalStorageState } from "../hooks/useLocalStorageState";
+import { createContext, PropsWithChildren, useEffect, useRef, useState } from "react";
 import { ApplicationContextStruct, ThemeMode } from "./ApplicationContextStruct.tsx";
 import { getPlatformUiThemes } from "../common/config.tsx";
 import {
@@ -21,11 +20,15 @@ import {
   computeDarkMode,
   offeredUiThemes,
   resolveUiTheme,
-  THEME_MODE_STORAGE_KEY,
-  UI_THEME_STORAGE_KEY,
   UiTheme,
   type PlatformUiThemes,
 } from "./uiThemes.ts";
+import {
+  saveUserPreference,
+  persistUserPreference,
+  updateCurrentUserPreference,
+  useCurrentUserPreference,
+} from "./userPreferences";
 
 /**
  * Our application context.
@@ -43,20 +46,21 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
   return <ApplicationThemeProvider platformUiThemes={getPlatformUiThemes()}>{props.children}</ApplicationThemeProvider>;
 };
 
-/** Presentation state shared by shells; this provider performs no API requests. */
+/** Shared presentation state; platform settings come from startup configuration. */
 export const ApplicationThemeProvider = ({
   children,
   platformUiThemes,
 }: PropsWithChildren<{ platformUiThemes: PlatformUiThemes | null }>) => {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useLocalStorageState(
-    "ApplicationContextProvider.isSidebarCollapsed",
-    false,
-  );
+  const isSidebarCollapsed = useCurrentUserPreference("sidebar_collapsed", false);
   // Default to "system" so the first load honours the OS preference (prefers-color-scheme);
-  // an explicit Light/Dark/System choice from the settings toggle then persists in localStorage.
-  const [themeMode, setThemeMode] = useLocalStorageState<ThemeMode>(THEME_MODE_STORAGE_KEY, "system");
+  // an explicit Light/Dark/System choice is also saved in the user's profile.
+  const themeMode = useCurrentUserPreference("theme_mode", "system") as ThemeMode;
   // null = no choice yet, so the platform default can apply (see resolveUiTheme).
-  const [storedUiTheme, setUiTheme] = useLocalStorageState<UiTheme | null>(UI_THEME_STORAGE_KEY, null);
+  const storedUiTheme = useCurrentUserPreference("ui_theme_id", null);
+  const confirmedMode = useRef(themeMode);
+  const confirmedTheme = useRef(storedUiTheme);
+  const modeChange = useRef(0);
+  const themeChange = useRef(0);
   useEffect(() => cachePlatformUiThemes(platformUiThemes), [platformUiThemes]);
   const uiTheme = resolveUiTheme(storedUiTheme, platformUiThemes);
   const offered = offeredUiThemes(platformUiThemes);
@@ -75,7 +79,38 @@ export const ApplicationThemeProvider = ({
   }, []);
 
   const toggleSidebar = () => {
-    setIsSidebarCollapsed((prevState) => !prevState);
+    const next = !isSidebarCollapsed;
+    persistUserPreference({ sidebar_collapsed: next });
+  };
+
+  const setThemeMode = (mode: ThemeMode, onError?: (error: unknown) => void) => {
+    const change = ++modeChange.current;
+    updateCurrentUserPreference({ theme_mode: mode });
+    void saveUserPreference({ theme_mode: mode })
+      .then(() => {
+        confirmedMode.current = mode;
+      })
+      .catch((error) => {
+        if (change === modeChange.current) {
+          updateCurrentUserPreference({ theme_mode: confirmedMode.current });
+          onError?.(error);
+        }
+      });
+  };
+
+  const setUiTheme = (theme: UiTheme, onError?: (error: unknown) => void) => {
+    const change = ++themeChange.current;
+    updateCurrentUserPreference({ ui_theme_id: theme });
+    void saveUserPreference({ ui_theme_id: theme })
+      .then(() => {
+        confirmedTheme.current = theme;
+      })
+      .catch((error) => {
+        if (change === themeChange.current) {
+          updateCurrentUserPreference({ ui_theme_id: confirmedTheme.current });
+          onError?.(error);
+        }
+      });
   };
 
   const contextValue: ApplicationContextStruct = {

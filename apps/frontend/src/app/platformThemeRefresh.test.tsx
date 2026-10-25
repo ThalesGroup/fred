@@ -5,16 +5,19 @@ import { act, useContext } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { localStorageKey } from "../hooks/useLocalStorageState";
+import { setCurrentUserPreferences } from "./userPreferences";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
-import { PLATFORM_UI_THEMES_CACHE_KEY, setCustomUiThemes, UI_THEME_STORAGE_KEY } from "./uiThemes";
+import { PLATFORM_UI_THEMES_CACHE_KEY, setCustomUiThemes } from "./uiThemes";
 vi.mock("../common/config.tsx", () => ({
   getPlatformUiThemes: () => ({ default_theme: "cloud", hidden_themes: [] }),
 }));
+const UI_THEME_STORAGE_KEY = "ApplicationContextProvider.uiTheme";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root, host: HTMLDivElement;
 beforeEach(() => {
   window.localStorage.clear();
   window.localStorage.setItem(localStorageKey(UI_THEME_STORAGE_KEY), JSON.stringify("acme"));
+  setCurrentUserPreferences({ ui_theme_id: "acme" });
   setCustomUiThemes([{ id: "acme", label: "Acme", base: "cobalt" }]);
   vi.stubGlobal(
     "fetch",
@@ -30,6 +33,7 @@ afterEach(() => {
   setCustomUiThemes([]);
   window.localStorage.clear();
   vi.unstubAllGlobals();
+  setCurrentUserPreferences({});
 });
 function mount() {
   function Probe() {

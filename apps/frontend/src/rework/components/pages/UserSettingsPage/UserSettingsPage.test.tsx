@@ -52,6 +52,13 @@ vi.mock("react-i18next", () => ({
     i18n: { language: "fr", changeLanguage: state.changeLanguage },
   }),
 }));
+
+vi.mock("../../../../app/userPreferences.ts", () => ({
+  persistUserPreference: vi.fn(),
+  saveUserPreference: vi.fn().mockResolvedValue(undefined),
+  updateCurrentUserPreference: vi.fn(),
+}));
+
 vi.mock("../../../../security/KeycloakService.ts", () => ({
   KeyCloakService: {
     GetUserId: () => state.userId,
@@ -91,6 +98,10 @@ vi.mock("@shared/molecules/Select/Select.tsx", () => ({
       ))}
     </select>
   ),
+}));
+
+vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
+  useApiErrorToast: () => ({ notifyApiError: vi.fn() }),
 }));
 
 import UserSettingsPage from "./UserSettingsPage";
@@ -235,9 +246,9 @@ describe("shared UserSettingsPage", () => {
       themePicker()!.value = "cloud";
       themePicker()!.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    expect(state.setUiTheme).toHaveBeenCalledWith("cloud");
+    expect(state.setUiTheme).toHaveBeenCalledWith("cloud", expect.any(Function));
     clickText("rework.userSettings.app.dark");
-    expect(state.setThemeMode).toHaveBeenCalledWith("dark");
+    expect(state.setThemeMode).toHaveBeenCalledWith("dark", expect.any(Function));
     clickText("rework.userSettings.app.english");
     expect(state.changeLanguage).toHaveBeenCalledWith("en");
   });

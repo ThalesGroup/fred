@@ -18,9 +18,11 @@ import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
-import { useContext } from "react";
+import { useContext, useRef } from "react";
+import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
 import { uiThemeLabel, type UiTheme } from "../../../../app/uiThemes.ts";
+import { saveUserPreference, updateCurrentUserPreference } from "../../../../app/userPreferences.ts";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { Link, useNavigate } from "react-router-dom";
@@ -34,6 +36,8 @@ export default function UserSettingsPage() {
   const { t } = useTranslation();
   const { themeMode, setThemeMode, uiTheme, setUiTheme, offeredUiThemes } = useContext(ApplicationContext);
   const { i18n } = useTranslation();
+  const confirmedLanguage = useRef(i18n.language);
+  const languageChange = useRef(0);
 
   const userId = KeyCloakService.GetUserId();
   // Manager uses its fixed mock subject when user authentication is disabled.
@@ -46,6 +50,29 @@ export default function UserSettingsPage() {
   const memberships = useMySpacesQuery(undefined, { refetchOnMountOrArgChange: true });
   useRefetchOnWindowFocus(memberships.refetch, false);
   const organization = memberships.currentData?.find((space) => space.kind === "organization");
+  const { notifyApiError } = useApiErrorToast();
+
+  const notifyPreferenceError = (error: unknown) =>
+    notifyApiError(error, {
+      summary: t("rework.userSettings.app.saveFailed"),
+      fallbackDetail: t("rework.userSettings.app.saveFailedDetail"),
+    });
+
+  const changeLanguage = (language: "fr" | "en") => {
+    const change = ++languageChange.current;
+    void i18n.changeLanguage(language);
+    void saveUserPreference({ language })
+      .then(() => {
+        confirmedLanguage.current = language;
+        updateCurrentUserPreference({ language });
+      })
+      .catch((error) => {
+        if (change === languageChange.current) {
+          void i18n.changeLanguage(confirmedLanguage.current);
+          notifyPreferenceError(error);
+        }
+      });
+  };
 
   return (
     <div className={styles.userSettingsPageRoot}>
@@ -132,7 +159,7 @@ export default function UserSettingsPage() {
                     label: uiThemeLabel(theme, t),
                   }))}
                   value={uiTheme}
-                  onChange={setUiTheme}
+                  onChange={(theme) => setUiTheme(theme, notifyPreferenceError)}
                   ariaLabel={t("rework.userSettings.app.uiThemeAria")}
                 />
               </div>
@@ -140,22 +167,22 @@ export default function UserSettingsPage() {
             <ButtonGroup
               variant="radio"
               aria-label={t("rework.userSettings.app.themeAria")}
-              defaultSelectedIndex={themeMode === "light" ? 0 : themeMode === "dark" ? 1 : 2}
+              selectedIndex={themeMode === "light" ? 0 : themeMode === "dark" ? 1 : 2}
               items={[
                 {
                   label: t("rework.userSettings.app.light"),
                   icon: { category: "outlined", type: "light_mode" },
-                  onClick: () => setThemeMode("light"),
+                  onClick: () => setThemeMode("light", notifyPreferenceError),
                 },
                 {
                   label: t("rework.userSettings.app.dark"),
                   icon: { category: "outlined", type: "dark_mode" },
-                  onClick: () => setThemeMode("dark"),
+                  onClick: () => setThemeMode("dark", notifyPreferenceError),
                 },
                 {
                   label: t("rework.userSettings.app.system"),
                   icon: { category: "outlined", type: "desktop_windows" },
-                  onClick: () => setThemeMode("system"),
+                  onClick: () => setThemeMode("system", notifyPreferenceError),
                 },
               ]}
               size={"small"}
@@ -168,15 +195,15 @@ export default function UserSettingsPage() {
           <ButtonGroup
             variant="radio"
             aria-label={t("rework.userSettings.app.languageAria")}
-            defaultSelectedIndex={i18n.language === "fr" ? 0 : 1}
+            selectedIndex={i18n.language === "fr" ? 0 : 1}
             items={[
               {
                 label: t("rework.userSettings.app.french"),
-                onClick: () => i18n.changeLanguage("fr"),
+                onClick: () => changeLanguage("fr"),
               },
               {
                 label: t("rework.userSettings.app.english"),
-                onClick: () => i18n.changeLanguage("en"),
+                onClick: () => changeLanguage("en"),
               },
             ]}
             size={"small"}
