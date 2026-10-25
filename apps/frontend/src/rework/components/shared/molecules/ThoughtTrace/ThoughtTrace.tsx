@@ -91,7 +91,7 @@ function codePreview(code: string, scriptLabel: (kind: "python" | "shell", count
     : -1;
   const python =
     /^(?:(?:uv\s+run|env(?:\s+[A-Za-z_]\w*=\S+)*)\s+)?(?:\S*\/)?python(?:3(?:\.\d+)?)?(?:\s+-[A-Za-z0-9]*)*$/.test(
-      heredoc?.[1]?.trim() ?? "",
+      heredoc?.[1]?.trim() ?? first.split("<<", 1)[0]?.trim() ?? "",
     );
   const preview = intent
     ? intent
@@ -100,7 +100,9 @@ function codePreview(code: string, scriptLabel: (kind: "python" | "shell", count
           python ? "python" : "shell",
           closeIndex < 0 ? undefined : closeIndex - visibleLines[firstIndex].index - 1,
         )
-      : `${first}${visibleLines.length > firstIndex + 1 ? " ..." : ""}`;
+      : first.includes("<<") && visibleLines.length > firstIndex + 1
+        ? scriptLabel(python ? "python" : "shell")
+        : `${first}${visibleLines.length > firstIndex + 1 ? " ..." : ""}`;
   return preview.length > 120 ? `${preview.slice(0, 117).trimEnd()}...` : preview;
 }
 

@@ -254,6 +254,13 @@ describe("ThoughtTrace code groups", () => {
     expect(groups()[0].textContent).not.toContain("<<'PY'");
   });
 
+  it("keeps an unfamiliar heredoc launcher out of the preview", () => {
+    renderTrace([call("c1", "execute_code", "python - <<'PY' > /tmp/out\nprint(42)\nPY", 1)]);
+    expect(groups()[0].textContent).toContain("Python script");
+    expect(groups()[0].textContent).not.toContain("<<'PY'");
+    expect(groups()[0].textContent).not.toContain("lines");
+  });
+
   it("recognizes an intent comment after a shell shebang", () => {
     renderTrace([
       call("c1", "execute_code", "#!/bin/bash\n# Search the mounted corpus\ngrep -Fi term /inputs/corpus/file", 1),
