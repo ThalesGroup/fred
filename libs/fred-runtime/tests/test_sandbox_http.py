@@ -73,8 +73,11 @@ async def test_adapter_scopes_session_header_to_private_identity() -> None:
     await adapter.execute(request, session=first)
     await adapter.execute(request, session=second)
     keys = [item.headers["X-Fred-Sandbox-Session"] for item in seen]
+    tenants = [item.headers["X-Fred-Sandbox-Tenant"] for item in seen]
     assert keys[0] == keys[1]
     assert keys[0] != keys[2]
+    assert tenants[0] == tenants[1]
+    assert tenants[0] != tenants[2]
     assert all(json.loads(item.content) == request.model_dump() for item in seen)
     await adapter.aclose()
 
@@ -96,4 +99,5 @@ async def test_adapter_requests_generation_scoped_view_without_starting_code() -
     assert await adapter.view_key(session) == "a" * 64
     assert seen[0].url.path == "/v1/view-key"
     assert seen[0].headers["X-Fred-Sandbox-Session"] == adapter.session_key(session)
+    assert seen[0].headers["X-Fred-Sandbox-Tenant"] == adapter.tenant_key(session)
     await adapter.aclose()

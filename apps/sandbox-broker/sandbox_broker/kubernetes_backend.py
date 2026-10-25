@@ -133,6 +133,7 @@ class KubernetesBackend:
             if self.mount is not None:
                 await self.mount.attach_owner(name, "job", pvc=True)
             deadline = time.monotonic() + self.settings.preparation_timeout_seconds
+            poll_delay = 0.25
             while time.monotonic() < deadline:
                 pods = await self._get_json(
                     self._kubectl(
@@ -161,7 +162,8 @@ class KubernetesBackend:
                             return SandboxLease(
                                 id=name, target=pod_name, view_key=mounted_key
                             )
-                await asyncio.sleep(0.25)
+                await asyncio.sleep(poll_delay)
+                poll_delay = min(2.0, poll_delay * 1.5)
             raise SandboxError("backend_failed")
         except BaseException:
             try:
@@ -201,9 +203,11 @@ class KubernetesBackend:
         expected = self.job_manifest(workload_name or "template")["spec"]["template"][
             "spec"
         ]
-        if sig_claim and self.mount is not None and workload_name is None:
+        if sig_claim and workload_name is None:
             expected["volumes"] = [
-                volume for volume in expected["volumes"] if volume["name"] != "inputs"
+                volume
+                for volume in expected["volumes"]
+                if volume["name"] not in {"inputs", "workspace"}
             ]
         actual = copy.deepcopy(actual)
         for field in ("hostNetwork", "hostPID", "hostIPC"):
@@ -373,7 +377,10 @@ class KubernetesBackend:
                                 },
                                 "volumeMounts": [
                                     {"name": "scratch", "mountPath": "/tmp"},
-                                    {"name": "scratch", "mountPath": "/work"},
+                                    {
+                                        "name": "workspace" if settings.coordinator_dsn else "scratch",
+                                        "mountPath": "/work",
+                                    },
                                 ]
                                 + (
                                     [
@@ -402,6 +409,18 @@ class KubernetesBackend:
                         "volumes": [
                             {"name": "scratch", "emptyDir": {"sizeLimit": "16Mi"}}
                         ]
+                        + (
+                            [
+                                {
+                                    "name": "workspace",
+                                    "persistentVolumeClaim": {
+                                        "claimName": f"workspace-{name}",
+                                    },
+                                }
+                            ]
+                            if settings.coordinator_dsn
+                            else []
+                        )
                         + (
                             [
                                 {
