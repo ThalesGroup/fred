@@ -105,18 +105,15 @@
 }
 
 .preview {
-  display: flex;
   flex: 1;
-  align-items: center;
-  container: trace-preview / inline-size;
   min-width: 0;
   overflow: hidden;
   color: var(--on-surface-retreat);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .preview::before {
-  flex-shrink: 0;
   margin-right: var(--spacing-2xs);
   content: "·";
 }
@@ -147,13 +144,6 @@
   font: 0.6875rem / 1.45 var(--font-family-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-@container trace-preview (max-width: 6.5rem) {
-  .previewLabel,
-  .previewSeparator {
-    display: none;
-  }
 }
 
 .children {

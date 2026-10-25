@@ -62,7 +62,7 @@ export function ToolTraceGroup({
         ? "error"
         : "ok";
   const preview = current ? group.rule.preview(current.entry) : "";
-  const spokenPreview = previewText(preview);
+  const headingPreview = typeof preview === "string" ? preview : preview.label;
   const spokenStatus =
     status === "pending"
       ? t("rework.chatTrace.toolStatus.running")
@@ -81,7 +81,7 @@ export function ToolTraceGroup({
         type="button"
         className={styles.heading}
         aria-expanded={expanded}
-        aria-label={`${group.index}. ${t(group.rule.titleKey)}. ${t(group.rule.countKey, { count: group.count })}. ${spokenStatus}${spokenPreview ? `. ${spokenPreview}` : ""}`}
+        aria-label={`${group.index}. ${t(group.rule.titleKey)}. ${t(group.rule.countKey, { count: group.count })}. ${spokenStatus}${headingPreview ? `. ${headingPreview}` : ""}`}
         onClick={() => setExpanded((value) => !value)}
       >
         <span className={styles.marker} aria-hidden="true">
@@ -90,7 +90,7 @@ export function ToolTraceGroup({
         </span>
         <span className={styles.title}>{t(group.rule.titleKey)}</span>
         <span className={styles.count}>{t(group.rule.countKey, { count: group.count })}</span>
-        {spokenPreview && <span className={styles.preview}>{previewContent(preview)}</span>}
+        {headingPreview && <span className={styles.preview}>{headingPreview}</span>}
         <Icon category="outlined" type={expanded ? "expand_less" : "expand_more"} />
       </button>
       {expanded && (

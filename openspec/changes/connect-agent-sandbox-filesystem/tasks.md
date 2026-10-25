@@ -17,10 +17,10 @@
 - [ ] 3.2 Connect Deep's logical `CompositeBackend` and ReAct sandbox tools to the mounted path contract without copying source files; remove the selection tool and verify browsing does not start a workload before execution.
 - [ ] 3.3 Gate Deep native `execute`, ReAct code execution and skill scripts through the same conversation sandbox lease and isolation profile; verify capability absence, Python file analysis and scratch reuse tests.
 - [x] 3.4 Guide `execute_code` to use selective Bash or Python queries over mounted files, then verify a real conversation keeps large source content out of the tool result and final answer.
-- [x] 3.5 Group consecutive code calls in the thought trace through a reusable presentation rule, preview the active command on one ellipsized line, preserve individual details and chronology, and verify that another tool splits groups and streaming calls append to the current group.
+- [x] 3.5 Group consecutive code calls in the thought trace through a reusable presentation rule, preview the active intent on one ellipsized heading line, preserve individual details and chronology, and verify that another tool splits groups and streaming calls append to the current group.
 - [x] 3.6 Replace the language-selecting sandbox request with one Bash script argument across the capability, SDK, broker backends, smoke test and UI; verify explicit Python invocation, command previews, and strict rejection of the removed argument.
-- [x] 3.7 Show a leading shell comment followed by the submitted code flattened onto one ellipsized line, without heredoc parsing; retain the active command and count in the grouped heading and verify exact code and result remain in the detail.
-- [x] 3.8 Guide every Bash or Python execution to start with an intent comment, and distinguish the intent label from the formatted command in the generic grouped trace; verify both a single Bash command and a Python heredoc in the UI.
+- [x] 3.7 Show a leading shell comment alone with the command count in the group heading and beside the submitted code flattened onto one ellipsized expanded row, without heredoc parsing; verify exact code and result remain in the detail.
+- [x] 3.8 Guide every Bash or Python execution to start with an intent comment, and show only the intent in the group heading and distinguish it from the formatted command in expanded rows; verify both a single Bash command and a Python heredoc in the UI.
 
 ## 4. Integration and close-out
 
