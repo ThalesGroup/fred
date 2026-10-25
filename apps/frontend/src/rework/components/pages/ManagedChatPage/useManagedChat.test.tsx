@@ -1636,6 +1636,21 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.pendingMessages).toEqual([]);
   });
 
+  it("queues text when files already belong to the conversation", async () => {
+    chatSseWaitResponse = true;
+    chatAttachmentsValue.attachmentsMarkdown = "## Attached files for this conversation\n- report.txt";
+    try {
+      mount();
+      bindSession("session-1");
+      act(() => latest.setInput("focus on Marseille"));
+      await act(async () => latest.handleSend());
+      expect(latest.pendingMessages.map((message) => message.text)).toEqual(["focus on Marseille"]);
+      expect(sendMock).not.toHaveBeenCalled();
+    } finally {
+      chatAttachmentsValue.attachmentsMarkdown = null;
+    }
+  });
+
   it("keeps a forced row until the runtime confirms delivery", async () => {
     chatSseWaitResponse = true;
     mount();

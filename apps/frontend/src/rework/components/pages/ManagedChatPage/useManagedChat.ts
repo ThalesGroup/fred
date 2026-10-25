@@ -937,7 +937,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
 
   const handleSend = useCallback(async () => {
     if (waitResponse || pendingMessages.length > 0) {
-      if (attachments.attachmentsMarkdown) {
+      if (attachments.attachments.length > 0) {
         showWarn({ summary: t("chatbot.pendingMessages.textOnly") });
         return;
       }
@@ -953,7 +953,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     input,
     waitResponse,
     pendingMessages.length,
-    attachments.attachmentsMarkdown,
+    attachments.attachments.length,
     inputTooLong,
     showWarn,
     t,
