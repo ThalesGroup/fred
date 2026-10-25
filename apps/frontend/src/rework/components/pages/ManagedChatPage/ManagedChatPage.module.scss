@@ -373,7 +373,7 @@
 .pendingList {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: var(--spacing-2xs);
   margin: 0;
   border-top: 1px solid var(--outline-muted);
   padding: var(--spacing-2xs) var(--spacing-s);
@@ -412,17 +412,6 @@
 .pendingAction:disabled {
   opacity: 0.5;
   cursor: default;
-}
-
-.pendingSend {
-  flex-shrink: 0;
-  border-radius: var(--radius-full);
-  height: 1.25rem;
-}
-
-.pendingSend > div {
-  padding-inline: var(--spacing-2xs);
-  font: var(--font-label-medium);
 }
 
 .pendingStatus {

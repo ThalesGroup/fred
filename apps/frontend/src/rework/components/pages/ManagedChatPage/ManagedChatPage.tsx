@@ -1065,9 +1065,8 @@ export default function ManagedChatPage() {
                                     {chat.waitResponse && (
                                       <Button
                                         type="button"
-                                        className={styles.pendingSend}
-                                        color="primary"
-                                        variant="outlined"
+                                        color="secondary"
+                                        variant="tonal"
                                         size="2xs"
                                         aria-label={`${t("chatbot.pendingMessages.send")}: ${message.text}`}
                                         onClick={() => void chat.forcePendingMessage(message.id)}
