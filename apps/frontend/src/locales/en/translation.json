@@ -117,6 +117,10 @@
   },
   "capability": {
     "panelLoadFailed": "This panel could not load. Reload the page.",
+    "code_sandbox": {
+      "name": "Code sandbox",
+      "description": "Run short Bash and Python programs in an isolated sandbox."
+    },
     "web_research": {
       "name": "Search the web",
       "description": "Search public sources and read web pages through controlled external access."
@@ -1120,6 +1124,22 @@
   },
   "rework": {
     "admin": {
+      "sandboxSettings": {
+        "title": "Code sandbox",
+        "description": "A sandbox starts on the first code execution and remains available to its conversation until inactivity expiry. Connected brokers apply changes within 30 seconds. Runtime, image and security policy are approved by the operator.",
+        "profile": "Approved profile",
+        "profileUnconfigured": "The operator has not named an approved profile yet.",
+        "loading": "Loading sandbox settings...",
+        "loadError": "Could not load sandbox settings.",
+        "idle": "Expire after inactivity (minutes)",
+        "idleHelp": "20 minutes by default. Scratch files are removed at expiry.",
+        "active": "Maximum active conversations",
+        "activeHelp": "Limited by the operator's hard capacity ceiling.",
+        "invalid": "Enter whole numbers within the allowed ranges.",
+        "save": "Save sandbox settings",
+        "saved": "Sandbox settings saved",
+        "saveError": "Could not save sandbox settings."
+      },
       "capabilities": {
         "title": "Features",
         "subtitle": "Platform feature catalog: per-team enablement, platform defaults, and health.",
@@ -1996,7 +2016,13 @@
         "running": "Running",
         "success": "Success"
       },
+      "toolGroups": {
+        "commands_one": "{{count}} command",
+        "commands_other": "{{count}} commands"
+      },
       "toolLabels": {
+        "codeSandbox": "Running code in an isolated space",
+        "selectCodeInput": "Preparing a file for analysis",
         "platform": {
           "askUser": "Requesting clarification",
           "readSkillFile": "Reading instructions"
@@ -2102,6 +2128,26 @@
         "skills": {
           "load_skill": "Loading instructions",
           "read_skill_file": "Reading instructions"
+        }
+      },
+      "sandbox": {
+        "code": "Code",
+        "result": "Result",
+        "exitCode": "Exit code: {{code}}",
+        "timedOut": "Time limit reached",
+        "truncated": "Output truncated",
+        "output": "Output",
+        "errors": "Errors",
+        "noOutput": "No output",
+        "errorsByCode": {
+          "unavailable": "The sandbox is unavailable.",
+          "unauthorized": "Code execution is not authorized.",
+          "busy": "The sandbox is busy. Try again shortly.",
+          "invalid_request": "The code request is invalid.",
+          "runtime_unavailable": "The sandbox runtime is unavailable.",
+          "policy_unavailable": "The sandbox security policy is unavailable.",
+          "backend_failed": "The sandbox could not run this code.",
+          "invalid_response": "The sandbox returned an invalid response."
         }
       },
       "webResearch": {

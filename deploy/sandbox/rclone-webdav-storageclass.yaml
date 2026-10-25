@@ -1,0 +1,14 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fred-sandbox-webdav
+provisioner: rclone.csi.veloxpack.io
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+parameters:
+  remotePath: /
+  csi.storage.k8s.io/node-publish-secret-name: "${pvc.name}"
+  csi.storage.k8s.io/node-publish-secret-namespace: fred-sandbox
+mountOptions:
+  - dir-cache-time=1s
+  - vfs-cache-mode=off

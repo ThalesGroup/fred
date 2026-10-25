@@ -167,6 +167,7 @@ export const materialIcons = [
   "translate",
   "payments",
   "code",
+  "terminal",
   "campaign",
   "travel_explore",
   "cloud",

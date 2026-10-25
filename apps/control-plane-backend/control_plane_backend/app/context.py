@@ -91,6 +91,7 @@ from control_plane_backend.routing_policy.store import (
     PlatformModelBindingStore,
     TeamRoutingPolicyStore,
 )
+from control_plane_backend.sandbox_settings.store import SandboxSettingsStore
 from control_plane_backend.scheduler.policies.policy_loader import (
     load_conversation_policy_catalog,
 )
@@ -134,6 +135,7 @@ class ApplicationContext:
             CreationAssistantSettingsStore | None
         ) = None
         self._platform_ui_settings_store: PlatformUiSettingsStore | None = None
+        self._sandbox_settings_store: SandboxSettingsStore | None = None
         self._marketplace_settings_store: PlatformMarketplaceSettingsStore | None = None
         self._agent_marketplace_store: AgentMarketplaceStore | None = None
         self._announcement_store: AnnouncementStore | None = None
@@ -469,6 +471,13 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._platform_ui_settings_store
+
+    def get_sandbox_settings_store(self) -> SandboxSettingsStore:
+        if self._sandbox_settings_store is None:
+            self._sandbox_settings_store = SandboxSettingsStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._sandbox_settings_store
 
     def get_marketplace_settings_store(self) -> PlatformMarketplaceSettingsStore:
         if self._marketplace_settings_store is None:

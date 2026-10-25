@@ -71,6 +71,7 @@ COPY libs/capabilities/fred-capability-documents/pyproject.toml /workspace/libs/
 COPY libs/capabilities/fred-capability-document-access/pyproject.toml /workspace/libs/capabilities/fred-capability-document-access/
 COPY libs/capabilities/fred-capability-mcp/pyproject.toml /workspace/libs/capabilities/fred-capability-mcp/
 COPY libs/capabilities/fred-capability-web-research/pyproject.toml /workspace/libs/capabilities/fred-capability-web-research/
+COPY libs/capabilities/fred-capability-code-sandbox/pyproject.toml /workspace/libs/capabilities/fred-capability-code-sandbox/
 
 RUN --mount=type=secret,id=ca-bundle \
     if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle; fi && \
@@ -119,6 +120,7 @@ COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-documents 
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-document-access /workspace/libs/capabilities/fred-capability-document-access
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-mcp /workspace/libs/capabilities/fred-capability-mcp
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-web-research /workspace/libs/capabilities/fred-capability-web-research
+COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-code-sandbox /workspace/libs/capabilities/fred-capability-code-sandbox
 RUN --mount=type=secret,id=ca-bundle \
     cd /workspace/apps/fred-agents && \
     if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle; fi && \

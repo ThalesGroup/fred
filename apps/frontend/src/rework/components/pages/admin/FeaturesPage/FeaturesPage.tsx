@@ -51,6 +51,7 @@ import styles from "./FeaturesPage.module.css";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
 import { PlatformModelBindingsPanel } from "./PlatformModelBindingsPanel/PlatformModelBindingsPanel.tsx";
 import { SuspendedInstancesDrawer } from "./SuspendedInstancesDrawer.tsx";
+import { SandboxSettingsPanel } from "./SandboxSettingsPanel.tsx";
 import { normalizeApiError } from "../../../../core/errors/normalizeApiError";
 import {
   capabilityLabel,
@@ -797,6 +798,10 @@ export default function FeaturesPage() {
       {activeKindFilter === "model" && !discoveryConfigurationReady && !isLoading && !isError && (
         <p className={styles.status}>{t("rework.admin.capabilities.discovery.refreshing")}</p>
       )}
+
+      <SandboxSettingsPanel
+        visible={activeKindFilter === "tool" && allCapabilities.some((cap) => cap.id === "code_sandbox")}
+      />
 
       {activeKindFilter === "model" && hasDiscovery && (
         <div className={styles.modelToolbar}>

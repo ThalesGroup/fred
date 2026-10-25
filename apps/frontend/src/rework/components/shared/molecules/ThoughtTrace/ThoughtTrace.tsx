@@ -24,11 +24,16 @@ import {
   traceEntryKey,
   traceRows,
   traceSummary,
+  toolArgs,
   toolCallId,
+  toolName,
+  toolSlug,
 } from "../../../../utils/traceUtils";
+import { groupTraceRows, type TraceGroupRule } from "../../../../utils/traceGrouping";
 import { useTraceExpansion } from "../../../../core/hooks/useTraceExpansion";
 import { ReasoningRow } from "./ReasoningRow/ReasoningRow";
 import { TraceEntryRow } from "./TraceEntryRow/TraceEntryRow";
+import { ToolTraceGroup } from "./ToolTraceGroup/ToolTraceGroup";
 import styles from "./ThoughtTrace.module.css";
 
 interface ThoughtTraceProps {
@@ -68,6 +73,37 @@ function useSummaryLabel(summary: TraceSummary): string {
 /** Stable empty identity, so the collapsed memo never yields a new array. */
 const EMPTY_ROWS: TraceRow[] = [];
 
+function codePreview(code: string): { label: string; value: string } {
+  const lines = code
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/\s+/g, " "))
+    .filter(Boolean);
+  const firstIndex = lines[0]?.startsWith("#!") && lines.length > 1 ? 1 : 0;
+  const visibleLines = lines.slice(firstIndex);
+  const first = visibleLines[0] ?? "";
+  const comment = first.startsWith("#") && !first.startsWith("#!") ? first.slice(1).trim() : "";
+  const intent = comment.length > 60 ? `${comment.slice(0, 57)}...` : comment;
+  const command = (comment ? visibleLines.slice(1) : visibleLines).join(" ");
+  const value =
+    command.length > 320 - intent.length ? `${command.slice(0, 317 - intent.length).trimEnd()}...` : command;
+  return { label: intent, value };
+}
+
+const GROUP_RULES: TraceGroupRule[] = [
+  {
+    id: "code-sandbox",
+    titleKey: "rework.chatTrace.toolLabels.codeSandbox",
+    countKey: "rework.chatTrace.toolGroups.commands",
+    itemIcon: "terminal",
+    matches: (entry) => toolSlug(toolName(entry.call)) === "execute_code",
+    itemLabel: () => "",
+    preview: (entry) => {
+      const code = toolArgs(entry.call).code;
+      return typeof code === "string" ? codePreview(code) : "";
+    },
+  },
+];
+
 export function ThoughtTrace({
   messages,
   done = false,
@@ -86,6 +122,7 @@ export function ThoughtTrace({
   // conversation on every token — and traceRows flattens markdown. Behind the
   // toggle, a long history's collapsed traces cost nothing per token.
   const rows = useMemo(() => (expanded ? traceRows(entries) : EMPTY_ROWS), [entries, expanded]);
+  const displayItems = useMemo(() => groupTraceRows(rows, GROUP_RULES, messages), [rows, messages]);
 
   if (entries.length === 0) return null;
 
@@ -108,21 +145,25 @@ export function ThoughtTrace({
           tool steps alternate rather than being stacked into two lanes. */}
       {expanded && (
         <div className={styles.body}>
-          {rows.map(({ entry, lane, index, reasoningText, restated }) =>
-            lane === "reasoning" ? (
+          {displayItems.map((item) => {
+            if (item.kind === "group") {
+              return <ToolTraceGroup key={item.key} group={item} pendingToolCallIds={pendingToolCallIds} />;
+            }
+            const { entry, lane, reasoningText, restated } = item.row;
+            return lane === "reasoning" ? (
               <ReasoningRow key={traceEntryKey(entry)} entry={entry} text={reasoningText ?? ""} restated={restated} />
             ) : (
               <TraceEntryRow
                 key={traceEntryKey(entry)}
                 entry={entry}
-                index={index}
+                index={item.index}
                 pendingToolCallIds={pendingToolCallIds}
                 hitlAnswerSummary={
                   entry.kind === "combo" ? hitlAnswerSummariesByCallId?.[toolCallId(entry.call)] : undefined
                 }
               />
-            ),
-          )}
+            );
+          })}
         </div>
       )}
     </div>

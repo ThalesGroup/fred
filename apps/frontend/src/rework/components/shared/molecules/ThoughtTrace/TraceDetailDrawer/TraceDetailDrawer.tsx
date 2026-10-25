@@ -44,6 +44,7 @@ import {
   toolResultContent,
   toolResultLatencyMs,
   toolResultOk,
+  toolSlug,
 } from "../../../../../utils/traceUtils";
 import { parseTabularTraceResult, tabularToolKind } from "../../../../../utils/tabularTrace";
 import { parseWebResearchResult, webResearchTarget, webResearchToolKind } from "../../../../../utils/webResearchTrace";
@@ -154,6 +155,99 @@ function SummarizeDocumentDetail({ text }: { text: string }) {
   );
 }
 
+const SANDBOX_ERROR_CODES = new Set([
+  "unavailable",
+  "unauthorized",
+  "busy",
+  "invalid_request",
+  "runtime_unavailable",
+  "policy_unavailable",
+  "backend_failed",
+  "invalid_response",
+]);
+
+type SandboxExecution = {
+  exit_code: number | null;
+  stdout: string;
+  stderr: string;
+  timed_out: boolean;
+  truncated: boolean;
+};
+
+function isSandboxExecution(
+  result: Record<string, unknown> | null,
+): result is Record<string, unknown> & SandboxExecution {
+  return (
+    result !== null &&
+    (typeof result.exit_code === "number" || result.exit_code === null) &&
+    typeof result.stdout === "string" &&
+    typeof result.stderr === "string" &&
+    typeof result.timed_out === "boolean" &&
+    typeof result.truncated === "boolean"
+  );
+}
+
+function SandboxToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
+  const { t } = useTranslation();
+  const args = toolArgs(entry.call);
+  const code = typeof args.code === "string" ? args.code : null;
+  if (code === null) return <GenericToolDetail entry={entry} />;
+
+  const result = entry.result ? parseToolResultContent(entry.result) : null;
+  const errorCode = result && typeof result.error_code === "string" ? result.error_code : null;
+  const execution = isSandboxExecution(result) ? result : null;
+
+  return (
+    <div className={styles.detail}>
+      <div className={styles.toolSection}>
+        <p className={styles.sectionLabel}>{t("rework.chatTrace.sandbox.code")}</p>
+        <CodeBlock code={code} language="bash" />
+      </div>
+      <div className={styles.toolSection}>
+        <p className={styles.sectionLabel}>{t("rework.chatTrace.sandbox.result")}</p>
+        {!entry.result ? (
+          <p className={styles.metaInfo}>{t("rework.chatTrace.toolStatus.running")}</p>
+        ) : execution ? (
+          <>
+            <div className={styles.meta}>
+              {execution.exit_code !== null && (
+                <span className={styles.metaInfo}>
+                  {t("rework.chatTrace.sandbox.exitCode", { code: execution.exit_code })}
+                </span>
+              )}
+              {execution.timed_out && <span className={styles.metaInfo}>{t("rework.chatTrace.sandbox.timedOut")}</span>}
+              {execution.truncated && (
+                <span className={styles.metaInfo}>{t("rework.chatTrace.sandbox.truncated")}</span>
+              )}
+            </div>
+            {execution.stdout && (
+              <div className={styles.toolSection}>
+                <p className={styles.sectionLabel}>{t("rework.chatTrace.sandbox.output")}</p>
+                <CodeBlock code={execution.stdout} />
+              </div>
+            )}
+            {execution.stderr && (
+              <div className={styles.toolSection}>
+                <p className={styles.sectionLabel}>{t("rework.chatTrace.sandbox.errors")}</p>
+                <CodeBlock code={execution.stderr} />
+              </div>
+            )}
+            {!execution.stdout && !execution.stderr && (
+              <p className={styles.metaInfo}>{t("rework.chatTrace.sandbox.noOutput")}</p>
+            )}
+          </>
+        ) : (
+          <div className={styles.errorBox}>
+            {t(
+              `rework.chatTrace.sandbox.errorsByCode.${SANDBOX_ERROR_CODES.has(errorCode ?? "") ? errorCode : "unavailable"}`,
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Fallback: redacted {action, status, latency} view for unrecognized tools. */
 function GenericToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
   const { t } = useTranslation();
@@ -167,6 +261,7 @@ function GenericToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "comb
 
 /** Dispatches a tool-result entry to the richest view its content shape supports. */
 function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "combo" }>; messages?: ChatMessage[] }) {
+  if (toolSlug(toolName(entry.call)) === "execute_code") return <SandboxToolDetail entry={entry} />;
   if (toolName(entry.call) === "ask_user") {
     const summary = messages ? hitlAnswerSummaryForTool(messages, entry.call) : null;
     if (summary) return <HitlChoiceRecap summary={summary} />;

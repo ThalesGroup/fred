@@ -133,6 +133,9 @@ vi.mock("./CapabilityTeamMatrixDrawer", () => ({
     return null;
   },
 }));
+vi.mock("./SandboxSettingsPanel", () => ({
+  SandboxSettingsPanel: ({ visible }: { visible: boolean }) => (visible ? <div>Sandbox settings</div> : null),
+}));
 
 import FeaturesPage from "./FeaturesPage";
 

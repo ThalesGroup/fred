@@ -56,6 +56,18 @@ class BaseTagStore(ABC):
             TagNotFoundError: If the tag does not exist.
         """
 
+    async def filter_owned_tag_ids(self, owner_id: str, tag_ids: set[str]) -> set[str]:
+        """Keep only tags whose stored owner matches the requested scope."""
+        filtered = set()
+        for tag_id in tag_ids:
+            try:
+                tag = await self.get_tag_by_id(tag_id)
+            except TagNotFoundError:
+                continue
+            if tag.owner_id == owner_id and tag.type == TagType.DOCUMENT:
+                filtered.add(tag_id)
+        return filtered
+
     @abstractmethod
     async def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str, session: AsyncSession | None = None) -> Tag | None:
         pass

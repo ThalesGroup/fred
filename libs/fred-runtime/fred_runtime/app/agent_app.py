@@ -43,6 +43,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import time
 from collections.abc import (
@@ -983,6 +984,22 @@ def _build_runtime_services(
     """
 
     runtime_config = get_runtime_context().config
+    sandbox_inputs = None
+    if (
+        runtime_config.sandbox_execution is not None
+        and os.getenv("FRED_SANDBOX_FILE_MOUNTS_ENABLED", "false").lower() == "true"
+    ):
+        from fred_runtime.sandbox_http import SandboxHttpAdapter
+        from fred_runtime.sandbox_inputs import SandboxInputHttpAdapter
+
+        if isinstance(runtime_config.sandbox_execution, SandboxHttpAdapter) and (
+            access_token or credential_provider
+        ):
+            sandbox_inputs = SandboxInputHttpAdapter(
+                runtime_config.sandbox_execution,
+                access_token=access_token,
+                credentials=credential_provider,
+            )
     if conversation_filesystem is None:
         conversation_filesystem = _build_conversation_filesystem(binding)
     conversation_port = None
@@ -1157,6 +1174,8 @@ def _build_runtime_services(
             if runtime_config.web_research_factory
             else None
         ),
+        sandbox_execution=runtime_config.sandbox_execution,
+        sandbox_inputs=sandbox_inputs,
         # The calling team's wiki (WIKI-03). Per-turn like the document ports —
         # it binds this turn's team and token privately — over the pod-lifetime
         # control-plane client.
@@ -4083,6 +4102,7 @@ def _build_capability_save_services(
         agent_assets=AgentConfigAssetsAdapter(binding=binding, settings=settings),
         document_folders=DocumentFolderAdapter(binding=binding, settings=settings),
         web_research=(web_factory(binding) if web_factory else None),
+        sandbox_execution=get_runtime_context().config.sandbox_execution,
     )
 
 
@@ -7034,6 +7054,7 @@ def create_agent_app(
         )
         gc_diagnostics = install_gc_diagnostics()
         container = build_pod_container(config)
+        sandbox_adapter = None
         try:
             container.initialize_kpi_writer()
             container.initialize_control_plane_client()
@@ -7095,7 +7116,10 @@ def create_agent_app(
                 raise RuntimeError(
                     "Invalid runtime storage state: checkpointer and history store must be configured together."
                 )
+            from fred_runtime.sandbox_http import SandboxHttpAdapter
             from fred_runtime.skills.catalog import PlatformSkills
+
+            sandbox_adapter = SandboxHttpAdapter.from_environment()
 
             skills = (
                 await asyncio.to_thread(
@@ -7146,6 +7170,7 @@ def create_agent_app(
                             if container.web_research
                             else None
                         ),
+                        sandbox_execution=sandbox_adapter,
                     )
                 )
             )
@@ -7179,13 +7204,16 @@ def create_agent_app(
             #   is strictly worse than logging both failures.
             # `except Exception` deliberately lets `CancelledError` through —
             # a shutdown being cancelled is not a step failing.
-            for label, close in (
+            close_steps = (
                 ("gc diagnostics", gc_diagnostics.stop),
                 ("pod container", container.shutdown),
                 # Release the Keycloak refresh pool deterministically rather
                 # than leaving it to GC, as the control-plane client above is.
                 ("keycloak refresh pool", aclose_token_refresh_client),
-            ):
+            )
+            if sandbox_adapter is not None:
+                close_steps += (("sandbox broker client", sandbox_adapter.aclose),)
+            for label, close in close_steps:
                 try:
                     await close()
                 except Exception:

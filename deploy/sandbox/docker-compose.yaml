@@ -1,0 +1,33 @@
+services:
+  sandbox-broker:
+    build:
+      context: ../..
+      dockerfile: apps/sandbox-broker/Dockerfile
+    image: ${SANDBOX_BROKER_IMAGE:-fred-sandbox-broker:review}
+    restart: unless-stopped
+    environment:
+      SANDBOX_BACKEND: docker
+      SANDBOX_ISOLATION: ${SANDBOX_ISOLATION:?Set kata or gvisor}
+      SANDBOX_RUNTIME_NAME: ${SANDBOX_RUNTIME_NAME:?Set isolated Docker runtime}
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:?Set approved image digest}
+      SANDBOX_BROKER_TOKEN: ${SANDBOX_BROKER_TOKEN:?Set random token}
+      SANDBOX_MAX_SANDBOXES: ${SANDBOX_MAX_SANDBOXES:-8}
+      SANDBOX_SETTINGS_URL: ${SANDBOX_SETTINGS_URL:-}
+      SANDBOX_SETTINGS_TOKEN: ${SANDBOX_SETTINGS_TOKEN:-}
+      DOCKER_HOST: ${DOCKER_HOST:?Set dedicated TLS Docker daemon}
+      DOCKER_TLS_VERIFY: "1"
+      DOCKER_CERT_PATH: /docker-certs
+    volumes:
+      - ${SANDBOX_TLS_DIR:?Set broker TLS directory}:/tls:ro
+      - ${SANDBOX_DOCKER_CERT_DIR:?Set Docker client certificate directory}:/docker-certs:ro
+    ports:
+      - 127.0.0.1:8443:8443
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 512m

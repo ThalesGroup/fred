@@ -22,9 +22,9 @@ different questions on a shared database:
   autogenerate and ``alembic check`` never touch tables migrated by
   control-plane or fred-runtime.
 - ``REQUIRED_TABLES`` — what a knowledge-flow process cannot serve without:
-  the owned set plus foreign tables it reads at runtime (``users`` and
-  ``teammetadata``, both migrated by control-plane's tree but queried by
-  ingestion/metadata code). Both entrypoints (``main.py`` and
+  the owned set plus foreign tables it reads at runtime (``users``,
+  ``teammetadata``, ``session_metadata`` and ``session_attachments``,
+  migrated by control-plane's tree). Both entrypoints (``main.py`` and
   ``main_worker.py``) pass it to ``require_tables`` so a deployment that
   skipped its migration jobs fails at boot instead of self-creating tables
   (the #2313 defect: an unfiltered ``create_all`` over the shared
@@ -49,6 +49,7 @@ import fred_core.documents.label_models  # noqa: F401 — registers document_lab
 
 import knowledge_flow_backend.core.stores.resources.resource_models  # noqa: F401 — registers resource with Base
 import knowledge_flow_backend.models.task_models  # noqa: F401 — registers kf_task_run / kf_task_event_log with Base
+import knowledge_flow_backend.models.sandbox_view_models  # noqa: F401
 from knowledge_flow_backend.models.base import Base
 
 # CoreBase tables whose migrations this tree owns — explicit names, never
@@ -58,11 +59,9 @@ SHARED_CORE_TABLES: frozenset[str] = frozenset({"tag", "metadata", "document_lab
 OWNED_TABLES: frozenset[str] = frozenset(Base.metadata.tables) | SHARED_CORE_TABLES
 
 # Foreign tables knowledge-flow queries at runtime without owning their DDL:
-# `users` (user store lookups in ingestion) and `teammetadata`
-# (TeamMetadataStore in ingestion/metadata services). Their migrations belong
-# to control-plane's tree — listing them here only makes the startup guard
-# honest about what this component needs to serve traffic.
-REQUIRED_TABLES: frozenset[str] = OWNED_TABLES | frozenset({"users", "teammetadata"})
+# User, team and conversation tables are migrated by control-plane. Listing
+# them here makes the startup guard cover the sandbox mount's reads too.
+REQUIRED_TABLES: frozenset[str] = OWNED_TABLES | frozenset({"users", "teammetadata", "session_metadata", "session_attachments"})
 
 # Consumed by alembic/env.py, main.py and main_worker.py — declared so
 # CodeQL's module-local unused-global query sees the export.

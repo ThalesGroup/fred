@@ -1515,6 +1515,22 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setPlatformUiSettingsRequest,
       }),
     }),
+    getSandboxSettingsControlPlaneV1AdminPlatformSandboxSettingsGet: build.query<
+      GetSandboxSettingsControlPlaneV1AdminPlatformSandboxSettingsGetApiResponse,
+      GetSandboxSettingsControlPlaneV1AdminPlatformSandboxSettingsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/sandbox-settings` }),
+    }),
+    putSandboxSettingsControlPlaneV1AdminPlatformSandboxSettingsPut: build.mutation<
+      PutSandboxSettingsControlPlaneV1AdminPlatformSandboxSettingsPutApiResponse,
+      PutSandboxSettingsControlPlaneV1AdminPlatformSandboxSettingsPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/sandbox-settings`,
+        method: "PUT",
+        body: queryArg.sandboxSettingsUpdate,
+      }),
+    }),
     getMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGet: build.query<
       GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiResponse,
       GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiArg
@@ -3217,6 +3233,14 @@ export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiResp
   /** status 200 Successful Response */ PlatformUiSettings;
 export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiArg = {
   setPlatformUiSettingsRequest: SetPlatformUiSettingsRequest;
+};
+export type GetSandboxSettingsControlPlaneV1AdminPlatformSandboxSettingsGetApiResponse =
+  /** status 200 Successful Response */ SandboxSettingsView;
+export type GetSandboxSettingsControlPlaneV1AdminPlatformSandboxSettingsGetApiArg = void;
+export type PutSandboxSettingsControlPlaneV1AdminPlatformSandboxSettingsPutApiResponse =
+  /** status 200 Successful Response */ SandboxSettingsView;
+export type PutSandboxSettingsControlPlaneV1AdminPlatformSandboxSettingsPutApiArg = {
+  sandboxSettingsUpdate: SandboxSettingsUpdate;
 };
 export type GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiResponse =
   /** status 200 Successful Response */ MarketplaceSettings;
@@ -5579,6 +5603,17 @@ export type SetPlatformUiSettingsRequest = {
   default_theme?: string | null;
   hidden_themes?: string[];
 };
+export type SandboxSettingsView = {
+  idle_minutes: number;
+  max_active_sessions: number;
+  profile_id?: string;
+  updated_by?: string | null;
+  updated_at?: string | null;
+};
+export type SandboxSettingsUpdate = {
+  idle_minutes: number;
+  max_active_sessions: number;
+};
 export type AgentsMarketplaceDefault = {
   agents_publishing_enabled: boolean;
   agents_publish_quota: number;
@@ -6423,6 +6458,9 @@ export const {
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   useLazyGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation,
+  useGetSandboxSettingsControlPlaneV1AdminPlatformSandboxSettingsGetQuery,
+  useLazyGetSandboxSettingsControlPlaneV1AdminPlatformSandboxSettingsGetQuery,
+  usePutSandboxSettingsControlPlaneV1AdminPlatformSandboxSettingsPutMutation,
   useGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,
   useLazyGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,
   usePreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetQuery,

@@ -1,0 +1,30 @@
+[project]
+name = "fred-capability-code-sandbox"
+version = "4.5.1"
+description = "Fred agent capability for isolated Bash and Python execution"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "Apache-2.0" }
+dependencies = ["fred-sdk[agents]>=4.5.3", "langchain-core>=1.6.5", "pydantic>=2.7,<3"]
+
+[project.entry-points."fred.capabilities"]
+code_sandbox = "fred_capability_code_sandbox.capability:CodeSandboxCapability"
+
+[project.optional-dependencies]
+dev = ["fred-runtime[app]>=4.5.3", "pytest>=8.4.2", "pytest-asyncio>=1.2.0"]
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["fred_capability_code_sandbox*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.uv.sources]
+fred-core = { path = "../../fred-core", editable = true }
+fred-sdk = { path = "../../fred-sdk", editable = true }
+fred-runtime = { path = "../../fred-runtime", editable = true }

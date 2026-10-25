@@ -106,10 +106,12 @@ def test_package_discovery_and_read_only_reference() -> None:
         "meeting-minutes",
         "mermaid",
         "summarize-document",
+        "tabular-evidence",
         "verify-answer",
     ]
     template = catalog.read("meeting-minutes", "references/meeting-minutes-template.md")
     assert "Not specified" in template
+    assert "totals" in catalog.read("tabular-evidence", "analyze.py")
     assert "## Decisions" not in catalog.prompt
     backend = SnapshotBackend({})
     write_result = backend.write("/file", "text")
@@ -229,6 +231,26 @@ async def test_deep_discovery_reads_original_frontmatter_from_filesystem(
     assert metadata["metadata"]["note"] == "x" * 60_000
     assert "PROCEDURE" not in str(model.calls[0])
     assert skills.read("example") == content
+
+
+def test_platform_skill_snapshot_accepts_confined_python_and_bash_scripts(
+    tmp_path: Path,
+) -> None:
+    location = skill(tmp_path)
+    (location / "analyze.py").write_text("print('ok')\n")
+    (location / "run.sh").write_text("echo ok\n")
+    scripts = PlatformSkills.from_directory(str(tmp_path))
+    assert scripts.read("example", "analyze.py") == "print('ok')\n"
+    assert scripts.read("example", "run.sh") == "echo ok\n"
+    (location / "escape.py").symlink_to("/etc/hosts")
+    (location / "oversized.py").write_text("x" * (64 * 1024 + 1))
+    reloaded = PlatformSkills.from_directory(str(tmp_path))
+    assert [item.name for item in reloaded.catalog.skills] == ["example"]
+    assert reloaded.read("example", "analyze.py") == "print('ok')\n"
+    with pytest.raises(ValueError):
+        reloaded.read("example", "escape.py")
+    with pytest.raises(ValueError):
+        reloaded.read("example", "oversized.py")
 
 
 def test_snapshot_fixed_until_restart_and_checkpoint_metadata_refresh(

@@ -640,6 +640,12 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
       return "Observation";
     case "tool_call": {
       if (entry.kind !== "combo") return "Tool call";
+      if (toolSlug(toolName(entry.call)) === "execute_code" && translate) {
+        return translate("rework.chatTrace.toolLabels.codeSandbox");
+      }
+      if (toolSlug(toolName(entry.call)) === "select_code_input" && translate) {
+        return translate("rework.chatTrace.toolLabels.selectCodeInput");
+      }
       if (toolName(entry.call) === "ask_user" && translate) {
         return translate("rework.chatTrace.toolLabels.platform.askUser");
       }
@@ -730,7 +736,13 @@ export function statusForEntry(entry: TraceEntry, pendingToolCallIds?: readonly 
     if (pendingToolCallIds?.includes(toolCallId(entry.call))) return "awaiting_confirmation";
     return "pending";
   }
-  return toolResultOk(entry.result) ? "ok" : "error";
+  if (!toolResultOk(entry.result)) return "error";
+  if (toolSlug(toolName(entry.call)) === "execute_code") {
+    const result = parseToolResultContent(entry.result);
+    if (typeof result?.exit_code === "number" && result.exit_code !== 0) return "error";
+    if (result?.timed_out === true) return "error";
+  }
+  return "ok";
 }
 
 /**

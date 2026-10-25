@@ -117,6 +117,10 @@
   },
   "capability": {
     "panelLoadFailed": "Ce panneau n'a pas pu se charger. Rechargez la page.",
+    "code_sandbox": {
+      "name": "Sandbox de code",
+      "description": "Exécuter de courts programmes Bash et Python dans une sandbox isolée."
+    },
     "web_research": {
       "name": "Rechercher sur le Web",
       "description": "Rechercher des sources publiques et lire des pages Web via un accès externe contrôlé."
@@ -1120,6 +1124,22 @@
   },
   "rework": {
     "admin": {
+      "sandboxSettings": {
+        "title": "Sandbox de code",
+        "description": "Une sandbox démarre à la première exécution de code et reste disponible pour sa conversation jusqu'à expiration après inactivité. Les brokers connectés appliquent les changements sous 30 secondes. Le runtime, l'image et la politique de sécurité sont approuvés par l'opérateur.",
+        "profile": "Profil approuvé",
+        "profileUnconfigured": "L'opérateur n'a pas encore nommé de profil approuvé.",
+        "loading": "Chargement des réglages de la sandbox...",
+        "loadError": "Impossible de charger les réglages de la sandbox.",
+        "idle": "Expiration après inactivité (minutes)",
+        "idleHelp": "20 minutes par défaut. Les fichiers temporaires sont supprimés à l'expiration.",
+        "active": "Conversations actives maximum",
+        "activeHelp": "Plafonné par la limite fixée par l'opérateur.",
+        "invalid": "Saisissez des nombres entiers dans les limites autorisées.",
+        "save": "Enregistrer les réglages",
+        "saved": "Réglages de la sandbox enregistrés",
+        "saveError": "Impossible d'enregistrer les réglages de la sandbox."
+      },
       "capabilities": {
         "title": "Fonctionnalités",
         "subtitle": "Catalogue des fonctionnalités de la plateforme : activation par équipe, valeurs par défaut et état.",
@@ -1996,7 +2016,13 @@
         "running": "En cours",
         "success": "Succès"
       },
+      "toolGroups": {
+        "commands_one": "{{count}} commande",
+        "commands_other": "{{count}} commandes"
+      },
       "toolLabels": {
+        "codeSandbox": "Exécution du code dans un espace isolé",
+        "selectCodeInput": "Préparation d'un fichier pour l'analyse",
         "platform": {
           "askUser": "Demande de précision",
           "readSkillFile": "Consultation des consignes"
@@ -2102,6 +2128,26 @@
         "skills": {
           "load_skill": "Chargement des consignes",
           "read_skill_file": "Consultation des consignes"
+        }
+      },
+      "sandbox": {
+        "code": "Code",
+        "result": "Résultat",
+        "exitCode": "Code de sortie : {{code}}",
+        "timedOut": "Durée maximale atteinte",
+        "truncated": "Sortie tronquée",
+        "output": "Sortie",
+        "errors": "Erreurs",
+        "noOutput": "Aucune sortie",
+        "errorsByCode": {
+          "unavailable": "La sandbox est indisponible.",
+          "unauthorized": "L'exécution de code n'est pas autorisée.",
+          "busy": "La sandbox est occupée. Réessayez dans un instant.",
+          "invalid_request": "La demande d'exécution est invalide.",
+          "runtime_unavailable": "Le runtime de la sandbox est indisponible.",
+          "policy_unavailable": "La politique de sécurité de la sandbox est indisponible.",
+          "backend_failed": "La sandbox n'a pas pu exécuter ce code.",
+          "invalid_response": "La sandbox a renvoyé une réponse invalide."
         }
       },
       "webResearch": {

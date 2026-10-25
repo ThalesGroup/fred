@@ -1166,6 +1166,16 @@ operations:
     required_permission: can_manage_platform # Unsets the binding and echoes the now-unset state.
   - service: control-plane
     method: GET
+    path: /control-plane/v1/admin/platform/sandbox-settings
+    review_status: approved
+    required_permission: can_manage_platform # Reads the operator-approved profile and bounded execution settings.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/sandbox-settings
+    review_status: approved
+    required_permission: can_manage_platform # Changes idle and capacity limits; image and runtime remain operator-owned.
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/admin/platform/prompt
     review_status: approved
     required_permission: can_edit_platform_prompt # platform-wide platform prompt — organization_authz.require_edit_platform_prompt (organization#can_edit_platform_prompt = platform_admin or prompt_editor). Read shares the write's gate on purpose: an editor who cannot read what they overwrite is useless, and this was never readable below the admin tier. is_default=true when no row was ever saved.
@@ -1755,6 +1765,76 @@ operations:
     path: /knowledge-flow/v1/resources/{resource_id}
     review_status: pending_review
     required_permission: pending_review
+  - service: knowledge-flow
+    method: OPTIONS
+    path: /knowledge-flow/v1/sandbox-mount/{key}
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: PROPFIND
+    path: /knowledge-flow/v1/sandbox-mount/{key}
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: HEAD
+    path: /knowledge-flow/v1/sandbox-mount/{key}
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/sandbox-mount/{key}
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: OPTIONS
+    path: /knowledge-flow/v1/sandbox-mount/{key}/
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: PROPFIND
+    path: /knowledge-flow/v1/sandbox-mount/{key}/
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: HEAD
+    path: /knowledge-flow/v1/sandbox-mount/{key}/
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/sandbox-mount/{key}/
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: OPTIONS
+    path: /knowledge-flow/v1/sandbox-mount/{key}/{path:path}
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: PROPFIND
+    path: /knowledge-flow/v1/sandbox-mount/{key}/{path:path}
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: HEAD
+    path: /knowledge-flow/v1/sandbox-mount/{key}/{path:path}
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/sandbox-mount/{key}/{path:path}
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/sandbox-mount/views/{key}
+    review_status: pending_review
+    required_permission: authenticated_user_and_sandbox_bind_credential
+  - service: knowledge-flow
+    method: DELETE
+    path: /knowledge-flow/v1/sandbox-mount/views/{key}
+    review_status: pending_review
+    required_permission: sandbox_revoke_credential
   - service: knowledge-flow
     method: POST
     path: /knowledge-flow/v1/schemas/echo

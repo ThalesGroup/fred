@@ -1,8 +1,8 @@
 CODE_QUALITY_DIRS := libs/fred-pod libs/fred-core libs/fred-sdk libs/fred-runtime libs/capabilities/fred-capability-writable-document libs/capabilities/fred-capability-ppt-filler libs/capabilities/fred-capability-platform-ops libs/capabilities/fred-capability-html-artifact libs/capabilities/fred-capability-team-wiki libs/capabilities/fred-capability-documents libs/capabilities/fred-capability-document-access libs/capabilities/fred-capability-web-research libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
 TEST_DIRS := libs/fred-pod libs/fred-core libs/fred-sdk libs/fred-runtime libs/capabilities/fred-capability-writable-document libs/capabilities/fred-capability-ppt-filler libs/capabilities/fred-capability-platform-ops libs/capabilities/fred-capability-html-artifact libs/capabilities/fred-capability-team-wiki libs/capabilities/fred-capability-documents libs/capabilities/fred-capability-document-access libs/capabilities/fred-capability-web-research libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
-DOCKER_BUILD_DIRS := apps/fred-agents apps/knowledge-flow-backend apps/control-plane-backend apps/frontend
+DOCKER_BUILD_DIRS := apps/fred-agents apps/knowledge-flow-backend apps/control-plane-backend apps/frontend apps/sandbox-broker
 RUN_DIRS := apps/control-plane-backend apps/fred-agents apps/knowledge-flow-backend apps/frontend
-ENV_APPS := apps/control-plane-backend apps/fred-agents apps/knowledge-flow-backend
+ENV_APPS := apps/control-plane-backend apps/fred-agents apps/knowledge-flow-backend apps/sandbox-broker
 
 .DEFAULT_GOAL := help
 
@@ -144,6 +144,10 @@ run-knowledge-flow: ## Run knowledge-flow backend API only
 run-control-plane: ## Run control-plane backend API only
 	$(MAKE) -C apps/control-plane-backend run
 
+.PHONY: run-sandbox-broker
+run-sandbox-broker: ## Run the optional trusted sandbox broker locally
+	$(MAKE) -C apps/sandbox-broker run
+
 .PHONY: run
 run: ## Start control-plane, fred-agents, knowledge-flow, and frontend together in one terminal (Ctrl+C stops all four)
 	@set -e; \
@@ -165,7 +169,7 @@ dev:  ## Start development environment in all submodules
 ##@ Docker
 
 .PHONY: docker-build
-docker-build: ## Build Docker images for fred-agents, knowledge-flow, control-plane, and frontend
+docker-build: ## Build Docker images for Fred services and the sandbox broker
 	@set -e; \
 	for dir in $(DOCKER_BUILD_DIRS); do \
 		echo "************ Building Docker image in $$dir ************"; \
@@ -195,6 +199,7 @@ PYPI_PACKAGES := \
 	libs/fred-core \
 	libs/fred-sdk \
 	libs/fred-runtime \
+	libs/capabilities/fred-capability-code-sandbox \
 	libs/capabilities/fred-capability-document-access \
 	libs/capabilities/fred-capability-documents \
 	libs/capabilities/fred-capability-html-artifact \
@@ -383,8 +388,8 @@ k3d-tests: ## Test local k3d image preparation without a cluster
 	python3 -m unittest discover -s deploy/k3d -p 'test_*.py'
 
 .PHONY: pod-chart-tests
-pod-chart-tests: ## Render the agent-pod and knowledge-base charts with helm (skipped without helm)
-	python3 -m unittest deploy/charts/test_pod_charts.py
+pod-chart-tests: ## Render agent-pod, knowledge-base and optional sandbox broker charts with helm
+	python3 -m unittest deploy/charts/test_pod_charts.py deploy/charts/test_sandbox_broker_chart.py
 
 ##@ Migration notes and release preparation
 

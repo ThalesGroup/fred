@@ -109,3 +109,14 @@ async def test_a_name_carrying_a_slash_is_still_found(tmp_path):
     found = await store.get_by_owner_type_full_path(OWNER, TagType.DOCUMENT, "A/B")
 
     assert found is not None and found.id == "legacy"
+
+
+@pytest.mark.asyncio
+async def test_owned_document_filter_excludes_other_tag_types(tmp_path):
+    store = await _store(tmp_path)
+    await store.create_tag(_tag("document", "Reports", None))
+    prompt = _tag("prompt", "Prompt", None)
+    await store.create_tag(prompt.model_copy(update={"type": TagType.PROMPT}))
+    await store.create_tag(_tag("other-owner", "Other", None, owner_id="team-2"))
+
+    assert await store.filter_owned_tag_ids(OWNER, {"document", "prompt", "other-owner"}) == {"document"}

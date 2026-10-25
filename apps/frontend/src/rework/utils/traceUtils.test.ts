@@ -337,6 +337,16 @@ describe("entryLabel localization", () => {
     expect(entryLabel(entry, () => translation)).toBe(expected);
   });
 
+  it("uses the localized sandbox label for code execution", () => {
+    const sandboxEntry = { ...entry, call: toolCallMsg("c1", "execute_code") };
+    expect(entryLabel(sandboxEntry, (key) => key)).toBe("rework.chatTrace.toolLabels.codeSandbox");
+  });
+
+  it("uses the localized label for a selected sandbox file", () => {
+    const selection = { ...entry, call: toolCallMsg("c1", "select_code_input") };
+    expect(entryLabel(selection, (key) => key)).toBe("rework.chatTrace.toolLabels.selectCodeInput");
+  });
+
   it("uses the localized label for ask_user", () => {
     const question = { kind: "combo" as const, call: toolCallMsg("c2", "ask_user") };
     expect(entryLabel(question, (key) => key)).toBe("rework.chatTrace.toolLabels.platform.askUser");
@@ -487,6 +497,12 @@ describe("isCancelledByUser", () => {
   it("returns 'error' for a combo with a failed result", () => {
     const call = toolCallMsg("c1", "search");
     const result = toolResultMsg("c1", "boom", false);
+    expect(statusForEntry({ kind: "combo", call, result })).toBe("error");
+  });
+
+  it("marks a failed sandbox command red without treating the tool transport as failed", () => {
+    const call = toolCallMsg("c1", "execute_code");
+    const result = toolResultMsg("c1", JSON.stringify({ exit_code: 127, stdout: "", stderr: "not found" }), true);
     expect(statusForEntry({ kind: "combo", call, result })).toBe("error");
   });
 
