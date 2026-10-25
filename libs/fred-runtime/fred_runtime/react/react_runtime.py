@@ -697,12 +697,19 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             for event in preload:
                 yield event.model_copy(update={"sequence": sequence})
                 sequence += 1
-            agent_stream = self._compiled_agent.astream(
-                graph_input,
-                config=_to_runnable_config(config),
-                stream_mode=["messages", "updates", "custom"],
-                subgraphs=self._services.skills is not None,
-            )
+            if self._services.skills is None:
+                agent_stream = self._compiled_agent.astream(
+                    graph_input,
+                    config=_to_runnable_config(config),
+                    stream_mode=["messages", "updates", "custom"],
+                )
+            else:
+                agent_stream = self._compiled_agent.astream(
+                    graph_input,
+                    config=_to_runnable_config(config),
+                    stream_mode=["messages", "updates", "custom"],
+                    subgraphs=True,
+                )
             while True:
                 try:
                     raw_event = await run_scope.next_event(agent_stream)
