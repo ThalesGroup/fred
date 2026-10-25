@@ -52,7 +52,11 @@ export function ComposerActionsMenu({
   const [menuPosition, setMenuPosition] = useState<{ top?: number; right: number; bottom?: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const closeMenu = () => setOpen(false);
+  const closeMenu = () => {
+    if (portal && menuRef.current?.contains(document.activeElement))
+      containerRef.current?.querySelector("button")?.focus();
+    setOpen(false);
+  };
 
   useEffect(() => {
     if (disabled && open) {
@@ -68,7 +72,10 @@ export function ComposerActionsMenu({
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        containerRef.current?.querySelector("button")?.focus();
+        setOpen(false);
+      }
     };
     document.addEventListener("mousedown", handleMouseDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -80,6 +87,7 @@ export function ComposerActionsMenu({
 
   useEffect(() => {
     if (!open || !portal) return;
+    menuRef.current?.querySelector<HTMLElement>("button, [href], [tabindex]:not([tabindex='-1'])")?.focus();
     window.addEventListener("resize", closeMenu);
     return () => {
       window.removeEventListener("resize", closeMenu);
@@ -109,6 +117,8 @@ export function ComposerActionsMenu({
         size={size}
         icon={icon}
         aria-label={openAriaLabel ?? t("chatbot.composerActions.openAria")}
+        aria-expanded={open}
+        aria-haspopup="dialog"
         disabled={disabled}
         onClick={(event) => {
           if (portal) {

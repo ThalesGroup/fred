@@ -14,13 +14,14 @@
 2. Add a separate authenticated runtime request for immediate steering. The existing SSE request cannot receive browser input. The request validates session ownership and team execution permission, then offers a message to a process-local active-run mailbox keyed by session and agent. An absent mailbox rejects the offer and leaves the client row pending.
 3. Add a ReAct/Deep root middleware hook before model calls. It consumes offered messages after any completed tool batch, appends them as `HumanMessage` state updates and emits a typed custom runtime event. The event acknowledges actual delivery to the frontend and is mapped to a user history row in stream order. No middleware is installed in Deep child agents.
 4. A forced row remains in the client pending list until its matching delivery event. If the run ends first, it reverts to ordinary queue behavior. Repeated force requests use the same message id, and the process-local mailbox deduplicates that id. A row awaiting delivery is temporarily locked against edit/delete; ordinary queued rows remain editable/removable.
+5. When a run pauses for human input, keep its undelivered mailbox entries inactive under the same session and identity. A matching HITL resume reactivates them before the next model boundary. Reject new offers while paused and discard the inactive entries if an unrelated ordinary turn starts. Final completion still clears the mailbox.
 
 ## Risks / Trade-offs
 
 - [Different runtime replica receives the steering request] -> Runtime refuses it; the message stays pending. This is a local trial and must not be deployed with multiple replicas without a shared mailbox.
 - [The model is already generating its final answer] -> No further model boundary occurs; the pending message starts the next turn.
 - [SSE delivery acknowledgement is lost] -> The client cannot prove consumption. Keep the row pending and avoid automatic retry after an uncertain transport failure; surface the uncertainty to the user.
-- [Human input pause or interrupted execution] -> Hold ordinary queue draining until the existing resolution path completes.
+- [Human input pause or interrupted execution] -> Hold ordinary queue draining until the existing resolution path completes. An offered message remains available to the matching resume until a model boundary consumes it.
 
 ## Migration Plan
 

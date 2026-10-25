@@ -6,11 +6,10 @@ from fastapi import HTTPException
 from fastapi.routing import APIRoute
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app.context import PodApplicationContext
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-from langgraph.graph.message import add_messages
-
 from fred_runtime.runtime_support import turn_steering
 from fred_sdk.contracts.execution import RuntimeExecuteRequest
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langgraph.graph.message import add_messages
 
 
 def test_mailbox_rejects_mismatch_and_deduplicates_messages() -> None:
@@ -28,6 +27,64 @@ def test_mailbox_rejects_mismatch_and_deduplicates_messages() -> None:
     assert mailbox.take("s") == []
     mailbox.end("s", token)
     assert not mailbox.offer("s", "a", "u", "t", "other", "later")
+
+
+def test_human_pause_carries_undelivered_message_to_matching_resume(
+    monkeypatch,
+) -> None:
+    events = []
+    monkeypatch.setattr(turn_steering, "get_stream_writer", lambda: events.append)
+    mailbox = turn_steering.TurnSteeringMailbox()
+    monkeypatch.setattr(turn_steering, "turn_steering_mailbox", mailbox)
+    token = mailbox.start("paused-session", "agent", "user", "team")
+    assert token is not None
+    assert mailbox.offer(
+        "paused-session", "agent", "user", "team", "message", "focus on Marseille"
+    )
+    mailbox.end("paused-session", token, paused=True)
+
+    assert not mailbox.offer(
+        "paused-session", "agent", "user", "team", "other", "too late"
+    )
+    assert (
+        mailbox.start("paused-session", "agent", "other", "team", resume=True) is None
+    )
+    resumed = mailbox.start("paused-session", "agent", "user", "team", resume=True)
+    assert resumed is not None and resumed != token
+    mailbox.end("paused-session", token)
+    assert mailbox.offer(
+        "paused-session", "agent", "user", "team", "message", "duplicate"
+    )
+    middleware = turn_steering.TurnSteeringMiddleware("paused-session")
+    update = asyncio.run(middleware.abefore_model({}, None))
+    assert update == {"messages": [HumanMessage(content="focus on Marseille")]}
+    assert [(event.message_id, event.content) for event in events] == [
+        ("message", "focus on Marseille")
+    ]
+    assert asyncio.run(middleware.abefore_model({}, None)) is None
+    mailbox.end("paused-session", resumed)
+    assert not mailbox.offer("paused-session", "agent", "user", "team", "later", "new")
+
+
+def test_unrelated_turn_does_not_inherit_paused_message() -> None:
+    mailbox = turn_steering.TurnSteeringMailbox()
+    token = mailbox.start("session", "agent", "user", "team")
+    assert token is not None
+    assert mailbox.offer("session", "agent", "user", "team", "old", "do not inherit")
+    mailbox.end("session", token, paused=True)
+
+    next_token = mailbox.start("session", "agent", "user", "team")
+    assert next_token is not None
+    assert mailbox.take("session") == []
+    mailbox.end("session", next_token)
+
+
+def test_empty_human_pause_does_not_retain_mailbox() -> None:
+    mailbox = turn_steering.TurnSteeringMailbox()
+    token = mailbox.start("session", "agent", "user", "team")
+    assert token is not None
+    mailbox.end("session", token, paused=True)
+    assert "session" not in mailbox._turns
 
 
 def test_steering_enters_after_completed_tool_pair(monkeypatch) -> None:

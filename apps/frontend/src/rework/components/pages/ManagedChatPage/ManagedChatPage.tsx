@@ -169,6 +169,7 @@ export default function ManagedChatPage() {
   }
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const pendingToggleRef = useRef<HTMLButtonElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // The capability side-panel and the session attachments drawer are both
   // `InlineDrawer layout="push"` — sharing one slot keeps at most one open at
@@ -647,6 +648,14 @@ export default function ManagedChatPage() {
   const composerControlsDisabled =
     chat.executionDisabled || chat.waitResponse || chat.isLoadingHistory || awaitingHumanAnswer;
   const composerInputDisabled = chat.executionDisabled || chat.isLoadingHistory || awaitingHumanAnswer;
+  const focusAfterPendingAction = () => {
+    if (composerInputDisabled) {
+      if ((chat.pendingMessages?.length ?? 0) > 1) pendingToggleRef.current?.focus();
+      else scrollContainerRef.current?.focus();
+    } else {
+      setFocusEndRequestId((n) => n + 1);
+    }
+  };
 
   // Slash commands and inline skills. Owns the menu and resolves the
   // first token on submit, so `Tab` then `Enter` and `Enter` from the open
@@ -958,6 +967,9 @@ export default function ManagedChatPage() {
                   <div
                     className={`${styles.chatArea} ${isInitialState ? styles.chatAreaInitial : ""}`}
                     ref={scrollContainerRef}
+                    tabIndex={-1}
+                    role="region"
+                    aria-label={t("chatbot.conversationAriaLabel")}
                   >
                     {isInitialState ? (
                       <div className={styles.initialStage}>
@@ -1026,6 +1038,7 @@ export default function ManagedChatPage() {
                       <section className={styles.pendingMessages} aria-label={t("chatbot.pendingMessages.label")}>
                         <button
                           type="button"
+                          ref={pendingToggleRef}
                           className={styles.pendingToggle}
                           aria-expanded={pendingExpanded}
                           aria-controls={pendingExpanded ? pendingListId : undefined}
@@ -1093,6 +1106,7 @@ export default function ManagedChatPage() {
                                                 label={t("chatbot.pendingMessages.edit")}
                                                 onClick={() => {
                                                   closeMenu();
+                                                  focusAfterPendingAction();
                                                   chat.editPendingMessage(message.id);
                                                 }}
                                               />,
@@ -1103,6 +1117,7 @@ export default function ManagedChatPage() {
                                                 danger
                                                 onClick={() => {
                                                   closeMenu();
+                                                  focusAfterPendingAction();
                                                   chat.removePendingMessage(message.id);
                                                 }}
                                               />,

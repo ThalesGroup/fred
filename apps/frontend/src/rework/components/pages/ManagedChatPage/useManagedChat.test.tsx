@@ -1713,6 +1713,82 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.pendingMessages[0]).toMatchObject({ text: "next", status: "waiting" });
   });
 
+  it("keeps a forced row offered while a human-input resume is preparing", async () => {
+    chatSseWaitResponse = true;
+    let resolveResume: (reached: boolean) => void = () => {};
+    sendHitlResumeMock.mockImplementationOnce(() => new Promise<boolean>((resolve) => (resolveResume = resolve)));
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("focus on Marseille"));
+    await act(async () => latest.handleSend());
+    const id = latest.pendingMessages[0].id;
+    await act(async () => latest.forcePendingMessage(id));
+    act(() => capturedOnAwaitingHuman?.(awaitingHumanEvent));
+    chatSseWaitResponse = false;
+    await act(async () => rerender());
+
+    act(() => latest.handleHitlAnswer("proceed"));
+    rerender();
+    expect(latest.pendingHitl).toBeNull();
+    expect(latest.pendingMessages[0]).toMatchObject({ id, status: "offered" });
+    expect(sendMock).not.toHaveBeenCalled();
+
+    chatSseWaitResponse = true;
+    await act(async () => {
+      resolveResume(true);
+      await Promise.resolve();
+    });
+    rerender();
+    act(() => capturedOnSteeredMessage?.(id, "session-1"));
+    expect(latest.pendingMessages).toEqual([]);
+  });
+
+  it("keeps a forced row offered when human-input resume preflight fails", async () => {
+    chatSseWaitResponse = true;
+    let resolveResume: (reached: boolean) => void = () => {};
+    sendHitlResumeMock.mockImplementationOnce(() => new Promise<boolean>((resolve) => (resolveResume = resolve)));
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("focus on Marseille"));
+    await act(async () => latest.handleSend());
+    const id = latest.pendingMessages[0].id;
+    await act(async () => latest.forcePendingMessage(id));
+    act(() => capturedOnAwaitingHuman?.(awaitingHumanEvent));
+
+    act(() => latest.handleHitlAnswer("proceed"));
+    act(() => capturedOnError?.("Could not resume"));
+    expect(latest.pendingMessages[0]).toMatchObject({ id, status: "offered" });
+    expect(sendMock).not.toHaveBeenCalled();
+
+    chatSseWaitResponse = false;
+    await act(async () => {
+      resolveResume(false);
+      await Promise.resolve();
+    });
+    rerender();
+    expect(latest.pendingHitl).toEqual(awaitingHumanEvent);
+    expect(latest.pendingMessages[0]).toMatchObject({ id, status: "offered" });
+  });
+
+  it("marks a forced row uncertain when the resumed stream fails after acceptance", async () => {
+    chatSseWaitResponse = true;
+    sendHitlResumeMock.mockImplementationOnce(async (...args) => {
+      (args[6] as () => void)();
+      return true;
+    });
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("focus on Marseille"));
+    await act(async () => latest.handleSend());
+    const id = latest.pendingMessages[0].id;
+    await act(async () => latest.forcePendingMessage(id));
+    act(() => capturedOnAwaitingHuman?.(awaitingHumanEvent));
+
+    await act(async () => latest.handleHitlAnswer("proceed"));
+    act(() => capturedOnError?.("Resumed stream failed"));
+    expect(latest.pendingMessages[0]).toMatchObject({ id, status: "uncertain" });
+  });
+
   it("starts only the first queued turn while it is running", async () => {
     chatSseWaitResponse = true;
     mount();
@@ -1895,7 +1971,15 @@ describe("useManagedChat — session write reliability", () => {
       await Promise.resolve();
     });
 
-    expect(sendHitlResumeMock).toHaveBeenCalledWith(question, undefined, "Lyon", expect.any(Object), undefined, false);
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(
+      question,
+      undefined,
+      "Lyon",
+      expect.any(Object),
+      undefined,
+      false,
+      expect.any(Function),
+    );
   });
 
   it("replaces a staged choice with Other text in a grouped answer", async () => {
@@ -2332,6 +2416,7 @@ describe("useManagedChat — session write reliability", () => {
       expect.any(Object),
       undefined,
       false,
+      expect.any(Function),
     );
 
     const mixedBatch = {
@@ -2401,6 +2486,7 @@ describe("useManagedChat — session write reliability", () => {
       expect.any(Object),
       undefined,
       false,
+      expect.any(Function),
     );
   });
 
@@ -2431,6 +2517,7 @@ describe("useManagedChat — session write reliability", () => {
       expect.any(Object),
       undefined,
       false,
+      expect.any(Function),
     );
   });
 
@@ -2465,6 +2552,7 @@ describe("useManagedChat — session write reliability", () => {
         : expect.not.objectContaining({ skills: expect.anything() }),
       undefined,
       false,
+      expect.any(Function),
     );
     act(() => latest.setInput("follow up"));
     await act(async () => {
@@ -2513,6 +2601,7 @@ describe("useManagedChat — session write reliability", () => {
       expect.objectContaining({ skills }),
       undefined,
       false,
+      expect.any(Function),
     );
     act(() => latest.setInput("follow up"));
     await act(async () => latest.handleSend());
@@ -2586,6 +2675,7 @@ describe("useManagedChat — session write reliability", () => {
       expect.any(Object),
       undefined,
       false,
+      expect.any(Function),
     );
     expect(latest.pendingHitl).toEqual(awaitingHumanEvent);
     expect(latest.hitlFreeText).toBe("  complete answer 🙂  ");

@@ -141,6 +141,8 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   });
   const [resumingAgentQuestionSessionId, setResumingAgentQuestionSessionId] = useState<string | null>(null);
   const hitlResumeOwnerRef = useRef<RuntimeAwaitingHumanEvent | null>(null);
+  const hitlResumePreparingRef = useRef<RuntimeAwaitingHumanEvent | null>(null);
+  const waitResponseRef = useRef(false);
   const submittedBatchKeysRef = useRef<Set<string>>(new Set());
   const autoApprovalAttemptedRef = useRef(new Set<string>());
   const [hitlFreeText, setHitlFreeText] = useState("");
@@ -398,11 +400,14 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   );
   const handleChatError = useCallback(
     (msg: string) => {
+      const resumePreparing = hitlResumePreparingRef.current?.session_id === activeSessionIdRef.current;
       setPendingMessages((current) => {
         const queued = queuedStartRef.current;
         const pending = queued && !current.some((message) => message.id === queued.id) ? [queued, ...current] : current;
         return pending.map((message) =>
-          message.status === "offered" || message.id === queued?.id ? { ...message, status: "uncertain" } : message,
+          (message.status === "offered" && !resumePreparing) || message.id === queued?.id
+            ? { ...message, status: "uncertain" }
+            : message,
         );
       });
       showError({ summary: "Agent error", detail: msg });
@@ -471,6 +476,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     isTurnCurrent,
     isExecutionAllowed,
   });
+  waitResponseRef.current = waitResponse;
   const canSendAllHitl =
     pendingHitlTabs.length > 1 &&
     pendingHitlTabs.every((event) => {
@@ -495,8 +501,6 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   // Live-turn indicator handed to useSessionHistory — its async closures need
   // the CURRENT streaming state at response-arrival time, not the render-time
   // value a plain boolean capture would freeze.
-  const waitResponseRef = useRef(waitResponse);
-  waitResponseRef.current = waitResponse;
   const isTurnActive = useCallback(() => waitResponseRef.current, []);
 
   // Mirrors read by the departure-snapshot cleanup below: a cleanup closure
@@ -545,6 +549,9 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     // already see "no live turn" or a cached thread would refuse to render.
     waitResponseRef.current = false;
     replacePendingHitls([]);
+    hitlResumeOwnerRef.current = null;
+    hitlResumePreparingRef.current = null;
+    setResumingAgentQuestionSessionId(null);
     lastHitlExchangeRef.current = null;
     submittedBatchKeysRef.current = new Set();
     hitlDraftsRef.current.clear();
@@ -1003,7 +1010,15 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   );
 
   useEffect(() => {
-    if (waitResponse || !sessionId || executionDisabledRef.current || pendingHitl || isLoadingHistory) return;
+    if (
+      waitResponse ||
+      !sessionId ||
+      executionDisabledRef.current ||
+      pendingHitl ||
+      hitlResumeOwnerRef.current?.session_id === sessionId ||
+      isLoadingHistory
+    )
+      return;
     if (pendingMessages.some((message) => message.status === "offered")) {
       setPendingMessages((current) =>
         current.map((message) => (message.status === "offered" ? { ...message, status: "waiting" } : message)),
@@ -1097,6 +1112,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       }
       const prompt = pendingHitl;
       hitlResumeOwnerRef.current = prompt;
+      hitlResumePreparingRef.current = prompt;
       if (prompt.payload.stage === "agent_question") setResumingAgentQuestionSessionId(prompt.session_id);
       const draftOwner = hitlDraftOwnerRef.current;
       const promptsBeforeResume = pendingHitlsRef.current;
@@ -1147,24 +1163,23 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       const toolNames = (prompt.payload.pending_calls ?? []).map((call) => call.tool_name);
       const rememberTools =
         rememberApproval && prompt.payload.stage === "tool_approval" && answer === "proceed" && toolNames.length > 0;
-      const onAccepted = rememberTools
-        ? () => {
-            const saved = rememberToolApprovalGrants(
-              { userId: KeyCloakService.GetUserId(), agentInstanceId, sessionId: prompt.session_id },
-              toolNames,
-            );
-            if (!saved) {
-              showError({
-                summary: t("chatbot.errors.toolApprovalSaveFailedSummary"),
-                detail: t("chatbot.errors.toolApprovalSaveFailedDetail"),
-              });
-            }
+      const onAccepted = () => {
+        if (hitlResumePreparingRef.current === prompt) hitlResumePreparingRef.current = null;
+        if (rememberTools) {
+          const saved = rememberToolApprovalGrants(
+            { userId: KeyCloakService.GetUserId(), agentInstanceId, sessionId: prompt.session_id },
+            toolNames,
+          );
+          if (!saved) {
+            showError({
+              summary: t("chatbot.errors.toolApprovalSaveFailedSummary"),
+              detail: t("chatbot.errors.toolApprovalSaveFailedDetail"),
+            });
           }
-        : undefined;
+        }
+      };
       const selectedAnswer = answerWithOtherPriority(prompt, answer, freeText);
-      const resume = onAccepted
-        ? sendHitlResume(prompt, selectedAnswer, freeText, runtimeContext, turnOptions, skipped, onAccepted)
-        : sendHitlResume(prompt, selectedAnswer, freeText, runtimeContext, turnOptions, skipped);
+      const resume = sendHitlResume(prompt, selectedAnswer, freeText, runtimeContext, turnOptions, skipped, onAccepted);
       void resume
         .then((reached) => {
           if (reached) {
@@ -1185,6 +1200,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
         .finally(() => {
           if (hitlResumeOwnerRef.current !== prompt) return;
           hitlResumeOwnerRef.current = null;
+          if (hitlResumePreparingRef.current === prompt) hitlResumePreparingRef.current = null;
           if (prompt.payload.stage === "agent_question") setResumingAgentQuestionSessionId(null);
         });
     },
@@ -1218,11 +1234,13 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       }
       const owner = prompts[0];
       hitlResumeOwnerRef.current = owner;
+      hitlResumePreparingRef.current = owner;
       setResumingAgentQuestionSessionId(owner.session_id);
       const submittedKeys = new Set(prompts.map(hitlKey));
       submittedBatchKeysRef.current = submittedKeys;
       let cleared = false;
       const clearAcceptedBatch = () => {
+        if (hitlResumePreparingRef.current === owner) hitlResumePreparingRef.current = null;
         if (cleared) return;
         cleared = true;
         if (activeSessionIdRef.current !== owner.session_id) return;
@@ -1255,6 +1273,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
         .finally(() => {
           if (hitlResumeOwnerRef.current !== owner) return;
           hitlResumeOwnerRef.current = null;
+          if (hitlResumePreparingRef.current === owner) hitlResumePreparingRef.current = null;
           setResumingAgentQuestionSessionId(null);
         });
     },

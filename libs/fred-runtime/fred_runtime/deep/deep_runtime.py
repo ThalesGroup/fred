@@ -59,7 +59,6 @@ from fred_runtime.deep.concat_files import ConcatFilesMiddleware
 from fred_runtime.deep.conversation_backend import ConversationNamespaceBackend
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
-from fred_runtime.runtime_support.turn_steering import TurnSteeringMiddleware
 from fred_runtime.react.middleware.hitl import (
     DeepChildHitlMiddleware,
     FredHitlMiddleware,
@@ -97,6 +96,7 @@ from fred_runtime.react.react_tool_binding import (
 )
 from fred_runtime.react.react_tool_resolution import ReActRuntimeToolResolver
 from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
+from fred_runtime.runtime_support.turn_steering import TurnSteeringMiddleware
 from fred_runtime.skills.catalog import PlatformSkills
 
 logger = logging.getLogger(__name__)

@@ -3,6 +3,7 @@
 - [x] 1.1 Add a process-local active-run mailbox and an authenticated steering endpoint; verify a focused runtime test covers owner/agent mismatch, duplicate ids, and no active run.
 - [x] 1.2 Add a root ReAct/Deep before-model hook and a typed delivery event; verify a focused runtime test places the user message after a completed tool batch and only once.
 - [x] 1.3 Persist the delivery event as an ordered user history row; verify a focused history test.
+- [x] 1.4 Preserve undelivered steering across a human-input pause and matching resume; verify a focused mailbox and middleware test.
 
 ## 2. Managed chat
 

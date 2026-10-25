@@ -163,7 +163,6 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     parse_human_input_answer,
 )
-from fred_runtime.runtime_support.turn_steering import turn_steering_mailbox
 from fred_sdk.contracts.skills import SkillCatalog, SkillDetail, SkillInvocation
 from fred_sdk.contracts.ui_part_union import current_ui_part_union
 from fred_sdk.support.authored_toolsets import (
@@ -239,6 +238,7 @@ from fred_runtime.runtime_support.hitl_batch import (
     parse_batched_human_answers,
 )
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
+from fred_runtime.runtime_support.turn_steering import turn_steering_mailbox
 
 from ..common.structures import AgentSettingsLike
 from ..integrations.v2_runtime.adapters import (
@@ -3978,6 +3978,7 @@ async def _stream(
             request.agent_instance_id,
             user_id,
             resolved_team_id or "personal",
+            resume=request.resume_payload is not None,
         )
         if session_id
         and request.agent_instance_id
@@ -4014,7 +4015,15 @@ async def _stream(
         # response never leaves the run to garbage collection.
         await payloads.aclose()
         if steering_token is not None and session_id is not None:
-            turn_steering_mailbox.end(session_id, steering_token)
+            paused = any(
+                payload.get("kind") == "awaiting_human" for payload in collected
+            )
+            failed = any(
+                payload.get("kind") == "execution_error" for payload in collected
+            )
+            turn_steering_mailbox.end(
+                session_id, steering_token, paused=paused and not failed
+            )
 
     _emit_turn_completed(
         container,

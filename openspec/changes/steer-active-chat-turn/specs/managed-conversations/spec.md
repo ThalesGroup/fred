@@ -39,6 +39,13 @@ The user SHALL be able to request immediate delivery of a pending plain-text mes
 - **WHEN** the active turn ends before another model decision
 - **THEN** the message remains pending and is eligible for the next ordinary turn
 
+#### Scenario: Human confirmation between offer and delivery
+
+- **GIVEN** an immediate message was accepted during an active turn
+- **WHEN** the agent pauses for tool confirmation before reaching another model boundary
+- **THEN** the message remains undelivered during the pause
+- **AND** the matching resumed turn consumes it once after the tool results and before its next model decision
+
 #### Scenario: Unauthorized steering
 
 - **WHEN** a caller tries to steer a session they do not own or an agent they cannot use

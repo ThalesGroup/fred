@@ -6,11 +6,10 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from uuid import uuid4
 
+from fred_sdk.contracts.runtime import SteeredUserMessageRuntimeEvent
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import HumanMessage
 from langgraph.config import get_stream_writer
-
-from fred_sdk.contracts.runtime import SteeredUserMessageRuntimeEvent
 
 
 @dataclass
@@ -21,6 +20,7 @@ class _ActiveTurn:
     team_id: str
     pending: OrderedDict[str, str] = field(default_factory=OrderedDict)
     seen: set[str] = field(default_factory=set)
+    active: bool = True
 
 
 class TurnSteeringMailbox:
@@ -28,20 +28,42 @@ class TurnSteeringMailbox:
         self._turns: dict[str, _ActiveTurn] = {}
 
     def start(
-        self, session_id: str, agent_instance_id: str, user_id: str, team_id: str
+        self,
+        session_id: str,
+        agent_instance_id: str,
+        user_id: str,
+        team_id: str,
+        *,
+        resume: bool = False,
     ) -> str | None:
-        if session_id in self._turns:
-            return None
+        current = self._turns.get(session_id)
+        if current is not None:
+            if current.active:
+                return None
+            if resume:
+                if (
+                    current.agent_instance_id != agent_instance_id
+                    or current.user_id != user_id
+                    or current.team_id != team_id
+                ):
+                    return None
+                current.token = str(uuid4())
+                current.active = True
+                return current.token
+            del self._turns[session_id]
         token = str(uuid4())
         self._turns[session_id] = _ActiveTurn(
             token, agent_instance_id, user_id, team_id
         )
         return token
 
-    def end(self, session_id: str, token: str) -> None:
+    def end(self, session_id: str, token: str, *, paused: bool = False) -> None:
         current = self._turns.get(session_id)
         if current is not None and current.token == token:
-            del self._turns[session_id]
+            if paused and current.pending:
+                current.active = False
+            else:
+                del self._turns[session_id]
 
     def offer(
         self,
@@ -55,6 +77,7 @@ class TurnSteeringMailbox:
         current = self._turns.get(session_id)
         if (
             current is None
+            or not current.active
             or current.agent_instance_id != agent_instance_id
             or current.user_id != user_id
             or current.team_id != team_id
@@ -67,7 +90,7 @@ class TurnSteeringMailbox:
 
     def take(self, session_id: str) -> list[tuple[str, str]]:
         current = self._turns.get(session_id)
-        if current is None:
+        if current is None or not current.active:
             return []
         messages = list(current.pending.items())
         current.pending.clear()
