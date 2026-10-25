@@ -12,4 +12,4 @@
 
 ## 3. Review
 
-- [ ] 3.1 Validate the OpenSpec change, run focused checks, review the full diff against `swift`, and record prototype limits in the draft PR or task response.
+- [x] 3.1 Validate the OpenSpec change, run focused checks, review the full diff against `swift`, and record prototype limits in the draft PR or task response.
