@@ -541,7 +541,12 @@ def _build_deepagent_runtime_middleware(
             kpi=kpi,
         ),
         *(
-            (TurnSteeringMiddleware(binding.portable_context.session_id),)
+            (
+                TurnSteeringMiddleware(
+                    binding.portable_context.session_id,
+                    binding.portable_context.baggage.get("steering_turn_id"),
+                ),
+            )
             if not child
             else ()
         ),

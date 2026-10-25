@@ -14,3 +14,9 @@
 ## 3. Review
 
 - [x] 3.1 Validate the OpenSpec change, run focused checks, review the full diff against `swift`, and record prototype limits in the draft PR or task response.
+
+## 4. Shared multi-replica delivery
+
+- [x] 4.1 Replace the process-local mailbox with one SQL-backed active-turn row, using the existing runtime async engine and one migration; cover cross-replica offer, ordered idempotent take, lease, stale turn, and close races in focused tests.
+- [x] 4.2 Carry a turn identity through the stream and steering requests; preserve accepted undelivered messages through HITL resume on another replica, and reject stale offers.
+- [x] 4.3 Update the generated runtime API contract, deployment note and PR description; verify the two-replica path, targeted tests, migration check, and branch review.

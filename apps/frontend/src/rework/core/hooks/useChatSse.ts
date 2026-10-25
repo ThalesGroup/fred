@@ -356,6 +356,7 @@ export function useChatSse(
   // send in that session restarts instead. Survives session switches.
   const stoppedSessionsRef = useRef(new Set<string>());
   const turnSessionRef = useRef<string | null>(null);
+  const activeSteeringTurnIdRef = useRef<string | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const thoughtBufsRef = useRef<
     Map<
@@ -382,6 +383,7 @@ export function useChatSse(
     () => () => {
       abortRef.current?.abort();
       abortRef.current = null;
+      activeSteeringTurnIdRef.current = null;
       preflightOwnerRef.current = null;
     },
     [],
@@ -413,6 +415,7 @@ export function useChatSse(
     console.debug("[useChatSse] reset() called — clearing all state");
     abortRef.current?.abort();
     abortRef.current = null;
+    activeSteeringTurnIdRef.current = null;
     // An explicit reset always cancels whatever attempt currently owns the
     // lock (if any) and immediately frees the slot for the next send() —
     // unconditional, unlike releasePreflightLock's ownership-checked release,
@@ -437,6 +440,7 @@ export function useChatSse(
     console.debug("[useChatSse] abort() called — clearing waitResponse");
     abortRef.current?.abort();
     abortRef.current = null;
+    activeSteeringTurnIdRef.current = null;
     // Otherwise an explicit Stop during preflight would leave the lock held
     // forever, blocking every subsequent Send. Unconditional for the same
     // reason as in reset() above.
@@ -937,6 +941,7 @@ export function useChatSse(
         abortRef.current.abort();
       }
       const ac = new AbortController();
+      const steeringTurnId = uuidv4();
       abortRef.current = ac;
       preflightOwnerRef.current = ac;
       // Immediately non-reentrant, not only once prepare-execution succeeds —
@@ -1120,6 +1125,7 @@ export function useChatSse(
         preflightOwnerRef.current = null;
       }
       turnSessionRef.current = effectiveSessionId;
+      activeSteeringTurnIdRef.current = steeringTurnId;
       // A continue sends no message: the composer keeps the user's draft.
       if (!continuing) onTurnStarted?.();
 
@@ -1167,6 +1173,7 @@ export function useChatSse(
             agent_instance_id: agentInstanceId,
             input,
             session_id: sessionId,
+            steering_turn_id: steeringTurnId,
             runtime_context: effectiveContext,
             ...(turnOptions ? { turn_options: turnOptions } : {}),
             ...(choice ? { interrupted_action: choice.action, interruption_id: choice.interruptionId ?? null } : {}),
@@ -1209,6 +1216,7 @@ export function useChatSse(
           onError?.(`Streaming failed: ${msg}`);
         }
       } finally {
+        if (activeSteeringTurnIdRef.current === steeringTurnId) activeSteeringTurnIdRef.current = null;
         console.debug(
           `[useChatSse][${sendId}] finally — ac.signal.aborted=${ac.signal.aborted} → will ${ac.signal.aborted ? "NOT" : ""} clear waitResponse`,
         );
@@ -1393,6 +1401,7 @@ export function useChatSse(
       // exchange_id before groupTraceEntries can pair a call with its result
       // by call_id).
       const exchangeId = pending.exchange_id;
+      const steeringTurnId = uuidv4();
       const hitlPayload = pending.payload;
       const hasChoices = Array.isArray(hitlPayload?.choices) && hitlPayload.choices.length > 0;
       const exactFreeText = typeof freeText === "string" && freeText.trim() ? freeText : undefined;
@@ -1401,6 +1410,7 @@ export function useChatSse(
       const answersToMirror = batchAnswers ?? [{ event: pending, answer, freeText, skipped }];
 
       setWaitResponse(true);
+      activeSteeringTurnIdRef.current = steeringTurnId;
 
       // Only flipped once the runtime answers 2xx. A fetch rejection or a
       // 401/502/503 means the resume never ran, so the caller must be told
@@ -1413,6 +1423,7 @@ export function useChatSse(
           {
             agent_instance_id: agentInstanceId,
             session_id: sessionId,
+            steering_turn_id: steeringTurnId,
             // #2216: a resume echoes interrupt_id (LangGraph's Interrupt.id,
             // validated against the currently pending occurrence backend-side).
             interrupt_id: batchAnswers ? null : (hitlPayload?.interrupt_id ?? null),
@@ -1574,6 +1585,7 @@ export function useChatSse(
           }
         }
       } finally {
+        if (activeSteeringTurnIdRef.current === steeringTurnId) activeSteeringTurnIdRef.current = null;
         if (!ac.signal.aborted) {
           setWaitResponse(false);
         }
@@ -1618,6 +1630,8 @@ export function useChatSse(
     async (sessionId: string, messageId: string, input: string): Promise<"accepted" | "rejected" | "uncertain"> => {
       let requestStarted = false;
       try {
+        const steeringTurnId = activeSteeringTurnIdRef.current;
+        if (!steeringTurnId) return "rejected";
         const prep = await prepareExecution({ teamId, agentInstanceId, sessionId }).unwrap();
         const streamPath = runtimeExecuteStreamPath(prep.execute_stream_url);
         const path = streamPath.replace(/\/execute\/stream$/, `/sessions/${encodeURIComponent(sessionId)}/steer`);
@@ -1626,6 +1640,7 @@ export function useChatSse(
         const steeringRequest: RuntimeExecuteRequest = {
           agent_instance_id: agentInstanceId,
           session_id: sessionId,
+          steering_turn_id: steeringTurnId,
           input,
           runtime_context: { team_id: canonicalizeRuntimeTeamId(teamId) },
         };

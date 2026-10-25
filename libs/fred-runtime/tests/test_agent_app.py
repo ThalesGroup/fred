@@ -2083,8 +2083,9 @@ def test_direct_agent_id_execution_never_receives_or_forges_platform_binding(
     assert "forged-model" not in echoed
 
 
+@pytest.mark.parametrize("stream", [False, True])
 def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, stream
 ) -> None:
     """
     Ensure agent-instance execution resolves template+tuning from control-plane.
@@ -2169,6 +2170,16 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         lambda config: StaticChatModelFactory(model),
     )
     monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
+    from fred_runtime.runtime_support.turn_steering import TurnSteeringMiddleware
+
+    seen_turn_ids: list[str | None] = []
+    original_before_model = TurnSteeringMiddleware.abefore_model
+
+    async def capture_steering_turn(self, state, runtime):
+        seen_turn_ids.append(self._turn_id)
+        return await original_before_model(self, state, runtime)
+
+    monkeypatch.setattr(TurnSteeringMiddleware, "abefore_model", capture_steering_turn)
 
     definition = _TeamScopeAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
@@ -2182,20 +2193,30 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
 
     with TestClient(app) as client:
         response = client.post(
-            "/pod/v1/agents/execute",
+            "/pod/v1/agents/execute/stream" if stream else "/pod/v1/agents/execute",
             headers={"Authorization": "Bearer test-token"},
             json={
                 "agent_instance_id": "instance-1",
                 "input": "what team am I in?",
                 "session_id": "managed-session",
+                "steering_turn_id": "managed-turn",
                 "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
             },
         )
 
     assert response.status_code == 200
-    payload = response.json()
+    payload = (
+        next(
+            json.loads(line.removeprefix("data: "))
+            for line in response.text.splitlines()
+            if line.startswith("data: ") and '"kind": "final"' in line
+        )
+        if stream
+        else response.json()
+    )
     assert payload["kind"] == "final"
     assert payload["content"] == "Managed execution complete."
+    assert seen_turn_ids == ["managed-turn" if stream else None] * 2
 
 
 def test_managed_execution_rejects_grant_with_mismatched_team(

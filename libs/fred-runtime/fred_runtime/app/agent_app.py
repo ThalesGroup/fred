@@ -1241,6 +1241,7 @@ class _AgentExecuteRequest(BaseModel):
     agent_instance_id: str | None = Field(default=None, min_length=1)
     message: str = Field(default="")
     context: dict[str, Any] | None = None
+    steering_turn_id: str | None = None
     interrupt_id: str | None = Field(default=None, min_length=1)
     occurrence_id: str | None = Field(default=None, min_length=1)
     resume_payload: Any | None = Field(
@@ -3973,16 +3974,34 @@ async def _stream(
 
     collected: list[dict[str, Any]] = []
     steering_token = (
-        turn_steering_mailbox.start(
+        await turn_steering_mailbox.start(
             session_id,
             request.agent_instance_id,
             user_id,
             resolved_team_id or "personal",
+            request.steering_turn_id,
             resume=request.resume_payload is not None,
         )
         if session_id
         and request.agent_instance_id
+        and request.steering_turn_id
         and not isinstance(definition, GraphAgentDefinition)
+        else None
+    )
+    if request.steering_turn_id and steering_token is None:
+        request = request.model_copy(update={"steering_turn_id": None})
+
+    async def renew_lease(active_session_id: str, active_turn_id: str) -> None:
+        while True:
+            await asyncio.sleep(30)
+            try:
+                await turn_steering_mailbox.renew(active_session_id, active_turn_id)
+            except Exception:
+                logger.exception("Failed to renew active turn steering lease")
+
+    steering_heartbeat = (
+        asyncio.create_task(renew_lease(session_id, steering_token))
+        if steering_token is not None and session_id is not None
         else None
     )
     payloads = _iterate_runtime_event_payloads(
@@ -4008,22 +4027,36 @@ async def _stream(
     )
     try:
         async for payload in payloads:
+            if (
+                payload.get("kind") == "awaiting_human"
+                and steering_token is not None
+                and session_id is not None
+            ):
+                await turn_steering_mailbox.pause(session_id, steering_token)
             collected.append(payload)
             yield _sse(json.dumps(payload, ensure_ascii=False))
     finally:
         # Closing this stream closes the run's stream with it, so a dropped
         # response never leaves the run to garbage collection.
-        await payloads.aclose()
-        if steering_token is not None and session_id is not None:
-            paused = any(
-                payload.get("kind") == "awaiting_human" for payload in collected
-            )
-            failed = any(
-                payload.get("kind") == "execution_error" for payload in collected
-            )
-            turn_steering_mailbox.end(
-                session_id, steering_token, paused=paused and not failed
-            )
+        try:
+            await payloads.aclose()
+        finally:
+            if steering_heartbeat is not None:
+                steering_heartbeat.cancel()
+                try:
+                    await steering_heartbeat
+                except asyncio.CancelledError:
+                    pass
+            if steering_token is not None and session_id is not None:
+                paused = any(
+                    payload.get("kind") == "awaiting_human" for payload in collected
+                )
+                failed = any(
+                    payload.get("kind") == "execution_error" for payload in collected
+                )
+                await turn_steering_mailbox.end(
+                    session_id, steering_token, paused=paused and not failed
+                )
 
     _emit_turn_completed(
         container,
@@ -4786,6 +4819,7 @@ async def _iterate_runtime_event_payloads_inner(
                 "session_id": ctx.get("session_id"),
                 "team_id": resolved_team_id,
                 "exchange_id": exchange_id,
+                "steering_turn_id": request.steering_turn_id,
                 "agent_instance_id": request.agent_instance_id,
                 "template_agent_id": definition.agent_id,
                 "run_id": getattr(credential_provider, "run_id", None),
@@ -4835,6 +4869,7 @@ async def _iterate_runtime_event_payloads_inner(
                 "occurrence_id": resolved_occurrence_id,
                 "execution_action": execution_action,
                 "exchange_id": exchange_id,
+                "steering_turn_id": request.steering_turn_id,
                 "is_service_agent": ctx.get("is_service_agent"),
             }.items()
             if isinstance(value, str) and value
@@ -6161,6 +6196,7 @@ def _build_agent_router(
         count = await history_store.delete_session(
             session_id=session_id, user_id=caller_uid
         )
+        await turn_steering_mailbox.purge(session_id, caller_uid)
         return {"deleted": count}
 
     @router.delete(
@@ -6582,6 +6618,7 @@ def _build_agent_router(
             )
         else:
             deleted = await cp.adelete_thread(session_id)
+        await turn_steering_mailbox.purge(session_id, caller_uid)
         return {"deleted": deleted}
 
     @router.post(
@@ -6837,6 +6874,7 @@ def _build_agent_router(
             request.session_id != session_id
             or not request.agent_instance_id
             or not request.input.strip()
+            or not request.steering_turn_id
         ):
             raise HTTPException(status_code=422, detail="invalid_steering_request")
         _enforce_chat_input_limit(request)
@@ -6850,11 +6888,12 @@ def _build_agent_router(
         user_id = (
             authenticated_user.uid if authenticated_user is not None else "unknown"
         )
-        offered = turn_steering_mailbox.offer(
+        offered = await turn_steering_mailbox.offer(
             session_id,
             request.agent_instance_id,
             user_id,
             request.effective_team_id() or "personal",
+            request.steering_turn_id,
             message_id,
             request.input.strip(),
         )
@@ -6928,6 +6967,7 @@ def _build_agent_router(
             _discard_run_record(target.credential_provider)
             raise
         provider = target.credential_provider
+        internal_req.steering_turn_id = request.steering_turn_id
         stream = _stream(
             target.definition,
             internal_req,
@@ -7103,6 +7143,7 @@ def create_agent_app(
         )
         gc_diagnostics = install_gc_diagnostics()
         container = build_pod_container(config)
+        steering_cleanup_task: asyncio.Task[None] | None = None
         try:
             container.initialize_kpi_writer()
             container.initialize_control_plane_client()
@@ -7137,6 +7178,21 @@ def create_agent_app(
                 chat_factory = chat_factory.with_provider(model_provider)
             await container.initialize_filesystem()
             await container.initialize_sql()
+            turn_steering_mailbox.configure(container.get_sql_engine())
+            if container.get_sql_engine() is not None:
+                await turn_steering_mailbox.cleanup_expired()
+
+                async def cleanup_expired_steering() -> None:
+                    while True:
+                        await asyncio.sleep(24 * 60 * 60)
+                        try:
+                            await turn_steering_mailbox.cleanup_expired()
+                        except Exception:
+                            logger.exception(
+                                "Failed to clean expired turn steering rows"
+                            )
+
+                steering_cleanup_task = asyncio.create_task(cleanup_expired_steering())
             if (
                 security is not None
                 and rebac_engine is not None
@@ -7236,6 +7292,10 @@ def create_agent_app(
                 )
             yield
         finally:
+            if steering_cleanup_task is not None:
+                steering_cleanup_task.cancel()
+                await asyncio.gather(steering_cleanup_task, return_exceptions=True)
+            turn_steering_mailbox.configure(None)
             # Shutdown must RUN and must COMPLETE.
             # - `finally`: a plain sequence after `yield` is skipped entirely
             #   when an exception propagates out of the app through the

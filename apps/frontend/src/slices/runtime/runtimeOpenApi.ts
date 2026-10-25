@@ -749,6 +749,8 @@ export type RuntimeExecuteRequest =
       runtime_context: RuntimeContext | null;
       /** Session identifier for multi-turn continuity. Keep stable across turns. */
       session_id?: string | null;
+      /** Identity of the active chat turn for mid-turn message delivery. */
+      steering_turn_id?: string | null;
       /** Per-capability typed chat-time values, keyed by capability id. Each slice is validated at turn start against the owning capability's TurnOptionsModel; an unknown capability id or an invalid slice is a typed 422 (RFC §3.5). The envelope is generic — the key is the discriminator — but every leaf is a typed model exported to OpenAPI, so each composer widget writes into turn_options[capability_id]. */
       turn_options?: {
         [key: string]: {
@@ -791,6 +793,8 @@ export type RuntimeExecuteRequest =
       runtime_context?: RuntimeContext | null;
       /** Session identifier for multi-turn continuity. Keep stable across turns. */
       session_id?: string | null;
+      /** Identity of the active chat turn for mid-turn message delivery. */
+      steering_turn_id?: string | null;
       /** Per-capability typed chat-time values, keyed by capability id. Each slice is validated at turn start against the owning capability's TurnOptionsModel; an unknown capability id or an invalid slice is a typed 422 (RFC §3.5). The envelope is generic — the key is the discriminator — but every leaf is a typed model exported to OpenAPI, so each composer widget writes into turn_options[capability_id]. */
       turn_options?: {
         [key: string]: {

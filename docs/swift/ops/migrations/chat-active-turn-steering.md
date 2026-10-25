@@ -1,10 +1,9 @@
 ---
 schema: 1
 title: "Queue and send messages during active agent turns"
-impact: none
+impact: minor
 configuration: none
-configuration_reason: "The chat UI and agent runtime add turn steering without changing deployment settings or permissions."
-no_action_reason: "Queued messages remain in the browser until sent, and forced messages use the active runtime process; no stored data needs conversion."
+configuration_reason: "Turn steering uses the existing shared runtime SQL engine and pool; no new service, connection setting or permission is required."
 ---
 
 ## Applicability
@@ -13,7 +12,7 @@ Existing Fred deployments upgrading to this release.
 
 ## Prerequisites
 
-No additional prerequisites beyond the normal deployment procedure.
+The runtime's shared PostgreSQL database must be available, as for checkpoints and history.
 
 ## Configuration
 
@@ -21,16 +20,16 @@ No configuration changes are required.
 
 ## Upgrade
 
-Deploy Fred normally; no additional operator or user action is required.
+Run the fred-runtime Alembic migration before updating runtime replicas. The normal chart migration job performs this step. The runtime checks for `runtime_turn_steering` at startup and remains unready if the table is missing.
 
 ## Validation
 
-During an agent turn, queue a message and choose Send. Verify it reaches the agent at the next model boundary, including after a tool confirmation.
+With two `fred-agents` replicas, start an agent turn on one pod, submit Send through the other, and verify the message reaches the agent at the next model boundary. Repeat with a tool confirmation and resume on the other pod.
 
 ## Rollback
 
-Use the normal rollback procedure; this change introduces no data migration.
+Roll back the runtime and frontend together. The older runtime ignores the new table; downgrade the migration only after no updated replicas remain.
 
 ## Limitations
 
-Forced messages awaiting a model boundary are held in the active runtime process, so a runtime restart can require the person to resend them.
+The ordinary pending list still lives in the browser and is lost on page reload. A pod failure between injection and the delivery event can leave the outcome uncertain; the UI does not retry automatically. Paused steering rows expire after 30 days.

@@ -51,12 +51,28 @@ The user SHALL be able to request immediate delivery of a pending plain-text mes
 - **WHEN** a caller tries to steer a session they do not own or an agent they cannot use
 - **THEN** the runtime refuses the request without making the message visible to the active agent
 
+### Requirement: Steering works across runtime replicas
+
+An active ReAct or Deep turn SHALL accept a steering request handled by another runtime replica. The runtime SHALL use a turn identity to reject stale requests for a later turn of the same session. A matching HITL resume on another replica SHALL retain an accepted but undelivered message. A stale or absent active turn SHALL refuse immediate delivery without claiming the message was delivered.
+
+#### Scenario: Cross-replica steering and HITL resume
+
+- **GIVEN** a turn running on replica A and an authenticated steering request handled by replica B
+- **WHEN** the turn reaches its next model boundary, including after a HITL resume handled by replica B
+- **THEN** the agent sees the message once and the client receives a delivery event
+
+#### Scenario: Stale turn request
+
+- **GIVEN** a request carrying the identity of an earlier turn
+- **WHEN** another turn is now active in the same session
+- **THEN** the runtime rejects the request without injecting it into the later turn
+
 ### Requirement: Prototype limits are explicit
 
-The first implementation SHALL offer immediate steering only for plain-text messages in active ReAct and Deep turns on the same runtime process. Graph turns MAY use the ordinary pending queue but SHALL NOT receive immediate steering. Commands, attachments and human-input answers SHALL NOT be queued or steered during an active turn. If immediate steering is unavailable, the message SHALL stay pending rather than appear delivered.
+The first implementation SHALL offer immediate steering only for plain-text messages in active ReAct and Deep turns. Graph turns MAY use the ordinary pending queue but SHALL NOT receive immediate steering. Commands, attachments and human-input answers SHALL NOT be queued or steered during an active turn. If immediate steering is unavailable, the message SHALL stay pending rather than appear delivered.
 
 #### Scenario: Unsupported active execution
 
-- **GIVEN** an active Graph turn or a request handled by a different runtime process
+- **GIVEN** an active Graph turn or an expired active turn
 - **WHEN** the user requests immediate delivery
 - **THEN** the interface keeps the message pending and identifies that delivery did not occur
