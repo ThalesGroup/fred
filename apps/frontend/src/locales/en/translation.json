@@ -421,7 +421,7 @@
     },
     "composerPlaceholder": "Ask your question, or type / for a command",
     "pendingMessages": {
-      "label": "Pending messages",
+      "label": "Queued",
       "send": "Send",
       "actions": "Message actions",
       "edit": "Edit",
