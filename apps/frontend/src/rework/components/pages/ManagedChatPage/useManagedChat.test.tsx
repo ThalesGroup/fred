@@ -110,7 +110,7 @@ const chatSseResetMock = vi.fn();
 // a React continuation the moment a test forgot to arrange one — and `reached
 // === true` is the outcome that asks nothing of the prompt-restore path, so a
 // test that forgets fails on its own assertion rather than on a TypeError.
-const sendHitlResumeMock = vi.fn(async () => true);
+const sendHitlResumeMock = vi.fn<(...args: unknown[]) => Promise<boolean>>(async () => true);
 const abortMock = vi.fn();
 const replaceAllMessagesMock = vi.fn();
 // Mutable so the #2239 departure-snapshot test below can put a displayed
