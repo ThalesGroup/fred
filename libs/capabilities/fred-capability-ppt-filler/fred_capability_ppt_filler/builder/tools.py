@@ -559,8 +559,8 @@ def _schema_for(
 
 
 _NO_CLOSING = (
-    "true only when the user asked for no closing slide or for another last slide; "
-    "otherwise the tool ends the deck on the template's closing slide."
+    "true only when the user explicitly asked for no closing slide or for another last "
+    "slide (a slide count is not that); otherwise the deck ends on the closing slide."
 )
 _SHOW_TAKEAWAYS = (
     "true only when the user explicitly asks to show the key messages (takeaways) on "
@@ -1512,7 +1512,10 @@ def _description(
     if "cover" in kinds:
         rules += " A first slide of only a title and subtitle is the cover."
     if "closing" in kinds:
-        rules += " A closing slide can only be the last one."
+        rules += (
+            " A closing slide can only be the last one; a new deck ends on one, counted"
+            " in any slide count asked (4 slides: 3 slides, then the closing)."
+        )
     if takeaway_zones(inventory):
         rules += (
             " Takeaways stay in the speaker notes; set show_takeaways: true only when the "

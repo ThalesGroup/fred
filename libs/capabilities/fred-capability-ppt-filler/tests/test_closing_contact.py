@@ -32,7 +32,12 @@ from fred_capability_ppt_filler.builder.assign import assign
 from fred_capability_ppt_filler.builder.models import Pattern, TemplateInventory
 from fred_capability_ppt_filler.builder.plan import DeckPlan
 from fred_capability_ppt_filler.builder.render import render_deck
-from fred_capability_ppt_filler.builder.tools import _closed, offered_kinds
+from fred_capability_ppt_filler.builder.tools import (
+    _args_schema,
+    _closed,
+    _description,
+    offered_kinds,
+)
 from pptx import Presentation
 from pptx.util import Inches
 
@@ -253,3 +258,17 @@ def test_an_english_deck_ends_on_thank_you():
     cover = {"title": "Project X", "subtitle": "Kick-off review"}
     plan, _ = _ended(_template(_thanks_slide), [cover, points])
     assert plan.slides[-1].title == "Thank you"
+
+
+def test_four_slides_asked_ending_on_the_closing_get_no_fifth():
+    """Owner decision: the closing counts within the slide count asked."""
+    template = _template(_contact_slide, _thanks_slide)
+    plan, _ = _ended(template, [COVER, POINTS, POINTS, THANKS])
+    assert len(plan.slides) == 4 and plan.slides[-1].title == "Merci"
+
+
+def test_the_guidance_counts_the_closing_within_the_slide_count():
+    inventory = _inventory(_template(_contact_slide, _thanks_slide))
+    assert "counted in any slide count" in _description(inventory, "template_slide", 2)
+    field = _args_schema(inventory).model_json_schema()["properties"]["no_closing"]
+    assert "a slide count is not that" in field["description"]
