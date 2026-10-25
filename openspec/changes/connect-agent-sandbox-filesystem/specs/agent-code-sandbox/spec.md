@@ -14,7 +14,7 @@ The system SHALL expose an admin-gated `execute_code(code)` tool whose sole mode
 ## ADDED Requirements
 
 ### Requirement: Grouped code execution trace
-The chat thought trace SHALL display a consecutive run of `execute_code` calls in one assistant turn as one expandable activity. Its single-line heading SHALL show the command count and a bounded preview of the running command, or the latest command when none is running. Expanding it SHALL show commands in chronological order with their status and links to full code and result details. A short leading shell comment on a multiline script SHALL supply its intent preview without being treated as evidence of what the script actually did. An unlabeled Python heredoc SHALL show a localized neutral script-and-line-count label without its delimiter; an unrecognized heredoc SHALL use a neutral shell-script label. Ordinary shell commands SHALL keep their bounded first-line preview with `...` when following code is omitted. The tool SHALL still execute and retain the submitted code unchanged. Reasoning between consecutive code calls SHALL remain in sequence. A different tool, including `summarize_document`, SHALL end the current activity; a later code call SHALL start a new activity. The grouping mechanism SHALL allow another tool family to opt in through a presentation rule without changing stored trace events.
+The chat thought trace SHALL display a consecutive run of `execute_code` calls in one assistant turn as one expandable activity. Its single-line heading SHALL show the command count and a bounded preview of the running command, or the latest command when none is running. Expanding it SHALL show commands in chronological order with their status and links to full code and result details. A short leading shell comment on a multiline script SHALL supply its intent preview, followed by the submitted code flattened in source order onto one line; neither SHALL be treated as evidence of what the script actually did. A long preview SHALL be truncated with `...`. It SHALL not parse or classify heredoc syntax. The tool SHALL still execute and retain the submitted code unchanged. Reasoning between consecutive code calls SHALL remain in sequence. A different tool, including `summarize_document`, SHALL end the current activity; a later code call SHALL start a new activity. The grouping mechanism SHALL allow another tool family to opt in through a presentation rule without changing stored trace events.
 
 #### Scenario: Multiple code calls
 - **WHEN** an agent executes a Bash command and a Bash script invoking Python consecutively in one turn
@@ -22,11 +22,11 @@ The chat thought trace SHALL display a consecutive run of `execute_code` calls i
 
 #### Scenario: Intent comment on a multiline script
 - **WHEN** a script starts with `# Search HELIOS-4821 in the attached PDF` before a Python heredoc
-- **THEN** the group and command row show that bounded intent while the tool detail retains the exact comment, launcher, body and result
+- **THEN** the group and command row show that bounded intent followed by the launcher and Python body flattened onto one line, while the tool detail retains the exact comment, launcher, body and result
 
-#### Scenario: Unlabeled heredoc
-- **WHEN** a script starts with a Python heredoc and has no leading intent comment
-- **THEN** the preview shows a neutral localized Python-script label and counts only source lines between delimiters, without exposing the heredoc delimiter
+#### Scenario: Unlabeled multiline script
+- **WHEN** a script starts with `python - <<'PY'` and has no leading intent comment
+- **THEN** the preview starts with `python - <<'PY'` and continues with its body and closing delimiter in source order on one line, up to the preview limit
 
 #### Scenario: Other tool between code calls
 - **WHEN** an agent executes code, calls `summarize_document`, and executes code again

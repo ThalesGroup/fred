@@ -1901,13 +1901,7 @@
       },
       "toolGroups": {
         "commands_one": "{{count}} command",
-        "commands_other": "{{count}} commands",
-        "pythonScript_one": "Python script ({{count}} line)",
-        "pythonScript_other": "Python script ({{count}} lines)",
-        "pythonScriptUncounted": "Python script",
-        "shellScript_one": "Shell script ({{count}} line)",
-        "shellScript_other": "Shell script ({{count}} lines)",
-        "shellScriptUncounted": "Shell script"
+        "commands_other": "{{count}} commands"
       },
       "toolLabels": {
         "codeSandbox": "Running code in an isolated space",

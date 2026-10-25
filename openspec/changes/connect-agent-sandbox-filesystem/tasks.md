@@ -19,7 +19,7 @@
 - [x] 3.4 Guide `execute_code` to use selective Bash or Python queries over mounted files, then verify a real conversation keeps large source content out of the tool result and final answer.
 - [x] 3.5 Group consecutive code calls in the thought trace through a reusable presentation rule, preview the active command on one ellipsized line, preserve individual details and chronology, and verify that another tool splits groups and streaming calls append to the current group.
 - [x] 3.6 Replace the language-selecting sandbox request with one Bash script argument across the capability, SDK, broker backends, smoke test and UI; verify explicit Python invocation, command previews, and strict rejection of the removed argument.
-- [x] 3.7 Use a leading shell comment as the preview for multiline code, show a neutral localized label for unlabeled heredocs, and retain the active command and count in the grouped heading; verify exact code and result remain in the detail.
+- [x] 3.7 Show a leading shell comment followed by the submitted code flattened onto one ellipsized line, without heredoc parsing; retain the active command and count in the grouped heading and verify exact code and result remain in the detail.
 
 ## 4. Integration and close-out
 
