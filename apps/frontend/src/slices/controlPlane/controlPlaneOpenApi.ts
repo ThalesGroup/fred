@@ -320,6 +320,37 @@ const injectedRtkApi = api.injectEndpoints({
     summary: build.query<SummaryApiResponse, SummaryApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/storage` }),
     }),
+    listAgentInstances: build.query<ListAgentInstancesApiResponse, ListAgentInstancesApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances` }),
+    }),
+    createAgentInstance: build.mutation<CreateAgentInstanceApiResponse, CreateAgentInstanceApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances`,
+        method: "POST",
+        body: queryArg.createAgentInstanceRequest,
+      }),
+    }),
+    getAgentInstance: build.query<GetAgentInstanceApiResponse, GetAgentInstanceApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances/${queryArg.agentInstanceId}`,
+      }),
+    }),
+    deleteAgentInstance: build.mutation<DeleteAgentInstanceApiResponse, DeleteAgentInstanceApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances/${queryArg.agentInstanceId}`,
+        method: "DELETE",
+      }),
+    }),
+    updateAgentInstance: build.mutation<UpdateAgentInstanceApiResponse, UpdateAgentInstanceApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances/${queryArg.agentInstanceId}`,
+        method: "PATCH",
+        body: queryArg.updateAgentInstanceRequest,
+      }),
+    }),
+    spaceAgentTemplates: build.query<SpaceAgentTemplatesApiResponse, SpaceAgentTemplatesApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-templates` }),
+    }),
     listPlatformRoles: build.query<ListPlatformRolesApiResponse, ListPlatformRolesApiArg>({
       query: () => ({ url: `/control-plane/v1/users/platform-roles` }),
     }),
@@ -584,6 +615,35 @@ export type RevokeApiArg = {
 export type SummaryApiResponse = /** status 200 undefined */ StorageSummary;
 export type SummaryApiArg = {
   id: string;
+};
+export type ListAgentInstancesApiResponse = /** status 200 undefined */ ManagedAgentInstanceSummary[];
+export type ListAgentInstancesApiArg = {
+  spaceId: string;
+};
+export type CreateAgentInstanceApiResponse = /** status 201 undefined */ ManagedAgentInstanceSummary;
+export type CreateAgentInstanceApiArg = {
+  spaceId: string;
+  createAgentInstanceRequest: CreateAgentInstanceRequest;
+};
+export type GetAgentInstanceApiResponse = /** status 200 undefined */ ManagedAgentInstanceSummary;
+export type GetAgentInstanceApiArg = {
+  spaceId: string;
+  agentInstanceId: string;
+};
+export type DeleteAgentInstanceApiResponse = unknown;
+export type DeleteAgentInstanceApiArg = {
+  spaceId: string;
+  agentInstanceId: string;
+};
+export type UpdateAgentInstanceApiResponse = /** status 200 undefined */ ManagedAgentInstanceSummary;
+export type UpdateAgentInstanceApiArg = {
+  spaceId: string;
+  agentInstanceId: string;
+  updateAgentInstanceRequest: UpdateAgentInstanceRequest;
+};
+export type SpaceAgentTemplatesApiResponse = /** status 200 undefined */ AgentTemplateSummary[];
+export type SpaceAgentTemplatesApiArg = {
+  spaceId: string;
 };
 export type ListPlatformRolesApiResponse = /** status 200 Success */ Grant[];
 export type ListPlatformRolesApiArg = void;
@@ -1126,6 +1186,137 @@ export type Directory = {
   total: number;
 };
 export type EntryOrder = "name_asc" | "name_desc" | "created_asc" | "created_desc" | "size_asc" | "size_desc";
+export type AgentInstanceStatus = "enabled" | "disabled";
+export type ManagedAgentInstanceSummary = {
+  agent_instance_id: string;
+  capability_config: {
+    [key: string]: {
+      [key: string]: any;
+    };
+  };
+  created_at: string;
+  created_by?: string | null;
+  description?: string | null;
+  display_name: string;
+  recommended_chat_profile_id?: string | null;
+  role: string;
+  selected_capability_ids?: string[] | null;
+  source_agent_id: string;
+  source_runtime_id: string;
+  space_id: string;
+  /** Operator state only, not runtime availability. */
+  status: AgentInstanceStatus;
+  template_id: string;
+  tuning_field_values: {
+    [key: string]: any;
+  };
+  updated_at: string;
+  updated_by?: string | null;
+  usage_statement: string;
+};
+export type TuningScalar = string | number | boolean;
+export type TuningValue =
+  | TuningScalar
+  | TuningScalar[]
+  | {
+      [key: string]: TuningScalar;
+    };
+export type CreateAgentInstanceRequest = {
+  /** Values for unselected capabilities are ignored. */
+  capability_config_values?:
+    | {
+        [key: string]: {
+          [key: string]: any;
+        };
+      }
+    | {
+        [key: string]: {
+          [key: string]: any;
+        };
+      };
+  /** Omitted/null inherits template defaults; [] selects no optional capabilities. */
+  capability_ids?: string[] | null;
+  description?: string | null;
+  display_name: string;
+  recommended_chat_profile_id?: string | null;
+  role?: string | null;
+  /** Canonical UUID returned by this space's template catalog. */
+  template_id: string;
+  /** All values must match TuningValue before unknown keys are ignored.
+    Known values must also match the pod's FieldSpecs. */
+  tuning_field_values?:
+    | {
+        [key: string]: TuningValue;
+      }
+    | {
+        [key: string]: TuningValue;
+      };
+  usage_statement: string;
+};
+export type UpdateAgentInstanceRequest = {
+  /** Omitted keeps config for an unchanged selection; null resets selected config. */
+  capability_config_values?:
+    | {
+        [key: string]: {
+          [key: string]: any;
+        };
+      }
+    | {
+        [key: string]: {
+          [key: string]: any;
+        };
+      };
+  /** Omitted keeps selection; null resolves current defaults; [] selects none. */
+  capability_ids?: string[] | null;
+  /** An empty string is an explicit description. */
+  description?: string | null;
+  /** Omitted/null metadata leaves the saved value unchanged. */
+  display_name?: string | null;
+  /** Omitted keeps the recommendation; null clears it; other values return 422. */
+  recommended_chat_profile_id?: string | null;
+  role?: string | null;
+  status?: AgentInstanceStatus | null;
+  /** Omitted keeps values; null/{} clears them; an object replaces known values. */
+  tuning_field_values?:
+    | {
+        [key: string]: TuningValue;
+      }
+    | {
+        [key: string]: TuningValue;
+      };
+  usage_statement?: string | null;
+};
+export type AgentTemplateStatus = "available";
+export type AgentTemplateSummary = {
+  /** Pod-owned descriptors, including config fields, schemas and routing metadata. */
+  available_capabilities: {
+    [key: string]: any;
+  }[];
+  capabilities: string[];
+  category: string;
+  default_capability_ids: string[];
+  /** Pod-owned FieldSpecs, including localized defaults and UI hints, unchanged. */
+  default_tuning_fields: {
+    [key: string]: any;
+  }[];
+  description: string;
+  description_by_lang?:
+    | {
+        [key: string]: string;
+      }
+    | {
+        [key: string]: string;
+      };
+  display_name: string;
+  public_version?: string | null;
+  source_agent_id: string;
+  source_runtime_id: string;
+  status: AgentTemplateStatus;
+  supports_capabilities: boolean;
+  tags: string[];
+  team_instantiable: boolean;
+  template_id: string;
+};
 export type Grant = {
   role: PlatformRole;
   user_id: string;
@@ -1207,6 +1398,15 @@ export const {
   useRevokeMutation,
   useSummaryQuery,
   useLazySummaryQuery,
+  useListAgentInstancesQuery,
+  useLazyListAgentInstancesQuery,
+  useCreateAgentInstanceMutation,
+  useGetAgentInstanceQuery,
+  useLazyGetAgentInstanceQuery,
+  useDeleteAgentInstanceMutation,
+  useUpdateAgentInstanceMutation,
+  useSpaceAgentTemplatesQuery,
+  useLazySpaceAgentTemplatesQuery,
   useListPlatformRolesQuery,
   useLazyListPlatformRolesQuery,
   useGrantPlatformRoleMutation,

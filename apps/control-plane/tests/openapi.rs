@@ -133,6 +133,12 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /authorize/space",
         "post /import-export/import",
         "get /organizations/{organization_id}/agents",
+        "get /spaces/{space_id}/agent-templates",
+        "post /spaces/{space_id}/agent-instances",
+        "get /spaces/{space_id}/agent-instances",
+        "get /spaces/{space_id}/agent-instances/{agent_instance_id}",
+        "patch /spaces/{space_id}/agent-instances/{agent_instance_id}",
+        "delete /spaces/{space_id}/agent-instances/{agent_instance_id}",
         "get /organizations/{organization_id}/supervision",
         "get /organizations/{organization_id}/supervision/teams/{team_id}",
         "put /organizations/{organization_id}/agents/{agent_id}/default-on",
@@ -524,4 +530,102 @@ fn document_receipts_and_lifecycle_receipts_have_distinct_generated_contracts() 
             "#/components/schemas/ErrorBody"
         );
     }
+}
+
+#[test]
+fn instance_operations_and_nullable_patch_match_the_wire_contract() {
+    use control_plane::agent_instances::http::UpdateAgentInstanceRequest;
+    let api = schema();
+    let schemas = &api["components"]["schemas"];
+    let collection = "/control-plane/v1/spaces/{space_id}/agent-instances";
+    let instance = format!("{collection}/{{agent_instance_id}}");
+    let templates = "/control-plane/v1/spaces/{space_id}/agent-templates";
+    for (path, method, status, response) in [
+        (templates, "get", "200", "AgentTemplateSummary"),
+        (collection, "post", "201", "ManagedAgentInstanceSummary"),
+        (collection, "get", "200", "ManagedAgentInstanceSummary"),
+        (&instance, "get", "200", "ManagedAgentInstanceSummary"),
+        (&instance, "patch", "200", "ManagedAgentInstanceSummary"),
+        (&instance, "delete", "204", ""),
+    ] {
+        let op = &api["paths"][path][method];
+        assert!(op.is_object(), "{method} {path}");
+        for error in ["400", "401", "403", "404", "409", "422", "500", "503"] {
+            assert_eq!(
+                op["responses"][error]["content"]["application/json"]["schema"]["$ref"],
+                "#/components/schemas/ErrorBody",
+                "{method} {path} {error}"
+            );
+        }
+        let success = &op["responses"][status];
+        if status == "204" {
+            assert!(success.get("content").is_none());
+        } else {
+            let body = &success["content"]["application/json"]["schema"];
+            let body = if method == "get" && path != instance {
+                assert_eq!(body["type"], "array");
+                &body["items"]
+            } else {
+                body
+            };
+            assert_eq!(body["$ref"], format!("#/components/schemas/{response}"));
+        }
+    }
+    for (method, name) in [
+        ("post", "CreateAgentInstanceRequest"),
+        ("patch", "UpdateAgentInstanceRequest"),
+    ] {
+        let path = if method == "post" {
+            collection
+        } else {
+            &instance
+        };
+        assert_eq!(
+            api["paths"][path][method]["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+            format!("#/components/schemas/{name}")
+        );
+        assert_eq!(schemas[name]["additionalProperties"], false);
+    }
+    let create = schemas["CreateAgentInstanceRequest"]["required"]
+        .as_array()
+        .unwrap();
+    assert_eq!(
+        create,
+        json!(["template_id", "display_name", "usage_statement"])
+            .as_array()
+            .unwrap()
+    );
+    let patch = &schemas["UpdateAgentInstanceRequest"];
+    assert!(patch["required"].as_array().is_none_or(Vec::is_empty));
+    fn nullable(value: &Value) -> bool {
+        value["type"]
+            .as_array()
+            .is_some_and(|types| types.contains(&json!("null")))
+            || value["type"] == "null"
+            || ["oneOf", "anyOf"].iter().any(|k| {
+                value[k]
+                    .as_array()
+                    .is_some_and(|variants| variants.iter().any(nullable))
+            })
+    }
+    for (name, property) in patch["properties"].as_object().unwrap() {
+        assert!(nullable(property), "{name}: {property}");
+    }
+    assert_eq!(
+        schemas["AgentInstanceStatus"]["enum"],
+        json!(["enabled", "disabled"])
+    );
+    let omitted: UpdateAgentInstanceRequest = serde_json::from_value(json!({})).unwrap();
+    assert!(omitted.tuning_field_values.is_none());
+    assert!(omitted.capability_ids.is_none());
+    assert!(omitted.recommended_chat_profile_id.is_none());
+    let cleared:UpdateAgentInstanceRequest=serde_json::from_value(json!({"tuning_field_values":null,"capability_ids":null,"capability_config_values":null,"recommended_chat_profile_id":null})).unwrap();
+    assert!(matches!(cleared.tuning_field_values, Some(None)));
+    assert!(matches!(cleared.capability_ids, Some(None)));
+    assert!(matches!(cleared.capability_config_values, Some(None)));
+    assert!(matches!(cleared.recommended_chat_profile_id, Some(None)));
+    let empty: UpdateAgentInstanceRequest =
+        serde_json::from_value(json!({"tuning_field_values":{},"capability_ids":[]})).unwrap();
+    assert!(empty.tuning_field_values.unwrap().unwrap().is_empty());
+    assert!(empty.capability_ids.unwrap().unwrap().is_empty());
 }

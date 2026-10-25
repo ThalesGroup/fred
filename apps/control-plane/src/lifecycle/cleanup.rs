@@ -226,6 +226,10 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
         } else {
             fga.fence(&mut guard).await?;
         }
+        sqlx::query("delete from agent_instance where space_id = $1")
+            .bind(space)
+            .execute(&mut *tx)
+            .await?;
         sqlx::query("delete from space where id = $1 and deletion_id = $2")
             .bind(space)
             .bind(id)

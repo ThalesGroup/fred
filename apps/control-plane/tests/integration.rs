@@ -6468,3 +6468,6 @@ async fn personal_kind_migration_preserves_active_and_retired_spaces() {
     assert!(result.unwrap_err().to_string().contains("placement is immutable"));
     sqlx::query("set search_path to public").execute(&mut *conn).await.unwrap();
 }
+
+#[path = "support/agent_instances.rs"]
+mod agent_instances;

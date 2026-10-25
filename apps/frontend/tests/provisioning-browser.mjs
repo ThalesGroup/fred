@@ -33,7 +33,7 @@ const expect = baseExpect.configure({ timeout: 60_000 });
 
 async function login(username, password, path = "/admin/provisioning") {
   const context = await browser.newContext({ locale: "en", viewport: { width: 1280, height: 900 } });
-  await context.route(/\/(control-plane|knowledge-flow|fred-agents|agentic-backend|runtime)\/v1\//, async (route) => {
+  await context.route(/\/(knowledge-flow|fred-agents|agentic-backend|runtime)\/v1\//, async (route) => {
     unavailableServices.push(new URL(route.request().url()).pathname);
     await route.fulfill({
       status: 503,

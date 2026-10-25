@@ -45,6 +45,17 @@ page, including orphan exception subjects. The embedded definition is `fred.gith
 | --- | --- | --- |
 | GET | `/control-plane/v1/organizations/{organization_id}/agents` | `organization_agents` |
 | PUT | `/control-plane/v1/organizations/{organization_id}/agents/{agent_id}/default-on` | `set_organization_agent_default` |
+| GET | `/control-plane/v1/spaces/{space_id}/agent-templates` | `space_agent_templates` |
+<!-- end generated -->
+
+<!-- generated: routes apps/control-plane/src/agent_instances/http.rs /control-plane/v1 -->
+| Method | Path | Handler |
+| --- | --- | --- |
+| GET | `/control-plane/v1/spaces/{space_id}/agent-instances` | `list_agent_instances` |
+| POST | `/control-plane/v1/spaces/{space_id}/agent-instances` | `create_agent_instance` |
+| DELETE | `/control-plane/v1/spaces/{space_id}/agent-instances/{agent_instance_id}` | `delete_agent_instance` |
+| GET | `/control-plane/v1/spaces/{space_id}/agent-instances/{agent_instance_id}` | `get_agent_instance` |
+| PATCH | `/control-plane/v1/spaces/{space_id}/agent-instances/{agent_instance_id}` | `update_agent_instance` |
 <!-- end generated -->
 
 Every error answer is an `ErrorBody` JSON object with `detail` and `code`. An unreadable
@@ -222,6 +233,7 @@ erDiagram
 "document_processing" }o--|| "space" : "space_id"
 "document_processing" }o--|| "document" : "document_id"
 "document_processing" |o--o| "document_processing" : "retry_of"
+"agent_instance" }o--|| "space" : "space_id"
 
 "deletion" {
   uuid id
@@ -381,6 +393,21 @@ erDiagram
   bigint rows
   bigint reserved_bytes
   timestamp_with_time_zone cleanup_due_at
+}
+"agent_instance" {
+  uuid agent_instance_id
+  uuid space_id FK
+  uuid template_id
+  text source_runtime_id
+  text source_agent_id
+  varchar_255_ display_name
+  varchar_500_ description
+  boolean enabled
+  text created_by
+  text updated_by
+  jsonb tuning
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone updated_at
 }
 ```
 <!-- end generated -->

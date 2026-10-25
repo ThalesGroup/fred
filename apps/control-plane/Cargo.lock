@@ -712,6 +712,7 @@ dependencies = [
  "jsonwebtoken",
  "percent-encoding",
  "prost",
+ "regex",
  "reqwest",
  "rsa",
  "serde",

@@ -10,6 +10,11 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 #[derive(Default)]
 pub struct Fault {
+    pub template_checks: Vec<serde_json::Value>,
+    pub active_template_checks: usize,
+    pub peak_template_checks: usize,
+    pub template_check_delay: Option<std::time::Duration>,
+    pub fail_template_check_at: usize,
     pub hide_stores: bool,
     pub writes: usize,
     pub calls: std::collections::BTreeMap<String, usize>,
@@ -53,7 +58,37 @@ impl Proxy {
                 async move {
                     let (parts, body) = request.into_parts();
                     let reading = parts.uri.path().ends_with("/read");
+                    let checking = parts.uri.path().ends_with("/check");
                     let mut body = to_bytes(body, 1024 * 1024).await.unwrap();
+                    let template_check = checking
+                        && serde_json::from_slice::<serde_json::Value>(&body).unwrap()["tuple_key"]
+                            ["relation"]
+                            == "can_use";
+                    if template_check {
+                        let (delay, fail) = {
+                            let mut fault = state.lock().await;
+                            fault
+                                .template_checks
+                                .push(serde_json::from_slice(&body).unwrap());
+                            fault.active_template_checks += 1;
+                            fault.peak_template_checks =
+                                fault.peak_template_checks.max(fault.active_template_checks);
+                            (
+                                fault.template_check_delay,
+                                fault.template_checks.len() == fault.fail_template_check_at,
+                            )
+                        };
+                        if let Some(delay) = delay {
+                            tokio::time::sleep(delay).await;
+                        }
+                        if fail {
+                            state.lock().await.active_template_checks -= 1;
+                            return Response::builder()
+                                .status(503)
+                                .body(Body::from("private-template-error"))
+                                .unwrap();
+                        }
+                    }
                     if reading {
                         let mut value: serde_json::Value = serde_json::from_slice(&body).unwrap();
                         let mut fault = state.lock().await;
@@ -144,6 +179,9 @@ impl Proxy {
                             .await
                             .unwrap();
                         let status = reply.status();
+                        if template_check {
+                            state.lock().await.active_template_checks -= 1;
+                        }
                         if reading {
                             state.lock().await.active_reads -= 1;
                         }

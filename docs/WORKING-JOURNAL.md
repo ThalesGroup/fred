@@ -42,6 +42,9 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F23](#f23-stockage-des-instances-dagents) | Stockage Rust des instances d'agents | Tests ciblés passants ; jalon global bloqué | Hors périmètre arc42 validé |
+| [F25](#f25-création-et-relecture-dune-instance-custom) | Création/relecture, liste, édition partielle et suppression API d'une instance Custom | Tests API passants ; jalon global bloqué | Hors périmètre arc42 validé |
+| [F24](#f24-catalogue-des-templates-par-espace) | Catalogue des templates par espace | Tests ciblés passants ; parcours UI non validé | Hors périmètre arc42 validé |
 | [F-013](#f-013-synthese-organisationnelle-en-lecture) | Synthèse organisationnelle et détail équipe | Backend et UI implémentés ; validation des parcours attendue | A2/A7/A8, chapitres 04/09 |
 | [F22](#f22-agent-rust-embarqué-hello-world) | Agent Rust embarqué, hello-world SSE | Implémenté, à valider | Hors périmètre arc42 validé |
 | [DOC-3](#doc-3-vue-densemble-de-weaver) | Vue d'ensemble de Weaver | Texte et schémas rédigés | 01 |
@@ -2047,3 +2050,134 @@ ou déploiement exécuté. Redéploiement et nouvel essai à effectuer par Dimi.
 Sur demande de Dimi, la rétention par défaut du seul profil k3d passe à PT1M.
 Le délai de balayage reste inchangé ; une minute rend la purge éligible mais ne
 garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
+
+## F23 Stockage des instances d'agents
+
+- 2026-10-25 : premier sous-incrément demandé de la tâche 1.1 du change
+  `simplify-weaver-runtime-authorization`. Migration additive `0012_agent_instances.sql`
+  et module Rust `agent_instances.rs` : création, relecture espace/UUID et liste par
+  espace. Identités, métadonnées, attribution et dates conservées ; tuning JSON
+  complet et opaque, dont enveloppes de capacités et distinction null / [].
+  Noms sans espaces de bord, unicité insensible à la casse dans chaque espace.
+- Pas de route, validation métier, autorisation ou exécution ajoutée. La couche
+  appelante doit fournir le contexte canonique et un tuning déjà validé. Tâche 1.1
+  laissée décochée ; API et autres mutations restent à réaliser dans un autre pas.
+- Décision restante consignée dans le design : FK d'espace sans cascade, donc purge
+  physique refusée tant qu'une instance le référence. Le worker actuel peut déjà
+  avoir purgé documents/dossiers et références FGA avant cet échec, puis réessayer.
+  Définir la rétention/suppression des instances et l'ordre d'admission/purge avant
+  de raccorder ce stockage au cycle de vie des espaces ; aucun worker modifié ici.
+- Relecture statique seulement. Migration non appliquée ; aucun test, build,
+  contrôle qualité, déploiement, commit ou push. Modifications préexistantes
+  préservées. Aucun parcours agent intégré/validé ajouté à arc42 ; documentation
+  architecturale à reprendre lors de l'intégration validée, conformément à sa limite.
+
+
+## F24 Catalogue des templates par espace
+
+- 2026-10-25 : Dimi accepte F23 en revue statique et demande uniquement la route
+  `GET /spaces/{space_id}/agent-templates`. La suppression d'un espace contenant des
+  instances reste hors de ce pas et à résoudre avant toute création exposée.
+- `agents.rs` : admission existante, lecture de l'espace avec contrôle de cycle de
+  vie, types équipe/personnel seulement, puis découverte publique et `can_use_agent`
+  par identité canonique organisation/runtime/template. Huit checks simultanés au
+  maximum ; erreurs propagées et aucune transaction SQL pendant ces appels réseau.
+- Projection Swift dédiée : champs complets, défauts et traductions, capacités
+  annoncées et sélection par défaut, sans schémas internes ni FGA de capacités.
+  Visibilité publique et exclusion des entrées d'application conservées. Ralph
+  n'est pas proposé à la création : son runtime refuse déjà les instances gérées.
+- Route/réponse inscrites à l'OpenAPI Rust ; aucun consommateur ou client frontend
+  généré modifié. Relecture statique seulement, aucun test, build, génération,
+  migration, déploiement, commit ou push. Tâche 1.1 toujours décochée.
+- Vérifications proposées : espace autorisé, espace étranger/retiré, template
+  désactivé, conservation exacte de `prompts.system`, des défauts localisés et des
+  capacités déclarées. Aucun parcours agent validé ni élargissement d'arc42 déduit
+  de la présence au catalogue. Modifications préexistantes conservées.
+
+
+## F25 Création et relecture d'une instance Custom
+
+- 2026-10-25 : deux routes POST/GET et contrats OpenAPI ajoutés à partir des
+  contrats Swift. Stockage existant réutilisé ; découverte configurée, UUID
+  canoniques, auteur authentifié et copie complète du tuning du pod. Validation
+  locale des seules valeurs soumises, sans défauts injectés ni obligation de
+  formulaire ajoutée. GET limité à espace/instance et à la configuration stockée.
+- Admission, espace équipe/personnel actif, écriture/lecture et can_use_agent ;
+  découverte hors transaction puis revérification sous verrou/fence existants.
+  Conflit de nom 409 agent_name_conflict. Capacités effectives vides uniquement,
+  persistées en [] ; outil actif ou profil recommandé non nul refusés en 422.
+- OpenSpec actualisé, tâches 1.1/1.2 toujours décochées. Aucun changement Python,
+  frontend, migration ou autre route. Aucune disponibilité d'exécution déduite.
+  Relecture de sources seulement ; ni tests, build, migration, déploiement,
+  génération client, commit ou push. Arc42 reste dans sa limite validée.
+- À vérifier par Dimi : prompt personnalisé relu à l'identique, défauts,
+  nom en conflit, espace/instance étrangers, espace retiré pendant découverte,
+  refus d'un outil/profil non raccordé. Prochaine étape après cette validation.
+- 2026-10-25 : ajout ciblé de PATCH sur la même instance, contrat OpenAPI et UPDATE
+  RETURNING. Métadonnées omises/null conservées ; tuning omis conservé, null/{}
+  vidé, objet remplacé après validation existante. Le tuning stocké et ses clés
+  inconnues sont conservés ; seules les FieldSpecs sont actualisées à l'édition
+  tuning/capacités. Repli sur les champs sauvegardés uniquement pour le tuning,
+  jamais sur un refus d'accès ; catalogue obligatoire pour les capacités.
+  Relecture sous les verrous existants après découverte, autorisation/lifecycle
+  revérifiés et fence avant écriture. PATCH sans effet conserve updated_at/by.
+  Renommage indépendant du rôle/prompt ; status gère activation/désactivation.
+  Capacités actives et recommandations non nulles restent refusées en 422.
+  OpenSpec précisée, 1.1/1.2 décochées ; arc42 reste dans sa limite validée.
+  Sources relues uniquement, aucune commande de test/build/migration/déploiement
+  ni génération client/commit. Parcours UI non validé. À vérifier par Dimi :
+  édition/relecture du prompt, omission/null/{}, renommage, status, absence d'effet,
+  conflit de nom, espace étranger/retiré, concurrence et réglages non raccordés.
+- 2026-10-25, étape 6 : DELETE de la configuration par espace et UUID, avec 204
+  sans corps ou 404 si absente/étrangère, y compris à la seconde suppression.
+  Admission, espace équipe/personnel actif et Write revérifiés sous lock_for,
+  authorize_locked et fence existants, puis commit. Pas de contrôle can_use_agent :
+  Write conservé permet de retirer une instance même si son template est révoqué.
+  Nom libéré ; état activé/désactivé indifférent. Catalogue, runtime, historique et
+  purge d'espace inchangés ; métadonnées de session/dernier nom à leur intégration.
+  Contrat et vérifications proposées dans l'OpenSpec (décision 1f), 1.1/1.2 décochées.
+  Relecture statique seulement, aucune validation dynamique ni commande de test,
+  build, migration, génération client, déploiement ou commit. Arc42 inchangé.
+- 2026-10-25, étape 7 : GET de la liste par espace et contrat OpenAPI ajoutés dans
+  agent_instances/http.rs uniquement en production. list_by_space et record_to_summary
+  réutilisés : projection sauvegardée identique au GET individuel, ordre created_at
+  puis agent_instance_id, instances activées/désactivées, [] si aucune visible.
+  Admission, espace canonique actif équipe/personnel et Read, puis can_use_agent une
+  fois par template distinct, avec la borne READ_CONCURRENCY existante. Refus omis ;
+  erreurs FGA, SQL et de projection autorisée propagées sans succès partiel.
+  Aucun verrou/transaction, connexion SQL retenue pendant FGA, appel catalogue/runtime
+  ou rafraîchissement des FieldSpecs. enabled n'atteste aucune disponibilité d'exécution.
+  DELETE inchangé : Write permet toujours la suppression après révocation du template,
+  sans exception de visibilité ni nouveau statut. Modifications préexistantes préservées.
+  OpenSpec actualisée (décision 1g), 1.1/1.2 décochées ; UI et validation restent à faire.
+  Prochain jalon : tests ciblés, leur inventaire OpenAPI et campagne listés dans tasks.md.
+  Relecture statique seule ; aucun test, build, migration, déploiement, génération client,
+  commit ou push. Arc42 reste dans son périmètre validé.
+
+- 2026-10-25, jalon de validation 1-7 demandé : sept groupes d'intégration
+  PostgreSQL/OpenFGA passent (CRUD, tuning, autorisations/concurrence, migration
+  additive et purge). Correction du refus des capacités fixes filtrées du catalogue
+  à la création ; revue indépendante et assertions OpenAPI nullable/optionnel.
+  Tests hors ligne (55 + 12), qualité Rust du checkout, Temporal, génération du
+  client Control Plane, qualité/tests/build frontend et contrôle d'architecture
+  réussis. Frontend : 4 878 tests passants, 8 ignorés. Générateur SQL documentaire
+  corrigé pour une transaction par migration, sans modifier les migrations.
+- Validation globale bloquée : trois assertions historiques de budget FGA en purge
+  échouent, identiquement sur le HEAD propre 6cea52adf (39/33, 16/13, 7/6 lectures).
+  Assertions conservées. Le HEAD propre échoue aussi à rustfmt ; les corrections
+  de formatage locales préexistantes restent exclues du commit ciblé. Après retrait
+  de l'interception 503 erronée du Control Plane dans le harnais navigateur, le
+  parcours attend les CGU et reste sur « Fred is starting... » ; non validé.
+- k3d secondaire confirmé (k3d-fred-secondary / fred), migrations 1-11 réussies,
+  composants Control Plane/KF worker/frontend prêts, fred-agents absent. Lint/rendu
+  factory réussi avec les anciennes images ; aucun upgrade. La sauvegarde préalable
+  a été refusée par le contrôle automatique pour copie locale de données sensibles ;
+  confirmation demandée. Migration 0012 déployée, droits API et ingestion dédiée
+  restent en attente. Pas de push de jalon validé, pas de PR, pas de raccordement
+  fred-agent. OpenSpec 1.1/1.2 restent décochées ; change non archivé.
+- Vérification de reproductibilité : la sélection ciblée appliquée au HEAD propre
+  compile et passe ses 55 tests unitaires, 12 contrats OpenAPI et sept groupes
+  d'intégration. Le client régénéré est identique sans les versions locales exclues.
+  Clippy passe ; rustfmt retrouve les seuls écarts préexistants. Le rendu k3d de
+  cette sélection passe avec les images du chart, sans build ni déploiement.
+  Un commit local conserve le lot ; aucun push tant que les blocages persistent.

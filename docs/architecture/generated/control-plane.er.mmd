@@ -15,6 +15,7 @@ erDiagram
 "document_processing" }o--|| "space" : "space_id"
 "document_processing" }o--|| "document" : "document_id"
 "document_processing" |o--o| "document_processing" : "retry_of"
+"agent_instance" }o--|| "space" : "space_id"
 
 "deletion" {
   uuid id
@@ -174,4 +175,19 @@ erDiagram
   bigint rows
   bigint reserved_bytes
   timestamp_with_time_zone cleanup_due_at
+}
+"agent_instance" {
+  uuid agent_instance_id
+  uuid space_id FK
+  uuid template_id
+  text source_runtime_id
+  text source_agent_id
+  varchar_255_ display_name
+  varchar_500_ description
+  boolean enabled
+  text created_by
+  text updated_by
+  jsonb tuning
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone updated_at
 }

@@ -1005,6 +1005,7 @@ fn registrations() -> OpenApiRouter<AppState> {
         .routes(routes!(health))
         .merge(crate::embedded_agent::routes())
         .merge(crate::agents::routes())
+        .merge(crate::agent_instances::http::routes())
         .merge(crate::supervision::routes())
         .routes(routes!(create_space))
         .routes(routes!(grant, revoke))

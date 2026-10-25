@@ -21,7 +21,9 @@ er: ## Regenerate generated/<component>.er.mmd from each component's migrations
 		trap 'docker rm -f $$pg >/dev/null 2>&1 || true' EXIT; \
 		docker run -d --name $$pg -e POSTGRES_PASSWORD=docs -p 127.0.0.1::5432 $(POSTGRES_IMAGE) >/dev/null; \
 		until docker exec $$pg psql -U postgres -h 127.0.0.1 -c 'select 1' >/dev/null 2>&1; do sleep 1; done; \
-		cat $(ROOT)/apps/$$c/migrations/*.sql | docker exec -i $$pg psql -U postgres -q -v ON_ERROR_STOP=1; \
+		for migration in $(ROOT)/apps/$$c/migrations/*.sql; do \
+			docker exec -i $$pg psql -U postgres -q -1 -v ON_ERROR_STOP=1 < "$$migration"; \
+		done; \
 		addr=$$(docker port $$pg 5432/tcp | head -n1); \
 		docker run --rm --network host $(TBLS_IMAGE) out -t mermaid \
 			"postgres://postgres:docs@$$addr/postgres?sslmode=disable" > generated/$$c.er.mmd; \

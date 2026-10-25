@@ -16,6 +16,7 @@
 //! folders, original documents and their processing, provisioning import and deferred
 //! space cleanup.
 
+pub mod agent_instances;
 pub mod agents;
 pub mod api;
 pub mod auth;

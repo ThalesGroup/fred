@@ -17,6 +17,7 @@
 use std::{collections::BTreeMap, time::Duration};
 
 use anyhow::{Context, Result, ensure};
+use futures::{StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -106,7 +107,14 @@ fn native_catalog() -> RuntimeCatalog {
             // Fixed response, with no ReAct loop or graph execution engine.
             kind: "static".into(),
             public_version: Some(definition.version.into()),
-            metadata: BTreeMap::new(),
+            // This runtime explicitly rejects managed instances.
+            metadata: BTreeMap::from([
+                ("team_instantiable".into(), serde_json::Value::Bool(false)),
+                (
+                    "supports_capabilities".into(),
+                    serde_json::Value::Bool(false),
+                ),
+            ]),
         }],
     }
 }
@@ -138,6 +146,148 @@ pub struct AgentEnablement {
     pub team_scope: AgentScopePolicy,
     pub default_on: bool,
     pub default_capability_ids: Vec<String>,
+}
+
+/// Form-facing projection of a permitted runtime template, not execution readiness.
+#[derive(Serialize, ToSchema)]
+pub struct AgentTemplateSummary {
+    pub template_id: Uuid,
+    pub source_runtime_id: String,
+    pub source_agent_id: String,
+    pub display_name: String,
+    pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description_by_lang: Option<BTreeMap<String, String>>,
+    pub category: String,
+    pub tags: Vec<String>,
+    pub capabilities: Vec<String>,
+    pub team_instantiable: bool,
+    pub status: AgentTemplateStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub public_version: Option<String>,
+    /// Pod-owned FieldSpecs, including localized defaults and UI hints, unchanged.
+    pub default_tuning_fields: Vec<BTreeMap<String, serde_json::Value>>,
+    /// Pod-owned descriptors, including config fields, schemas and routing metadata.
+    pub available_capabilities: Vec<BTreeMap<String, serde_json::Value>>,
+    pub supports_capabilities: bool,
+    pub default_capability_ids: Vec<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentTemplateStatus {
+    Available,
+}
+
+#[derive(Default, Deserialize)]
+struct TemplateTuning {
+    #[serde(default)]
+    fields: Vec<BTreeMap<String, serde_json::Value>>,
+    #[serde(default)]
+    tags: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct TemplateFormMetadata {
+    description_by_lang: Option<BTreeMap<String, String>>,
+    #[serde(default)]
+    default_tuning: TemplateTuning,
+    #[serde(default)]
+    available_capabilities: Vec<BTreeMap<String, serde_json::Value>>,
+    #[serde(default = "crate::config::yes")]
+    supports_capabilities: bool,
+    #[serde(default)]
+    default_capability_ids: Vec<String>,
+    #[serde(default = "crate::config::yes")]
+    public: bool,
+    #[serde(default = "crate::config::yes")]
+    team_instantiable: bool,
+}
+
+fn template_summary(
+    id: Uuid,
+    runtime: String,
+    template: &RuntimeTemplate,
+) -> Result<Option<AgentTemplateSummary>> {
+    let mut metadata: TemplateFormMetadata =
+        serde_json::from_value(serde_json::to_value(&template.metadata)?)
+            .context("invalid runtime template form metadata")?;
+    if !metadata.public || !metadata.team_instantiable {
+        return Ok(None);
+    }
+    // Preserve Swift's product-application quarantine without capability ReBAC.
+    let mut quarantined = std::collections::BTreeSet::new();
+    for entry in &metadata.available_capabilities {
+        let id = entry
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .context("runtime capability descriptor has no string id")?;
+        if id.starts_with("app__")
+            || entry.get("kind").and_then(serde_json::Value::as_str) == Some("app")
+        {
+            quarantined.insert(id.to_owned());
+        }
+    }
+    metadata.available_capabilities.retain(|entry| {
+        entry
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|id| !quarantined.contains(id))
+    });
+    metadata
+        .default_capability_ids
+        .retain(|id| !id.is_empty() && !id.starts_with("app__") && !quarantined.contains(id));
+    Ok(Some(AgentTemplateSummary {
+        template_id: id,
+        source_runtime_id: runtime,
+        source_agent_id: template.template_agent_id.clone(),
+        display_name: template.title.clone(),
+        description: template.description.clone(),
+        description_by_lang: metadata.description_by_lang,
+        capabilities: vec![template.kind.clone()],
+        category: template.kind.clone(),
+        tags: metadata.default_tuning.tags,
+        team_instantiable: true,
+        status: AgentTemplateStatus::Available,
+        public_version: template.public_version.clone(),
+        default_tuning_fields: metadata.default_tuning.fields,
+        available_capabilities: metadata.available_capabilities,
+        supports_capabilities: metadata.supports_capabilities,
+        default_capability_ids: metadata.default_capability_ids,
+    }))
+}
+
+/// Resolve only configured, catalog-visible templates; keep the complete pod tuning.
+pub(crate) async fn enrollable_template(
+    config: &PlatformConfig,
+    organization: Uuid,
+    requested_id: Uuid,
+) -> AppResult<(AgentTemplateSummary, serde_json::Value)> {
+    for catalog in discover(config).await? {
+        for template in catalog.templates {
+            let id = template_id(
+                organization,
+                &catalog.runtime_id,
+                &template.template_agent_id,
+            );
+            if id == requested_id {
+                let mut summary = template_summary(id, catalog.runtime_id, &template)?
+                    .ok_or(AppError::NotFound)?;
+                // Public catalog quarantine must not erase active enrollment dependencies.
+                if let Some(defaults) = template.metadata.get("default_capability_ids") {
+                    summary.default_capability_ids = serde_json::from_value(defaults.clone())
+                        .context("invalid template capability defaults")?;
+                }
+                let tuning = template
+                    .metadata
+                    .get("default_tuning")
+                    .context("runtime template has no default_tuning")?
+                    .clone();
+                return Ok((summary, tuning));
+            }
+        }
+    }
+    Err(AppError::NotFound)
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -194,8 +344,60 @@ fn project(organization: Uuid, catalogs: Vec<RuntimeCatalog>) -> AppResult<Vec<A
 
 pub fn routes() -> utoipa_axum::router::OpenApiRouter<crate::api::AppState> {
     utoipa_axum::router::OpenApiRouter::new()
+        .routes(utoipa_axum::routes!(space_agent_templates))
         .routes(utoipa_axum::routes!(organization_agents))
         .routes(utoipa_axum::routes!(set_organization_agent_default))
+}
+
+#[utoipa::path(
+    get, path = "/spaces/{space_id}/agent-templates",
+    params(("space_id" = Uuid, Path)),
+    responses(
+        (status = 200, body = [AgentTemplateSummary]),
+        (status = 400, body = crate::error::ErrorBody),
+        (status = 401, body = crate::error::ErrorBody),
+        (status = 403, body = crate::error::ErrorBody),
+        (status = 404, body = crate::error::ErrorBody),
+        (status = 409, body = crate::error::ErrorBody),
+        (status = 500, body = crate::error::ErrorBody),
+        (status = 503, body = crate::error::ErrorBody)
+    )
+)]
+async fn space_agent_templates(
+    axum::extract::State(s): axum::extract::State<crate::api::AppState>,
+    crate::onboarding::AdmittedUser(user): crate::onboarding::AdmittedUser,
+    crate::extract::ApiPath(space_id): crate::extract::ApiPath<Uuid>,
+) -> AppResult<axum::Json<Vec<AgentTemplateSummary>>> {
+    let space = spaces::authorize(&s.pool, &s.fga, &user.uid, space_id, Permission::Read).await?;
+    if !matches!(space.kind, SpaceKind::Team | SpaceKind::Personal) {
+        return Err(AppError::BadRequest(
+            "agent templates require a team or personal space".into(),
+        ));
+    }
+    // Discovery uses the pod's public catalog; no caller can opt into hidden agents.
+    // Neither discovery nor template checks retain a SQL connection/transaction.
+    let catalogs = discover(&s.agent_catalog).await?;
+    let fga = &s.fga;
+    let space = &space;
+    let items: Vec<Option<AgentTemplateSummary>> =
+        futures::stream::iter(catalogs.into_iter().flat_map(|catalog| {
+            let runtime = catalog.runtime_id;
+            catalog
+                .templates
+                .into_iter()
+                .map(move |template| (runtime.clone(), template))
+        }))
+        .map(|(runtime, template)| async move {
+            let id = template_id(space.organization, &runtime, &template.template_agent_id);
+            if !fga.can_use_agent(id, space).await? {
+                return Ok(None);
+            }
+            template_summary(id, runtime, &template)
+        })
+        .buffered(crate::fga::READ_CONCURRENCY)
+        .try_collect()
+        .await?;
+    Ok(axum::Json(items.into_iter().flatten().collect()))
 }
 
 #[utoipa::path(
@@ -302,38 +504,107 @@ async fn set_organization_agent_default(
     }))
 }
 
-/// Expects a configuration accepted by [`PlatformConfig::validate`].
-pub async fn discover(config: &PlatformConfig) -> Result<Vec<RuntimeCatalog>> {
-    let client = reqwest::Client::builder()
+fn catalog_client() -> Result<reqwest::Client> {
+    Ok(reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .redirect(reqwest::redirect::Policy::none())
-        .build()?;
-    let mut catalogs = vec![native_catalog()];
-    for source in config.runtime_catalog_sources.iter().filter(|s| s.enabled) {
-        let response = client
-            .get(format!(
-                "{}/agents/templates",
-                source.base_url.trim_end_matches('/')
-            ))
-            .send()
-            .await
-            .with_context(|| format!("runtime {} is unreachable", source.runtime_id))?;
-        ensure!(
-            response.status().is_success(),
+        .build()?)
+}
+
+async fn fetch_runtime_templates(
+    client: &reqwest::Client,
+    source: &RuntimeCatalogSource,
+) -> Result<Vec<RuntimeTemplate>> {
+    let response = client
+        .get(format!(
+            "{}/agents/templates",
+            source.base_url.trim_end_matches('/')
+        ))
+        .send()
+        .await
+        .with_context(|| format!("runtime {} is unreachable", source.runtime_id))?;
+    // Retain the HTTP status as a typed cause: edit fallback must not hide a denial.
+    response.error_for_status_ref().with_context(|| {
+        format!(
             "runtime {} returned HTTP {} while listing templates",
             source.runtime_id,
             response.status()
-        );
-        let templates = response
-            .json::<Vec<RuntimeTemplate>>()
-            .await
-            .with_context(|| format!("runtime {} returned invalid templates", source.runtime_id))?;
+        )
+    })?;
+    ensure!(
+        response.status().is_success(),
+        "runtime {} returned HTTP {} while listing templates",
+        source.runtime_id,
+        response.status()
+    );
+    response
+        .json::<Vec<RuntimeTemplate>>()
+        .await
+        .with_context(|| format!("runtime {} returned invalid templates", source.runtime_id))
+}
+
+/// Expects a configuration accepted by [`PlatformConfig::validate`].
+pub async fn discover(config: &PlatformConfig) -> Result<Vec<RuntimeCatalog>> {
+    let client = catalog_client()?;
+    let mut catalogs = vec![native_catalog()];
+    for source in config.runtime_catalog_sources.iter().filter(|s| s.enabled) {
         catalogs.push(RuntimeCatalog {
             runtime_id: source.runtime_id.clone(),
-            templates,
+            templates: fetch_runtime_templates(&client, source).await?,
         });
     }
     Ok(catalogs)
+}
+
+/// Refresh only the saved source, reusing discovery and its visibility rules.
+/// Missing/unavailable catalogs can fall back for tuning edits, never for capabilities.
+pub(crate) async fn editable_template(
+    config: &PlatformConfig,
+    organization: Uuid,
+    runtime_id: &str,
+    agent_id: &str,
+) -> AppResult<Option<AgentTemplateSummary>> {
+    let templates = if runtime_id == NATIVE_RUNTIME_ID {
+        native_catalog().templates
+    } else {
+        let Some(source) = config
+            .runtime_catalog_sources
+            .iter()
+            .find(|source| source.enabled && source.runtime_id == runtime_id)
+        else {
+            return Ok(None);
+        };
+        fetch_runtime_templates(&catalog_client()?, source)
+            .await
+            .map_err(|error| {
+                let denied = error.chain().any(|cause| {
+                    cause
+                        .downcast_ref::<reqwest::Error>()
+                        .and_then(reqwest::Error::status)
+                        .is_some_and(|status| matches!(status.as_u16(), 401 | 403))
+                });
+                if denied {
+                    AppError::Forbidden
+                } else {
+                    AppError::Unavailable("runtime template catalog unavailable".into())
+                }
+            })?
+    };
+    let Some(template) = templates
+        .iter()
+        .find(|template| template.template_agent_id == agent_id)
+    else {
+        return Ok(None);
+    };
+    let id = template_id(organization, runtime_id, agent_id);
+    let mut summary =
+        template_summary(id, runtime_id.to_owned(), template)?.ok_or(AppError::NotFound)?;
+    // Catalog quarantine must not turn declared dependencies into an inactive selection.
+    if let Some(defaults) = template.metadata.get("default_capability_ids") {
+        summary.default_capability_ids = serde_json::from_value(defaults.clone())
+            .context("invalid template capability defaults")?;
+    }
+    Ok(Some(summary))
 }
 
 #[cfg(test)]

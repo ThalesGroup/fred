@@ -21,6 +21,7 @@ sha2 = "0.10"
 tempfile = "3"
 unicode-normalization = "0.1"
 percent-encoding = "2"
+regex = "1.13.1"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "uuid", "chrono", "migrate", "macros", "json"] }
 temporalio-client = "=1.0.0"
 temporalio-common = "=1.0.0"
