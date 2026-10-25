@@ -658,14 +658,16 @@ def test_native_chart_legend_sits_below_when_shown(
 
 
 @pytest.mark.parametrize(
-    "values, labels",
+    "values, labels, ticks",
     [
-        ([2.45, 1.38, 0.0485], '#,##0.00" M€"'),
-        ([12.5, 3], '#,##0.0" M€"'),
-        ([2450, 48], '#,##0" M€"'),
+        ([2.45, 1.38, 0.0485], '#,##0.00" M€"', '#,##0.0" M€"'),
+        ([12.5, 3], '#,##0.0" M€"', '#,##0.0" M€"'),
+        ([2450, 48], '#,##0" M€"', '#,##0" M€"'),
+        # Whole ticks (0, 100, 200…) show no decimals, whatever the data's.
+        ([538.18, 549.33, 117.5], '#,##0.00" M€"', '#,##0" M€"'),
     ],
 )
-def test_the_decimals_come_from_the_scaled_values(values, labels):
+def test_the_decimals_come_from_the_scaled_values(values, labels, ticks):
     chart = PlanChart.model_validate(
         {
             "type": "column",
@@ -675,7 +677,7 @@ def test_the_decimals_come_from_the_scaled_values(values, labels):
         }
     )
     assert charts.number_format(chart) == labels
-    assert charts.number_format(chart, ticks=True) == f"{labels};-{labels};0"
+    assert charts.number_format(chart, ticks=True) == f"{ticks};-{ticks};0"
 
 
 def test_values_carry_their_unit_and_pies_their_percentages(builtin):
@@ -686,8 +688,8 @@ def test_values_carry_their_unit_and_pies_their_percentages(builtin):
         "series": [{"name": "R", "values": [1.5, 2, 3, 4]}],
     }
     built = _chart(_render(template, inventory, _chart_slide(money)))
-    # The axis's 0 reads "0", never "0,0 M€".
-    assert built.value_axis.tick_labels.number_format == '#,##0.0" M€";-#,##0.0" M€";0'
+    # The axis's 0 reads "0", never "0,0 M€"; its whole ticks need no decimal.
+    assert built.value_axis.tick_labels.number_format == '#,##0" M€";-#,##0" M€";0'
     assert built.plots[0].data_labels.number_format == '#,##0.0" M€"'
     pie = _chart(_render(template, inventory, _chart_slide({**REVENUE, "type": "pie"})))
     assert pie.plots[0].data_labels.show_percentage
@@ -881,7 +883,7 @@ def test_the_example_chart_keeps_its_design_and_takes_the_plans_data(builtin):
     labels = built.plots[0]._element.find(qn("c:dLbls"))
     assert labels.find(qn("c:numFmt")).get("formatCode") == '#,##0.0" M€"'
     assert not built.has_legend and not built.has_title
-    assert built.value_axis.tick_labels.number_format == '#,##0.0" M€";-#,##0.0" M€";0'
+    assert built.value_axis.tick_labels.number_format == '#,##0" M€";-#,##0" M€";0'
 
 
 def test_another_type_on_the_example_slide_is_a_fresh_theme_chart(builtin):
@@ -1418,7 +1420,8 @@ def test_a_scatter_titles_its_axes_and_names_few_points(builtin):
     x_axis, y_axis = built.category_axis, built.value_axis
     assert x_axis.axis_title.text_frame.text == "Price (€)"
     assert y_axis.axis_title.text_frame.text == "Units sold"
-    assert x_axis.tick_labels.number_format == '#,##0.0" €";-#,##0.0" €";0'
+    # The title names the unit: the ticks are bare numbers.
+    assert x_axis.tick_labels.number_format == "#,##0.0;-#,##0.0;0"
     assert y_axis.tick_labels.number_format == "#,##0"
     assert list(built.plots[0].series[0].values) == [120, 90, 60]
     points = built.plots[0].series[0].points
@@ -1627,3 +1630,37 @@ def test_a_word_unit_stays_off_the_ticks():
     assert charts.number_format(chart("accidents")) == '#,##0" accidents"'
     for symbol in ("k€", "m²", "kWh", "%"):
         assert symbol in charts.number_format(chart(symbol), ticks=True)
+
+
+@pytest.mark.parametrize(
+    "kind, series, step",
+    [
+        ("bar", [[2.45, 1.38, 0.64, 0.215, 0.0485]], 0.5),
+        ("column", [[45, 2800, 9]], 1000),
+        ("line", [[-12, 30, 18]], 10),
+        # Stacked: the axis spans the totals (1 940), not the largest part.
+        ("stacked_bar", [[950, 1025, 1100, 1200], [590, 645, 690, 740]], 500),
+    ],
+)
+def test_a_value_axis_has_at_most_five_round_intervals(builtin, kind, series, step):
+    template, inventory = builtin
+    chart = {
+        "type": kind,
+        "categories": [f"C{i}" for i in range(len(series[0]))],
+        "series": [{"name": f"S{n}", "values": v} for n, v in enumerate(series)],
+    }
+    built = _chart(_render(template, inventory, _chart_slide(chart)))
+    assert built.value_axis.major_unit == step
+
+
+def test_a_horizontal_bar_s_ticks_stay_short(builtin):
+    """0,50 M€1,00 M€… ran together: five round ticks, one decimal."""
+    template, inventory = builtin
+    chart = {
+        "type": "bar",
+        "categories": ["A", "B", "C", "D", "E"],
+        "series": [{"name": "S", "values": [2.45, 1.38, 0.64, 0.215, 0.0485]}],
+        "unit": "M€",
+    }
+    value = _chart(_render(template, inventory, _chart_slide(chart))).value_axis
+    assert value.tick_labels.number_format == '#,##0.0" M€";-#,##0.0" M€";0'

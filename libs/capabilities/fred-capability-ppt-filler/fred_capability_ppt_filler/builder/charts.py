@@ -22,6 +22,7 @@ are adapted from ``fred-capability-pptx-generator``, by Shuigami.
 from __future__ import annotations
 
 import copy
+import math
 import re
 from collections import Counter
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast
@@ -770,18 +771,54 @@ def _decimals(values: Sequence[Optional[float]]) -> int:
 _WORD_UNIT = re.compile(r"[^\W\d_A-Z]{3,}(?: [^\W\d_A-Z]+)*")
 
 
-def number_format(chart: PlanChart, axis: str = "y", ticks: bool = False) -> str:
+# At most this many intervals on a category chart's value axis: 0 to 2,5 by 0,5.
+_INTERVALS = 5
+
+
+def tick_step(chart: PlanChart) -> Optional[float]:
+    """The round step (1, 2, 2.5 or 5 times a power of ten) that spans a category
+    chart's values, stacked ones by their totals, in at most five intervals."""
+    if chart.type in XY_TYPES or chart.type in ROUND or _percent(chart):
+        return None
+    rows = [[v or 0.0 for v in s.values] for s in chart.series]
+    if chart.type in STACKED_TYPES:
+        columns = list(zip(*rows)) if rows else []
+        top = max((sum(v for v in c if v > 0) for c in columns), default=0.0)
+        low = min((sum(v for v in c if v < 0) for c in columns), default=0.0)
+    else:
+        flat = [v for row in rows for v in row]
+        top, low = max([0.0, *flat]), min([0.0, *flat])
+    if top - low <= 0:
+        return None
+    power = 10.0 ** math.floor(math.log10((top - low) / _INTERVALS))
+    for step in (m * power * k for k in (1, 10) for m in (1, 2, 2.5, 5)):
+        if math.ceil(top / step - 1e-9) + math.ceil(-low / step - 1e-9) <= _INTERVALS:
+            return step
+    return None
+
+
+def _step_decimals(step: float) -> int:
+    """0,5 → 1, 2,5 → 1, 200 → 0: what the axis's round ticks need."""
+    shown = f"{step:.3f}".rstrip("0")
+    return len(shown.split(".")[1])
+
+
+def number_format(
+    chart: PlanChart, axis: str = "y", ticks: bool = False, bare: bool = False
+) -> str:
     """``#,##0.0" M€"``: the data's own decimals (at most 2), then its unit; on a
-    scatter or bubble, those of one axis. ``ticks``: an axis's, whose 0 reads "0"."""
+    scatter or bubble, those of one axis. ``ticks``: an axis's, whose 0 reads "0",
+    with the decimals of its round ticks; ``bare``: without the unit."""
     if chart.type in XY_TYPES:
         values = [getattr(p, axis) for p in chart.points()]
         unit = {"x": chart.x_unit, "size": chart.size_unit}.get(axis, chart.unit)
     else:
         values = [v for s in chart.series for v in s.values]
         unit = chart.unit
-    decimals = _decimals(values)
+    step = tick_step(chart) if ticks else None
+    decimals = _decimals(values) if step is None else _step_decimals(step)
     base = "#,##0" + ("." + "0" * decimals if decimals else "")
-    unit = (unit or "").replace('"', "").strip()
+    unit = "" if bare else (unit or "").replace('"', "").strip()
     if ticks and _WORD_UNIT.fullmatch(unit):
         unit = ""  # "1 accidents" on every tick: a counted word belongs in the title
     shown = base
@@ -1080,7 +1117,18 @@ def _separator(dlbls: Any, text: str) -> None:
     node.text = text
 
 
-def _axes(built: Any, fmt: str) -> None:
+def _value_ticks(value: Any, chart: PlanChart) -> None:
+    """Round ticks, at most five intervals: dense ones run together on a bar."""
+    value.tick_labels.number_format = (
+        "0%" if _percent(chart) else number_format(chart, ticks=True)
+    )
+    value.tick_labels.number_format_is_linked = False
+    step = tick_step(chart)
+    if step is not None:
+        value.major_unit = step
+
+
+def _axes(built: Any, chart: PlanChart) -> None:
     category, value = built.category_axis, built.value_axis
     value.has_major_gridlines = True
     gridlines = value.major_gridlines.format.line
@@ -1089,8 +1137,7 @@ def _axes(built: Any, fmt: str) -> None:
     gridlines.width = Pt(0.75)
     value.format.line.fill.background()
     value.major_tick_mark = XL_TICK_MARK.NONE
-    value.tick_labels.number_format = fmt
-    value.tick_labels.number_format_is_linked = False
+    _value_ticks(value, chart)
     category.major_tick_mark = XL_TICK_MARK.NONE
     category.format.line.color.theme_color = MSO_THEME_COLOR.TEXT_1
     category.format.line.color.brightness = 0.6
@@ -1103,9 +1150,11 @@ def _xy_axes(built: Any, chart: PlanChart, pt: float) -> None:
         (built.category_axis, "x", chart.x_title, chart.x_unit),
         (built.value_axis, "y", chart.y_title, chart.unit),
     ):
-        axis.tick_labels.number_format = number_format(chart, name, ticks=True)
-        axis.tick_labels.number_format_is_linked = False
         text = axis_title(title, unit)
+        # The title names the unit: "1 000 m²2 000 m²" on the ticks runs together.
+        shown = number_format(chart, name, ticks=True, bare=bool(text and unit))
+        axis.tick_labels.number_format = shown
+        axis.tick_labels.number_format_is_linked = False
         if not text:
             axis.has_title = False
             continue
@@ -1234,11 +1283,7 @@ def refill(
     if chart.type in XY_TYPES:
         _xy_axes(built, chart, pt)
     elif chart.type not in ROUND:
-        value = built.value_axis.tick_labels
-        value.number_format = (
-            "0%" if _percent(chart) else number_format(chart, ticks=True)
-        )
-        value.number_format_is_linked = False
+        _value_ticks(built.value_axis, chart)
 
 
 def _relabel(
@@ -1323,7 +1368,7 @@ def draw(
     if chart.type in ROUND:
         _hole(built)
     else:
-        _axes(built, "0%" if percent else number_format(chart, ticks=True))
+        _axes(built, chart)
         if chart.type in XY_TYPES:
             _xy_axes(built, chart, pt)
         if chart.type == "bubble":
