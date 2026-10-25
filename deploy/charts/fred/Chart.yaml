@@ -5,13 +5,13 @@ description: >-
   documents: governance, document ingestion and search, background workers and web UI.
 type: application
 # Both are set from the release tag when the chart is published.
-version: 1.5.0-post
-appVersion: 1.5.0-post
+version: 5.0.0
+appVersion: 5.0.0
 home: https://site.fredlab.dev
 icon: https://site.fredlab.dev/images/fred.svg
 sources:
   - https://github.com/ThalesGroup/fred
-  - https://github.com/ThalesGroup/fred/tree/swift/deploy/charts/fred
+  - https://github.com/ThalesGroup/fred/tree/weaver/deploy/charts/fred
 keywords:
   - fred
   - ai

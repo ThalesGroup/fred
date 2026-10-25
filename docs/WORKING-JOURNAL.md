@@ -42,6 +42,8 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [SEC-1](#sec-1-invariants-de-sécurité-weaver) | Sécurité Swift et simplification ReBAC Weaver | Direction explicite consignée ; contrats détaillés à cadrer | Consignes, sans validation fonctionnelle nouvelle |
+| [REL-1](#rel-1-génération-weaver-500) | Alignement des versions Weaver | Préparé localement, non publié | Sans changement architectural |
 | [F-013](#f-013-synthese-organisationnelle-en-lecture) | Synthèse organisationnelle et détail équipe | Backend et UI implémentés ; validation des parcours attendue | A2/A7/A8, chapitres 04/09 |
 | [F23](#f23-stockage-des-instances-dagents) | Stockage Rust des instances d'agents | Tests ciblés passants ; jalon global bloqué | Hors périmètre arc42 validé |
 | [F25](#f25-création-et-relecture-dune-instance-custom) | Création/relecture, liste, édition partielle et suppression API d'une instance Custom | Tests API passants ; jalon global bloqué | Hors périmètre arc42 validé |
@@ -1294,6 +1296,33 @@ Les modifications des autres travaux sont conservées.
   lancés. arc42 (bloc généré A3, matrice 03a, décision D23) reporté à un lot séparé.
 
 
+- 2026-10-25 : préparation k3d sur `weaver`, après validation de l'ingestion et
+  de la suppression documentaire par Dimi. Build local étendu à `apps/fred-agents`,
+  consommateur `fred-agents` dans `images.yaml` et référence dans `images.txt`,
+  avec le mécanisme de tags de contenu existant. Aucune sortie générée ici.
+- Service confirmé par lecture : `fred-agents:80` vers 8000, préfixe
+  `/fred/agents/v2`, catalogue public `GET /agents/templates`. UI organisation
+  déjà consommatrice du catalogue Rust ; aucun changement UI nécessaire.
+- Activation bloquée par le contrat de démarrage : le runtime Python exige
+  `organization.suspended` dans OpenFGA, absent du modèle Weaver, puis les tables
+  d'admission `platform_access_*`, `users` et `teammetadata` de l'ancien manager.
+  Les valeurs héritées autorisent en outre la création du store `fred` et la
+  synchronisation du modèle Swift. Aucun modèle remplacé, migration legacy
+  ajoutée ou contrôle de sécurité désactivé pour contourner ces exigences.
+- `applications.fred-agents.enabled` reste false ; source Rust non activée pour
+  ne pas faire échouer aussi la découverte de Ralph. Les changements demandés
+  d'activation restent donc à réaliser après adaptation explicite du contrat
+  runtime/autorisation, hors de ce lot. README k3d : dépendances héritées,
+  configuration cible et blocage documentés. Profil conservé dans Fred, factory
+  inchangée ; aucun élargissement du dossier arc42 aux agents non validés.
+- Validation restant à Dimi après résolution et déploiement : avec `o1admin`,
+  administration de son organisation -> Agents, Ralph et templates publics
+  fred-agents visibles, liste retrouvée après rechargement. Cela ne prouve ni
+  création ni exécution d'instance. Échec global et refus d'activation des
+  templates à dépendances indisponibles conservés. Aucune validation dynamique,
+  aucun test, build, déploiement, commit ou push exécuté ; relecture seule.
+
+
 ## DOC-3 Vue d'ensemble de Weaver
 
 - 2026-10-23 : à la demande de Dimi, le chapitre 1 contient uniquement le
@@ -2050,6 +2079,129 @@ ou déploiement exécuté. Redéploiement et nouvel essai à effectuer par Dimi.
 Sur demande de Dimi, la rétention par défaut du seul profil k3d passe à PT1M.
 Le délai de balayage reste inchangé ; une minute rend la purge éligible mais ne
 garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
+
+
+## REL-1 Génération Weaver 5.0.0
+
+- 2026-10-25 : décision de Dimi de conserver les noms de packages et de démarrer
+  toutes les distributions Weaver en 5.0.0 ; Swift conserve ses lignes actuelles.
+  Applications Python/frontend, crates Rust, quatre bibliothèques Python, neuf
+  packages de capabilities, trois bibliothèques npm, charts et versions par défaut
+  des images alignés. Workspace npm et harnais de validation alignés également.
+- Dépendances internes Python bornées à `>=5.0.0,<6`, peer dependency UI/tokens à
+  `^5.0.0`. Lockfiles ajustés mécaniquement pour les coordonnées locales, sans
+  résolution ni changement des dépendances tierces. Ralph expose la version de
+  sa crate via `CARGO_PKG_VERSION`.
+- Versions de schéma des manifests capabilities, protocoles/API, migrations,
+  fixtures synthétiques et preuves de publications historiques conservées.
+  Aucun changement des règles OpenFGA ou de l'admission runtime dans ce lot.
+- Politique de versions actualisée. Avant publication : adapter les helpers Python
+  (bornes et maintenance d'une ancienne majeure), le contrat npm encore lié à
+  Swift, les tags/branches de publication et les bornes côté Swift. Aucun accord
+  historique de publication réutilisé pour Weaver.
+- Modifications préexistantes du lot k3d conservées. Relecture du diff seulement ;
+  aucun test, build, régénération OpenAPI, déploiement, tag, publication, commit ou
+  push exécuté. Le numéro 5.0.0 ne vaut pas validation fonctionnelle de Weaver.
+
+
+## SEC-1 Invariants de sécurité Weaver
+
+- 2026-10-25 : Dimi réaffirme que Weaver ne doit jamais s'écarter du modèle de
+  sécurité Swift. La refonte simplifie le modèle ReBAC et concentre les contrôles,
+  sans sacrifier identité, admission, isolation, délégation, renouvellement des
+  credentials, révocation ou fin de vie des runs. Section normative ajoutée dans
+  `AGENTS.md`, avec renvoi depuis `CLAUDE.md`.
+- Direction : permissions documentaires portées par les espaces, sans tuples par
+  document ; disparition de Knowledge Flow API, recherche vectorielle et lectures
+  via les capacités locales du pod agent. L'accès direct au stockage reste soumis
+  aux contrôles d'autorisation partagés. Cette direction n'est pas une preuve
+  d'implémentation ou de validation du parcours.
+- Le scénario initial à cadrer est Bob dans fredlab, organisation TSN, avec des
+  capacités locales uniquement. La généralisation des appels REST d'autorisation,
+  un mode catalogue séparé, un nouveau grant signé et les détails de la réponse
+  de contexte ne sont pas des décisions acceptées. La distinction entre personne
+  et service et les mécanismes de renouvellement doivent être préservés.
+- Pour chaque garantie affectée : identifier son contrôle Swift, son application
+  Weaver et la preuve à apporter. Un équivalent manquant reste une question de
+  contrat, sans contournement implicite. Aucune conclusion d'homologation CVSSI
+  ne découle de cette clarification.
+- Modification des consignes et du journal uniquement pour ce lot ; changements
+  locaux précédents conservés. Aucun code applicatif modifié, test, build,
+  déploiement, commit ou publication exécuté.
+
+- 2026-10-25, suite du cadrage SEC-1 : décisions validées par Dimi :
+  `can_read` sur l'espace d'exécution et `can_use` de cet espace sur le template ;
+  consommation locale du binding PG/OpenFGA canonique en lecture seule ; contrôle
+  à l'entrée puis avant chaque opération protégée, sans cache inter-opérations ni
+  contrôle par token SSE ; renouvellement JWT conservé indépendamment des droits.
+- Portée documentaire confirmée : espace et ancêtres, sans `can_read` supplémentaire
+  sur les ancêtres ; fredlab inclut TSN, un projet inclut équipe et organisation,
+  aucun descendant/frère ajouté, espace personnel isolé. Aucun tuple par document.
+- Dimi exclut explicitement toute rétrocompatibilité Weaver/Swift : aucun mode,
+  alias ou fallback ; migration séparée, remplacement et suppression du code
+  obsolète, simplicité et réduction du code de production prioritaires.
+- OpenSpec de planification créé :
+  `openspec/changes/simplify-weaver-runtime-authorization/` (proposition, conception,
+  exigences et lots conditionnels). Les anciens changes centrés sur KF/tags ne
+  constituent pas le contrat Weaver. Aucun code de production modifié dans ce lot.
+- Trois prérequis restent visibles avant exécution gérée : correspondance du
+  contrôle Swift de compte actif avec la révocation/admission Weaver ; source et
+  contrat Rust des faits instance/conversation ; disponibilité/autorisation des
+  capacités et modèles du template. La relation Swift `suspended` absente ne prouve
+  pas qu'une nouvelle fonction de suspension est nécessaire : comparaison à faire,
+  sans supprimer implicitement la garantie. Dimi a demandé une explication de ce
+  point ; aucune décision de suppression ou de nouveau mécanisme n'est acquise.
+- Recherche locale proposée : filtre de portée et vérification SQL groupée des
+  publications/cycles de vie ; exclusion conservatrice pendant changement
+  d'inclusion à confirmer. L'exécution d'agents en projet reste distincte de la
+  portée documentaire, le helper Rust actuel acceptant équipe/personnel seulement.
+- Changements utilisateur précédents préservés. Aucun test, build, déploiement,
+  commit, push ni validation dynamique exécuté. Planification ne vaut pas accord
+  d'implémentation ni preuve de réduction effective du code.
+
+- 2026-10-25, arbitrage suivant de Dimi : aucun besoin de suspension réversible
+  ni de restauration de l'ancien contexte de Bob ; un retour suit l'admission
+  d'un nouvel arrivant. Quelques minutes d'activité déjà engagée après révocation
+  sont acceptables, avec arrêt/nettoyage rapide. Consignes et OpenSpec actualisés.
+  Les contrôles avant opération restent acquis ; la borne chiffrée et son
+  application aux runs/délégations restent à préciser. Aucune assimilation entre
+  nettoyage des accès/runtime et purge des documents, historiques ou audits.
+  Planification uniquement, sans modification de code ni validation dynamique.
+
+- 2026-10-25 : Dimi valide une borne maximale de cinq minutes après révocation
+  effective des accès pour les activités déjà engagées et la fin d'autorité des
+  runs/délégations concernés. Consignes et OpenSpec alignés ; le mécanisme qui
+  garantit cette borne reste à préciser, notamment sans nouvel appel d'outil.
+  Le renouvellement des tokens de service ne doit pas prolonger cette autorité.
+  Aucun code de production ni validation dynamique dans cette mise à jour.
+
+- 2026-10-25 : Dimi délègue la proposition du contexte minimal et exige de conserver
+  des logs/KPI riches filtrables par organisation, équipe et projet. Conception
+  précisée : resolver demandé par espace/instance, réponse sujet + placement
+  canonique + binding/configuration agent ; session/run/trace restent au runtime,
+  qui conserve le contrôle d'appartenance conversation/checkpoint. Aucun second
+  stockage de conversation côté Rust ni liste de permissions dans le contexte.
+  Projection centrale du même contexte vers logs/KPI existants, dimensions
+  organisation/équipe/projet stables, isolation concurrente, attribution terminale.
+  Les dimensions produit ne sont pas ajoutées implicitement aux labels Prometheus.
+  Route/source d'instance Rust et mécanisme de borne à cinq minutes restent à
+  préciser. Proposition documentaire uniquement, sans validation dynamique.
+
+- 2026-10-25 : Dimi valide le contexte canonique minimal puis la règle de
+  dépendances : l'activation du template autorise ses capacités/modèles configurés,
+  sans catalogue ReBAC distinct ; disponibilité et restrictions de données restent
+  vérifiées. Registre, configuration, routage des modèles, clients et renouvellement
+  Swift conservés ; aucun élargissement vers leur refonte ou les autres capacités.
+- OpenSpec `simplify-weaver-runtime-authorization` réconcilié en quatre lots :
+  consommateur Python Weaver ; contexte/run/dépendances/observabilité ; accès
+  documentaire local ; configuration et remise à Dimi. Suppressions dans chaque
+  lot, sans lot général de nettoyage ni mode compatible. La source d'instance Rust
+  et la garantie technique des cinq minutes restent à établir au début du lot 2,
+  sans rouvrir les règles métier validées ni élargir implicitement le périmètre.
+- Documentation uniquement dans cette mise à jour (OpenSpec et journal).
+  Aucun code, configuration de déploiement, test ni fichier généré modifié ;
+  aucun test, build, déploiement, commit, push ou validation dynamique exécuté.
+
 
 ## F23 Stockage des instances d'agents
 

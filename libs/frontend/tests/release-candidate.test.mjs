@@ -20,6 +20,10 @@ import test from "node:test";
 
 import { buildReleaseCandidate } from "../scripts/release-candidate.mjs";
 import { loadReleaseContract } from "../scripts/release-contract.mjs";
+import {
+  changelogFixture,
+  withCompatibleTokenBaseline,
+} from "./helpers/release-fixtures.mjs";
 
 const expectedToolchain = { node: "24.21.0", npm: "11.19.0" };
 const gates = {
@@ -61,6 +65,7 @@ test("candidate generation packs and verifies each selected archive once", async
   const contract = await loadReleaseContract();
   const calls = [];
   const result = await buildReleaseCandidate({
+    root: await changelogFixture(context, contract),
     contract,
     sourceCommit: "f".repeat(40),
     clean: true,
@@ -81,7 +86,9 @@ test("candidate generation packs and verifies each selected archive once", async
 });
 
 test("SDK-only, tokens-only, UI-only and combined candidates pack only selected members", async (context) => {
-  const contract = await loadReleaseContract();
+  const contract = await withCompatibleTokenBaseline(
+    await loadReleaseContract(),
+  );
   for (const [selection, expected, compatible] of [
     ["iframeSdk", ["iframeSdk"], []],
     ["designTokens", ["designTokens"], []],
@@ -90,6 +97,7 @@ test("SDK-only, tokens-only, UI-only and combined candidates pack only selected 
   ]) {
     const calls = [];
     const result = await buildReleaseCandidate({
+      root: await changelogFixture(context, contract),
       contract,
       selection,
       sourceCommit: "f".repeat(40),
@@ -231,7 +239,7 @@ test("changing only a fixture contract state cannot authorize a candidate", asyn
   assert.deepEqual(calls, []);
 });
 
-test("a failed package gate prevents candidate evidence", async () => {
+test("a failed package gate prevents candidate evidence", async (context) => {
   const contract = await loadReleaseContract();
   const packers = {
     designTokens: async () => {
@@ -242,6 +250,7 @@ test("a failed package gate prevents candidate evidence", async () => {
   };
   await assert.rejects(
     buildReleaseCandidate({
+      root: await changelogFixture(context, contract),
       contract,
       sourceCommit: "fixture-commit",
       clean: true,
@@ -262,6 +271,7 @@ test("an incomplete archive prevents candidate evidence", async (context) => {
   });
   await assert.rejects(
     buildReleaseCandidate({
+      root: await changelogFixture(context, contract),
       contract,
       sourceCommit: "fixture-commit",
       clean: true,
@@ -279,6 +289,7 @@ test("candidate generation rejects archives changed by a later gate", async (con
   const calls = [];
   await assert.rejects(
     buildReleaseCandidate({
+      root: await changelogFixture(context, contract),
       contract,
       sourceCommit: "fixture-commit",
       clean: true,

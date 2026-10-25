@@ -1,27 +1,27 @@
 [project]
 name = "fred-agents"
-version = "0.1.1"
+version = "5.0.0"
 description = "The fred default agents"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Fredlab", email = "contact@fredlab.com" }]
 dependencies = [
-  "fred-core>=4.5.3",
-  "fred-sdk[agents]>=4.5.3",
-  "fred-runtime[app]>=4.5.3",
+  "fred-core>=5.0.0,<6",
+  "fred-sdk[agents]>=5.0.0,<6",
+  "fred-runtime[app]>=5.0.0,<6",
   # First-party capabilities installed on this pod: installing the package IS
   # the registration (AGENT-CAPABILITY-RFC §4/§7, fred.capabilities entry point).
-  "fred-capability-writable-document>=4.5.1",
-  "fred-capability-ppt-filler>=4.5.1",
-  "fred-capability-platform-ops>=4.5.1",
-  "fred-capability-html-artifact>=4.5.1",
-  "fred-capability-team-wiki>=4.5.1",
-  "fred-capability-documents>=4.5.2",
-  "fred-capability-document-access>=4.5.1",
+  "fred-capability-writable-document>=5.0.0,<6",
+  "fred-capability-ppt-filler>=5.0.0,<6",
+  "fred-capability-platform-ops>=5.0.0,<6",
+  "fred-capability-html-artifact>=5.0.0,<6",
+  "fred-capability-team-wiki>=5.0.0,<6",
+  "fred-capability-documents>=5.0.0,<6",
+  "fred-capability-document-access>=5.0.0,<6",
   # Default MCP catalog and instructions, discovered through fred.mcp_catalogs.
-  "fred-capability-mcp>=4.5.1",
-  "fred-capability-web-research>=4.5.1",
+  "fred-capability-mcp>=5.0.0,<6",
+  "fred-capability-web-research>=5.0.0,<6",
   "uvicorn>=0.35",
 ]
 

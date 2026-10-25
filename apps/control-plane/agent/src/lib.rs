@@ -23,7 +23,7 @@ pub struct AgentDefinition {
 pub const DEFINITION: AgentDefinition = AgentDefinition {
     id: AGENT_ID,
     title: AGENT_ID,
-    version: "0.1.0",
+    version: env!("CARGO_PKG_VERSION"),
     provider: "control-plane",
     description: "Demonstration agent replying Hello world! without an LLM or data access.",
 };

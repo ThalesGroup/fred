@@ -991,7 +991,7 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "4.5.9"
+version = "5.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
@@ -1129,7 +1129,7 @@ dev = [
 
 [[package]]
 name = "fred-pod"
-version = "4.5.1"
+version = "5.0.0"
 source = { editable = "../fred-pod" }
 dependencies = [
     { name = "httpx" },

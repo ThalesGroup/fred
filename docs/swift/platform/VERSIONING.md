@@ -4,6 +4,33 @@ This document defines Fred release delivery and versioning conventions.
 
 We follow [Semantic Versioning 2.0.0](https://semver.org/).
 
+## Weaver 5.x preparation
+
+The `weaver` branch starts a coordinated 5.0.0 generation for Fred application
+packages, Rust crates, Python libraries and capabilities, npm libraries, chart
+versions/appVersions and local image-tag defaults. Published package names and
+Python import names are retained. Swift keeps its existing version lines and can
+continue releasing maintenance patches independently.
+
+Weaver Python consumers require internal libraries in `>=5.0.0,<6`; the npm UI
+requires `@fred-oss/design-tokens` in `^5.0.0`. Application lockfiles select the
+local 5.0.0 packages without updating third-party dependencies. The k3d build
+continues to use content-derived tags for imported images.
+
+This is source preparation, not a publication or compatibility certification.
+It does not adapt Python authorization to Weaver. Capability manifest/schema
+versions, HTTP API versions, protocol versions, migration identifiers, historical
+release evidence and synthetic test fixtures keep their existing meaning and
+are not distribution versions.
+
+Before publication, adapt and validate the release tooling for the two maintained
+branches: the Python patch-preparation helper currently accepts only unbounded
+`>=` dependency floors, the PyPI publication guard compares against the latest
+published version, and the approved npm release contract still targets `swift`.
+Do not reuse that approval as a Weaver release approval or rewrite historical
+registry evidence. Review branch/tag routing, npm dist-tags, dependency bounds
+on the Swift branch, and publication order in that separate release task.
+
 ## Delivery Flow
 
 Fred uses a **long-lived release branch** model. See [`BRANCH_STRATEGY.md`](BRANCH_STRATEGY.md)

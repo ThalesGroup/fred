@@ -4,12 +4,12 @@ description: An agent pod built on Fred's fred-runtime, deployed from its own im
 type: application
 # version follows the fred chart; appVersion identifies the fred-runtime version
 # used by the embedded AgentPodConfig values.schema.json.
-version: 1.5.0-post
-appVersion: "4.5.9"
+version: 5.0.0
+appVersion: 5.0.0
 home: https://github.com/ThalesGroup/fred
 icon: https://site.fredlab.dev/images/fred.svg
 sources:
-  - https://github.com/ThalesGroup/fred/tree/swift/deploy/charts/agent-pod
+  - https://github.com/ThalesGroup/fred/tree/weaver/deploy/charts/agent-pod
 keywords:
   - fred
   - agents

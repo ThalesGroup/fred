@@ -1,7 +1,7 @@
 # Project Metadata
 PROJECT_NAME        ?= fred-evaluation-backend
 PROJECT_SLUG        ?= fred-evaluation-backend
-VERSION             ?= 0.1
+VERSION             ?= 5.0.0
 PY_PACKAGE          ?= fred_evaluation_backend
 
 # Docker/Registry

@@ -28,7 +28,9 @@ import {
   assertCompatibleTokenProvision,
 } from "../scripts/provision-compatible-token.mjs";
 
-const contract = await loadReleaseContract();
+import { withCompatibleTokenBaseline } from "./helpers/release-fixtures.mjs";
+
+const contract = await withCompatibleTokenBaseline(await loadReleaseContract());
 const ledger = await loadCompatibilityLedger();
 
 test("UI-only provisioning verifies exact bytes and provenance without historical CI ZIP", async (context) => {

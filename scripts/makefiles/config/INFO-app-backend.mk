@@ -1,7 +1,7 @@
 # Project Metadata
 PROJECT_NAME        ?= app-backend
 PROJECT_SLUG        ?= app-backend
-VERSION             ?= 0.1
+VERSION             ?= 5.0.0
 PY_PACKAGE          ?= app_backend
 
 # Runtime

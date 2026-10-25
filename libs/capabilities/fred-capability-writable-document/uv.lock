@@ -750,7 +750,7 @@ wheels = [
 
 [[package]]
 name = "fred-capability-writable-document"
-version = "4.5.1"
+version = "5.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
@@ -824,7 +824,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "4.5.9"
+version = "5.0.0"
 source = { editable = "../../fred-core" }
 dependencies = [
     { name = "aiohttp" },
@@ -930,7 +930,7 @@ dev = [
 
 [[package]]
 name = "fred-pod"
-version = "4.5.1"
+version = "5.0.0"
 source = { editable = "../../fred-pod" }
 dependencies = [
     { name = "httpx" },
@@ -970,7 +970,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "4.5.9"
+version = "5.0.0"
 source = { editable = "../../fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -1039,7 +1039,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.5.9"
+version = "5.0.0"
 source = { editable = "../../fred-sdk" }
 dependencies = [
     { name = "fred-pod" },

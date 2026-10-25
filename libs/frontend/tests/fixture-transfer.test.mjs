@@ -25,6 +25,8 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
+import fs from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -52,6 +54,11 @@ import {
 } from "../scripts/release-contract.mjs";
 import { sha512Integrity } from "../scripts/release-evidence.mjs";
 import { assertDocumentSchema } from "../scripts/schema-validation.mjs";
+
+import {
+  changelogFixture,
+  withCompatibleTokenBaseline,
+} from "./helpers/release-fixtures.mjs";
 
 const sourceCommit = "a".repeat(40);
 const execution = fixtureExecution({
@@ -347,7 +354,9 @@ test("selected SDK/UI archives transfer to a separate application environment wi
     ["ui", ["ui"]],
   ]) {
     const paths = await roots(context);
-    const contract = await loadReleaseContract();
+    const contract = await withCompatibleTokenBaseline(
+      await loadReleaseContract(),
+    );
     const calls = [];
     await createFixtureTransfer({
       outputRoot: paths.producer,
@@ -416,6 +425,23 @@ test("a maintainer-confirmed transfer becomes approved evidence only after recei
   const contract = await loadReleaseContract(
     path.join(workspaceRoot, "release/proposed-release-contract.json"),
   );
+  const changelogRoot = await changelogFixture(context, contract);
+  const changelogs = new Map(
+    contract.inventory.members.map(({ workspace }) => [
+      path.join(workspaceRoot, workspace, "CHANGELOG.md"),
+      path.join(changelogRoot, workspace, "CHANGELOG.md"),
+    ]),
+  );
+  // Only release approval data is simulated; canonical-root and real packer checks still run.
+  const originalReadFile = fs.readFile;
+  const readMock = context.mock.method(fs, "readFile", (file, ...args) =>
+    originalReadFile(changelogs.get(file) ?? file, ...args),
+  );
+  syncBuiltinESMExports();
+  context.after(() => {
+    readMock.mock.restore();
+    syncBuiltinESMExports();
+  });
   await createReleaseCandidateTransfer({
     outputRoot: paths.producer,
     contract,

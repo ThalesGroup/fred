@@ -12,6 +12,11 @@ through `.agents/skills`. Its editorial policy is mandatory: keep the human-faci
 architecture current with feature changes and put code references in annexes.
 It supersedes older guidance about architecture content and update timing.
 
+For Weaver runtime and authorization work, apply
+[AGENTS.md - Weaver security invariants](AGENTS.md#weaver-preserve-swifts-security-model-while-simplifying-rebac).
+This is the authoritative boundary for the revamp; historical Swift mechanisms
+and proposed migration plans do not override it.
+
 ---
 
 ## Prime directive — extend, do not duplicate

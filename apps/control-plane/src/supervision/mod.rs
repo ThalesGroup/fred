@@ -175,7 +175,10 @@ impl Accumulator {
             (&mut c.published.vectors, row.vectors),
             (&mut c.published.tabular_datasets, row.datasets),
             (&mut c.published.known_rows, row.known_rows),
-            (&mut c.published.datasets_with_unknown_rows, row.unknown_datasets),
+            (
+                &mut c.published.datasets_with_unknown_rows,
+                row.unknown_datasets,
+            ),
         ] {
             *value = value
                 .checked_add(additional)
@@ -218,9 +221,8 @@ impl Accumulator {
             .into_iter()
             .map(|(role, assignments)| RoleAssignments { role, assignments })
             .collect();
-        self.counts.published.total_rows =
-            (self.counts.published.datasets_with_unknown_rows == 0)
-                .then_some(self.counts.published.known_rows);
+        self.counts.published.total_rows = (self.counts.published.datasets_with_unknown_rows == 0)
+            .then_some(self.counts.published.known_rows);
         self.counts
             .processing
             .sort_by_key(|c| (c.status == ProcessingStatus::Running, c.stage.ordinal()));
@@ -265,17 +267,17 @@ async fn collect(
     }
     let mut counts: BTreeMap<Bucket, Accumulator> = BTreeMap::new();
     for row in &snapshot.counts {
-        let buckets = destinations.get(&row.space_id).ok_or_else(|| {
-            AppError::Internal(anyhow::anyhow!("missing supervision scope"))
-        })?;
+        let buckets = destinations
+            .get(&row.space_id)
+            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("missing supervision scope")))?;
         for bucket in buckets {
             counts.entry(*bucket).or_default().add_counts(row)?;
         }
     }
     for row in &snapshot.processing {
-        let buckets = destinations.get(&row.space_id).ok_or_else(|| {
-            AppError::Internal(anyhow::anyhow!("missing supervision scope"))
-        })?;
+        let buckets = destinations
+            .get(&row.space_id)
+            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("missing supervision scope")))?;
         for bucket in buckets {
             counts.entry(*bucket).or_default().add_processing(row)?;
         }
@@ -288,9 +290,9 @@ async fn collect(
         .collect();
     let grants = s.fga.grants_on(&active).await.map_err(|_| unavailable())?;
     for (id, grants) in grants {
-        let buckets = destinations.get(&id).ok_or_else(|| {
-            AppError::Internal(anyhow::anyhow!("missing supervision scope"))
-        })?;
+        let buckets = destinations
+            .get(&id)
+            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("missing supervision scope")))?;
         // A repeated tuple across pages cannot inflate an attribution count.
         for (user, role) in grants.into_iter().collect::<BTreeSet<_>>() {
             for bucket in buckets {

@@ -1,6 +1,6 @@
 {
   "name": "@fred-oss/design-tokens",
-  "version": "0.1.1-alpha.0",
+  "version": "5.0.0",
   "description": "FRED design tokens and optional packaged Geist fonts",
   "license": "Apache-2.0",
   "type": "module",
@@ -9,7 +9,7 @@
     "url": "git+https://github.com/ThalesGroup/fred.git",
     "directory": "libs/frontend/design-tokens"
   },
-  "homepage": "https://github.com/ThalesGroup/fred/tree/swift/libs/frontend/design-tokens#readme",
+  "homepage": "https://github.com/ThalesGroup/fred/tree/weaver/libs/frontend/design-tokens#readme",
   "bugs": {
     "url": "https://github.com/ThalesGroup/fred/issues"
   },

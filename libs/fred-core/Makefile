@@ -1,4 +1,4 @@
-VERSION=0.1.0
+VERSION=5.0.0
 PROJECT_NAME=fred-core
 PY_PACKAGE=fred_core
 

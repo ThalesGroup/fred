@@ -1,7 +1,7 @@
 # Project Metadata
 PROJECT_NAME        ?= fred-agents
 PROJECT_SLUG        ?= fred-agents
-VERSION             ?= 0.2
+VERSION             ?= 5.0.0
 PY_PACKAGE          ?= fred_agents
 
 # Docker/Registry

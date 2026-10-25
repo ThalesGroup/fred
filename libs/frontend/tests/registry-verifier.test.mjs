@@ -44,6 +44,7 @@ import {
   verificationEvidenceKind,
 } from "../scripts/registry-verifier.mjs";
 import { run } from "../scripts/process.mjs";
+import { withCompatibleTokenBaseline } from "./helpers/release-fixtures.mjs";
 import { signedPublishingProvenance } from "./helpers/signed-provenance.mjs";
 
 const fixtureContract = await loadReleaseContract();
@@ -962,7 +963,7 @@ test("selected registry tooling verifies SDK alone and UI with an independently 
   const { loadCompatibilityLedger } =
     await import("../scripts/compatibility-baselines.mjs");
   const ledger = await loadCompatibilityLedger();
-  const contract = structuredClone(selectedContract);
+  const contract = await withCompatibleTokenBaseline(selectedContract);
   const root = await mkdtemp(
     path.join(os.tmpdir(), "fred-selected-registry-tooling-"),
   );
@@ -1044,7 +1045,7 @@ test("UI-only registry resolution validates an exact compatibility-token peer gr
   const baselineVersion = baseline.coordinate.slice(
     baseline.coordinate.lastIndexOf("@") + 1,
   );
-  const contract = structuredClone(selectedContract);
+  const contract = await withCompatibleTokenBaseline(selectedContract);
   contract.packages.designTokens.version = "0.1.0-alpha.2";
   const root = await mkdtemp(path.join(os.tmpdir(), "fred-ui-registry-graph-"));
   context.after(() => rm(root, { recursive: true, force: true }));
@@ -1322,7 +1323,7 @@ test("UI-only registry tooling rejects missing baseline and wrong validly signed
   const { loadCompatibilityLedger } =
     await import("../scripts/compatibility-baselines.mjs");
   const ledger = await loadCompatibilityLedger();
-  const contract = structuredClone(selectedContract);
+  const contract = await withCompatibleTokenBaseline(selectedContract);
   const root = await mkdtemp(
     path.join(os.tmpdir(), "fred-wrong-baseline-registry-"),
   );

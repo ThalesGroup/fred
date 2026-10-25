@@ -1,7 +1,7 @@
 # Project Metadata
 PROJECT_NAME        ?= control-plane
 PROJECT_SLUG        ?= control-plane
-VERSION             ?= 0.1
+VERSION             ?= 5.0.0
 
 # Docker/Registry
 REGISTRY_URL        ?= ghcr.io

@@ -4,12 +4,12 @@ description: A Knowledge Base pod built on Fred's fred-sdk, deployed from its ow
 type: application
 # version follows the fred chart; appVersion identifies the fred-sdk version used
 # by the embedded Knowledge Base PodConfiguration values.schema.json.
-version: 1.5.0-post
-appVersion: "4.5.9"
+version: 5.0.0
+appVersion: 5.0.0
 home: https://github.com/ThalesGroup/fred
 icon: https://site.fredlab.dev/images/fred.svg
 sources:
-  - https://github.com/ThalesGroup/fred/tree/swift/deploy/charts/knowledge-base
+  - https://github.com/ThalesGroup/fred/tree/weaver/deploy/charts/knowledge-base
 keywords:
   - fred
   - knowledge-base

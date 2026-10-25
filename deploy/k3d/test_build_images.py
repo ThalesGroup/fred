@@ -51,7 +51,20 @@ class BuildImagesTests(unittest.TestCase):
                 module.build(root, output)
             self.assertEqual(before, (output / "images.yaml").read_text())
             applications = json.loads(before)["applications"]
-            self.assertEqual(len(applications), 4)
+            self.assertEqual(
+                set(applications),
+                {
+                    "control-plane-backend",
+                    "knowledge-flow-backend",
+                    "knowledge-flow-worker",
+                    "frontend",
+                    "fred-agents",
+                },
+            )
+            self.assertEqual(
+                applications["fred-agents"]["image"]["repository"],
+                "localhost:5000/fred/fred-agents",
+            )
             for api, worker in (("knowledge-flow-backend", "knowledge-flow-worker"),):
                 self.assertEqual(
                     applications[api], applications[worker]
@@ -59,13 +72,13 @@ class BuildImagesTests(unittest.TestCase):
             self.assertEqual(
                 applications["frontend"]["image"]["tag"], "k3d-" + hashlib.sha256(json.dumps({"rootfs": {"Type": "layers", "Layers": ["sha256:" + "a" * 64]}, "config": {}, "os": "linux", "architecture": "amd64", "variant": ""}, sort_keys=True).encode()).hexdigest()[:16]
             )
-            self.assertEqual(len((output / "images.txt").read_text().splitlines()), 3)
+            self.assertEqual(len((output / "images.txt").read_text().splitlines()), 4)
             builds = [
                 call.args[0]
                 for call in run.call_args_list
                 if "docker-build" in call.args[0]
             ]
-            self.assertEqual(len(builds), 6)
+            self.assertEqual(len(builds), 8)
             self.assertEqual(builds[0][3], str(root / "apps/control-plane"))
 
     def test_runtime_changes_get_new_tags(self) -> None:

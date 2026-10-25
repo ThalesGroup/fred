@@ -56,6 +56,76 @@ a push or publication. State accurately which validation was not performed.
 This working mode takes precedence over the automatic workflow, verification,
 review and close-out requirements below and in legacy guidance or skills.
 
+## Weaver: preserve Swift's security model while simplifying ReBAC
+
+This is Dimi's explicit Weaver direction. Weaver reinvents the ReBAC data model
+and consolidates its implementation; it does not authorize a departure from
+Swift's security model, trust principles or guarantees. Preserve the guarantees,
+not the scattered checks, legacy tables, endpoint layout or per-document tuples.
+Read this section before planning or changing Python libraries, agent execution,
+capabilities, identity, authorization or backend-to-backend communication.
+
+Weaver development is a breaking replacement, not a backward-compatible Swift
+variant. Do not add compatibility flags, legacy aliases, fallback endpoints or
+parallel old/new authorization paths. Migration is a separate workstream. Replace
+and remove obsolete behavior in each scoped lot, after checking its consumers;
+preserve security guarantees and useful shared mechanisms, not legacy code.
+Optimize for the fewest concepts and least owned production code consistent with
+clear, robust behavior. Do not weaken controls or compress code to claim savings.
+
+- Dimi clarified departure semantics: no reversible suspension or automatic
+  restoration of former access/context on return; treat return as newcomer
+  admission. Already-running activity and affected run/delegation cleanup have
+  an accepted maximum of five minutes after effective access revocation.
+  Preserve next-operation checks and bound delegated authority independently of
+  renewable service tokens. Runtime/access cleanup is not implicit authorization
+  to erase shared content, persisted histories or audit evidence.
+- Preserve JWT validation, the distinction between the authenticated workload
+  and the person it acts for, trusted delegation, user/service credential
+  renewal, credential confidentiality and run-lifetime enforcement. A service
+  token is not the person's identity or permission. Renewing credentials must
+  never restore revoked rights or extend a completed run's authority.
+- Identity comes from validated credentials or an explicitly trusted delegation
+  path. Browser/model-supplied user, organization, space, instance and conversation
+  fields are requests to verify, not authority. Bind canonical context on the
+  server; model/tool arguments cannot replace or broaden it.
+- Preserve admission, organization/space isolation, conversation ownership/access,
+  revocation and lifecycle controls at the applicable operation boundaries.
+  Initial execution admission is not an unlimited authorization for later data
+  access. A missing Weaver equivalent is a contract gap to resolve explicitly,
+  never permission to disable the Swift guarantee or reproduce a legacy bypass.
+- The agent's exchange with Control Plane to resolve its execution context already
+  exists in Swift. Clarify and simplify that contract; do not infer a decision to
+  replace all Python authorization with REST calls or to introduce a new signed
+  execution grant. The exact admission response, delegation transport and timing
+  of rechecks remain design decisions until explicitly agreed.
+- Knowledge Flow API disappears from the Weaver target. Knowledge Flow retains
+  document processing; vector search and related reads move to local capabilities
+  in the agent pod, using shared Python access primitives with OpenSearch/pgvector,
+  PostgreSQL and OpenFGA. Do not plan a replacement Knowledge Flow HTTP dependency.
+  Storage credentials authenticate infrastructure access, not Bob's entitlement;
+  capabilities must enforce his verified context before exposing data to the LLM
+  or caller. This target is not evidence that those paths already work.
+- Document permissions derive from their containing Weaver space (organization,
+  team, project or personal space); do not recreate per-document authorization
+  tuples. PostgreSQL placement/publication/lifecycle facts and OpenFGA permissions
+  jointly constrain access. An index hit alone is not authorization. Consolidate
+  checks into a few shared, efficient primitives; do not duplicate the permission
+  matrix in each capability or assume a fixed RPC budget without evidence.
+- Keep external tools outside Fred's identity trust distinct from services that
+  explicitly accept delegation. Do not forward Fred credentials automatically to
+  unrelated endpoints. Port remote MCP behavior in its own agreed scope; preserve
+  existing credential renewal and delegation guarantees rather than redesigning
+  them incidentally during the local-capability migration.
+
+For each affected security guarantee, identify the Swift enforcement point, its
+Weaver replacement and the evidence needed to establish preservation. Explain any
+changed trust boundary before implementation; obtain an explicit decision rather
+than infer approval from "simplification". This traceability is scoped to the
+change and does not authorize a broad audit or tests outside the agreed workflow.
+Do not claim security equivalence from version numbers, successful startup or
+catalog discovery, or promise that SSI/CVSSI reassessment is unnecessary.
+
 ## Rust engineering baseline
 
 Apply these rules to Rust implementation and review, including the Control Plane

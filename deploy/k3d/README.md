@@ -1,6 +1,6 @@
-# Rust control-plane: local ingestion deployment
+# Weaver: local ingestion deployment and agent catalog preparation
 
-On `chore/rust-rebac`, `deploy/k3d/build` builds `apps/control-plane` as the
+On `weaver`, `deploy/k3d/build` builds `apps/control-plane` as the
 `control-plane-backend` image. The ingestion profile runs it as `control-plane serve`:
 HTTP, durable Temporal submission and lifecycle work share one process. Knowledge
 Flow runs only its worker; its HTTP API and the separate manager worker are disabled.
@@ -20,6 +20,78 @@ URLs, its shared base values and the generic build/import/sync sequence. Its
 `APP=fred DIR=...` command selects the checkout's Helmfile when present.
 No Rust-specific profile is added to the factory.
 
+## Agent catalog preparation: activation blocked
+
+`deploy/k3d/build` also builds `apps/fred-agents` through its existing
+`docker-build` target. The same content-derived `k3d-<digest>` tag is written to
+`images.txt` and to `images.yaml` under the `fred-agents` consumer. Build output
+is still published only after all four images succeed. Building this image does
+not enable its deployment.
+
+The chart confirms Service `fred-agents`, port 80 targeting container port 8000,
+and HTTP prefix `/fred/agents/v2`. Rust appends `/agents/templates`; that public
+route lists public registry definitions by default without calling the control
+plane or invoking a model. The existing organization Agents UI consumes the Rust
+catalog. No UI change or runtime registration is needed.
+
+**Do not enable the inherited Swift runtime profile yet.** Source inspection
+found two startup contracts incompatible with a Weaver-only installation:
+
+- `enforce_account_status` requires OpenFGA `organization.suspended: [user]`.
+  Weaver uses `space` and has no such type/relation. The inherited Python defaults
+  select store `fred`, allow store creation and synchronize the Swift model at
+  startup. Pointing those defaults at Weaver's store would publish the wrong
+  model; using a separate Swift store would not enforce Weaver's authority.
+- With user, M2M and ReBAC security enabled, `initialize_platform_access` requires
+  the legacy Python tables `platform_access_settings`, `platform_access_users`,
+  `platform_access_removals`, `users`, `teammetadata`, `platform_access_links` and
+  `platform_access_link_joiners`, and reads them at startup. Weaver migrations
+  do not provide that admission contract. Runtime/capability migrations do not
+  replace the Python control-plane migrations.
+
+These checks precede serving even the public catalog. Disabling authentication,
+ReBAC or delegation, creating a parallel authority, installing legacy manager
+migrations, or replacing the OpenFGA model is not a deployment-only solution.
+A separate runtime/authorization adaptation must define how the pod retains
+Weaver's admission and authorization guarantees before activation.
+
+The following inherited dependencies also become active with `fred-agents`:
+
+| Dependency | Inherited behavior |
+| --- | --- |
+| Migrations / PostgreSQL | Factory enables the pre-upgrade runtime and installed-capability migration job, including scale-down; runtime requires durable SQL and `session_history` at startup. Database `fred`, user `fred`, host `postgres`; password from `fred-secrets/POSTGRES_FRED_PASSWORD`. |
+| OpenFGA | `http://openfga:9080`, token from `fred-secrets/OPENFGA_API_TOKEN`; unsafe default store creation/model synchronization must be resolved before activation. |
+| Keycloak | C3, user and M2M authentication, outgoing delegation; client `agentic`, secret `fred-secrets/KEYCLOAK_AGENTIC_CLIENT_SECRET`. Factory infrastructure provisions this client and its service/delegation roles; checkout identities only add the ingestion worker. Secondary realm/origins are inherited. OpenAI-compatible execution is already disabled. |
+| Storage / observability | SeaweedFS runtime object store with inherited admin credential `fred-secrets/SEAWEEDFS_ADMIN_PASSWORD`; OpenSearch logs with `fred-secrets/OPENSEARCH_PASSWORD`, Prometheus metrics, and the node CA mount. This does not reuse the ingestion worker's scoped credentials. |
+| Models | Mounted Mistral and in-process mock profiles; required `fred-model-credentials/OPENAI_API_KEY`. Web research remains disabled and its provider Secret optional. Catalog discovery makes no LLM request. |
+| Legacy APIs | Startup creates a lazy control-plane HTTP client. Managed execution later calls the legacy team/agent-instance runtime binding; discovery does not. Knowledge Flow HTTP is disabled in this profile, so its legacy tools are not established either. |
+
+`applications.fred-agents.enabled` therefore remains false and no external Rust
+source is activated. Once the startup contract is resolved, the intended addition
+belongs in this checkout's `values.yaml.gotmpl`, alongside enabling the pod:
+
+```yaml
+applications:
+  control-plane-backend:
+    configuration:
+      platform:
+        runtime_catalog_sources:
+          - runtime_id: fred-agents
+            base_url: http://fred-agents/fred/agents/v2
+            enabled: true
+```
+
+The base/secondary adapters continue to drop factory control-plane configuration;
+no Rust configuration moves to the factory. Discovery still fails globally if
+any enabled source fails, including the organization list containing Ralph.
+The refusal to activate templates with unavailable dependencies is unchanged.
+
+After resolving the blocker and deploying, Dimi validates with `o1admin`:
+organization administration -> Agents shows Ralph and the public fred-agents
+templates, including after reload. This proves catalog discovery only, not
+instance creation or execution. No dynamic validation, tests, builds or deployments
+were run for this preparation; the current diff cannot yet satisfy that criterion.
+
 ## Prepare and deploy
 
 Use the updated factory script that recognizes a checkout-owned Helmfile and
@@ -33,7 +105,7 @@ make k3d-up
 # Validate/render only, without building or provisioning.
 make k3d-app-validate APP=fred DIR=../fred
 # Build, import images, prepare the ingestion dependencies, then deploy.
-make k3d-app APP=fred DIR=../fred
+make k3d-app ENV=secondary APP=fred DIR=../fred
 ```
 
 `ENV` selects the cluster, not the branch or directory. This experimental profile
