@@ -321,6 +321,8 @@
 }
 
 .pendingMessages {
+  position: relative;
+  z-index: 1;
   margin: 0 auto;
   border: 1px solid var(--outline-muted);
   border-bottom: 0;
