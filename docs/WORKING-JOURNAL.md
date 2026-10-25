@@ -42,10 +42,10 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F-013](#f-013-synthese-organisationnelle-en-lecture) | Synthèse organisationnelle et détail équipe | Backend et UI implémentés ; validation des parcours attendue | A2/A7/A8, chapitres 04/09 |
 | [F23](#f23-stockage-des-instances-dagents) | Stockage Rust des instances d'agents | Tests ciblés passants ; jalon global bloqué | Hors périmètre arc42 validé |
 | [F25](#f25-création-et-relecture-dune-instance-custom) | Création/relecture, liste, édition partielle et suppression API d'une instance Custom | Tests API passants ; jalon global bloqué | Hors périmètre arc42 validé |
 | [F24](#f24-catalogue-des-templates-par-espace) | Catalogue des templates par espace | Tests ciblés passants ; parcours UI non validé | Hors périmètre arc42 validé |
-| [F-013](#f-013-synthese-organisationnelle-en-lecture) | Synthèse organisationnelle et détail équipe | Backend et UI implémentés ; validation des parcours attendue | A2/A7/A8, chapitres 04/09 |
 | [F22](#f22-agent-rust-embarqué-hello-world) | Agent Rust embarqué, hello-world SSE | Implémenté, à valider | Hors périmètre arc42 validé |
 | [DOC-3](#doc-3-vue-densemble-de-weaver) | Vue d'ensemble de Weaver | Texte et schémas rédigés | 01 |
 | [DOC-2](#doc-2-contrat-de-lespace-personnel-à-sa-place) | Contrat de l'espace personnel déplacé hors du catalogue SQL | À jour | A2 |
