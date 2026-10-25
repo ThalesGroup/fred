@@ -10,6 +10,7 @@ from fred_runtime.runtime_support import turn_steering
 from fred_sdk.contracts.execution import RuntimeExecuteRequest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.graph.message import add_messages
+from langgraph.runtime import Runtime
 
 
 def test_mailbox_rejects_mismatch_and_deduplicates_messages() -> None:
@@ -56,12 +57,17 @@ def test_human_pause_carries_undelivered_message_to_matching_resume(
         "paused-session", "agent", "user", "team", "message", "duplicate"
     )
     middleware = turn_steering.TurnSteeringMiddleware("paused-session")
-    update = asyncio.run(middleware.abefore_model({}, None))
+    update = asyncio.run(
+        middleware.abefore_model({"messages": []}, Runtime(context=None))
+    )
     assert update == {"messages": [HumanMessage(content="focus on Marseille")]}
     assert [(event.message_id, event.content) for event in events] == [
         ("message", "focus on Marseille")
     ]
-    assert asyncio.run(middleware.abefore_model({}, None)) is None
+    assert (
+        asyncio.run(middleware.abefore_model({"messages": []}, Runtime(context=None)))
+        is None
+    )
     mailbox.end("paused-session", resumed)
     assert not mailbox.offer("paused-session", "agent", "user", "team", "later", "new")
 
@@ -97,7 +103,9 @@ def test_steering_enters_after_completed_tool_pair(monkeypatch) -> None:
             "steer-test", "a", "u", "t", "m", "new direction"
         )
         middleware = turn_steering.TurnSteeringMiddleware("steer-test")
-        update = asyncio.run(middleware.abefore_model({}, None))
+        update = asyncio.run(
+            middleware.abefore_model({"messages": []}, Runtime(context=None))
+        )
         assert update is not None
         history = [
             HumanMessage(content="original"),
@@ -107,17 +115,24 @@ def test_steering_enters_after_completed_tool_pair(monkeypatch) -> None:
             ToolMessage(content="result", tool_call_id="call-1"),
         ]
         merged = add_messages(history, update["messages"])
+        assert isinstance(merged, list)
         assert [type(item) for item in merged] == [
             HumanMessage,
             AIMessage,
             ToolMessage,
             HumanMessage,
         ]
+        assert isinstance(merged[-1], HumanMessage)
         assert merged[-1].content == "new direction"
         assert [(event.message_id, event.content) for event in events] == [
             ("m", "new direction")
         ]
-        assert asyncio.run(middleware.abefore_model({}, None)) is None
+        assert (
+            asyncio.run(
+                middleware.abefore_model({"messages": []}, Runtime(context=None))
+            )
+            is None
+        )
     finally:
         turn_steering.turn_steering_mailbox.end("steer-test", token)
 
