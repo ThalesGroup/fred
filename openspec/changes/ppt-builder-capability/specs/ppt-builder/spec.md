@@ -1039,9 +1039,5 @@ When the template offers a `closing` kind, the system SHALL end every deck it bu
 
 - **GIVEN** a delivered deck that ends on the closing slide the build added
 - **WHEN** a `changes` call edits the deck, or removes the closing without setting `no_closing`
-- **THEN** the rebuilt deck still ends on a closing slide; a call that sets `no_closing: true` removes it, and the opt-out stays with the deck for later `changes` and resends that leave `no_closing` out
-
-#### Scenario: Superseded: the closing within the slide count
-
-- **WHEN** a new deck sent in `slides` did not end on a closing slide
-- **THEN** the earlier `needs_revision` refusal (the closing counted within the slide count asked) is no longer returned: in the live evaluation the model dropped requested content to fit the count or set `no_closing` unasked
+- **THEN** the rebuilt deck still ends on a closing slide; a call that sets `no_closing: true` removes the closing the build added, with or without a `remove` op (a closing the model wrote or edited, such as a contact, stays), and the opt-out stays with the deck for later `changes` and resends that leave `no_closing` out
+- **AND** a call whose only effect is to set or clear `no_closing` is built, never answered as an unchanged deck
