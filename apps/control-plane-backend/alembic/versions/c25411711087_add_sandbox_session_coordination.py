@@ -60,9 +60,7 @@ def upgrade() -> None:
     op.create_index(
         "ix_sandbox_wait_order", "sandbox_wait_tickets", ["created_at", "id"]
     )
-    op.create_index(
-        "ix_sandbox_wait_tenant", "sandbox_wait_tickets", ["tenant_key"]
-    )
+    op.create_index("ix_sandbox_wait_tenant", "sandbox_wait_tickets", ["tenant_key"])
 
 
 def downgrade() -> None:

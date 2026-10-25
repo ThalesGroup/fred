@@ -117,16 +117,49 @@
         "shared": {
           "type": "object",
           "properties": {
-            "enabled": {"type": "boolean"},
-            "coordinatorDsnSecret": {"type": "string"},
-            "workspaceStorageClass": {"type": "string"},
-            "workspaceSize": {"type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi)$"},
-            "activeIdleSeconds": {"type": "integer", "minimum": 60, "maximum": 3600},
-            "maxRetainedSessions": {"type": "integer", "minimum": 1, "maximum": 100000},
-            "maxPreparations": {"type": "integer", "minimum": 1, "maximum": 1000},
-            "maxQueueLength": {"type": "integer", "minimum": 1, "maximum": 100000},
-            "maxQueuePerTenant": {"type": "integer", "minimum": 1, "maximum": 100000},
-            "queueWaitSeconds": {"type": "integer", "minimum": 1, "maximum": 120}
+            "enabled": {
+              "type": "boolean"
+            },
+            "coordinatorDsnSecret": {
+              "type": "string"
+            },
+            "workspaceStorageClass": {
+              "type": "string"
+            },
+            "workspaceSize": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*(Mi|Gi)$"
+            },
+            "activeIdleSeconds": {
+              "type": "integer",
+              "minimum": 60,
+              "maximum": 3600
+            },
+            "maxRetainedSessions": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            },
+            "maxPreparations": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "maxQueueLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            },
+            "maxQueuePerTenant": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            },
+            "queueWaitSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 120
+            }
           },
           "additionalProperties": false
         },

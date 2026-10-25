@@ -102,7 +102,9 @@ class SandboxHttpAdapter(SandboxExecutionPort):
         ).hexdigest()
 
     def tenant_key(self, session: SandboxSessionIdentity) -> str:
-        scope = f"team:{session.team_id}" if session.team_id else f"user:{session.user_id}"
+        scope = (
+            f"team:{session.team_id}" if session.team_id else f"user:{session.user_id}"
+        )
         return hmac.new(
             self._token.encode(),
             b"fred-sandbox-tenant-v1\0" + scope.encode(),
