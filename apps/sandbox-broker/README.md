@@ -23,6 +23,18 @@ enforces NetworkPolicy. OpenShell is not integrated here.
 
 ## Configuration
 
+For local development, root `make setup-env` creates `config/.env` from the
+template without overwriting an existing file. Fill its approved Docker runtime,
+digest-pinned execution image, token and TLS paths. `make run` starts the broker
+on loopback with TLS from `SANDBOX_TLS_DIR`. `make docker-build` builds its image
+from the repository root context, and `make run-docker` uses the restricted
+Docker Compose profile.
+The root `make run-sandbox-broker` and VS Code `All Services + Sandbox` task are
+opt-in. Configure the approved runtime, execution image, broker token and a
+dedicated TLS Docker daemon before launching. On Kubernetes, the Fred chart's
+`sandboxBroker` section can own the broker Deployment, Service, RBAC and guest
+policy; it is disabled by default.
+
 | Variable | Purpose |
 | --- | --- |
 | `SANDBOX_BACKEND` | `kubernetes`, `agent_sandbox`, or `docker` |

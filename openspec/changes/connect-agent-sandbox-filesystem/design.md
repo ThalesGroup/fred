@@ -32,6 +32,16 @@ The approved skill directory is a shared source, mounted read-only by both the a
 
 10. **Bound expired-view cleanup work.** Existing views still fail closed at expiry. Purge expired rows at most once per ten minutes per Knowledge Flow process on the next view creation, instead of making every code execution scan the full view table.
 
+## Broker deployment
+
+The Fred chart exposes a disabled-by-default broker profile. When enabled, it
+owns the broker Deployment, Service, ServiceAccount, scoped RBAC and guest
+deny-all policy and quota. Operators provide namespaces, Secrets, isolated
+runtime, images and any SIG or CSI installation. The chart refuses to render
+without digest-pinned broker and guest images and verified network and PID
+attestations. The standalone broker manifest is an alternative deployment
+owner, not a second resource layer.
+
 ## Risks / Trade-offs
 
 - [A shared filesystem increases the Kata host/guest interface] -> Expose only a narrow read-only view through an approved volume and verify the selected runtime's volume implementation; never expose a host path or raw bucket.

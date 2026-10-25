@@ -22,6 +22,47 @@
 #    6. Knowledge Flow Worker
 # ════════════════════════════════════════════════════════════════════
 
+# Optional trusted sandbox control plane. Create the namespaces and Secrets first;
+# never enable this without an approved RuntimeClass and verified cluster policy.
+sandboxBroker:
+  enabled: false
+  namespace: fred-sandbox-system
+  sandboxNamespace: fred-sandbox
+  image: "" # Digest-pinned broker image, repository@sha256:...
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  executionImage: "" # Separate digest-pinned image that runs agent code
+  backend: kubernetes # kubernetes or agent_sandbox
+  isolation: kata # kata or gvisor
+  runtimeName: ""
+  networkPolicyVerified: false
+  pidLimitVerified: false
+  agentPoolName: fred-code
+  maxSandboxes: 8
+  quota:
+    pods: 20
+    jobs: 20
+    persistentVolumeClaims: 20
+    secrets: 20
+  brokerTokenSecret: fred-sandbox-broker-auth
+  tlsSecret: fred-sandbox-broker-tls
+  mountProvider: none # none or rclone_csi
+  fileGatewayUrl: ""
+  fileGatewayRevokeUrl: ""
+  fileGatewaySecret: ""
+  fileStorageClass: ""
+  skillsVolume: ""
+  settingsUrl: ""
+  settingsTokenSecret: ""
+  caSecret: "" # Optional Secret with ca.crt for internal HTTPS upstreams
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
 # ── 1. YAML Anchors (shared data — not used directly by Helm) ──────────────────────
 #
 # These blocks are referenced via YAML aliases (*anchor-name) in the sections below.

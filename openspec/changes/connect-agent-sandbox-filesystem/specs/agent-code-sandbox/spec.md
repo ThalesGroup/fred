@@ -13,6 +13,22 @@ The system SHALL expose an admin-gated `execute_code(code)` tool whose sole mode
 
 ## ADDED Requirements
 
+### Requirement: Optional operator-managed broker deployment
+The Fred chart SHALL leave the broker disabled by default. When enabled with
+approved digest-pinned images, an isolation RuntimeClass and verified cluster
+network and PID limits, it SHALL render exactly one trusted broker replica,
+its Service, scoped permissions and a deny-all guest policy. It SHALL reject
+an incomplete or unverified profile before producing that deployment. The
+chart SHALL NOT create ready guest workloads before a code execution.
+
+#### Scenario: Default chart installation
+- **WHEN** Fred is installed without sandbox broker overrides
+- **THEN** no broker workload or guest sandbox workload is rendered
+
+#### Scenario: Unverified sandbox profile
+- **WHEN** an operator enables the broker without the approved images or policy checks
+- **THEN** chart rendering fails before installation
+
 ### Requirement: Grouped code execution trace
 The chat thought trace SHALL display a consecutive run of `execute_code` calls in one assistant turn as one expandable activity. Its single-line heading SHALL show the command count and only the bounded intent comment of the running command, or the latest command when none is running. It SHALL not show submitted code in the heading. Expanding it SHALL show commands in chronological order with their status and links to full code and result details. The tool guidance SHALL ask the agent to start every execution, including a single Bash command, with a short shell comment describing intent. When present, the leading comment SHALL appear in the heading and as an ordinary intent label in the expanded row, followed there by the submitted code in a visually distinct monospace surface, flattened in source order onto one line; neither SHALL be treated as evidence of what the script actually did. Without a leading comment, the heading SHALL show only the command count. A long preview SHALL be truncated with `...`. It SHALL not parse or classify heredoc syntax. The tool SHALL still execute and retain the submitted code unchanged. Reasoning between consecutive code calls SHALL remain in sequence. A different tool, including `summarize_document`, SHALL end the current activity; a later code call SHALL start a new activity. The grouping mechanism SHALL allow another tool family to opt in through a presentation rule without changing stored trace events.
 

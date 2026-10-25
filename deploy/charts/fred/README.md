@@ -19,6 +19,7 @@ setting.
 | `knowledge-flow-worker`, `knowledge-flow-worker-extraction-{fast,medium,rich}` | ingestion workers, one per queue | no |
 | `control-plane-backend` | teams, sessions, administration API | yes |
 | `control-plane-worker` | control-plane background work | no |
+| `sandboxBroker` | trusted broker and guest namespace policy for isolated code execution | no |
 
 Each application can also run its database migration as a Helm hook Job
 (`applications.<name>.migration.enabled`).
@@ -44,11 +45,24 @@ attached to its [GitHub release](https://github.com/ThalesGroup/fred/releases).
 
 ## Images
 
-The chart runs four images, `ghcr.io/thalesgroup/fred-agent/<app>`: `fred-agents`,
+The chart normally runs four images, `ghcr.io/thalesgroup/fred-agent/<app>`: `fred-agents`,
 `knowledge-flow-backend`, `control-plane-backend` and `frontend`; the workers run their
 backend's image. The tag defaults to the chart's `appVersion`; set
 `applications.<app>.image.tag` to run another one. `make docker-build` at the root of the
-repository builds all four from source.
+repository builds those four and the optional sandbox broker from source.
+
+## Optional sandbox broker
+
+Set `sandboxBroker.enabled: true` only after following the
+[sandbox Kubernetes installation guide](../../../docs/swift/ops/AGENT_SANDBOX_KUBERNETES.md).
+The chart then installs one broker Deployment and Service, its ServiceAccount,
+least-privilege RBAC, guest deny-all NetworkPolicy and ResourceQuota. It does not
+install Kata, gVisor, SIG Agent Sandbox, rclone CSI, the execution image,
+namespaces or Secrets. Supply digest-pinned `sandboxBroker.image` and
+`sandboxBroker.executionImage`, the approved `runtimeName`, and set the two
+verification flags only after probing NetworkPolicy and node PID limits.
+Keep the standalone `deploy/sandbox/kubernetes.yaml` example out of this Helm
+release to avoid two owners for the same broker resources.
 
 ## Your values file
 

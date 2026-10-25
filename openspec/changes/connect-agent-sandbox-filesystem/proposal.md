@@ -28,4 +28,4 @@ None.
 
 ## Impact
 
-Touches `fred-sdk` ports, `fred-runtime` Deep/ReAct filesystem and skills integration, the `code_sandbox` capability, the sandbox broker and its Kubernetes/Docker/SIG backends, an operator-provided filesystem mount driver and authorized file gateway, attachment/corpus adapters, targeted tests, operator documentation and the runtime execution contract. The broker remains the only component with workload control privileges.
+Touches `fred-sdk` ports, `fred-runtime` Deep/ReAct filesystem and skills integration, the `code_sandbox` capability, the sandbox broker and its Kubernetes/Docker/SIG backends, an optional Helm broker deployment, an operator-provided filesystem mount driver and authorized file gateway, attachment/corpus adapters, targeted tests, operator documentation and the runtime execution contract. The broker remains the only component with workload control privileges.

@@ -35,6 +35,43 @@
       }
     },
     {
+      "label": "All Services + Sandbox",
+      "dependsOn": ["All Services", "sandbox-broker"],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "icon": {
+        "id": "shield",
+        "color": "terminal.ansiBlue"
+      }
+    },
+    {
+      "label": "All Services PROD + Sandbox",
+      "dependsOn": ["All Services PROD", "sandbox-broker"],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "icon": {
+        "id": "shield",
+        "color": "terminal.ansiBlue"
+      }
+    },
+    {
+      "label": "sandbox-broker",
+      "type": "shell",
+      "command": "make run-sandbox-broker",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "shield",
+        "color": "terminal.ansiBlue"
+      }
+    },
+    {
       "label": "fred-agents",
       "type": "shell",
       "command": "bash",

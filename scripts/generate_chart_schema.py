@@ -308,6 +308,41 @@ _ENV_VAR = _obj({
     "valueFrom": _obj({}, additional=True),
 }, additional=True)
 
+_SANDBOX_BROKER = _obj({
+    "enabled": _BOOL,
+    "namespace": _STRING,
+    "sandboxNamespace": _STRING,
+    "image": _STRING,
+    "imagePullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]},
+    "imagePullSecrets": _arr(_obj({"name": _STRING}, required=["name"])),
+    "executionImage": _STRING,
+    "backend": {"enum": ["kubernetes", "agent_sandbox"]},
+    "isolation": {"enum": ["kata", "gvisor"]},
+    "runtimeName": _STRING,
+    "networkPolicyVerified": _BOOL,
+    "pidLimitVerified": _BOOL,
+    "agentPoolName": _STRING,
+    "maxSandboxes": {"type": "integer", "minimum": 1, "maximum": 1000},
+    "quota": _obj({
+        "pods": {"type": "integer", "minimum": 1},
+        "jobs": {"type": "integer", "minimum": 1},
+        "persistentVolumeClaims": {"type": "integer", "minimum": 1},
+        "secrets": {"type": "integer", "minimum": 1},
+    }, required=["pods", "jobs", "persistentVolumeClaims", "secrets"]),
+    "brokerTokenSecret": _STRING,
+    "tlsSecret": _STRING,
+    "mountProvider": {"enum": ["none", "rclone_csi"]},
+    "fileGatewayUrl": _STRING,
+    "fileGatewayRevokeUrl": _STRING,
+    "fileGatewaySecret": _STRING,
+    "fileStorageClass": _STRING,
+    "skillsVolume": _STRING,
+    "settingsUrl": _STRING,
+    "settingsTokenSecret": _STRING,
+    "caSecret": _STRING,
+    "resources": _OBJECT_FREE,
+}, required=["enabled"])
+
 _MIGRATION = _obj({
     "enabled": _BOOL,
     "scaleDown": _BOOL,
@@ -599,6 +634,7 @@ def build(fa_schema_path: Path, kf_schema_path: Path, cp_schema_path: Path) -> d
         "patternProperties": {"^x-": {}},
         "properties": {
             "global": _GLOBAL,
+            "sandboxBroker": _SANDBOX_BROKER,
             "registrations": _registrations(cp_schema),
             "applications": _obj({
                 "fred-agents": _fred_agents_app(fa_config),

@@ -3,7 +3,7 @@ services:
     build:
       context: ../..
       dockerfile: apps/sandbox-broker/Dockerfile
-    image: fred-sandbox-broker:review
+    image: ${SANDBOX_BROKER_IMAGE:-fred-sandbox-broker:review}
     restart: unless-stopped
     environment:
       SANDBOX_BACKEND: docker
