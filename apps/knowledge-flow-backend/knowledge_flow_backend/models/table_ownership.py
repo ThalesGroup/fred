@@ -22,9 +22,9 @@ different questions on a shared database:
   autogenerate and ``alembic check`` never touch tables migrated by
   control-plane or fred-runtime.
 - ``REQUIRED_TABLES`` — what a knowledge-flow process cannot serve without:
-  the owned set plus foreign tables it reads at runtime (``users`` and
-  ``teammetadata``, both migrated by control-plane's tree but queried by
-  ingestion/metadata code). Both entrypoints (``main.py`` and
+  the owned set plus foreign tables it reads at runtime (``users``,
+  ``teammetadata``, ``session_metadata`` and ``session_attachments``,
+  migrated by control-plane's tree). Both entrypoints (``main.py`` and
   ``main_worker.py``) pass it to ``require_tables`` so a deployment that
   skipped its migration jobs fails at boot instead of self-creating tables
   (the #2313 defect: an unfiltered ``create_all`` over the shared
@@ -59,10 +59,8 @@ SHARED_CORE_TABLES: frozenset[str] = frozenset({"tag", "metadata", "document_lab
 OWNED_TABLES: frozenset[str] = frozenset(Base.metadata.tables) | SHARED_CORE_TABLES
 
 # Foreign tables knowledge-flow queries at runtime without owning their DDL:
-# `users` (user store lookups in ingestion) and `teammetadata`
-# (TeamMetadataStore in ingestion/metadata services). Their migrations belong
-# to control-plane's tree — listing them here only makes the startup guard
-# honest about what this component needs to serve traffic.
+# User, team and conversation tables are migrated by control-plane. Listing
+# them here makes the startup guard cover the sandbox mount's reads too.
 REQUIRED_TABLES: frozenset[str] = OWNED_TABLES | frozenset({"users", "teammetadata", "session_metadata", "session_attachments"})
 
 # Consumed by alembic/env.py, main.py and main_worker.py — declared so

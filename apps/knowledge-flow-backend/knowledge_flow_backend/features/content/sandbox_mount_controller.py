@@ -137,9 +137,15 @@ def _stream(handle):
 class SandboxMountController:
     def __init__(self, router: APIRouter, mount_router: APIRouter) -> None:
         self.context = ApplicationContext.get_instance()
-        self.store = SandboxViewStore(self.context.get_pg_async_engine())
+        self._store: SandboxViewStore | None = None
         self._register_binding(router)
         self._register_mount(mount_router)
+
+    @property
+    def store(self) -> SandboxViewStore:
+        if self._store is None:
+            self._store = SandboxViewStore(self.context.get_pg_async_engine())
+        return self._store
 
     def _register_binding(self, router: APIRouter) -> None:
         @router.post("/sandbox-mount/views/{key}", include_in_schema=False)

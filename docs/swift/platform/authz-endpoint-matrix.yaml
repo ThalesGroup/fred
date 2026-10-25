@@ -1766,6 +1766,76 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
+    method: OPTIONS
+    path: /knowledge-flow/v1/sandbox-mount/{key}
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: PROPFIND
+    path: /knowledge-flow/v1/sandbox-mount/{key}
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: HEAD
+    path: /knowledge-flow/v1/sandbox-mount/{key}
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/sandbox-mount/{key}
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: OPTIONS
+    path: /knowledge-flow/v1/sandbox-mount/{key}/
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: PROPFIND
+    path: /knowledge-flow/v1/sandbox-mount/{key}/
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: HEAD
+    path: /knowledge-flow/v1/sandbox-mount/{key}/
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/sandbox-mount/{key}/
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: OPTIONS
+    path: /knowledge-flow/v1/sandbox-mount/{key}/{path:path}
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: PROPFIND
+    path: /knowledge-flow/v1/sandbox-mount/{key}/{path:path}
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: HEAD
+    path: /knowledge-flow/v1/sandbox-mount/{key}/{path:path}
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/sandbox-mount/{key}/{path:path}
+    review_status: pending_review
+    required_permission: sandbox_mount_credential_and_revalidated_scope
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/sandbox-mount/views/{key}
+    review_status: pending_review
+    required_permission: authenticated_user_and_sandbox_bind_credential
+  - service: knowledge-flow
+    method: DELETE
+    path: /knowledge-flow/v1/sandbox-mount/views/{key}
+    review_status: pending_review
+    required_permission: sandbox_revoke_credential
+  - service: knowledge-flow
     method: POST
     path: /knowledge-flow/v1/schemas/echo
     review_status: pending_review
