@@ -27,19 +27,24 @@ import pytest
 from builder_decks import L_TITLE_ONLY, _set_title, _textbox, build_slides
 from deck_builders import png_bytes
 from fred_capability_ppt_filler.builder import lexicon
+from fred_capability_ppt_filler.builder import tools as tools_mod
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.assign import assign
 from fred_capability_ppt_filler.builder.models import Pattern, TemplateInventory
 from fred_capability_ppt_filler.builder.plan import DeckPlan
 from fred_capability_ppt_filler.builder.render import render_deck
 from fred_capability_ppt_filler.builder.tools import (
+    BUILD_TOOL_NAME,
     _args_schema,
     _closed,
     _description,
+    _opted_out,
     offered_kinds,
 )
+from port_fakes import FakeWorkspace
 from pptx import Presentation
 from pptx.util import Inches
+from test_build_tool import _configured, _ctx, _no_pdf, _tools
 
 COVER = {"title": "Projet X", "subtitle": "Revue de lancement"}
 POINTS = {"title": "Le contexte", "bullets": ["Un marché en croissance", "Deux sites"]}
@@ -274,3 +279,52 @@ def test_the_guidance_puts_the_closing_outside_the_slide_count():
     assert "outside any slide count" in _description(inventory, "template_slide", 2)
     field = _args_schema(inventory).model_json_schema()["properties"]["no_closing"]
     assert "a slide count is never a reason" in field["description"]
+
+
+@pytest.mark.asyncio
+async def test_an_opt_out_sent_with_changes_drops_the_added_closing(
+    monkeypatch, deck_plan_store
+):
+    """The opt-out removes the thank-you closing the build appended, without a
+    `remove` op, even when the edit sent leaves every slide as it was."""
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    workspace = FakeWorkspace()
+    template = _template(_contact_slide, _thanks_slide)
+
+    def build():
+        config, assets = _configured(template=template)
+        ctx = _ctx(config, assets=assets, workspace=workspace)
+        return _tools(ctx)[BUILD_TOOL_NAME].coroutine
+
+    def slides() -> int:
+        return len(Presentation(io.BytesIO(workspace.writes[-1]["content"])).slides)
+
+    text, result = await build()(slides=[COVER, POINTS])
+    assert not result.is_error, text
+    assert slides() == 3
+    same = {"op": "edit", "slide": 2, "field": "title", "value": POINTS["title"]}
+    text, result = await build()(changes=[same], no_closing=True)
+    assert not result.is_error, text
+    assert slides() == 2
+    # Opting back in rebuilds the deck with its closing, though no slide changed.
+    text, result = await build()(changes=[same], no_closing=False)
+    assert not result.is_error, text
+    assert slides() == 3
+
+
+def test_an_opt_out_keeps_a_closing_the_model_wrote_or_edited():
+    added = {"title": "Merci", "kind": "closing", "added_closing": True}
+    contact = {**added, "email": EMAIL}
+    renamed = {**added, "title": "Questions ?"}
+    for last, kept in (
+        (added, False),
+        (contact, True),
+        (renamed, True),
+        ({"title": "Merci"}, True),
+    ):
+        plan = DeckPlan.model_validate(
+            {"slides": [COVER, POINTS, last], "no_closing": True}
+        )
+        assert (len(_opted_out(plan).slides) == 3) is kept
+    plan = DeckPlan.model_validate({"slides": [COVER, added]})
+    assert len(_opted_out(plan).slides) == 2

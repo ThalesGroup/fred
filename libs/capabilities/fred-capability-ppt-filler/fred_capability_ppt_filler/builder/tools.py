@@ -717,8 +717,26 @@ def _closed(plan: DeckPlan, kinds: Sequence[str]) -> Tuple[DeckPlan, bool]:
         or ends_on_closing(slides[-1])
     ):
         return plan, False
-    thanks = SlidePlan(title=_THANKS[speaker.plan_language(plan)], kind="closing")
+    thanks = SlidePlan(
+        title=_THANKS[speaker.plan_language(plan)], kind="closing", added_closing=True
+    )
     return plan.model_copy(update={"slides": [*plan.slides, thanks]}), True
+
+
+def _opted_out(plan: DeckPlan) -> DeckPlan:
+    """An opted-out deck without the thank-you closing the build appended;
+    a closing the model wrote or edited (a contact, a new title) stays."""
+    last = plan.slides[-1] if plan.slides else None
+    if (
+        not plan.no_closing
+        or last is None
+        or not last.added_closing
+        or last.email
+        or last.phone
+        or last.title not in _THANKS.values()
+    ):
+        return plan
+    return plan.model_copy(update={"slides": plan.slides[:-1]})
 
 
 def _shown_takeaways(plan: DeckPlan) -> DeckPlan:
@@ -1745,11 +1763,13 @@ def build_builder_tools(
                     else no_closing,
                 }
             )
+            plan = _opted_out(plan)
             # Rebuilt, an identical deck would read as a change done.
             if (
                 base.delivered
                 and plan.file_name == base.file_name
                 and plan.show_takeaways == base.show_takeaways
+                and plan.no_closing == base.no_closing
                 and unchanged(base, plan, _kinds(inventory))
             ):
                 return _answer(_UNCHANGED)

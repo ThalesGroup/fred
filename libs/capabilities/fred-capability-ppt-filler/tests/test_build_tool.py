@@ -105,24 +105,25 @@ def _tools(ctx) -> dict[str, Any]:
 
 
 def _configured(
-    extend=None, variety: str = "template_slide"
+    extend=None, variety: str = "template_slide", template: bytes = TEMPLATE
 ) -> tuple[PptBuilderConfig, FakeAssets]:
     """A template whose analysis succeeded and is in this pod's cache."""
-    inventory = analyze_template(TEMPLATE).inventory
+    inventory = analyze_template(template).inventory
     assert inventory is not None
     if extend is not None:
         inventory = extend(inventory)
+    sha = "sha-test" if template is TEMPLATE else "sha-other"
     config = PptBuilderConfig.model_validate(
-        {"template_sha256": "sha-test", "variety_check": variety}
+        {"template_sha256": sha, "variety_check": variety}
     )
     analysis_job.remember_inventory(
         "00000000-0000-4000-8000-000000000007",
-        "sha-test",
+        sha,
         config.labelling_key(),
         inventory,
     )
-    analysis_job._templates.set("sha-test", TEMPLATE)
-    assets = FakeAssets({PPT_BUILDER_TEMPLATE_KEY: TEMPLATE})
+    analysis_job._templates.set(sha, template)
+    assets = FakeAssets({PPT_BUILDER_TEMPLATE_KEY: template})
     return config, assets
 
 

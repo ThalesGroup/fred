@@ -1217,6 +1217,8 @@ class SlidePlan(BaseModel):
     # The user asked for the key messages on the slides: the takeaway goes in
     # the template's takeaway zone when it fits. Set by the tool only.
     takeaway_shown: SkipJsonSchema[bool] = False
+    # The thank-you closing the build appended: an opt-out drops it again.
+    added_closing: SkipJsonSchema[bool] = False
 
     @model_validator(mode="before")
     @classmethod
@@ -1286,6 +1288,7 @@ HIDDEN_FIELDS = (
     "asked_from",
     "rendered",
     "takeaway_shown",
+    "added_closing",
 )
 
 
