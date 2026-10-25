@@ -19,6 +19,9 @@ const h = vi.hoisted(() => ({
 vi.mock("@core/hooks/useOrganizationAdmin", () => ({
   useOrganizationAdmin: () => ({ isAdmin: false }),
 }));
+vi.mock("@core/hooks/useOrganizationSupervisionAccess", () => ({
+  useOrganizationSupervisionAccess: () => ({ allowed: false }),
+}));
 vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({ useManagerPlatformAdmin: () => h.access }));
 vi.mock("@shared/layouts/MainLayout/MainLayout", () => ({ default: ({ children }) => <div>{children}</div> }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));

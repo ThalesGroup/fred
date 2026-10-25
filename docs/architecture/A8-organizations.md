@@ -211,6 +211,43 @@ and [paginated direct grants](../../apps/control-plane/src/fga.rs) (`grants_on`,
 [organization_console.rs](../../apps/control-plane/tests/support/organization_console.rs)
 by the three `supervision_*` tests; source references are not execution evidence.
 
+### Supervision UI
+
+`/admin/supervision` is an organization area inside the existing frontend layout.
+Its navigation entry precedes Features. The shared
+[access provider](../../apps/frontend/src/rework/core/hooks/useOrganizationSupervisionAccess.tsx)
+resolves the organization through `/me/spaces` and calls `/authorize/space` with
+`own_organization`; neither platform roles nor membership role names establish
+permission. The page applies the same decision for direct URL access. ManagerArea
+admits this independently guarded route for mixed platform/organization roles.
+No content role or selected team is required.
+
+The [page](../../apps/frontend/src/rework/components/pages/OrganizationSupervisionPage/OrganizationSupervisionPage.tsx)
+uses the generated RTK summary and detail hooks through the existing enhancement
+module. Query keys retain organization, cursor and team. A context change remounts
+the page, discarding cursor and detail selection; `currentData` prevents reuse of
+another query's values. A failed read displays an error, not zero counts, and
+hides the affected values. A detected authorization refusal also withdraws the
+shared permission decision. Successful-load dates come from successful RTK results.
+
+Refresh and window focus recheck context and permission before metric subscriptions
+resume and refetch, including an open detail. There is no supervision polling;
+organization-admin navigation polling is disabled on this route. The team table
+uses previous/next cursor navigation without global sorting or numbered pages.
+Organization totals come directly from the same summary response, independently
+of its team page. Detail collection timestamps remain separate.
+
+[SupervisionCountsView](../../apps/frontend/src/rework/components/pages/OrganizationSupervisionPage/SupervisionCountsView.tsx)
+shares the presentation between totals, compartments and the team drawer. A compact
+summary exposes organization metrics and activity states; a three-row table compares
+resource compartments. Complementary counts and direct roles remain available in
+collapsible sections. The team drawer uses the same compact summary. It keeps
+purge, failed attempts, publications and direct assignments distinct; unknown row
+totals show their known subtotal and number of datasets without an attributable
+row count. Personal spaces remain aggregated. Existing PageHeader, StatusBadge,
+DataTable, Disclosure, InlineDrawer, navigation, buttons and formatters provide the
+UI controls, with French and English translations.
+
 ## Platform organization administration
 
 The platform registry exposes active organizations, independently of content

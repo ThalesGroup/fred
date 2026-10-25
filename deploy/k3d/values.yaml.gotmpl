@@ -29,6 +29,11 @@ applications:
     enabled: false
 
   control-plane-backend:
+    lifecycle_policy_catalog:
+      space_policies:
+        purge:
+          default:
+            retention: PT1M
     # Keep the standard chart resource name; the executable is control-plane.
     applicationName: control-plane-backend
     command: {enabled: true, data: [control-plane, serve]}
@@ -75,9 +80,6 @@ applications:
         user: {realm_url: {{ requiredEnv "K3D_REALM_URL" | quote }}}
         authorized_origins: [{{ requiredEnv "K3D_PUBLIC_URL" | quote }}]
         rebac: {api_url: http://openfga:9080}
-      scheduler:
-        lifecycle:
-          temporal: {host: "temporal:7233"}
       storage:
         content:
           # address/choice: the Swift documents bucket and input/output roots.
@@ -93,6 +95,9 @@ applications:
             s3_seconds: 120
             transfer_seconds: 300
       scheduler:
+        lifecycle:
+          enabled: true
+          temporal: {host: "temporal:7233"}
         processing:
           enabled: true
           worker_contract_file: /app/processing-contract/worker-contract.json

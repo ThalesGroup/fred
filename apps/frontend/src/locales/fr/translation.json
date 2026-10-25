@@ -1120,6 +1120,9 @@
   },
   "rework": {
     "supervision": {
+      "collectionDetails": "Dates et périmètre de collecte",
+      "distribution": "Répartition des données",
+      "scope": "Périmètre",
       "title": "Supervision de l'organisation",
       "refresh": "Actualiser",
       "lastSuccess": "Dernier chargement réussi : {{date}}",

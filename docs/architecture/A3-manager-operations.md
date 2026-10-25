@@ -431,6 +431,8 @@ bootstrap and imported data.
 ## Space deletion lifecycle
 
 API and worker share `scheduler.lifecycle` and `policies.purge_catalog_path`.
+The checkout's k3d profile explicitly enables lifecycle through `temporal:7233`.
+That development profile overrides the default purge retention to one minute (`PT1M`).
 Omitted lifecycle configuration is disabled. Each rule sets a retention, with
 `P7D` as the default. Zero retention (`PT0S`) makes deletion due immediately,
 still executed by the worker. Rules match

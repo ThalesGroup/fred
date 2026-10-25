@@ -42,7 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
-| [F-013](#f-013-synthese-organisationnelle-en-lecture) | Synthèse organisationnelle et détail équipe | Evaluation seulement ; définitions et contrat à décider | Aucun changement du dossier |
+| [F-013](#f-013-synthese-organisationnelle-en-lecture) | Synthèse organisationnelle et détail équipe | Backend et UI implémentés ; validation des parcours attendue | A2/A7/A8, chapitres 04/09 |
 | [F22](#f22-agent-rust-embarqué-hello-world) | Agent Rust embarqué, hello-world SSE | Implémenté, à valider | Hors périmètre arc42 validé |
 | [DOC-3](#doc-3-vue-densemble-de-weaver) | Vue d'ensemble de Weaver | Texte et schémas rédigés | 01 |
 | [DOC-2](#doc-2-contrat-de-lespace-personnel-à-sa-place) | Contrat de l'espace personnel déplacé hors du catalogue SQL | À jour | A2 |
@@ -1984,3 +1984,66 @@ mock legacy. Ajout de ces deux exports à la liste de stubs existante dans
 usePipelineRun.test.tsx. Aucun changement applicatif, généré ou d'assertion.
 Correction relue, sans relance de tests, compilation ou lint par l'assistant.
 Le résultat après correction reste à confirmer par Dimi.
+
+
+### F-013 : vue de supervision organisationnelle, lot 2
+
+2026-10-24 : Dimi valide la proposition UI : entrée avant Fonctionnalités dans
+Administration, route /admin/supervision, panneau InlineDrawer pour le détail,
+contrôle serveur partagé own_organization et exception de navigation pour le cumul
+de rôles. Il demande un code minimal, partagé, avec en-têtes Apache-2.0 et layout
+existant conservé. Les composants existants sont réutilisés sans refonte globale.
+
+Implémentation locale : page, trois compartiments, totaux serveur, pagination UUID,
+détail équipe, états de chargement/erreur/refus et traductions FR/EN. Présentation des
+compteurs commune aux totaux, compartiments et détail ; rôle direct non confondu
+avec utilisateur distinct, lignes inconnues non converties en zéro. Contexte issu
+de /me/spaces et permission issue de /authorize/space, partagés entre menu et page.
+Actualiser et retour au premier plan revérifient le contexte/l'autorisation ; les
+requêtes de métriques reprennent ensuite, détail compris. Pas de polling ajouté ;
+le polling du hook organisation admin est désactivé sur cette route. Client généré,
+backend Rust, migrations et données inchangés. Les fichiers source nouveaux portent
+l'en-tête Apache-2.0.
+
+Vérification : relecture des sources et du diff uniquement. Branche weaver,
+HEAD initial 1a53d36d3, arbre initial propre. Le contrat lot 1 et les annexes sont
+cohérents par lecture ; présence de 0010/0011 ne prouve pas leur application.
+Aucun test, build, lint, génération, requête déployée, migration, délégation, commit
+ou push exécuté. L'application des migrations, le déploiement local et les tests
+d'intégration restent non établis. La validation de la proposition UI n'est pas
+une validation fonctionnelle de la vue implémentée.
+
+Parcours manuel proposé sans préparation de données : o1owner/O1/E1 avec projets ;
+o2owner/O2 sans équipe ; autres rôles refusés par menu et URL ; owner avec rôles
+plateforme autorisé ; utilisateurs distincts non additionnés ; pagination sans
+perte sur données stables ; actualisation résumé/détail après ingestion/suppression
+par un utilisateur autorisé ; erreur réseau avec date inchangée et sans faux zéro ;
+lignes inconnues distinguées de zéro ; changement de contexte sans anciennes
+valeurs ; révocation détectée retirant l'accès et le détail. Retour de Dimi attendu.
+
+Arc42 : 04 décrit la vue au présent, A8 contient le branchement frontend et ses
+limites, A2 et l'index pointent vers cette explication. Aucun parcours présenté
+comme validé, aucun résultat de test inféré.
+
+2026-10-24 : composition compacte de supervision approuvée par Dimi, avec
+répartition uniforme sur la largeur et adaptation aux petits écrans. Synthèse
+unique, états sémantiques (zéro neutre), comparaison des trois compartiments,
+tableau d'équipes sans hauteur fixe et détails/attributions repliables. Réutilisation
+de PageHeader, DataTable en taille small, StatusBadge, Disclosure et InlineDrawer ;
+aucun composant partagé modifié. Correctif local de révocation, requêtes, cache,
+rafraîchissement et curseurs conservés. Traductions FR/EN complétées.
+Vérification par lecture du code et du diff uniquement ; l'instance k3d sert une
+image frontend sans montage des sources, donc les changements locaux ne sont pas
+visuellement validés. Aucun test, quality, build, déploiement, commit ou push lancé.
+
+2026-10-24 : essai manuel de suppression bloqué par un 503 à 19:44, avec
+`scheduler.lifecycle.enabled=false` dans la configuration k3d déployée. Les trois
+documents sont restés présents, sans marqueur de purge. Sur demande de Dimi,
+le message devient `document deletion is disabled by configuration` et le profil
+k3d active lifecycle. Les deux clés scheduler du profil sont réunies pour conserver
+ensemble lifecycle et processing. Relecture du diff uniquement ; aucun test, build
+ou déploiement exécuté. Redéploiement et nouvel essai à effectuer par Dimi.
+
+Sur demande de Dimi, la rétention par défaut du seul profil k3d passe à PT1M.
+Le délai de balayage reste inchangé ; une minute rend la purge éligible mais ne
+garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.

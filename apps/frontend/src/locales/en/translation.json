@@ -1120,6 +1120,9 @@
   },
   "rework": {
     "supervision": {
+      "collectionDetails": "Collection dates and scope",
+      "distribution": "Data distribution",
+      "scope": "Scope",
       "title": "Organization supervision",
       "refresh": "Refresh",
       "lastSuccess": "Last successful load: {{date}}",

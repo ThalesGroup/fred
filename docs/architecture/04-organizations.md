@@ -40,9 +40,10 @@ Creating an account or organization does not automatically create a personal spa
 
 ## Organization supervision
 
-The organization owner consults a technical summary through the API. It covers
-documents, processing, published results and direct role counts, without exposing
-content or personal identities. There is no supervision screen.
+The organization owner opens **Organization supervision** from Administration.
+The summary covers documents, processing, published results and direct role counts,
+without exposing content or personal identities. Selecting a team opens its detail
+in a side panel; Refresh reloads the summary and the open detail.
 
 ```mermaid
 flowchart TB

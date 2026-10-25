@@ -140,7 +140,8 @@ They require organization ownership, not content read permission. The
 [supervision contract](A8-organizations.md#organization-supervision) defines
 disclosure boundaries, counters, failure behavior and pagination. Wire schemas
 come from [supervision/models.rs](../../apps/control-plane/src/supervision/models.rs)
-through utoipa/OpenAPI and the generated RTK client; there is no supervision UI.
+through utoipa/OpenAPI and the generated RTK client. The
+[supervision UI](A8-organizations.md#supervision-ui) consumes these two read routes.
 
 <!-- generated: routes apps/control-plane/src/supervision/mod.rs /control-plane/v1 -->
 | Method | Path | Handler |

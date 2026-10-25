@@ -147,7 +147,7 @@ impl Lifecycle {
         }
         if !self.config.enabled {
             return Err(AppError::Unavailable(
-                "document deletion is disabled".into(),
+                "document deletion is disabled by configuration".into(),
             ));
         }
         let space_id: Uuid = sqlx::query_scalar(

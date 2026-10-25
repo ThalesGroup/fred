@@ -5,39 +5,101 @@
 .page {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-l);
+  gap: var(--spacing-m);
+  box-sizing: border-box;
   background: var(--surface-main);
-  padding: var(--spacing-xl);
+  padding: var(--spacing-l);
   width: 100%;
   min-width: 0;
   color: var(--on-surface);
+  font: var(--font-body-medium);
 }
 
 .page h2,
 .page h3 {
-  font: var(--font-title-small);
+  margin: 0 0 var(--spacing-xs);
+  font: var(--font-title-small-emphasized);
 }
 
-.cards,
+.page p {
+  margin: var(--spacing-xs) 0;
+}
+
+.page section,
+.details {
+  min-width: 0;
+}
+
+.summary {
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  color: var(--on-surface);
+  overflow-wrap: anywhere;
+}
+
+.metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-s);
+  margin: 0;
+  padding: var(--spacing-m);
+}
+
+.metrics > div {
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+
+.metrics dt {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.metrics dd {
+  margin: var(--spacing-xs) 0 0;
+  font: var(--font-title-large);
+  font-variant-numeric: tabular-nums;
+}
+
+.states {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-s);
+  border-top: 1px solid var(--outline-muted);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+.states > div {
+  display: flex;
+  flex: 1 1 15rem;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
 .compartments {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
-  gap: var(--spacing-m);
-}
-
-.compartments {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--spacing-m) var(--spacing-l);
+  padding-top: var(--spacing-xs);
 }
 
 .counts {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--spacing-xs) var(--spacing-m);
+  margin: var(--spacing-s) 0;
   font: var(--font-body-medium);
+  overflow-wrap: anywhere;
 }
 
 .counts dd {
   margin: 0;
+  max-width: 12ch;
+  font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
@@ -46,12 +108,32 @@
 }
 
 .table {
+  margin-bottom: var(--spacing-xs);
   max-width: 100%;
-  height: 28rem;
+}
+
+.teamButton {
+  margin: var(--spacing-2xs) 0;
+  height: auto;
+  min-height: var(--spacing-xl);
+  text-align: left;
+  overflow-wrap: anywhere;
 }
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--spacing-s);
-  margin-top: var(--spacing-m);
+  margin-top: var(--spacing-xs);
+}
+
+@media (max-width: 700px) {
+  .page {
+    padding: var(--spacing-m);
+  }
+
+  .compartments {
+    grid-template-columns: 1fr;
+  }
 }

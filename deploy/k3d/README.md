@@ -5,6 +5,10 @@ On `chore/rust-rebac`, `deploy/k3d/build` builds `apps/control-plane` as the
 HTTP, durable Temporal submission and lifecycle work share one process. Knowledge
 Flow runs only its worker; its HTTP API and the separate manager worker are disabled.
 
+The k3d profile enables `scheduler.lifecycle.enabled` for deletion admission and
+lifecycle processing through `temporal:7233` in the same control-plane process.
+Its purge retention is one minute (`PT1M`); physical cleanup follows worker execution.
+
 This checkout owns the complete profile in `deploy/k3d/helmfile.yaml.gotmpl`,
 `values.yaml.gotmpl` and its `prepare` hook. `base-values.yaml.gotmpl` imports
 the shared factory values while removing the worker's legacy MinIO storage
