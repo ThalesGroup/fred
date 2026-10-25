@@ -39,6 +39,18 @@ sandboxBroker:
   pidLimitVerified: false
   agentPoolName: fred-code
   maxSandboxes: 8
+  replicas: 1
+  shared:
+    enabled: false
+    coordinatorDsnSecret: ""
+    workspaceStorageClass: ""
+    workspaceSize: 1Gi
+    activeIdleSeconds: 120
+    maxRetainedSessions: 1000
+    maxPreparations: 8
+    maxQueueLength: 256
+    maxQueuePerTenant: 8
+    queueWaitSeconds: 30
   quota:
     pods: 20
     jobs: 20

@@ -77,7 +77,7 @@ SandboxTemplate. Do not allow the agent to choose or install packages at run tim
 
 ## 2. Prepare the sandbox namespace and broker
 
-For Helm, create `fred-sandbox` and `fred-sandbox-system` first with Pod Security Restricted labels. Configure `sandboxBroker.enabled: true`, digest-pinned `image` and `executionImage`, `backend`, `isolation`, `runtimeName` and capacity in the Fred values overlay. The chart creates the deny-all policy, object-count quota, broker RBAC, ServiceAccount, Deployment and Service. Size `sandboxBroker.quota` for the selected `maxSandboxes` and existing namespace objects; the chart rejects a cap above its Pod, Job or file-mount object counts and reserves one PVC for a skills volume. Guest Pods carry their own CPU and memory limits. If the cluster also has CPU, memory or storage quotas, size them for the approved guest profile and capacity. `networkPolicyVerified` and `pidLimitVerified` must remain false until the probes in section 3 succeed; the chart refuses to render an enabled broker while either is false. For the standalone path, review [kubernetes.yaml](../../../deploy/sandbox/kubernetes.yaml), replace its placeholders and apply it through a separate owner. Never apply the standalone broker manifest alongside the chart-managed broker. The broker Deployment is one replica because its active admission and conversation map are currently in memory. Give access to the template and policy resources only to cluster operators.
+For Helm, create `fred-sandbox` and `fred-sandbox-system` first with Pod Security Restricted labels. Configure `sandboxBroker.enabled: true`, digest-pinned `image` and `executionImage`, `backend`, `isolation`, `runtimeName` and capacity in the Fred values overlay. The chart creates the deny-all policy, object-count quota, broker RBAC, ServiceAccount, Deployment and Service. Size `sandboxBroker.quota` for the selected `maxSandboxes` and existing namespace objects; the chart rejects a cap above its Pod, Job or file-mount object counts and reserves one PVC for a skills volume. Guest Pods carry their own CPU and memory limits. If the cluster also has CPU, memory or storage quotas, size them for the approved guest profile and capacity. `networkPolicyVerified` and `pidLimitVerified` must remain false until the probes in section 3 succeed; the chart refuses to render an enabled broker while either is false. For the standalone path, review [kubernetes.yaml](../../../deploy/sandbox/kubernetes.yaml), replace its placeholders and apply it through a separate owner. Never apply the standalone broker manifest alongside the chart-managed broker. The default broker Deployment is one replica because its admission and conversation map are process-local. The shared SIG profile described below permits more replicas. Give access to the template and policy resources only to cluster operators.
 
 For SIG, install its CRDs/controller and a reviewed SandboxTemplate and zero-replica SandboxWarmPool before enabling the broker; set `sandboxBroker.backend: agent_sandbox` and the matching `agentPoolName`. The chart adds the broker's claim Role but does not install SIG resources. For read-only `/inputs`, install rclone CSI and the StorageClass first, then set `mountProvider: rclone_csi`, `fileGatewayUrl`, `fileGatewayRevokeUrl`, `fileGatewaySecret` and `fileStorageClass`. The chart adds its file mount RBAC; the CSI controller's own Secret-read grant is still operator managed. `skillsVolume` names the separately approved guest PVC. Use `settingsUrl` with `settingsTokenSecret` for live admin settings, and `caSecret` when the broker needs an internal HTTPS CA. Secrets stay external to the chart. These values are optional and default to code-only execution.
 
@@ -145,3 +145,50 @@ On AKS, evaluate its supported Kata pod sandboxing profile and its documented re
 Prefer Kata when the cluster provides a supported VM runtime and the `/inputs` CSI volume passes a real mount test. This gives each guest its own kernel. Use gVisor where Kata is unavailable and `runsc`, NetworkPolicy and the same file-mount tests pass. SIG Agent Sandbox is a useful Kubernetes lifecycle controller on either runtime, but the simpler Job backend is available when its CRDs or controller are not approved. Both start with zero preloaded workloads.
 
 For native Docker development, keep the same Fred capability and broker API, set `SANDBOX_BACKEND=docker`, and use a dedicated TLS Docker daemon with an approved Kata or gVisor runtime. The optional read-only file view uses the rclone Docker volume plugin rather than Kubernetes CSI. A plain local subprocess or a default Docker runtime does not meet this arbitrary-code isolation profile. See the [Docker setup](../../../apps/sandbox-broker/README.md#docker) for daemon and plugin requirements.
+
+## Shared SIG profile for many conversations
+
+Use this optional profile when active Pods must be bounded independently of the number of conversations. It requires SIG Agent Sandbox and PostgreSQL. Docker and Kubernetes Job backends reject its configuration at startup. A conversation receives one private `ReadWriteOnce` PVC mounted at `/work`; `/tmp` remains bounded `emptyDir`. The broker suspends its Pod after a shorter active-idle interval, keeps its claim and PVC until the admin-controlled final inactivity expiry, and resumes the same Sandbox on the next execution. The SIG warm pool remains at zero replicas. No running sandbox is shared between users or conversations. The [SIG volume guide](https://agent-sandbox.sigs.k8s.io/docs/volumes/volume-claim-template/) explains PVC persistence across Pod replacement; the [SIG status guide](https://agent-sandbox.sigs.k8s.io/docs/sandbox/conditions/) defines the Ready and Suspended conditions used by the broker.
+
+1. Apply the Fred control-plane Alembic migration before enabling `sandboxBroker.shared.enabled`. It creates `sandbox_conversation_leases` and `sandbox_wait_tickets`. Create a separate PostgreSQL login for the broker with `USAGE` on the schema, `SELECT, INSERT, UPDATE, DELETE` on those two tables and read-only `SELECT` on the existing `sandbox_settings` table. The latter supplies the current admin active limit and inactivity expiry to every broker replica; the shared profile does not use the HTTP settings synchronizer. Store its `postgresql://...` DSN in a Secret in `fred-sandbox-system`, key `dsn`. Do not reuse a control-plane owner credential. A failed database connection leaves the shared broker unready and rejects new executions.
+2. Select a cluster-approved, encrypted-at-rest `ReadWriteOnce` StorageClass that can mount under the chosen Kata or gVisor RuntimeClass. Check its reclaim policy, node topology, CSI compatibility and deletion behavior. The broker validates the StorageClass name and the admitted PVC ownership, mount and security context. Test that a file in `/work` survives `Running -> Suspended -> Running`, and that final claim deletion removes its PVC. The examples [code only](../../../deploy/sandbox/agent-sandbox-persistent.yaml), [/inputs](../../../deploy/sandbox/agent-sandbox-files-persistent.yaml), and [/inputs plus /skills](../../../deploy/sandbox/agent-sandbox-files-skills-persistent.yaml) show the required template and zero-replica pool. Replace image and skills placeholders and select the exact pool name in the broker values. Keep the PVC claim template on the claim, not a shared guest hostPath.
+3. Size `maxSandboxes` for concurrently active or preparing Pods, `maxPreparations` for cold starts, and `maxRetainedSessions` for dormant PVCs. With `/inputs`, each retained Sandbox uses one workspace PVC plus one rclone CSI PVC and Secret; `/skills` adds the approved shared PVC. Set namespace PVC, Secret, storage-byte and SandboxClaim quotas accordingly. The chart checks object counts, while the operator owns storage-byte, CPU and memory quotas. Queue tickets contain only opaque session and tenant hashes, expire after a bounded wait, and are limited globally and per team or personal space. Beyond the limit, clients receive `busy` and may retry. A broker replica restart does not delete retained SIG claims in this profile.
+4. Enable the profile in a reviewed Helm overlay. This example has room for 1,000 retained conversations and 50 active Pods; adjust all limits from the measured node and storage budgets:
+
+   ```yaml
+   sandboxBroker:
+     backend: agent_sandbox
+     agentPoolName: fred-code-files-skills-persistent
+     maxSandboxes: 50
+     replicas: 2
+     quota:
+       pods: 60
+       jobs: 20
+       persistentVolumeClaims: 2010
+       secrets: 1010
+     shared:
+       enabled: true
+       coordinatorDsnSecret: fred-sandbox-db
+       workspaceStorageClass: approved-encrypted-rwo
+       workspaceSize: 1Gi
+       activeIdleSeconds: 120
+       maxRetainedSessions: 1000
+       maxPreparations: 8
+       maxQueueLength: 256
+       maxQueuePerTenant: 8
+       queueWaitSeconds: 30
+   ```
+
+5. Put the sandbox RuntimeClass on an approved node group using `RuntimeClass.scheduling.nodeSelector` and tolerations. Measure and declare `RuntimeClass.overhead.podFixed` for the actual Kata or gVisor runtime, then configure the node autoscaler from those measured Pod requests plus CPU, memory, PID, IP and CSI limits. Kata includes a guest kernel and VM memory overhead; gVisor uses a userspace kernel. Neither eliminates the per-Pod Kubernetes object cost. Test cold start, active reuse and resume latency separately. Keep a small active cap until a 50/100/250/500/1,000-user ramp with real `/inputs` and `/skills` reaches the intended production ceiling.
+
+   When reducing `maxSandboxes`, lower the admin active-conversation cap first and confirm `fred_sandbox_limit` on every broker replica is at or below the new ceiling. Then roll out the lower Helm value and its matching quota. Old and new replicas otherwise apply different operator ceilings during a rolling update. Increase in the opposite order: raise the Helm ceiling and quota, wait for the rollout, then raise the admin cap.
+
+   For example, label nodes `fred.sandbox/runtime=kata` or `fred.sandbox/runtime=gvisor` and put the matching selector on each RuntimeClass. These labels are examples; the actual handler names, tolerations and `overhead.podFixed` values come from the cluster operator's runtime installation and measurements:
+
+   ```yaml
+   scheduling:
+     nodeSelector:
+       fred.sandbox/runtime: gvisor # use kata for the Kata RuntimeClass
+   ```
+
+6. Observe `GET /healthz` and `GET /metrics` on the broker Service. The shared profile reports active, preparing, suspended, retained and waiting counts, plus local preparation duration and admission refusals. Use `kubectl -n fred-sandbox get sandboxclaim,sandbox,pod,pvc` to compare the counts, `kubectl -n fred-sandbox-system get deploy fred-sandbox-broker` to confirm broker replicas, and `kubectl get runtimeclass <name> -o yaml` to inspect scheduling and overhead. The broker deletes claims at the admin inactivity limit, 20 minutes by default. Active claims keep that limit as their SIG `shutdownTime` backstop; after the Pod is suspended, the broker extends `shutdownTime` to the maximum admin limit of 120 minutes so a later admin extension preserves its workspace. During a database or broker outage, new admission fails closed and suspended PVCs may outlive the admin limit until that SIG deadline. If an admin extends the limit while the broker or Kubernetes is unavailable before suspension, the active claim may expire at its old deadline and `/work` may be lost. Do not switch back to the process-local profile while shared claims remain: its startup cleanup would delete them. Drain and expire the shared sessions first.
