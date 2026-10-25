@@ -85,7 +85,6 @@ def create_app(
                 return _error(503, "unavailable")
             return {
                 **stats,
-                "limit": app.state.sessions.max_sessions,
                 "idle_timeout_seconds": app.state.sessions.idle_seconds,
             }
         return {

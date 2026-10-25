@@ -17,7 +17,7 @@ Install the SIG controller and CRDs, a verified Kata or gVisor RuntimeClass, a d
 
 ## Configuration
 
-Create a PostgreSQL credential limited to the two new sandbox coordination tables and store its DSN in a Secret. Set `sandboxBroker.shared.enabled`, `coordinatorDsnSecret`, `workspaceStorageClass`, and the approved capacity, storage and queue values in the Fred chart overlay. The default profile remains disabled.
+Create a PostgreSQL credential with write access limited to the two new sandbox coordination tables and read-only access to `sandbox_settings`, then store its DSN in a Secret. Set `sandboxBroker.shared.enabled`, `coordinatorDsnSecret`, `workspaceStorageClass`, and the approved capacity, storage and queue values in the Fred chart overlay. The default profile remains disabled.
 
 ## Upgrade
 

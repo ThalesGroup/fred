@@ -156,3 +156,105 @@ async def test_shared_admission_resume_and_restart() -> None:
         assert backend.prepared == 2
     finally:
         await second.close()
+
+
+@pytest.mark.asyncio
+async def test_admin_cap_is_shared_before_next_admission() -> None:
+    dsn = os.getenv("SANDBOX_TEST_POSTGRES_DSN")
+    if not dsn:
+        pytest.skip("Set SANDBOX_TEST_POSTGRES_DSN for PostgreSQL integration")
+    database = await asyncpg.connect(dsn)
+    previous = await database.fetchrow(
+        "SELECT * FROM sandbox_settings WHERE id='default'"
+    )
+    await database.execute("TRUNCATE sandbox_conversation_leases CASCADE")
+    await database.execute(
+        """INSERT INTO sandbox_settings
+           (id,idle_minutes,max_active_sessions,updated_at)
+           VALUES ('default',20,2,now())
+           ON CONFLICT (id) DO UPDATE SET max_active_sessions=2"""
+    )
+    config = BrokerSettings(
+        backend="agent_sandbox",
+        isolation="gvisor",
+        runtime_name="gvisor",
+        image="python@sha256:" + "a" * 64,
+        token="x" * 32,
+        network_policy_verified=True,
+        pid_limit_verified=True,
+        max_sandboxes=2,
+        max_preparations=2,
+        coordinator_dsn=dsn,
+        workspace_storage_class="local-path",
+        queue_wait_seconds=1,
+    )
+    backend = _Backend()
+    first = SharedConversationPool(backend, config)  # type: ignore[arg-type]
+    second = SharedConversationPool(backend, config)  # type: ignore[arg-type]
+    try:
+        await first.start()
+        await second.start()
+        assert (
+            await first.execute("e" * 64, "a" * 64, SandboxRequest(code="first"))
+        ).stdout == "first"
+        await database.execute(
+            "UPDATE sandbox_settings SET max_active_sessions=1 WHERE id='default'"
+        )
+        with pytest.raises(SandboxError, match="busy"):
+            await second.execute("f" * 64, "b" * 64, SandboxRequest(code="second"))
+        assert backend.prepared == 1
+        assert (await second.statistics())["limit"] == 1
+    finally:
+        await first.close()
+        await second.close()
+        if previous is None:
+            await database.execute("DELETE FROM sandbox_settings WHERE id='default'")
+        else:
+            await database.execute(
+                """UPDATE sandbox_settings SET idle_minutes=$1,
+                   max_active_sessions=$2, updated_by=$3, updated_at=$4
+                   WHERE id='default'""",
+                previous["idle_minutes"],
+                previous["max_active_sessions"],
+                previous["updated_by"],
+                previous["updated_at"],
+            )
+        await database.close()
+
+
+@pytest.mark.asyncio
+async def test_stale_sweeper_cannot_delete_new_conversation_generation() -> None:
+    dsn = os.getenv("SANDBOX_TEST_POSTGRES_DSN")
+    if not dsn:
+        pytest.skip("Set SANDBOX_TEST_POSTGRES_DSN for PostgreSQL integration")
+    database = await asyncpg.connect(dsn)
+    await database.execute("TRUNCATE sandbox_conversation_leases CASCADE")
+    config = BrokerSettings(
+        backend="agent_sandbox",
+        isolation="gvisor",
+        runtime_name="gvisor",
+        image="python@sha256:" + "a" * 64,
+        token="x" * 32,
+        network_policy_verified=True,
+        pid_limit_verified=True,
+        coordinator_dsn=dsn,
+        workspace_storage_class="local-path",
+    )
+    pool = SharedConversationPool(_Backend(), config)  # type: ignore[arg-type]
+    await pool.start()
+    try:
+        old_view = await pool.view_key("a" * 64, "b" * 64)
+        await database.execute(
+            """UPDATE sandbox_conversation_leases SET state='deleting',
+               last_used_at=now()-interval '21 minutes' WHERE session_key=$1""",
+            "a" * 64,
+        )
+        old = await pool._ensure("a" * 64, "b" * 64)
+        await pool._sweep_one(old, delete=True)
+        new_view = await pool.view_key("a" * 64, "b" * 64)
+        assert new_view != old_view
+        await pool._sweep_one(old, delete=True)
+        assert await pool.view_key("a" * 64, "b" * 64) == new_view
+    finally:
+        await pool.close()
+        await database.close()

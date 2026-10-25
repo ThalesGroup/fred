@@ -67,6 +67,9 @@ class SharedConversationPool:
                 await connection.fetchval(
                     "SELECT count(*) FROM sandbox_conversation_leases"
                 )
+                await connection.fetchval(
+                    "SELECT max_active_sessions FROM sandbox_settings WHERE id='default'"
+                )
         except Exception as exc:
             if self._database is not None:
                 await self._database.close()
@@ -286,6 +289,7 @@ class SharedConversationPool:
                             """SELECT count(*) FROM sandbox_conversation_leases
                                WHERE state IN ('preparing','resuming')"""
                         )
+                        limit = await self._capacity_limit(connection)
                         first = await connection.fetchval(
                             """SELECT t.id FROM sandbox_wait_tickets t
                                JOIN sandbox_conversation_leases s
@@ -294,7 +298,7 @@ class SharedConversationPool:
                                ORDER BY t.created_at, t.id LIMIT 1"""
                         )
                         if (
-                            active >= self.max_sessions
+                            active >= limit
                             or preparing >= self.settings.max_preparations
                             or (first is not None and first != ticket)
                         ):
@@ -401,7 +405,8 @@ class SharedConversationPool:
             """UPDATE sandbox_conversation_leases SET state='suspended',
                owner_token=NULL, owner_expires_at=NULL, updated_at=now()
                WHERE session_key=$1 AND owner_token=$2""",
-            key, owner,
+            key,
+            owner,
         )
         if status != "UPDATE 1":
             raise SandboxError("unavailable")
@@ -485,14 +490,18 @@ class SharedConversationPool:
                    owner_expires_at=now()+($3 * interval '1 second'),
                    state=CASE WHEN $4 THEN 'deleting' ELSE 'suspending' END,
                    updated_at=now() WHERE session_key=$1
+                   AND workspace_id=$7 AND view_epoch=$8
                    AND (owner_token IS NULL OR owner_expires_at < now())
-                   AND ($6 OR last_used_at < now() - ($5 * interval '1 second'))""",
+                   AND (($6 AND state='deleting') OR
+                        last_used_at < now() - ($5 * interval '1 second'))""",
                 row.session_key,
                 owner,
                 _OWNER_SECONDS,
                 delete,
                 self.idle_seconds if delete else self.active_idle_seconds,
                 row.state == "deleting",
+                row.workspace_id,
+                row.view_epoch,
             )
             if status != "UPDATE 1":
                 return
@@ -547,6 +556,14 @@ class SharedConversationPool:
             raise SandboxError("unavailable")
         return self._database
 
+    async def _capacity_limit(
+        self, connection: asyncpg.Connection | asyncpg.Pool
+    ) -> int:
+        admin_limit = await connection.fetchval(
+            "SELECT max_active_sessions FROM sandbox_settings WHERE id='default'"
+        )
+        return min(self.max_sessions, admin_limit if admin_limit is not None else 8)
+
     async def statistics(self) -> dict[str, int]:
         row = await self._db().fetchrow(
             """SELECT
@@ -560,6 +577,7 @@ class SharedConversationPool:
         waiting = await self._db().fetchval(
             "SELECT count(*) FROM sandbox_wait_tickets WHERE expires_at >= now()"
         )
+        limit = await self._capacity_limit(self._db())
         assert row is not None
         return {
             "allocated": row["allocated"],
@@ -567,6 +585,7 @@ class SharedConversationPool:
             "preparing": row["preparing"],
             "retained": row["retained"],
             "waiting": waiting,
+            "limit": limit,
         }
 
     async def prometheus(self) -> str:
