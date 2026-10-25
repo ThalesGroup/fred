@@ -200,6 +200,12 @@ def _rescaled(
         # Large plain amounts are shown in a scale that keeps them short.
         (["1 250 000 €", "800 000 €"], None, ([1.25, 0.8], "M€")),
         ([1250000, 800000], "€", ([1.25, 0.8], "M€")),
+        # The largest amount sets the scale, however many smaller ones there are.
+        (
+            [2450000, 1380000, 640000, 215000, 48500],
+            "€",
+            ([2.45, 1.38, 0.64, 0.215, 0.0485], "M€"),
+        ),
         # Short enough already: left as written.
         (["1 500 €", "2 300 €"], None, ([1500.0, 2300.0], "€")),
     ],

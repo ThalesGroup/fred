@@ -655,6 +655,27 @@ def test_native_chart_legend_sits_below_when_shown(
         assert built.legend.include_in_layout is False
 
 
+@pytest.mark.parametrize(
+    "values, labels",
+    [
+        ([2.45, 1.38, 0.0485], '#,##0.00" M€"'),
+        ([12.5, 3], '#,##0.0" M€"'),
+        ([2450, 48], '#,##0" M€"'),
+    ],
+)
+def test_the_decimals_come_from_the_scaled_values(values, labels):
+    chart = PlanChart.model_validate(
+        {
+            "type": "column",
+            "categories": ["A", "B", "C"][: len(values)],
+            "series": [{"name": "S", "values": values}],
+            "unit": "M€",
+        }
+    )
+    assert charts.number_format(chart) == labels
+    assert charts.number_format(chart, ticks=True) == f"{labels};-{labels};0"
+
+
 def test_values_carry_their_unit_and_pies_their_percentages(builtin):
     template, inventory = builtin
     money = {
@@ -663,7 +684,8 @@ def test_values_carry_their_unit_and_pies_their_percentages(builtin):
         "series": [{"name": "R", "values": [1.5, 2, 3, 4]}],
     }
     built = _chart(_render(template, inventory, _chart_slide(money)))
-    assert built.value_axis.tick_labels.number_format == '#,##0.0" M€"'
+    # The axis's 0 reads "0", never "0,0 M€".
+    assert built.value_axis.tick_labels.number_format == '#,##0.0" M€";-#,##0.0" M€";0'
     assert built.plots[0].data_labels.number_format == '#,##0.0" M€"'
     pie = _chart(_render(template, inventory, _chart_slide({**REVENUE, "type": "pie"})))
     assert pie.plots[0].data_labels.show_percentage
@@ -847,7 +869,7 @@ def test_the_example_chart_keeps_its_design_and_takes_the_plans_data(builtin):
     labels = built.plots[0]._element.find(qn("c:dLbls"))
     assert labels.find(qn("c:numFmt")).get("formatCode") == '#,##0.0" M€"'
     assert not built.has_legend and not built.has_title
-    assert built.value_axis.tick_labels.number_format == '#,##0.0" M€"'
+    assert built.value_axis.tick_labels.number_format == '#,##0.0" M€";-#,##0.0" M€";0'
 
 
 def test_another_type_on_the_example_slide_is_a_fresh_theme_chart(builtin):
@@ -1384,7 +1406,7 @@ def test_a_scatter_titles_its_axes_and_names_few_points(builtin):
     x_axis, y_axis = built.category_axis, built.value_axis
     assert x_axis.axis_title.text_frame.text == "Price (€)"
     assert y_axis.axis_title.text_frame.text == "Units sold"
-    assert x_axis.tick_labels.number_format == '#,##0.0" €"'
+    assert x_axis.tick_labels.number_format == '#,##0.0" €";-#,##0.0" €";0'
     assert y_axis.tick_labels.number_format == "#,##0"
     assert list(built.plots[0].series[0].values) == [120, 90, 60]
     points = built.plots[0].series[0].points

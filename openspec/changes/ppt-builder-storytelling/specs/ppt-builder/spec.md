@@ -26,7 +26,7 @@ The system SHALL accept a `takeaway` on every plan slide: the conclusion the aud
 
 ### Requirement: A chart holds one measure
 
-Before that check, the system SHALL put a category chart's amounts in one scale of their unit: values written with scale prefixes of one base unit (k€, M€, Md€; k$, M$; K, M, B, bn, Md) SHALL be converted to the scale that keeps most values between 1 and 999 (the chart's own `unit` when it names one of them), and amounts of a single unit reaching 10 000 or more (1 250 000 €) SHALL be shown in such a scale; the converted values carry that unit in their number format, data labels included, its billion prefix spelled in the deck's language (Md in French, bn in English). An amount of 10 000 or more written in slide text with a currency sign SHALL be shortened to that scale too, in the deck's decimal separator (520 000 € → 520 k€). A bare number beside several scales SHALL NOT be converted. The system SHALL return `needs_revision` for a chart whose values are still written with two different units, every time it is sent; a scatter or bubble chart SHALL be checked per axis. This check SHALL run before the slide assignment, and a `changes` call SHALL be checked on the slides it touches only. The system SHALL NOT refuse a chart for the spread of its values or, on a slide with several charts, for a missing chart title.
+Before that check, the system SHALL put a category chart's amounts in one scale of their unit: values written with scale prefixes of one base unit (k€, M€, Md€; k$, M$; K, M, B, bn, Md) SHALL be converted to the scale that puts the largest value between 1 and 999 (the chart's own `unit` when it names one of them), and amounts of a single unit reaching 10 000 or more (1 250 000 €) SHALL be shown in such a scale; the converted values carry that unit in their number format, data labels included, its billion prefix spelled in the deck's language (Md in French, bn in English), with the decimals the converted values carry (at most 2, none when all are whole); an axis's 0 SHALL read "0". An amount of 10 000 or more written in slide text with a currency sign SHALL be shortened to that scale too, in the deck's decimal separator (520 000 € → 520 k€). A bare number beside several scales SHALL NOT be converted. The system SHALL return `needs_revision` for a chart whose values are still written with two different units, every time it is sent; a scatter or bubble chart SHALL be checked per axis. This check SHALL run before the slide assignment, and a `changes` call SHALL be checked on the slides it touches only. The system SHALL NOT refuse a chart for the spread of its values or, on a slide with several charts, for a missing chart title.
 
 #### Scenario: Two written units
 
@@ -42,6 +42,11 @@ Before that check, the system SHALL put a category chart's amounts in one scale 
 
 - **WHEN** a series holds "1 250 000 €" and "800 000 €" in a French deck
 - **THEN** the chart plots 1.25 and 0.8 in `M€`; "1 500 €" and "2 300 €" are plotted as written
+
+#### Scenario: The largest amount sets the scale
+
+- **WHEN** a chart in `€` holds 2 450 000, 1 380 000, 640 000, 215 000 and 48 500
+- **THEN** it plots them in `M€` (2,45 M€, not 2 450,0 k€) and its value axis starts at "0"
 
 #### Scenario: Wide-range values
 

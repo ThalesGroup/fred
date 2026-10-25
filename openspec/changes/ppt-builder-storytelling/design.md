@@ -141,7 +141,7 @@ Any reply after a proposal used to count as approval. The platform's `ask_user` 
 
 ### D12. Amounts in one scale (owner decision 2026-10-23)
 
-"500 k€" beside "2 M€" was refused as two units. `story.rescaled` runs before the check (`tools._evaluate`): it reads each value's written unit (`PlanSeries.units` is now one entry per value), converts amounts of one base unit to a common scale chosen by the most values in 1-999 (ties: the larger scale), and writes that unit in `chart.unit`, which the number format already carries to axis and data labels. A single unit is rescaled only from 10 000, so short amounts stay as written. A written spelling of the chosen scale is reused; otherwise k/M/Md (French) or k/M/bn (English) by `notes.plan_language`. Scatter and bubble axes and table cells are left as written (a table's text is the user's).
+"500 k€" beside "2 M€" was refused as two units. `story.rescaled` runs before the check (`tools._evaluate`): it reads each value's written unit (`PlanSeries.units` is now one entry per value), converts amounts of one base unit to a common scale that puts the largest value in 1-999 (most values in range left 2 450 000 € at 2 450,0 k€ in the live eval), and writes that unit in `chart.unit`, which the number format already carries to axis and data labels. A single unit is rescaled only from 10 000, so short amounts stay as written. A written spelling of the chosen scale is reused; otherwise k/M/Md (French) or k/M/bn (English) by `notes.plan_language`. Scatter and bubble axes and table cells are left as written (a table's text is the user's).
 
 ## Risks / Trade-offs
 

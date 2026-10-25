@@ -717,9 +717,9 @@ def _decimals(values: Sequence[Optional[float]]) -> int:
     )
 
 
-def number_format(chart: PlanChart, axis: str = "y") -> str:
+def number_format(chart: PlanChart, axis: str = "y", ticks: bool = False) -> str:
     """``#,##0.0" M€"``: the data's own decimals (at most 2), then its unit; on a
-    scatter or bubble, those of one axis."""
+    scatter or bubble, those of one axis. ``ticks``: an axis's, whose 0 reads "0"."""
     if chart.type in XY_TYPES:
         values = [getattr(p, axis) for p in chart.points()]
         unit = {"x": chart.x_unit, "size": chart.size_unit}.get(axis, chart.unit)
@@ -729,9 +729,10 @@ def number_format(chart: PlanChart, axis: str = "y") -> str:
     decimals = _decimals(values)
     base = "#,##0" + ("." + "0" * decimals if decimals else "")
     unit = (unit or "").replace('"', "").strip()
-    if not unit:
-        return base
-    return f'{base}"{unit}"' if unit == "%" else f'{base}" {unit}"'
+    shown = base
+    if unit:
+        shown = f'{base}"{unit}"' if unit == "%" else f'{base}" {unit}"'
+    return f"{shown};-{shown};0" if ticks and shown != "#,##0" else shown
 
 
 def _scheme(name: str) -> Any:
@@ -1043,7 +1044,7 @@ def _xy_axes(built: Any, chart: PlanChart, pt: float) -> None:
         (built.category_axis, "x", chart.x_title, chart.x_unit),
         (built.value_axis, "y", chart.y_title, chart.unit),
     ):
-        axis.tick_labels.number_format = number_format(chart, name)
+        axis.tick_labels.number_format = number_format(chart, name, ticks=True)
         axis.tick_labels.number_format_is_linked = False
         text = axis_title(title, unit)
         if not text:
@@ -1175,7 +1176,9 @@ def refill(
         _xy_axes(built, chart, pt)
     elif chart.type not in ROUND:
         value = built.value_axis.tick_labels
-        value.number_format = "0%" if _percent(chart) else fmt
+        value.number_format = (
+            "0%" if _percent(chart) else number_format(chart, ticks=True)
+        )
         value.number_format_is_linked = False
 
 
@@ -1261,7 +1264,7 @@ def draw(
     if chart.type in ROUND:
         _hole(built)
     else:
-        _axes(built, "0%" if percent else fmt)
+        _axes(built, "0%" if percent else number_format(chart, ticks=True))
         if chart.type in XY_TYPES:
             _xy_axes(built, chart, pt)
         if chart.type == "bubble":

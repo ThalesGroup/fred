@@ -249,4 +249,4 @@ async def test_k_and_m_euros_in_one_chart_are_drawn_in_one_scale(monkeypatch):
     (frame,) = [s for s in deck(workspace).slides[1].shapes if s.has_chart]
     chart = frame.chart
     assert list(chart.plots[0].series[0].values) == [0.5, 2.0]
-    assert chart.value_axis.tick_labels.number_format == '#,##0.0" M€"'
+    assert chart.value_axis.tick_labels.number_format == '#,##0.0" M€";-#,##0.0" M€";0'

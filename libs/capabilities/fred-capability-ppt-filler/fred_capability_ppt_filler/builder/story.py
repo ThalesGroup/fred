@@ -115,9 +115,12 @@ def _scale(unit: str) -> Optional[Tuple[str, float]]:
     return None
 
 
-def _in_range(amounts: Sequence[float], factor: float) -> Tuple[int, int]:
-    scaled = [abs(a) / factor for a in amounts if a]
-    return sum(1 <= v < 1000 for v in scaled), -sum(v >= 1000 for v in scaled)
+def _magnitude(amounts: Sequence[float], least: float = 1.0) -> float:
+    """The scale that puts the largest amount in [1, 1000): 2 450 000 → 1e6."""
+    top = max(map(abs, amounts), default=0.0)
+    return max(
+        (f for f in (1.0, 1e3, 1e6, 1e9) if f >= least and top >= f), default=least
+    )
 
 
 def rescaled_chart(chart: PlanChart, language: str) -> Optional[PlanChart]:
@@ -152,7 +155,7 @@ def rescaled_chart(chart: PlanChart, language: str) -> Optional[PlanChart]:
     if mixed and given:
         target = given[1]
     else:
-        target = max((1.0, 1e3, 1e6, 1e9), key=lambda f: (*_in_range(known, f), f))
+        target = _magnitude(known)
     if not mixed and target == current:
         return None
     (base,) = bases
@@ -195,7 +198,7 @@ def rescaled_text(text: str, language: str) -> str:
         value, _ = read_number(match["after"] or match["before"], mark)
         if value is None or abs(value) < _LARGE:
             return match.group()
-        target = max((1e3, 1e6, 1e9), key=lambda f: (*_in_range([value], f), f))
+        target = _magnitude([value], 1e3)
         shown = f"{round(value / target, 2):g}".replace(".", mark)
         prefix = _PREFIX_OF["fr" if language == "fr" else "en"][target]
         if match["after"]:
