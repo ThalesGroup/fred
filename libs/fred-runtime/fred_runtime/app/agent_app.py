@@ -53,7 +53,7 @@ from collections.abc import (
     Mapping,
     Sequence,
 )
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, cast
@@ -4043,10 +4043,8 @@ async def _stream(
         finally:
             if steering_heartbeat is not None:
                 steering_heartbeat.cancel()
-                try:
+                with suppress(asyncio.CancelledError):
                     await steering_heartbeat
-                except asyncio.CancelledError:
-                    pass
             if steering_token is not None and session_id is not None:
                 paused = any(
                     payload.get("kind") == "awaiting_human" for payload in collected
