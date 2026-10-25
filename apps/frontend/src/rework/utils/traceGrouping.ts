@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import type { ChatMessage } from "../../slices/runtime/runtimeOpenApi";
+import type { IconType } from "@shared/utils/Type.ts";
 import type { TraceRow, ToolEntry } from "./traceUtils";
 import { isToolCall, toolCallId, traceEntryKey } from "./traceUtils";
 
@@ -20,6 +21,7 @@ export type TraceGroupRule = {
   id: string;
   titleKey: string;
   countKey: string;
+  itemIcon?: IconType;
   matches: (entry: ToolEntry) => boolean;
   itemLabel: (entry: ToolEntry) => string;
   preview: (entry: ToolEntry) => string | { label: string; value: string };

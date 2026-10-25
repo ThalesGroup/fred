@@ -227,6 +227,7 @@ describe("ThoughtTrace code groups", () => {
     const row = [...container.querySelectorAll("button")].find(
       (button) => button !== heading && button.textContent?.includes("Find the requested CSV"),
     );
+    expect(row?.querySelector('[data-icon="terminal"]')).toBeTruthy();
     expect(row?.querySelector("code")?.textContent).toBe("find /inputs -name '*.csv'");
   });
 

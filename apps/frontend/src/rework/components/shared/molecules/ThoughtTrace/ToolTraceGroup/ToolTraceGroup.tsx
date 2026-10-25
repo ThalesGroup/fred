@@ -132,6 +132,11 @@ export function ToolTraceGroup({
                 onClick={() => openTrace(entry)}
               >
                 <span className={`${styles.childDot} ${styles[`dot_${childStatus}`]}`} aria-hidden="true" />
+                {group.rule.itemIcon && (
+                  <span className={styles.childIcon}>
+                    <Icon category="outlined" type={group.rule.itemIcon} />
+                  </span>
+                )}
                 {itemLabel && <span className={styles.childTitle}>{itemLabel}</span>}
                 {itemPreviewText && <span className={styles.childPreview}>{previewContent(itemPreview)}</span>}
                 {childStatus !== "ok" && <span className={styles.childStatus}>{statusText}</span>}

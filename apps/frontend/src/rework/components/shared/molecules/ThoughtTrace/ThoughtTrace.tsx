@@ -94,6 +94,7 @@ const GROUP_RULES: TraceGroupRule[] = [
     id: "code-sandbox",
     titleKey: "rework.chatTrace.toolLabels.codeSandbox",
     countKey: "rework.chatTrace.toolGroups.commands",
+    itemIcon: "terminal",
     matches: (entry) => toolSlug(toolName(entry.call)) === "execute_code",
     itemLabel: () => "",
     preview: (entry) => {
