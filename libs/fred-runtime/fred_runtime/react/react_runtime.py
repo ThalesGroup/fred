@@ -66,6 +66,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeEvent,
     RuntimeServices,
     StatusRuntimeEvent,
+    SteeredUserMessageRuntimeEvent,
     ThoughtDeltaEvent,
     ThoughtEndEvent,
     ThoughtStartEvent,
@@ -696,19 +697,12 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             for event in preload:
                 yield event.model_copy(update={"sequence": sequence})
                 sequence += 1
-            if self._services.skills is None:
-                agent_stream = self._compiled_agent.astream(
-                    graph_input,
-                    config=_to_runnable_config(config),
-                    stream_mode=["messages", "updates"],
-                )
-            else:
-                agent_stream = self._compiled_agent.astream(
-                    graph_input,
-                    config=_to_runnable_config(config),
-                    stream_mode=["messages", "updates", "custom"],
-                    subgraphs=True,
-                )
+            agent_stream = self._compiled_agent.astream(
+                graph_input,
+                config=_to_runnable_config(config),
+                stream_mode=["messages", "updates", "custom"],
+                subgraphs=self._services.skills is not None,
+            )
             while True:
                 try:
                     raw_event = await run_scope.next_event(agent_stream)
@@ -716,9 +710,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     break
                 mode, update = _split_stream_event_mode(raw_event)
 
-                if (
-                    mode == "custom"
-                    and isinstance(update, StatusRuntimeEvent)
+                if mode == "custom" and (
+                    isinstance(update, SteeredUserMessageRuntimeEvent)
+                    or isinstance(update, StatusRuntimeEvent)
                     and update.skill_load is not None
                 ):
                     yield update.model_copy(update={"sequence": sequence})

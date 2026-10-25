@@ -163,6 +163,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     parse_human_input_answer,
 )
+from fred_runtime.runtime_support.turn_steering import turn_steering_mailbox
 from fred_sdk.contracts.skills import SkillCatalog, SkillDetail, SkillInvocation
 from fred_sdk.contracts.ui_part_union import current_ui_part_union
 from fred_sdk.support.authored_toolsets import (
@@ -3365,7 +3366,12 @@ async def _write_turn_history(
     for payload in payloads:
         kind = payload.get("kind")
 
-        if kind == "status" and isinstance(payload.get("skill_load"), dict):
+        if kind == RuntimeEventKind.STEERED_USER_MESSAGE.value:
+            messages.append(
+                make_user_text(session_id, exchange_id, rank, payload["content"])
+            )
+            rank += 1
+        elif kind == "status" and isinstance(payload.get("skill_load"), dict):
             from fred_sdk.contracts.skills import SkillLoadAttribution
 
             attribution = SkillLoadAttribution.model_validate(payload["skill_load"])
@@ -3966,6 +3972,18 @@ async def _stream(
         resolved_team_id = "personal"
 
     collected: list[dict[str, Any]] = []
+    steering_token = (
+        turn_steering_mailbox.start(
+            session_id,
+            request.agent_instance_id,
+            user_id,
+            resolved_team_id or "personal",
+        )
+        if session_id
+        and request.agent_instance_id
+        and not isinstance(definition, GraphAgentDefinition)
+        else None
+    )
     payloads = _iterate_runtime_event_payloads(
         definition,
         request,
@@ -3995,6 +4013,8 @@ async def _stream(
         # Closing this stream closes the run's stream with it, so a dropped
         # response never leaves the run to garbage collection.
         await payloads.aclose()
+        if steering_token is not None and session_id is not None:
+            turn_steering_mailbox.end(session_id, steering_token)
 
     _emit_turn_completed(
         container,
@@ -6792,6 +6812,46 @@ def _build_agent_router(
             session_id=eval_session_id,
             turn_start=turn_start,
         )
+
+    @router.post("/sessions/{session_id}/steer", status_code=status.HTTP_202_ACCEPTED)
+    async def steer_active_turn(
+        session_id: str,
+        request: RuntimeExecuteRequest,
+        message_id: str = Query(..., min_length=1),
+        authenticated_user: KeycloakUser | AssertedUser | None = Depends(
+            _execution_subject
+        ),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> dict[str, str]:
+        _refuse_reserved_session_id(session_id)
+        if (
+            request.session_id != session_id
+            or not request.agent_instance_id
+            or not request.input.strip()
+        ):
+            raise HTTPException(status_code=422, detail="invalid_steering_request")
+        _enforce_chat_input_limit(request)
+        await _enforce_session_ownership(
+            session_id,
+            authenticated_user,
+            container,
+            agent_instance_id=request.agent_instance_id,
+        )
+        await _authorize_execution_or_raise(request, authenticated_user, container)
+        user_id = (
+            authenticated_user.uid if authenticated_user is not None else "unknown"
+        )
+        offered = turn_steering_mailbox.offer(
+            session_id,
+            request.agent_instance_id,
+            user_id,
+            request.effective_team_id() or "personal",
+            message_id,
+            request.input.strip(),
+        )
+        if not offered:
+            raise HTTPException(status_code=409, detail="active_turn_unavailable")
+        return {"status": "pending"}
 
     @router.post(
         "/execute/stream",

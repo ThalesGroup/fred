@@ -59,6 +59,7 @@ from fred_runtime.deep.concat_files import ConcatFilesMiddleware
 from fred_runtime.deep.conversation_backend import ConversationNamespaceBackend
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
+from fred_runtime.runtime_support.turn_steering import TurnSteeringMiddleware
 from fred_runtime.react.middleware.hitl import (
     DeepChildHitlMiddleware,
     FredHitlMiddleware,
@@ -538,6 +539,11 @@ def _build_deepagent_runtime_middleware(
             max_history_messages=None,
             binding=binding,
             kpi=kpi,
+        ),
+        *(
+            (TurnSteeringMiddleware(binding.portable_context.session_id),)
+            if not child
+            else ()
         ),
         # Deep Agents no longer installs planning for non-Codex models.
         cast(AgentMiddleware, TodoListMiddleware()),
