@@ -209,6 +209,39 @@ def test_amounts_in_several_scales_of_one_unit_are_put_in_one(values, unit, expe
     assert tuple(got) == expected and problems == []
 
 
+def _text(title: str = "Le chiffre d'affaires", **fields: Any) -> Any:
+    plan = DeckPlan.model_validate({"slides": [COVER, _slide(title=title, **fields)]})
+    return story.rescaled(plan).slides[1]
+
+
+def test_large_amounts_written_in_text_are_rescaled_too():
+    slide = _text(
+        bullets=[
+            "Sud : **520\u202f000\u00a0€** (41,6 %) – leader",
+            "Nord : 1\u202f500 €",
+        ],
+        items=[{"number": "1 250 000 €", "label": "CA"}, {"number": "450 k€"}],
+        table={"header": ["Région", "CA"], "rows": [["Est", "2 300 000 €"]]},
+    )
+    assert slide.bullets == [
+        "Sud : **520\u00a0k€** (41,6 %) – leader",
+        "Nord : 1\u202f500 €",
+    ]
+    assert [i.number for i in slide.items] == ["1,25 M€", "450 k€"]
+    assert slide.table.rows == [["Est", "2,3 M€"]]
+
+
+def test_short_or_scaled_amounts_and_other_numbers_are_left_in_text():
+    bullets = ["1 500 € par poste", "450 k€ investis", "12 000 salariés", "45 000 %"]
+    assert _text(bullets=bullets).bullets == bullets
+
+
+def test_text_amounts_are_spelled_in_the_deck_s_language():
+    english = "The revenue of the group"
+    slide = _text(english, bullets=["Revenue: $1,250,000", "Cost: 2,500,000,000 €"])
+    assert slide.bullets == ["Revenue: $1.25M", "Cost: 2.5 bn€"]
+
+
 def test_a_billion_scale_is_spelled_in_the_deck_s_language():
     english = "The revenue of the group"
     assert _rescaled(["2 500 000 000 €", "900 000 000 €"], title=english)[1] == "bn€"

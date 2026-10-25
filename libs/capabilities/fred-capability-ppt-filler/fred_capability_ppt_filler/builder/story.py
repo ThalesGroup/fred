@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """The one-measure check of a deck plan's charts (amounts in k€ and M€ are
-first put in one scale), run before the assignment
+first put in one scale, large amounts of the text shortened), run before the assignment
 (problems in the assigner's shape join its ``needs_revision``), and the plan
 outline shown for validation. Whether a slide makes a point, cites a source or
 needs a cover is the model's call (working rules), never refused here.
@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, TypeVar
+
+from pydantic import BaseModel
 
 from fred_capability_ppt_filler.builder import charts, notes
 from fred_capability_ppt_filler.builder.assign import SlideProblem
@@ -32,6 +34,7 @@ from fred_capability_ppt_filler.builder.plan import (
     DeckPlan,
     PlanChart,
     SlidePlan,
+    read_number,
     shown_charts,
 )
 
@@ -173,11 +176,79 @@ def rescaled_chart(chart: PlanChart, language: str) -> Optional[PlanChart]:
     return chart.model_copy(update={"series": series, "unit": label})
 
 
+# A large amount written in text, its currency after (1 250 000 €) or before
+# ($1,250,000); "450 k€" or "$500k" already carry a scale and do not match.
+_FIGURE = r"\d{1,3}(?:[ \u00a0\u202f,.]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?"
+_TEXT_AMOUNT = re.compile(
+    rf"(?<![\d.,])(?:(?P<after>{_FIGURE})(?P<space>[ \u00a0\u202f]?)(?P<sign>[€$£])"
+    rf"|(?P<lead>[€$£])(?P<before>{_FIGURE})(?![\d.,]|\s?(?:bn|Md|[kKmMB])(?![^\W\d_])))"
+)
+_Model = TypeVar("_Model", bound=BaseModel)
+
+
+def rescaled_text(text: str, language: str) -> str:
+    """Amounts of ``text`` past `_LARGE` in the scale that keeps them short:
+    ``520 000 €`` → ``520 k€``, ``$1,250,000`` → ``$1.25M``."""
+    mark = "," if language == "fr" else "."
+
+    def amount(match: re.Match[str]) -> str:
+        value, _ = read_number(match["after"] or match["before"], mark)
+        if value is None or abs(value) < _LARGE:
+            return match.group()
+        target = max((1e3, 1e6, 1e9), key=lambda f: (*_in_range([value], f), f))
+        shown = f"{round(value / target, 2):g}".replace(".", mark)
+        prefix = _PREFIX_OF["fr" if language == "fr" else "en"][target]
+        if match["after"]:
+            return f"{shown}{match['space']}{prefix}{match['sign']}"
+        return f"{match['lead']}{shown}{prefix}"
+
+    return _TEXT_AMOUNT.sub(amount, text)
+
+
+def _rewritten(
+    model: _Model, names: Sequence[str], text: Callable[[str], str]
+) -> _Model:
+    """``model`` with the text of its fields ``names`` rewritten; itself when unchanged."""
+
+    def deep(value: Any) -> Any:
+        if isinstance(value, str):
+            return text(value)
+        return [deep(v) for v in value] if isinstance(value, list) else value
+
+    update = {n: deep(getattr(model, n)) for n in names}
+    update = {n: v for n, v in update.items() if v != getattr(model, n)}
+    return model.model_copy(update=update) if update else model
+
+
+def _slide_text(slide: SlidePlan, language: str) -> SlidePlan:
+    def text(value: str) -> str:
+        return rescaled_text(value, language)
+
+    slide = _rewritten(
+        slide, ("title", "subtitle", "takeaway", "number", "bullets"), text
+    )
+    update: Dict[str, Any] = {}
+    columns = [_rewritten(c, ("heading", "bullets"), text) for c in slide.columns]
+    if any(n is not c for n, c in zip(columns, slide.columns)):
+        update["columns"] = columns
+    names = ("number", "heading", "text", "label")
+    items = [_rewritten(i, names, text) for i in slide.items]
+    if any(n is not i for n, i in zip(items, slide.items)):
+        update["items"] = items
+    if slide.table is not None:
+        table = _rewritten(slide.table, ("header", "rows"), text)
+        if table is not slide.table:
+            update["table"] = table
+    return slide.model_copy(update=update) if update else slide
+
+
 def rescaled(plan: DeckPlan) -> DeckPlan:
-    """Every chart of the plan in one scale of its unit (see `rescaled_chart`)."""
+    """Every chart of the plan in one scale of its unit (see `rescaled_chart`),
+    and every large amount of its text too (see `rescaled_text`)."""
     language = notes.plan_language(plan)
 
     def slide_of(slide: SlidePlan) -> SlidePlan:
+        slide = _slide_text(slide, language)
         update = {}
         if slide.chart is not None:
             chart = rescaled_chart(slide.chart, language)
