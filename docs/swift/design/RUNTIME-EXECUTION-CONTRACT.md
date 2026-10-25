@@ -7195,7 +7195,7 @@ whose `asset_files` are inline) need `CAN_UPDATE_AGENTS`, readiness (body
 that calls it. On a secured pod a save or readiness request without `team_id` is
 422. Control-plane forwards the user's token on all three.
 
-Acceptance scenarios: `openspec/changes/ppt-builder-capability/`.
+Acceptance scenarios: `openspec/specs/ppt-builder/spec.md`.
 
 ### 8.120 Capability readiness hook and pod endpoint (2026-10-05)
 
@@ -7243,4 +7243,4 @@ ReBAC). This is the pod-side half of control-plane's team-free model list
 (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §70), minus pod coverage, which only
 control-plane sees. ppt_builder's `/platform*` writes return 422 on a refusal.
 
-Acceptance scenarios: `openspec/changes/ppt-builder-platform-defaults/`.
+Acceptance scenarios: `openspec/specs/ppt-builder/spec.md`.

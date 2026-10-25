@@ -83,12 +83,10 @@ has none.
 
 Optional annotation channels: a shape name from the Selection pane (`title`,
 `body`, `number`, `keep`…), and `kind:` / `label:` lines in a slide's notes.
-Design: `openspec/changes/ppt-builder-capability/`, charts:
-`openspec/changes/ppt-builder-charts/` and
+Spec: `openspec/specs/ppt-builder/spec.md`; in flight:
 `openspec/changes/ppt-builder-more-chart-types/`,
-`openspec/changes/ppt-builder-multi-chart-slides/`, storytelling:
-`openspec/changes/ppt-builder-storytelling/`, intents:
-`openspec/changes/ppt-builder-intent-fields/`.
+`openspec/changes/ppt-builder-multi-chart-slides/` and
+`openspec/changes/ppt-builder-storytelling/`.
 
 ### Evaluation (opt-in)
 

@@ -5236,4 +5236,4 @@ panel filters it on `supports_vision`, as the agent form filters the team list.
 The capability routes those panels call (ppt_builder `/platform*`) live on the pod
 and are gated by the pod's capability-manager check
 (`RUNTIME-EXECUTION-CONTRACT.md` §8.121). Acceptance scenarios:
-`openspec/changes/ppt-builder-platform-defaults/`.
+`openspec/specs/ppt-builder/spec.md`.
