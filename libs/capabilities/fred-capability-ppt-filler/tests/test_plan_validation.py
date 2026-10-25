@@ -86,10 +86,21 @@ async def test_the_first_build_returns_the_outline_and_stores_the_plan(
     )
     (stored,) = deck_plan_store.plans.values()
     plan = DeckPlan.model_validate_json(stored)
-    assert plan.proposed and not plan.delivered and len(plan.slides) == 3
+    # The three slides sent, then the closing the tool adds.
+    assert plan.proposed and not plan.delivered and len(plan.slides) == 4
     # A second call before the user answers gets the outline again.
     again, _ = await build(slides=DECK)
     assert again.startswith("Plan proposed") and not workspace.writes
+
+
+@pytest.mark.asyncio
+async def test_the_outline_shows_the_closing_slide_the_tool_adds(monkeypatch):
+    """The user sees the appended closing in the plan and can remove it there."""
+    build = await build_tool(monkeypatch, _first_turn(), validate_plan=True)
+    text, _ = await build(slides=DECK)
+    assert any(line.startswith("4. closing — Merci") for line in text.splitlines())
+    opted, _ = await build(slides=DECK, no_closing=True)
+    assert not any(line.startswith("4.") for line in opted.splitlines())
 
 
 @pytest.mark.asyncio
@@ -140,7 +151,7 @@ async def test_a_correction_applies_to_the_proposed_plan(monkeypatch):
     )
     text, _ = await build(changes=[{"op": "remove", "slide": 3}])
     assert text.startswith("Delivered"), text
-    assert len(deck(workspace).slides) == 2
+    assert len(deck(workspace).slides) == 3  # the appended closing stays
 
 
 @pytest.mark.asyncio

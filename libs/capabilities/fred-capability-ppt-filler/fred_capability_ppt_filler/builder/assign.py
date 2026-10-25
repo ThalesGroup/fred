@@ -320,6 +320,14 @@ def infer_kinds(slide: SlidePlan) -> List[SlideKind]:
     return kinds
 
 
+def ends_on_closing(slide: SlidePlan) -> bool:
+    """Whether the slide reads as a closing: asked as one, holding a contact,
+    or a bare "Merci" the assignment takes as one."""
+    if slide.kind:
+        return slide.kind == "closing"
+    return bool(slide.email or slide.phone) or infer_kinds(slide)[0] == "closing"
+
+
 # Text patterns of a list that another kind would show better.
 _DATED = re.compile(r"^(?:\w{1,10}\.?\s+)?(?:19|20)\d{2}\b")
 _STEP = re.compile(r"^(?:\d{1,2}\s*[.)]|(?:étape|etape|step|phase)\s*\d)", re.I)

@@ -1024,3 +1024,14 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 - **WHEN** a call sends both `slides` and `changes`
 - **THEN** nothing is built and the one-line result names the one to send: only `slides`, every slide of the deck in order (the slides `changes` added included), while no deck was delivered; only `changes` once the user has a deck
 
+### Requirement: The deck ends on the template's closing slide
+
+When the template offers a `closing` kind, the system SHALL end every new deck sent in `slides` on a closing slide, appending a thank-you closing when the plan does not end on one, unless the model reports that the user asked for no closing slide or for another last slide (`no_closing`).
+
+#### Scenario: The deck always ends on the template's closing slide
+
+- **GIVEN** a template that offers a `closing` kind
+- **WHEN** a new deck is sent in `slides` and its last slide is not a closing (asked as `closing`, giving an `email` or a `phone`, or a bare title the assignment takes as one, such as "Merci")
+- **THEN** the tool appends a thank-you closing slide ("Merci", or "Thank you" for an English plan) before the assignment, so the proposed outline shows it and the user can remove it there; it is assigned as any closing slide, so a template whose only closing is the contact design builds it on a close kind
+- **AND** nothing is appended when the plan already ends on a closing, when the template has no closing kind, when the plan has no content, for `changes` calls (a closing the user removed stays removed), or when the model sets `no_closing: true`, which the schema offers only with a closing kind and asks only when the user wants no closing slide or another last slide
+- **AND** the appended slide is not counted in a slide count the user asked for: the deck holds the slides sent plus that closing

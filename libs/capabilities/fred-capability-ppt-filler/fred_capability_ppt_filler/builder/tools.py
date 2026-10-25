@@ -85,6 +85,7 @@ from fred_capability_ppt_filler.builder.assign import (
     VarietyCheck,
     assign,
     assignable,
+    ends_on_closing,
     renumber_parts,
     unplaced,
 )
@@ -486,7 +487,9 @@ def _schema_for(
         __config__=ConfigDict(extra="ignore"),
         __validators__={
             "_lists": field_validator("slides", "changes", mode="before")(_listed),
-            "_show": field_validator("show_takeaways", mode="before")(_flag_or_none),
+            "_show": field_validator("show_takeaways", "no_closing", mode="before")(
+                _flag_or_none
+            ),
             "_deck": cast(Any, model_validator(mode="before")(_deck_fields_lifted)),
         },
         slides=(
@@ -545,11 +548,20 @@ def _schema_for(
             if takeaways
             else (SkipJsonSchema[Optional[bool]], None)
         ),
+        no_closing=(  # pyright: ignore[reportArgumentType]
+            (Optional[bool], Field(default=None, description=_NO_CLOSING))
+            if "closing" in kinds
+            else (SkipJsonSchema[Optional[bool]], None)
+        ),
         deck_conflict=(SkipJsonSchema[Optional[str]], None),
     )
     return model
 
 
+_NO_CLOSING = (
+    "true only when the user asked for no closing slide or for another last slide; "
+    "otherwise the tool ends the deck on the template's closing slide."
+)
 _SHOW_TAKEAWAYS = (
     "true only when the user explicitly asks to show the key messages (takeaways) on "
     "the slides; otherwise leave it out: they stay in the speaker notes."
@@ -682,6 +694,24 @@ def _to_plan(validated: Any) -> DeckPlan:
         main_message=validated.main_message,
         show_takeaways=bool(getattr(validated, "show_takeaways", None)),
     )
+
+
+_THANKS = {"fr": "Merci", "en": "Thank you"}
+
+
+def _closed(plan: DeckPlan, kinds: Sequence[str], opted_out: bool) -> DeckPlan:
+    """A new deck ends on the template's closing slide unless the user opted
+    out: a thank-you one appended when the plan's last slide is not a closing."""
+    slides = [s for s in plan.slides if s.invalid_entry is None]
+    if (
+        opted_out
+        or "closing" not in kinds
+        or not any(has_content(s) for s in slides)
+        or ends_on_closing(slides[-1])
+    ):
+        return plan
+    thanks = SlidePlan(title=_THANKS[speaker.plan_language(plan)], kind="closing")
+    return plan.model_copy(update={"slides": [*plan.slides, thanks]})
 
 
 def _shown_takeaways(plan: DeckPlan) -> DeckPlan:
@@ -1588,6 +1618,7 @@ def build_builder_tools(
     identity = ctx.identity
     validate_plan = ctx.config.validate_plan
     args_schema = _args_schema(inventory, validate_plan)
+    offered = offered_kinds(inventory)
     previous_problems: _Previous = {}
     # Variety is asked on the turn's first evaluated plan (one tool instance)
     # only: a call refused before evaluation does not use the ask up.
@@ -1705,6 +1736,9 @@ def build_builder_tools(
             ):
                 return _answer(_UNCHANGED)
 
+        if base is None:
+            opted_out = bool(getattr(validated, "no_closing", None))
+            plan = _closed(plan, offered, opted_out)
         delivered = await previous_deck(None) if base is None else None
         if delivered is not None:
             if cover_dropped(delivered, plan, _kinds(inventory)):
