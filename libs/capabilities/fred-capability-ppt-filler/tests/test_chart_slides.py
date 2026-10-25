@@ -1571,3 +1571,26 @@ def test_an_absurd_magnitude_is_refused_with_a_unit_hint():
     (what, fix), *_ = charts.data_problems(chart)
     assert what == "chart.series[0].values[0] is 1e+300, too large to chart"
     assert "larger unit" in fix
+
+
+def test_a_radar_resent_with_fewer_series_names_the_ones_left_out():
+    def slide(names: List[str]) -> SlidePlan:
+        return SlidePlan.model_validate(
+            {
+                "title": "Positionnement",
+                "chart": {
+                    "type": "radar",
+                    "categories": ["Prix", "Qualité", "Délai"],
+                    "series": [{"name": n, "values": [3, 2, 4]} for n in names],
+                },
+            }
+        )
+
+    sent = charts.over_cap([slide(["Nous", "A", "B", "C", "D"])])
+    assert charts.left_out_series(sent, [slide(["Nous", "A", "B"])]) == [
+        "Slide 1: the chart leaves out 'C', 'D' (at most 3 series stay readable): "
+        "say so to the user."
+    ]
+    # Shown on another chart (a split), a series is not left out.
+    other = slide(["C", "D"]).model_copy(update={"title": "Suite"})
+    assert charts.left_out_series(sent, [slide(["Nous", "A", "B"]), other]) == []

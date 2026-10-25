@@ -250,3 +250,27 @@ async def test_k_and_m_euros_in_one_chart_are_drawn_in_one_scale(monkeypatch):
     chart = frame.chart
     assert list(chart.plots[0].series[0].values) == [0.5, 2.0]
     assert chart.value_axis.tick_labels.number_format == '#,##0.0" M€";-#,##0.0" M€";0'
+
+
+@pytest.mark.asyncio
+async def test_series_dropped_to_meet_the_cap_are_named_in_the_delivery(monkeypatch):
+    """The refusal makes the model drop series: the user must hear which."""
+    names = ["Nous", "Alpha", "Bravo", "Charlie", "Delta"]
+    sent = {
+        **CHART,
+        "chart": {
+            "type": "column",
+            "categories": ["Italie", "Espagne"],
+            "series": [{"name": n, "values": [3, 2]} for n in names],
+        },
+    }
+    build = await build_tool(monkeypatch, [HumanMessage(content=USER)])
+    refused, _ = await build(slides=[COVER, sent])
+    assert "at most 4 stay readable" in refused
+    kept = {**sent, "chart": {**sent["chart"], "series": sent["chart"]["series"][:4]}}
+    text, _ = await build(slides=[COVER, kept])
+    assert text.startswith("Delivered"), text
+    assert (
+        "Slide 2: the chart leaves out 'Delta' (at most 4 series stay readable): "
+        "say so to the user." in text
+    )

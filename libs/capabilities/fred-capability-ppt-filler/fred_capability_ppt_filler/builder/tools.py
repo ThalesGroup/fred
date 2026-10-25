@@ -100,6 +100,7 @@ from fred_capability_ppt_filler.builder.changes import (
     repinned,
     unchanged,
 )
+from fred_capability_ppt_filler.builder.charts import left_out_series, over_cap
 from fred_capability_ppt_filler.builder.checks import SlideReport
 from fred_capability_ppt_filler.builder.deck_plans import get_deck_plan_store
 from fred_capability_ppt_filler.builder.models import (
@@ -1643,6 +1644,9 @@ def build_builder_tools(
     # answered without a rebuild (same turn only, so the template is the same).
     turn_delivered: List[Tuple[DeckPlan, str]] = []
     plans = _BasePlans(identity.session_id, identity.agent_instance_id)
+    # Series of charts sent over their cap this turn: the delivery names those
+    # the resend left out.
+    capped: Dict[str, List[str]] = {}
 
     async def delivered_before(base: Optional[DeckPlan]) -> bool:
         if turn_delivered or (base is not None and base.delivered):
@@ -1787,6 +1791,7 @@ def build_builder_tools(
         checked = [n for n, s in enumerate(plan.slides, start=1) if id(s) not in kept]
         # After `checked`: the copies it makes are not slides the call changed.
         plan = renumber_parts(_shown_takeaways(plan))
+        capped.update(over_cap(plan.slides))
         try:
             assignment, plan, bad = await asyncio.to_thread(
                 _evaluate,
@@ -1963,8 +1968,10 @@ def build_builder_tools(
             + unloadable
             + assignment.notes
             + _cleared_lines(cleared, plan, numbers)
-            + _after_cover_lines(after_cover, numbers),
+            + _after_cover_lines(after_cover, numbers)
+            + left_out_series(capped, deck.slides),
         )
+        capped.clear()
         notes = delta + _designs_line(inventory, deck.slides, patterns) + notes
 
         try:

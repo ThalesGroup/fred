@@ -24,7 +24,7 @@ from __future__ import annotations
 import copy
 import re
 from collections import Counter
-from typing import Any, List, Optional, Sequence, Tuple, cast
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
 from pptx.chart.data import BubbleChartData, CategoryChartData, XyChartData
 from pptx.chart.datalabel import DataLabels
@@ -52,6 +52,7 @@ from fred_capability_ppt_filler.builder.plan import (
     PlanChart,
     PlanPoint,
     capacity_text,
+    shown_charts,
 )
 from fred_capability_ppt_filler.traversal import PlacedShape, walk_shapes
 
@@ -318,6 +319,51 @@ def data_problems(chart: PlanChart) -> List[Tuple[str, str]]:
                 )
             )
     return found
+
+
+def series_cap(chart: PlanChart) -> int:
+    return _RADAR_SERIES if chart.type == "radar" else MAX_SERIES
+
+
+def _chart_key(chart: PlanChart) -> str:
+    """One chart across resends: its categories, or a scatter's title."""
+    named = chart.categories or [chart.title or ""]
+    return "|".join(lexicon.normalize(str(c)) for c in named)
+
+
+def over_cap(slides: Sequence[Any]) -> Dict[str, List[str]]:
+    """The series names of each chart sent with more series than it draws."""
+    return {
+        _chart_key(chart): [s.name for s in chart.series if s.name]
+        for slide in slides
+        if slide.invalid_entry is None
+        for _, chart in shown_charts(slide)
+        if chart.type not in ROUND and len(chart.series) > series_cap(chart)
+    }
+
+
+def left_out_series(
+    sent: Mapping[str, Sequence[str]], slides: Sequence[Any]
+) -> List[str]:
+    """A line per delivered chart that left out series an earlier call sent over
+    the cap: the refusal made the model drop them, so the user is told."""
+    if not sent:
+        return []
+    drawn = [(n, c) for n, s in enumerate(slides, start=1) for _, c in shown_charts(s)]
+    shown = {lexicon.normalize(s.name) for _, c in drawn for s in c.series}
+    lines = []
+    for number, chart in drawn:
+        gone = [
+            n
+            for n in sent.get(_chart_key(chart), ())
+            if lexicon.normalize(n) not in shown
+        ]
+        if gone:
+            lines.append(
+                f"Slide {number}: the chart leaves out {', '.join(repr(n) for n in gone)} "
+                f"(at most {series_cap(chart)} series stay readable): say so to the user."
+            )
+    return lines
 
 
 def _point_problems(chart: PlanChart) -> List[Tuple[str, str]]:

@@ -65,6 +65,7 @@ The system SHALL accept on a plan slide a `chart` field holding only data — `t
 
 - **WHEN** a chart has more categories than its zone holds at a readable size, or more series than the cap, or a pie with several series
 - **THEN** no deck is built and `needs_revision` gives the measured limit and a remedy (group as "Other", fewer series, another type); the chart is never cut or split over two slides
+- **AND** when a later call of the turn delivers that chart (same categories, or a scatter's title) without some of the series sent over the cap, and no other chart of the deck shows them, the delivery notes name those series on their slide, so the reply tells the user
 
 #### Scenario: A small chart is measured at its own text size
 
