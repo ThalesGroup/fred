@@ -98,7 +98,7 @@ package, so every fred-agents pod that installs that package registers it.
 ## Rollback
 
 1. Downgrade the control-plane schema first, while the new code still runs:
-   `alembic downgrade c9acb7dd3ad0` in the control-plane backend. The
+   `alembic downgrade f28c3e9ab641` in the control-plane backend. The
    downgrade lifts every `capability_pending` suspension and drops
    `agent_instance.suspension_detail`. An older control plane does not know
    `capability_pending` and fails listing a team's agents if one row still
