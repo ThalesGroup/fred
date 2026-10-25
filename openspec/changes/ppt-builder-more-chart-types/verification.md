@@ -29,3 +29,7 @@ The four types of the spec scenarios (stacked bar, radar, scatter with "Price (â
 
 - Task 5.1: the evaluation prompts, edits and metrics (expected chart type chosen, first call, scatter/bubble axes titled) are written in `eval/prompts.py` and `eval/run_eval.py`; the `make eval` run against a live model has not been run.
 - Point highlights on a scatter are drawn as per-point markers, which LibreOffice ignores; PowerPoint shows them.
+
+## Live run (5.1, 2026-10-25)
+
+- Through the revision harness (`~/fred-tmp/revision-evals/charts-r1..r3`), not `make eval`: scatter, bubble, radar and stacked bar chosen as asked. Bubble pass in r1-r3; stacked + bubble pass in r3; radar capped at 3 series (partial); scatter labels overlap (partial). r3 6/3/0 on 9 requests, r2 6/6/1 on 13.

@@ -55,3 +55,9 @@ Date: 2026-10-15, branch `feat/ppt-builder-capability`.
 - Tokens (cl100k, Thales v3 inventory of 4fbe0531): description 3365 → 3387, schema 4371 → 4376, working rules 585 → 587.
 - Offline replay of 4fbe0531 call 10 with `validate_plan` on (`~/fred-tmp/revision-evals/fixes/audit/review-4fbe0531/`): the outline now ends with the slide 1 cover → section note and the section repeat note "use fewer 'section' slides".
 - Not verified: a live mistral-medium turn (titles as claims, no `source` on general knowledge) — judgement of the model.
+
+## Live checks (2026-10-25)
+
+- 9.2: the owner checked the plan approval card (outline, Approve button, free answer) in the browser.
+- 10.2: the owner checked k€/M€ in the browser; chart eval `charts-r3` p07 (mixed k€) pass, M€ axis 0,5–3,0 M€.
+- Still open: 4.1 (storytelling metrics in `eval/prompts.py` and their run) and 4.2 (evidence PDFs on the built-in template).

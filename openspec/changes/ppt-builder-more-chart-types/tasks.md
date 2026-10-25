@@ -28,7 +28,7 @@
 
 ## 5. Evaluation, docs, close-out
 
-- [ ] 5.1 `eval/prompts.py`: the four prompts and edits of D7, metrics (type chosen, first-call success, axis titles) — harness only, needs a live LLM (prompts, edits and metrics written; the `make eval` run against a live model is still to do)
+- [x] 5.1 `eval/prompts.py`: the four prompts and edits of D7, metrics (type chosen, first-call success, axis titles) — harness only, needs a live LLM (prompts, edits and metrics written; the `make eval` run against a live model is still to do) — live run 2026-10-25 through the revision harness (`~/fred-tmp/revision-evals/charts-r1..r3`), not `make eval`: scatter, bubble, radar and stacked bar chosen as asked; bubble pass r1-r3, stacked+bubble pass in r3; r3 6/3/0 on 9 requests, r2 6/6/1 on 13
 - [x] 5.2 Help Center fr+en: `guides/prepare-powerpoint-template.md` chart types, `features/capabilities.md` chart sentence; package `README.md`; check whether the generated client carries the type enum and regenerate if so
 - [x] 5.3 Migration note line (impact none, patch); package `make test`, `ruff check` (incl. `--select I`), `ruff format --check`, basedpyright baseline; `make code-quality`/`make test` for frontend if touched; `openspec validate ppt-builder-more-chart-types --strict`
 - [ ] 5.4 `verification.md` with test counts and evidence (written); archive after `ppt-builder-charts` and `ppt-builder-storytelling`
