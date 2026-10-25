@@ -665,6 +665,8 @@ def test_native_chart_legend_sits_below_when_shown(
         ([2450, 48], '#,##0" M€"', '#,##0" M€"'),
         # Whole ticks (0, 100, 200…) show no decimals, whatever the data's.
         ([538.18, 549.33, 117.5], '#,##0.00" M€"', '#,##0" M€"'),
+        # A step far below 0,001 keeps four decimals, never none.
+        ([0.00012, 0.00009], '#,##0" M€"', '#,##0.0000" M€"'),
     ],
 )
 def test_the_decimals_come_from_the_scaled_values(values, labels, ticks):

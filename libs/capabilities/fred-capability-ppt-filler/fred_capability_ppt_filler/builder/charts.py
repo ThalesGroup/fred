@@ -797,10 +797,20 @@ def tick_step(chart: PlanChart) -> Optional[float]:
     return None
 
 
+# Past this, a tick step's decimals are cut: 0,00025 shows 0,0003.
+_MAX_TICK_DECIMALS = 4
+
+
 def _step_decimals(step: float) -> int:
     """0,5 → 1, 2,5 → 1, 200 → 0: what the axis's round ticks need."""
-    shown = f"{step:.3f}".rstrip("0")
-    return len(shown.split(".")[1])
+    return next(
+        (
+            d
+            for d in range(_MAX_TICK_DECIMALS)
+            if math.isclose(round(step, d), step, rel_tol=1e-9)
+        ),
+        _MAX_TICK_DECIMALS,
+    )
 
 
 def number_format(
