@@ -1026,19 +1026,17 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 
 ### Requirement: The deck ends on the template's closing slide
 
-When the template offers a `closing` kind, the system SHALL end every new deck sent in `slides` on a closing slide, appending a thank-you closing when the plan does not end on one, unless the model reports that the user asked for no closing slide or for another last slide (`no_closing`).
+When the template offers a `closing` kind, the system SHALL refuse a new deck sent in `slides` that does not end on a closing slide, unless the model reports that the user asked for no closing slide or for another last slide (`no_closing`); it SHALL never append one, so the closing counts within any slide count the user asked for.
 
-#### Scenario: The deck always ends on the template's closing slide
+#### Scenario: A new deck not ending on a closing is refused
 
 - **GIVEN** a template that offers a `closing` kind
-- **WHEN** a new deck is sent in `slides` and its last slide is not a closing (asked as `closing`, giving an `email` or a `phone`, or a bare title the assignment takes as one, such as "Merci")
-- **THEN** the tool appends a thank-you closing slide ("Merci", or "Thank you" for an English plan) before the assignment, so the proposed outline shows it and the user can remove it there; it is assigned as any closing slide, so a template whose only closing is the contact design builds it on a close kind
-- **AND** nothing is appended when the plan already ends on a closing, when the template has no closing kind, when the plan has no content, for `changes` calls (a closing the user removed stays removed), or when the model sets `no_closing: true`, which the schema offers only with a closing kind and asks only when the user wants no closing slide or another last slide
-- **AND** a slide count is not an opt-out: `no_closing` is set only when the user explicitly asked for no closing slide or for another last slide
+- **WHEN** a new deck is sent in `slides` and its last slide is not a closing (asked as `closing`, giving an `email` or a `phone`, or a bare title the assignment takes as one, such as "Merci") and `no_closing` is not set
+- **THEN** nothing is built and the tool answers `needs_revision` (not an error, so the model retries in the same turn): end the deck on a closing slide counted within any slide count asked, dropping or merging a content slide rather than adding one, or set `no_closing` only if the user asked for no closing slide
+- **AND** nothing is refused when the plan ends on a closing, when the template has no closing kind, when the plan has no content, for `changes` calls (a closing the user removed stays removed), or when the model sets `no_closing: true`, which the schema offers only with a closing kind; a slide count is not an opt-out
 
 #### Scenario: The closing slide counts within the requested slide count
 
 - **GIVEN** a template that offers a `closing` kind and a user who asks for N slides
-- **WHEN** the model plans the new deck
-- **THEN** the tool description and the `no_closing` field tell it that the count includes the closing slide, so it sends N slides whose last is the closing ("4 slides": 3 slides, then the closing), which the outline labels `closing`
-- **AND** the tool appends nothing to such a plan; the appended thank-you closing is only the safety net for a plan that does not end on one
+- **WHEN** the model sends N slides whose last is the closing ("4 slides": 3 slides, then the closing)
+- **THEN** the deck holds those N slides, the outline labels the last one `closing`, and no slide is added

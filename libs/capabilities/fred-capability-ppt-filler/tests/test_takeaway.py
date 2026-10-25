@@ -267,7 +267,7 @@ async def test_on_request_every_chart_takes_the_slide_with_a_card(monkeypatch):
     # Without the request the card would stay empty: the wide chart slide, as before.
     text, _, workspace = await _built(monkeypatch, slides, "")
     assert text.startswith("Delivered"), text
-    assert [_card(s) for s in list(deck(workspace).slides)[1:3]] == [[], []]
+    assert [_card(s) for s in list(deck(workspace).slides)[1:]] == [[], []]
 
 
 @pytest.mark.asyncio

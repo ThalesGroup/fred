@@ -560,7 +560,7 @@ def _schema_for(
 
 _NO_CLOSING = (
     "true only when the user explicitly asked for no closing slide or for another last "
-    "slide (a slide count is not that); otherwise the deck ends on the closing slide."
+    "slide (a slide count is not that)."
 )
 _SHOW_TAKEAWAYS = (
     "true only when the user explicitly asks to show the key messages (takeaways) on "
@@ -696,22 +696,16 @@ def _to_plan(validated: Any) -> DeckPlan:
     )
 
 
-_THANKS = {"fr": "Merci", "en": "Thank you"}
-
-
-def _closed(plan: DeckPlan, kinds: Sequence[str], opted_out: bool) -> DeckPlan:
-    """A new deck ends on the template's closing slide unless the user opted
-    out: a thank-you one appended when the plan's last slide is not a closing."""
+def _unclosed(plan: DeckPlan, kinds: Sequence[str], opted_out: bool) -> bool:
+    """Whether a new deck misses the template's closing slide the user did not
+    opt out of: it is refused, never appended, so a slide count asked holds."""
     slides = [s for s in plan.slides if s.invalid_entry is None]
-    if (
+    return not (
         opted_out
         or "closing" not in kinds
         or not any(has_content(s) for s in slides)
         or ends_on_closing(slides[-1])
-    ):
-        return plan
-    thanks = SlidePlan(title=_THANKS[speaker.plan_language(plan)], kind="closing")
-    return plan.model_copy(update={"slides": [*plan.slides, thanks]})
+    )
 
 
 def _shown_takeaways(plan: DeckPlan) -> DeckPlan:
@@ -1373,6 +1367,15 @@ _UNCHANGED = (
 )
 # A resend that keeps the deck but loses its cover is an edit gone wrong (an
 # added first slide written over it), never a new deck.
+_UNCLOSED = (
+    "No deck was built: the deck must end on a closing slide (kind closing). Make the "
+    "last slide a closing, counted within any slide count the user asked for: drop or "
+    "merge a content slide rather than add one. Set no_closing: true only if the user "
+    "asked for no closing slide."
+    + _NEXT_CALL
+    + "\n"
+    + json.dumps({"status": "needs_revision", "closing": "missing"})
+)
 _COVER_DROPPED = (
     "No deck was built: this resends the user's deck with most of its slides but without "
     "its cover. Keep the cover: to add a slide at the start, send only `changes` with an "
@@ -1512,10 +1515,7 @@ def _description(
     if "cover" in kinds:
         rules += " A first slide of only a title and subtitle is the cover."
     if "closing" in kinds:
-        rules += (
-            " A closing slide can only be the last one; a new deck ends on one, counted"
-            " in any slide count asked (4 slides: 3 slides, then the closing)."
-        )
+        rules += " A closing slide can only be the last one; a new deck ends on one."
     if takeaway_zones(inventory):
         rules += (
             " Takeaways stay in the speaker notes; set show_takeaways: true only when the "
@@ -1739,9 +1739,10 @@ def build_builder_tools(
             ):
                 return _answer(_UNCHANGED)
 
-        if base is None:
-            opted_out = bool(getattr(validated, "no_closing", None))
-            plan = _closed(plan, offered, opted_out)
+        if base is None and _unclosed(
+            plan, offered, bool(getattr(validated, "no_closing", None))
+        ):
+            return _answer(_UNCLOSED)
         delivered = await previous_deck(None) if base is None else None
         if delivered is not None:
             if cover_dropped(delivered, plan, _kinds(inventory)):
