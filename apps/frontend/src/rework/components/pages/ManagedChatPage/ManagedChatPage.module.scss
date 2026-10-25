@@ -414,6 +414,11 @@
   cursor: default;
 }
 
+.pendingSend {
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+}
+
 .pendingStatus {
   color: var(--on-surface-muted);
   white-space: nowrap;

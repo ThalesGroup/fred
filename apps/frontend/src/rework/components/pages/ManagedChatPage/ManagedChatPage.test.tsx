@@ -438,9 +438,9 @@ describe("ManagedChatPage pending messages", () => {
     expect(html).toContain("first question");
     expect(html).toContain("second question");
     expect(html.indexOf("first question")).toBeLessThan(html.indexOf("second question"));
-    expect(html).toContain("chatbot.pendingMessages.steer");
+    expect(html).toContain("chatbot.pendingMessages.send");
     expect(html).toContain("chatbot.pendingMessages.actions");
-    expect(html).toContain('aria-label="chatbot.pendingMessages.steer: first question"');
+    expect(html).toContain('aria-label="chatbot.pendingMessages.send: first question"');
     expect(html).toContain('aria-label="chatbot.pendingMessages.actions: second question"');
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain("more_horiz");

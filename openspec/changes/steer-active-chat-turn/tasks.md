@@ -7,7 +7,7 @@
 ## 2. Managed chat
 
 - [x] 2.1 Keep plain-text composer submission available during streaming, queue it per session, and drain one ordinary turn at a time; verify focused hook tests cover order and pause behavior.
-- [x] 2.2 Render a compact, collapsible pending panel like `write_todos`; keep each message on one ellipsized line, use the composer menu pattern with edit/delete icons, and label immediate delivery `Steer`/`Réorienter`. Verify focused component tests and localized labels.
+- [x] 2.2 Render a compact, collapsible pending panel like `write_todos`; keep each message on one ellipsized line, use the composer menu pattern with edit/delete icons, and use Fred's outlined pill button labeled `Send`/`Envoyer` for immediate delivery. Verify focused component tests and localized labels.
 - [x] 2.3 Send the steering request and reconcile only on the delivery event, preserving a pending row on refusal or missed boundary; verify focused SSE and page tests.
 
 ## 3. Review

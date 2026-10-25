@@ -82,6 +82,7 @@ import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import Button from "@shared/atoms/Button/Button";
 import { resolveAgentIcon } from "@shared/utils/agentIcon";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
@@ -1062,14 +1063,17 @@ export default function ManagedChatPage() {
                                 ) : (
                                   <>
                                     {chat.waitResponse && (
-                                      <button
+                                      <Button
                                         type="button"
-                                        className={styles.pendingAction}
-                                        aria-label={`${t("chatbot.pendingMessages.steer")}: ${message.text}`}
+                                        className={styles.pendingSend}
+                                        color="primary"
+                                        variant="outlined"
+                                        size="2xs"
+                                        aria-label={`${t("chatbot.pendingMessages.send")}: ${message.text}`}
                                         onClick={() => void chat.forcePendingMessage(message.id)}
                                       >
-                                        {t("chatbot.pendingMessages.steer")}
-                                      </button>
+                                        {t("chatbot.pendingMessages.send")}
+                                      </Button>
                                     )}
                                     <ComposerActionsMenu
                                       icon={{ category: "outlined", type: "more_horiz" }}

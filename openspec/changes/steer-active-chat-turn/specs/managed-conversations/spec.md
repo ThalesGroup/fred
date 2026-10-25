@@ -24,7 +24,7 @@ During an active managed ReAct or Deep turn, the composer SHALL accept additiona
 
 ### Requirement: A pending message can steer the active turn
 
-The user SHALL be able to request immediate delivery of a pending plain-text message. For an active ReAct or Deep turn, the runtime SHALL make it available before the next model decision after the already dispatched tool batch completes. It MUST NOT split an outstanding assistant tool-call/result group. A message that has not reached that boundary before the turn ends SHALL remain available as the next ordinary turn. The interface SHALL distinguish pending from actually delivered messages.
+The user SHALL be able to request immediate delivery of a pending plain-text message using a compact outlined pill button labeled `Send` or `Envoyer`. For an active ReAct or Deep turn, the runtime SHALL make it available before the next model decision after the already dispatched tool batch completes. It MUST NOT split an outstanding assistant tool-call/result group. A message that has not reached that boundary before the turn ends SHALL remain available as the next ordinary turn. The interface SHALL distinguish pending from actually delivered messages.
 
 #### Scenario: Delivery after tools
 

@@ -422,7 +422,7 @@
     "composerPlaceholder": "Ask your question, or type / for a command",
     "pendingMessages": {
       "label": "Pending messages",
-      "steer": "Steer",
+      "send": "Send",
       "actions": "Message actions",
       "edit": "Edit",
       "remove": "Remove",
