@@ -7213,7 +7213,7 @@ whose `schema_version` lags is read through `upgrade_config`. An unknown capabil
 or a slice that no longer parses is omitted: config health owns that verdict. A
 raising hook reports `pending` without detail, since an omitted capability reads as
 ready. Control-plane maps the answers to the `capability_pending` suspension
-(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §69).
+(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §70).
 
 `GET /agents/models-catalog` entries gain `vision_profile_ids`, the subset of
 `profile_ids` declaring `supports_vision`, mirrored on
@@ -7240,7 +7240,7 @@ raises `CapabilityModelUnavailableError` unless the profile is a vision chat pro
 the port may use; the SDK default refuses. With a team it follows the team's usable
 models; without one the model must hold the org `default_on` marker (open without
 ReBAC). This is the pod-side half of control-plane's team-free model list
-(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §70), minus pod coverage, which only
+(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §71), minus pod coverage, which only
 control-plane sees. ppt_builder's `/platform*` writes return 422 on a refusal.
 
 Acceptance scenarios: `openspec/specs/ppt-builder/spec.md`.

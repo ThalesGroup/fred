@@ -516,7 +516,7 @@ operations:
     method: GET
     path: /control-plane/v1/routing-policy/available-models
     review_status: pending_review
-    required_permission: can_manage_capabilities # Team-free twin of the team list below, for a platform-wide choice (ppt_builder platform template vision model); models on for every team, CONTROL-PLANE-PRODUCT-CONTRACT.md §70
+    required_permission: can_manage_capabilities # Team-free twin of the team list below, for a platform-wide choice (ppt_builder platform template vision model); models on for every team, CONTROL-PLANE-PRODUCT-CONTRACT.md §71
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}/routing-policy/available-models

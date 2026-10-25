@@ -5176,7 +5176,7 @@ frontend applies the database response or defaults to in-memory controls and
 does not mirror database-backed choices to localStorage. Before login, theme boot uses only public
 platform settings and the OS color mode. Resizable pane widths and trace expansion remain local.
 
-## 69. Contract Notes — capability readiness and vision flags (2026-10-05)
+## 70. Contract Notes — capability readiness and vision flags (2026-10-05)
 
 **Readiness suspension.** `SuspensionReason` gains `capability_pending`: a selected
 capability reports, through its pod's `POST /agents/capabilities/readiness`
@@ -5218,7 +5218,7 @@ model during its save. No platform binding is sent. The pod
 `EffectiveChatModel.supports_vision` (default false) report whether the profile
 declares `supports_vision` in the pod catalog. A platform binding reports false.
 
-## 70. Contract Notes — capability platform settings fields (2026-10-22)
+## 71. Contract Notes — capability platform settings fields (2026-10-22)
 
 `CapabilityEnablementItem` (`GET /admin/capabilities`, `can_manage_capabilities`)
 gains `route_base_url` (nullable): the ingress-relative base URL of the capability's
