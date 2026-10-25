@@ -842,6 +842,18 @@ def test_agent_sandbox_rejects_security_drift_in_template_and_pod() -> None:
     assert not backend.kubernetes.is_safe_pod_spec(changed, sig_claim=True)
 
 
+def test_kubernetes_accepts_omitted_false_host_namespace_fields() -> None:
+    backend = KubernetesBackend(settings("kubernetes"), AgentRunner())
+    pod = backend.job_manifest("fred-sbx-test")["spec"]["template"]["spec"]
+    for field in ("hostNetwork", "hostPID", "hostIPC"):
+        pod.pop(field)
+    assert backend.is_safe_pod_spec(pod, workload_name="fred-sbx-test")
+    for field in ("hostNetwork", "hostPID", "hostIPC"):
+        changed = json.loads(json.dumps(pod))
+        changed[field] = True
+        assert not backend.is_safe_pod_spec(changed, workload_name="fred-sbx-test")
+
+
 @pytest.mark.asyncio
 async def test_agent_sandbox_rejects_claimed_pod_without_owner_chain() -> None:
     class MissingOwnerRunner(AgentRunner):

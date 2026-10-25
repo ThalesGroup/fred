@@ -206,9 +206,9 @@ class KubernetesBackend:
                 volume for volume in expected["volumes"] if volume["name"] != "inputs"
             ]
         actual = copy.deepcopy(actual)
+        for field in ("hostNetwork", "hostPID", "hostIPC"):
+            actual.setdefault(field, False)
         if sig_claim:
-            for field in ("hostNetwork", "hostPID", "hostIPC"):
-                actual.setdefault(field, False)
             volumes = actual.get("volumes")
             if not isinstance(volumes, list) or any(
                 not isinstance(volume, dict) for volume in volumes
