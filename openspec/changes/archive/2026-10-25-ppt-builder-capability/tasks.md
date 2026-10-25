@@ -118,7 +118,7 @@ Owns: `libs/capabilities/fred-capability-ppt-filler/eval/` (new), package `Makef
 - [x] 9.1 Harness: prompts × templates (local "PPT Corporate" template by env var, built-in), real analysis + tool + configured LLM, metrics per D11, JSON + table output
 - [x] 9.2 Run it; record results and targets met/missed in `verification.md`
 - [x] 9.3 `make code-quality` + `make test` in the package, fred-sdk, fred-runtime, frontend; `fred-performance-reviewer` on the tool path and the per-turn row read
-- [ ] 9.4 End-to-end on the local stack (upload → status → build → preview/download; no template); README, migration note, issue #2679 status comment
+- [x] 9.4 End-to-end on the local stack (upload → status → build → preview/download; no template); README, migration note, issue #2679 status comment — done 2026-10-25: the local stack ran end to end (live revision rounds 2-7 and chart evals r1-r3 build, preview and download through fred-agents, Renoir on the built-in template with no template uploaded; the owner checked upload, analysis status, plan card and build in the browser); README, migration note `docs/swift/ops/migrations/ppt-builder-capability.md` and the #2679 status comment exist (see `verification.md`, Close-out)
 
 ## WP11. First-call success: capacities, coherent labels, soft fallback
 
@@ -164,7 +164,7 @@ Owns: `apps/frontend/src/rework/features/capabilities/ppt_builder/PatternReviewD
 - [x] 14.1 Three sections: slides of the deck, layouts (collapsed, one-line hint), excluded; thumbnails keep their page by pattern id
 - [x] 14.2 `.cardHeader` `grid-template-columns: minmax(0, 1fr) auto`; label `TextInput` `compact`; `Switch size="small"`; thumbnail page width from the thumbnail box
 - [x] 14.3 vitest: sections split by `source` and `included`; locales en/fr; COMPONENT-UX line
-- [ ] 14.4 Checked in the browser on the Paintress agent (switch inside the card, no gap above the kind select); frontend checks as tsc/prettier/eslint/scoped vitest (no `make` while Vite runs)
+- [x] 14.4 Checked in the browser on the Paintress agent (switch inside the card, no gap above the kind select); frontend checks as tsc/prettier/eslint/scoped vitest (no `make` while Vite runs) — done 2026-10-25: the owner checked the Paintress form in the browser; frontend checks recorded under WP14 in `verification.md`
 
 ## WP15. Table slides (D14)
 
@@ -579,7 +579,7 @@ Owns: `builder/capability.py` (`_BUILD_INSTRUCTIONS`, `build_instructions`), `to
 - [x] 53.2 Working rules for revisions: only what was asked (extras proposed), `changes` for the slides concerned, ask which slide when none is named, claim a build only after a delivery in this answer and describe only what the result lists, say when nothing needed changing. Same test
 - [x] 53.3 `after` 0 described as "first, after the cover" (tool description, `SlideChange.after`, the missing-`after` problem); `slides` described as a new deck or a rewrite of most slides. Tests: `test_the_tool_tells_the_agent_one_call_builds_the_whole_deck`, `test_every_bad_change_is_reported_with_its_remedy`
 - [x] 53.4 Delivery: "none changed: tell the user the deck is the same"; a `slides` resend touching at most two slides of a larger deck adds "send only `changes` next time". Tests: `test_the_delta_names_changed_added_and_removed_slides`, `test_a_whole_deck_resent_for_a_small_edit_is_pointed_to_changes`, `test_a_small_edit_resent_as_a_whole_deck_is_built_and_pointed_to_changes`
-- [ ] 53.5 Live re-evaluation of the 30 revision requests on both templates once fred-agents runs this code (not restarted by this change)
+- [x] 53.5 Live re-evaluation of the 30 revision requests on both templates once fred-agents runs this code (not restarted by this change) — done: round 2 (2026-10-18, fred-agents with WP53), 30 requests x 2 templates: default 11/12/7, Thales 15/7/8 pass/partial/fail; round 4 (2026-10-23, mistral-medium) 42/11/6/1 NE of 60
 
 ## WP54. Vertical text measured along its height (owner decision 2026-10-17 overnight)
 
@@ -603,7 +603,7 @@ Owns: `changes.py` (`apply_changes` origins and `move`, `deck_delta` pairing, re
 - [x] 55.9 `move` op in `changes`; the delta lists moved slides. Tests: `test_move_puts_a_slide_after_another`, `test_a_moved_slide_is_built_and_listed_as_moved`, `test_every_bad_change_is_reported_with_its_remedy`
 - [x] 55.10 Eval calls replayed offline; LibreOffice render for the visual items (`~/fred-tmp/revision-evals/fixes/r3/`), PNG looked at; package checks; `openspec validate --strict`
 - Not changed (not universal, D33): a process `number` too long for its banner (a growing zone, no capacity); content the agent itself wrote in `notes` on a slide that also changed visibly (default r10)
-- [ ] 55.11 Live re-evaluation once fred-agents runs this code (not restarted by this change)
+- [x] 55.11 Live re-evaluation once fred-agents runs this code (not restarted by this change) — done: round 3 (2026-10-18, 60 runs, mistral-medium): 37/16/6 +1 NE (round 1: 24/26/10)
 
 ## WP56. Audit fixes: silent losses and prompt/tool contradictions (owner decision 2026-10-18: audit fixes, design D34)
 
@@ -616,7 +616,7 @@ Owns: `changes.py` (`_overlap`, `_on_the_base`), `plan.py` (`read_number`, `_dec
 - [x] 56.5 (H13) With `validate_plan` on, the working rules say the tool shows the outline (never one written in the chat); `skip_plan` is in the schema only then. Test: `test_plan_validation.py::test_the_plan_gate_is_visible_to_the_model_only_when_it_is_on`
 - [x] 56.6 Medium Thales r22 replayed offline and rendered (`~/fred-tmp/revision-evals/fixes/audit/H15/`), PNG looked at; package checks; `openspec validate --strict`
 - Not changed: L16 (one number reader for story, plan and lexicon: story already reads U+2212 and both readings, a merge is its own change); M29 (any reply to a proposed outline counts as approval); M22/M23 (refused plan dies with the turn; recoverable mistakes returned as tool errors)
-- [ ] 56.7 Live re-evaluation once fred-agents runs this code (not restarted by this change)
+- [x] 56.7 Live re-evaluation once fred-agents runs this code (not restarted by this change) — done: round 3 (2026-10-18), 37/16/6 +1 NE of 60
 
 ## WP57. Judgement leaves the builder: the cover (owner decision 2026-10-18: judgement moves to the LLM, design D35)
 
@@ -626,7 +626,7 @@ Owns: `assign.py` (`_allowed`, `_tiers`, `_problem`, `_asked`, `_substitution`, 
 - [x] 57.2 (H16, M2) `after` 0 means first; `after_the_cover` and its note are deleted. Tests: `test_deck_changes.py::test_an_insert_at_the_start_opens_the_deck`, `test_build_tool.py::test_the_tool_tells_the_agent_one_call_builds_the_whole_deck`
 - [x] 57.3 Package checks; `openspec validate --strict`
 - Not changed: a cover pattern still serves slide 1 only, and a closing pattern the last slide only (position rules of the kinds themselves)
-- [ ] 57.4 Live re-evaluation once fred-agents runs this code (not restarted by this change)
+- [x] 57.4 Live re-evaluation once fred-agents runs this code (not restarted by this change) — done: round 3 (2026-10-18), 37/16/6 +1 NE of 60
 
 ## WP58. Layouts and resends (owner decision 2026-10-18: audit fixes, lot 4, design D36)
 
@@ -640,7 +640,7 @@ Owns: `render.py` (`column_split` deleted, `_ZoneMap`, `_place_text`), `plan.py`
 - [x] 58.6 (H14) Variety asks carry only `suggested` recasts. Tests: `test_build_tool.py::test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built`, `test_assign.py::test_a_slide_used_three_times_is_reported_without_designs_that_cannot_hold_it`
 - [x] 58.7 Package checks; `openspec validate --strict`
 - Not changed: splitting itself (needed when a list outgrows the largest slide of its kind); each column quoted at its own room (the tightest body is quoted; no case left after H3); a part title near its room plus ` (k/n)` makes the split fail and the slide is refused as before
-- [ ] 58.8 Live re-evaluation once fred-agents runs this code (not restarted by this change)
+- [x] 58.8 Live re-evaluation once fred-agents runs this code (not restarted by this change) — done: round 3 (2026-10-18), 37/16/6 +1 NE of 60
 
 ## WP59. Revision fixes, round 3 live evals (owner decision 2026-10-18: universal builder rules only, design D37)
 
@@ -652,7 +652,7 @@ Owns: `charts.py` (`pie_show`), `render.py` (hidden-unit note), `tools.py` (`_re
 - [x] 59.4 ~~An edited takeaway goes on a design of its kind that shows it~~ reverted (owner decision 2026-10-18, D37): a key message is delivered through the slide's content, shown only via `show_takeaways`; the `takeaway` description says so. Test: `test_takeaway.py::test_an_edited_takeaway_never_switches_design_nor_shows`
 - [x] 59.5 Package checks; `openspec validate --strict`
 - Not changed: mixed units in one series without written units (D37)
-- [ ] 59.6 Live re-evaluation once fred-agents runs this code (not restarted by this change)
+- [x] 59.6 Live re-evaluation once fred-agents runs this code (not restarted by this change) — done: round 4 (2026-10-23), 42/11/6/1 NE of 60; pie labels show values, sommaire after the cover
 
 ## WP60. Look-alike designs, fallback fix, kinds' use (owner decision 2026-10-18: Paintress deck review, design D38)
 
@@ -663,7 +663,7 @@ Owns: `analysis.py` (`design`, ANALYSIS_VERSION 21), `models.py`, `assign.py` (d
 - [x] 60.3 One "use for" clause per content kind on its catalogue line. Test: `test_build_tool.py::test_schema_and_description_offer_kinds_never_pattern_ids` (updated)
 - [x] 60.4 Package checks; `openspec validate --strict`; `make builtin-inventory`
 - [x] 60.6 Deck fields lifted out of `slides` entries too (one helper with `changes`); a deck field reaching a slide is never told to go in its text. Tests: `test_build_tool.py::test_a_deck_field_written_inside_a_slide_is_read_as_the_decks` (replays the a611e51e first call, `tests/replays/a611e51e_first_call.json`), `test_assign.py::test_a_field_the_model_invented_is_a_problem_naming_its_text` (extended)
-- [ ] 60.5 Live re-evaluation once fred-agents runs this code (not restarted; stored inventories re-analyse on the version bump)
+- [x] 60.5 Live re-evaluation once fred-agents runs this code (not restarted; stored inventories re-analyse on the version bump) — done: round 4 (2026-10-23, Thales instance re-analysed on v4), 42/11/6/1 NE of 60
 
 ## WP61. Sections, numbering and suggestions (owner decision 2026-10-18: deck review 50bf2432, design D39)
 
@@ -675,7 +675,7 @@ Owns: `assign.py` (`_sections`, `SECTION_RULE`, `Repeat.suggested`, `_suggested`
 - [x] 61.2 Every note numbers slides as the outline of its result does (delivery: the file; proposal and revision: the plan), suggestions included. Test: `test_assign.py::test_every_note_numbers_slides_as_its_outline_does`
 - [x] 61.3 A suggestion never names a template slide already at its cap. Test: `test_assign.py::test_a_suggestion_never_names_a_template_slide_already_at_its_cap`
 - [x] 61.4 Variety notes state their fix without "nothing to do". Test: `test_assign.py::test_every_note_numbers_slides_as_its_outline_does` (asserts the phrase is gone)
-- [ ] 61.7 Live re-evaluation once fred-agents runs this code (not restarted by this change)
+- [x] 61.7 Live re-evaluation once fred-agents runs this code (not restarted by this change) — done: round 4 (2026-10-23), 42/11/6/1 NE of 60
 
 ## WP62. Pro-session fixes: deck fields and key figures (owner decision 2026-10-18: audit fixes, design D40)
 
@@ -684,7 +684,7 @@ Owns: `tools.py` (`_deck_fields_lifted`, `deck_conflict`), `render.py` (`_figure
 - [x] 62.1 Deck fields lifted by the args schema, before the runtime parses the slides. Tests: `test_build_tool.py::test_a_deck_field_inside_a_parsed_slide_is_never_a_slide_problem` (replays the 0f2506ea first build, `tests/replays/0f2506ea_first_build.json`), `test_build_tool.py::test_a_deck_field_written_inside_a_slide_is_read_as_the_decks` (now through `ainvoke`)
 - [x] 62.2 A one-line key figure shrinks to the floor before it is refused; its room is quoted at the floor. Test: `test_builder_render.py::test_a_key_figure_shrinks_to_fit_its_line_down_to_the_floor`
 - [x] 62.3 Package checks; `openspec validate --strict`
-- [ ] 62.4 Live re-evaluation once fred-agents runs this code (not restarted by this change)
+- [x] 62.4 Live re-evaluation once fred-agents runs this code (not restarted by this change) — done: round 4 (2026-10-23), 42/11/6/1 NE of 60
 
 ## WP63. Robustness review fixes (owner decision 2026-10-23, design D41)
 
@@ -701,4 +701,4 @@ Owns: `lexicon.py` (`contact_kind`), `analysis.py` (`_contact_roles`, ANALYSIS_V
 - [x] 64.3 An empty contact line goes with its icon; a closing without contact lines lists the contact. Tests: `test_closing_contact.py::test_the_contact_fills_its_lines_and_an_empty_one_loses_its_icon`, `::test_a_closing_without_a_contact_line_lists_the_contact`
 - [x] 64.4 Package checks; `openspec validate --strict`; `make builtin-inventory`; ppt_builder client regenerated
 - [x] 64.8 Owner decision B (2026-10-25): the closing is outside the slide count asked, appended at build (`tools._closed`), never in the proposed outline; kept on revisions; opt-out only through `no_closing`, which the user asked for explicitly, stored with the deck (`DeckPlan.no_closing`). Tests: `test_closing_contact.py::test_a_deck_without_a_contact_gets_the_thanks_slide_after_its_slides`, `::test_four_slides_asked_get_the_closing_as_a_fifth`, `::test_the_guidance_puts_the_closing_outside_the_slide_count`, `test_plan_validation.py::test_the_closing_is_added_at_build_never_in_the_outline`, `::test_a_revision_keeps_the_closing_unless_the_user_opts_out`, `test_closing_contact.py::test_an_opt_out_sent_with_changes_drops_the_added_closing`, `::test_an_opt_out_keeps_a_closing_the_model_wrote_or_edited`
-- [ ] 64.5 Live re-evaluation once fred-agents runs this code
+- [x] 64.5 Live re-evaluation once fred-agents runs this code — done: chart evals r1-r3 (2026-10-25): contact closing pass in r1-r3 (p11), r3 builds N slides + the thank-you closing (p07-p09 pass); owner browser check of Merci/Contact closings

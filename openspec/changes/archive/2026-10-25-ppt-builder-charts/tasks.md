@@ -88,4 +88,4 @@
 ### 8. Phase B close-out
 
 - [x] 8.1 `verification.md` phase B section; README update; `openspec validate ppt-builder-charts --strict`
-- [ ] 8.2 Archive after `ppt-builder-capability`
+- [x] 8.2 Archive after `ppt-builder-capability` — archived after `ppt-builder-capability` (2026-10-25)

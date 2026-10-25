@@ -42,4 +42,4 @@ Linked issue: #2987 (first slice). Ships inside the ppt_builder PR (#2679).
 - [x] 6.1 Update the Help Center fr/en (`features/administration.md` admin side, `features/capabilities.md` fallback order) and verify the pages render.
 - [x] 6.2 Update the #2679 migration note (operations: optional activation, capability table column, overrides dropped with no own template).
 - [x] 6.3 Run `make code-quality` and `make test` in each touched project, then the `fred-performance-reviewer` skill (middleware per-turn path); record the evidence in `verification.md`.
-- [ ] 6.4 Browser check: upload a platform template as admin, see it in an agent form without a template, build a deck on it, reset to the Fred template; record it in `verification.md`.
+- [x] 6.4 Browser check: upload a platform template as admin, see it in an agent form without a template, build a deck on it, reset to the Fred template; record it in `verification.md`. — done 2026-10-25 by the owner in the browser (see `verification.md`)

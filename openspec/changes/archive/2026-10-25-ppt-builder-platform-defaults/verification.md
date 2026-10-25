@@ -39,3 +39,7 @@ Run without `make` (Vite is running from this checkout): `npx tsc --noEmit` clea
 ## Not yet verified
 
 - `make code-quality` / `make test` for the frontend (not run while Vite runs from this checkout), browser check 6.4.
+
+## Browser check (6.4, 2026-10-25)
+
+- The owner uploaded a platform template as admin, saw it in an agent form without a template, built a deck on it and reset to the Fred template.
