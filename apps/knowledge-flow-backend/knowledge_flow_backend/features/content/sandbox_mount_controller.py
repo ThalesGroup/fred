@@ -142,7 +142,7 @@ class SandboxMountController:
         self._register_mount(mount_router)
 
     def _register_binding(self, router: APIRouter) -> None:
-        @router.post("/sandbox-mount/views/{key}")
+        @router.post("/sandbox-mount/views/{key}", include_in_schema=False)
         async def open_view(request: Request, key: str, body: _OpenView, user: KeycloakUser = Depends(get_current_user)) -> dict[str, str]:
             _check_bind_credential(request, key, body.session_id, user.uid, body.team_id)
             try:
@@ -160,7 +160,7 @@ class SandboxMountController:
             return {"path": "/inputs"}
 
     def _register_mount(self, router: APIRouter) -> None:
-        @router.delete("/sandbox-mount/views/{key}", status_code=204)
+        @router.delete("/sandbox-mount/views/{key}", status_code=204, include_in_schema=False)
         async def revoke_view(request: Request, key: str) -> Response:
             if not VIEW_KEY_RE.fullmatch(key):
                 raise HTTPException(404, "Sandbox view is unavailable")
@@ -349,11 +349,11 @@ class SandboxMountController:
                 media_type=media_type,
             )
 
-        @router.api_route("/sandbox-mount/{key}", methods=["OPTIONS", "PROPFIND", "HEAD", "GET"])
-        @router.api_route("/sandbox-mount/{key}/", methods=["OPTIONS", "PROPFIND", "HEAD", "GET"])
+        @router.api_route("/sandbox-mount/{key}", methods=["OPTIONS", "PROPFIND", "HEAD", "GET"], include_in_schema=False)
+        @router.api_route("/sandbox-mount/{key}/", methods=["OPTIONS", "PROPFIND", "HEAD", "GET"], include_in_schema=False)
         async def mount_root(request: Request, key: str) -> Response:
             return await handle_mount(request, key)
 
-        @router.api_route("/sandbox-mount/{key}/{path:path}", methods=["OPTIONS", "PROPFIND", "HEAD", "GET"])
+        @router.api_route("/sandbox-mount/{key}/{path:path}", methods=["OPTIONS", "PROPFIND", "HEAD", "GET"], include_in_schema=False)
         async def mount_file(request: Request, key: str, path: str) -> Response:
             return await handle_mount(request, key, path)
