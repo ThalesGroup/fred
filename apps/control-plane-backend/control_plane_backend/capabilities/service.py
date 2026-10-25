@@ -48,7 +48,11 @@ from fred_sdk.contracts.capability.manifest import (
 )
 
 from control_plane_backend.app.feature_flags import is_feature_enabled
-from control_plane_backend.capabilities.catalog import aggregate_capability_catalog
+from control_plane_backend.capabilities.catalog import (
+    aggregate_capability_catalog,
+    model_display_name_overrides,
+    universally_available_chat_model_profile_ids,
+)
 from control_plane_backend.capabilities.enablement import (
     ORG_REF,
     CapabilityNotFound,
@@ -81,8 +85,10 @@ from control_plane_backend.capabilities.schemas import (
     CapabilityImpactPreview,
     CapabilityPersonalScopeResult,
     ImpactedInstanceSummary,
+    ModelDisplayNameResult,
     ModelReasoningResult,
     PersonalScope,
+    SetModelDisplayNameRequest,
     TeamCapabilityEnablementResult,
 )
 from control_plane_backend.organization_authz import require_manage_capabilities
@@ -320,6 +326,8 @@ async def _build_enablement_item(
     total_personal_space_count: int,
     impact: Mapping[str, CapabilityImpact],
     reasoning_enabled_ids: frozenset[str],
+    universal_chat_profile_ids: frozenset[str] = frozenset(),
+    display_name_overrides: Mapping[str, str] | None = None,
 ) -> CapabilityEnablementItem:
     """Build one row's ReBAC-derived fields.
 
@@ -404,6 +412,36 @@ async def _build_enablement_item(
             not is_projected_product_object(entry) and entry.id in reasoning_enabled_ids
         ),
         model_display_name=entry.model_display_name,
+        model_display_name_override=(display_name_overrides or {}).get(entry.id),
+        model_discovery_source_id=entry.model_discovery_source_id,
+        model_runtime_ids=list(entry.model_runtime_ids),
+        model_chat_profile_ids=list(entry.model_chat_profile_ids),
+        model_platform_binding=(
+            entry.model_platform_binding
+            if any(
+                profile_id in universal_chat_profile_ids
+                for profile_id in entry.model_chat_profile_ids
+            )
+            else None
+        ),
+        model_fallback_profile_ids=(
+            [
+                profile_id
+                for profile_id in entry.model_chat_profile_ids
+                if profile_id in universal_chat_profile_ids
+            ]
+            if entry.model_discovery_source_id is None
+            else []
+        ),
+        model_capabilities=list(entry.model_capabilities),
+        model_chat_capability_verified=entry.model_chat_capability_verified,
+        model_reasoning_efforts={
+            profile_id: list(levels)
+            for profile_id, levels in entry.model_reasoning_efforts.items()
+        },
+        model_context_window_tokens=entry.model_context_window_tokens,
+        model_max_input_tokens=entry.model_max_input_tokens,
+        model_max_output_tokens=entry.model_max_output_tokens,
     )
 
 
@@ -422,7 +460,7 @@ async def list_capability_enablement(
     # reason `catalog.py`/`impact.py` defer their own product.service imports.
     from control_plane_backend.product.service import _pod_catalog_fetch_scope
 
-    # These 4 steps are mutually independent (none consumes another's result),
+    # These steps are mutually independent (none consumes another's result),
     # so run them concurrently instead of one after another (#2089). Platform-
     # wide denominators (collaborative teams for default-on inheritance §8.5,
     # personal spaces for personal-class access §8.4) and resting health
@@ -439,6 +477,7 @@ async def list_capability_enablement(
             total_personal_space_count,
             impact,
             reasoning_enabled_ids,
+            display_name_overrides,
         ) = await asyncio.gather(
             aggregate_capability_catalog(deps),
             count_all_collaborative_teams(deps.team_dependencies),
@@ -447,6 +486,12 @@ async def list_capability_enablement(
             # REASON-01 §5: one table read for the whole list, joined per row
             # below — never a query per model.
             deps.get_model_reasoning_store().list_enabled_model_ids(),
+            model_display_name_overrides(deps),
+        )
+        universal_chat_profile_ids = (
+            await universally_available_chat_model_profile_ids(deps)
+            if any(entry.kind == "model" for entry in catalog.values())
+            else frozenset()
         )
     reasoning_enabled_ids = frozenset(reasoning_enabled_ids)
     # Per-row ReBAC reads are independent across rows too (#2089) — gather
@@ -465,6 +510,8 @@ async def list_capability_enablement(
                     total_personal_space_count=total_personal_space_count,
                     impact=impact,
                     reasoning_enabled_ids=reasoning_enabled_ids,
+                    universal_chat_profile_ids=universal_chat_profile_ids,
+                    display_name_overrides=display_name_overrides,
                 )
                 for entry in catalog.values()
             )
@@ -759,6 +806,26 @@ async def set_default_on(
     )
 
 
+async def set_model_display_name(
+    *,
+    user: KeycloakUser,
+    capability_id: str,
+    display_name: str | None,
+    deps: ProductServiceDependencies,
+) -> ModelDisplayNameResult:
+    await _require_can_manage(_rebac(deps), user, capability_id, deps=deps)
+    entry = _catalog_entry(await aggregate_capability_catalog(deps), capability_id)
+    if entry.kind != "model":
+        raise CapabilityNotFound(f"Capability {capability_id!r} is not a model.")
+    name = SetModelDisplayNameRequest(display_name=display_name).display_name
+    await deps.get_model_display_name_override_store().set(
+        model_capability_id=capability_id,
+        display_name=name,
+        updated_by=user.uid,
+    )
+    return ModelDisplayNameResult(capability_id=capability_id, display_name=name)
+
+
 async def set_model_reasoning(
     *,
     user: KeycloakUser,
@@ -974,4 +1041,5 @@ __all__ = [
     "preview_capability_revoke",
     "set_default_on",
     "set_personal_scope",
+    "set_model_display_name",
 ]

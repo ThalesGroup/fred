@@ -113,6 +113,7 @@ class FakeOpenSearchClient:
         self.search_pipeline = FakeSearchPipeline(exists=pipeline_exists)
         self.update_by_query_calls: list[tuple[str, dict]] = []
         self.update_by_query_response: dict = {"updated": 1}
+        self.delete_by_query_calls: list[tuple[str, dict, dict | None]] = []
         self.search_calls: list[dict] = []
         self.search_responses: list[dict] = []
         self.search_request_timeouts: list[int | None] = []
@@ -123,6 +124,10 @@ class FakeOpenSearchClient:
     def update_by_query(self, *, index: str, body: dict, params: dict | None = None) -> dict:
         self.update_by_query_calls.append((index, deepcopy(body)))
         return self.update_by_query_response
+
+    def delete_by_query(self, *, index: str, body: dict, params: dict | None = None) -> dict:
+        self.delete_by_query_calls.append((index, deepcopy(body), deepcopy(params)))
+        return {"deleted": 2}
 
     def search(self, *, index: str, body: dict, request_timeout: int | None = None, params: dict | None = None) -> dict:
         self.search_calls.append(deepcopy(body))
@@ -210,6 +215,22 @@ def _make_store_for_existing_index(monkeypatch, fake_client: FakeOpenSearchClien
     )
 
 
+def test_delete_vectors_for_document_refreshes_so_deletion_is_immediately_visible(monkeypatch):
+    mapping = ovs.build_vector_index_mapping(4)
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
+    store = _make_store_for_existing_index(monkeypatch, fake_client)
+
+    store.delete_vectors_for_document(document_uid="doc-1")
+
+    assert fake_client.delete_by_query_calls == [
+        (
+            "fred-vectors",
+            {"query": {"term": {"metadata.document_uid": {"value": "doc-1"}}}},
+            {"conflicts": "proceed", "refresh": "true"},
+        )
+    ]
+
+
 def test_set_document_name_logs_error_when_no_chunks_matched(monkeypatch, caplog):
     mapping = ovs.build_vector_index_mapping(4)
     fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
@@ -245,6 +266,28 @@ def test_set_document_name_does_not_log_error_on_full_success(monkeypatch, caplo
 
     assert not any(r.levelname == "ERROR" for r in caplog.records)
     assert any("updated document_name on 3 vector chunks" in r.message for r in caplog.records)
+
+
+def test_set_document_tag_ids_replaces_the_folder_ids_on_every_chunk_of_the_document(monkeypatch):
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=ovs.build_vector_index_mapping(4))
+    store = _make_store_for_existing_index(monkeypatch, fake_client)
+
+    store.set_document_tag_ids(document_uid="doc-1", tag_ids=["alpha", "beta"])
+
+    [(index, body)] = fake_client.update_by_query_calls
+    assert index == "fred-vectors"
+    assert body["query"] == {"term": {"metadata.document_uid": {"value": "doc-1"}}}
+    assert body["script"]["source"] == "ctx._source.metadata.tag_ids = params.value"
+    assert body["script"]["params"] == {"value": ["alpha", "beta"]}
+
+
+def test_set_document_tag_ids_raises_on_reported_failures(monkeypatch):
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=ovs.build_vector_index_mapping(4))
+    fake_client.update_by_query_response = {"updated": 1, "failures": [{"cause": "version_conflict"}]}
+    store = _make_store_for_existing_index(monkeypatch, fake_client)
+
+    with pytest.raises(RuntimeError, match="1 chunk"):
+        store.set_document_tag_ids(document_uid="doc-1", tag_ids=["beta"])
 
 
 def test_application_context_opensearch_factory_does_not_call_validate_index_or_fail(

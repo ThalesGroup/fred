@@ -23,7 +23,7 @@ import { ThoughtTrace } from "./ThoughtTrace";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => (key === "rework.chatTrace.toolLabels.readQuery" ? "Reading query" : key),
+    t: (key: string) => (key === "rework.chatTrace.toolLabels.mcp.tabular.readQuery" ? "Reading data" : key),
   }),
 }));
 

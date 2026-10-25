@@ -965,6 +965,16 @@ operations:
     path: /control-plane/v1/users/me/avatar
     review_status: approved
     required_permission: authenticated_user # self only
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/users/me/preferences
+    review_status: approved
+    required_permission: authenticated_user # self only
+  - service: control-plane
+    method: PATCH
+    path: /control-plane/v1/users/me/preferences
+    review_status: approved
+    required_permission: authenticated_user # self only
   # Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
   # can_administer_users gates all three; the platform_admin relation is
   # additionally guarded service-side: grant/revoke root-only, root never
@@ -1075,6 +1085,71 @@ operations:
     review_status: approved
     required_permission: can_manage # REASON-01 / RFC MODEL-REASONING-ENABLEMENT §5 — capability#can_manage (can_manage_capabilities from organization). Global activation, not a per-team grant: writes a plain table row, never an FGA tuple (§5.1).
   - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/capabilities/{capability_id}/display-name
+    review_status: approved
+    required_permission: can_manage # capability#can_manage; the target must be an advertised model. The name is platform-wide and does not change access grants.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/model-discovery
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/admin/model-discovery/refresh
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/model-discovery/detail
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/model-discovery/{source_id}/url
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/model-discovery/{source_id}/removed-model
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/pod-chat-defaults
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/pod-chat-defaults/{runtime_id}
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/pod-chat-defaults/{runtime_id}
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/pod-chat-defaults/{runtime_id}/fallback
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/pod-chat-defaults/{runtime_id}/fallback
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: agent-pod
+    method: POST
+    path: /pod/v1/agents/models-catalog/refresh
+    review_status: approved
+    required_permission: can_manage_capabilities # A changed models_url additionally requires can_manage_platform. Enforced when pod security is enabled; local unsecured mode bypasses ReBAC.
+  - service: agent-pod
+    method: GET
+    path: /pod/v1/agents/models-catalog/detail
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
     method: GET
     path: /control-plane/v1/admin/platform/model-bindings
     review_status: approved
@@ -1083,12 +1158,12 @@ operations:
     method: PUT
     path: /control-plane/v1/admin/platform/model-bindings
     review_status: approved
-    required_permission: can_manage_capabilities # organization_authz.require_manage_capabilities. ModelBinding's own strict settings contract (ModelBindingSettings, extra="forbid") rejects credential-shaped or unknown settings keys at request-body parsing (422), before this route's authz even runs.
+    required_permission: can_manage_platform # Advanced URL settings can redirect a pod's provider credential. ModelBinding's strict settings contract rejects unknown keys at request parsing (422).
   - service: control-plane
     method: DELETE
     path: /control-plane/v1/admin/platform/model-bindings
     review_status: approved
-    required_permission: can_manage_capabilities # organization_authz.require_manage_capabilities. Unsets the binding (row deletion — no off-sentinel) and echoes the now-unset state.
+    required_permission: can_manage_platform # Unsets the binding and echoes the now-unset state.
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/platform/sandbox-settings

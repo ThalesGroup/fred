@@ -657,7 +657,9 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
     def _field_adapter(self, name: str) -> TypeAdapter[Any]:
         adapter = self._adapters.get(name)
         if adapter is None:
-            adapter = TypeAdapter(self._state_model.model_fields[name].annotation)
+            # A declared model field always carries an annotation.
+            annotation = cast(Any, self._state_model.model_fields[name].annotation)
+            adapter = TypeAdapter(annotation)
             self._adapters[name] = adapter
         return adapter
 

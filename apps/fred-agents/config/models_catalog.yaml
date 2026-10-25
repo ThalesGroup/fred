@@ -15,6 +15,20 @@ common_model_settings:
 
 default_profile_by_capability:
   chat: chat.mistral.small
+
+# Mistral exposes GET https://api.mistral.ai/v1/models. Set OPENAI_API_KEY to
+# a Mistral key. Static and discovered profiles may share a wire ID but keep
+# separate activation and fallback behavior.
+# Add more endpoints by appending entries under `discovery`:
+#   - source_id: another-gateway
+#     base_url: https://gateway.example/v1
+# All sources on one pod use its OPENAI_API_KEY; use separate pods for distinct keys.
+discovery:
+  - source_id: mistral
+    base_url: https://api.mistral.ai/v1
+    # include_model_ids: [mistral-large-latest]
+# Keep the static chat default above as this pod's default.
+
 profiles:
   - profile_id: chat.mistral.medium
     capability: chat

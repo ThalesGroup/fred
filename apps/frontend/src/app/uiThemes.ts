@@ -44,10 +44,6 @@ export const UI_THEME_LABEL_KEYS: Record<string, string> = {
   cloud: "rework.userSettings.app.themeCloud",
 };
 
-/** Hook keys; useLocalStorageState stores them under localStorageKey(key). */
-export const UI_THEME_STORAGE_KEY = "ApplicationContextProvider.uiTheme";
-export const THEME_MODE_STORAGE_KEY = "ApplicationContextProvider.themeMode";
-
 /** Platform settings from the public /frontend/config (ids may be unknown here). */
 export type PlatformUiThemes = FrontendUiThemes;
 
@@ -105,15 +101,6 @@ export const computeDarkMode = (themeMode: unknown, systemDarkMode: boolean): bo
   return systemDarkMode;
 };
 
-function readStored(key: string): unknown {
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw === null ? null : JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
 /** Remembers the platform settings for theme-boot.js on the next load. */
 export function cachePlatformUiThemes(platform: PlatformUiThemes | null): void {
   try {
@@ -124,11 +111,15 @@ export function cachePlatformUiThemes(platform: PlatformUiThemes | null): void {
   }
 }
 
-/** Applies the resolved theme and mode to <html>; called once the fresh platform settings are known. */
-export function applyResolvedTheme(platform: PlatformUiThemes | null): void {
-  const theme = resolveUiTheme(readStored(localStorageKey(UI_THEME_STORAGE_KEY)), platform);
+/** Applies the resolved theme and mode to <html> from explicit inputs. */
+export function applyResolvedTheme(
+  platform: PlatformUiThemes | null,
+  selectedTheme: UiTheme | null = null,
+  themeMode: "light" | "dark" | "system" = "system",
+): void {
+  const theme = resolveUiTheme(selectedTheme, platform);
   const systemDark = !!window.matchMedia?.("(prefers-color-scheme: dark)").matches;
-  const dark = computeDarkMode(readStored(localStorageKey(THEME_MODE_STORAGE_KEY)), systemDark);
+  const dark = computeDarkMode(themeMode, systemDark);
   document.documentElement.setAttribute("data-ui-theme", theme);
   document.documentElement.setAttribute("data-ui-base-theme", uiThemeBase(theme));
   document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");

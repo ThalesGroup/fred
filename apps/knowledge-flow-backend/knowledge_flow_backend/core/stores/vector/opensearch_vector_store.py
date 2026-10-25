@@ -19,7 +19,7 @@ from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Type, TypeVar
+from typing import Any, Dict, List, Optional, Sequence, Type, TypeVar
 
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.store import MappingValidationError, validate_index_mapping
@@ -1031,13 +1031,10 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
     def delete_vectors_for_document(self, *, document_uid: str) -> None:
         try:
             body = {"query": {"term": {"metadata.document_uid": {"value": document_uid}}}}
-            # conflicts="proceed": this purge is idempotent and runs from more
-            # than one place on a cancelled ingestion (the indexing thread
-            # self-cleans, then the workflow compensation sweeps the same uid).
-            # A version conflict just means the other pass already removed the
-            # chunk — the default "abort" turned that benign race into a 409
-            # with a full stacktrace (#2315).
-            resp = self._client.delete_by_query(index=self._index, body=body, params={"conflicts": "proceed"})
+            # conflicts="proceed": the purge is idempotent and may race a second pass on a
+            # cancelled ingestion. refresh: deleted chunks must stop being searchable and
+            # counted when this returns, like the per-document update paths below.
+            resp = self._client.delete_by_query(index=self._index, body=body, params={"conflicts": "proceed", "refresh": "true"})
             deleted = int(resp.get("deleted", 0))
             logger.info("[VECTOR][OPENSEARCH] deleted %s vector chunks for document_uid=%s.", deleted, document_uid)
         except Exception:
@@ -1158,6 +1155,18 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         except Exception:
             logger.exception("[VECTOR][OPENSEARCH] failed to update document_name for document_uid=%s.", document_uid)
             raise RuntimeError("Failed to update document_name in OpenSearch.")
+
+    def set_document_tag_ids(self, *, document_uid: str, tag_ids: Sequence[str]) -> None:
+        body = {
+            "script": {"source": "ctx._source.metadata.tag_ids = params.value", "lang": "painless", "params": {"value": [str(t) for t in tag_ids]}},
+            "query": {"term": {"metadata.document_uid": {"value": document_uid}}},
+        }
+        resp = self._client.update_by_query(index=self._index, body=body, params={"refresh": "true"})
+        # Per-document failures (e.g. version conflicts) are reported, not raised.
+        failures = resp.get("failures") or []
+        if failures:
+            raise RuntimeError(f"OpenSearch failed to update tag_ids on {len(failures)} chunk(s) of document {document_uid}.")
+        logger.info("[VECTOR][OPENSEARCH] updated tag_ids on %s chunk(s) for document_uid=%s.", resp.get("updated", 0), document_uid)
 
     # ---------- Diagnostics / Introspection ----------
 

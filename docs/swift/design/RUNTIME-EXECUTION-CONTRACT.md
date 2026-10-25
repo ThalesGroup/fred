@@ -3768,6 +3768,12 @@ model knows which it is.
   same first-seen rule as `description`. `CapabilityCatalogEntry` carries it
   as `model_display_name`; the multi-pod union keeps a name authored on one pod
   when another serves the model unnamed.
+- An optional `discovery` source in `models_catalog.yaml` turns an
+  OpenAI-compatible `GET /models` inventory into chat profiles at pod startup.
+  The route advertises that resolved startup snapshot, including optional
+  `context_window_tokens`, `max_input_tokens` and `max_output_tokens`. Static
+  catalogs retain their file-read behavior. See `LLM_ROUTING_FRED.md` for the
+  operator contract.
 - The frontend prefers that string verbatim, then prettifies the real model
   `name`, then falls back to splitting the capability id.
 
@@ -4272,7 +4278,7 @@ pod's `models_catalog.yaml`.
 
 | Field | Meaning |
 | ----- | ------- |
-| `default_chat_profile_id: str \| None` | This pod's `default_profile_by_capability.chat` — the LOWEST precedence level. `None` when the catalog declares no chat default. |
+| `default_chat_profile_id: str \| None` | This pod's effective manual chat default - the LOWEST precedence level. An explicit `default_profile_by_capability.chat` wins; otherwise the sole manual chat profile is inferred. `None` when neither rule selects one. |
 | `agent_chat_profile_overrides: dict[str, str]` | This pod's ops-authored `agent_profile_overrides`, RESTRICTED to entries targeting a chat profile — the HIGHEST level below the platform binding. |
 
 Both are pod-level, not per-model, so they sit beside `models` rather than on
@@ -5103,7 +5109,8 @@ inspection.
 
 This section records the August 2026 measurements. The filesystem and corpus
 MCP mounts, and later the corpus-manager HTTP API, were retired by #2984;
-the corresponding follow-up findings below are historical.
+the corresponding follow-up findings below are historical. The FastApiMCP
+implementation described here was replaced by FastMCP 4 in §8.118.
 
 **What changed.** No MCP tool description carries response documentation any
 more. Two steps, landed together in knowledge-flow's `main.py`:
@@ -7130,3 +7137,21 @@ are unchanged. Leak-study A/B on `mistral-medium`, `reasoning_effort: high`,
 12 runs per arm: text-written tool calls 26/146 → 0/188, decks 7/12 → 12/12,
 runaway hangs 3 → 0; median call 17.8 s → 23.8 s from the larger input.
 Migration note: `docs/swift/ops/migrations/3110-recover-streamed-mistral-tool-calls.md`.
+
+### 8.118 MCP SDK v2 runtime and Knowledge Flow servers (2026-10-22)
+
+Runtime MCP discovery and calls use `langchain.mcp.MCPAdapter` with FastMCP 4's
+client. The supported catalog transports remain `streamable_http` and `stdio`.
+For HTTP, the current person bearer or delegated workload bearer is read at
+each request; an expired person token or rejected workload lease gets one
+renewal attempt. A delegated grant stays in the server URL, outside model tool
+arguments. Redirects are refused, and receiver authority refusals end the run.
+No Fred-owned MCP-to-LangChain tool wrapper is used.
+
+Knowledge Flow projects its existing tagged FastAPI routes with
+`FastMCP.from_fastapi` at the existing MCP paths. HTTP is stateless, so listing
+and calling tools can reach different replicas without a shared MCP session.
+The outer request authenticates before MCP dispatch; the inner FastAPI request
+gets only the verified grant and admitted log context. The upgrade preserves
+tool names, descriptions and callable input schemas, allowing existing agents
+and legacy HTTP peers to use the same catalog entries.

@@ -115,6 +115,8 @@ export const materialIcons = [
   "content_copy",
   "drive_file_move",
   "fit_width",
+  "fullscreen",
+  "fullscreen_exit",
   "error",
   "error_outline",
   "warning",

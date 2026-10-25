@@ -2,25 +2,24 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Iterator
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import httpx2
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from fastapi_mcp import AuthConfig, FastApiMCP
+from fastmcp import FastMCP
 from fred_core.common import get_config, register_exception_handlers
 from fred_core.documents.document_structures import DocumentMetadata, Identity, SourceInfo, SourceType, Tagging
 from fred_core.security import oidc
 from fred_core.security.delegation import DelegationConfig, enforce_account_status, initialize_delegation
 from fred_core.security.mcp_delegation import (
     declare_delegation_parameters,
-    mcp_mount_auth,
-    strip_grant_tool_fields,
 )
-from fred_core.security.mcp_delegation_fastapi import DelegatedFastApiMCP
 from fred_core.security.oidc import get_current_user_without_gcu
 from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
 from fred_core.security.structure import KeycloakUser
@@ -28,10 +27,10 @@ from fred_core.tests.security.rebac_fakes import AccountStatusStore, account_sta
 from fred_core.users.store.postgres_user_store import get_user_store
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.compat import fastapi_mcp_patch  # noqa: F401
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tag.structure import Tag, TagType
 from knowledge_flow_backend.features.tag.tag_controller import TagController
+from knowledge_flow_backend.mcp_mount import mount_fastapi_tools
 
 _HEADERS = {
     "authorization": "Bearer synthetic-workload-token",
@@ -83,15 +82,19 @@ def _delegation_globals(monkeypatch) -> Iterator[None]:
     initialize_delegation(DelegationConfig())
 
 
-def _configure(store: AccountStatusStore | None = None, *, issuer: str = "https://issuer.test/realms/fred", login_client: str = "app") -> OpenFgaRebacEngine:
+async def _configure_async(store: AccountStatusStore | None = None, *, issuer: str = "https://issuer.test/realms/fred", login_client: str = "app") -> OpenFgaRebacEngine:
     """Start as the backend does: the delegation block, then the engine for the account status check."""
     initialize_delegation(DelegationConfig(accept_delegated_calls=True), issuers=[issuer], user_clients=[login_client])
     engine = account_status_engine(store or AccountStatusStore())
-    asyncio.run(enforce_account_status(engine))
+    await enforce_account_status(engine)
     return engine
 
 
-def _app_with_mcp() -> tuple[FastAPI, FastApiMCP]:
+def _configure(store: AccountStatusStore | None = None, *, issuer: str = "https://issuer.test/realms/fred", login_client: str = "app") -> OpenFgaRebacEngine:
+    return asyncio.run(_configure_async(store, issuer=issuer, login_client=login_client))
+
+
+def _app_with_mcp(*, mount: bool = True) -> tuple[FastAPI, FastMCP | None]:
     app = FastAPI()
     register_exception_handlers(app)
     router = APIRouter(dependencies=[Depends(declare_delegation_parameters)])
@@ -101,54 +104,55 @@ def _app_with_mcp() -> tuple[FastAPI, FastApiMCP]:
         return {"subject": user.uid, "roles": user.roles}
 
     app.include_router(router)
-    mcp = strip_grant_tool_fields(
-        DelegatedFastApiMCP(
+    mcp = (
+        mount_fastapi_tools(
             app,
-            include_tags=["Documents"],
-            auth_config=AuthConfig(dependencies=[Depends(mcp_mount_auth)]),
+            path="/mcp",
+            name="Document test MCP",
+            description="List documents.",
+            tags={"Documents"},
         )
+        if mount
+        else None
     )
-    mcp.mount_http(mount_path="/mcp")
     return app, mcp
 
 
-_INITIALIZE = {
-    "protocolVersion": "2025-03-26",
-    "capabilities": {},
-    "clientInfo": {"name": "test", "version": "1"},
+_META = {
+    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+    "io.modelcontextprotocol/clientCapabilities": {},
 }
 
 
-def _mcp_post(client: TestClient, method: str, params: dict, *, grant: dict[str, str] | None = _GRANT):
-    return client.post("/mcp", params=grant, headers=_HEADERS, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+@asynccontextmanager
+async def _serving_mcp(app: FastAPI):
+    async with app.router.lifespan_context(app):
+        async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://test") as client:
+            yield client
 
 
-def _mcp_call(
-    client: TestClient,
+async def _mcp_post(client: httpx2.AsyncClient, method: str, params: dict, *, grant: dict[str, str] | None = _GRANT):
+    headers = {**_HEADERS, "MCP-Protocol-Version": "2026-07-28", "Mcp-Method": method}
+    if method == "tools/call":
+        headers["Mcp-Name"] = params["name"]
+    return await client.post("/mcp", params=grant, headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": {"_meta": _META, **params}})
+
+
+async def _mcp_call(
+    client: httpx2.AsyncClient,
     arguments: dict[str, str],
     *,
     grant: dict[str, str] | None = _GRANT,
     bearer: str = "synthetic-workload-token",
 ) -> dict:
-    headers = {**_HEADERS, "authorization": f"Bearer {bearer}"}
-    initialize = client.post(
-        "/mcp",
-        params=grant,
-        headers=headers,
-        json={
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2025-03-26",
-                "capabilities": {},
-                "clientInfo": {"name": "test", "version": "1"},
-            },
-        },
-    )
-    assert initialize.status_code == 200
-    assert "mcp-session-id" not in initialize.headers
-    response = client.post(
+    headers = {
+        **_HEADERS,
+        "authorization": f"Bearer {bearer}",
+        "MCP-Protocol-Version": "2026-07-28",
+        "Mcp-Method": "tools/call",
+        "Mcp-Name": "list_documents",
+    }
+    response = await client.post(
         "/mcp",
         params=grant,
         headers=headers,
@@ -156,7 +160,7 @@ def _mcp_call(
             "jsonrpc": "2.0",
             "id": 2,
             "method": "tools/call",
-            "params": {"name": "list_documents", "arguments": arguments},
+            "params": {"_meta": _META, "name": "list_documents", "arguments": arguments},
         },
     )
     assert response.status_code == 200
@@ -205,41 +209,43 @@ def signed_tokens(monkeypatch):
     return token, issuer, login_client
 
 
-def test_signed_receiver_keeps_rest_and_mcp_available_after_person_expiry(
+@pytest.mark.asyncio
+async def test_signed_receiver_keeps_rest_and_mcp_available_after_person_expiry(
     signed_tokens,
 ) -> None:
     token, issuer, login_client = signed_tokens
-    _configure(issuer=issuer, login_client=login_client)
+    await _configure_async(issuer=issuer, login_client=login_client)
     expired_person = token(subject="person-a", client="browser", expires_at=_NOW - 1, caller=False)
     workload = token(subject="workload-subject", client="agent-runtime", expires_at=_NOW + 300)
     expired_workload = token(subject="workload-subject", client="agent-runtime", expires_at=_NOW - 1)
     app, _ = _app_with_mcp()
 
-    with TestClient(app) as client:
-        person_response = client.get("/documents", headers={"Authorization": f"Bearer {expired_person}"})
-        rest_response = client.get(
+    async with _serving_mcp(app) as client:
+        person_response = await client.get("/documents", headers={"Authorization": f"Bearer {expired_person}"})
+        rest_response = await client.get(
             "/documents",
             params=_GRANT,
             headers={"Authorization": f"Bearer {workload}"},
         )
-        mcp_response = _mcp_call(
+        mcp_response = await _mcp_call(
             client,
             {"person": "forged", "run": "forged", "agent": "forged"},
             bearer=workload,
         )
-        expired_response = client.post(
+        expired_response = await client.post(
             "/mcp",
             params=_GRANT,
-            headers={**_HEADERS, "authorization": f"Bearer {expired_workload}"},
+            headers={
+                **_HEADERS,
+                "authorization": f"Bearer {expired_workload}",
+                "MCP-Protocol-Version": "2026-07-28",
+                "Mcp-Method": "tools/list",
+            },
             json={
                 "jsonrpc": "2.0",
                 "id": 3,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2025-03-26",
-                    "capabilities": {},
-                    "clientInfo": {"name": "test", "version": "1"},
-                },
+                "method": "tools/list",
+                "params": {"_meta": _META},
             },
         )
 
@@ -247,14 +253,14 @@ def test_signed_receiver_keeps_rest_and_mcp_available_after_person_expiry(
     assert rest_response.status_code == 200
     assert rest_response.json() == {"subject": "person-a", "roles": []}
     assert mcp_response["result"]["isError"] is False
-    assert '"subject": "person-a"' in mcp_response["result"]["content"][0]["text"]
-    assert "forged" not in mcp_response["result"]["content"][0]["text"]
+    assert mcp_response["result"]["structuredContent"]["subject"] == "person-a"
+    assert "forged" not in str(mcp_response["result"])
     assert expired_response.status_code == 401
 
 
 def test_rest_accepts_trusted_workload_delegation() -> None:
     _configure()
-    app, _ = _app_with_mcp()
+    app, _ = _app_with_mcp(mount=False)
 
     with TestClient(app) as client:
         accepted = client.get("/documents", params=_GRANT, headers={"authorization": _HEADERS["authorization"]})
@@ -296,7 +302,7 @@ def test_rest_refuses_a_grant_from_a_workload_without_the_role(monkeypatch) -> N
             token_type="Bearer",
         ),
     )
-    app, _ = _app_with_mcp()
+    app, _ = _app_with_mcp(mount=False)
 
     with TestClient(app) as client:
         response = client.get(
@@ -331,77 +337,82 @@ def test_rest_delegation_preserves_endpoint_user_authorization() -> None:
     assert response.json()["detail"] == "forbidden"
 
 
-def test_mcp_forwards_validated_outer_grant_and_strips_tool_forgery() -> None:
-    _configure()
+@pytest.mark.asyncio
+async def test_mcp_forwards_validated_outer_grant_and_strips_tool_forgery() -> None:
+    await _configure_async()
     app, _ = _app_with_mcp()
 
-    with TestClient(app) as client:
-        payload = _mcp_call(
+    async with _serving_mcp(app) as client:
+        payload = await _mcp_call(
             client,
             {"person": "forged", "run": "forged", "agent": "forged"},
         )
 
     assert payload["result"]["isError"] is False
-    assert '"subject": "person-a"' in payload["result"]["content"][0]["text"]
-    assert '"roles": []' in payload["result"]["content"][0]["text"]
+    assert payload["result"]["structuredContent"] == {"subject": "person-a", "roles": []}
 
 
-def test_mcp_accepts_trusted_outer_grant() -> None:
-    _configure()
+@pytest.mark.asyncio
+async def test_mcp_accepts_trusted_outer_grant() -> None:
+    await _configure_async()
     app, _ = _app_with_mcp()
 
-    with TestClient(app) as client:
-        payload = _mcp_call(client, {})
+    async with _serving_mcp(app) as client:
+        payload = await _mcp_call(client, {})
 
     assert payload["result"]["isError"] is False
-    assert '"subject": "person-a"' in payload["result"]["content"][0]["text"]
+    assert payload["result"]["structuredContent"]["subject"] == "person-a"
 
 
-def test_mcp_grant_context_does_not_leak_to_next_request() -> None:
-    _configure()
+@pytest.mark.asyncio
+async def test_mcp_grant_context_does_not_leak_to_next_request() -> None:
+    await _configure_async()
     app, _ = _app_with_mcp()
 
-    with TestClient(app) as client:
-        delegated = _mcp_call(client, {})
-        caller_only = _mcp_call(client, {}, grant=None)
+    async with _serving_mcp(app) as client:
+        delegated = await _mcp_call(client, {})
+        caller_only = await _mcp_call(client, {}, grant=None)
 
-    assert '"subject": "person-a"' in delegated["result"]["content"][0]["text"]
-    assert '"subject": "workload-subject"' in caller_only["result"]["content"][0]["text"]
+    assert delegated["result"]["structuredContent"]["subject"] == "person-a"
+    assert caller_only["result"]["structuredContent"]["subject"] == "workload-subject"
 
 
-def test_mcp_tool_schema_does_not_offer_grant_fields() -> None:
-    _configure()
-    _, mcp = _app_with_mcp()
-
-    schema = next(tool.inputSchema for tool in mcp.tools if tool.name == "list_documents")
+@pytest.mark.asyncio
+async def test_mcp_tool_schema_does_not_offer_grant_fields() -> None:
+    await _configure_async()
+    app, _ = _app_with_mcp()
+    async with _serving_mcp(app) as client:
+        tools = (await _mcp_post(client, "tools/list", {})).json()["result"]["tools"]
+    schema = next(tool["inputSchema"] for tool in tools if tool["name"] == "list_documents")
     assert not set(_GRANT).intersection(schema.get("properties", {}))
 
 
 @pytest.mark.parametrize(("grant", "subject"), [(_GRANT, "person-a"), (None, "workload-subject")], ids=["with-grant", "caller-only"])
-def test_a_mounted_tool_call_checks_account_status_once_in_the_route_serving_it(grant: dict[str, str] | None, subject: str) -> None:
+@pytest.mark.asyncio
+async def test_a_mounted_tool_call_checks_account_status_once_in_the_route_serving_it(grant: dict[str, str] | None, subject: str) -> None:
     store = AccountStatusStore()
-    _configure(store)
+    await _configure_async(store)
     app, _ = _app_with_mcp()
 
-    with TestClient(app) as client:
-        assert _mcp_post(client, "initialize", _INITIALIZE, grant=grant).status_code == 200
-        assert _mcp_post(client, "tools/list", {}, grant=grant).status_code == 200
-        response = _mcp_post(client, "tools/call", {"name": "list_documents", "arguments": {}}, grant=grant)
+    async with _serving_mcp(app) as client:
+        assert (await _mcp_post(client, "tools/list", {}, grant=grant)).status_code == 200
+        response = await _mcp_post(client, "tools/call", {"name": "list_documents", "arguments": {}}, grant=grant)
 
     assert response.json()["result"]["isError"] is False
     # The mount only authenticates; the route serving the call makes the one check.
     assert store.account_status_checks() == [(f"user:{subject}", "HIGHER_CONSISTENCY")]
 
 
-def test_a_tool_call_after_a_suspension_is_refused_by_its_serving_route() -> None:
+@pytest.mark.asyncio
+async def test_a_tool_call_after_a_suspension_is_refused_by_its_serving_route() -> None:
     store = AccountStatusStore()
-    _configure(store)
+    await _configure_async(store)
     app, _ = _app_with_mcp()
 
-    with TestClient(app) as client:
-        assert _mcp_post(client, "initialize", _INITIALIZE).status_code == 200
+    async with _serving_mcp(app) as client:
+        assert (await _mcp_post(client, "tools/list", {})).status_code == 200
         store.suspended.add("person-a")
-        response = _mcp_post(client, "tools/call", {"name": "list_documents", "arguments": {}})
+        response = await _mcp_post(client, "tools/call", {"name": "list_documents", "arguments": {}})
 
     assert response.status_code == 200
     assert response.json()["result"]["structuredContent"] == {"cause": "authority_lost"}

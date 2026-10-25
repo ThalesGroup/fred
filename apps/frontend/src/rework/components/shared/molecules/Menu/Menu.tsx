@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { memo, useRef, useEffect, ReactElement } from "react";
+import { memo, useRef, useEffect, ReactElement, Fragment } from "react";
 import styles from "./Menu.module.scss";
 import { type SelectOption } from "../Select/Select.tsx";
 import MenuItem from "../../atoms/MenuItem/MenuItem.tsx";
@@ -77,7 +77,7 @@ const MenuInternal = <T,>({
         tabIndex={-1}
         onMouseDown={(e) => e.preventDefault()}
       >
-        {options.map((option) => {
+        {options.map((option, index) => {
           // The unique key also keeps IDs stable when values are objects.
           // Treat the resulting ID as opaque, including punctuation in keys.
           const itemId = `${baseId}-opt-${option.key}`;
@@ -88,22 +88,28 @@ const MenuInternal = <T,>({
             : selectedId === option.value;
 
           return (
-            <MenuItem
-              key={option.key}
-              id={itemId}
-              label={option.label}
-              description={option.description}
-              tooltip={option.tooltip}
-              icon={option.icon}
-              disabled={option.disabled}
-              destructive={option.destructive}
-              selected={isSelected}
-              focused={isFocused}
-              onClick={() => {
-                if (option.disabled) return;
-                onChange?.(option.value);
-              }}
-            />
+            <Fragment key={option.key}>
+              {option.section && option.section !== options[index - 1]?.section && (
+                <li className={styles.sectionTitle} role="presentation">
+                  {option.section}
+                </li>
+              )}
+              <MenuItem
+                id={itemId}
+                label={option.label}
+                description={option.description}
+                tooltip={option.tooltip}
+                icon={option.icon}
+                disabled={option.disabled}
+                destructive={option.destructive}
+                selected={isSelected}
+                focused={isFocused}
+                onClick={() => {
+                  if (option.disabled) return;
+                  onChange?.(option.value);
+                }}
+              />
+            </Fragment>
           );
         })}
       </ul>

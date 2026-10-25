@@ -58,6 +58,7 @@ export const BETA: CorpusDoc = {
 };
 
 /** Synthesize the upload file from the inline corpus text. */
-export function fileOf(doc: CorpusDoc): File {
-  return new File([doc.text], doc.fileName, { type: "text/markdown" });
+export function fileOf(doc: CorpusDoc, runToken: string): File {
+  const fileName = doc.fileName.replace(/(\.[^.]+)$/, `-${runToken}$1`);
+  return new File([doc.text], fileName, { type: "text/markdown" });
 }

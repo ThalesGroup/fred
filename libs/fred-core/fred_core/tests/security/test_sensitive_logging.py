@@ -258,6 +258,22 @@ def test_server_url_redaction_keeps_the_diagnostic() -> None:
     )
 
 
+def test_mcp_grant_query_redaction_keeps_parameter_names() -> None:
+    record = logging.LogRecord(
+        "uvicorn.error",
+        logging.ERROR,
+        __file__,
+        1,
+        "failure at /mcp?person=private-person&run=private-run&agent=private-agent&ordinary=visible",
+        (),
+        None,
+    )
+    log_setup_module.UvicornSensitiveQueryFilter().filter(record)
+    assert record.getMessage() == (
+        "failure at /mcp?person=<redacted>&run=<redacted>&agent=<redacted>&ordinary=visible"
+    )
+
+
 def test_the_canary_probe_can_see_a_leak_through_a_traceback() -> None:
     """Detect an exception marker and its cause in an in-memory record."""
     marker = "detector-exception"

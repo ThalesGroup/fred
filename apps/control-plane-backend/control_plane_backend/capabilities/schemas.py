@@ -19,8 +19,9 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from fred_sdk.contracts.capability.manifest import TeamScopePolicy
+from fred_sdk.contracts.context import ModelBinding
 from fred_sdk.contracts.models import FieldSpec
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 PersonalScope = Literal["enabled", "disabled", "default"]
 
@@ -177,12 +178,32 @@ class CapabilityEnablementItem(BaseModel):
     model_display_name: str | None = Field(
         default=None,
         description=(
-            'For a `kind="model"` row: the ops-authored `model_display_name` '
-            "from models_catalog.yaml, carried verbatim. `name` is the wire "
-            "model value, which several models on one gateway can share, so "
-            "the admin label prefers this when set. Display only."
+            'For a `kind="model"` row: the effective label. A saved admin '
+            "name takes priority over pod catalog metadata. `name` remains "
+            "the wire model value. Display only."
         ),
     )
+    model_display_name_override: str | None = Field(
+        default=None,
+        description="The platform administrator's saved label, if any. Clear to restore the pod label.",
+    )
+    model_discovery_source_id: str | None = Field(
+        default=None,
+        description="The pod-advertised discovery source for this model, if any.",
+    )
+    model_runtime_ids: list[str] = Field(
+        default_factory=list,
+        description="Runtime pods currently advertising this model.",
+    )
+    model_chat_profile_ids: list[str] = Field(default_factory=list)
+    model_platform_binding: ModelBinding | None = None
+    model_fallback_profile_ids: list[str] = Field(default_factory=list)
+    model_capabilities: list[str] = Field(default_factory=list)
+    model_chat_capability_verified: bool = False
+    model_reasoning_efforts: dict[str, list[str]] = Field(default_factory=dict)
+    model_context_window_tokens: int | None = Field(default=None, gt=0)
+    model_max_input_tokens: int | None = Field(default=None, gt=0)
+    model_max_output_tokens: int | None = Field(default=None, gt=0)
 
 
 class CapabilityEnablementList(BaseModel):
@@ -209,6 +230,29 @@ class SetModelReasoningRequest(BaseModel):
     """Switch one model's platform-wide reasoning on or off (REASON-01 §5)."""
 
     reasoning_enabled: bool
+
+
+class SetModelDisplayNameRequest(BaseModel):
+    display_name: str | None
+
+    @field_validator("display_name")
+    @classmethod
+    def _validate_display_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        name = value.strip()
+        if (
+            not name
+            or len(name) > 160
+            or any(ord(char) < 32 or ord(char) == 127 for char in name)
+        ):
+            raise ValueError("display_name must be 1-160 printable characters")
+        return name
+
+
+class ModelDisplayNameResult(BaseModel):
+    capability_id: str
+    display_name: str | None
 
 
 class ModelReasoningResult(BaseModel):

@@ -32,6 +32,8 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, values?: Record<string, unknown>) => {
       if (key === "rework.chatTrace.toolLabels.codeSandbox") return "Code in sandbox";
+      if (key === "rework.chatTrace.toolLabels.capabilities.documents.summarize_document")
+        return "Summarizing a document";
       if (key === "rework.chatTrace.toolGroups.commands")
         return `${values?.count} ${values?.count === 1 ? "command" : "commands"}`;
       if (key === "test.summaries") return `${values?.count} summaries`;
@@ -124,7 +126,7 @@ describe("ThoughtTrace code groups", () => {
     expect(groups()[0].getAttribute("aria-label")).toMatch(/^1\. /);
     expect(groups()[1].getAttribute("aria-label")).toMatch(/^3\. /);
     const summary = [...container.querySelectorAll('[role="button"]')].find((node) =>
-      node.getAttribute("aria-label")?.includes("Summarize Document"),
+      node.getAttribute("aria-label")?.includes("Summarizing a document"),
     );
     expect(summary).toBeDefined();
     expect(groups()[0].compareDocumentPosition(summary!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);

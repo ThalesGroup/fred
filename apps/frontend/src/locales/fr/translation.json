@@ -655,6 +655,18 @@
       "arguments": "Arguments :"
     }
   },
+  "mermaid": {
+    "title": "Diagramme",
+    "diagram": "Diagramme Mermaid",
+    "copySource": "Copier le code du diagramme",
+    "download": "Télécharger le diagramme en SVG",
+    "downloadError": "Le diagramme n'a pas pu être téléchargé. Réessayez.",
+    "enlarge": "Afficher le diagramme en plein écran",
+    "close": "Quitter le plein écran",
+    "loading": "Rendu du diagramme...",
+    "error": "Erreur du diagramme",
+    "renderError": "Le diagramme n'a pas pu être affiché."
+  },
   "common": {
     "cancel": "Annuler",
     "close": "Fermer",
@@ -1145,10 +1157,40 @@
         },
         "emptyAgents": "Aucun template d'agent n'est encore enregistré par un pod runtime.",
         "emptyModels": "Aucun modèle n'est encore publié par un pod runtime.",
+        "modelDetail": {
+          "openAria": "Charger les détails de {{name}}",
+          "openHint": "Cliquer pour charger les détails du modèle",
+          "loading": "Chargement des détails du modèle...",
+          "error": "Détails du modèle indisponibles. Cliquer pour réessayer."
+        },
+        "modelSpecs": {
+          "source": "Source : {{source}}",
+          "context": "Contexte {{value}}",
+          "contextExact": "Contexte : {{count}} tokens",
+          "input": "Entrée {{value}}",
+          "output": "Sortie {{value}}",
+          "reasoningLevels": "Raisonnement : {{levels}}",
+          "capabilities": {
+            "chat": "Chat",
+            "embedding": "Embedding",
+            "language": "Langage",
+            "image": "Image"
+          }
+        },
+        "modelName": {
+          "editAction": "Modifier le nom affiché",
+          "editAria": "Modifier le nom affiché de {{name}}",
+          "label": "Nom affiché dans le chat",
+          "saveAction": "Enregistrer",
+          "resetAction": "Réinitialiser",
+          "cancelAction": "Annuler",
+          "saved": "Nom du modèle enregistré",
+          "saveError": "Impossible d'enregistrer le nom du modèle"
+        },
         "emptyApps": "Aucune application n'est encore installée sur cette plateforme.",
         "col": {
           "capability": "Fonctionnalité",
-          "enabledTeams": "Équipes activées",
+          "enabledTeams": "Accès",
           "defaultOn": "Activé pour tous",
           "health": "État",
           "reasoning": "Raisonnement",
@@ -1245,6 +1287,45 @@
         "reasoningOffToast": "Raisonnement désactivé pour ce modèle.",
         "reasoningOnToast": "Raisonnement activé pour ce modèle.",
         "reasoningToggleError": "Impossible de modifier le réglage de raisonnement de ce modèle.",
+        "discovery": {
+          "title": "Découverte des modèles",
+          "sourceUrlAria": "URL de découverte pour {{source}}",
+          "lastSuccess": "Dernière vérification réussie : {{time}}",
+          "refresh": "Actualiser",
+          "refreshing": "Vérification des modèles disponibles...",
+          "refreshFailed": "La découverte a échoué. Le dernier inventaire vérifié reste affiché.",
+          "unverifiedRuntimes": "Impossible de vérifier les catalogues de modèles de ces services d'agents :",
+          "failedSources": "Découverte en échec pour {{sources}}. Les derniers modèles vérifiés restent disponibles.",
+          "summary": "{{added}} nouveau(x) modèle(s), {{removed}} absent(s) du dernier inventaire",
+          "removedTitle": "Modèles absents du dernier inventaire",
+          "showRemoved": "Modèles absents ({{count}})",
+          "closeRemoved": "Fermer",
+          "removedHint": "Ces modèles ne figurent plus dans GET /models, mais leur fournisseur peut encore accepter des requêtes.",
+          "removedModelId": "Identifiant absent : {{id}}",
+          "removeFromList": "Supprimer de la liste",
+          "removeConfirmTitle": "Supprimer ce modèle de la liste ?",
+          "removeConfirmMessage": "L'alerte pour {{name}} sera masquée. Les accès existants ne seront pas modifiés.",
+          "removeCancel": "Annuler",
+          "removeError": "Impossible de supprimer ce modèle de la liste des absences.",
+          "unavailable": "Absent de l'inventaire",
+          "unavailableGrantHint": "Ce modèle a disparu de la découverte. Vous pouvez retirer ses accès existants, mais pas en accorder de nouveaux.",
+          "new": "Nouveau",
+          "manualSection": "Catalogue",
+          "discoveredSection": "Découverte",
+          "tabAria": "Origine des modèles",
+          "filter": "Filtrer les modèles",
+          "clearFilter": "Effacer le filtre",
+          "noMatches": "Aucun modèle ne correspond à ce filtre.",
+          "discoveryUrls": "URLs de découverte",
+          "emptyManual": "Aucun modèle défini manuellement.",
+          "emptyDiscovered": "Aucun modèle découvert disponible.",
+          "unregisteredSource": "Les modèles de {{sources}} sont visibles, mais les paramètres de découverte sont indisponibles. Vérifiez les autres pods agents configurés et actualisez.",
+          "none": "Aucune source de découverte configurée. Les modèles du catalogue statique figurent ci-dessous.",
+          "save": "Enregistrer",
+          "reset": "Rétablir l'URL par défaut",
+          "saveError": "Impossible d'enregistrer ou de vérifier l'URL de découverte.",
+          "formatLimit": "La découverte accepte les réponses GET /models compatibles OpenAI avec data[].id. Les autres formats nécessitent un adaptateur."
+        },
         "grantAllConfirm": {
           "title": "Activer aussi les fonctionnalités requises ?",
           "messageTeam": "{{agent}} a besoin de {{deps}} pour fonctionner. Cette équipe ne peut pas encore l'utiliser : activer l'agent seul le laisserait inopérant.",
@@ -1259,15 +1340,51 @@
         "emptyKnowledgeBases": "Aucune définition de base de connaissances n'a encore été publiée dans ce déploiement."
       },
       "platformModelBindings": {
-        "openButton": "Liaison de modèle plateforme",
-        "title": "Liaison de modèle de discussion plateforme",
-        "subtitle": "Impose un modèle de discussion concret (fournisseur, nom) sur tous les pods d'exécution — remplace le modèle par défaut de chaque pod. Laissez non défini pour conserver le comportement actuel par pod.",
+        "openButton": "Modèles par défaut",
+        "title": "Modèles par défaut",
+        "tabAria": "Portée des modèles par défaut",
+        "platformTab": "Plateforme",
+        "podsTab": "Pods agents",
+        "subtitle": "La surcharge globale impose le même modèle à tous les échanges gérés, quels que soient les choix de l'équipe et du pod.",
+        "forcedLabel": "Surcharge globale",
+        "modelSelect": "Modèle de discussion",
+        "manualSource": "Catalogue",
+        "discoveredSource": "Découverte",
+        "noSelectableModels": "Aucun modèle disponible avec une configuration compatible. Utilisez la configuration avancée.",
+        "advanced": "Configuration manuelle avancée",
+        "noPlatformDefaultTitle": "Modèle par défaut manquant",
+        "noPlatformDefault": "Au moins un pod agent n'a pas de modèle de discussion par défaut. Choisissez un modèle dans l'onglet Pods agents pour chaque pod concerné.",
+        "chooseModel": "Configurer les modèles par défaut",
+        "podDefaultSelect": "Modèle par défaut du pod",
+        "podUnreachable": "Catalogue du pod inaccessible. Le réglage enregistré est conservé.",
+        "podOverrideUnavailable": "Le modèle enregistré {{profile}} n'est plus disponible. Le défaut YAML est utilisé.",
+        "podNoModels": "Aucun modèle de discussion activé sur ce pod",
+        "chooseEnabledModel": "Choisir un modèle activé",
+        "chooseEnabledManualModel": "Choisir un modèle manuel activé",
+        "currentNotSelectable": "Réglage actuel non proposé car le modèle n'est pas activé ou disponible :",
+        "podsLoading": "Chargement des catalogues des pods agents...",
+        "podsLoadError": "Impossible de charger les modèles par défaut des pods agents.",
+        "noPods": "Aucun pod agent configuré.",
+        "podSaved": "Modèle par défaut du pod enregistré.",
+        "podSaveError": "Impossible de modifier le modèle par défaut du pod.",
+        "podReset": "Défaut YAML du pod rétabli.",
+        "podResetAction": "Réinitialiser",
+        "fallbackLabel": "Modèle de secours du pod",
+        "fallbackHint": "Utilisé si un modèle choisi dans Découverte disparaît ou est décommissionné. Sans réglage ici, le modèle manuel par défaut du YAML sert de secours.",
+        "fallbackSelect": "Modèle de chat manuel",
+        "noManualModels": "Aucun modèle de chat manuel activé sur ce pod.",
+        "podFallbackUnavailable": "Le secours enregistré {{profile}} n'est plus disponible. Le modèle manuel par défaut du YAML est utilisé s'il existe.",
+        "fallbackSaveToast": "Modèle de secours enregistré.",
+        "fallbackDeleteToast": "Modèle de secours supprimé.",
+        "fallbackError": "Impossible de modifier le modèle de secours.",
+        "noFallback": "Aucun modèle de secours configuré",
+        "clearFallback": "Effacer le modèle de secours",
         "loading": "Chargement de la liaison de modèle de discussion plateforme…",
         "loadError": "Impossible de charger la liaison de modèle de discussion plateforme.",
         "capability": {
           "chat": "Discussion"
         },
-        "podDefault": "Utilise le défaut du pod",
+        "podDefault": "Utilise les choix de l'équipe et du pod",
         "boundState": "{{provider}} / {{name}}",
         "editAction": "Modifier",
         "deleteAction": "Rétablir le défaut du pod",
@@ -1906,16 +2023,112 @@
       "toolLabels": {
         "codeSandbox": "Exécution du code dans un espace isolé",
         "selectCodeInput": "Préparation d'un fichier pour l'analyse",
-        "askUser": "Demande d'information à l'utilisateur",
-        "readSkillFile": "Lecture d’un fichier du skill",
-        "readQuery": "Lecture de la requête",
-        "documents": "Liste des documents tabulaires",
-        "markdown": "Lecture du catalogue du classeur",
-        "schemas": "Lecture des schémas tabulaires",
-        "descriptions": "Lecture des documents tabulaires",
-        "search": "Recherche d'une valeur tabulaire",
-        "webSearch": "Recherche sur le web",
-        "fetchUrl": "Lecture d'une page web"
+        "platform": {
+          "askUser": "Demande de précision",
+          "readSkillFile": "Consultation des consignes"
+        },
+        "mcp": {
+          "tabular": {
+            "readQuery": "Consultation des données",
+            "documents": "Liste des fichiers de données",
+            "markdown": "Lecture du catalogue du classeur",
+            "schemas": "Lecture des schémas tabulaires",
+            "descriptions": "Consultation de la structure des données",
+            "search": "Recherche dans les données"
+          },
+          "text": {
+            "search_documents_using_vectorization": "Recherche dans les documents"
+          },
+          "opensearchOps": {
+            "os_health": "État de santé d'OpenSearch",
+            "os_pending_tasks": "Tâches OpenSearch en attente",
+            "os_cluster_settings": "Paramètres du cluster OpenSearch",
+            "os_cluster_state": "État du cluster OpenSearch",
+            "os_cluster_stats": "Statistiques du cluster OpenSearch",
+            "os_allocation_explain": "Explication de l'affectation d'un fragment OpenSearch",
+            "os_nodes_stats": "Statistiques des noeuds OpenSearch",
+            "os_nodes_info": "Informations sur les noeuds OpenSearch",
+            "os_nodes_hot_threads": "Analyse des threads actifs OpenSearch",
+            "os_indices": "Liste des index OpenSearch",
+            "os_index_stats": "Statistiques d'un index OpenSearch",
+            "os_index_mapping": "Structure des champs d'un index OpenSearch",
+            "os_index_settings": "Paramètres d'un index OpenSearch",
+            "os_index_recovery": "Récupération d'un index OpenSearch",
+            "os_tasks": "Tâches OpenSearch en cours",
+            "os_task_get": "Détails d'une tâche OpenSearch",
+            "os_shards": "État des fragments OpenSearch",
+            "os_cat_nodes": "Vue d'ensemble des noeuds OpenSearch",
+            "os_cat_allocation": "Répartition des fragments OpenSearch",
+            "os_cat_thread_pool": "État des groupes de threads OpenSearch",
+            "os_recovery": "Récupération des index OpenSearch",
+            "os_diagnostics": "Diagnostic global d'OpenSearch"
+          },
+          "prometheusOps": {
+            "prometheus_query": "Exécution d'une requête instantanée Prometheus",
+            "prometheus_query_range": "Exécution d'une requête Prometheus sur une période",
+            "prometheus_series": "Recherche de séries de mesures Prometheus",
+            "prometheus_metrics": "Liste des métriques Prometheus",
+            "prometheus_metrics_catalog": "Catalogue des métriques Prometheus",
+            "prometheus_metadata": "Description des métriques Prometheus",
+            "prometheus_labels": "Liste des labels Prometheus",
+            "prometheus_label_values": "Valeurs d'un label Prometheus",
+            "prometheus_targets": "État des cibles de collecte Prometheus"
+          }
+        },
+        "capabilities": {
+          "webResearch": {
+            "webSearch": "Recherche sur le web",
+            "fetchUrl": "Lecture d'une page web"
+          },
+          "documentAccess": {
+            "list_document_tree": "Consultation de l'arborescence des documents"
+          },
+          "documents": {
+            "list_documents_by_label": "Recherche de documents par label",
+            "read_document": "Lecture d'un document",
+            "summarize_document": "Résumé d'un document",
+            "extract_from_document": "Extraction d'informations d'un document",
+            "find_similar_passages": "Recherche de passages similaires"
+          },
+          "writableDocument": {
+            "open_writable_document": "Ouverture d'un document Word",
+            "write_document": "Rédaction d'un document Word"
+          },
+          "teamWiki": {
+            "wiki_list_pages": "Liste des pages du wiki",
+            "wiki_read_page": "Lecture d'une page du wiki",
+            "wiki_propose_page_text": "Préparation d'une modification du wiki",
+            "wiki_propose_page": "Préparation d'une nouvelle page du wiki",
+            "wiki_publish_proposal": "Demande de validation d'une page du wiki"
+          },
+          "htmlArtifact": {
+            "render_html_artifact": "Création d'un contenu interactif"
+          },
+          "pptFiller": {
+            "list_images_in_folder": "Recherche d'images pour une présentation PowerPoint",
+            "fill_ppt_template": "Création d'une présentation PowerPoint"
+          },
+          "platformOps": {
+            "postgres_list_tables": "Consultation des données disponibles",
+            "postgres_run_query": "Consultation de la base de données"
+          }
+        },
+        "deep": {
+          "ls": "Liste des fichiers",
+          "read_file": "Lecture d'un fichier",
+          "write_file": "Création d'un fichier",
+          "edit_file": "Modification d'un fichier",
+          "glob": "Recherche de fichiers",
+          "grep": "Recherche dans les fichiers",
+          "execute": "Exécution d'une commande",
+          "concat_files": "Assemblage de fichiers",
+          "task": "Travail confié à un assistant",
+          "write_todos": "Mise à jour du plan"
+        },
+        "skills": {
+          "load_skill": "Chargement des consignes",
+          "read_skill_file": "Consultation des consignes"
+        }
       },
       "sandbox": {
         "code": "Code",
@@ -2112,6 +2325,8 @@
     "helpCenter": {
       "title": "Centre d'aide",
       "languageAria": "Langue de la documentation",
+      "languageSaveFailed": "La langue de la documentation n'a pas été enregistrée",
+      "languageSaveFailedDetail": "Cette page utilise votre choix, mais votre profil reprendra l'ancienne langue la prochaine fois.",
       "sidebarAria": "Navigation du centre d'aide",
       "copyPageLink": "Copier le lien de la page",
       "copyHeadingLink": "Copier le lien de ce paragraphe",
@@ -2577,7 +2792,12 @@
     },
     "selftest": {
       "page": {
-        "title": "Auto-test"
+        "title": "Auto-test",
+        "subtitle": "Chaque famille vérifie un domaine de ce déploiement, avec votre compte, sur les vrais services. Tout ce qu'une exécution crée porte son jeton et est supprimé à la fin.",
+        "durationTitle": "Un run complet prend 5 à 10 minutes",
+        "durationDescription": "Gardez cet onglet ouvert jusqu'à la fin. Le fermer arrête le run et laisse ses données de test, nommées avec le jeton du run.",
+        "runAll": "Tout lancer",
+        "copyAll": "Copier le rapport complet"
       },
       "report": {
         "verified": "Vérifié",
@@ -2585,26 +2805,16 @@
         "running": "En cours…",
         "empty": "Aucune exécution.",
         "counts": "{{passed}} réussis · {{failed}} échoués · {{skipped}} ignorés · {{total}} étapes",
+        "expand": "Afficher les étapes",
+        "collapse": "Masquer les étapes",
         "copy": "Copier le rapport",
         "copied": "Copié"
       },
-      "functional": {
-        "title": "Auto-test fonctionnel",
-        "subtitle": "Crée deux dossiers dans votre espace personnel, ingère un document marqueur dans l'un et un document neutre dans l'autre, puis interroge le vrai agent d'auto-test sur chacun — le marqueur doit revenir du premier et être absent du second. Tout est nettoyé à la fin.",
-        "run": "Lancer la campagne"
-      },
-      "web": {
-        "title": "Auto-test de la recherche web",
-        "subtitle": "Exécute l'agent déterministe de recherche web à travers le vrai pipeline d'exécution. Il échoue d'emblée si la recherche web n'est pas activée sur ce déploiement ; sinon il prouve que chaque protection tient — schémas, ports et identifiants refusés, adresses loopback, privées, de métadonnées et encodées, noms des services de la plateforme, redirections vers des destinations internes, contenu binaire et un SafeSearch que le modèle ne peut pas affaiblir — puis que la recherche et la lecture de page fonctionnent. Les sondes qui dépendent d'un service tiers injoignable sont ignorées, jamais validées. L'agent temporaire est supprimé à la fin.",
-        "run": "Lancer les vérifications web"
-      },
       "authz": {
-        "identityTitle": "Auto-test d’authentification JWT",
-        "identityDescription": "Vérifie l’accès aux trois API, le refus des jetons absents ou invalides, les routes publiques et l’identité de l’espace personnel. Les contrôles non applicables au fournisseur sont ignorés avec une explication.",
-        "identityRun": "Lancer les contrôles",
-        "title": "Auto-test d'autorisation",
-        "subtitle": "Prouve que l'API réelle respecte le modèle d'autorisation : les drapeaux platform-admin correspondent aux accès réels des endpoints, et personne — pas même un platform_admin — n'a d'accès implicite à une équipe dont il n'est pas membre.",
-        "runSelf": "Lancer pour moi-même",
+        "notice": {
+          "title": "Pourquoi vérifier les autorisations ?",
+          "description": "Cette famille détecte les accès indus aux routes protégées, à l'administration et aux équipes. Tout lancer vérifie les droits liés à votre rôle et le refus des jetons absents ou invalides ; le contrôle d'une équipe extérieure est ignoré si aucune n'existe. L'isolation entre deux utilisateurs se teste séparément ci-dessous avec un second compte ; ce contrôle crée et supprime des prompts temporaires dans les deux espaces personnels. Le test d'expiration de session se lance aussi séparément et peut durer plusieurs minutes."
+        },
         "expiry": {
           "title": "Accès de l'agent après l'expiration de votre session",
           "run": "Lancer le test d'expiration de session",
@@ -2617,13 +2827,72 @@
           "caption": "Utilise votre session SSO actuelle. L'agent vérifie l'accès authentifié aux métadonnées, attend au-delà de l'expiration du jeton capturé, puis répète la vérification. Aucun mot de passe, changement Keycloak, document ou bibliothèque n'est nécessaire. Seule une instance d'agent temporaire est créée puis supprimée ; fermer l'onglet pendant l'exécution la laisse en place, à supprimer depuis vos agents personnels. Le renouvellement du navigateur reste actif. L'attente correspond à la durée de vie restante du jeton plus une courte marge — de moins d'une minute à plusieurs — gardez donc cette page ouverte jusqu'à la fin ; une attente supérieure à {{maxMinutes}} minutes est ignorée."
         },
         "testProfile": {
-          "title": "Tester un autre profil",
           "usernameLabel": "Compte",
           "usernamePlaceholder": "Choisir un compte",
           "passwordLabel": "Mot de passe",
-          "run": "Lancer",
-          "caption": "Nécessite le mot de passe réel de ce compte et l'accès direct (direct-grant) Keycloak activé sur ce realm — déjà actif sur les realms locaux/démo, conçu comme test/dev uniquement. Ceci n'accorde aucun accès nouveau — ça rapporte simplement ce que ce compte peut déjà faire.",
-          "disabledInsecure": "Non disponible sur ce déploiement — aucun vrai realm Keycloak à interroger."
+          "tokenLabel": "Jeton d'accès API du second compte",
+          "tokenCaption": "Connectez-vous avec l'autre compte dans une fenêtre privée, puis collez ici son jeton d'accès API, pas son jeton d'identité. Le champ est vidé au début du test et le jeton n'apparaît jamais dans le rapport. Le test vérifie les deux espaces personnels sans changer votre session admin.",
+          "caption": "Nécessite le mot de passe du compte dédié et l'accès direct (direct-grant) activé sur le realm Keycloak de test. La campagne modifie temporairement les rôles applicatifs de ce compte après confirmation."
+        },
+        "campaign": {
+          "title": "Campagne de segmentation et de rôles",
+          "description": "Avec les identifiants ci-dessus, vérifier au maximum 150 contrôles réels : chaque rôle plateforme seul, les principaux profils d'équipe, la segmentation entre utilisateurs et équipes privées/publiques, et la révocation. Les rôles du compte de test dédié sont temporairement modifiés, puis restaurés ; les ressources temporaires sont nettoyées. Cette campagne est séparée de Tout lancer.",
+          "limits": "Nécessite l'admin qui a initialisé la plateforme et son acceptation de la charte administrateur d'équipe. Utiliser un compte dédié : ses accès plateforme changent pendant le run. La charte détermine si le rôle administrateur d'équipe est actif ou en attente. Garder cette page ouverte et le jeton de test valide. La sauvegarde locale contient les ID et les rôles initiaux, jamais les identifiants de connexion ; fermer le navigateur nécessite une reprise. Ne pas administrer les rôles ni lancer une autre campagne depuis un autre navigateur en parallèle.",
+          "run": "Tester les rôles et la segmentation",
+          "confirmation": "Modifier temporairement les rôles plateforme de {{account}}, y compris l'accès administrateur plateforme ? Ce compte doit être dédié au test. Les rôles initiaux seront restaurés à la fin ; après une interruption, revenir ici pour les restaurer. Les rôles des équipes existantes et la configuration du fournisseur d'identité ne sont pas modifiés.",
+          "tokenAccount": "l'utilisateur identifié par le jeton API fourni",
+          "confirm": "Lancer la campagne",
+          "recoveryNotice": "Une campagne interrompue nécessite une restauration. Utiliser l'admin initial dans ce navigateur pour rétablir les rôles et nettoyer les équipes temporaires avant une nouvelle campagne.",
+          "recover": "Restaurer les rôles initiaux et nettoyer"
+        }
+      },
+      "family": {
+        "run": "Lancer"
+      },
+      "families": {
+        "identity": {
+          "title": "Identité et session",
+          "subtitle": "Vérifie l’accès aux trois API, le refus des jetons absents ou invalides, les routes publiques et l’identité de l’espace personnel. Les contrôles non applicables au fournisseur sont ignorés avec une explication."
+        },
+        "authorization": {
+          "title": "Autorisation",
+          "subtitle": "Prouve que l'API réelle respecte le modèle d'autorisation : les drapeaux d'administration correspondent aux accès réels, les routes protégées de chaque backend refusent un jeton absent, malformé ou falsifié, les routes d'administration suivent votre rôle sur la plateforme, et le contenu d'une équipe dont vous n'êtes pas membre reste fermé, même à un administrateur de la plateforme."
+        },
+        "knowledge": {
+          "title": "Documents et connaissances",
+          "subtitle": "Travaille dans votre espace personnel. Vérifie la recherche limitée à un dossier et l'isolation d'un autre via l'agent d'auto-test, la recherche directe selon chaque politique, un petit document par format pris en charge (texte, Markdown, JSON Lines, PDF, Word, Excel, PowerPoint), une requête SQL sur un CSV, l'ajout et le retrait d'un document entre dossiers, la récupérabilité, l'arborescence des documents, l'absence de fragment récupérable après suppression et, en option, l'audit du corpus."
+        },
+        "agents": {
+          "title": "Agents",
+          "subtitle": "Inscrit un agent d'auto-test temporaire dans votre espace personnel. Vérifie que son prompt système est transmis, que son modèle est utilisable, qu'une configuration modifiée atteint plusieurs tours suivants, qu'un agent désactivé ne peut pas répondre, les destinations de copie, un duplicata sous un nom choisi et le refus d'un second, une copie sous un nom libre, et des conversations simultanées qui reçoivent chacune seulement leur propre contexte."
+        },
+        "prompts": {
+          "title": "Prompts",
+          "subtitle": "Crée une catégorie et un prompt personnel avec une commande, attache le prompt à une conversation et vérifie que l'agent le reçoit, puis qu'une modification atteint la conversation. Vérifie la liste des commandes, les favoris, le renommage d'une catégorie, la liste du marketplace, et qu'un prompt supprimé n'est plus lisible."
+        },
+        "web": {
+          "title": "Recherche web",
+          "subtitle": "Exécute l'agent déterministe de recherche web à travers le vrai pipeline d'exécution. Il échoue d'emblée si la recherche web n'est pas activée sur ce déploiement ; sinon il prouve que chaque protection tient : schémas, ports et identifiants refusés, adresses loopback, privées, de métadonnées et encodées, noms des services de la plateforme, redirections vers des destinations internes, contenu binaire et un SafeSearch que le modèle ne peut pas affaiblir. Il vérifie ensuite que la recherche et la lecture de page fonctionnent. Les sondes qui dépendent d'un service tiers injoignable sont ignorées, jamais validées. L'agent temporaire est supprimé à la fin."
+        },
+        "platform": {
+          "title": "Plateforme",
+          "subtitle": "Lit le déploiement sans rien modifier : santé et disponibilité des services, statut du compte, fournisseur d'identité et émetteur du jeton, horloges, runtimes d'agents et agent d'auto-test, profils de modèles, catalogue des capacités et principaux réglages d'administration."
+        },
+        "conversations": {
+          "title": "Conversations",
+          "subtitle": "Crée deux conversations dans votre espace personnel et exécute un tour dans l'une. Vérifie qu'elles sont listées, qu'un renommage est conservé, qu'un fichier joint est retrouvé dans sa conversation et jamais depuis l'autre, qu'une pièce jointe supprimée disparaît, la liste des conversations inactives et la suppression groupée."
+        },
+        "teams": {
+          "title": "Équipes",
+          "subtitle": "Crée une équipe jetable que vous administrez, puis la supprime. Ignorée tant que vous n'avez pas accepté la charte d'administrateur d'équipe ; l'exécution ne l'accepte jamais à votre place. Vérifie que le seul rôle d'admin ne permet pas de modifier le contenu, que le rôle d'éditeur ouvre la modification et que son retrait la referme, un prompt, un dossier et un agent d'équipe, les révisions et la restauration du wiki, le lien d'invitation, le routage des modèles, la copie de l'agent d'équipe vers votre espace personnel, et que rien de l'équipe supprimée ne reste accessible."
+        },
+        "security": {
+          "title": "Sécurité",
+          "subtitle": "Vérifie que la plateforme est servie en HTTPS, indique quels en-têtes de durcissement la page envoie, vérifie que les réponses d'erreur n'exposent aucune trace d'exécution, puis dépose un SVG inoffensif dans votre espace personnel et vérifie que son téléchargement brut est une pièce jointe et que son aperçu ne peut pas s'exécuter comme document sur cette origine."
+        },
+        "observability": {
+          "title": "Observabilité",
+          "subtitle": "Lit les KPI de conversations, de messages et de consommation de jetons sur la dernière journée, puis vérifie la santé du cluster de recherche et de chaque cible de métriques. Un backend que ce déploiement n'utilise pas est ignoré, jamais compté en échec."
         }
       }
     },
@@ -3352,7 +3621,9 @@
         "themePebble": "Galet",
         "uiThemeAria": "Thème graphique",
         "interfaceTitle": "Interface : thème et mode",
-        "languageAria": "Langue"
+        "languageAria": "Langue",
+        "saveFailed": "Impossible d'enregistrer la préférence d'affichage",
+        "saveFailedDetail": "Votre choix précédent a été rétabli. Réessayez."
       },
       "conversationProfile": {
         "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos {{agentsNicknamePlural}} doivent s'adresser à vous.",

@@ -158,6 +158,7 @@ class RuntimeConfig:
     # endpoint can re-read the file without needing the full AgentPodConfig
     # object, which isn't otherwise reachable from RuntimeContext.
     models_catalog_path: str | None = None
+    model_catalog_snapshot: Any | None = None
     # Read-only SQL over the platform database (OPSCAP-01-PG): pod-lifetime
     # adapter behind `RuntimeServices.platform_sql`, built by
     # `PodApplicationContext.initialize_platform_sql()`. None on the SQLite

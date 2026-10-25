@@ -61,6 +61,17 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ## Components
 
+### Admin self-test authorization controls
+
+**Location:** `src/rework/components/pages/admin/SelfTestPage/AuthorizationExtras.tsx`
+
+**Status:** Functional; not visually reviewed. The second-account form has
+only credentials and the isolation/role campaign, with no team/role selection.
+The campaign requires credentials
+and confirmation, explains its temporary privilege changes and offers recovery
+when a local journal remains. Other runs are disabled during execution.
+Live browser validation of the new campaign remains pending.
+
 ---
 
 ### `SearchField`
@@ -980,6 +991,49 @@ _(none — streaming indicator resolved 2026-05-18)_
   while any supported fence is still open, including Mermaid. The user sees the language header,
   copy action, and raw source text immediately during streaming, then the block switches to syntax
   highlighting / Mermaid / KaTeX / directive rendering once complete.
+
+---
+
+### `MermaidBlock`
+
+**Location:** `src/rework/components/shared/molecules/MermaidBlock/`
+**Status:** `Functional`
+
+Completed Mermaid fences use beautiful-mermaid for its supported subset, with official Mermaid
+as a compatibility renderer for other syntax (including one-line semicolon headers, pie and
+Gantt). The original source is attempted before the existing syntax repair. Open fences remain
+source previews until they close.
+
+Both the inline diagram and enlarged view follow Fred's current theme: `surface-container` canvas,
+`surface-container-high` nodes, `on-surface` labels, `on-surface-retreat` connectors/secondary labels,
+`primary` accent and `outline-variant` borders. Diagram fonts are local application fonts; SVG styles,
+IDs, references and animations are isolated per view. Theme and mode changes update mounted diagrams.
+Compatibility diagrams use the primary, secondary and tertiary token pairs for section colors and
+journey actors; timeline axes retain the connector token in both modes.
+The diagram is unframed: no code-block label, header fill or border. Quiet actions retain source
+copy and translated fullscreen/download icons. The action order is fullscreen, download, copy.
+Download saves the complete graph as `diagram.svg` on a white background, using the selected theme's
+light palette even from a dark interface. The standalone SVG retains scoped styles, references and
+safe HTML labels; fonts use the existing stack and local fallbacks. Fullscreen also offers download
+as its second action, and export failures show localized feedback without replacing the diagram.
+Inline SVGs fit the available width without
+cropping. In chat, a diagram can extend beyond the prose column up to 1.4 times its reading measure;
+surrounding text keeps its original width. Full-width document previews let diagrams span their
+content area. The fullscreen view uses the available window, retains natural-size scrolling for
+large diagrams, and returns focus to its trigger on Escape. Rendering errors retain source copy.
+
+For a representative example, paste this completed block into an existing Markdown surface:
+
+````markdown
+```mermaid
+flowchart LR
+  Q[Question] --> A[Agent]
+  A --> D[Documents]
+  A --> W[Recherche web]
+  D --> R[Réponse]
+  W --> R
+```
+````
 
 ---
 

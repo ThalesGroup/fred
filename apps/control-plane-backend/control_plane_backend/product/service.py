@@ -931,6 +931,12 @@ def _reasoning_efforts(raw: object) -> dict[str, tuple[ReasoningEffortLevel, ...
     }
 
 
+def _model_token_limit(raw: object) -> int | None:
+    return (
+        raw if isinstance(raw, int) and not isinstance(raw, bool) and raw > 0 else None
+    )
+
+
 async def _model_capabilities_for_source_uncached(
     base_url: str,
 ) -> PodModelCatalog | None:
@@ -975,10 +981,36 @@ async def _model_capabilities_for_source_uncached(
             exc,
         )
         return None
+    raw_discovery_source_id = payload.get("discovery_source_id")
+    discovery_source_id = (
+        raw_discovery_source_id
+        if isinstance(raw_discovery_source_id, str) and raw_discovery_source_id
+        else None
+    )
+    discovered_source_by_id: dict[str, str] = {}
+    raw_sources = payload.get("discovery_sources")
+    if isinstance(raw_sources, list):
+        for source in raw_sources:
+            if not isinstance(source, dict) or not isinstance(
+                source.get("source_id"), str
+            ):
+                continue
+            for model_id in source.get("discovered_model_ids", []):
+                if isinstance(model_id, str):
+                    discovered_source_by_id[model_id] = source["source_id"]
+    elif discovery_source_id is not None and isinstance(
+        payload.get("discovered_model_ids"), list
+    ):
+        discovered_source_by_id = {
+            model_id: discovery_source_id
+            for model_id in payload["discovered_model_ids"]
+            if isinstance(model_id, str)
+        }
     entries = [
         CapabilityCatalogEntry(
             id=entry["id"],
             source_id=entry["id"],
+            model_discovery_source_id=discovered_source_by_id.get(entry["id"]),
             # No runtime_id on purpose: several pods can serve the same model,
             # and the catalog unions their entries below. A single pod id would
             # be whichever one merged last — arbitrary, and read as fact.
@@ -991,11 +1023,15 @@ async def _model_capabilities_for_source_uncached(
             kind="model",
             team_scope=TeamScopePolicy.ADMIN_GATED,
             model_profile_ids=tuple(entry.get("profile_ids") or ()),
+            model_capabilities=tuple(entry.get("capabilities") or ()),
+            model_chat_capability_verified=entry.get("chat_capability_verified")
+            is True,
             # Team routing is chat-only. Preserve the pod-authored capability
             # projection instead of deriving it from a profile-id naming
             # convention. Missing on an older pod means no chat profile is
             # certified there, which makes writes fail closed during rollout.
             model_chat_profile_ids=tuple(entry.get("chat_profile_ids") or ()),
+            model_platform_binding=entry.get("platform_binding"),
             # REASON-01 §5.3 — the pod derives this subset from each profile's
             # `supports_thinking`; control-plane carries it verbatim, exactly
             # like `profile_ids` above. Absent on a pre-REASON-01 pod, which
@@ -1009,6 +1045,11 @@ async def _model_capabilities_for_source_uncached(
             # pod, which reads as unnamed and leaves the frontend on its
             # id-splitting heuristic — the previous behaviour exactly.
             model_display_name=entry.get("display_name"),
+            model_context_window_tokens=_model_token_limit(
+                entry.get("context_window_tokens")
+            ),
+            model_max_input_tokens=_model_token_limit(entry.get("max_input_tokens")),
+            model_max_output_tokens=_model_token_limit(entry.get("max_output_tokens")),
         )
         for entry in payload.get("models", [])
         if isinstance(entry, dict) and "id" in entry and "name" in entry
@@ -2954,15 +2995,11 @@ async def update_agent_instance(
             exclude_agent_instance_id=agent_instance_id,
         )
 
-    # 2026-07-19 fix (GitHub #2004 item 1): re-check the team's `can_use` on
-    # this instance's own `kind="agent"` template capability, the same gate
-    # `enroll_agent_instance` already applies at creation time. Without this,
-    # a team whose template grant was revoked (or a `default_on`/personal-
-    # scope withdrawal) could keep freely reconfiguring an instance that
-    # `suspend_dependent_instances`/`set_capability_default_on` already
-    # suspended for exactly that reason — unenroll (delete) is still always
-    # allowed, only editing is blocked.
-    if not await can_team_use_capability(
+    # Same template gate as enrollment: a revoked grant blocks editing (unenroll
+    # stays allowed). Exempt harness templates never carry a `can_use` tuple.
+    if not capability_gate_exempt(
+        record.source_agent_id
+    ) and not await can_team_use_capability(
         deps.team_dependencies.rebac,
         team_id,
         capability_id=template_capability_id(
@@ -3675,8 +3712,22 @@ async def get_runtime_binding_for_team(
             session=session
         )
         binding = await resolve_platform_chat_model_binding(deps, session=session)
+        pod_defaults = await deps.get_pod_chat_default_store().list_all(session=session)
+        pod_fallbacks = await deps.get_pod_chat_default_store().list_fallbacks(
+            session=session
+        )
+        discovery_states = await deps.get_model_discovery_state_store().list_all(
+            session=session
+        )
         prompt = await resolve_platform_prompt_text(deps, session=session)
-        return reasoning, binding, prompt
+        return (
+            reasoning,
+            binding,
+            pod_defaults,
+            pod_fallbacks,
+            discovery_states,
+            prompt,
+        )
 
     team_result, platform_result = await asyncio.gather(
         _in_read_session(deps, _team_reads),
@@ -3685,9 +3736,20 @@ async def get_runtime_binding_for_team(
     if team_result is None:
         return None
     instance, all_team_settings, routing_policy = team_result
-    reasoning_enabled_model_ids, platform_chat_model_binding, platform_prompt = (
-        platform_result
-    )
+    (
+        reasoning_enabled_model_ids,
+        platform_chat_model_binding,
+        pod_defaults,
+        pod_fallbacks,
+        discovery_states,
+        platform_prompt,
+    ) = platform_result
+    confirmed_removed_chat_profiles = {
+        profile_id: item["id"]
+        for state in discovery_states
+        for item in state.removed
+        for profile_id in item.get("chat_profile_ids", [])
+    }
     # Ship only the settings slices of the capabilities this instance selected
     # (CAPAB-01, RFC §8.2); the pod carries each to `CapabilityContext`.
     selected = set(instance.tuning.selected_capability_ids or [])
@@ -3711,6 +3773,16 @@ async def get_runtime_binding_for_team(
             else []
         ),
         platform_chat_model_binding=platform_chat_model_binding,
+        pod_chat_default_profile_id=pod_defaults.get(instance.source_runtime_id),
+        pod_chat_fallback_profile_id=pod_fallbacks.get(instance.source_runtime_id),
+        model_discovery_urls={
+            state.source_id: state.active_url or state.yaml_url
+            for state in discovery_states
+        },
+        model_discovery_revisions={
+            state.source_id: state.revision for state in discovery_states
+        },
+        confirmed_removed_chat_profiles=confirmed_removed_chat_profiles,
         platform_prompt=platform_prompt,
     )
 

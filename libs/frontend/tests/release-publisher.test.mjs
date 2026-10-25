@@ -21,6 +21,7 @@ import test from "node:test";
 import semver from "semver";
 
 import { loadReleaseContract } from "../scripts/release-contract.mjs";
+import { assertRegistryConsumer } from "../scripts/dependency-boundaries.mjs";
 import { sha512Integrity } from "../scripts/release-evidence.mjs";
 import {
   baselineDigest,
@@ -1105,6 +1106,7 @@ test("npm acceptance with lost outcome reconstructs tokens and continues only un
       wait: async () => {},
       verifyExisting: ({ member, expected, attempts }) =>
         verifyPublishedMember({
+          candidate,
           member,
           expected,
           contract,
@@ -1176,6 +1178,7 @@ test("publisher reconciliation distinguishes signed attempts at the same commit"
         certificateIssuer: contract.expectedProvenance.certificateIssuer,
       });
     const input = {
+      candidate,
       member,
       expected,
       contract,
@@ -1204,6 +1207,73 @@ test("publisher reconciliation distinguishes signed attempts at the same commit"
       verifyPublishedMember(input),
       /downloaded registry archive integrity differs/,
     );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("UI reconciliation validates transitive design tokens with retained candidate evidence", async () => {
+  const contract = await loadReleaseContract(
+    "release/proposed-release-contract.json",
+  );
+  const root = await mkdtemp(path.join(os.tmpdir(), "fred-registry-graph-"));
+  try {
+    const { candidate } = await syntheticCandidate(
+      ["designTokens", "ui"],
+      contract,
+      root,
+    );
+    const attempt = attemptFor(candidate, contract, "b".repeat(40), "301");
+    const member = candidate.selected.find(({ id }) => id === "ui");
+    const expected = {
+      coordinate: member.coordinate,
+      integrity: candidate.archives.ui.integrity,
+    };
+    const entries = Object.fromEntries(
+      candidate.selected.map(({ id }) => {
+        const selected = contract.packages[id];
+        return [
+          `node_modules/${selected.name}`,
+          {
+            version: selected.version,
+            integrity: candidate.archives[id].integrity,
+            resolved: `${contract.registry}${selected.name}/-/archive.tgz`,
+          },
+        ];
+      }),
+    );
+    const verified = await verifyPublishedMember({
+      candidate,
+      member,
+      expected,
+      contract,
+      attempts: [{ record: attempt }],
+      resolvePackage: async ({ evidence }) => {
+        assertRegistryConsumer({
+          manifest: {
+            dependencies: {
+              [contract.packages.ui.name]: contract.packages.ui.version,
+            },
+          },
+          lockfile: { packages: entries },
+          contract,
+          evidence,
+          roles: ["ui"],
+        });
+        return { integrity: expected.integrity };
+      },
+      verifySignature: async () =>
+        signedPublishingProvenance({
+          artifactDigest: expected.integrity,
+          repository: contract.expectedProvenance.repository,
+          sourceCommit: attempt.execution.sourceCommit,
+          workflow: contract.expectedProvenance.workflow,
+          runId: attempt.execution.runId,
+          runAttempt: attempt.execution.runAttempt,
+          certificateIssuer: contract.expectedProvenance.certificateIssuer,
+        }),
+    });
+    assert(verified.cryptographicallyVerified);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

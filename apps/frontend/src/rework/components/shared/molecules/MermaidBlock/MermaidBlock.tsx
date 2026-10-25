@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useId, useState } from "react";
-import mermaid from "mermaid";
-import { useIsDark } from "../../../../core/hooks/useIsDark";
-import { sanitizeMermaidForParsing } from "./mermaidSanitizer";
+import { useEffect, useId, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { readMermaidTheme, renderMermaid } from "./mermaidRenderer";
+import { prepareMermaidSvg, serializeMermaidSvg } from "./mermaidSvg";
+import { downloadFile } from "src/utils/downloadUtils";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { FullPageModal } from "../FullPageModal/FullPageModal";
@@ -26,130 +27,210 @@ interface MermaidBlockProps {
 }
 
 export function MermaidBlock({ code }: MermaidBlockProps) {
-  const [svg, setSvg] = useState<string | null>(null);
+  const { t } = useTranslation();
+  const [svg, setSvg] = useState<{ inline: string; enlarged: string; source: string; revision: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [zoomed, setZoomed] = useState(false);
-  const isDark = useIsDark();
+  const [themeRevision, setThemeRevision] = useState(0);
+  const blockRef = useRef<HTMLDivElement>(null);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const enlargeTrigger = useRef<HTMLButtonElement | null>(null);
+  const renderedSource = useRef(code);
+  const canDownload = svg !== null && svg.source === code && svg.revision === themeRevision && error === null;
+
+  async function handleDownload() {
+    setDownloadError(false);
+    setDownloading(true);
+    const container = document.createElement("div");
+    container.className = styles.export;
+    container.id = `${diagramId}Export`;
+    for (const attribute of ["data-ui-theme", "data-ui-base-theme"])
+      container.setAttribute(attribute, document.documentElement.getAttribute(attribute) ?? "");
+    container.setAttribute("data-theme", "light");
+    container.style.setProperty("--surface-container", "#ffffff");
+    document.body.append(container);
+    try {
+      // A white file needs the selected theme's light palette, including from a dark UI.
+      const theme = { ...readMermaidTheme(container), dark: false };
+      const rendered = await renderMermaid(code, `${diagramId}ExportRender`, theme);
+      container.innerHTML = prepareMermaidSvg(rendered, container.id);
+      const source = container.querySelector("svg");
+      if (!source) throw new Error("Diagram unavailable");
+      downloadFile(new Blob([serializeMermaidSvg(source)], { type: "image/svg+xml;charset=utf-8" }), "diagram.svg");
+    } catch {
+      setDownloadError(true);
+    } finally {
+      container.remove();
+      setDownloading(false);
+    }
+  }
+
+  const downloadButton = (
+    <IconButton
+      type="button"
+      variant="icon"
+      size="small"
+      icon={{ category: "outlined", type: "download" }}
+      aria-label={t("mermaid.download")}
+      title={t("mermaid.download")}
+      disabled={!canDownload || downloading}
+      onClick={handleDownload}
+    />
+  );
+  const downloadFeedback = downloadError && (
+    <span className={styles.downloadError} role="alert">
+      {t("mermaid.downloadError")}
+    </span>
+  );
+
+  function closeEnlarged() {
+    setZoomed(false);
+    enlargeTrigger.current?.focus();
+  }
 
   function handleCopy() {
     writeRichClipboard("", code).then((ok) => {
       if (ok) {
         setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        clearTimeout(copyTimer.current);
+        copyTimer.current = setTimeout(() => setCopied(false), 2000);
       }
     });
   }
 
-  // useId produces a stable, unique id per component instance (e.g. ":r0:").
-  // Mermaid requires a plain alphanumeric DOM id.
   const uid = useId();
   const diagramId = `mermaid${uid.replace(/[^a-zA-Z0-9]/g, "")}`;
 
   useEffect(() => {
-    setSvg(null);
+    const observer = new MutationObserver(() => setThemeRevision((value) => value + 1));
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme", "data-ui-theme", "data-ui-base-theme"],
+    });
+    return () => {
+      observer.disconnect();
+      clearTimeout(copyTimer.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (renderedSource.current !== code) {
+      setSvg(null);
+      renderedSource.current = code;
+    }
     setError(null);
+    setDownloadError(false);
 
     let cancelled = false;
-    mermaid.initialize({ startOnLoad: false, theme: isDark ? "dark" : "default" });
-
-    const renderDiagram = async () => {
-      try {
-        const { svg: rendered } = await mermaid.render(`${diagramId}Raw`, code);
-        if (!cancelled) setSvg(rendered);
-        return;
-      } catch (rawErr) {
-        const sanitized = sanitizeMermaidForParsing(code);
-        try {
-          const { svg: rendered } = await mermaid.render(`${diagramId}Sanitized`, sanitized);
-          if (!cancelled) setSvg(rendered);
-          return;
-        } catch (sanitizedErr) {
-          const message = sanitizedErr instanceof Error ? sanitizedErr.message : null;
-          const fallbackMessage = rawErr instanceof Error ? rawErr.message : "Diagram could not be rendered.";
-          throw new Error(message ?? fallbackMessage);
+    const theme = readMermaidTheme(blockRef.current!);
+    renderMermaid(code, diagramId, theme)
+      .then((rendered) => {
+        if (!cancelled) {
+          setSvg({
+            inline: prepareMermaidSvg(rendered, `${diagramId}Inline`),
+            enlarged: prepareMermaidSvg(rendered, `${diagramId}Enlarged`),
+            source: code,
+            revision: themeRevision,
+          });
         }
-      }
-    };
-
-    renderDiagram().catch((err: unknown) => {
-      if (!cancelled) setError(err instanceof Error ? err.message : "Diagram could not be rendered.");
-    });
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "");
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [code, isDark, diagramId]);
-
-  if (error) {
-    return (
-      <div className={styles.block}>
-        <div className={styles.header}>
-          <span className={styles.lang}>mermaid</span>
-        </div>
-        <div className={styles.error}>
-          <span className={styles.errorLabel}>Diagram error</span>
-          <pre className={styles.errorDetail}>{error}</pre>
-        </div>
-      </div>
-    );
-  }
+  }, [code, themeRevision, diagramId]);
 
   return (
-    <div className={styles.block}>
-      <div className={styles.header} data-clipboard-ignore>
-        <span className={styles.lang}>mermaid</span>
-        <div className={styles.actions}>
-          {svg !== null && (
+    <div className={styles.preview} ref={blockRef} data-mermaid-preview>
+      <div className={styles.toolbar} data-clipboard-ignore>
+        {svg !== null && (
+          <>
             <IconButton
+              type="button"
               variant="icon"
               size="small"
-              icon={{ category: "outlined", type: "search" }}
-              aria-label="Enlarge diagram"
-              onClick={() => setZoomed(true)}
+              icon={{ category: "outlined", type: "fullscreen" }}
+              aria-label={t("mermaid.enlarge")}
+              title={t("mermaid.enlarge")}
+              aria-haspopup="dialog"
+              onClick={(event) => {
+                enlargeTrigger.current = event.currentTarget;
+                setZoomed(true);
+              }}
+            />
+            {downloadButton}
+          </>
+        )}
+        <IconButton
+          type="button"
+          variant="icon"
+          size="small"
+          icon={{ category: "outlined", type: copied ? "check" : "content_copy" }}
+          onClick={handleCopy}
+          aria-label={copied ? t("common.copied") : t("mermaid.copySource")}
+          title={copied ? t("common.copied") : t("mermaid.copySource")}
+        />
+      </div>
+      {!zoomed && downloadFeedback}
+      {error !== null ? (
+        <div className={styles.error} role="alert">
+          <span className={styles.errorLabel}>{t("mermaid.error")}</span>
+          <pre className={styles.errorDetail}>{error || t("mermaid.renderError")}</pre>
+        </div>
+      ) : (
+        <div className={styles.body}>
+          {svg === null ? (
+            <span className={styles.loading} role="status">
+              {t("mermaid.loading")}
+            </span>
+          ) : (
+            <div
+              id={`${diagramId}Inline`}
+              className={styles.diagram}
+              role="img"
+              aria-label={t("mermaid.diagram")}
+              data-clipboard-diagram-label="Mermaid diagram"
+              dangerouslySetInnerHTML={{ __html: svg.inline }}
             />
           )}
-          <button className={styles.copy} onClick={handleCopy} aria-label="Copy diagram source">
-            {copied ? "✓ Copied" : "Copy"}
-          </button>
         </div>
-      </div>
-      <div className={styles.body}>
-        {svg === null ? (
-          <span className={styles.loading}>Rendering diagram…</span>
-        ) : (
-          // Safe: SVG is produced by the mermaid library from our own agent
-          // content — never from raw user input.
-          // data-clipboard-diagram-label: the clipboard serialiser degrades this
-          // whole subtree to a placeholder rather than depending on mermaid's
-          // internal SVG structure (which is a rendering-library detail, not a
-          // stable contract).
-          <div
-            className={styles.diagram}
-            data-clipboard-diagram-label="Mermaid diagram"
-            dangerouslySetInnerHTML={{ __html: svg }}
-          />
-        )}
-      </div>
+      )}
 
       {svg !== null && (
-        <FullPageModal isOpen={zoomed} onClose={() => setZoomed(false)} id="mermaid-zoom">
-          <div className={styles.zoomOverlay} onClick={() => setZoomed(false)} aria-hidden="true">
+        <FullPageModal isOpen={zoomed} onClose={closeEnlarged} id={`${diagramId}Zoom`}>
+          <div className={styles.zoomOverlay} onClick={closeEnlarged}>
             <div className={styles.zoomShell} onClick={(event) => event.stopPropagation()}>
               <header className={styles.zoomHeader}>
-                <span id="mermaid-zoom-title" className={styles.lang}>
-                  mermaid
+                <span id={`${diagramId}Zoom-title`} className={styles.title}>
+                  {t("mermaid.title")}
                 </span>
-                <IconButton
-                  variant="icon"
-                  size="small"
-                  icon={{ category: "outlined", type: "close" }}
-                  aria-label="Close enlarged diagram"
-                  onClick={() => setZoomed(false)}
-                />
+                <div className={styles.actions}>
+                  <IconButton
+                    type="button"
+                    autoFocus
+                    variant="icon"
+                    size="small"
+                    icon={{ category: "outlined", type: "fullscreen_exit" }}
+                    aria-label={t("mermaid.close")}
+                    onClick={closeEnlarged}
+                  />
+                  {downloadButton}
+                </div>
               </header>
-              {/* Safe: same library-produced SVG as the inline render. */}
-              <div className={styles.zoomBody} dangerouslySetInnerHTML={{ __html: svg }} />
+              {downloadFeedback}
+              <div
+                id={`${diagramId}Enlarged`}
+                className={styles.zoomBody}
+                role="img"
+                aria-label={t("mermaid.diagram")}
+                dangerouslySetInnerHTML={{ __html: svg.enlarged }}
+              />
             </div>
           </div>
         </FullPageModal>

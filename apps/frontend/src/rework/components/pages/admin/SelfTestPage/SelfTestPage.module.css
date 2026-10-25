@@ -79,6 +79,12 @@
   font: var(--font-label-small);
 }
 
+.roleExpectations {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
 .error {
   border: 1px solid var(--error);
   border-radius: var(--radius-s);
@@ -164,4 +170,10 @@
   margin-top: var(--spacing-xl);
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
+}
+
+.pageActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-s);
 }

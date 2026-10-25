@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy import (
     JSON,
@@ -38,7 +39,7 @@ class UserRow(Base):
         {"extend_existing": True},
     )
 
-    id: Mapped[Uuid] = mapped_column(Uuid, primary_key=True)
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     username: Mapped[str | None] = mapped_column(String, nullable=True)
     email: Mapped[str | None] = mapped_column(String, nullable=True)
     first_name: Mapped[str | None] = mapped_column(String, nullable=True)

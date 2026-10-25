@@ -41,6 +41,7 @@ import httpx
 import pytest
 from control_plane_backend.app.dependencies import get_application_container_from_app
 from control_plane_backend.config.models import (
+    ManagedAgentFieldSpec,
     ManagedAgentTuning,
     RuntimeCatalogSourceConfig,
 )
@@ -708,6 +709,62 @@ async def test_update_rejected_once_template_access_is_revoked(
         )
     assert resp.status_code == 403
     assert store._records[0].display_name == record.display_name  # unchanged
+
+
+def _self_test_record():
+    record = _make_record(
+        template_id="runtime-a:fred.github.self_test",
+        source_agent_id="fred.github.self_test",
+    )
+    record.tuning = record.tuning.model_copy(
+        update={
+            "fields": [
+                ManagedAgentFieldSpec(
+                    key="prompts.system", type="prompt", title="System prompt"
+                )
+            ],
+            "values": {"prompts.system": "Old prompt."},
+        }
+    )
+    return record
+
+
+@pytest.mark.asyncio
+async def test_update_toggles_gate_exempt_instance_without_template_grant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The self-test harness template is never admitted, so no team holds a
+    `can_use` on it; its instance must still be disabled and re-enabled."""
+
+    _wire_rebac(monkeypatch, {"personal": set()})
+    app, store = _setup(monkeypatch, records=[_self_test_record()])
+    url = "/control-plane/v1/teams/personal/agent-instances/instance-1"
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        disabled = await client.patch(url, json={"status": "disabled"})
+        assert disabled.status_code == 200, disabled.text
+        assert store._records[0].enabled is False
+        enabled = await client.patch(url, json={"status": "enabled"})
+    assert enabled.status_code == 200, enabled.text
+    assert store._records[0].enabled is True
+
+
+@pytest.mark.asyncio
+async def test_update_tunes_gate_exempt_instance_prompt_without_template_grant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _wire_rebac(monkeypatch, {"personal": set()})
+    app, store = _setup(monkeypatch, records=[_self_test_record()])
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/agent-instances/instance-1",
+            json={"tuning_field_values": {"prompts.system": "New prompt."}},
+        )
+    assert resp.status_code == 200, resp.text
+    assert store._records[0].tuning.values == {"prompts.system": "New prompt."}
 
 
 @pytest.mark.asyncio

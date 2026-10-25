@@ -1475,6 +1475,9 @@ async def test_user_deletion_removes_what_the_user_has_seen(
     app.include_router(users_api.router)
     attach_application_container(app, container)  # type: ignore[arg-type]
     app.dependency_overrides[get_current_user] = _user
+    app.dependency_overrides[users_api._get_user_preferences_store] = lambda: (
+        SimpleNamespace(delete=_nothing)
+    )
     app.dependency_overrides[get_user_service_dependencies] = lambda: SimpleNamespace(
         configuration=SimpleNamespace(
             security=SimpleNamespace(user_directory="keycloak")

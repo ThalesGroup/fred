@@ -22,8 +22,16 @@ Provider-style adapters for routed chat-model selection.
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import Protocol
+import time
+from typing import TYPE_CHECKING, Protocol
+from uuid import uuid4
+
+import httpx
+
+if TYPE_CHECKING:
+    from .catalog import ModelCatalog
 
 from fred_core.common import ModelConfiguration
 from fred_core.model.factory import get_embeddings, get_model
@@ -74,6 +82,7 @@ _INFO_LOGGED_SOURCES = frozenset(
         ModelSelectionSource.USER_CHOICE,
         ModelSelectionSource.INSTANCE_RECOMMENDATION,
         ModelSelectionSource.TEAM_POLICY,
+        ModelSelectionSource.POD_FALLBACK,
     }
 )
 
@@ -136,13 +145,269 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         *,
         resolver: ModelRoutingResolver,
         provider: ModelProvider | None = None,
+        catalog: ModelCatalog | None = None,
+        catalog_verified: bool = True,
     ) -> None:
-        self._resolver = resolver
+        self._snapshot = (resolver, catalog)
         self._provider = provider or FredCoreModelProvider()
+        self._refresh_lock = asyncio.Lock()
+        self._catalog_verified = catalog_verified
+        self._active_revisions: dict[str, int] = {}
+        self._failed_urls: dict[tuple[str, str | None], float] = {}
+        self._pending_refreshes: dict[
+            tuple[str, str | None, int | None, bool], asyncio.Task[ModelCatalog]
+        ] = {}
+        self._prepared: dict[str, tuple[ModelRoutingResolver, ModelCatalog, str]] = {}
+        self._activation_backups: dict[str, tuple[ModelCatalog, str, int, bool]] = {}
+        self._active_preparation_tokens: dict[str, str] = {}
+
+    @property
+    def catalog(self) -> ModelCatalog | None:
+        return self._snapshot[1]
+
+    @property
+    def active_revision(self) -> int:
+        return max(self._active_revisions.values(), default=0)
+
+    def active_revision_for(self, source_id: str | None) -> int:
+        return self._active_revisions.get(source_id or "", 0)
+
+    @property
+    def _resolver(self) -> ModelRoutingResolver:
+        return self._snapshot[0]
+
+    async def refresh_catalog(
+        self,
+        path: str,
+        *,
+        models_url: str | None = None,
+        source_id: str | None = None,
+        revision: int | None = None,
+        force: bool = False,
+        allow_url_change: bool = True,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> ModelCatalog:
+        from .catalog import load_model_catalog
+
+        async with self._refresh_lock:
+            current = self.catalog or load_model_catalog(path)
+            source = current.discovery_source(source_id)
+            if source is None:
+                raise ValueError(f"Unknown discovery source {source_id!r}")
+            source_id = source.source_id
+            refresh_key = (source_id, models_url)
+            active_url = f"{source.base_url}/models"
+            if not allow_url_change and models_url != active_url:
+                raise ValueError("Refresh changes the active discovery URL")
+            started_revision = self.active_revision_for(source_id)
+            if (
+                not force
+                and revision is not None
+                and revision < self.active_revision_for(source_id)
+                and current is not None
+            ):
+                return current
+            if (
+                not force
+                and models_url == active_url
+                and current is not None
+                and source_id in current.verified_discovery_source_ids
+            ):
+                if revision is not None:
+                    self._active_revisions[source_id] = max(
+                        revision, self.active_revision_for(source_id)
+                    )
+                return current
+            if (
+                not force
+                and time.monotonic() < self._failed_urls.get(refresh_key, 0)
+                and current is not None
+            ):
+                return current
+            task_key = (*refresh_key, revision, allow_url_change)
+            task = self._pending_refreshes.get(task_key)
+            if task is None:
+                task = asyncio.create_task(
+                    current.resolve_discovery_async(
+                        models_url=models_url,
+                        source_id=source_id,
+                        allow_missing_default=True,
+                        transport=transport,
+                    )
+                )
+                self._pending_refreshes[task_key] = task
+        try:
+            catalog = await asyncio.shield(task)
+            resolver = ModelRoutingResolver(catalog.to_policy())
+        except asyncio.CancelledError:
+            if task.cancelled():
+                async with self._refresh_lock:
+                    if self._pending_refreshes.get(task_key) is task:
+                        self._pending_refreshes.pop(task_key)
+            raise
+        except Exception:
+            async with self._refresh_lock:
+                if self._pending_refreshes.get(task_key) is task:
+                    self._pending_refreshes.pop(task_key)
+                    self._failed_urls[refresh_key] = time.monotonic() + 5
+            raise
+        async with self._refresh_lock:
+            if self._pending_refreshes.get(task_key) is task:
+                if revision is not None and revision < self.active_revision_for(
+                    source_id
+                ):
+                    self._pending_refreshes.pop(task_key)
+                    return self.catalog or catalog
+                current = self.catalog
+                if not allow_url_change:
+                    current_source = (
+                        current.discovery_source(source_id)
+                        if current is not None
+                        else None
+                    )
+                    if (
+                        current_source is None
+                        or models_url != f"{current_source.base_url}/models"
+                        or self.active_revision_for(source_id) != started_revision
+                    ):
+                        self._pending_refreshes.pop(task_key)
+                        raise ValueError(
+                            "Active discovery source changed during refresh"
+                        )
+                if current is not None and current is not catalog:
+                    catalog = current.with_discovery_source_from(catalog, source_id)
+                    resolver = ModelRoutingResolver(catalog.to_policy())
+                self._snapshot = (resolver, catalog)
+                self._catalog_verified = True
+                if revision is not None:
+                    self._active_revisions[source_id] = revision
+                self._active_preparation_tokens.pop(source_id, None)
+                self._failed_urls.pop(refresh_key, None)
+                self._pending_refreshes.pop(task_key)
+            return self.catalog or catalog
+
+    async def prepare_catalog(
+        self, path: str, *, models_url: str, source_id: str | None = None
+    ) -> tuple[str, ModelCatalog]:
+        from .catalog import load_model_catalog
+
+        current = self.catalog or load_model_catalog(path)
+        source = current.discovery_source(source_id)
+        if source is None:
+            raise ValueError(f"Unknown discovery source {source_id!r}")
+        catalog = await current.resolve_discovery_async(
+            models_url=models_url,
+            source_id=source.source_id,
+            allow_missing_default=True,
+        )
+        resolver = ModelRoutingResolver(catalog.to_policy())
+        token = uuid4().hex
+        async with self._refresh_lock:
+            if len(self._prepared) >= 16:
+                self._prepared.pop(next(iter(self._prepared)))
+            self._prepared[token] = (resolver, catalog, source.source_id)
+        return token, catalog
+
+    async def activate_prepared_catalog(
+        self,
+        token: str,
+        *,
+        revision: int | None,
+        allow_url_change: bool = True,
+    ) -> ModelCatalog:
+        async with self._refresh_lock:
+            prepared = self._prepared.get(token)
+            if prepared is None:
+                raise ValueError("Prepared model catalog is no longer available")
+            source_id = prepared[2]
+            if revision is None or revision <= self.active_revision_for(source_id):
+                raise ValueError("Prepared catalog revision is stale")
+            current = self.catalog
+            if current is None:
+                raise ValueError("No active model catalog")
+            previous_source = current.discovery_source(source_id)
+            prepared_source = prepared[1].discovery_source(source_id)
+            if not allow_url_change and (
+                previous_source is None
+                or prepared_source is None
+                or previous_source.base_url != prepared_source.base_url
+            ):
+                raise ValueError("Prepared catalog changes the active discovery URL")
+            self._prepared.pop(token)
+            candidate = current.with_discovery_source_from(prepared[1], prepared[2])
+            prepared_resolver = ModelRoutingResolver(candidate.to_policy())
+            self._activation_backups[token] = (
+                current,
+                source_id,
+                self.active_revision_for(source_id),
+                self._catalog_verified,
+            )
+            if len(self._activation_backups) > 16:
+                self._activation_backups.pop(next(iter(self._activation_backups)))
+            self._snapshot = (prepared_resolver, candidate)
+            self._catalog_verified = True
+            self._active_revisions[source_id] = revision
+            self._active_preparation_tokens[source_id] = token
+            self._failed_urls = {
+                key: deadline
+                for key, deadline in self._failed_urls.items()
+                if key[0] != source_id
+            }
+            for key in tuple(self._pending_refreshes):
+                if key[0] == source_id:
+                    self._pending_refreshes.pop(key)
+            return candidate
+
+    async def rollback_prepared_catalog(
+        self, token: str, *, allow_url_change: bool = True
+    ) -> ModelCatalog:
+        async with self._refresh_lock:
+            previous = self._activation_backups.get(token)
+            if previous is not None and not allow_url_change:
+                current = self.catalog
+                current_source = (
+                    current.discovery_source(previous[1])
+                    if current is not None
+                    else None
+                )
+                previous_source = previous[0].discovery_source(previous[1])
+                if (
+                    current_source is None
+                    or previous_source is None
+                    or current_source.base_url != previous_source.base_url
+                ):
+                    raise ValueError("Rollback changes the active discovery URL")
+            self._activation_backups.pop(token, None)
+            if (
+                previous is not None
+                and self._active_preparation_tokens.get(previous[1]) == token
+            ):
+                current = self.catalog
+                if current is None:
+                    raise ValueError("No active model catalog")
+                catalog = current.with_discovery_source_from(previous[0], previous[1])
+                self._snapshot = (ModelRoutingResolver(catalog.to_policy()), catalog)
+                self._active_revisions[previous[1]] = previous[2]
+                self._catalog_verified = previous[3] or bool(
+                    catalog.verified_discovery_source_ids
+                )
+                self._active_preparation_tokens.pop(previous[1], None)
+                for key in tuple(self._pending_refreshes):
+                    if key[0] == previous[1]:
+                        self._pending_refreshes.pop(key)
+            current = self.catalog
+            if current is None:
+                raise ValueError("No active model catalog")
+            return current
 
     def with_provider(self, provider: ModelProvider) -> RoutedChatModelFactory:
         """Same routing, models built by `provider` (a pod serving extra providers)."""
-        return RoutedChatModelFactory(resolver=self._resolver, provider=provider)
+        return RoutedChatModelFactory(
+            resolver=self._resolver,
+            provider=provider,
+            catalog=self.catalog,
+            catalog_verified=self._catalog_verified,
+        )
 
     def _chat_profile(
         self, profile_id: str | None
@@ -268,7 +533,11 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         # `model.name`: siblings on one gateway share that wire name.
         capability_id = selection.capability_id
         if (
-            selection.source != ModelSelectionSource.PLATFORM_BINDING
+            selection.source
+            not in {
+                ModelSelectionSource.PLATFORM_BINDING,
+                ModelSelectionSource.POD_FALLBACK,
+            }
             and binding.usable_model_ids is not None
         ):
             if capability_id not in binding.usable_model_ids:
@@ -409,22 +678,62 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                 )
             )
 
+        user_choice = self._accepted_choice(
+            binding.runtime_context.chat_profile_id, binding, level="user_choice"
+        )
+        recommendation = self._accepted_choice(
+            binding.recommended_chat_profile_id,
+            binding,
+            level="instance_recommendation",
+        )
+        removed = binding.confirmed_removed_chat_profiles
+        if definition.agent_id not in self._resolver.agent_overrides_for(capability):
+            candidates = (
+                (binding.runtime_context.chat_profile_id, user_choice),
+                (binding.recommended_chat_profile_id, recommendation),
+                (binding.runtime_context.chat_default_profile_id, None),
+            )
+            for candidate, accepted in candidates:
+                if accepted is not None:
+                    break
+                if candidate is None:
+                    continue
+                removed_capability_id = removed.get(candidate)
+                if removed_capability_id is None:
+                    continue
+                if removed_capability_id in binding.team_disabled_model_ids:
+                    continue
+                if (
+                    binding.usable_model_ids is not None
+                    and removed_capability_id not in binding.usable_model_ids
+                ):
+                    continue
+                return self._pod_fallback_selection(binding, candidate)
+
         resolution = resolve_effective_chat_profile(
             agent_id=definition.agent_id,
             pod_agent_chat_profile_overrides=self._resolver.agent_overrides_for(
                 capability
             ),
-            pod_default_chat_profile_id=self._resolver.default_profile_id_for(
-                capability
+            pod_default_chat_profile_id=(
+                binding.pod_chat_default_profile_id
+                if binding.pod_chat_default_profile_id is not None
+                and (
+                    binding.pod_chat_default_profile_id in removed
+                    or (
+                        (
+                            override := self._resolver.profile_or_none(
+                                binding.pod_chat_default_profile_id
+                            )
+                        )
+                        is not None
+                        and override.capability == capability
+                    )
+                )
+                else self._resolver.default_profile_id_for(capability)
             ),
-            user_chat_profile_id=self._accepted_choice(
-                binding.runtime_context.chat_profile_id, binding, level="user_choice"
-            ),
-            instance_chat_profile_id=self._accepted_choice(
-                binding.recommended_chat_profile_id,
-                binding,
-                level="instance_recommendation",
-            ),
+            user_chat_profile_id=user_choice,
+            instance_chat_profile_id=recommendation,
             team_chat_default_profile_id=binding.runtime_context.chat_default_profile_id,
         )
         if resolution is None:
@@ -433,6 +742,16 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             raise ValueError(
                 f"No default profile configured for capability={capability.value!r}."
             )
+
+        if (
+            resolution.origin
+            in (
+                ChatProfileOrigin.POD_AGENT_OVERRIDE,
+                ChatProfileOrigin.POD_DEFAULT,
+            )
+            and resolution.profile_id in removed
+        ):
+            return self._pod_fallback_selection(binding, resolution.profile_id)
 
         profile = self._resolver.profile_or_none(resolution.profile_id)
         team_origin = resolution.origin is ChatProfileOrigin.TEAM_DEFAULT
@@ -475,6 +794,45 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             capability_id=profile.capability_id,
         )
 
+    def _pod_fallback_selection(
+        self, binding: BoundRuntimeContext, removed_profile_id: str
+    ) -> ModelSelection:
+        discovered_ids = (
+            set(self.catalog.discovered_profile_ids)
+            if self.catalog is not None
+            else set()
+        )
+        profile = None
+        for fallback_profile_id in (
+            binding.pod_chat_fallback_profile_id,
+            self._resolver.policy.default_profile_by_capability.get(
+                ModelCapability.CHAT
+            ),
+        ):
+            candidate = (
+                self._resolver.profile_or_none(fallback_profile_id)
+                if fallback_profile_id is not None
+                else None
+            )
+            if (
+                candidate is not None
+                and candidate.capability == ModelCapability.CHAT
+                and fallback_profile_id not in discovered_ids
+            ):
+                profile = candidate
+                break
+        if profile is None:
+            raise ValueError(
+                f"Chat profile {removed_profile_id!r} was removed and no manual fallback is available for this pod"
+            )
+        return ModelSelection(
+            source=ModelSelectionSource.POD_FALLBACK,
+            capability=ModelCapability.CHAT,
+            profile_id=profile.profile_id,
+            model=profile.model.model_copy(deep=True),
+            capability_id=profile.capability_id,
+        )
+
     def _accepted_choice(
         self, profile_id: str | None, binding: BoundRuntimeContext, *, level: str
     ) -> str | None:
@@ -485,7 +843,9 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         if profile_id is None:
             return None
         profile = self._resolver.profile_or_none(profile_id)
-        if profile is None or profile.capability != ModelCapability.CHAT:
+        if profile_id in binding.confirmed_removed_chat_profiles:
+            reason = "profile absent from the latest discovery inventory"
+        elif profile is None or profile.capability != ModelCapability.CHAT:
             reason = "unknown or non-chat profile"
         elif (
             binding.usable_model_ids is not None

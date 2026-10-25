@@ -436,7 +436,8 @@ class MetadataService:
             tag_ids = metadata.tags.tag_ids or []
             if new_tag_id not in tag_ids:
                 previous_tag_ids = set(tag_ids)
-                tag_ids.append(new_tag_id)
+                tag_ids = [*tag_ids, new_tag_id]
+                await self._sync_vector_tag_ids(metadata, tag_ids)
                 metadata.tags.tag_ids = tag_ids
                 metadata.identity.modified = datetime.now(timezone.utc)
                 metadata.identity.last_modified_by = user.uid
@@ -462,8 +463,18 @@ class MetadataService:
                 await self._set_tag_as_parent_in_rebac(new_tag_id, metadata.document_uid, actor_uid=user.uid)
 
         except Exception as e:
-            logger.error(f"Error updating retrievable flag for {metadata.document_name}: {e}")
-            raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
+            logger.error(f"Failed to add tag '{new_tag_id}' to document '{metadata.document_name}': {e}")
+            raise MetadataUpdateError(f"Failed to add tag: {e}")
+
+    async def _sync_vector_tag_ids(self, metadata: DocumentMetadata, tag_ids: list[str]) -> None:
+        """Search pre-filters chunks on their copied folder ids. Written before the
+        metadata save so a vector failure leaves the membership change undone;
+        every failure surfaces, and a retry re-applies both writes."""
+        if ProcessingStage.VECTORIZED not in metadata.processing.stages:
+            return
+        if self.vector_store is None:
+            self.vector_store = ApplicationContext.get_instance().get_vector_store()
+        await asyncio.to_thread(self.vector_store.set_document_tag_ids, document_uid=metadata.document_uid, tag_ids=tag_ids)
 
     async def remove_tag_id_from_document(self, user: KeycloakUser, metadata: DocumentMetadata, tag_id_to_remove: str) -> None:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id_to_remove)
@@ -530,6 +541,7 @@ class MetadataService:
                 # TODO: remove all rebac relations for this document
 
             else:
+                await self._sync_vector_tag_ids(metadata, new_ids)
                 metadata.identity.modified = datetime.now(timezone.utc)
                 metadata.identity.last_modified_by = user.uid
                 # Save and release the tag owner that no longer holds this document,
@@ -729,34 +741,21 @@ class MetadataService:
             if not metadata:
                 raise MetadataNotFound(f"Document '{document_uid}' not found.")
 
-            # 1) Update metadata-store view of retrievability
+            # Search filters on the chunks' copy of the flag, so apply it there first: a
+            # failure (or a store without toggle support) fails the request before
+            # anything is persisted. The toggle is idempotent, so a retry converges.
+            if ProcessingStage.VECTORIZED in metadata.processing.stages:
+                if self.vector_store is None:
+                    self.vector_store = ApplicationContext.get_instance().get_vector_store()
+                await asyncio.to_thread(self.vector_store.set_document_retrievable, document_uid=document_uid, value=value)
+                logger.info("[VECTOR] Updated retrievable=%s in vector index for document '%s'.", value, document_uid)
+
             metadata.source.retrievable = value
             metadata.identity.modified = datetime.now(timezone.utc)
             metadata.identity.last_modified_by = modified_by
 
             await self.metadata_store.save_metadata(metadata)
             logger.info(f"[METADATA] Set retrievable={value} for document '{document_uid}' by '{modified_by}'")
-
-            # 2) If the document was vectorized, reflect the toggle in the vector index
-            # to make the change effective immediately in search results, without deleting vectors.
-            try:
-                if ProcessingStage.VECTORIZED in metadata.processing.stages:
-                    if self.vector_store is None:
-                        self.vector_store = ApplicationContext.get_instance().get_vector_store()
-                    try:
-                        self.vector_store.set_document_retrievable(document_uid=document_uid, value=value)
-                        logger.info(
-                            "[VECTOR] Updated retrievable=%s in vector index for document '%s'.",
-                            value,
-                            document_uid,
-                        )
-                    except NotImplementedError:
-                        logger.info(
-                            "[VECTOR] Vector store does not support retrievable toggling; vectors unchanged for document '%s'.",
-                            document_uid,
-                        )
-            except Exception as ve:
-                logger.warning(f"[VECTOR] Could not reflect retrievable toggle in vector index for '{document_uid}': {ve}")
         except Exception as e:
             logger.error(f"Error updating retrievable flag for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
@@ -815,8 +814,8 @@ class MetadataService:
         await self.metadata_store.save_metadata(metadata)
         logger.info(f"[METADATA] Renamed document '{document_uid}' from '{old_name}' to '{new_name}' by '{modified_by}'")
 
-        # Best-effort vector sync, same shape as update_document_retrievable above:
-        # the Postgres write is authoritative and already succeeded; a vector store
+        # Best-effort vector sync (unlike update_document_retrievable, which search
+        # depends on): the Postgres write is authoritative and already succeeded; a vector store
         # that can't (or doesn't need to) reflect the change never fails the request.
         # Offloaded to a thread: every concrete store's set_document_name is a
         # synchronous, blocking client call (opensearchpy/chromadb/clickhouse_connect/
@@ -1569,6 +1568,22 @@ class MetadataService:
             logger.warning("[AUDIT] Failed to count vectors for %s: %s", document_uid, e)
             return None
 
+    def _session_scoped_vector_uids(self, candidate_uids: set[str]) -> set[str]:
+        # Chat attachments are vector-only by design, so they are not corpus orphans.
+        # Only a positive classification hides a UID; unsupported or failed lookups keep it reported.
+        store = self._ensure_vector_store()
+        if store is None:
+            return set()
+
+        session_uids: set[str] = set()
+        for document_uid in sorted(candidate_uids):
+            try:
+                if store.is_session_scoped_document(document_uid):
+                    session_uids.add(document_uid)
+            except Exception as e:
+                logger.warning("[AUDIT] Could not classify %s as a session attachment: %s", document_uid, e)
+        return session_uids
+
     async def audit_stores(self, user: KeycloakUser) -> StoreAuditReport:
         """
         Scan metadata, content, and vector stores to surface orphan or partial data.
@@ -1588,6 +1603,8 @@ class MetadataService:
         vector_ids = self._list_vector_document_uids()
         content_ids = self._list_content_document_uids()
         all_ids = sorted(metadata_ids | vector_ids | content_ids)
+        vector_only_ids = vector_ids - metadata_ids
+        session_ids = await asyncio.to_thread(self._session_scoped_vector_uids, vector_only_ids) if vector_only_ids else set()
 
         anomalies: list[StoreAuditFinding] = []
         for doc_uid in all_ids:
@@ -1598,7 +1615,7 @@ class MetadataService:
             issues: list[str] = []
 
             if not in_metadata:
-                if in_vector:
+                if in_vector and doc_uid not in session_ids:
                     issues.append("orphan_vectors")
                 if in_content:
                     issues.append("orphan_content")
