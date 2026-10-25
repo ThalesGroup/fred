@@ -94,7 +94,8 @@ class CodeSandboxCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel])
                 name="execute_code",
                 description=(
                     "Run a short Bash script in an isolated sandbox. "
-                    "For a multiline script, start with one short # comment "
+                    "Start every script, including a single Bash command, "
+                    "with one short # comment "
                     "describing the intended action in the user's language, "
                     "without claiming a result. It appears in the activity trace. "
                     "The first executable line must be a shell command, not a Python "

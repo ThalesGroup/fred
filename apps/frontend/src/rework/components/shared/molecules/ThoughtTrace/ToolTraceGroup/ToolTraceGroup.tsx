@@ -15,13 +15,29 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
-import type { TraceDisplayItem } from "@rework/utils/traceGrouping";
+import type { TraceDisplayItem, TraceGroupRule } from "@rework/utils/traceGrouping";
 import { isCancelledByUser, statusForEntry, traceEntryKey, type ToolEntry } from "@rework/utils/traceUtils";
 import { ReasoningRow } from "../ReasoningRow/ReasoningRow";
 import { useTraceDrawer } from "../traceDrawerContext";
 import styles from "./ToolTraceGroup.module.css";
 
 type Group = Extract<TraceDisplayItem, { kind: "group" }>;
+type Preview = ReturnType<TraceGroupRule["preview"]>;
+
+function previewText(preview: Preview): string {
+  return typeof preview === "string" ? preview : [preview.label, preview.value].filter(Boolean).join(" - ");
+}
+
+function previewContent(preview: Preview) {
+  if (typeof preview === "string") return preview;
+  return (
+    <>
+      {preview.label && <span className={styles.previewLabel}>{preview.label}</span>}
+      {preview.label && preview.value && <span className={styles.previewSeparator}> - </span>}
+      {preview.value && <code className={styles.previewValue}>{preview.value}</code>}
+    </>
+  );
+}
 
 export function ToolTraceGroup({
   group,
@@ -46,6 +62,7 @@ export function ToolTraceGroup({
         ? "error"
         : "ok";
   const preview = current ? group.rule.preview(current.entry) : "";
+  const spokenPreview = previewText(preview);
   const spokenStatus =
     status === "pending"
       ? t("rework.chatTrace.toolStatus.running")
@@ -64,7 +81,7 @@ export function ToolTraceGroup({
         type="button"
         className={styles.heading}
         aria-expanded={expanded}
-        aria-label={`${group.index}. ${t(group.rule.titleKey)}. ${t(group.rule.countKey, { count: group.count })}. ${spokenStatus}${preview ? `. ${preview}` : ""}`}
+        aria-label={`${group.index}. ${t(group.rule.titleKey)}. ${t(group.rule.countKey, { count: group.count })}. ${spokenStatus}${spokenPreview ? `. ${spokenPreview}` : ""}`}
         onClick={() => setExpanded((value) => !value)}
       >
         <span className={styles.marker} aria-hidden="true">
@@ -73,7 +90,7 @@ export function ToolTraceGroup({
         </span>
         <span className={styles.title}>{t(group.rule.titleKey)}</span>
         <span className={styles.count}>{t(group.rule.countKey, { count: group.count })}</span>
-        {preview && <span className={styles.preview}>{preview}</span>}
+        {spokenPreview && <span className={styles.preview}>{previewContent(preview)}</span>}
         <Icon category="outlined" type={expanded ? "expand_less" : "expand_more"} />
       </button>
       {expanded && (
@@ -95,6 +112,7 @@ export function ToolTraceGroup({
             const cancelled = isCancelledByUser(entry);
             const itemLabel = group.rule.itemLabel(entry);
             const itemPreview = group.rule.preview(entry);
+            const itemPreviewText = previewText(itemPreview);
             const statusText =
               childStatus === "ok"
                 ? t("rework.chatTrace.toolStatus.success")
@@ -110,12 +128,12 @@ export function ToolTraceGroup({
                 type="button"
                 key={traceEntryKey(entry)}
                 className={styles.child}
-                aria-label={[itemLabel, itemPreview, statusText].filter(Boolean).join(". ")}
+                aria-label={[itemLabel, itemPreviewText, statusText].filter(Boolean).join(". ")}
                 onClick={() => openTrace(entry)}
               >
                 <span className={`${styles.childDot} ${styles[`dot_${childStatus}`]}`} aria-hidden="true" />
                 {itemLabel && <span className={styles.childTitle}>{itemLabel}</span>}
-                {itemPreview && <span className={styles.childPreview}>{itemPreview}</span>}
+                {itemPreviewText && <span className={styles.childPreview}>{previewContent(itemPreview)}</span>}
                 {childStatus !== "ok" && <span className={styles.childStatus}>{statusText}</span>}
               </button>
             );

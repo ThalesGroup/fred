@@ -187,6 +187,7 @@ describe("ThoughtTrace code groups", () => {
     expect(groups()[0].textContent).toContain("python - <<'PY' from pypdf import PdfReader");
     expect(groups()[0].textContent).toContain("for page in reader.pages: print(page) PY");
     expect(groups()[0].textContent).not.toContain("\n");
+    expect(groups()[0].querySelector("code")?.textContent).toContain("for page in reader.pages: print(page) PY");
     act(() => groups()[0].click());
     const child = [...container.querySelectorAll("button")].find((button) =>
       button.textContent?.includes("python - <<'PY' from pypdf import PdfReader"),
@@ -212,6 +213,18 @@ describe("ThoughtTrace code groups", () => {
   it("accepts a leading comment without a space after the hash", () => {
     renderTrace([call("c1", "execute_code", "#Search report\npython - <<'PY'\nprint(42)\nPY", 1)]);
     expect(groups()[0].textContent).toContain("Search report - python - <<'PY' print(42) PY");
+  });
+
+  it("separates Bash intent from the formatted command in the heading and row", () => {
+    renderTrace([call("c1", "execute_code", "# Find the requested CSV\nfind /inputs -name '*.csv'", 1)]);
+    const heading = groups()[0];
+    expect(heading.textContent).toContain("Find the requested CSV - find /inputs -name '*.csv'");
+    expect(heading.querySelector("code")?.textContent).toBe("find /inputs -name '*.csv'");
+    act(() => heading.click());
+    const row = [...container.querySelectorAll("button")].find(
+      (button) => button !== heading && button.textContent?.includes("Find the requested CSV"),
+    );
+    expect(row?.querySelector("code")?.textContent).toBe("find /inputs -name '*.csv'");
   });
 
   it("keeps the command count and current intent in the group heading", () => {

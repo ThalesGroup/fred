@@ -518,7 +518,7 @@ _(none)_
 
 #### Resolved
 
-- **Sandbox command previews (2026-10-25)** - The group heading retains the command count and active command preview. A short leading shell comment describes intent, followed by the submitted code in source order with line breaks replaced by spaces. The heading and child row stay on one line and end with `...` when the preview is too long. The full script and result remain in the tool detail.
+- **Sandbox command previews (2026-10-25)** - The tool asks for a short intent comment before every execution, including a single Bash command. The group heading retains the command count and active command preview. A leading comment appears as an ordinary label; the submitted command appears beside it in a distinct monospace code surface, with line breaks replaced by spaces. The heading and child row stay on one line and end with `...` when the preview is too long. On a narrow heading, only the command remains visible; its accessible name and the expanded row retain the intent. The full script and result remain in the tool detail.
 
 - **Reasoning rows still repeated a rephrased preamble (2026-09-14, #2666)** — the fix below
   only trimmed sentences identical character for character to the _previous_ block. Models

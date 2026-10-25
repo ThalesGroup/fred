@@ -22,7 +22,7 @@ export type TraceGroupRule = {
   countKey: string;
   matches: (entry: ToolEntry) => boolean;
   itemLabel: (entry: ToolEntry) => string;
-  preview: (entry: ToolEntry) => string;
+  preview: (entry: ToolEntry) => string | { label: string; value: string };
 };
 
 export type TraceDisplayItem =

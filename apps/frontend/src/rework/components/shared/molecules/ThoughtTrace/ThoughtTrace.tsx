@@ -73,7 +73,7 @@ function useSummaryLabel(summary: TraceSummary): string {
 /** Stable empty identity, so the collapsed memo never yields a new array. */
 const EMPTY_ROWS: TraceRow[] = [];
 
-function codePreview(code: string): string {
+function codePreview(code: string): { label: string; value: string } {
   const lines = code
     .split(/\r?\n/)
     .map((line) => line.trim().replace(/\s+/g, " "))
@@ -83,10 +83,10 @@ function codePreview(code: string): string {
   const first = visibleLines[0] ?? "";
   const comment = first.startsWith("#") && !first.startsWith("#!") ? first.slice(1).trim() : "";
   const intent = comment.length > 60 ? `${comment.slice(0, 57)}...` : comment;
-  const preview = comment
-    ? `${intent}${visibleLines.length > 1 ? ` - ${visibleLines.slice(1).join(" ")}` : ""}`
-    : visibleLines.join(" ");
-  return preview.length > 320 ? `${preview.slice(0, 317).trimEnd()}...` : preview;
+  const command = (comment ? visibleLines.slice(1) : visibleLines).join(" ");
+  const value =
+    command.length > 320 - intent.length ? `${command.slice(0, 317 - intent.length).trimEnd()}...` : command;
+  return { label: intent, value };
 }
 
 const GROUP_RULES: TraceGroupRule[] = [

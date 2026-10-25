@@ -65,6 +65,7 @@ def test_capability_boot_and_tool_schema() -> None:
     ]
     tool = capability.tools(context(FakeSandbox()))[0]
     assert set(tool.args_schema.model_json_schema()["properties"]) == {"code"}
+    assert "including a single Bash command" in tool.description
     with pytest.raises(RuntimeError, match="configured execution broker"):
         capability.tools(context(None))
 
