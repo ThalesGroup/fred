@@ -486,9 +486,10 @@ def _point_problem(at: str, point: PlanPoint, kind: str) -> List[Tuple[str, str]
 
 
 def axis_title(title: Optional[str], unit: Optional[str]) -> str:
-    """``Price (€)``: an axis title with its unit."""
+    """``Price (€)``: an axis title with its unit, unless it names it already."""
     title, unit = (title or "").strip(), (unit or "").strip()
-    return f"{title} ({unit})" if title and unit else title
+    named = unit and re.search(rf"(?<!\w){re.escape(unit)}(?!\w)", title, re.I)
+    return f"{title} ({unit})" if title and unit and not named else title
 
 
 def _xy_fit(
@@ -731,17 +732,19 @@ def intent_notes(chart: PlanChart) -> List[Tuple[str, str]]:
 
 def _arranged(chart: PlanChart) -> PlanChart:
     """The chart in the order ``sort`` asks; the plan itself keeps the order written."""
-    if chart.sort not in ("desc", "asc") or chart.type in _UNSORTED:
-        return chart
     count = len(chart.categories)
-    if chart.type in STACKED_TYPES:
-        keys = [sum(s.values[i] or 0 for s in chart.series) for i in range(count)]
-    else:
-        keys = [v or 0 for v in chart.series[0].values]
-    order = sorted(range(count), key=keys.__getitem__, reverse=chart.sort == "desc")
+    order = list(range(count))
+    if chart.sort in ("desc", "asc") and chart.type not in _UNSORTED:
+        if chart.type in STACKED_TYPES:
+            keys = [sum(s.values[i] or 0 for s in chart.series) for i in range(count)]
+        else:
+            keys = [v or 0 for v in chart.series[0].values]
+        order.sort(key=keys.__getitem__, reverse=chart.sort == "desc")
     if chart.type in _HORIZONTAL:
         # A bar chart draws its first category at the bottom: the first in order goes last.
         order.reverse()
+    if order == list(range(count)):
+        return chart
     return chart.model_copy(
         update={
             "categories": [chart.categories[i] for i in order],
@@ -763,6 +766,10 @@ def _decimals(values: Sequence[Optional[float]]) -> int:
     )
 
 
+# A unit that is a word (accidents, jours), not a symbol (k€, m², kWh, %).
+_WORD_UNIT = re.compile(r"[^\W\d_A-Z]{3,}(?: [^\W\d_A-Z]+)*")
+
+
 def number_format(chart: PlanChart, axis: str = "y", ticks: bool = False) -> str:
     """``#,##0.0" M€"``: the data's own decimals (at most 2), then its unit; on a
     scatter or bubble, those of one axis. ``ticks``: an axis's, whose 0 reads "0"."""
@@ -775,6 +782,8 @@ def number_format(chart: PlanChart, axis: str = "y", ticks: bool = False) -> str
     decimals = _decimals(values)
     base = "#,##0" + ("." + "0" * decimals if decimals else "")
     unit = (unit or "").replace('"', "").strip()
+    if ticks and _WORD_UNIT.fullmatch(unit):
+        unit = ""  # "1 accidents" on every tick: a counted word belongs in the title
     shown = base
     if unit:
         shown = f'{base}"{unit}"' if unit == "%" else f'{base}" {unit}"'

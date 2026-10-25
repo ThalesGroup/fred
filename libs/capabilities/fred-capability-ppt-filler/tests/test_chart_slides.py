@@ -549,8 +549,10 @@ def test_each_type_builds_a_native_chart(builtin, kind, xl_type):
     result = _render(template, inventory, _chart_slide({**REVENUE, "type": kind}))
     chart = _chart(result)
     assert chart.chart_type == xl_type
-    assert list(chart.plots[0].categories) == ["Q1", "Q2", "Q3", "Q4"]
-    assert list(chart.plots[0].series[0].values) == [12, 15, 18, 21]
+    # A bar chart draws its first category at the bottom: sent reversed, Q1 reads on top.
+    step = -1 if kind == "bar" else 1
+    assert list(chart.plots[0].categories) == ["Q1", "Q2", "Q3", "Q4"][::step]
+    assert list(chart.plots[0].series[0].values) == [12, 15, 18, 21][::step]
 
 
 def test_colours_and_fonts_come_from_the_theme(builtin):
@@ -1594,3 +1596,34 @@ def test_a_radar_resent_with_fewer_series_names_the_ones_left_out():
     # Shown on another chart (a split), a series is not left out.
     other = slide(["C", "D"]).model_copy(update={"title": "Suite"})
     assert charts.left_out_series(sent, [slide(["Nous", "A", "B"]), other]) == []
+
+
+@pytest.mark.parametrize(
+    "title, unit, shown",
+    [
+        ("Surface (m²)", "m²", "Surface (m²)"),
+        ("Coût en €/m²", "€/m²", "Coût en €/m²"),
+        ("Coût au m²", "€/m²", "Coût au m² (€/m²)"),
+        ("Heures", "h", "Heures (h)"),
+    ],
+)
+def test_an_axis_title_naming_its_unit_does_not_repeat_it(title, unit, shown):
+    assert charts.axis_title(title, unit) == shown
+
+
+def test_a_word_unit_stays_off_the_ticks():
+    def chart(unit: str) -> PlanChart:
+        return PlanChart.model_validate(
+            {
+                "type": "bar",
+                "categories": ["2024", "2025"],
+                "series": [{"name": "S", "values": [7, 3]}],
+                "unit": unit,
+            }
+        )
+
+    # "1 accidents" on every tick: the word belongs in the title, values keep it.
+    assert charts.number_format(chart("accidents"), ticks=True) == "#,##0"
+    assert charts.number_format(chart("accidents")) == '#,##0" accidents"'
+    for symbol in ("k€", "m²", "kWh", "%"):
+        assert symbol in charts.number_format(chart(symbol), ticks=True)

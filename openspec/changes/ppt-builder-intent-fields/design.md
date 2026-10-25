@@ -33,7 +33,7 @@ Facts (drafted at `4d0057e41`; phase A facts re-checked at `25727177d`, phase Bâ
 
 Default `given`. Reorders categories and every series' values together, stably, by the first series' values (one series, clustered types) or by the category totals (`stacked_column`). Not applied to `line` and `area` (their categories are usually time): `intent_not_shown` with "a line chart keeps its categories' order". `pie`/`doughnut`: sorted slices start at 12 o'clock clockwise.
 
-Bar order: a `bar` chart draws its first category at the bottom. With `sort` set, the sorted order is fed to the chart reversed, so the first of the order (the largest for `desc`) is on top; the axis is not touched. Without `sort` (or `given`), a bar chart is drawn exactly as before: no existing chart changes (owner request, 2026-10-14; the draft's `reverse_order` on every bar chart was dropped). Effort **S**.
+Bar order: a `bar` chart draws its first category at the bottom. With `sort` set, the sorted order is fed to the chart reversed, so the first of the order (the largest for `desc`) is on top; the axis is not touched. Without `sort` (or `given`), a bar chart is drawn exactly as before: no existing chart changes (owner request, 2026-10-14; the draft's `reverse_order` on every bar chart was dropped). Superseded 2026-10-25 (owner, after the live chart eval): an unsorted bar chart is fed reversed too, so it reads top to bottom. Effort **S**.
 
 ### D3. `chart.highlight: <category or series name>`
 

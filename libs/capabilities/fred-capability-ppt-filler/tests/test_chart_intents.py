@@ -159,7 +159,8 @@ def test_a_chart_without_intents_is_drawn_as_before(builtin):
     assert _points(column) == {} and "a:alpha" not in _xml(column._chartSpace)
     bar = _chart(result, 2)
     assert bar.category_axis.reverse_order is False
-    assert list(bar.plots[0].categories) == ["Q1", "Q2", "Q3", "Q4"]
+    # Drawn from the bottom up, the order written reads top to bottom.
+    assert list(bar.plots[0].categories) == ["Q4", "Q3", "Q2", "Q1"]
     assert _intent_notes(result) == []
 
 

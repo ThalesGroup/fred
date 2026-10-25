@@ -54,6 +54,7 @@
 - [x] 9.5 Frontend: `chart_shows_shares` in `DeckSummaryButton.tsx` and `locales/{en,fr}`
 - [x] 9.6 `charts.pie_show`: `both` on values in `%` shows each value once (live eval printed "45%" and "45 %"). Test: `test_chart_slides.py::test_a_pie_of_percentages_asked_both_prints_each_value_once`
 - [x] 9.7 `charts.over_cap` / `charts.left_out_series` (`tools.py` turn state): series the model dropped after a series-cap refusal (radar 3, others 4) are named in the delivery notes. Tests: `test_story_render.py::test_series_dropped_to_meet_the_cap_are_named_in_the_delivery`, `test_chart_slides.py::test_a_radar_resent_with_fewer_series_names_the_ones_left_out`
+- [x] 9.8 Cosmetics from the live chart eval: an axis title naming its unit does not repeat it (`axis_title`); a word unit ("accidents") stays off the tick labels (`number_format(ticks=True)`); every bar chart is fed reversed so its first category reads on top (`_arranged`). Tests: `test_chart_slides.py::test_an_axis_title_naming_its_unit_does_not_repeat_it`, `::test_a_word_unit_stays_off_the_ticks`, `::test_each_type_builds_a_native_chart`, `test_chart_intents.py::test_a_chart_without_intents_is_drawn_as_before`
 - Verification: `test_chart_slides.py` (aliases and loose words, default, `labels` still categories, unknown word revision, chart XML per mode, both notes, `chart.show` edit, tool description), `DeckSummaryButton.test.tsx`; evidence PDF of one pie in the three modes
 
 ## Phase B — the template's own example chart (after the owner has tested phase A)
