@@ -323,12 +323,10 @@
 .pendingMessages {
   position: relative;
   z-index: 1;
-  margin: 0 auto;
+  margin: 0 auto var(--spacing-xs);
   border: 1px solid var(--outline-muted);
-  border-bottom: 0;
-  border-radius: var(--radius-s) var(--radius-s) 0 0;
+  border-radius: var(--radius-m);
   background: var(--surface-container-low);
-  padding-bottom: var(--radius-m);
   width: calc(100% - var(--spacing-l) - var(--spacing-l));
   max-width: var(--composer-max-width);
   overflow: visible;
