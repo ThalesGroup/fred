@@ -95,6 +95,7 @@ fiche plutôt que d'effacer les résultats précédents.
 | [F26](#f26-fusion-swift-et-préférences-utilisateur) | Fusion Swift : préférences personnelles en Rust | Implémenté ; validation fonctionnelle à faire | 02.1, A1, carte des sources |
 | [F27](#f27-primitive-de-visibilité-des-chunks) | Primitive Python de périmètre et de vérification des chunks | Implémentée, non branchée ; SQL non exécuté | Hors périmètre arc42 validé |
 | [F28](#f28-requêtes-opensearch-de-la-capacité-document-access) | Requêtes OpenSearch pures de Document Access | Implémentées, non branchées ; rien d'exécuté contre OpenSearch | Hors périmètre arc42 validé |
+| [F29](#f29-liste-sql-des-documents-visibles-dun-périmètre) | Liste SQL des documents visibles d'un périmètre | Implémentée, non branchée ; SQL non exécuté | Hors périmètre arc42 validé |
 
 ## Méthode de consolidation
 
@@ -2711,3 +2712,24 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
   rangs avant vérification SQL ; métadonnée mal typée = erreur de validation.
   Aucune requête jouée contre OpenSearch, aucune validation fonctionnelle, aucun
   commit.
+
+## F29 Liste SQL des documents visibles d'un périmètre
+
+- 2026-10-26 : lecture seule `fred_core/documents/tree.py`, tests
+  `fred_core/tests/documents/test_tree.py` ; `access.py` expose `is_live_document`
+  (règle commune, sans changement de comportement). Objectif : alimenter plus tard
+  `list_document_tree` de Document Access sans Knowledge Flow API. Aucun appelant,
+  rendu, configuration ni connexion.
+- `list_visible_documents` : mêmes documents que `verify_candidates` (vivant +
+  génération publiée, manifest non lu), chemin de dossiers en noms ; dossier
+  retiré, chemin incohérent ou ancêtre sans nom = document écarté. Trois requêtes :
+  espaces, documents (`LIMIT max_rows + 1` pour signaler la troncature), noms des
+  dossiers (sautée s'il n'y en a aucun). Erreur SQL remontée.
+- `make test-one` : `test_tree.py` 18 passés, `test_access.py` 18 passés (inchangé) ;
+  `make code-quality` (fred-core) : sortie 0 après `ruff format` de `tree.py`.
+- Retouche : la requête de documents reprend la règle dans son `WHERE`, en
+  préfiltre seulement (le Python décide toujours) ; sans cela, des documents non
+  inclus pouvaient épuiser `max_rows` et masquer les documents visibles.
+- Limites : requêtes jamais exécutées contre PostgreSQL ; tri des dossiers par identifiants ;
+  `folder.deletion_id` filtré mais jamais posé. Aucune validation fonctionnelle,
+  aucun commit.
