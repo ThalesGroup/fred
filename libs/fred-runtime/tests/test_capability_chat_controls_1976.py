@@ -34,7 +34,6 @@ from typing import Any, Literal
 import pytest
 from conftest import ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
-from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.capabilities import (
     TurnOptionsInvalidError,
     evaluate_chat_controls_batch,
@@ -58,8 +57,8 @@ from pydantic import BaseModel
 # Reuse the #1974 endpoint harness verbatim (app + fake control-plane + registry).
 from test_capability_endpoints_1974 import (
     _app_with_capabilities,
-    _fake_control_plane,
 )
+from weaver_fixtures import managed_payload
 
 pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
 
@@ -268,26 +267,25 @@ def _execute(client: TestClient, turn_options: dict[str, Any]) -> Any:
     return client.post(
         "/pod/v1/agents/execute",
         headers={"Authorization": "Bearer test-token"},
-        json={
-            "agent_instance_id": "instance-cap-1",
-            "input": "hi",
-            "session_id": "cap-session",
-            "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
-            "turn_options": turn_options,
-        },
+        json=managed_payload(
+            {
+                "agent_instance_id": "instance-cap-1",
+                "input": "hi",
+                "session_id": "cap-session",
+                "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
+                "turn_options": turn_options,
+            }
+        ),
     )
 
 
 def test_execute_rejects_invalid_turn_options_with_422(monkeypatch, tmp_path) -> None:
-    monkeypatch.setattr(
-        agent_app_module.httpx,
-        "AsyncClient",
-        _fake_control_plane({"selected_capability_ids": ["scope_probe"]}),
-    )
+    tuning = {"selected_capability_ids": ["scope_probe"]}
     client = _app_with_capabilities(
         tmp_path,
         monkeypatch,
         _ScopeCapability(),
+        tuning=tuning,
         model=ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")]),
         control_plane_url="http://control-plane:8222/control-plane/v1",
     )
@@ -314,15 +312,12 @@ def test_execute_passes_typed_turn_options_to_middleware(monkeypatch, tmp_path) 
             AIMessage(content="done"),
         ]
     )
-    monkeypatch.setattr(
-        agent_app_module.httpx,
-        "AsyncClient",
-        _fake_control_plane({"selected_capability_ids": ["scope_probe"]}),
-    )
+    tuning = {"selected_capability_ids": ["scope_probe"]}
     client = _app_with_capabilities(
         tmp_path,
         monkeypatch,
         _ScopeCapability(),
+        tuning=tuning,
         model=model,
         control_plane_url="http://control-plane:8222/control-plane/v1",
     )

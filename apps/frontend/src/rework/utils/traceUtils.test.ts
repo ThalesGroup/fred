@@ -375,7 +375,6 @@ describe("categorized tool labels", () => {
     }
     const groups = [
       frLabels.mcp.text,
-      frLabels.mcp.opensearchOps,
       frLabels.mcp.prometheusOps,
       frLabels.capabilities.documentAccess,
       frLabels.capabilities.documents,
@@ -400,7 +399,6 @@ describe("categorized tool labels", () => {
     ["write_document", "Rédaction d'un document Word"],
     ["fill_ppt_template", "Création d'une présentation PowerPoint"],
     ["wiki_read_page", "Lecture d'une page du wiki"],
-    ["mcp__knowledge_flow__os_health", "État de santé d'OpenSearch"],
     ["mcp__knowledge_flow__prometheus_query_range_2", "Exécution d'une requête Prometheus sur une période"],
   ])("renders the localized label for %s", (name, expected) => {
     const entry = { kind: "combo" as const, call: toolCallMsg("c1", name) };
@@ -409,7 +407,6 @@ describe("categorized tool labels", () => {
   });
 
   it.each([
-    ["mcp__knowledge_flow__os_health", "mcp.opensearchOps.os_health"],
     ["prometheus_targets", "mcp.prometheusOps.prometheus_targets"],
     ["list_document_tree", "capabilities.documentAccess.list_document_tree"],
     ["write_document", "capabilities.writableDocument.write_document"],
@@ -420,8 +417,8 @@ describe("categorized tool labels", () => {
   });
 
   it("keeps the fallback for a namespaced external MCP tool with the same slug", () => {
-    const entry = { kind: "combo" as const, call: toolCallMsg("c1", "mcp__other__os_health") };
-    expect(entryLabel(entry, translate)).toBe("Os Health");
+    const entry = { kind: "combo" as const, call: toolCallMsg("c1", "mcp__other__prometheus_query") };
+    expect(entryLabel(entry, translate)).toBe("Prometheus Query");
   });
 });
 

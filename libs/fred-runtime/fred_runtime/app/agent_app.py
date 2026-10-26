@@ -762,6 +762,8 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             )
 
         context_dict = request.context.model_dump(mode="json")
+        context_dict["space_id"] = str(authority.binding.space.id)
+        context_dict["agent_instance_id"] = str(authority.binding.agent.instance_id)
         context_dict.setdefault("execution_action", ExecutionGrantAction.EXECUTE.value)
         # RFC AGENT-INVOKE: apply the caller's per-call scope onto the callee's
         # retrieval context. These keys are read back when the callee's
@@ -4174,6 +4176,7 @@ async def _iterate_runtime_event_payloads_inner(
         baggage={
             key: value
             for key, value in {
+                "space_id": ctx.get("space_id"),
                 "agent_instance_id": request.agent_instance_id,
                 "template_agent_id": definition.agent_id,
                 "interrupt_id": resolved_interrupt_id,

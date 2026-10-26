@@ -99,6 +99,10 @@ def test_model_factory_installs_guard(monkeypatch):
     from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
     model = FakeListChatModel(responses=["ok"])
-    monkeypatch.setattr(factory, "_create_model", lambda cfg: model)
+    create_model = Mock(return_value=model)
+    monkeypatch.setattr(factory, "_create_model", create_model)
     assert factory.get_model(None) is model
+    create_model.assert_called_once_with(
+        None, inference_api_key=None, wrap_clients=None
+    )
     assert getattr(ai, "parse_partial_json") is tool_call_chunks._parse_object_fragment

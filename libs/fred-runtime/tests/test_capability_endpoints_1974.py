@@ -63,6 +63,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
 from pydantic import BaseModel
 from test_agent_app import _build_test_config, _EchoAgent
+from weaver_fixtures import INSTANCE_ID, SPACE_ID, create_managed_app, managed_payload
 
 pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
 
@@ -174,7 +175,7 @@ class _ProbeCapability(AgentCapability[_ProbeConfig, _ProbeConfig, EmptyModel]):
 
 
 def _app_with_capabilities(
-    tmp_path, monkeypatch, *capabilities, model=None, **config_kwargs
+    tmp_path, monkeypatch, *capabilities, model=None, tuning=None, **config_kwargs
 ):
     # Offline pods have no models catalog; stub the factory like every other
     # agent_app test does.
@@ -188,10 +189,22 @@ def _app_with_capabilities(
         raising=True,
     )
     definition = _EchoAgent()
-    app = create_agent_app(
-        registry={definition.agent_id: definition},
-        config=_build_test_config(tmp_path, **config_kwargs),
-    )
+    config = _build_test_config(tmp_path, **config_kwargs)
+    registry = {definition.agent_id: definition}
+    if tuning is None:
+        app = create_agent_app(registry=registry, config=config)
+    else:
+        app = create_managed_app(
+            monkeypatch,
+            registry=registry,
+            config=config,
+            tuning={
+                "role": "Echo tool agent",
+                "description": "Echo with capabilities",
+                "mcp_servers": [],
+                **tuning,
+            },
+        )
     client = TestClient(app)
     client.__enter__()  # run lifespan → boot registry on app.state
     for capability in capabilities:
@@ -703,63 +716,18 @@ def test_valid_upload_reaches_capability_and_only_keys_persist(
 # ---------------------------------------------------------------------------
 
 
-class _FakeResponse:
-    def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
-        self._payload = payload
-        self.status_code = status_code
-        self.text = json.dumps(payload)
-        self.reason_phrase = "OK"
-
-    def json(self) -> dict[str, object]:
-        return self._payload
-
-
-def _fake_control_plane(tuning_extra: dict[str, object]):
-    class _FakeAsyncClient:
-        def __init__(self, *args, **kwargs) -> None:
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        async def aclose(self) -> None:
-            return None
-
-        async def get(self, url: str, headers: dict[str, str] | None = None):
-            return _FakeResponse(
-                {
-                    "agent_instance_id": "instance-cap-1",
-                    "template_agent_id": "rags.sample.echo",
-                    "owner_scope": "team",
-                    "owner_team_id": "fredlab",
-                    "enabled": True,
-                    "tuning": {
-                        "role": "Echo tool agent",
-                        "description": "Echo agent with capabilities.",
-                        "tags": [],
-                        "fields": [],
-                        "mcp_servers": [],
-                        **tuning_extra,
-                    },
-                }
-            )
-
-    return _FakeAsyncClient
-
-
 def _execute_managed(client: TestClient, message: str) -> dict[str, Any]:
     response = client.post(
         "/pod/v1/agents/execute",
         headers={"Authorization": "Bearer test-token"},
-        json={
-            "agent_instance_id": "instance-cap-1",
-            "input": message,
-            "session_id": "cap-session",
-            "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
-        },
+        json=managed_payload(
+            {
+                "agent_instance_id": "instance-cap-1",
+                "input": message,
+                "session_id": "cap-session",
+                "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
+            }
+        ),
     )
     assert response.status_code == 200
     return response.json()
@@ -780,25 +748,20 @@ def test_managed_execution_runs_selected_capability_with_typed_config(
             AIMessage(content="Capability run complete."),
         ]
     )
-    monkeypatch.setattr(
-        agent_app_module.httpx,
-        "AsyncClient",
-        _fake_control_plane(
-            {
-                "selected_capability_ids": ["probe_echo"],
-                "capability_config": {
-                    "probe_echo": {
-                        "schema_version": "1.0.0",
-                        "config": {"uppercase": True},
-                    }
-                },
+    tuning = {
+        "selected_capability_ids": ["probe_echo"],
+        "capability_config": {
+            "probe_echo": {
+                "schema_version": "1.0.0",
+                "config": {"uppercase": True},
             }
-        ),
-    )
+        },
+    }
     client = _app_with_capabilities(
         tmp_path,
         monkeypatch,
         _ProbeCapability(),
+        tuning=tuning,
         model=model,
         control_plane_url="http://control-plane:8222/control-plane/v1",
     )
@@ -811,8 +774,8 @@ def test_managed_execution_runs_selected_capability_with_typed_config(
                 "text": "hello",
                 "uppercase": True,
                 "user_id": "alice",
-                "team_id": "fredlab",
-                "agent_instance_id": "instance-cap-1",
+                "team_id": SPACE_ID,
+                "agent_instance_id": INSTANCE_ID,
             }
         ]
     finally:
@@ -833,25 +796,20 @@ def test_managed_execution_with_demo_capability_end_to_end(
             AIMessage(content="Echo done."),
         ]
     )
-    monkeypatch.setattr(
-        agent_app_module.httpx,
-        "AsyncClient",
-        _fake_control_plane(
-            {
-                "selected_capability_ids": ["tracer_echo"],
-                "capability_config": {
-                    "tracer_echo": {
-                        "schema_version": TracerEchoCapability.manifest.version,
-                        "config": {"uppercase": True},
-                    }
-                },
+    tuning = {
+        "selected_capability_ids": ["tracer_echo"],
+        "capability_config": {
+            "tracer_echo": {
+                "schema_version": TracerEchoCapability.manifest.version,
+                "config": {"uppercase": True},
             }
-        ),
-    )
+        },
+    }
     client = _app_with_capabilities(
         tmp_path,
         monkeypatch,
         TracerEchoCapability(),
+        tuning=tuning,
         model=model,
         control_plane_url="http://control-plane:8222/control-plane/v1",
     )
@@ -869,15 +827,12 @@ def test_managed_execution_with_unknown_capability_fails_loudly(
     monkeypatch, tmp_path
 ) -> None:
     model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="never used")])
-    monkeypatch.setattr(
-        agent_app_module.httpx,
-        "AsyncClient",
-        _fake_control_plane({"selected_capability_ids": ["ghost"]}),
-    )
+    tuning = {"selected_capability_ids": ["ghost"]}
     client = _app_with_capabilities(
         tmp_path,
         monkeypatch,
         TracerEchoCapability(),
+        tuning=tuning,
         model=model,
         control_plane_url="http://control-plane:8222/control-plane/v1",
     )

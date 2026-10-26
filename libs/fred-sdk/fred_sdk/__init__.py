@@ -73,7 +73,6 @@ if TYPE_CHECKING:
     # MCP server references
     # ---------------------------------------------------------------------------
     from fred_sdk.authoring.knowledge_flow_mcp import (
-        MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
         MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS,
         MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
         MCPServerRef,
@@ -198,7 +197,6 @@ _LAZY: dict[str, str] = {
     "ui_field": "fred_sdk.authoring.api",
     "inspect_agent": "fred_sdk.authoring.inspection",
     # MCP server references
-    "MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS": "fred_sdk.authoring.knowledge_flow_mcp",
     "MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS": "fred_sdk.authoring.knowledge_flow_mcp",
     "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR": "fred_sdk.authoring.knowledge_flow_mcp",
     "MCPServerRef": "fred_sdk.authoring.knowledge_flow_mcp",
@@ -311,7 +309,6 @@ __all__ = [
     "inspect_agent",
     # MCP server references
     "MCPServerRef",
-    "MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR",
     # Graph authoring

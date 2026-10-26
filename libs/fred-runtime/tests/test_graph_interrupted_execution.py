@@ -47,6 +47,12 @@ from fred_sdk.contracts.runtime import (
 from fred_sdk.graph.runtime import GraphNodeContext
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import create_async_engine
+from weaver_fixtures import (
+    INSTANCE_ID,
+    conversation_provenance,
+    create_managed_app,
+    managed_payload,
+)
 
 pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
 
@@ -511,19 +517,21 @@ async def test_a_step_is_persisted_before_the_next_step_starts(
 def _post(client: Any, **body: Any) -> dict[str, Any]:
     response = client.post(
         "/pod/v1/agents/execute",
-        json={
-            "agent_id": _Agent().agent_id,
-            "session_id": "sess-1",
-            "runtime_context": {"user_id": "alice"},
-            **body,
-        },
+        json=managed_payload(
+            {
+                "agent_id": _Agent().agent_id,
+                "session_id": "sess-1",
+                "runtime_context": {"user_id": "alice"},
+                **body,
+            }
+        ),
     )
     assert response.status_code == 200, response.text
     return response.json()
 
 
 @pytest.fixture
-def _offline_model(monkeypatch: pytest.MonkeyPatch) -> None:
+def _offline_model(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
     from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
     from fred_runtime.app import agent_app as agent_app_module
     from langchain_core.messages import AIMessage
@@ -535,13 +543,16 @@ def _offline_model(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda config: StaticChatModelFactory(model),
     )
 
+    return monkeypatch
 
-def _app_with(definition: Any, tmp_path: Any) -> Any:
-    from fred_runtime.app.agent_app import create_agent_app
+
+def _app_with(definition: Any, tmp_path: Any, monkeypatch) -> Any:
     from test_agent_app import _build_test_config
 
-    return create_agent_app(
-        registry={definition.agent_id: definition}, config=_build_test_config(tmp_path)
+    return create_managed_app(
+        monkeypatch,
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
     )
 
 
@@ -549,8 +560,16 @@ def _lose_run_in_pod() -> Any:
     from fred_runtime.runtime_context import get_runtime_context
 
     checkpointer = get_runtime_context().config.checkpointer
+    assert checkpointer is not None
+    assert asyncio.run(
+        checkpointer.abind_conversation(
+            "sess-1", conversation_provenance(_Agent().agent_id), allow_create=True
+        )
+    )
     asyncio.run(
-        _lose_run_while_publishing(checkpointer, session_id="sess-1", instance=None)
+        _lose_run_while_publishing(
+            checkpointer, session_id="sess-1", instance=INSTANCE_ID
+        )
     )
     return checkpointer
 
@@ -561,7 +580,7 @@ def test_pod_reports_the_interruption_and_keeps_history_untouched(
     from fastapi.testclient import TestClient
     from fred_runtime.runtime_context import get_runtime_context
 
-    with TestClient(_app_with(_Agent(), tmp_path)) as client:
+    with TestClient(_app_with(_Agent(), tmp_path, _offline_model)) as client:
         _lose_run_in_pod()
         reported = _post(client, input="again")
         history = get_runtime_context().config.history_store
@@ -576,7 +595,7 @@ def test_pod_continue_finishes_without_a_user_row(tmp_path, _offline_model) -> N
     from fastapi.testclient import TestClient
     from fred_runtime.runtime_context import get_runtime_context
 
-    with TestClient(_app_with(_Agent(), tmp_path)) as client:
+    with TestClient(_app_with(_Agent(), tmp_path, _offline_model)) as client:
         _lose_run_in_pod()
         reported = _post(client, input="again")
         final = _post(
@@ -594,17 +613,15 @@ def test_pod_continue_finishes_without_a_user_row(tmp_path, _offline_model) -> N
 
 
 def test_pod_refuses_a_continue_another_replica_already_holds(
-    tmp_path: Path, _offline_model: None
+    tmp_path: Path, _offline_model: pytest.MonkeyPatch
 ) -> None:
     from fastapi.testclient import TestClient
 
-    with TestClient(_app_with(_Agent(), tmp_path)) as client:
+    with TestClient(_app_with(_Agent(), tmp_path, _offline_model)) as client:
         checkpointer = _lose_run_in_pod()
         reported = _post(client, input="again")
         publishes = RUNS["publish"]
-        admission = checkpointer.graph_resume_lock.acquire(
-            f"sess-1:{_Agent().agent_id}"
-        )
+        admission = checkpointer.graph_resume_lock.acquire(f"sess-1:{INSTANCE_ID}")
         with asyncio.Runner() as runner:
             runner.run(admission.__aenter__())
             try:
@@ -634,7 +651,7 @@ model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
 mock_pod_infrastructure(MonkeyPatch())
 with patch("fred_runtime.app.agent_app._build_chat_model_factory",
            lambda config: StaticChatModelFactory(model)):
-    with TestClient(t._app_with(t._Agent(), Path(sys.argv[1]))) as client:
+    with TestClient(t._app_with(t._Agent(), Path(sys.argv[1]), MonkeyPatch())) as client:
         t._lose_run_in_pod()
         reported = t._post(client, input="again")
         t.BEHAVIOUR["publish"] = "exit"
@@ -644,7 +661,7 @@ with patch("fred_runtime.app.agent_app._build_chat_model_factory",
 
 
 def test_pod_continues_again_after_its_continuing_process_dies(
-    tmp_path: Path, _offline_model: None
+    tmp_path: Path, _offline_model: pytest.MonkeyPatch
 ) -> None:
     from fastapi.testclient import TestClient
     from test_agent_app import _hitl_claim_rows
@@ -658,7 +675,7 @@ def test_pod_continues_again_after_its_continuing_process_dies(
     )
     assert child.returncode == 9, child.stderr
 
-    with TestClient(_app_with(_Agent(), tmp_path)) as client:
+    with TestClient(_app_with(_Agent(), tmp_path, _offline_model)) as client:
         reported = _post(client, input="again")
         final = _post(
             client,
@@ -676,16 +693,16 @@ def test_pod_continues_again_after_its_continuing_process_dies(
 
 
 def test_pod_continuation_ignores_an_old_permanent_technical_claim(
-    tmp_path: Path, _offline_model: None
+    tmp_path: Path, _offline_model: pytest.MonkeyPatch
 ) -> None:
     from fastapi.testclient import TestClient
     from test_agent_app import _hitl_claim_rows
 
-    with TestClient(_app_with(_Agent(), tmp_path)) as client:
+    with TestClient(_app_with(_Agent(), tmp_path, _offline_model)) as client:
         checkpointer = _lose_run_in_pod()
         reported = _post(client, input="again")
         identity = {
-            "thread_id": f"sess-1:{_Agent().agent_id}",
+            "thread_id": f"sess-1:{INSTANCE_ID}",
             "checkpoint_ns": "",
             "interrupt_id": f"continue:{reported['interruption_id']}",
         }
@@ -711,7 +728,7 @@ def test_pod_refuses_continue_for_a_non_graph_agent(tmp_path, _offline_model) ->
     from test_agent_app import _EchoAgent
 
     echo = _EchoAgent()
-    with TestClient(_app_with(echo, tmp_path)) as client:
+    with TestClient(_app_with(echo, tmp_path, _offline_model)) as client:
         refused = _post(
             client,
             agent_id=echo.agent_id,
@@ -733,7 +750,7 @@ def test_pod_rejects_an_unauthorized_caller_before_any_event(
         raise HTTPException(status_code=403, detail="not your session")
 
     monkeypatch.setattr(agent_app_module, "_enforce_session_ownership", _deny)
-    with TestClient(_app_with(_Agent(), tmp_path)) as client:
+    with TestClient(_app_with(_Agent(), tmp_path, _offline_model)) as client:
         _lose_run_in_pod()
         response = client.post(
             "/pod/v1/agents/execute",
@@ -749,12 +766,12 @@ def test_pod_rejects_an_unauthorized_caller_before_any_event(
     assert "execution_interrupted" not in response.text
 
 
-def test_openai_compat_cannot_answer_the_card_so_a_lost_run_restarts(
+def test_openai_compat_cannot_restart_an_interrupted_weaver_run(
     tmp_path, _offline_model
 ) -> None:
     from fastapi.testclient import TestClient
 
-    with TestClient(_app_with(_Agent(), tmp_path)) as client:
+    with TestClient(_app_with(_Agent(), tmp_path, _offline_model)) as client:
         _lose_run_in_pod()
         response = client.post(
             "/v1/chat/completions",
@@ -765,9 +782,9 @@ def test_openai_compat_cannot_answer_the_card_so_a_lost_run_restarts(
             headers={"X-Fred-Session-Id": "sess-1"},
         )
 
-    assert response.status_code == 200, response.text
-    assert '"finish_reason":"stop"' in response.text
-    assert RUNS["prepare"] == 2  # restarted from the entry step
+    assert response.status_code == 503, response.text
+    assert "not connected to Weaver" in response.json()["detail"]
+    assert RUNS["prepare"] == 1  # the unsupported route did not restart the graph
 
 
 def test_pod_rejects_a_stale_continue_without_leaving_a_claim(
@@ -776,7 +793,7 @@ def test_pod_rejects_a_stale_continue_without_leaving_a_claim(
     from fastapi.testclient import TestClient
     from test_agent_app import _hitl_claim_rows
 
-    with TestClient(_app_with(_Agent(), tmp_path)) as client:
+    with TestClient(_app_with(_Agent(), tmp_path, _offline_model)) as client:
         checkpointer = _lose_run_in_pod()
         refused = _post(
             client, interrupted_action="continue", interruption_id="stale-or-made-up"

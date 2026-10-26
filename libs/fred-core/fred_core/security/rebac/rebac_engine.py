@@ -257,8 +257,8 @@ class OrganizationPermission(str, Enum):
     # RFC FRED-AUTHORIZATION-TARGET-MODEL §6.1: platform_observer's own named
     # capability (platform_admin included via the platform_observer union) —
     # the one relation for cross-user / platform-wide KPI observation. Gates
-    # the control-plane Analytics presets (`/admin/analytics`) and the raw
-    # OpenSearch Ops surface. The raw Prometheus Ops surface is
+    # the control-plane Analytics presets (`/admin/analytics`). The raw
+    # Prometheus Ops surface is
     # authentication-only and is not gated by this relation. AUTHZ-05 review
     # item 16: previously split into a second,
     # platform_admin-only `CAN_READ_KPI_GLOBAL` (legacy READ_GLOBAL) for the

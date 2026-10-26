@@ -654,10 +654,6 @@ class MCPConfig(BaseModel):
         default=True,
         description="Expose the Resources MCP server for resource/tag management.",
     )
-    opensearch_ops_enabled: bool = Field(
-        default=False,
-        description="Expose OpenSearch operational endpoints and the corresponding MCP server.",
-    )
     prometheus_ops_enabled: bool = Field(
         default=False,
         description="Expose Prometheus operational endpoints and the corresponding MCP server.",

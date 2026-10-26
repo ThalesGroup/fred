@@ -4,8 +4,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
+from fred_sdk.contracts.context import PortableContext, RuntimeContext
 from fred_sdk.contracts.weaver import ModelOfferKey, WeaverRuntimeBinding
 
 from fred_runtime.runtime_support.authority import AuthorityLostError
@@ -46,14 +47,22 @@ class TurnAuthority:
         if agent_id is not None and agent_id != self.binding.agent.template_key:
             raise AuthorityLostError()
 
-    def check_context(self, context: Any, agent_id: str) -> None:
+    def check_context(
+        self, context: RuntimeContext | PortableContext, agent_id: str
+    ) -> None:
         self.check(agent_id=agent_id)
         b = self.binding
+        if isinstance(context, PortableContext):
+            space_id = context.baggage.get("space_id")
+            instance_id = context.baggage.get("agent_instance_id")
+        else:
+            space_id = context.space_id
+            instance_id = context.agent_instance_id
         if (
             context.user_id != b.subject_id
             or context.session_id != b.conversation_id
-            or context.space_id != str(b.space.id)
-            or context.agent_instance_id != str(b.agent.instance_id)
+            or space_id != str(b.space.id)
+            or instance_id != str(b.agent.instance_id)
         ):
             raise AuthorityLostError()
 

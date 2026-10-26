@@ -247,7 +247,6 @@ def test_create_app_mounts_prometheus_mcp_when_enabled(
         "ResourceController",
         "McpFilesystemController",
         "TabularController",
-        "OpenSearchOpsController",
         "SchedulerController",
     ]:
         monkeypatch.setattr(main_module, attr_name, lambda *args, **kwargs: None)

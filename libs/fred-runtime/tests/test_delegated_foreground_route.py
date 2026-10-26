@@ -14,7 +14,6 @@ import json
 import logging
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
 from contextlib import asynccontextmanager
-from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
@@ -29,8 +28,7 @@ from fred_core.security import oidc as oidc_module
 from fred_core.security.delegation import DelegationConfig, initialize_delegation
 from fred_core.security.structure import KeycloakUser
 from fred_runtime.app import security as pod_security
-from fred_runtime.app.agent_app import _write_turn_history, create_agent_app
-from fred_runtime.app.dependencies import get_pod_container_from_app
+from fred_runtime.app.agent_app import _write_turn_history
 from fred_runtime.common.outbound_credentials import (
     DelegationRuntime,
     set_delegation_runtime,
@@ -54,6 +52,7 @@ from test_agent_app import (
     _build_test_config,
     _EchoAgent,
 )
+from weaver_fixtures import create_managed_app, managed_payload
 
 pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
 
@@ -77,20 +76,6 @@ def _restore_process_security() -> Iterator[None]:
 def _portal_call(client: TestClient, func, *args):
     assert client.portal is not None
     return client.portal.call(func, *args)
-
-
-async def _install_control_plane_transport(
-    app, transport: httpx.AsyncBaseTransport
-) -> None:
-    container = get_pod_container_from_app(app)
-    old_client = container.get_control_plane_http_client()
-    client = httpx.AsyncClient(transport=transport)
-    container._control_plane_http_client = client
-    runtime_context = get_runtime_context()
-    runtime_context._config = replace(
-        runtime_context.config, control_plane_http_client=client
-    )
-    await old_client.aclose()
 
 
 def _person_pod(
@@ -146,8 +131,12 @@ def _person_pod(
                 )
             }
         )
-    return create_agent_app(
-        registry={_EchoAgent().agent_id: _EchoAgent()}, config=config
+    return create_managed_app(
+        monkeypatch,
+        registry={_EchoAgent().agent_id: _EchoAgent()},
+        config=config,
+        user_id="owner-a",
+        mock_identity=False,
     )
 
 
@@ -297,7 +286,7 @@ def _post(client: httpx.AsyncClient, body: dict[str, Any]) -> Awaitable[httpx.Re
     )
 
 
-_DIRECT_TURN = {"agent_id": "rags.sample.echo", "input": "hello"}
+_MANAGED_TURN = managed_payload({"input": "hello"})
 
 
 @pytest.mark.asyncio
@@ -316,7 +305,7 @@ async def test_direct_stream_preserves_terms_decision_at_http_boundary(
         assert rebac is not None
         terms = AsyncMock(side_effect=HTTPException(expected_status, cause))
         monkeypatch.setattr(pod_security, "_require_accepted", terms)
-        response = await asyncio.wait_for(_post(client, _DIRECT_TURN), TIMEOUT)
+        response = await asyncio.wait_for(_post(client, _MANAGED_TURN), TIMEOUT)
 
     assert response.status_code == expected_status
     assert response.json()["detail"] == cause
@@ -410,19 +399,14 @@ async def test_a_delegated_stream_runs_once_and_carries_no_run_handle(
     model = ToolFriendlyFakeChatModel(responses=responses)
     app = _person_pod(monkeypatch, tmp_path, model=model)
     run_ids = _admitted_run_ids(monkeypatch)
-    control_plane_requests: list[httpx.Request] = []
-
-    def control_plane(request: httpx.Request) -> httpx.Response:
-        control_plane_requests.append(request)
-        return httpx.Response(500)
+    control_plane_requests = app.state.resolver_requests
 
     connection = _Connection(app)
     async with _serving(connection) as client:
         runtime = _install_delegation()
         rebac = get_runtime_context().config.rebac_engine
         assert rebac is not None
-        await _install_control_plane_transport(app, httpx.MockTransport(control_plane))
-        response = await asyncio.wait_for(_post(client, _DIRECT_TURN), TIMEOUT)
+        response = await asyncio.wait_for(_post(client, _MANAGED_TURN), TIMEOUT)
 
     assert response.status_code == 200
     # The request's own account status check is the run's only one at admission.
@@ -431,8 +415,7 @@ async def test_a_delegated_stream_runs_once_and_carries_no_run_handle(
     assert not any(line.startswith("id:") for line in response.text.splitlines())
     assert _payloads(response.text)[-1]["kind"] == expected_kind
     assert model.i == model_index
-    # A direct run resolves locally: nothing reaches the control plane.
-    assert control_plane_requests == []
+    assert len(control_plane_requests) == 1
     assert len(run_ids) == 1
     assert len(runtime.records) == 0
     delegated_logs = "\n".join(
@@ -465,7 +448,7 @@ async def test_a_cancelled_request_ends_the_run_and_its_children(
     connection = _Connection(app)
     async with _serving(connection) as client:
         runtime = _install_delegation()
-        request = asyncio.ensure_future(_post(client, _DIRECT_TURN))
+        request = asyncio.ensure_future(_post(client, _MANAGED_TURN))
         await asyncio.wait_for(started.wait(), TIMEOUT)
         assert len(runtime.records) == 1
 
@@ -523,7 +506,7 @@ async def test_a_stream_dropped_after_its_first_frame_ends_with_the_response(
             "records": len(runtime.records),
             "child_stopped": children[0].done(),
         }
-        request = asyncio.ensure_future(_post(client, _DIRECT_TURN))
+        request = asyncio.ensure_future(_post(client, _MANAGED_TURN))
         await asyncio.wait_for(second_frame.wait(), TIMEOUT)
         assert len(connection.frames) == 1
 
@@ -563,7 +546,7 @@ async def test_a_stream_dropped_before_its_first_frame_releases_the_record(
     async with _serving(connection) as client:
         runtime = _install_delegation()
         connection.on_end = lambda: {"records": len(runtime.records)}
-        request = asyncio.ensure_future(_post(client, _DIRECT_TURN))
+        request = asyncio.ensure_future(_post(client, _MANAGED_TURN))
         await asyncio.wait_for(entered.wait(), TIMEOUT)
         assert len(runtime.records) == 1
 
@@ -599,7 +582,7 @@ async def test_a_request_cancelled_while_a_frame_waits_in_send_ends_the_run(
     connection = _Connection(app, hold_first_frame=True)
     async with _serving(connection) as client:
         runtime = _install_delegation()
-        request = asyncio.ensure_future(_post(client, _DIRECT_TURN))
+        request = asyncio.ensure_future(_post(client, _MANAGED_TURN))
         await asyncio.wait_for(second_frame.wait(), TIMEOUT)
         assert len(streams) == 1
         assert len(runtime.records) == 1
@@ -629,7 +612,7 @@ async def test_a_stream_failing_before_its_first_frame_releases_the_record(
     async with _serving(connection) as client:
         runtime = _install_delegation()
         with pytest.raises(RuntimeError, match="synthetic history failure"):
-            await asyncio.wait_for(_post(client, _DIRECT_TURN), TIMEOUT)
+            await asyncio.wait_for(_post(client, _MANAGED_TURN), TIMEOUT)
 
         assert len(runtime.records) == 0
 
@@ -648,7 +631,7 @@ async def test_a_human_pause_ends_the_stream(monkeypatch, tmp_path) -> None:
     connection = _Connection(app)
     async with _serving(connection) as client:
         runtime = _install_delegation()
-        response = await asyncio.wait_for(_post(client, _DIRECT_TURN), TIMEOUT)
+        response = await asyncio.wait_for(_post(client, _MANAGED_TURN), TIMEOUT)
 
         assert response.status_code == 200
         assert [p["kind"] for p in _payloads(response.content)] == ["awaiting_human"]
@@ -691,7 +674,7 @@ async def test_repeated_cancellation_waits_for_disposal_and_child_cleanup(
     connection = _Connection(app)
     async with _serving(connection) as client:
         runtime = _install_delegation()
-        request = asyncio.ensure_future(_post(client, _DIRECT_TURN))
+        request = asyncio.ensure_future(_post(client, _MANAGED_TURN))
         await asyncio.wait_for(disposing.wait(), TIMEOUT)
         record = runtime.records.get(run_ids[0])
         assert record is not None and record.terminal
@@ -728,7 +711,7 @@ async def test_the_stream_route_has_no_reconnect_surface(monkeypatch, tmp_path) 
                     "Authorization": f"Bearer {PERSON_TOKEN}",
                     "Origin": "http://ui.test",
                 },
-                json=_DIRECT_TURN,
+                json=_MANAGED_TURN,
             ),
             TIMEOUT,
         )
@@ -771,35 +754,51 @@ def test_a_human_resume_is_a_fresh_admission_with_the_current_token(
 
     app = _person_pod(monkeypatch, tmp_path, decode=decode)
     monkeypatch.setattr(agent_app_module, "_stream", stream)
-    control_plane_requests: list[httpx.Request] = []
-
-    def control_plane(request: httpx.Request) -> httpx.Response:
-        control_plane_requests.append(request)
-        return httpx.Response(500)
+    control_plane_requests = app.state.resolver_requests
 
     with TestClient(app) as client:
         runtime = _install_delegation()
-        _portal_call(
-            client,
-            _install_control_plane_transport,
-            app,
-            httpx.MockTransport(control_plane),
-        )
-        runtime_context = get_runtime_context()
-        runtime_context._config = replace(runtime_context.config, checkpointer=None)
         paused = client.post(
             STREAM_PATH,
             headers={"Authorization": "Bearer person-token"},
-            json=_DIRECT_TURN,
+            json=managed_payload({"input": "hello", "session_id": "session-a"}),
         )
+        # First admission pinned this conversation to owner-a before the fake pause.
+        checkpointer = get_runtime_context().config.checkpointer
+        assert checkpointer is not None
+
+        async def pause_checkpoint():
+            from fred_runtime.runtime_support.checkpoints import checkpoint_config
+            from langgraph.checkpoint.base import empty_checkpoint
+
+            stored = await checkpointer.aput(
+                checkpoint_config(thread_id="session-a"),
+                empty_checkpoint(),
+                {"source": "update", "step": 0, "parents": {}},
+                {},
+            )
+            await checkpointer.aput_writes(
+                stored,
+                [
+                    (
+                        "__interrupt__",
+                        {"id": "pause-a", "value": {"question": "continue?"}},
+                    )
+                ],
+                task_id="task-1",
+            )
+
+        _portal_call(client, pause_checkpoint)
         resumed = client.post(
             STREAM_PATH,
             headers={"Authorization": "Bearer current-person-token"},
-            json={
-                "agent_id": "rags.sample.echo",
-                "session_id": "session-a",
-                "resume_payload": {"choice_id": "continue"},
-            },
+            json=managed_payload(
+                {
+                    "interrupt_id": "pause-a",
+                    "session_id": "session-a",
+                    "resume_payload": {"choice_id": "continue"},
+                }
+            ),
         )
 
     assert paused.status_code == 200
@@ -810,4 +809,4 @@ def test_a_human_resume_is_a_fresh_admission_with_the_current_token(
     assert len(streamed_run_ids) == 2
     assert streamed_run_ids[0] != streamed_run_ids[1]
     assert len(runtime.records) == 0
-    assert control_plane_requests == []
+    assert len(control_plane_requests) == 2

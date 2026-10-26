@@ -56,9 +56,6 @@ from knowledge_flow_backend.features.corpus_tree.controller import CorpusTreeCon
 from knowledge_flow_backend.features.extract.controller import ExtractController
 from knowledge_flow_backend.features.filesystem.mcp_fs_controller import McpFilesystemController
 from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
-from knowledge_flow_backend.features.kpi.opensearch_controller import (
-    OpenSearchOpsController,
-)
 from knowledge_flow_backend.features.kpi.prometheus_controller import (
     PrometheusOpsController,
 )
@@ -286,12 +283,6 @@ def create_app() -> FastAPI:
     else:
         logger.warning("%s TabularController disabled via configuration.mcp.tabular_enabled=false", LOG_PREFIX)
 
-    if configuration.mcp.opensearch_ops_enabled:
-        OpenSearchOpsController(router)
-        logger.info("%s OpenSearchOpsController registered (mcp.opensearch_ops_enabled=true)", LOG_PREFIX)
-    else:
-        logger.warning("%s OpenSearchOpsController disabled via configuration.mcp.opensearch_ops_enabled=false", LOG_PREFIX)
-
     if configuration.mcp.prometheus_ops_enabled:
         PrometheusOpsController(router)
         logger.info("%s PrometheusOpsController registered (mcp.prometheus_ops_enabled=true)", LOG_PREFIX)
@@ -339,19 +330,6 @@ def create_app() -> FastAPI:
         description="Create Markdown-first reports and get downloadable artifacts.",
         tags={"Reports"},
     )
-
-    if configuration.mcp.opensearch_ops_enabled:
-        mcp_mount_path = f"{mcp_prefix}/mcp-opensearch-ops"
-        mount_fastapi_tools(
-            app,
-            path=mcp_mount_path,
-            name="Knowledge Flow OpenSearch Ops MCP",
-            description="Read-only operational tools for OpenSearch: cluster health, nodes, shards, indices, mappings, and sample docs. Monitoring/diagnostics only.",
-            tags={"OpenSearch"},
-        )
-        logger.info("%s MCP OpenSearch Ops mounted at %s", LOG_PREFIX, mcp_mount_path)
-    else:
-        logger.warning("%s MCP OpenSearch Ops disabled via configuration.mcp.opensearch_ops_enabled=false", LOG_PREFIX)
 
     if configuration.mcp.prometheus_ops_enabled:
         mcp_mount_path = f"{mcp_prefix}/mcp-prometheus-ops"

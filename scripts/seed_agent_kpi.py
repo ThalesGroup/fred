@@ -59,7 +59,7 @@ Turn budget per agent (turns / 30 days, scaled by --since-days):
         Orion              122
         DataForge           68
         Aria Assistant      45
-        Sentinel Pro        22
+        Custom Pro        22
         CodeCraft           20
         Meridian            18
         PulseBot            18
@@ -149,7 +149,6 @@ TEMPLATE_IDS = [
     "fred-agents:fred.general_assistant",
     "fred-agents:fred.rag_expert",
     "fred-agents:fred.sql_expert",
-    "fred-agents:fred.sentinel",
     "fred-agents:fred.react_rag_mcp",
 ]
 
@@ -195,7 +194,7 @@ CONVERSATION_DISTRIBUTION = [
     ("Orion",              122),
     ("DataForge",           68),
     ("Aria Assistant",      45),
-    ("Sentinel Pro",        22),
+    ("Custom Pro",        22),
     ("CodeCraft",           20),
     ("Meridian",            18),
     ("PulseBot",            18),

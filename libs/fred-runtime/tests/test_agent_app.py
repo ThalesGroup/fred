@@ -43,23 +43,19 @@ from conftest import (
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from fred_core.common.config_loader import get_config
-from fred_core.common.team_id import personal_team_id
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
-from fred_core.security.delegation import DelegationConfig as CoreDelegationConfig
 from fred_core.security.delegation import (
     get_delegation_config,
     initialize_delegation,
-    preserved_delegation,
 )
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
     RebacDisabledResult,
-    TeamPermission,
 )
 from fred_core.security.structure import KeycloakUser
 from fred_core.users.store import postgres_user_store
@@ -93,6 +89,15 @@ from fred_sdk.contracts.runtime import (
 )
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.base import empty_checkpoint
+from weaver_fixtures import (
+    INSTANCE_ID,
+    SPACE_ID,
+    active_turn,
+    conversation_provenance,
+    create_managed_app,
+    invocation_context,
+    managed_payload,
+)
 
 pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
 
@@ -163,22 +168,7 @@ async def _demo_team_routing(ctx: ToolContext) -> str:
 
 @tool("demo.reasoning", description="Return the bound reasoning activation snapshot.")
 async def _demo_reasoning(ctx: ToolContext) -> str:
-    """
-    Return the platform reasoning activation bound to the current runtime context.
-
-    Why this exists:
-    - the admin's per-model reasoning toggle ships through the same
-      three-hop channel the two probes above cover, and `RuntimeContext` is
-      rebuilt field-by-field in `agent_app._iterate_runtime_event_payloads` —
-      a field nobody names is silently dropped. Both neighbours here exist
-      because that already happened twice in production.
-    - The blast radius is specific: model routing strips the reasoning
-      settings for every model absent from this list, so a dropped field
-      pins reasoning permanently off and makes the admin toggle decorative.
-
-    How to use it:
-    - invoked by the reasoning regression agent through the runtime
-    """
+    """Return the per-turn reasoning choice and any retired model-id ceiling."""
 
     rc = ctx.binding.runtime_context
     ids = rc.reasoning_enabled_model_ids
@@ -472,12 +462,10 @@ def test_a_role_holder_whose_token_is_not_addressed_to_delegation_is_refused(
     assert len(delegation.records) == 0
 
 
-def test_a_service_bearer_without_the_caller_role_runs_as_itself_under_delegation(
+def test_a_service_bearer_without_a_person_is_refused_under_delegation(
     monkeypatch, tmp_path, _pod_inbound_security
 ) -> None:
-    """The evaluator names no person: it runs on its own bearer. Its request's
-    account status check passes, and a direct target skips the team check, as with
-    delegation off."""
+    """A service bearer alone cannot acquire Weaver execution authority."""
     app, delegation = _secured_pod(
         monkeypatch, tmp_path, caller_client_id="caller-1", accept_delegated_calls=False
     )
@@ -506,7 +494,7 @@ def test_a_service_bearer_without_the_caller_role_runs_as_itself_under_delegatio
             if event["audit_event"] == "delegated_run_admitted"
         ]
 
-    assert response.status_code == 200
+    assert response.status_code == 403
     engine.require_active_account.assert_not_awaited()
     assert admitted == []
     assert len(delegation.records) == 0
@@ -684,7 +672,8 @@ def test_create_agent_app_executes_local_authored_tools_and_honors_base_url(
 
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(
+    app = create_managed_app(
+        monkeypatch,
         registry=registry,
         config=_build_test_config(tmp_path, max_chat_input_chars=37),
     )
@@ -706,7 +695,7 @@ def test_create_agent_app_executes_local_authored_tools_and_honors_base_url(
 
         configured_limit_response = client.post(
             "/pod/v1/agents/execute",
-            json={"agent_id": "unknown", "input": "x" * 38},
+            json=managed_payload({"agent_id": "unknown", "input": "x" * 38}),
         )
         assert configured_limit_response.status_code == 422
         assert configured_limit_response.json()["detail"]["limit_chars"] == 37
@@ -744,12 +733,14 @@ def test_create_agent_app_executes_local_authored_tools_and_honors_base_url(
 
         execute_response = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": "rags.sample.echo",
-                "input": "hello",
-                "session_id": "session-execute",
-                "runtime_context": {"user_id": "alice"},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": "rags.sample.echo",
+                    "input": "hello",
+                    "session_id": "session-execute",
+                    "runtime_context": {"user_id": "alice"},
+                }
+            ),
         )
         assert execute_response.status_code == 200
         assert execute_response.json()["kind"] == "final"
@@ -757,12 +748,14 @@ def test_create_agent_app_executes_local_authored_tools_and_honors_base_url(
 
         stream_response = client.post(
             "/pod/v1/agents/execute/stream",
-            json={
-                "agent_id": "rags.sample.echo",
-                "input": "hello",
-                "session_id": "session-stream",
-                "runtime_context": {"user_id": "alice"},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": "rags.sample.echo",
+                    "input": "hello",
+                    "session_id": "session-stream",
+                    "runtime_context": {"user_id": "alice"},
+                }
+            ),
         )
         assert stream_response.status_code == 200
 
@@ -812,7 +805,7 @@ def test_native_execution_routes_enforce_chat_input_limit_before_runtime_work(
                     route,
                     json={"agent_id": "unknown", "input": text_factory(size)},
                 )
-                assert response.status_code == 404
+                assert response.status_code == 403
 
         exchange_lookup = AsyncMock()
         target_resolution = AsyncMock()
@@ -909,17 +902,23 @@ def test_delete_checkpoint_thread_returns_deleted_count(monkeypatch, tmp_path) -
 
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
 
-    with TestClient(app) as client:
+    with TestClient(
+        app, headers={"Authorization": "Bearer test-person-token"}
+    ) as client:
         execute_response = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": "rags.sample.echo",
-                "input": "hello",
-                "session_id": "session-checkpoint-delete",
-                "runtime_context": {"user_id": "alice"},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": "rags.sample.echo",
+                    "input": "hello",
+                    "session_id": "session-checkpoint-delete",
+                    "runtime_context": {"user_id": "alice"},
+                }
+            ),
         )
         assert execute_response.status_code == 200
 
@@ -939,7 +938,7 @@ def test_delete_checkpoint_thread_returns_deleted_count(monkeypatch, tmp_path) -
         threads_after = client.get(
             "/pod/v1/agents/checkpoints/session-checkpoint-delete"
         )
-        assert threads_after.json()["checkpoints"] == []
+        assert threads_after.status_code == 404
 
         # Idempotent: a retry against an already-purged thread deletes nothing.
         retry_response = client.delete(
@@ -967,22 +966,28 @@ def test_a_session_id_naming_a_graph_thread_is_refused_everywhere(
     )
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
     stolen = "session-a:inst-1"
 
-    with TestClient(app) as client:
+    with TestClient(
+        app, headers={"Authorization": "Bearer test-person-token"}
+    ) as client:
         execute = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": definition.agent_id,
-                "input": "hello",
-                "session_id": stolen,
-                "runtime_context": {"user_id": "bob"},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": definition.agent_id,
+                    "input": "hello",
+                    "session_id": stolen,
+                    "runtime_context": {"user_id": "bob"},
+                }
+            ),
         )
         assert execute.status_code == 422, execute.text
         checkpoints = client.get(f"/pod/v1/agents/checkpoints/{stolen}")
-        assert checkpoints.status_code == 422
+        assert checkpoints.status_code == 404
         deletion = client.delete(f"/pod/v1/agents/checkpoints/{stolen}")
         assert deletion.status_code == 422
         openai = client.post(
@@ -993,7 +998,8 @@ def test_a_session_id_naming_a_graph_thread_is_refused_everywhere(
             },
             headers={"X-Fred-Session-Id": stolen},
         )
-        assert openai.status_code == 422, openai.text
+        assert openai.status_code == 503, openai.text
+        assert "not connected to Weaver" in openai.json()["detail"]
 
 
 def test_a_turn_listing_more_prompt_commands_than_the_limit_is_refused(
@@ -1011,7 +1017,9 @@ def test_a_turn_listing_more_prompt_commands_than_the_limit_is_refused(
     )
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
 
     def command(count: int) -> dict[str, object]:
         return {
@@ -1033,12 +1041,14 @@ def test_a_turn_listing_more_prompt_commands_than_the_limit_is_refused(
     def execute(client: TestClient, count: int):
         return client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": definition.agent_id,
-                "input": "\n\n".join("x" for _ in range(count)),
-                "session_id": f"session-prompts-{count}",
-                "runtime_context": {"user_id": "bob", "command": command(count)},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": definition.agent_id,
+                    "input": "\n\n".join("x" for _ in range(count)),
+                    "session_id": f"session-prompts-{count}",
+                    "runtime_context": {"user_id": "bob", "command": command(count)},
+                }
+            ),
         )
 
     with TestClient(app) as client:
@@ -1242,20 +1252,24 @@ def test_execute_forwards_context_prompt_text_to_agent_binding(
 
     definition = _ContextPromptAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
 
     with TestClient(app) as client:
         stream_response = client.post(
             "/pod/v1/agents/execute/stream",
-            json={
-                "agent_id": "rags.sample.context_prompt",
-                "input": "hello",
-                "session_id": "session-ctx",
-                "runtime_context": {
-                    "user_id": "alice",
-                    "context_prompt_text": "CTXMARKER-9f3a",
-                },
-            },
+            json=managed_payload(
+                {
+                    "agent_id": "rags.sample.context_prompt",
+                    "input": "hello",
+                    "session_id": "session-ctx",
+                    "runtime_context": {
+                        "user_id": "alice",
+                        "context_prompt_text": "CTXMARKER-9f3a",
+                    },
+                }
+            ),
         )
         assert stream_response.status_code == 200
 
@@ -1298,19 +1312,23 @@ def test_execute_forwards_ask_user_to_agent_tool_catalog(monkeypatch, tmp_path) 
         lambda config: StaticChatModelFactory(model),
     )
     definition = _EchoAgent()
-    app = create_agent_app(
-        registry={definition.agent_id: definition}, config=_build_test_config(tmp_path)
+    app = create_managed_app(
+        monkeypatch,
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
     )
 
     with TestClient(app) as client:
         response = client.post(
             "/pod/v1/agents/execute/stream",
-            json={
-                "agent_id": definition.agent_id,
-                "input": "Ask me",
-                "session_id": "session-question",
-                "runtime_context": {"user_id": "alice", "ask_user": True},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": definition.agent_id,
+                    "input": "Ask me",
+                    "session_id": "session-question",
+                    "runtime_context": {"user_id": "alice", "ask_user": True},
+                }
+            ),
         )
         assert response.status_code == 200
 
@@ -1326,47 +1344,14 @@ def test_execute_forwards_ask_user_to_agent_tool_catalog(monkeypatch, tmp_path) 
     )
 
 
-def test_execute_forwards_team_routing_policy_to_agent_binding(
-    monkeypatch, tmp_path
-) -> None:
-    """
-    Regression: `runtime_context.chat_default_profile_id` must reach the agent
-    binding on DIRECT (raw `agent_id`) execution, the per-conversation
-    `chat_profile_id` (managed instances only) must not, and the
-    platform-operator chat binding must NOT — the trusted platform binding
-    is scoped to managed agent-instance execution only; direct execution has
-    no per-turn control-plane lookup at all and stays pod-local routing.
-
-    Why this exists:
-    - control-plane resolves a team's routing policy at prepare-execution and
-      the frontend forwards it via `runtime_context`, but the runtime once
-      rebuilt `RuntimeContext` from the request and silently dropped both
-      fields — so `fred_runtime.model_routing.provider`'s team-override
-      resolution always saw nothing bound.
-    - a forged `platform_model_bindings` key on the request body below is not
-      even a valid `RuntimeContext` field anymore (that field was removed
-      entirely once the platform binding became a trusted, runtime-resolved
-      value) — pydantic silently ignores it — proving a direct-execution
-      caller has no way to influence chat model selection via a platform
-      binding at all.
-
-    How to use it:
-    - run via the default offline `make test` suite in `fred-runtime`
-    """
-
+def test_execute_forwards_canonical_space_and_model_choice(monkeypatch, tmp_path):
     model = ToolFriendlyFakeChatModel(
         responses=[
             AIMessage(
                 content="",
-                tool_calls=[
-                    {
-                        "id": "call-routing-1",
-                        "name": "demo_team_routing",
-                        "args": {},
-                    }
-                ],
+                tool_calls=[{"id": "choice", "name": "demo_team_routing", "args": {}}],
             ),
-            AIMessage(content="Done."),
+            AIMessage(content="done"),
         ]
     )
     monkeypatch.setattr(
@@ -1374,59 +1359,30 @@ def test_execute_forwards_team_routing_policy_to_agent_binding(
         "_build_chat_model_factory",
         lambda config: StaticChatModelFactory(model),
     )
-
     definition = _TeamRoutingAgent()
-    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
-
+    app = create_managed_app(
+        monkeypatch,
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
+    )
     with TestClient(app) as client:
-        stream_response = client.post(
+        response = client.post(
             "/pod/v1/agents/execute/stream",
-            json={
-                "agent_id": "rags.sample.team_routing",
-                "input": "hello",
-                "session_id": "session-routing",
-                "runtime_context": {
-                    "user_id": "alice",
-                    "chat_default_profile_id": "chat.anthropic.claude-sonnet",
-                    "chat_profile_id": "chat.anthropic.claude-haiku",
-                    # Removed field and trusted-only fields: all ignored.
-                    "agent_profile_overrides": {
-                        "rags.sample.team_routing": "chat.forged.override"
+            json=managed_payload(
+                {
+                    "input": "hello",
+                    "runtime_context": {
+                        "model_choice": {
+                            "source_id": "a",
+                            "upstream_model_id": "second",
+                        }
                     },
-                    "team_disabled_model_ids": ["model__forged"],
-                    "recommended_chat_profile_id": "chat.forged.recommendation",
-                    # Forged: no longer a valid RuntimeContext field at all —
-                    # a direct-execution caller trying the old attack (or a
-                    # stale client) must have this silently ignored, not
-                    # reach the binding.
-                    "platform_model_bindings": {
-                        "chat": {"provider": "attacker", "name": "forged-model"}
-                    },
-                },
-            },
+                }
+            ),
         )
-        assert stream_response.status_code == 200
-
-    payloads = [
-        json.loads(line.removeprefix("data: "))
-        for line in stream_response.text.splitlines()
-        if line.startswith("data: ")
-    ]
-    tool_results = [p for p in payloads if p.get("kind") == "tool_result"]
-    assert tool_results, "expected a tool_result event"
-    # The tool echoed the bound routing policy — proving both fields survived
-    # the request → RuntimeContext binding (not dropped → not
-    # "profile:none"), and that the forged platform binding never reached
-    # the agent at all (direct execution: no trusted per-turn lookup exists).
-    echoed = " ".join(p.get("content", "") for p in tool_results)
-    assert "profile:chat.anthropic.claude-sonnet" in echoed
-    # The per-conversation choice applies to managed instances only.
-    assert "choice:none" in echoed
-    assert "disabled:none" in echoed
-    assert "recommended:none" in echoed
-    assert "forged" not in echoed
-    assert "bindings:none" in echoed
+    assert response.status_code == 200
+    assert f"space:{SPACE_ID}" in response.text
+    assert "second" in response.text
 
 
 def _run_managed_reasoning_turn(
@@ -1436,13 +1392,7 @@ def _run_managed_reasoning_turn(
     legacy_agent_reasoning_enabled: bool | None = None,
     definition_cls: type[_ReasoningAgent] = _ReasoningAgent,
 ) -> str:
-    """Execute one managed-instance turn on `_ReasoningAgent` and return what the
-    probe tool echoed about the reasoning activation it was bound with.
-
-    Managed, not raw `agent_id`: only a managed turn carries the trusted
-    platform ceiling. `legacy_agent_reasoning_enabled` puts the retired
-    per-agent switch in the stored tuning, which must now be ignored.
-    """
+    """Run the reasoning probe with trusted Weaver tuning and a forged legacy ceiling."""
 
     tuning: dict[str, object] = {
         "role": "Reasoning activation probe",
@@ -1452,48 +1402,6 @@ def _run_managed_reasoning_turn(
     }
     if legacy_agent_reasoning_enabled is not None:
         tuning["reasoning_enabled"] = legacy_agent_reasoning_enabled
-
-    class _FakeResponse:
-        def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
-            self._payload = payload
-            self.status_code = status_code
-            self.text = json.dumps(payload)
-            self.reason_phrase = "OK"
-
-        def json(self) -> dict[str, object]:
-            return self._payload
-
-    class _FakeAsyncClient:
-        def __init__(self, *args, **kwargs) -> None:
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        async def aclose(self) -> None:
-            return None
-
-        async def get(self, url: str, headers: dict[str, str] | None = None):
-            return _FakeResponse(
-                {
-                    "agent_instance_id": "instance-reasoning",
-                    "template_agent_id": "rags.sample.reasoning",
-                    "owner_scope": "team",
-                    "owner_team_id": "fredlab",
-                    "enabled": True,
-                    "tuning": tuning,
-                    # The trusted, control-plane-resolved reasoning snapshot —
-                    # deliberately different from whatever the request below
-                    # claims, so a test that still reads the request's copy
-                    # instead of this one fails loudly.
-                    "reasoning_enabled_model_ids": [
-                        "model__openai__mistral-small-latest"
-                    ],
-                }
-            )
 
     model = ToolFriendlyFakeChatModel(
         responses=[
@@ -1515,11 +1423,12 @@ def _run_managed_reasoning_turn(
         "_build_chat_model_factory",
         lambda config: StaticChatModelFactory(model),
     )
-    monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
 
     definition = definition_cls()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(
+    app = create_managed_app(
+        monkeypatch,
+        tuning=tuning,
         registry=registry,
         config=_build_test_config(
             tmp_path,
@@ -1531,25 +1440,27 @@ def _run_managed_reasoning_turn(
         stream_response = client.post(
             "/pod/v1/agents/execute/stream",
             headers={"Authorization": "Bearer test-token"},
-            json={
-                "agent_instance_id": "instance-reasoning",
-                "input": "hello",
-                "session_id": "session-reasoning",
-                "runtime_context": {
-                    "user_id": "alice",
-                    "team_id": "fredlab",
-                    # Deliberately a DIFFERENT model id than the one the fake
-                    # control-plane response carries above — the pod must use
-                    # control-plane's answer, never this client-supplied copy.
-                    "reasoning_enabled_model_ids": [
-                        "model__spoofed__should-be-ignored"
-                    ],
-                    # Level 4: the user's per-question choice travels on the same
-                    # context, and is dropped by the same field-by-field rebuild
-                    # if nobody names it.
-                    "reasoning": True,
-                },
-            },
+            json=managed_payload(
+                {
+                    "agent_instance_id": "instance-reasoning",
+                    "input": "hello",
+                    "session_id": "session-reasoning",
+                    "runtime_context": {
+                        "user_id": "alice",
+                        "team_id": "fredlab",
+                        # Deliberately a DIFFERENT model id than the one the fake
+                        # control-plane response carries above — the pod must use
+                        # control-plane's answer, never this client-supplied copy.
+                        "reasoning_enabled_model_ids": [
+                            "model__spoofed__should-be-ignored"
+                        ],
+                        # Level 4: the user's per-question choice travels on the same
+                        # context, and is dropped by the same field-by-field rebuild
+                        # if nobody names it.
+                        "reasoning": True,
+                    },
+                }
+            ),
         )
         assert stream_response.status_code == 200
 
@@ -1563,47 +1474,25 @@ def _run_managed_reasoning_turn(
     return " ".join(p.get("content", "") for p in tool_results)
 
 
-def test_execute_forwards_reasoning_activation_to_agent_binding(
+def test_execute_forwards_reasoning_choice_and_ignores_legacy_model_ids(
     monkeypatch, tmp_path
 ) -> None:
-    """
-    Regression: `runtime_context.reasoning_enabled_model_ids` must reach the
-    agent binding, sourced from control-plane's own runtime-binding response —
-    never from the client-supplied request context.
-
-    Why this exists:
-    - dropping the field entirely is not a degraded experience, it is a dead
-      feature: model routing strips reasoning settings for any model NOT in
-      this list, so an empty list here means no model ever reasons however
-      the admin toggles it. `_iterate_runtime_event_payloads` rebuilds
-      `RuntimeContext` field-by-field, so a field that's not named is
-      silently dropped — this one dropped in an earlier cut of this feature.
-    - the request below deliberately sends a DIFFERENT, bogus model id than
-      the fake control-plane response — this only passes if the pod uses
-      control-plane's answer and ignores the client's.
-
-    How to use it:
-    - run via the default offline `make test` suite in `fred-runtime`
-    """
+    """The user reasoning choice survives; legacy model-id ceilings confer no authority."""
 
     echoed = _run_managed_reasoning_turn(monkeypatch, tmp_path)
-    # The tool echoed the bound activation — proving the field survived the
-    # control-plane → RuntimeContext binding (not dropped → not "reasoning:none")
-    # and that it came from control-plane, not the client's bogus request value.
-    assert "reasoning:model__openai__mistral-small-latest" in echoed
+    assert "reasoning:none" in echoed
     assert "turn:true" in echoed
 
 
 def test_legacy_agent_reasoning_switch_no_longer_narrows_the_ceiling(
     monkeypatch, tmp_path
 ) -> None:
-    """The platform activation alone is the ceiling: a stored tuning row still
-    carrying the retired `reasoning_enabled: false` loads and narrows nothing."""
+    """A retired tuning switch does not alter the per-turn reasoning choice."""
 
     echoed = _run_managed_reasoning_turn(
         monkeypatch, tmp_path, legacy_agent_reasoning_enabled=False
     )
-    assert "reasoning:model__openai__mistral-small-latest" in echoed
+    assert "reasoning:none" in echoed
     assert "turn:true" in echoed
 
 
@@ -1640,156 +1529,45 @@ def test_deprecated_definition_reasoning_fields_load_warn_and_change_nothing(
 
 def test_managed_execution_uses_trusted_platform_chat_binding_not_forged_request(
     monkeypatch, tmp_path
-) -> None:
-    """
-    Regression / security: a managed turn's platform `chat`
-    model binding must come from control-plane's own per-turn
-    `ManagedAgentRuntimeBinding` response, never from the client-supplied
-    request body — closing the exact gap `platform_model_bindings` used to
-    open when it lived on the client-forwarded `RuntimeContext`: any caller
-    could set it directly and `RoutedChatModelFactory.select()` would honor
-    it unconditionally, including the `usable_model_ids` ReBAC bypass that
-    only a genuine platform binding should get.
+):
+    from fred_runtime.model_routing.turn import current_turn
 
-    Why this exists:
-    - the fix moved resolution into the runtime's existing per-turn,
-      server-to-server `ManagedAgentRuntimeBinding` lookup — the same trust
-      boundary `reasoning_enabled_model_ids` already crosses (see
-      `_run_managed_reasoning_turn` above) — so a request body can no longer
-      influence it at all, forged field or not.
-    - the fake control-plane response below deliberately returns a
-      DIFFERENT model than the forged request claims, so a test that still
-      somehow read the request's copy fails loudly.
+    observed = []
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="done")])
 
-    How to use it:
-    - run via the default offline `make test` suite in `fred-runtime`
-    """
+    class Factory(StaticChatModelFactory):
+        def build(self, definition, binding):
+            observed.append(current_turn().binding.models.policy.default)
+            return super().build(definition, binding)
 
-    class _FakeResponse:
-        def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
-            self._payload = payload
-            self.status_code = status_code
-            self.text = json.dumps(payload)
-            self.reason_phrase = "OK"
-
-        def json(self) -> dict[str, object]:
-            return self._payload
-
-    class _FakeAsyncClient:
-        def __init__(self, *args, **kwargs) -> None:
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        async def aclose(self) -> None:
-            return None
-
-        async def get(self, url: str, headers: dict[str, str] | None = None):
-            return _FakeResponse(
+    monkeypatch.setattr(
+        agent_app_module, "_build_chat_model_factory", lambda config: Factory(model)
+    )
+    definition = _EchoAgent()
+    app = create_managed_app(
+        monkeypatch,
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json=managed_payload(
                 {
-                    "agent_instance_id": "instance-platform-binding",
-                    "template_agent_id": "rags.sample.team_routing",
-                    "owner_scope": "team",
-                    "owner_team_id": "fredlab",
-                    "enabled": True,
-                    "tuning": {
-                        "role": "Team routing probe",
-                        "description": "Reports the team routing policy snapshot it received.",
-                        "tags": [],
-                        "fields": [],
-                        "recommended_chat_profile_id": "chat.trusted.recommendation",
-                    },
-                    "team_disabled_model_ids": ["model__openai__gpt-4o"],
-                    # The TRUSTED, control-plane-resolved platform chat
-                    # binding — deliberately different from whatever the
-                    # forged request below claims.
-                    "platform_chat_model_binding": {
-                        "provider": "openai",
-                        "name": "gpt-4o-mini",
-                        "settings": {"temperature": 0.2},
+                    "input": "hello",
+                    "runtime_context": {
+                        "platform_model_bindings": {
+                            "chat": {"provider": "attacker", "name": "forged"}
+                        }
                     },
                 }
-            )
-
-    model = ToolFriendlyFakeChatModel(
-        responses=[
-            AIMessage(
-                content="",
-                tool_calls=[
-                    {
-                        "id": "call-platform-binding-1",
-                        "name": "demo_team_routing",
-                        "args": {},
-                    }
-                ],
             ),
-            AIMessage(content="Done."),
-        ]
-    )
-    monkeypatch.setattr(
-        agent_app_module,
-        "_build_chat_model_factory",
-        lambda config: StaticChatModelFactory(model),
-    )
-    monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
-
-    definition = _TeamRoutingAgent()
-    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(
-        registry=registry,
-        config=_build_test_config(
-            tmp_path,
-            control_plane_url="http://control-plane:8222/control-plane/v1",
-        ),
-    )
-
-    with TestClient(app) as client:
-        stream_response = client.post(
-            "/pod/v1/agents/execute/stream",
-            headers={"Authorization": "Bearer test-token"},
-            json={
-                "agent_instance_id": "instance-platform-binding",
-                "input": "hello",
-                "session_id": "session-platform-binding",
-                "runtime_context": {
-                    "user_id": "alice",
-                    "team_id": "fredlab",
-                    # Forged: no longer a valid RuntimeContext field at all —
-                    # silently ignored by pydantic, and even if it somehow
-                    # reached the binding it names a DIFFERENT model than
-                    # control-plane's fake response above.
-                    "platform_model_bindings": {
-                        "chat": {"provider": "attacker", "name": "forged-model"}
-                    },
-                    "team_disabled_model_ids": ["model__attacker__forged"],
-                    "recommended_chat_profile_id": "chat.attacker.forged",
-                    # The user's choice is client-forwarded on a managed turn.
-                    "chat_profile_id": "chat.user.choice",
-                },
-            },
         )
-        assert stream_response.status_code == 200
-
-    payloads = [
-        json.loads(line.removeprefix("data: "))
-        for line in stream_response.text.splitlines()
-        if line.startswith("data: ")
-    ]
-    tool_results = [p for p in payloads if p.get("kind") == "tool_result"]
-    assert tool_results, "expected a tool_result event"
-    echoed = " ".join(p.get("content", "") for p in tool_results)
-    # The trusted control-plane values reached the agent...
-    assert "bindings:chat=openai/gpt-4o-mini" in echoed
-    assert "disabled:model__openai__gpt-4o" in echoed
-    assert "recommended:chat.trusted.recommendation" in echoed
-    assert "choice:chat.user.choice" in echoed
-    # ...and the forged request-body value never did.
-    assert "attacker" not in echoed
-    assert "forged-model" not in echoed
+    assert response.status_code == 200
+    assert response.json()["kind"] == "final"
+    assert observed and all(
+        key.source_id == "a" and key.upstream_model_id == "first" for key in observed
+    )
 
 
 def test_managed_resume_cannot_deserialize_turn_authority() -> None:
@@ -1804,54 +1582,7 @@ def test_managed_resume_cannot_deserialize_turn_authority() -> None:
 def test_managed_execution_never_calls_llm_when_runtime_binding_resolution_fails(
     monkeypatch, tmp_path
 ) -> None:
-    """
-    Fail-closed correction (Slice 1 review): when control-plane's per-turn
-    `ManagedAgentRuntimeBinding` lookup fails (e.g. the platform-binding store
-    read raised, so control-plane's generic exception handler returns 500),
-    the pod must map that to an `HTTPException` INSIDE `_resolve_agent_instance`
-    (`_authorize_and_resolve`'s last step) — awaited and raised before the
-    `/agents/execute/stream` route ever builds the `StreamingResponse`/`_stream`
-    generator that would call the chat model factory. A 500 must never be
-    silently treated as "no platform binding" and routed through to an LLM
-    call under pod/team defaults.
-
-    Why this exists:
-    - proves the mapping is not just a status-code translation
-      (`test_resolve_agent_instance_preserves_http_error_mapping` already
-      covers that in isolation) but that it actually gates the whole
-      execution pipeline: the chat model factory is never even constructed.
-
-    How to use it:
-    - run via the default offline `make test` suite in `fred-runtime`
-    """
-
-    class _FakeResponse:
-        def __init__(self, status_code: int) -> None:
-            self.status_code = status_code
-            self.text = "simulated control-plane failure"
-            self.reason_phrase = "Internal Server Error"
-
-        def json(self) -> dict[str, object]:
-            raise AssertionError("a failing response's body must never be parsed")
-
-    class _FakeAsyncClient:
-        def __init__(self, *args, **kwargs) -> None:
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        async def aclose(self) -> None:
-            return None
-
-        async def get(self, url: str, headers: dict[str, str] | None = None):
-            # Stands in for control-plane's own generic exception handler
-            # turning `resolve_platform_chat_model_binding`'s propagated
-            # store/validation failure into a 500.
-            return _FakeResponse(status_code=500)
+    """An unavailable resolver returns 503 before any model construction."""
 
     factory_build_calls: list[object] = []
 
@@ -1866,11 +1597,12 @@ def test_managed_execution_never_calls_llm_when_runtime_binding_resolution_fails
         "_build_chat_model_factory",
         lambda config: _CountingChatModelFactory(model),
     )
-    monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
 
     definition = _TeamRoutingAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(
+    app = create_managed_app(
+        monkeypatch,
+        resolver_status=500,
         registry=registry,
         config=_build_test_config(
             tmp_path,
@@ -1882,157 +1614,60 @@ def test_managed_execution_never_calls_llm_when_runtime_binding_resolution_fails
         stream_response = client.post(
             "/pod/v1/agents/execute/stream",
             headers={"Authorization": "Bearer test-token"},
-            json={
-                "agent_instance_id": "instance-binding-failure",
-                "input": "hello",
-                "session_id": "session-binding-failure",
-                "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
-            },
+            json=managed_payload(
+                {
+                    "agent_instance_id": "instance-binding-failure",
+                    "input": "hello",
+                    "session_id": "session-binding-failure",
+                    "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
+                }
+            ),
         )
 
     # Mapped from the upstream 500 (>=400, not 404/403) — see
     # `_resolve_agent_instance`'s status mapping.
-    assert stream_response.status_code == 502
+    assert stream_response.status_code == 503
     assert factory_build_calls == []
 
 
-def test_direct_agent_id_execution_never_receives_or_forges_platform_binding(
-    monkeypatch, tmp_path
-) -> None:
-    """
-    Isolation (Slice 1 review acceptance gate): direct (non-managed)
-    `agent_id` execution takes `_ResolvedExecutionTarget.platform_chat_model_binding`'s
-    default of `None` in `_resolve_agent_instance` — it never calls
-    control-plane at all — so it must report "no platform binding" even when
-    the request body forges the legacy `platform_model_bindings` key
-    (silently dropped by `RuntimeContext`'s ordinary Pydantic parsing, same
-    as the managed-execution forgery regression above).
-
-    How to use it:
-    - run via the default offline `make test` suite in `fred-runtime`
-    """
-
-    model = ToolFriendlyFakeChatModel(
-        responses=[
-            AIMessage(
-                content="",
-                tool_calls=[
-                    {
-                        "id": "call-direct-binding-1",
-                        "name": "demo_team_routing",
-                        "args": {},
-                    }
-                ],
-            ),
-            AIMessage(content="Done."),
-        ]
-    )
+@pytest.mark.parametrize("route", ["execute", "execute/stream", "evaluate"])
+def test_direct_execution_cannot_acquire_authority_with_forged_binding(
+    monkeypatch, tmp_path, route
+):
+    model = ToolFriendlyFakeChatModel(responses=[])
     monkeypatch.setattr(
         agent_app_module,
         "_build_chat_model_factory",
         lambda config: StaticChatModelFactory(model),
     )
-
-    definition = _TeamRoutingAgent()
-    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
-
+    definition = _EchoAgent()
+    app = create_managed_app(
+        monkeypatch,
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
+    )
     with TestClient(app) as client:
-        stream_response = client.post(
-            "/pod/v1/agents/execute/stream",
-            headers={"Authorization": "Bearer test-token"},
+        response = client.post(
+            f"/pod/v1/agents/{route}",
             json={
                 "agent_id": definition.agent_id,
-                "input": "hello",
-                "session_id": "session-direct-binding",
+                "input": "hi",
                 "runtime_context": {
-                    "user_id": "alice",
-                    "team_id": "fredlab",
                     "platform_model_bindings": {
-                        "chat": {"provider": "attacker", "name": "forged-model"}
-                    },
+                        "chat": {"provider": "attacker", "name": "forged"}
+                    }
                 },
             },
         )
-        assert stream_response.status_code == 200
-
-    payloads = [
-        json.loads(line.removeprefix("data: "))
-        for line in stream_response.text.splitlines()
-        if line.startswith("data: ")
-    ]
-    tool_results = [p for p in payloads if p.get("kind") == "tool_result"]
-    assert tool_results, "expected a tool_result event"
-    echoed = " ".join(p.get("content", "") for p in tool_results)
-    assert "bindings:none" in echoed
-    assert "attacker" not in echoed
-    assert "forged-model" not in echoed
+    assert response.status_code == 403
+    assert "Direct template" in response.json()["detail"]
+    assert app.state.resolver_requests == []
 
 
 def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
     monkeypatch, tmp_path
 ) -> None:
-    """
-    Ensure agent-instance execution resolves template+tuning from control-plane.
-
-    Why this exists:
-    - pods now accept `agent_instance_id` in addition to raw `agent_id`
-    - the resolved team scope must drive runtime tool behavior rather than any
-      caller-provided ad hoc team context
-
-    How to use it:
-    - run in the default offline `fred-runtime` test suite
-
-    Example:
-    - `pytest tests/test_agent_app.py -q`
-    """
-
-    class _FakeResponse:
-        def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
-            self._payload = payload
-            self.status_code = status_code
-            self.text = json.dumps(payload)
-            self.reason_phrase = "OK"
-
-        def json(self) -> dict[str, object]:
-            return self._payload
-
-    class _FakeAsyncClient:
-        def __init__(self, *args, **kwargs) -> None:
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        async def aclose(self) -> None:
-            return None
-
-        async def get(self, url: str, headers: dict[str, str] | None = None):
-            assert (
-                url
-                == "http://control-plane:8222/control-plane/v1/teams/fredlab/agent-instances/instance-1/runtime"
-            )
-            assert headers is not None
-            assert headers["Authorization"] == "Bearer test-token"
-            assert headers["X-Request-Id"]  # correlation id, TURN-01
-            return _FakeResponse(
-                {
-                    "agent_instance_id": "instance-1",
-                    "template_agent_id": "sentinel.react.v2",
-                    "owner_scope": "team",
-                    "owner_team_id": "fredlab",
-                    "enabled": True,
-                    "tuning": {
-                        "role": "Sentinel",
-                        "description": "Reports the current team scope.",
-                        "tags": ["ops"],
-                        "fields": [],
-                    },
-                }
-            )
+    """Resolve a managed instance through Weaver and bind its canonical team to tools."""
 
     model = ToolFriendlyFakeChatModel(
         responses=[
@@ -2054,11 +1689,11 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         "_build_chat_model_factory",
         lambda config: StaticChatModelFactory(model),
     )
-    monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
 
     definition = _TeamScopeAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(
+    app = create_managed_app(
+        monkeypatch,
         registry=registry,
         config=_build_test_config(
             tmp_path,
@@ -2070,12 +1705,14 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         response = client.post(
             "/pod/v1/agents/execute",
             headers={"Authorization": "Bearer test-token"},
-            json={
-                "agent_instance_id": "instance-1",
-                "input": "what team am I in?",
-                "session_id": "managed-session",
-                "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
-            },
+            json=managed_payload(
+                {
+                    "agent_instance_id": "instance-1",
+                    "input": "what team am I in?",
+                    "session_id": "managed-session",
+                    "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
+                }
+            ),
         )
 
     assert response.status_code == 200
@@ -2087,55 +1724,7 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
 def test_managed_execution_rejects_grant_with_mismatched_team(
     monkeypatch, tmp_path
 ) -> None:
-    """RUNTIME-07 F4 (Phase 1): a grant whose team_id differs from the resolved
-    instance's owner_team_id must be refused with 403, even though the grant is
-    otherwise structurally valid. This is the runtime-side team binding that
-    `_validate_grant_team_binding` performs after control-plane resolution.
-
-    The Phase 0 characterization
-    (`test_main.py`/`test_execution_contracts.py`) documented that team_id was
-    never checked; this proves the binding is now enforced."""
-
-    class _FakeResponse:
-        def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
-            self._payload = payload
-            self.status_code = status_code
-            self.text = json.dumps(payload)
-            self.reason_phrase = "OK"
-
-        def json(self) -> dict[str, object]:
-            return self._payload
-
-    class _FakeAsyncClient:
-        def __init__(self, *args, **kwargs) -> None:
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        async def aclose(self) -> None:
-            return None
-
-        async def get(self, url: str, headers: dict[str, str] | None = None):
-            # Resolution says the instance is owned by "fredlab".
-            return _FakeResponse(
-                {
-                    "agent_instance_id": "instance-1",
-                    "template_agent_id": "sentinel.react.v2",
-                    "owner_scope": "team",
-                    "owner_team_id": "fredlab",
-                    "enabled": True,
-                    "tuning": {
-                        "role": "Sentinel",
-                        "description": "Reports the current team scope.",
-                        "tags": ["ops"],
-                        "fields": [],
-                    },
-                }
-            )
+    """Reject a trusted response whose team disagrees with the admitted request."""
 
     model = ToolFriendlyFakeChatModel(
         responses=[AIMessage(content="should not be reached")]
@@ -2145,11 +1734,14 @@ def test_managed_execution_rejects_grant_with_mismatched_team(
         "_build_chat_model_factory",
         lambda config: StaticChatModelFactory(model),
     )
-    monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
 
     definition = _TeamScopeAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(
+    app = create_managed_app(
+        monkeypatch,
+        binding_transform=lambda data: data["space"].update(
+            team_id="00000000-0000-0000-0000-000000000099"
+        ),
         registry=registry,
         config=_build_test_config(
             tmp_path,
@@ -2163,205 +1755,18 @@ def test_managed_execution_rejects_grant_with_mismatched_team(
         response = client.post(
             "/pod/v1/agents/execute",
             headers={"Authorization": "Bearer test-token"},
-            json={
-                "agent_instance_id": "instance-1",
-                "input": "what team am I in?",
-                "session_id": "managed-session",
-                "runtime_context": {"user_id": "alice", "team_id": "intruder-team"},
-            },
+            json=managed_payload(
+                {
+                    "agent_instance_id": "instance-1",
+                    "input": "what team am I in?",
+                    "session_id": "managed-session",
+                    "runtime_context": {"user_id": "alice", "team_id": "intruder-team"},
+                }
+            ),
         )
 
     assert response.status_code == 403
-    assert "team" in response.json()["detail"].lower()
-
-
-def _managed_resolution_payload(owner_team_id: str = "fredlab") -> dict[str, object]:
-    return {
-        "agent_instance_id": "instance-1",
-        "template_agent_id": "sentinel.react.v2",
-        "owner_scope": "team",
-        "owner_team_id": owner_team_id,
-        "enabled": True,
-        "tuning": {
-            "role": "Sentinel",
-            "description": "Reports the current team scope.",
-            "tags": ["ops"],
-            "fields": [],
-        },
-    }
-
-
-class _RecordingResponse:
-    """Minimal httpx.Response double — status_code/json()/text only, as used by _resolve_agent_instance."""
-
-    def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
-        self._payload = payload
-        self.status_code = status_code
-        self.text = json.dumps(payload)
-        self.reason_phrase = "error"
-
-    def json(self) -> dict[str, object]:
-        return self._payload
-
-
-def _install_recording_async_client(monkeypatch, response_factory):
-    """
-    Swap `httpx.AsyncClient` itself for a bare `.get()`/`.aclose()` recorder —
-    the same technique the control-plane execution tests above already use —
-    so the returned instance keeps the static type `httpx.AsyncClient` and can
-    be passed straight to `_resolve_agent_instance(http_client=...)`.
-
-    Returns (client, calls): `calls` is the list of recorded {"url", "headers"}
-    dicts, appended to in call order — safe to inspect for ordering/isolation.
-    """
-    calls: list[dict[str, Any]] = []
-
-    class _RecordingAsyncClient:
-        def __init__(self, *args, **kwargs) -> None:
-            pass
-
-        async def get(self, url: str, headers: dict[str, str] | None = None):
-            call: dict[str, Any] = {
-                "url": url,
-                "headers": dict(headers) if headers else None,
-            }
-            calls.append(call)
-            return response_factory(call)
-
-        async def aclose(self) -> None:
-            return None
-
-    monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _RecordingAsyncClient)
-    client = agent_app_module.httpx.AsyncClient()
-    return client, calls
-
-
-def _managed_instance_request() -> "agent_app_module._AgentExecuteRequest":
-    return agent_app_module._AgentExecuteRequest(
-        agent_instance_id="instance-1", message="hi"
-    )
-
-
-@pytest.mark.asyncio
-async def test_resolve_agent_instance_reuses_the_injected_client_across_calls(
-    monkeypatch,
-) -> None:
-    """TURN-01: the function must only use the caller-supplied client, never build
-    its own httpx.AsyncClient per resolution — that per-turn construction was the
-    finding this fix removes."""
-    client, calls = _install_recording_async_client(
-        monkeypatch, lambda call: _RecordingResponse(_managed_resolution_payload())
-    )
-    registry = {_TeamScopeAgent().agent_id: _TeamScopeAgent()}
-
-    for _ in range(3):
-        await agent_app_module._resolve_agent_instance(
-            request=_managed_instance_request(),
-            registry=registry,
-            access_token="token-a",
-            control_plane_url="http://control-plane:8222/control-plane/v1",
-            http_client=client,
-            team_id="fredlab",
-        )
-
-    assert len(calls) == 3  # the one injected client served every resolution
-
-
-@pytest.mark.asyncio
-async def test_resolve_agent_instance_does_not_leak_headers_between_calls(
-    monkeypatch,
-) -> None:
-    """Authorization/X-Request-Id stay per-request on the shared client — no
-    default header must survive from one turn's resolution to the next."""
-    client, calls = _install_recording_async_client(
-        monkeypatch, lambda call: _RecordingResponse(_managed_resolution_payload())
-    )
-    registry = {_TeamScopeAgent().agent_id: _TeamScopeAgent()}
-
-    await agent_app_module._resolve_agent_instance(
-        request=_managed_instance_request(),
-        registry=registry,
-        access_token="token-alice",
-        control_plane_url="http://control-plane:8222/control-plane/v1",
-        http_client=client,
-        team_id="fredlab",
-        request_id="req-alice",
-    )
-    await agent_app_module._resolve_agent_instance(
-        request=_managed_instance_request(),
-        registry=registry,
-        access_token="token-bob",
-        control_plane_url="http://control-plane:8222/control-plane/v1",
-        http_client=client,
-        team_id="fredlab",
-        request_id="req-bob",
-    )
-
-    first, second = calls
-    assert first["headers"] == {
-        "Authorization": "Bearer token-alice",
-        "X-Request-Id": "req-alice",
-    }
-    assert second["headers"] == {
-        "Authorization": "Bearer token-bob",
-        "X-Request-Id": "req-bob",
-    }
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("upstream_status", "expected_status"),
-    [(404, 404), (403, 403), (500, 502)],
-)
-async def test_resolve_agent_instance_preserves_http_error_mapping(
-    monkeypatch, upstream_status: int, expected_status: int
-) -> None:
-    """The control-plane status → pod HTTPException mapping (404/403/other→502)
-    must be unchanged now that the call runs through an injected client."""
-    client, _calls = _install_recording_async_client(
-        monkeypatch, lambda call: _RecordingResponse({}, status_code=upstream_status)
-    )
-    registry = {_TeamScopeAgent().agent_id: _TeamScopeAgent()}
-
-    with pytest.raises(agent_app_module.HTTPException) as exc:
-        await agent_app_module._resolve_agent_instance(
-            request=_managed_instance_request(),
-            registry=registry,
-            access_token="token",
-            control_plane_url="http://control-plane:8222/control-plane/v1",
-            http_client=client,
-            team_id="fredlab",
-        )
-    assert exc.value.status_code == expected_status
-
-
-@pytest.mark.asyncio
-async def test_resolve_agent_instance_supports_concurrent_calls_on_one_client(
-    monkeypatch,
-) -> None:
-    """Multiple in-flight turns must resolve concurrently against the single
-    shared client without cross-talk between their request ids/headers."""
-    client, calls = _install_recording_async_client(
-        monkeypatch, lambda call: _RecordingResponse(_managed_resolution_payload())
-    )
-    registry = {_TeamScopeAgent().agent_id: _TeamScopeAgent()}
-
-    async def _resolve(request_id: str):
-        return await agent_app_module._resolve_agent_instance(
-            request=_managed_instance_request(),
-            registry=registry,
-            access_token="token",
-            control_plane_url="http://control-plane:8222/control-plane/v1",
-            http_client=client,
-            team_id="fredlab",
-            request_id=request_id,
-        )
-
-    request_ids = [f"req-{i}" for i in range(10)]
-    results = await asyncio.gather(*[_resolve(rid) for rid in request_ids])
-
-    assert len(results) == 10
-    assert {call["headers"]["X-Request-Id"] for call in calls} == set(request_ids)
+    assert "binding mismatch" in response.json()["detail"].lower()
 
 
 def test_create_agent_app_does_not_initialize_swift_user_store(
@@ -2639,7 +2044,8 @@ def test_emit_turn_completed_populates_kpi_turns_buffer(monkeypatch, tmp_path) -
     )
 
     definition = _EchoAgent()
-    app = create_agent_app(
+    app = create_managed_app(
+        monkeypatch,
         registry={definition.agent_id: definition},
         config=_build_test_config(tmp_path),
     )
@@ -2650,7 +2056,7 @@ def test_emit_turn_completed_populates_kpi_turns_buffer(monkeypatch, tmp_path) -
 
         resp = client.post(
             "/pod/v1/agents/execute",
-            json={"agent_id": "rags.sample.echo", "input": "ping"},
+            json=managed_payload({"agent_id": "rags.sample.echo", "input": "ping"}),
         )
         assert resp.status_code == 200
 
@@ -2707,7 +2113,8 @@ def test_emit_turn_completed_carries_session_id(monkeypatch, tmp_path) -> None:
     )
 
     definition = _EchoAgent()
-    app = create_agent_app(
+    app = create_managed_app(
+        monkeypatch,
         registry={definition.agent_id: definition},
         config=_build_test_config(tmp_path),
     )
@@ -2728,11 +2135,13 @@ def test_emit_turn_completed_carries_session_id(monkeypatch, tmp_path) -> None:
 
         resp = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": "rags.sample.echo",
-                "input": "ping",
-                "session_id": "session-depth",
-            },
+            json=managed_payload(
+                {
+                    "agent_id": "rags.sample.echo",
+                    "input": "ping",
+                    "session_id": "session-depth",
+                }
+            ),
         )
         assert resp.status_code == 200
 
@@ -2800,36 +2209,46 @@ def test_execute_route_propagates_observability_context(monkeypatch, tmp_path) -
 
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
 
     with TestClient(app) as client:
         response = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": "rags.sample.echo",
-                "input": "hello",
-                "session_id": "session-1",
-                "runtime_context": {
-                    "user_id": "alice",
-                    "team_id": "fredlab",
-                    "trace_id": "trace-1",
-                    "correlation_id": "corr-1",
-                },
-            },
+            json=managed_payload(
+                {
+                    "agent_id": "rags.sample.echo",
+                    "input": "hello",
+                    "session_id": "session-1",
+                    "runtime_context": {
+                        "user_id": "alice",
+                        "team_id": "fredlab",
+                        "trace_id": "trace-1",
+                        "correlation_id": "corr-1",
+                    },
+                }
+            ),
         )
 
     assert response.status_code == 200
     assert seen["context"] == {
         "session_id": "session-1",
         "user_id": "alice",
-        "team_id": "fredlab",
+        "team_id": SPACE_ID,
+        "space_id": SPACE_ID,
+        "agent_instance_id": INSTANCE_ID,
+        "template_agent_id": "rags.sample.echo",
         "trace_id": "trace-1",
         "correlation_id": "corr-1",
         "execution_action": "execute",
     }
 
 
-def test_local_registry_invoker_reuses_runtime_execute_projection(monkeypatch) -> None:
+@pytest.mark.asyncio
+async def test_local_registry_invoker_reuses_runtime_execute_projection(
+    monkeypatch,
+) -> None:
     """
     Ensure local agent invocation flows through the typed runtime request bridge.
 
@@ -2874,12 +2293,12 @@ def test_local_registry_invoker_reuses_runtime_execute_projection(monkeypatch) -
         access_token="token-1",
     )
 
-    result = asyncio.run(
-        invoker.invoke(
+    with active_turn("rags.sample.echo", session="session-1"):
+        result = await invoker.invoke(
             AgentInvocationRequest(
                 agent_id=definition.agent_id,
                 message="hello",
-                context=PortableContext(
+                context=invocation_context(
                     request_id="req-1",
                     correlation_id="corr-1",
                     actor="alice",
@@ -2892,7 +2311,6 @@ def test_local_registry_invoker_reuses_runtime_execute_projection(monkeypatch) -
                 ),
             )
         )
-    )
 
     assert result.content == "ok"
     assert result.is_error is False
@@ -2907,10 +2325,15 @@ def test_local_registry_invoker_reuses_runtime_execute_projection(monkeypatch) -
     assert context["session_id"] == "session-1"
     assert context["user_id"] == "alice"
     assert context["team_id"] == "fredlab"
+    assert context["space_id"] == SPACE_ID
+    assert context["agent_instance_id"] == INSTANCE_ID
     assert context["execution_action"] == "execute"
 
 
-def test_local_registry_child_never_receives_the_user_chat_choice(monkeypatch) -> None:
+@pytest.mark.asyncio
+async def test_local_registry_child_never_receives_the_user_chat_choice(
+    monkeypatch,
+) -> None:
     """A registry child gets only the parent's PortableContext: no user choice,
     no instance tuning (so no recommendation) and no team-disabled set, so it
     keeps its own model resolution."""
@@ -2934,12 +2357,12 @@ def test_local_registry_child_never_receives_the_user_chat_choice(monkeypatch) -
     invoker = agent_app_module.LocalRegistryAgentInvoker(
         registry={definition.agent_id: definition}, access_token=None
     )
-    asyncio.run(
-        invoker.invoke(
+    with active_turn("rags.sample.echo", session=None):
+        await invoker.invoke(
             AgentInvocationRequest(
                 agent_id=definition.agent_id,
                 message="hello",
-                context=PortableContext(
+                context=invocation_context(
                     request_id="req-1",
                     correlation_id="corr-1",
                     actor="alice",
@@ -2949,7 +2372,6 @@ def test_local_registry_child_never_receives_the_user_chat_choice(monkeypatch) -
                 ),
             )
         )
-    )
 
     context = seen["context"]
     kwargs = seen["kwargs"]
@@ -2960,7 +2382,10 @@ def test_local_registry_child_never_receives_the_user_chat_choice(monkeypatch) -
     assert not kwargs.get("reasoning_enabled_model_ids")
 
 
-def test_local_registry_invoker_drains_runtime_events_after_final(monkeypatch) -> None:
+@pytest.mark.asyncio
+async def test_local_registry_invoker_drains_runtime_events_after_final(
+    monkeypatch,
+) -> None:
     """
     Ensure an in-process nested invocation lets the runtime generator finish.
 
@@ -3011,12 +2436,12 @@ def test_local_registry_invoker_drains_runtime_events_after_final(monkeypatch) -
         access_token="token-1",
     )
 
-    result = asyncio.run(
-        invoker.invoke(
+    with active_turn("rags.sample.echo", session="session-1"):
+        result = await invoker.invoke(
             AgentInvocationRequest(
                 agent_id=definition.agent_id,
                 message="hello",
-                context=PortableContext(
+                context=invocation_context(
                     request_id="req-1",
                     correlation_id="corr-1",
                     actor="alice",
@@ -3028,7 +2453,6 @@ def test_local_registry_invoker_drains_runtime_events_after_final(monkeypatch) -
                 ),
             )
         )
-    )
 
     assert result.content == "ok"
     assert result.is_error is False
@@ -3036,7 +2460,8 @@ def test_local_registry_invoker_drains_runtime_events_after_final(monkeypatch) -
     assert seen["cleaned_up"] is True
 
 
-def test_local_registry_invoker_applies_invocation_scope(monkeypatch) -> None:
+@pytest.mark.asyncio
+async def test_local_registry_invoker_applies_invocation_scope(monkeypatch) -> None:
     """
     RFC AGENT-INVOKE: a per-call ``InvocationScope`` narrows the callee's retrieval.
 
@@ -3079,7 +2504,7 @@ def test_local_registry_invoker_applies_invocation_scope(monkeypatch) -> None:
     )
 
     def _portable() -> PortableContext:
-        return PortableContext(
+        return invocation_context(
             request_id="req-1",
             correlation_id="corr-1",
             actor="alice",
@@ -3092,8 +2517,8 @@ def test_local_registry_invoker_applies_invocation_scope(monkeypatch) -> None:
         )
 
     # With scope → narrowing fields land on the forwarded context dict.
-    asyncio.run(
-        invoker.invoke(
+    with active_turn("rags.sample.echo", session="session-1"):
+        await invoker.invoke(
             AgentInvocationRequest(
                 agent_id=definition.agent_id,
                 message="hello",
@@ -3105,7 +2530,6 @@ def test_local_registry_invoker_applies_invocation_scope(monkeypatch) -> None:
                 ),
             )
         )
-    )
     context = seen["context"]
     assert isinstance(context, dict)
     assert context["selected_document_uids"] == ["doc-a", "doc-b"]
@@ -3114,72 +2538,47 @@ def test_local_registry_invoker_applies_invocation_scope(monkeypatch) -> None:
 
     # Without scope → no narrowing keys are injected (no regression).
     seen.clear()
-    asyncio.run(
-        invoker.invoke(
+    with active_turn("rags.sample.echo", session="session-1"):
+        await invoker.invoke(
             AgentInvocationRequest(
                 agent_id=definition.agent_id,
                 message="hello",
                 context=_portable(),
             )
         )
-    )
     context = seen["context"]
     assert isinstance(context, dict)
     assert "selected_document_uids" not in context
     assert "search_policy" not in context
 
 
-def test_nested_invocation_preserves_actor_when_user_id_is_none(monkeypatch) -> None:
-    seen: dict[str, object] = {}
+@pytest.mark.asyncio
+async def test_nested_invocation_cannot_replace_person_with_actor(monkeypatch):
+    from fred_runtime.runtime_support.authority import AuthorityLostError
 
-    async def _fake_iterate_runtime_event_payloads(
-        definition,
-        request,
-        *,
-        access_token,
-        team_id,
-        registry,
-        exchange_id=None,
-        **_kwargs,
-    ):
-        _ = (definition, access_token, team_id, registry, exchange_id)
-        seen["context"] = dict(request.context or {})
-        yield {"kind": "final", "sequence": 0, "content": "ok"}
-
-    monkeypatch.setattr(
-        agent_app_module,
-        "_iterate_runtime_event_payloads",
-        _fake_iterate_runtime_event_payloads,
-    )
-
+    iterate = AsyncMock(side_effect=AssertionError("Unbound person reached execution"))
+    monkeypatch.setattr(agent_app_module, "_iterate_runtime_event_payloads", iterate)
     definition = _EchoAgent()
     invoker = agent_app_module.LocalRegistryAgentInvoker(
-        registry={definition.agent_id: definition},
-        access_token="token-1",
+        registry={definition.agent_id: definition}, access_token=None
     )
-
-    result = asyncio.run(
-        invoker.invoke(
-            AgentInvocationRequest(
-                agent_id=definition.agent_id,
-                message="hello",
-                context=PortableContext(
-                    request_id="req-1",
-                    correlation_id="corr-1",
-                    actor="marc",
-                    tenant="default",
-                    environment=PortableEnvironment.DEV,
-                    user_id=None,
-                ),
+    with active_turn(definition.agent_id):
+        with pytest.raises(AuthorityLostError):
+            await invoker.invoke(
+                AgentInvocationRequest(
+                    agent_id=definition.agent_id,
+                    message="hi",
+                    context=invocation_context(
+                        request_id="r",
+                        correlation_id="c",
+                        actor="alice",
+                        tenant="default",
+                        environment=PortableEnvironment.DEV,
+                        user_id=None,
+                    ),
+                )
             )
-        )
-    )
-
-    assert result.is_error is False
-    context = seen["context"]
-    assert isinstance(context, dict)
-    assert context["actor"] == "marc"
-    assert context["user_id"] is None
+    iterate.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -3411,6 +2810,9 @@ async def _write_react_v2_checkpoint(
     only ever land there (`test_langgraph_resets_root_checkpoint_namespace`).
     """
 
+    assert await checkpointer.abind_conversation(
+        thread_id, conversation_provenance(), allow_create=True
+    )
     checkpoint = empty_checkpoint()
     checkpoint_id = checkpoint["id"]
     checkpoint["channel_values"] = channel_values
@@ -3511,7 +2913,9 @@ def test_resume_accepts_react_v2_checkpoint_via_pending_interrupt_write(
 
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
 
     with TestClient(app) as client:
         checkpointer = get_runtime_context().config.checkpointer
@@ -3527,17 +2931,19 @@ def test_resume_accepts_react_v2_checkpoint_via_pending_interrupt_write(
 
         response = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": "rags.sample.echo",
-                "input": "",
-                "session_id": "session-react-v2",
-                # LangGraph's Interrupt.id — never a real stored checkpoint
-                # id (#2179's root cause) — but exactly the id the pending
-                # write above carries (#2216's exact-match requirement).
-                "interrupt_id": "xxh3-routing-hash-not-a-real-checkpoint-id",
-                "resume_payload": {"choice_id": "proceed"},
-                "runtime_context": {"user_id": "alice"},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": "rags.sample.echo",
+                    "input": "",
+                    "session_id": "session-react-v2",
+                    # LangGraph's Interrupt.id — never a real stored checkpoint
+                    # id (#2179's root cause) — but exactly the id the pending
+                    # write above carries (#2216's exact-match requirement).
+                    "interrupt_id": "xxh3-routing-hash-not-a-real-checkpoint-id",
+                    "resume_payload": {"choice_id": "proceed"},
+                    "runtime_context": {"user_id": "alice"},
+                }
+            ),
         )
 
     assert response.status_code == 200
@@ -3682,7 +3088,9 @@ def test_resume_rejects_react_v2_checkpoint_without_pending_interrupt(
 
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
 
     with TestClient(app) as client:
         checkpointer = get_runtime_context().config.checkpointer
@@ -3698,14 +3106,16 @@ def test_resume_rejects_react_v2_checkpoint_without_pending_interrupt(
 
         response = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": "rags.sample.echo",
-                "input": "",
-                "session_id": "session-react-v2-done",
-                "interrupt_id": "xxh3-routing-hash-not-a-real-checkpoint-id",
-                "resume_payload": {"choice_id": "proceed"},
-                "runtime_context": {"user_id": "alice"},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": "rags.sample.echo",
+                    "input": "",
+                    "session_id": "session-react-v2-done",
+                    "interrupt_id": "xxh3-routing-hash-not-a-real-checkpoint-id",
+                    "resume_payload": {"choice_id": "proceed"},
+                    "runtime_context": {"user_id": "alice"},
+                }
+            ),
         )
 
     assert response.status_code == 409
@@ -3783,7 +3193,9 @@ def test_resume_builds_react_input_without_raising(monkeypatch, tmp_path) -> Non
 
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
 
     with TestClient(app) as client:
         checkpointer = get_runtime_context().config.checkpointer
@@ -3799,14 +3211,16 @@ def test_resume_builds_react_input_without_raising(monkeypatch, tmp_path) -> Non
 
         response = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": "rags.sample.echo",
-                "input": "",
-                "session_id": "session-react-input-resume",
-                "interrupt_id": "xxh3-routing-hash-not-a-real-checkpoint-id",
-                "resume_payload": {"choice_id": "proceed"},
-                "runtime_context": {"user_id": "alice"},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": "rags.sample.echo",
+                    "input": "",
+                    "session_id": "session-react-input-resume",
+                    "interrupt_id": "xxh3-routing-hash-not-a-real-checkpoint-id",
+                    "resume_payload": {"choice_id": "proceed"},
+                    "runtime_context": {"user_id": "alice"},
+                }
+            ),
         )
 
     assert response.status_code == 200
@@ -3915,7 +3329,9 @@ def test_resume_reuses_exchange_id_from_the_interrupted_turn(
 
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
 
     with TestClient(app) as client:
         checkpointer = get_runtime_context().config.checkpointer
@@ -3923,12 +3339,14 @@ def test_resume_reuses_exchange_id_from_the_interrupted_turn(
 
         first = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": "rags.sample.echo",
-                "input": "hello",
-                "session_id": "session-exchange-continuity",
-                "runtime_context": {"user_id": "alice"},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": "rags.sample.echo",
+                    "input": "hello",
+                    "session_id": "session-exchange-continuity",
+                    "runtime_context": {"user_id": "alice"},
+                }
+            ),
         )
         assert first.status_code == 200
 
@@ -3942,14 +3360,16 @@ def test_resume_reuses_exchange_id_from_the_interrupted_turn(
 
         resume = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": "rags.sample.echo",
-                "input": "",
-                "session_id": "session-exchange-continuity",
-                "interrupt_id": "xxh3-routing-hash-not-a-real-checkpoint-id",
-                "resume_payload": {"choice_id": "proceed"},
-                "runtime_context": {"user_id": "alice"},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": "rags.sample.echo",
+                    "input": "",
+                    "session_id": "session-exchange-continuity",
+                    "interrupt_id": "xxh3-routing-hash-not-a-real-checkpoint-id",
+                    "resume_payload": {"choice_id": "proceed"},
+                    "runtime_context": {"user_id": "alice"},
+                }
+            ),
         )
         assert resume.status_code == 200
 
@@ -4066,7 +3486,9 @@ def test_resume_stale_response_cannot_approve_a_later_interrupt(
 
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
     session_id = "session-stale-attack"
 
     with TestClient(app) as client:
@@ -4083,14 +3505,16 @@ def test_resume_stale_response_cannot_approve_a_later_interrupt(
         )
         resume_a = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": "rags.sample.echo",
-                "input": "",
-                "session_id": session_id,
-                "interrupt_id": "interrupt-a",
-                "resume_payload": {"choice_id": "proceed"},
-                "runtime_context": {"user_id": "alice"},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": "rags.sample.echo",
+                    "input": "",
+                    "session_id": session_id,
+                    "interrupt_id": "interrupt-a",
+                    "resume_payload": {"choice_id": "proceed"},
+                    "runtime_context": {"user_id": "alice"},
+                }
+            ),
         )
         assert resume_a.status_code == 200
         assert calls == ["interrupt-a"]
@@ -4109,14 +3533,16 @@ def test_resume_stale_response_cannot_approve_a_later_interrupt(
         # never reach the runtime (B's tool has not executed).
         stale_resume = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": "rags.sample.echo",
-                "input": "",
-                "session_id": session_id,
-                "interrupt_id": "interrupt-a",
-                "resume_payload": {"choice_id": "proceed"},
-                "runtime_context": {"user_id": "alice"},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": "rags.sample.echo",
+                    "input": "",
+                    "session_id": session_id,
+                    "interrupt_id": "interrupt-a",
+                    "resume_payload": {"choice_id": "proceed"},
+                    "runtime_context": {"user_id": "alice"},
+                }
+            ),
         )
         assert stale_resume.status_code == 409
         assert stale_resume.json()["detail"] == (
@@ -4127,14 +3553,16 @@ def test_resume_stale_response_cannot_approve_a_later_interrupt(
         # 4. resuming with B's own id succeeds, exactly once.
         resume_b = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": "rags.sample.echo",
-                "input": "",
-                "session_id": session_id,
-                "interrupt_id": "interrupt-b",
-                "resume_payload": {"choice_id": "proceed"},
-                "runtime_context": {"user_id": "alice"},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": "rags.sample.echo",
+                    "input": "",
+                    "session_id": session_id,
+                    "interrupt_id": "interrupt-b",
+                    "resume_payload": {"choice_id": "proceed"},
+                    "runtime_context": {"user_id": "alice"},
+                }
+            ),
         )
         assert resume_b.status_code == 200
         assert calls == ["interrupt-a", "interrupt-b"]
@@ -4187,7 +3615,9 @@ def test_resume_replay_after_success_does_not_execute_again(
 
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
     session_id = "session-replay"
 
     with TestClient(app) as client:
@@ -4200,14 +3630,16 @@ def test_resume_replay_after_success_does_not_execute_again(
                 interrupt_id="interrupt-a",
             )
         )
-        payload = {
-            "agent_id": "rags.sample.echo",
-            "input": "",
-            "session_id": session_id,
-            "interrupt_id": "interrupt-a",
-            "resume_payload": {"choice_id": "proceed"},
-            "runtime_context": {"user_id": "alice"},
-        }
+        payload = managed_payload(
+            {
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": session_id,
+                "interrupt_id": "interrupt-a",
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            }
+        )
 
         first = client.post("/pod/v1/agents/execute", json=payload)
         assert first.status_code == 200
@@ -4250,7 +3682,9 @@ def test_resume_rejects_non_matching_interrupt_id_variants(
 
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
     session_id = "session-invalid-input"
 
     with TestClient(app) as client:
@@ -4264,13 +3698,15 @@ def test_resume_rejects_non_matching_interrupt_id_variants(
             )
         )
 
-        body: dict[str, Any] = {
-            "agent_id": "rags.sample.echo",
-            "input": "",
-            "session_id": session_id,
-            "resume_payload": {"choice_id": "proceed"},
-            "runtime_context": {"user_id": "alice"},
-        }
+        body: dict[str, Any] = managed_payload(
+            {
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": session_id,
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            }
+        )
         if interrupt_id is not None:
             body["interrupt_id"] = interrupt_id
 
@@ -4298,7 +3734,9 @@ def test_resume_rejects_token_belonging_to_another_thread(
 
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
 
     with TestClient(app) as client:
         checkpointer = get_runtime_context().config.checkpointer
@@ -4320,14 +3758,16 @@ def test_resume_rejects_token_belonging_to_another_thread(
 
         response = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": "rags.sample.echo",
-                "input": "",
-                "session_id": "session-thread-a",
-                "interrupt_id": "interrupt-b",  # belongs to thread B, not A
-                "resume_payload": {"choice_id": "proceed"},
-                "runtime_context": {"user_id": "alice"},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": "rags.sample.echo",
+                    "input": "",
+                    "session_id": "session-thread-a",
+                    "interrupt_id": "interrupt-b",  # belongs to thread B, not A
+                    "resume_payload": {"choice_id": "proceed"},
+                    "runtime_context": {"user_id": "alice"},
+                }
+            ),
         )
 
     assert response.status_code == 409
@@ -4414,7 +3854,9 @@ async def test_concurrent_duplicate_resumes_execute_the_tool_at_most_once(
 
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
     session_id = "session-dup-http-concurrent"
 
     with TestClient(app):
@@ -4426,14 +3868,16 @@ async def test_concurrent_duplicate_resumes_execute_the_tool_at_most_once(
             interrupt_id="interrupt-a",
         )
 
-        payload = {
-            "agent_id": "rags.sample.echo",
-            "input": "",
-            "session_id": session_id,
-            "interrupt_id": "interrupt-a",
-            "resume_payload": {"choice_id": "proceed"},
-            "runtime_context": {"user_id": "alice"},
-        }
+        payload = managed_payload(
+            {
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": session_id,
+                "interrupt_id": "interrupt-a",
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            }
+        )
 
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -4501,7 +3945,9 @@ def test_resume_runtime_setup_failure_leaves_no_claim_and_retry_succeeds(
 
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
     session_id = "session-setup-failure"
 
     with TestClient(app) as client:
@@ -4514,14 +3960,16 @@ def test_resume_runtime_setup_failure_leaves_no_claim_and_retry_succeeds(
                 interrupt_id="interrupt-a",
             )
         )
-        payload = {
-            "agent_id": "rags.sample.echo",
-            "input": "",
-            "session_id": session_id,
-            "interrupt_id": "interrupt-a",
-            "resume_payload": {"choice_id": "proceed"},
-            "runtime_context": {"user_id": "alice"},
-        }
+        payload = managed_payload(
+            {
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": session_id,
+                "interrupt_id": "interrupt-a",
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            }
+        )
 
         first = client.post("/pod/v1/agents/execute", json=payload)
         # The runtime construction failure surfaces as a RuntimeErrorEvent
@@ -4577,7 +4025,9 @@ def test_resume_start_failure_releases_the_claim_for_a_retry(
 
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
     session_id = "session-start-failure"
 
     with TestClient(app) as client:
@@ -4590,14 +4040,16 @@ def test_resume_start_failure_releases_the_claim_for_a_retry(
                 interrupt_id="interrupt-a",
             )
         )
-        payload = {
-            "agent_id": "rags.sample.echo",
-            "input": "",
-            "session_id": session_id,
-            "interrupt_id": "interrupt-a",
-            "resume_payload": {"choice_id": "proceed"},
-            "runtime_context": {"user_id": "alice"},
-        }
+        payload = managed_payload(
+            {
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": session_id,
+                "interrupt_id": "interrupt-a",
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            }
+        )
 
         first = client.post("/pod/v1/agents/execute", json=payload)
         assert first.status_code == 200
@@ -4683,7 +4135,9 @@ async def test_cancellation_after_start_leaves_the_claim_stuck_not_released(
 
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
     session_id = "session-cancel-mid-invocation"
 
     with TestClient(app):
@@ -4694,14 +4148,16 @@ async def test_cancellation_after_start_leaves_the_claim_stuck_not_released(
             thread_id=session_id,
             interrupt_id="interrupt-a",
         )
-        payload = {
-            "agent_id": "rags.sample.echo",
-            "input": "",
-            "session_id": session_id,
-            "interrupt_id": "interrupt-a",
-            "resume_payload": {"choice_id": "proceed"},
-            "runtime_context": {"user_id": "alice"},
-        }
+        payload = managed_payload(
+            {
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": session_id,
+                "interrupt_id": "interrupt-a",
+                "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            }
+        )
 
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -4756,17 +4212,21 @@ def test_normal_react_turn_without_resume_is_unaffected(monkeypatch, tmp_path) -
 
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    app = create_managed_app(
+        monkeypatch, registry=registry, config=_build_test_config(tmp_path)
+    )
 
     with TestClient(app) as client:
         response = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": "rags.sample.echo",
-                "input": "hello",
-                "session_id": "session-normal-turn",
-                "runtime_context": {"user_id": "alice"},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": "rags.sample.echo",
+                    "input": "hello",
+                    "session_id": "session-normal-turn",
+                    "runtime_context": {"user_id": "alice"},
+                }
+            ),
         )
 
     assert response.status_code == 200
@@ -4828,131 +4288,29 @@ def test_execute_rejects_managed_request_without_team_before_resolution(
     assert response.status_code == 422
 
 
-def test_no_security_resolves_personal_team_before_iterate(
-    monkeypatch, tmp_path
-) -> None:
-    """
-    _stream must resolve team_id to "personal" and pass it to
-    _iterate_runtime_event_payloads when security is disabled and the caller
-    omits team_id.
-
-    Why this exists:
-    - the resolution happens in _stream(), before calling _iterate; this test
-      catches any regression where KPIs and history would receive team_id=None
-    - the fake _iterate captures the team_id it was called with so we can assert
-      without running a real agent
-
-    How to use it:
-    - pytest tests/test_agent_app.py::test_no_security_resolves_personal_team_before_iterate
-    """
-
-    captured: dict[str, object] = {}
-
-    async def _fake_iterate(
-        definition,
-        request,
-        access_token=None,
-        *,
-        team_id=None,
-        registry=None,
-        exchange_id=None,
-        **_kwargs,
-    ):
-        captured["team_id"] = team_id
-        yield {"kind": "final", "sequence": 0, "content": "ok"}
-
-    monkeypatch.setattr(
-        agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
-    )
-    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+@pytest.mark.parametrize("route", ["execute", "execute/stream", "evaluate"])
+def test_security_disabled_does_not_admit_an_anonymous_turn(
+    monkeypatch, tmp_path, route
+):
+    model = ToolFriendlyFakeChatModel(responses=[])
     monkeypatch.setattr(
         agent_app_module,
         "_build_chat_model_factory",
         lambda config: StaticChatModelFactory(model),
     )
-
-    definition = _EchoAgent()
+    iterate = AsyncMock(side_effect=AssertionError("Anonymous turn reached execution"))
+    monkeypatch.setattr(agent_app_module, "_iterate_runtime_event_payloads", iterate)
     app = create_agent_app(
-        registry={definition.agent_id: definition},
-        config=_build_test_config(tmp_path),  # security.user.enabled=False
-    )
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/pod/v1/agents/execute/stream",
-            # no team_id — _stream() must default to "personal"
-            json={"agent_id": "rags.sample.echo", "input": "hello"},
-        )
-
-    assert response.status_code == 200
-    assert captured["team_id"] == "personal"
-
-
-def test_no_security_resolves_personal_team_in_portable_context(
-    monkeypatch, tmp_path
-) -> None:
-    """
-    When security is disabled and no team_id is provided, the agent's
-    PortableContext must carry team_id="personal".
-
-    Why this exists:
-    - validates the full default chain end-to-end:
-      no team_id in request → _iterate applies "personal" → PortableContext carries it
-    - uses the _demo_team_scope authored tool as an observable side-effect
-      (same pattern as test_create_agent_app_executes_managed_agent_instances)
-
-    How to use it:
-    - pytest tests/test_agent_app.py::test_no_security_resolves_personal_team_in_portable_context
-    """
-
-    model = ToolFriendlyFakeChatModel(
-        responses=[
-            AIMessage(
-                content="",
-                tool_calls=[
-                    {
-                        "name": "demo_team_scope",
-                        "args": {},
-                        "id": "call-team",
-                        "type": "tool_call",
-                    }
-                ],
-            ),
-            AIMessage(content="team:personal"),
-        ]
-    )
-    monkeypatch.setattr(
-        agent_app_module,
-        "_build_chat_model_factory",
-        lambda config: StaticChatModelFactory(model),
-    )
-
-    definition = _TeamScopeAgent()
-    app = create_agent_app(
-        registry={definition.agent_id: definition},
+        registry={_EchoAgent().agent_id: _EchoAgent()},
         config=_build_test_config(tmp_path),
     )
-
     with TestClient(app) as client:
         response = client.post(
-            "/pod/v1/agents/execute/stream",
-            json={
-                "agent_id": "sentinel.react.v2",
-                "input": "what team?",
-                # no team_id provided
-            },
+            f"/pod/v1/agents/{route}", json=managed_payload({"input": "hi"})
         )
-
-    assert response.status_code == 200
-    lines = [
-        json.loads(line.removeprefix("data: "))
-        for line in response.text.splitlines()
-        if line.startswith("data: ")
-    ]
-    tool_results = [e for e in lines if e.get("kind") == "tool_result"]
-    assert any("team:personal" in e.get("content", "") for e in tool_results), (
-        f"Expected team:personal in tool_result events, got: {tool_results}"
-    )
+    assert response.status_code == 403
+    assert "authenticated person" in response.json()["detail"]
+    iterate.assert_not_called()
 
 
 def test_apply_runtime_tuning_applies_system_prompt_from_values() -> None:
@@ -5872,33 +5230,6 @@ def test_build_mcp_capability_id_and_team_scope_come_from_the_catalog_server() -
 # ---------------------------------------------------------------------------
 
 
-class _FakeRebacEngine:
-    """Minimal RebacEngine stand-in for `_authorize_execution_or_raise` tests."""
-
-    def __init__(self, *, enabled: bool, deny: bool = False) -> None:
-        self._enabled = enabled
-        self._deny = deny
-        self.calls: list[tuple[str, TeamPermission, str]] = []
-
-    @property
-    def enabled(self) -> bool:
-        return self._enabled
-
-    async def check_user_team_permission_or_raise(
-        self, user: KeycloakUser, permission: TeamPermission, team_id: str
-    ) -> str | None:
-        self.calls.append((user.uid, permission, team_id))
-        if self._deny:
-            raise AuthorizationError(user.uid, permission.value, Resource.RESOURCES)
-        return None
-
-
-def _managed_request(team_id: str = "fredlab") -> RuntimeExecuteRequest:
-    body: dict[str, object] = {"input": "hi", "agent_instance_id": "inst-1"}
-    body["runtime_context"] = {"user_id": "alice", "team_id": team_id}
-    return RuntimeExecuteRequest.model_validate(body)
-
-
 def _wire_engine(
     monkeypatch, engine: object | None, *, security_profile: str | None = None
 ) -> None:
@@ -5917,301 +5248,79 @@ _ALICE = KeycloakUser(uid="alice", username="alice", roles=[], email=None)
 
 
 @pytest.mark.asyncio
-async def test_authorize_allows_when_user_holds_team_relation(
-    monkeypatch, minimal_config
-) -> None:
-    """An enabled engine that grants CAN_USE_TEAM_AGENTS lets the request proceed."""
-    engine = _FakeRebacEngine(enabled=True, deny=False)
+@pytest.mark.parametrize("engine_enabled", [True, False])
+async def test_admission_defers_permissions_to_weaver_resolution(
+    monkeypatch, minimal_config, engine_enabled
+):
+    engine = SimpleNamespace(
+        enabled=engine_enabled,
+        check_user_team_permission_or_raise=AsyncMock(side_effect=AssertionError),
+    )
     _wire_engine(monkeypatch, engine)
-    container = PodApplicationContext(minimal_config)
-
+    request = RuntimeExecuteRequest.model_validate(managed_payload({"input": "hello"}))
     await agent_app_module._authorize_execution_or_raise(
-        _managed_request(), _ALICE, container
+        request, _ALICE, PodApplicationContext(minimal_config)
     )
-
-    assert engine.calls == [("alice", TeamPermission.CAN_USE_TEAM_AGENTS, "fredlab")]
-    with container._audit_events_lock:
-        events = list(container.audit_events_buffer)
-    assert events[-1]["audit_event"] == "rebac_authorized"
-
-
-@pytest.mark.asyncio
-async def test_authorize_propagates_rebac_denial(monkeypatch, minimal_config) -> None:
-    """Preserve a typed refusal for the route handler."""
-    engine = _FakeRebacEngine(enabled=True, deny=True)
-    _wire_engine(monkeypatch, engine)
-    container = PodApplicationContext(minimal_config)
-
-    with pytest.raises(AuthorizationError) as exc:
-        await agent_app_module._authorize_execution_or_raise(
-            _managed_request(), _ALICE, container
-        )
-
-    assert exc.value.action == TeamPermission.CAN_USE_TEAM_AGENTS.value
-
-
-@pytest.mark.asyncio
-async def test_authorize_skips_when_security_disabled(
-    monkeypatch, minimal_config
-) -> None:
-    """No authenticated user (dev mode) → no OpenFGA call, no raise."""
-    engine = _FakeRebacEngine(enabled=True, deny=True)
-    _wire_engine(monkeypatch, engine)
-    container = PodApplicationContext(minimal_config)
-
-    await agent_app_module._authorize_execution_or_raise(
-        _managed_request(), None, container
-    )
-
-    assert engine.calls == []
-
-
-@pytest.mark.asyncio
-async def test_authorize_skips_when_engine_disabled(
-    monkeypatch, minimal_config
-) -> None:
-    """A disabled (Noop) engine → identity-only, no check even with a user."""
-    engine = _FakeRebacEngine(enabled=False, deny=True)
-    _wire_engine(monkeypatch, engine)
-    container = PodApplicationContext(minimal_config)
-
-    await agent_app_module._authorize_execution_or_raise(
-        _managed_request(), _ALICE, container
-    )
-
-    assert engine.calls == []
-
-
-@pytest.mark.asyncio
-async def test_authorize_forbids_direct_agent_id_under_c3(
-    monkeypatch, minimal_config
-) -> None:
-    """Direct agent_id execution is forbidden under the c3 profile (F-D)."""
-    engine = _FakeRebacEngine(enabled=True, deny=False)
-    _wire_engine(monkeypatch, engine, security_profile="c3")
-    container = PodApplicationContext(minimal_config)
-    direct = RuntimeExecuteRequest.model_validate(
-        {"input": "hi", "agent_id": "demo.agent"}
-    )
-
-    with pytest.raises(agent_app_module.HTTPException) as exc:
-        await agent_app_module._authorize_execution_or_raise(direct, _ALICE, container)
-
-    assert exc.value.status_code == 403
-    assert engine.calls == []
-
-
-@pytest.mark.asyncio
-async def test_authorize_allows_direct_agent_id_without_c3(
-    monkeypatch, minimal_config
-) -> None:
-    """Direct agent_id execution stays identity-only in dev/non-c3 (no OpenFGA)."""
-    engine = _FakeRebacEngine(enabled=True, deny=True)
-    _wire_engine(monkeypatch, engine, security_profile=None)
-    container = PodApplicationContext(minimal_config)
-    direct = RuntimeExecuteRequest.model_validate(
-        {"input": "hi", "agent_id": "demo.agent"}
-    )
-
-    await agent_app_module._authorize_execution_or_raise(direct, _ALICE, container)
-
-
-_WORKER = KeycloakUser(
-    uid="svc-worker",
-    username="service-account-fred-evaluation-worker",
-    roles=["service_agent"],
-    email=None,
-)
-
-
-@pytest.mark.asyncio
-async def test_authorize_allows_service_agent_scoped_to_team(
-    monkeypatch, minimal_config
-) -> None:
-    """A service_agent caller is authorized for the request team WITHOUT any
-    OpenFGA check (RFC EVAL-AUTH, Solution A) — audited as service_agent_authorized."""
-    engine = _FakeRebacEngine(enabled=True, deny=True)  # would deny if consulted
-    _wire_engine(monkeypatch, engine)
-    container = PodApplicationContext(minimal_config)
-
-    await agent_app_module._authorize_execution_or_raise(
-        _managed_request(), _WORKER, container
-    )
-
-    assert engine.calls == []  # OpenFGA never consulted for a service identity
-    with container._audit_events_lock:
-        events = list(container.audit_events_buffer)
-    assert events[-1]["audit_event"] == "service_agent_authorized"
-    assert events[-1].get("team_id") == "fredlab"
-
-
-_DELEGATION_CLIENT = _WORKER.model_copy(
-    update={"client_id": "agents", "caller_roles": frozenset({"delegation_caller"})}
-)
-
-
-@pytest.mark.asyncio
-async def test_authorize_never_admits_a_delegation_client_as_a_service_identity(
-    monkeypatch, minimal_config
-) -> None:
-    """It holds the service role too; with delegation off it is still decided
-    by OpenFGA, and holding no relation it is refused."""
-    engine = _FakeRebacEngine(enabled=True, deny=True)
-    _wire_engine(monkeypatch, engine)
-    monkeypatch.setattr(agent_app_module, "get_delegation_runtime", lambda: None)
-    container = PodApplicationContext(minimal_config)
-
-    with preserved_delegation():
-        initialize_delegation(CoreDelegationConfig())
-        with pytest.raises(AuthorizationError):
-            await agent_app_module._authorize_execution_or_raise(
-                _managed_request(), _DELEGATION_CLIENT, container
-            )
-
-    assert engine.calls == [
-        ("svc-worker", TeamPermission.CAN_USE_TEAM_AGENTS, "fredlab")
-    ]
+    engine.check_user_team_permission_or_raise.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("caller", "stamped"),
-    [(_WORKER, "true"), (_DELEGATION_CLIENT, None)],
-    ids=["service-identity", "delegation-client"],
+    "caller",
+    [
+        None,
+        KeycloakUser(uid="worker", username="worker", roles=["service_agent"]),
+        KeycloakUser(
+            uid="worker",
+            username="worker",
+            roles=["service_agent"],
+            client_id="agents",
+            caller_roles=frozenset({"delegation_caller"}),
+        ),
+    ],
 )
-async def test_only_a_service_identity_skips_the_per_tool_recheck(
-    monkeypatch, minimal_config, caller: KeycloakUser, stamped: str | None
-) -> None:
-    """The stamp mirrors the admission: with delegation off the delegation
-    client's tool calls are still re-authorized."""
-
-    async def _noop(*args, **kwargs):
-        return None
-
-    resolved: list[dict] = []
-
-    async def _fake_resolve(**kwargs):
-        resolved.append(kwargs)
-        return SimpleNamespace(
-            team_id="fredlab", definition=None, agent_instance_name=None
-        )
-
-    monkeypatch.setattr(agent_app_module, "_validate_session_checkpoint_access", _noop)
-    monkeypatch.setattr(agent_app_module, "_enforce_session_ownership", _noop)
-    monkeypatch.setattr(agent_app_module, "_authorize_execution_or_raise", _noop)
-    monkeypatch.setattr(agent_app_module, "_resolve_agent_instance", _fake_resolve)
-    monkeypatch.setattr(
-        agent_app_module, "_validate_resolved_team", lambda *a, **k: None
-    )
-    monkeypatch.setattr(
-        agent_app_module,
-        "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(control_plane_url=None)),
-    )
-    monkeypatch.setattr(agent_app_module, "get_delegation_runtime", lambda: None)
-    request = RuntimeExecuteRequest.model_validate(
-        {
-            "input": "hi",
-            "agent_instance_id": "inst-1",
-            "runtime_context": {"team_id": "fredlab"},
-        }
-    )
-    container = PodApplicationContext(minimal_config)
-    container._kpi_writer = NoOpKPIWriter()
-    container.initialize_control_plane_client()
-
-    with preserved_delegation():
-        initialize_delegation(CoreDelegationConfig())
-        await agent_app_module._authorize_and_resolve(
-            request,
-            authenticated_user=caller,
-            container=container,
-            registry={},
-            access_token="header-jwt",
-        )
-
-    assert resolved[0]["request"].context.get("is_service_agent") == stamped
-
-
-_BOB = KeycloakUser(uid="bob", username="bob", roles=[], email=None)
-
-
-@pytest.mark.asyncio
-async def test_authorize_allows_personal_space_owner_via_rebac_check(
-    monkeypatch, minimal_config
-) -> None:
-    """A human caller acting on their own canonical personal_team_id is authorized
-    through the plain `CAN_USE_TEAM_AGENTS` team check — no special-casing here
-    (AUTHZ-08, supersedes AUTHZ-05 item 8b). In the real system this succeeds
-    because `RebacEngine.check_user_team_permission_or_raise` self-heals the
-    owner's own `team_editor` tuple on first touch (which implies `team_member`,
-    which `CAN_USE_TEAM_AGENTS` requires); this test only proves agent_app.py no
-    longer short-circuits before the check, i.e. the engine IS consulted."""
-    engine = _FakeRebacEngine(enabled=True, deny=False)  # models the self-healed tuple
-    _wire_engine(monkeypatch, engine)
-    container = PodApplicationContext(minimal_config)
-
-    await agent_app_module._authorize_execution_or_raise(
-        _managed_request(team_id=personal_team_id(_ALICE.uid)), _ALICE, container
-    )
-
-    assert engine.calls == [
-        ("alice", TeamPermission.CAN_USE_TEAM_AGENTS, personal_team_id(_ALICE.uid))
-    ]
-    with container._audit_events_lock:
-        events = list(container.audit_events_buffer)
-    assert events[-1]["audit_event"] == "rebac_authorized"
-    assert events[-1].get("team_id") == personal_team_id(_ALICE.uid)
-
-
-@pytest.mark.asyncio
-async def test_authorize_denies_other_users_personal_space_via_rebac_check(
-    monkeypatch, minimal_config
-) -> None:
-    """Alice requesting Bob's personal space is denied — via the plain
-    `CAN_USE_TEAM_AGENTS` team check, not a local identity guard. In the real
-    system no tuple is ever provisioned for Alice on Bob's space (self-heal
-    only ever grants the space's own owner), and `RebacEngine.add_relation`'s
-    write-guard refuses any other
-    shape naming a personal team (AUTHZ-08) — that invariant is proven in
-    fred-core's own test suite, not here. This test only proves agent_app.py
-    defers to the check rather than special-casing the outcome."""
-    engine = _FakeRebacEngine(enabled=True, deny=True)  # models "no tuple exists"
-    _wire_engine(monkeypatch, engine)
-    container = PodApplicationContext(minimal_config)
-
-    with pytest.raises(AuthorizationError):
+async def test_admission_requires_an_authenticated_person(minimal_config, caller):
+    request = RuntimeExecuteRequest.model_validate(managed_payload({"input": "hello"}))
+    with pytest.raises(agent_app_module.HTTPException) as error:
         await agent_app_module._authorize_execution_or_raise(
-            _managed_request(team_id=personal_team_id(_BOB.uid)), _ALICE, container
+            request, caller, PodApplicationContext(minimal_config)
         )
-
-    assert engine.calls == [
-        ("alice", TeamPermission.CAN_USE_TEAM_AGENTS, personal_team_id(_BOB.uid))
-    ]
+    assert error.value.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_authorize_denies_bare_personal_alias(
-    monkeypatch, minimal_config
-) -> None:
-    """The bare "personal" alias is not `is_personal_team_id`-shaped, so it is
-    just an ordinary (always-tupleless) team id post-AUTHZ-08 — denied by the
-    plain check like any other unknown team, not by a dedicated alias guard."""
-    engine = _FakeRebacEngine(enabled=True, deny=True)
-    _wire_engine(monkeypatch, engine)
-    container = PodApplicationContext(minimal_config)
-
-    with pytest.raises(AuthorizationError):
+@pytest.mark.parametrize("profile", [None, "c3"])
+async def test_direct_template_execution_has_no_weaver_authority(
+    monkeypatch, minimal_config, profile
+):
+    _wire_engine(monkeypatch, None, security_profile=profile)
+    request = RuntimeExecuteRequest(agent_id="demo.agent", input="hi")
+    with pytest.raises(agent_app_module.HTTPException) as error:
         await agent_app_module._authorize_execution_or_raise(
-            _managed_request(team_id="personal"), _ALICE, container
+            request, _ALICE, PodApplicationContext(minimal_config)
         )
+    assert error.value.status_code == 403
+    assert "Direct template" in error.value.detail
 
-    assert engine.calls == [("alice", TeamPermission.CAN_USE_TEAM_AGENTS, "personal")]
 
-
-# ---------------------------------------------------------------------------
-# RUNTIME-07 rev. 2 (F-B / F-C) — JWT identity + private-per-owner sessions
-# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "team", ["fredlab", "personal", "personal:alice", "personal:bob"]
+)
+async def test_a_team_or_personal_alias_cannot_replace_a_canonical_space(
+    minimal_config, team
+):
+    request = RuntimeExecuteRequest(
+        agent_instance_id=INSTANCE_ID,
+        input="hi",
+        runtime_context=RuntimeContext(team_id=team),
+    )
+    with pytest.raises(agent_app_module.HTTPException) as error:
+        await agent_app_module._authorize_execution_or_raise(
+            request, _ALICE, PodApplicationContext(minimal_config)
+        )
+    assert error.value.status_code == 422
+    assert "space_id" in error.value.detail
 
 
 class _FakeHistoryStore:

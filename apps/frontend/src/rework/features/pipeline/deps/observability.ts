@@ -68,11 +68,6 @@ export function useObservabilityDeps(): ObservabilityDeps {
             ).rows.length,
         },
       ],
-      searchHealth: () =>
-        orAbsent(async () => {
-          const health = (await dispatch(kf.osHealth.initiate({}, FRESH)).unwrap()) as { status?: string } | null;
-          return String(health?.status ?? "unknown");
-        }),
       metricsTargets: () =>
         orAbsent(async () => {
           const response = (await dispatch(kf.prometheusTargets.initiate({}, FRESH)).unwrap()) as PrometheusTargets;

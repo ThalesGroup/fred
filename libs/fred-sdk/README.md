@@ -252,7 +252,6 @@ Built-in MCP server constants:
 | Constant                                   | Connects to                   |
 | ------------------------------------------ | ----------------------------- |
 | `MCP_SERVER_KNOWLEDGE_FLOW_TABULAR`        | Tabular data / CSV            |
-| `MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS` | OpenSearch operations         |
 
 ---
 

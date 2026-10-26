@@ -70,8 +70,8 @@ type organization
 
   # RFC FRED-AUTHORIZATION-TARGET-MODEL §6.1: the platform_observer role's own
   # named capability — cross-user / platform-wide KPI observation, gating the
-  # control-plane Analytics preset endpoints (`/admin/analytics`) and the raw
-  # OpenSearch Ops surface. The raw Prometheus Ops surface is authentication-only
+  # control-plane Analytics preset endpoints (`/admin/analytics`).
+  # The raw Prometheus Ops surface is authentication-only
   # and is not gated by this relation. AUTHZ-05 review item 16: previously
   # split into a second, platform_admin-only
   # `can_read_kpi_global` (legacy Action.READ_GLOBAL) for the Analytics presets —

@@ -31,6 +31,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     ConversationTurn,
@@ -44,6 +45,7 @@ from fred_sdk.runtime_support.remote_agent_invoker import (
     RemoteSseAgentInvoker,
     RemoteSseAgentInvokerConfig,
 )
+from weaver_fixtures import active_turn, invocation_context
 
 # ---------------------------------------------------------------------------
 # Test fixtures
@@ -55,7 +57,7 @@ def _turn(user: str, response: str, name: str | None = None) -> ConversationTurn
 
 
 def _portable_context() -> PortableContext:
-    return PortableContext(
+    return invocation_context(
         request_id="req-1",
         correlation_id="corr-1",
         actor="alice",
@@ -151,7 +153,8 @@ def test_graph_input_skips_injection_on_resume() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_local_invoker_forwards_prior_turns_to_execute_request() -> None:
+@pytest.mark.asyncio
+async def test_local_invoker_forwards_prior_turns_to_execute_request() -> None:
     from fred_runtime.app import agent_app as agent_app_module
     from fred_runtime.app.agent_app import LocalRegistryAgentInvoker
 
@@ -182,10 +185,11 @@ def test_local_invoker_forwards_prior_turns_to_execute_request() -> None:
     registry = {"test.agent": _FakeAgent()}
     invoker = LocalRegistryAgentInvoker(registry=registry, access_token=None)
 
-    with patch.object(
-        agent_app_module, "_iterate_runtime_event_payloads", fake_iterate
-    ):
-        asyncio.run(invoker.invoke(req))
+    with active_turn("test.agent", session="sess-1"):
+        with patch.object(
+            agent_app_module, "_iterate_runtime_event_payloads", fake_iterate
+        ):
+            await invoker.invoke(req)
 
     assert len(captured) == 1
     execute_request = captured[0]
@@ -195,7 +199,8 @@ def test_local_invoker_forwards_prior_turns_to_execute_request() -> None:
     assert turns[0].user_message == "q1"
 
 
-def test_local_invoker_empty_prior_turns_passed_as_empty_tuple() -> None:
+@pytest.mark.asyncio
+async def test_local_invoker_empty_prior_turns_passed_as_empty_tuple() -> None:
     from fred_runtime.app import agent_app as agent_app_module
     from fred_runtime.app.agent_app import LocalRegistryAgentInvoker
 
@@ -224,10 +229,11 @@ def test_local_invoker_empty_prior_turns_passed_as_empty_tuple() -> None:
     registry = {"test.agent": _FakeAgent()}
     invoker = LocalRegistryAgentInvoker(registry=registry, access_token=None)
 
-    with patch.object(
-        agent_app_module, "_iterate_runtime_event_payloads", fake_iterate
-    ):
-        asyncio.run(invoker.invoke(req))
+    with active_turn("test.agent", session="sess-1"):
+        with patch.object(
+            agent_app_module, "_iterate_runtime_event_payloads", fake_iterate
+        ):
+            await invoker.invoke(req)
 
     assert len(captured) == 1
     execute_request = captured[0]

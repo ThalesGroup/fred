@@ -19,7 +19,6 @@ import { observabilityScenario, type ObservabilityDeps } from "./observabilitySc
 function deps(overrides: Partial<ObservabilityDeps> = {}): ObservabilityDeps {
   return {
     kpis: [{ id: "kpi-sessions", title: "Sessions", read: async () => 3 }],
-    searchHealth: async () => "green",
     metricsTargets: async () => [{ job: "agents", up: true }],
     ...overrides,
   };
@@ -34,20 +33,18 @@ async function run(d: ObservabilityDeps) {
 describe("observabilityScenario", () => {
   it("passes when every KPI and backend answers", async () => {
     const r = await run(deps());
-    expect(r.steps.map((s) => s.status)).toEqual(["passed", "passed", "passed"]);
+    expect(r.steps.map((s) => s.status)).toEqual(["passed", "passed"]);
   });
 
   it("skips backends the deployment does not run", async () => {
-    const r = await run(deps({ searchHealth: async () => null, metricsTargets: async () => null }));
-    expect(r.status("search-backend")).toBe("skipped");
+    const r = await run(deps({ metricsTargets: async () => null }));
     expect(r.status("metrics-backend")).toBe("skipped");
   });
 
-  it("fails a red cluster, a down target and an unreadable KPI", async () => {
+  it("fails a down target and an unreadable KPI", async () => {
     const r = await run(
       deps({
         kpis: [{ id: "kpi-messages", title: "Messages", read: async () => Promise.reject(new Error("HTTP 500")) }],
-        searchHealth: async () => "red",
         metricsTargets: async () => [
           { job: "agents", up: false },
           { job: "agents", up: false },
@@ -56,7 +53,6 @@ describe("observabilityScenario", () => {
       }),
     );
     expect(r.status("kpi-messages")).toBe("failed");
-    expect(r.status("search-backend")).toBe("failed");
     expect(r.steps.find((s) => s.id === "metrics-backend")?.error).toBe("down: agents");
   });
 });

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Prepared resolver admission cases using the real delegated credential contract."""
 
+import asyncio
 from dataclasses import dataclass
 
 import httpx
@@ -79,7 +80,7 @@ def admission(monkeypatch: pytest.MonkeyPatch) -> _Admission:
     return _Admission(binding, identity, delegation, provider, request)
 
 
-@pytest.mark.parametrize("status", [200, 401, 403, 503])
+@pytest.mark.parametrize("status", [200, 401, 403, 404, 500, 503])
 async def test_resolver_uses_workload_lease_and_grant_once(
     admission: _Admission, status: int
 ) -> None:
@@ -106,7 +107,9 @@ async def test_resolver_uses_workload_lease_and_grant_once(
         else:
             with pytest.raises(HTTPException) as error:
                 await admission.resolve(client)
-            assert error.value.status_code == (403 if status in (401, 403) else 503)
+            assert error.value.status_code == (
+                403 if status in (401, 403, 404) else 503
+            )
             assert admission.request._turn_authority is None
 
     assert len(requests) == 1
@@ -207,3 +210,44 @@ async def test_delegation_assertions_must_match_before_acquiring_token(
     assert error.value.status_code == 403
     assert not admission.identity.issued
     assert admission.request._turn_authority is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("concurrent", [False, True])
+async def test_resolver_reuses_one_client_and_keeps_request_headers_isolated(
+    admission, concurrent
+):
+
+    calls = []
+
+    async def respond(request):
+        calls.append(request)
+        await asyncio.sleep(0)
+        return httpx.Response(200, json=admission.binding.model_dump(mode="json"))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+
+        async def resolve(index):
+            return await agent_app._resolve_agent_instance(
+                request=admission.request.model_copy(),
+                registry={"template": _Template()},
+                access_token=f"person-token-{index}",
+                control_plane_url="https://cp.invalid/api",
+                http_client=client,
+                credentials=admission.provider,
+                request_id=f"request-{index}",
+            )
+
+        if concurrent:
+            results = await asyncio.gather(*(resolve(i) for i in range(10)))
+        else:
+            results = [await resolve(i) for i in range(10)]
+        assert len(results) == 10
+        assert "Authorization" not in client.headers
+    assert len(calls) == 10
+    assert {r.headers["X-Request-Id"] for r in calls} == {
+        f"request-{i}" for i in range(10)
+    }
+    assert {r.headers["Authorization"] for r in calls} == {
+        "Bearer synthetic-workload-token"
+    }

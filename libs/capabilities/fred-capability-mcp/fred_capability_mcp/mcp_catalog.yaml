@@ -14,17 +14,6 @@ servers:
     auth_mode: "delegated"
     prompt_file: pkg://fred_capability_mcp/prompts/tabular.md
 
-  - id: "mcp-knowledge-flow-opensearch-ops"
-    name: "mcp.servers.search_opensearch.name"
-    description: "mcp.servers.search_opensearch.description"
-    prompt_group_title: "OpenSearch operations"
-    transport: "streamable_http"
-    service: knowledge_flow
-    path: mcp-opensearch-ops
-    sse_read_timeout: 2000
-    enabled: true
-    auth_mode: "delegated"
-
   - id: "mcp-knowledge-flow-prometheus-ops"
     name: "mcp.servers.prometheus.name"
     description: "mcp.servers.prometheus.description"

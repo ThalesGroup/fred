@@ -18,8 +18,6 @@ import type { Scenario } from "../types";
 export interface ObservabilityDeps {
   /** KPI presets the analytics pages read, over the last day. */
   kpis: Array<{ id: string; title: string; read: () => Promise<number> }>;
-  /** Cluster status, or null when the deployment has no search backend. */
-  searchHealth: () => Promise<string | null>;
   /** Scrape targets, or null when the deployment has no metrics backend. */
   metricsTargets: () => Promise<Array<{ job: string; up: boolean }> | null>;
 }
@@ -32,12 +30,6 @@ export const observabilityScenario: Scenario<ObservabilityDeps> = async (deps, r
       detail: `${await kpi.read()} point(s) over the last day`,
     }));
   }
-  await runStep(report, "search-backend", "The search cluster is healthy", async () => {
-    const status = await deps.searchHealth();
-    if (status === null) throw new SkipStep("this deployment has no search cluster");
-    if (status === "red") throw new Error("the search cluster is red");
-    return { value: undefined, detail: status };
-  });
   await runStep(report, "metrics-backend", "Every metrics target is up", async () => {
     const targets = await deps.metricsTargets();
     if (targets === null) throw new SkipStep("this deployment has no metrics backend");

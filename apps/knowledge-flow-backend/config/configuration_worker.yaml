@@ -382,7 +382,6 @@ mcp:
   text_enabled: true
   templates_enabled: true
   resources_enabled: true
-  opensearch_ops_enabled: true
   prometheus_ops_enabled: false
   filesystem_read_default_limit: 100
   filesystem_read_max_limit: 500

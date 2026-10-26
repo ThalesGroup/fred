@@ -123,3 +123,55 @@ async def test_transformed_requests_cannot_widen_model_or_options(payload):
                     headers={"Authorization": "Bearer fixture"},
                     json=payload,
                 )
+
+
+@pytest.mark.parametrize("portable", [False, True])
+@pytest.mark.parametrize(
+    "changed", [None, "user_id", "session_id", "space_id", "agent_instance_id"]
+)
+def test_context_provenance_is_checked_for_runtime_and_portable_calls(
+    portable, changed
+):
+    from fred_sdk.contracts.context import (
+        PortableContext,
+        PortableEnvironment,
+        RuntimeContext,
+    )
+
+    binding = resolved_binding()
+    fields = dict(
+        user_id=binding.subject_id,
+        session_id=binding.conversation_id,
+        space_id=str(binding.space.id),
+        agent_instance_id=str(binding.agent.instance_id),
+    )
+    if changed is not None:
+        fields[changed] = "forged"
+    if portable:
+        space = fields.pop("space_id")
+        instance = fields.pop("agent_instance_id")
+        context = PortableContext(
+            request_id="r",
+            correlation_id="c",
+            actor="person",
+            tenant="default",
+            environment=PortableEnvironment.DEV,
+            **fields,
+            baggage={"space_id": str(space), "agent_instance_id": str(instance)},
+        )
+    else:
+        context = RuntimeContext.model_validate(fields)
+
+    # RunScope teardown requires an active event loop.
+    async def check():
+        with RunScope.open() as scope:
+            authority = TurnAuthority(binding, None)
+            authority.start(scope)
+            scope.turn_authority = authority
+            if changed is None:
+                authority.check_context(context, "template")
+            else:
+                with pytest.raises(AuthorityLostError):
+                    authority.check_context(context, "template")
+
+    asyncio.run(check())

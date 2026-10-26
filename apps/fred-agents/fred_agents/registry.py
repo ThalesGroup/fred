@@ -37,7 +37,6 @@ from fred_agents.rag_expert import RAG_EXPERT_AGENT
 from fred_agents.react_rag_mcp import REACT_RAG_MCP_AGENT
 from fred_agents.self_test import SELF_TEST_AGENT
 from fred_agents.self_test_web import WEB_SELF_TEST_AGENT
-from fred_agents.sentinel import SENTINEL_AGENT
 from fred_agents.sql_expert import SQL_EXPERT_AGENT
 from fred_agents.test_assistant.graph_agent import TEST_ASSISTANT_AGENT
 
@@ -54,9 +53,6 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
     - fred.github.deep_assistant  General-purpose deep-agent (LangGraph planner)
                                counterpart to fred.github.assistant. Its
                                workspace tools come from DeepAgentRuntime.
-    - fred.github.sentinel     Monitoring ReAct agent. Requires OpenSearch MCP.
-                               Expected to fail gracefully in standalone mode —
-                               useful for validating error detection and handling.
     - fred.github.rag_expert   Document-grounded ReAct agent (Rico). Uses the Fred
                                built-in knowledge.search declared_tool_ref (not
                                MCP). Reference for ReAct/built-in-tool pattern.
@@ -89,7 +85,6 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
         # First entry is the default agent selected by fred-agents-cli on connect.
         GENERAL_ASSISTANT_AGENT.agent_id: GENERAL_ASSISTANT_AGENT,
         DEEP_ASSISTANT_AGENT.agent_id: DEEP_ASSISTANT_AGENT,
-        SENTINEL_AGENT.agent_id: SENTINEL_AGENT,
         RAG_EXPERT_AGENT.agent_id: RAG_EXPERT_AGENT,
         REACT_RAG_MCP_AGENT.agent_id: REACT_RAG_MCP_AGENT,
         MINDMAP_AGENT.agent_id: MINDMAP_AGENT,

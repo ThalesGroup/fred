@@ -25,7 +25,7 @@ import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator, Iterator, Sequence
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager, contextmanager, nullcontext
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
@@ -76,6 +76,7 @@ from fred_runtime.common.outbound_credentials import (
     set_delegation_runtime,
 )
 from fred_runtime.common.structures import AgentSettingsLike
+from fred_runtime.model_routing.turn import TurnAuthority
 from fred_runtime.runtime_context import (
     RuntimeConfig,
     set_runtime_context,
@@ -91,7 +92,6 @@ from fred_sdk.authoring import ReActAgent
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     BoundRuntimeContext,
-    PortableContext,
     PortableEnvironment,
     RuntimeContext,
 )
@@ -104,6 +104,13 @@ from test_agent_app import (
     _EchoAgent,
 )
 from test_delegation_receiver_integration import _NOW, _FixedDateTime, _Jwks
+from weaver_fixtures import (
+    INSTANCE_ID,
+    SPACE_ID,
+    active_turn,
+    invocation_context,
+    turn_binding,
+)
 
 pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
 
@@ -375,7 +382,7 @@ async def test_a_run_resolved_onto_another_team_leaves_no_record_behind(monkeypa
     runtime = install_delegation()
 
     async def _other_team(**kwargs: Any) -> Any:
-        return resolved_target("team-2")
+        raise HTTPException(status_code=403, detail="Weaver runtime binding mismatch")
 
     with pytest.raises(HTTPException) as raised:
         await authorize_and_resolve(monkeypatch, resolve=_other_team)
@@ -663,22 +670,13 @@ async def test_a_service_identity_runs_on_its_own_bearer_under_delegation(
 
 
 @pytest.mark.asyncio
-async def test_a_service_identitys_binding_call_carries_its_own_bearer(monkeypatch):
+async def test_a_service_identity_cannot_reach_weaver_resolution():
     runtime = install_delegation()
-    captured: dict[str, Any] = {}
-
-    async def _resolve(**kwargs: Any) -> Any:
-        captured["binding"] = kwargs["credentials"]
-        return resolved_target("team-1")
-
-    _, target = await authorize_and_resolve(
-        monkeypatch, resolve=_resolve, user=evaluator(), access_token=EVALUATOR_TOKEN
-    )
-
-    binding = await captured["binding"].credentials()
-    assert binding.authorization == f"Bearer {EVALUATOR_TOKEN}"
-    assert binding.parameters == {}
-    assert target.credential_provider is None
+    with pytest.raises(HTTPException) as error:
+        await agent_app_module._authorize_execution_or_raise(
+            execute_request(), evaluator(), Container()
+        )
+    assert error.value.status_code == 403
     assert len(runtime.records) == 0
 
 
@@ -886,63 +884,69 @@ def test_a_grant_admission_audit_names_neither_the_person_nor_the_caller(
 # ---------------------------------------------------------------------------
 
 
-def managed_binding(definition: ReActAgent) -> dict:
-    return {
-        "agent_instance_id": "instance-1",
-        "template_agent_id": definition.agent_id,
-        "owner_scope": "team",
-        "owner_team_id": "team-1",
-        "tuning": {
-            "role": definition.role,
-            "description": definition.description,
-        },
-    }
-
-
 @pytest.mark.asyncio
-async def test_a_delegated_managed_run_resolves_its_binding_with_one_grant_get():
+async def test_a_delegated_managed_run_resolves_its_binding_with_one_grant_get(
+    monkeypatch,
+):
     """The read-only lookup carries the workload bearer and the grant."""
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: FredRuntimeContext(
+            RuntimeConfig(
+                knowledge_flow_url="https://kf.invalid", service_name="test-pod"
+            )
+        ),
+    )
     runtime = install_delegation()
     definition = _Definition()
     provider = delegated_provider(
         runtime,
-        RunRecord(run_id="run-9", person_id="alice", agent_id="instance-1"),
+        RunRecord(run_id="run-9", person_id="alice", agent_id=INSTANCE_ID),
     )
     sent: list[httpx.Request] = []
 
     def _control_plane(request: httpx.Request) -> httpx.Response:
         sent.append(request)
-        return httpx.Response(200, json=managed_binding(definition))
+        return httpx.Response(
+            200,
+            json=turn_binding(definition.agent_id, run="run-9").model_dump(mode="json"),
+        )
 
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(_control_plane)
     ) as client:
         target = await agent_app_module._resolve_agent_instance(
             request=agent_app_module._AgentExecuteRequest(
-                agent_instance_id="instance-1", message="hello"
+                agent_instance_id=INSTANCE_ID,
+                message="hello",
+                context={"user_id": "alice", "space_id": SPACE_ID},
             ),
             registry={definition.agent_id: definition},
             access_token=None,
             control_plane_url="http://control-plane.invalid/control-plane/v1",
             http_client=client,
-            team_id="team-1",
+            team_id=SPACE_ID,
             credentials=provider,
         )
 
     assert [(request.method, request.url.path) for request in sent] == [
-        ("GET", "/control-plane/v1/teams/team-1/agent-instances/instance-1/runtime")
+        (
+            "GET",
+            f"/control-plane/v1/spaces/{SPACE_ID}/agent-instances/{INSTANCE_ID}/runtime",
+        )
     ]
     assert dict(sent[0].url.params) == {
         GRANT_PARAM_PERSON: "alice",
         GRANT_PARAM_RUN: "run-9",
-        GRANT_PARAM_AGENT: "instance-1",
+        GRANT_PARAM_AGENT: INSTANCE_ID,
     }
     assert sent[0].headers["Authorization"] == "Bearer workload-token"
-    assert target.effective_agent_id == "instance-1"
+    assert target.effective_agent_id == INSTANCE_ID
 
 
 @pytest.mark.asyncio
-async def test_a_delegated_direct_run_makes_no_control_plane_call():
+async def test_a_delegated_direct_run_is_refused_without_a_control_plane_call():
     runtime = install_delegation()
     definition = _Definition()
     provider = delegated_provider(
@@ -958,19 +962,20 @@ async def test_a_delegated_direct_run_makes_no_control_plane_call():
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(_control_plane)
     ) as client:
-        target = await agent_app_module._resolve_agent_instance(
-            request=agent_app_module._AgentExecuteRequest(
-                agent_id=definition.agent_id, message="hello"
-            ),
-            registry={definition.agent_id: definition},
-            access_token=None,
-            control_plane_url="http://control-plane.invalid/control-plane/v1",
-            http_client=client,
-            credentials=provider,
-        )
+        with pytest.raises(HTTPException) as error:
+            await agent_app_module._resolve_agent_instance(
+                request=agent_app_module._AgentExecuteRequest(
+                    agent_id=definition.agent_id, message="hello"
+                ),
+                registry={definition.agent_id: definition},
+                access_token=None,
+                control_plane_url="http://control-plane.invalid/control-plane/v1",
+                http_client=client,
+                credentials=provider,
+            )
 
     assert sent == []
-    assert target.effective_agent_id == definition.agent_id
+    assert error.value.status_code == 403
 
 
 def test_a_role_holder_naming_nobody_is_refused_where_grants_are_not_believed(
@@ -1086,15 +1091,21 @@ async def run_one_turn(
         interrupt_id=None,
         invocation_turns=(),
     )
-    payloads = [
-        payload
-        async for payload in agent_app_module._iterate_runtime_event_payloads(
-            _Definition(),
-            request,
-            credential_provider=credential_provider,
-            **kwargs,
+    owner = kwargs.get("owns_run_record", False)
+    if owner:
+        request._turn_authority = TurnAuthority(
+            turn_binding(_Definition().agent_id), None
         )
-    ]
+    with nullcontext() if owner else active_turn(_Definition().agent_id):
+        payloads = [
+            payload
+            async for payload in agent_app_module._iterate_runtime_event_payloads(
+                _Definition(),
+                request,
+                credential_provider=credential_provider,
+                **kwargs,
+            )
+        ]
     return bindings[0], payloads
 
 
@@ -1271,7 +1282,7 @@ def invocation(agent_id: str) -> AgentInvocationRequest:
     return AgentInvocationRequest(
         agent_id=agent_id,
         message="do your part",
-        context=PortableContext(
+        context=invocation_context(
             request_id="r-1",
             correlation_id="c-1",
             actor="alice",
@@ -1284,199 +1295,210 @@ def invocation(agent_id: str) -> AgentInvocationRequest:
 
 
 @pytest.mark.asyncio
-async def test_each_team_member_names_itself_on_the_shared_run(monkeypatch):
-    registry = {f"member-{index}": _Definition() for index in range(1, 4)}
-    provider = SpyProvider()
-    captured: list[Any] = []
+async def test_concurrent_children_name_the_admitted_template_on_the_shared_run(
+    monkeypatch,
+):
+    with active_turn("member-1"):
+        registry = {"member-1": _Definition() for index in range(1, 4)}
+        provider = SpyProvider()
+        captured: list[Any] = []
 
-    async def _fake_iterate(definition, request, **kwargs):
-        captured.append(kwargs["credential_provider"])
-        yield {"kind": "final", "content": "done"}
+        async def _fake_iterate(definition, request, **kwargs):
+            captured.append(kwargs["credential_provider"])
+            yield {"kind": "final", "content": "done"}
 
-    monkeypatch.setattr(
-        agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
-    )
-
-    await asyncio.gather(
-        *(
-            invoker(registry, provider).invoke(invocation(f"member-{index}"))
-            for index in range(1, 4)
+        monkeypatch.setattr(
+            agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
         )
-    )
 
-    grants = [await child.credentials() for child in captured]
-    assert sorted(grant.parameters[GRANT_PARAM_AGENT] for grant in grants) == [
-        "member-1",
-        "member-2",
-        "member-3",
-    ]
-    assert {grant.parameters[GRANT_PARAM_RUN] for grant in grants} == {"run-7"}
-    assert {grant.parameters[GRANT_PARAM_PERSON] for grant in grants} == {"alice"}
+        await asyncio.gather(
+            *(
+                invoker(registry, provider).invoke(invocation("member-1"))
+                for index in range(1, 4)
+            )
+        )
+
+        grants = [await child.credentials() for child in captured]
+        assert sorted(grant.parameters[GRANT_PARAM_AGENT] for grant in grants) == [
+            "member-1",
+            "member-1",
+            "member-1",
+        ]
+        assert {grant.parameters[GRANT_PARAM_RUN] for grant in grants} == {"run-7"}
+        assert {grant.parameters[GRANT_PARAM_PERSON] for grant in grants} == {"alice"}
 
 
 @pytest.mark.asyncio
 async def test_a_child_is_handed_the_provider_and_not_a_credential(monkeypatch):
     """The workload token rotates after the child has started; the child's
     next request must carry the change, which a copied string could not."""
-    tokens = StaticWorkloadTokens("workload-token")
-    runtime = install_delegation(token_provider=tokens)
-    provider = delegated_provider(
-        runtime, RunRecord(run_id="run-7", person_id="alice", agent_id="parent")
-    )
-    captured: list[Any] = []
-    started = asyncio.Event()
-    release = asyncio.Event()
+    with active_turn("member-1"):
+        tokens = StaticWorkloadTokens("workload-token")
+        runtime = install_delegation(token_provider=tokens)
+        provider = delegated_provider(
+            runtime, RunRecord(run_id="run-7", person_id="alice", agent_id="parent")
+        )
+        captured: list[Any] = []
+        started = asyncio.Event()
+        release = asyncio.Event()
 
-    async def _fake_iterate(definition, request, **kwargs):
-        child = kwargs["credential_provider"]
-        captured.append(child)
-        before = await child.get_token_lease()
-        started.set()
-        await release.wait()
-        after = await child.get_token_lease()
-        captured.append((before.token, after.token))
-        yield {"kind": "final", "content": "done"}
+        async def _fake_iterate(definition, request, **kwargs):
+            child = kwargs["credential_provider"]
+            captured.append(child)
+            before = await child.get_token_lease()
+            started.set()
+            await release.wait()
+            after = await child.get_token_lease()
+            captured.append((before.token, after.token))
+            yield {"kind": "final", "content": "done"}
 
-    monkeypatch.setattr(
-        agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
-    )
+        monkeypatch.setattr(
+            agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
+        )
 
-    running = asyncio.create_task(
-        invoker({"member-1": _Definition()}, provider).invoke(invocation("member-1"))
-    )
-    await started.wait()
-    tokens.token = "workload-token-2"
-    release.set()
-    await running
+        running = asyncio.create_task(
+            invoker({"member-1": _Definition()}, provider).invoke(
+                invocation("member-1")
+            )
+        )
+        await started.wait()
+        tokens.token = "workload-token-2"
+        release.set()
+        await running
 
-    assert isinstance(captured[0], DelegatedCredentialProvider)
-    assert (await captured[0].credentials()).parameters[GRANT_PARAM_AGENT] == (
-        "member-1"
-    )
-    assert captured[1] == ("workload-token", "workload-token-2")
+        assert isinstance(captured[0], DelegatedCredentialProvider)
+        assert (await captured[0].credentials()).parameters[GRANT_PARAM_AGENT] == (
+            "member-1"
+        )
+        assert captured[1] == ("workload-token", "workload-token-2")
 
 
 @pytest.mark.asyncio
 async def test_cancelling_the_run_cancels_every_member(monkeypatch):
-    registry = {f"member-{index}": _Definition() for index in range(1, 4)}
-    provider = SpyProvider()
-    running = asyncio.Event()
-    cancelled: list[str] = []
+    with active_turn("member-1"):
+        registry = {"member-1": _Definition() for index in range(1, 4)}
+        provider = SpyProvider()
+        running = asyncio.Event()
+        cancelled: list[str] = []
 
-    async def _fake_iterate(definition, request, **kwargs):
-        agent_id = kwargs["credential_provider"].agent_id
-        try:
-            running.set()
-            await asyncio.Event().wait()
-            yield {"kind": "final", "content": "unreachable"}
-        except asyncio.CancelledError:
-            cancelled.append(agent_id)
-            raise
+        async def _fake_iterate(definition, request, **kwargs):
+            agent_id = kwargs["credential_provider"].agent_id
+            try:
+                running.set()
+                await asyncio.Event().wait()
+                yield {"kind": "final", "content": "unreachable"}
+            except asyncio.CancelledError:
+                cancelled.append(agent_id)
+                raise
 
-    monkeypatch.setattr(
-        agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
-    )
-
-    fan_out = asyncio.gather(
-        *(
-            invoker(registry, provider).invoke(invocation(f"member-{index}"))
-            for index in range(1, 4)
+        monkeypatch.setattr(
+            agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
         )
-    )
-    await running.wait()
-    await asyncio.sleep(0)
-    fan_out.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await fan_out
 
-    assert sorted(cancelled) == ["member-1", "member-2", "member-3"]
+        fan_out = asyncio.gather(
+            *(
+                invoker(registry, provider).invoke(invocation("member-1"))
+                for index in range(1, 4)
+            )
+        )
+        await running.wait()
+        await asyncio.sleep(0)
+        fan_out.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await fan_out
+
+        assert sorted(cancelled) == ["member-1"] * 3
 
 
 @pytest.mark.asyncio
 async def test_with_the_flag_off_a_child_reads_the_updated_person_bearer(
     monkeypatch, tmp_path
 ):
-    captured: list[OutboundCredentials] = []
-    runtime_context = RuntimeContext(
-        session_id="synthetic-session",
-        user_id="synthetic-person",
-        team_id="synthetic-team",
-        access_token="person-token-1",
-    )
-    binding = BoundRuntimeContext(
-        runtime_context=runtime_context,
-        portable_context=invocation("member-1").context,
-    )
-
-    async def _fake_iterate(definition, request, **kwargs):
-        captured.append(await kwargs["credential_provider"].credentials())
-        yield {"kind": "final", "content": "done"}
-
-    monkeypatch.setattr(
-        agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
-    )
-
-    monkeypatch.setattr(
-        agent_app_module,
-        "_build_chat_model_factory",
-        lambda config: StaticChatModelFactory(ToolFriendlyFakeChatModel(responses=[])),
-    )
-    definition = _EchoAgent()
-    app = agent_app_module.create_agent_app(
-        registry={"member-1": definition}, config=_build_test_config(tmp_path)
-    )
-    with TestClient(app):
-        services = agent_app_module._build_runtime_services(
-            definition,
-            binding,
+    with active_turn("member-1"):
+        captured: list[OutboundCredentials] = []
+        runtime_context = RuntimeContext(
+            session_id="synthetic-session",
+            user_id="synthetic-person",
             team_id="synthetic-team",
-            registry={"member-1": definition},
             access_token="person-token-1",
         )
-        assert services.agent_invoker is not None
-        await services.agent_invoker.invoke(invocation("member-1"))
-        runtime_context.access_token = "person-token-2"
-        await services.agent_invoker.invoke(invocation("member-1"))
+        binding = BoundRuntimeContext(
+            runtime_context=runtime_context,
+            portable_context=invocation("member-1").context,
+        )
 
-    assert [item.authorization for item in captured] == [
-        "Bearer person-token-1",
-        "Bearer person-token-2",
-    ]
-    assert all(item.parameters == {} for item in captured)
+        async def _fake_iterate(definition, request, **kwargs):
+            captured.append(await kwargs["credential_provider"].credentials())
+            yield {"kind": "final", "content": "done"}
+
+        monkeypatch.setattr(
+            agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
+        )
+
+        monkeypatch.setattr(
+            agent_app_module,
+            "_build_chat_model_factory",
+            lambda config: StaticChatModelFactory(
+                ToolFriendlyFakeChatModel(responses=[])
+            ),
+        )
+        definition = _EchoAgent()
+        app = agent_app_module.create_agent_app(
+            registry={"member-1": definition}, config=_build_test_config(tmp_path)
+        )
+        with TestClient(app):
+            services = agent_app_module._build_runtime_services(
+                definition,
+                binding,
+                team_id="synthetic-team",
+                registry={"member-1": definition},
+                access_token="person-token-1",
+            )
+            assert services.agent_invoker is not None
+            await services.agent_invoker.invoke(invocation("member-1"))
+            runtime_context.access_token = "person-token-2"
+            await services.agent_invoker.invoke(invocation("member-1"))
+
+        assert [item.authorization for item in captured] == [
+            "Bearer person-token-1",
+            "Bearer person-token-2",
+        ]
+        assert all(item.parameters == {} for item in captured)
 
 
 @pytest.mark.asyncio
 async def test_the_run_cancels_an_in_process_child_still_working(monkeypatch):
     """A child that runs inline cannot be cancelled: the run ends while the
     child keeps calling out under an authority the platform has given up."""
-    started = asyncio.Event()
-    cancelled: list[str] = []
+    with active_turn("member-1"):
+        started = asyncio.Event()
+        cancelled: list[str] = []
 
-    async def _fake_iterate(definition, request, **kwargs):
-        try:
-            started.set()
-            await asyncio.Event().wait()
-            yield {"kind": "final", "content": "unreachable"}
-        except asyncio.CancelledError:
-            cancelled.append(kwargs["credential_provider"].agent_id)
-            raise
+        async def _fake_iterate(definition, request, **kwargs):
+            try:
+                started.set()
+                await asyncio.Event().wait()
+                yield {"kind": "final", "content": "unreachable"}
+            except asyncio.CancelledError:
+                cancelled.append(kwargs["credential_provider"].agent_id)
+                raise
 
-    monkeypatch.setattr(
-        agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
-    )
-
-    with RunScope.open() as scope:
-        running = asyncio.create_task(
-            invoker({"member-1": _Definition()}, SpyProvider()).invoke(
-                invocation("member-1")
-            )
+        monkeypatch.setattr(
+            agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
         )
-        await started.wait()
-        scope.cancel_children()
-        with pytest.raises(asyncio.CancelledError):
-            await asyncio.wait_for(running, timeout=3)
 
-    assert cancelled == ["member-1"]
+        with RunScope.open() as scope:
+            running = asyncio.create_task(
+                invoker({"member-1": _Definition()}, SpyProvider()).invoke(
+                    invocation("member-1")
+                )
+            )
+            await started.wait()
+            scope.cancel_children()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(running, timeout=3)
+
+        assert cancelled == ["member-1"]
 
 
 @pytest.mark.parametrize(
@@ -1493,46 +1515,48 @@ async def test_a_stopped_child_ends_the_parent_on_the_same_reason(
 ):
     """The parent ends typed, on the child's reason — the child's own sentence
     is never handed back as though it were an answer."""
+    with active_turn("member-1"):
 
-    async def _fake_iterate(definition, request, **kwargs):
-        yield {
-            "kind": "execution_error",
-            "message": "the child's own sentence",
-            "reason": reason,
-        }
+        async def _fake_iterate(definition, request, **kwargs):
+            yield {
+                "kind": "execution_error",
+                "message": "the child's own sentence",
+                "reason": reason,
+            }
 
-    monkeypatch.setattr(
-        agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
-    )
-
-    with pytest.raises(RunStopError) as raised:
-        await invoker({"member-1": _Definition()}, SpyProvider()).invoke(
-            invocation("member-1")
+        monkeypatch.setattr(
+            agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
         )
 
-    assert type(raised.value) is expected
-    assert raised.value.reason == reason
-    assert "the child's own sentence" not in str(raised.value)
+        with pytest.raises(RunStopError) as raised:
+            await invoker({"member-1": _Definition()}, SpyProvider()).invoke(
+                invocation("member-1")
+            )
+
+        assert type(raised.value) is expected
+        assert raised.value.reason == reason
+        assert "the child's own sentence" not in str(raised.value)
 
 
 @pytest.mark.asyncio
 async def test_a_child_failing_on_its_own_is_still_an_error_result(monkeypatch):
     """Only a platform stop ends the parent; an ordinary child failure is still
     something the caller reports back to its model."""
+    with active_turn("member-1"):
 
-    async def _fake_iterate(definition, request, **kwargs):
-        yield {"kind": "execution_error", "message": "the child could not answer"}
+        async def _fake_iterate(definition, request, **kwargs):
+            yield {"kind": "execution_error", "message": "the child could not answer"}
 
-    monkeypatch.setattr(
-        agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
-    )
+        monkeypatch.setattr(
+            agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
+        )
 
-    result = await invoker({"member-1": _Definition()}, SpyProvider()).invoke(
-        invocation("member-1")
-    )
+        result = await invoker({"member-1": _Definition()}, SpyProvider()).invoke(
+            invocation("member-1")
+        )
 
-    assert result.is_error is True
-    assert result.content == "the child could not answer"
+        assert result.is_error is True
+        assert result.content == "the child could not answer"
 
 
 @pytest.mark.asyncio
@@ -1541,39 +1565,40 @@ async def test_a_run_starts_as_many_children_at_once_as_its_turn_asks_for(
 ):
     """No child is refused or held back for being one too many: twelve
     members asked for at once all run at once."""
-    members = 12
-    registry = {f"member-{index}": _Definition() for index in range(1, members + 1)}
-    provider = SpyProvider()
-    running: list[str] = []
-    release = asyncio.Event()
+    with active_turn("member-1"):
+        members = 12
+        registry = {"member-1": _Definition() for index in range(1, members + 1)}
+        provider = SpyProvider()
+        running: list[str] = []
+        release = asyncio.Event()
 
-    async def _fake_iterate(definition, request, **kwargs):
-        running.append(kwargs["credential_provider"].agent_id)
-        await release.wait()
-        yield {"kind": "final", "content": "done"}
+        async def _fake_iterate(definition, request, **kwargs):
+            running.append(kwargs["credential_provider"].agent_id)
+            await release.wait()
+            yield {"kind": "final", "content": "done"}
 
-    monkeypatch.setattr(
-        agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
-    )
-
-    with RunScope.open():
-        fan_out = asyncio.gather(
-            *(
-                invoker(registry, provider).invoke(invocation(f"member-{index}"))
-                for index in range(1, members + 1)
-            )
+        monkeypatch.setattr(
+            agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
         )
-        for _ in range(200):
-            if len(running) == members:
-                break
-            await asyncio.sleep(0)
 
-        assert len(running) == members
+        with RunScope.open():
+            fan_out = asyncio.gather(
+                *(
+                    invoker(registry, provider).invoke(invocation("member-1"))
+                    for index in range(1, members + 1)
+                )
+            )
+            for _ in range(200):
+                if len(running) == members:
+                    break
+                await asyncio.sleep(0)
 
-        release.set()
-        results = await asyncio.wait_for(fan_out, timeout=3)
+            assert len(running) == members
 
-    assert [result.is_error for result in results] == [False] * members
+            release.set()
+            results = await asyncio.wait_for(fan_out, timeout=3)
+
+        assert [result.is_error for result in results] == [False] * members
 
 
 @pytest.mark.asyncio
@@ -1917,7 +1942,7 @@ def refused_execution(
     [(False, False), (True, False), (True, True)],
     ids=["delegation-off", "act-for-people", "accept-delegated-calls"],
 )
-def test_a_refused_team_permission_is_audited_once_without_identifiers(
+def test_missing_canonical_space_is_refused_before_permission_resolution(
     monkeypatch,
     tmp_path,
     _restore_security,
@@ -1936,28 +1961,11 @@ def test_a_refused_team_permission_is_audited_once_without_identifiers(
         monkeypatch, app, accept_delegated_calls=accept_delegated_calls
     )
 
-    assert response.status_code == 403
-    assert response.headers["X-Fred-Denial-Cause"] == "permission_refused"
-    engine.check_user_team_permission_or_raise.assert_awaited_once()
-    subject, _, team_id = engine.check_user_team_permission_or_raise.await_args.args
-    assert (subject.uid, team_id) == (REFUSED_PERSON, REFUSED_TEAM)
-    denied = [r for r in records if getattr(r, "audit_event", None) == "rebac_denied"]
-    assert len(denied) == 1
-    assert (vars(denied[0])["outcome"], vars(denied[0])["reason"]) == (
-        "rejected",
-        "permission_refused",
-    )
-    assert [
-        {key: value for key, value in event.items() if key != "ts"}
-        for event in pod_view
-        if event["audit_event"] == "rebac_denied"
-    ] == [
-        {
-            "audit_event": "rebac_denied",
-            "outcome": "rejected",
-            "reason": "permission_refused",
-        }
-    ]
+    assert response.status_code == 422
+    assert "space_id" in response.json()["detail"]
+    engine.check_user_team_permission_or_raise.assert_not_awaited()
+    assert not [r for r in records if getattr(r, "audit_event", None) == "rebac_denied"]
+    assert not [e for e in pod_view if e["audit_event"] == "rebac_denied"]
     for canary in REFUSED_CANARIES:
         assert canary not in audit_text(records)
         assert canary not in repr(pod_view)

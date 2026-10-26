@@ -83,6 +83,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, MessagesState, StateGraph
 from pydantic import BaseModel
+from weaver_fixtures import INSTANCE_ID, SPACE_ID
 
 # The body a refused receiver answers with. It must reach nothing the platform
 # owns: not an exception message, not an event, not the transcript.
@@ -214,7 +215,10 @@ async def workspace_call(provider: DelegatedCredentialProvider, receiver: Receiv
 
 async def binding_call(provider: DelegatedCredentialProvider, receiver: Receiver):
     request = agent_app_module._AgentExecuteRequest.model_construct(
-        agent_id=None, agent_instance_id="instance-1", message="hi"
+        agent_id=None,
+        agent_instance_id=INSTANCE_ID,
+        message="hi",
+        context={"space_id": SPACE_ID, "user_id": "alice"},
     )
     async with httpx.AsyncClient(transport=httpx.MockTransport(receiver)) as client:
         # An unknown instance ends the lookup right after its one request,
@@ -227,9 +231,9 @@ async def binding_call(provider: DelegatedCredentialProvider, receiver: Receiver
                 control_plane_url="http://control-plane.invalid/v1",
                 http_client=client,
                 team_id="team-1",
-                credentials=provider,
+                credentials=provider.for_agent(INSTANCE_ID),
             )
-    assert raised.value.status_code == 404
+    assert raised.value.status_code == 403
 
 
 async def team_wiki_call(provider: DelegatedCredentialProvider, receiver: Receiver):
@@ -307,7 +311,10 @@ async def test_each_delegated_request_acquires_its_bearer_once(monkeypatch, path
     assert identity.acquisitions == 1
     assert identity.token_requests == ["request_initial"]
     assert bearers(seen) == ["Bearer workload-token-1"]
-    assert grant_of(seen[0]) == GRANT
+    expected_grant = (
+        {**GRANT, GRANT_PARAM_AGENT: INSTANCE_ID} if path == "binding" else GRANT
+    )
+    assert grant_of(seen[0]) == expected_grant
     assert decode_log_context(seen[0].headers[CONTEXT_HEADER]) == (
         {"correlation_id": "journey-a", "team_id": "team-a", "custom": {"phase": 2}},
         None,
@@ -801,7 +808,7 @@ def test_a_failed_tool_call_reports_its_endpoint_without_the_grant():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("cause", ["account_status_unavailable", "other", None])
-async def test_binding_lookup_preserves_only_bounded_account_status_unavailable(
+async def test_binding_lookup_does_not_expose_upstream_denial_fields(
     monkeypatch, cause
 ):
     def endpoint(request):
@@ -812,7 +819,10 @@ async def test_binding_lookup_preserves_only_bounded_account_status_unavailable(
         )
 
     request = agent_app_module._AgentExecuteRequest.model_construct(
-        agent_id=None, agent_instance_id="instance-1", message="hi"
+        agent_id=None,
+        agent_instance_id=INSTANCE_ID,
+        message="hi",
+        context={"space_id": SPACE_ID, "user_id": "alice"},
     )
     async with httpx.AsyncClient(transport=httpx.MockTransport(endpoint)) as client:
         with pytest.raises(HTTPException) as raised:
@@ -825,15 +835,11 @@ async def test_binding_lookup_preserves_only_bounded_account_status_unavailable(
                 team_id="team-1",
                 credentials=admitted_provider(
                     MockIdentityProvider(monkeypatch).provider
-                ),
+                ).for_agent(INSTANCE_ID),
             )
-    if cause == "account_status_unavailable":
-        assert raised.value.status_code == 503
-        assert raised.value.headers == {"X-Fred-Denial-Cause": cause}
-        assert UPSTREAM_MARKER not in raised.value.detail
-    else:
-        assert raised.value.status_code == 502
-        assert not raised.value.headers
+    assert raised.value.status_code == 503
+    assert not raised.value.headers
+    assert UPSTREAM_MARKER not in raised.value.detail
 
 
 @pytest.mark.asyncio

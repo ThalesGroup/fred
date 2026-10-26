@@ -421,7 +421,6 @@ x-kf-mcp: &kf-mcp
   text_enabled: true
   templates_enabled: true
   resources_enabled: true
-  opensearch_ops_enabled: false
   prometheus_ops_enabled: false
 
 x-kf-filesystem: &kf-filesystem

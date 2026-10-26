@@ -1234,66 +1234,64 @@ async def test_reference_read_escapes_reserved_tags_only_for_model_messages(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("denied", [False, True])
-async def test_runtime_catalog_reuses_admission_gate_and_selected_instance(
+async def test_runtime_catalog_uses_person_metadata_and_selected_instance(
     monkeypatch: pytest.MonkeyPatch, denied: bool
 ) -> None:
-    from unittest.mock import AsyncMock
-
+    import httpx
     from fastapi import HTTPException
-    from fred_runtime.app import agent_app
+    from fred_core.security.structure import KeycloakUser
     from fred_runtime.skills import api
     from test_history import _PingAgent
+    from weaver_fixtures import INSTANCE_ID, SPACE_ID, turn_binding
 
     catalog = PlatformSkills.from_directory("package")
     definition = _PingAgent()
-    gate = AsyncMock(side_effect=HTTPException(status_code=403) if denied else None)
-    resolve = AsyncMock(
-        return_value=SimpleNamespace(definition=definition, team_id="team")
-    )
-    monkeypatch.setattr(agent_app, "_authorize_execution_or_raise", gate)
-    monkeypatch.setattr(agent_app, "_resolve_agent_instance", resolve)
-    monkeypatch.setattr(agent_app, "_validate_resolved_team", lambda *args: None)
+    requests = []
+
+    def metadata(request):
+        requests.append(request)
+        assert (
+            request.url.path
+            == f"/spaces/{SPACE_ID}/agent-instances/{INSTANCE_ID}/runtime"
+        )
+        assert not request.url.params
+        assert request.headers["Authorization"] == "Bearer person-token"
+        return httpx.Response(
+            403 if denied else 200,
+            json=turn_binding(definition.agent_id).model_dump(mode="json"),
+        )
+
     monkeypatch.setattr(
         api,
         "get_runtime_context",
         lambda: SimpleNamespace(
             config=SimpleNamespace(
-                control_plane_url="https://control.invalid", skills=catalog
+                control_plane_url="https://control.invalid",
+                service_name="test-pod",
+                skills=catalog,
             )
         ),
     )
-    container = cast(Any, SimpleNamespace(get_control_plane_http_client=lambda: None))
-    if denied:
-        with pytest.raises(HTTPException) as exc:
-            await api.get_instance_skills(
-                "selected",
-                "team",
-                None,
-                None,
-                container,
-                {definition.agent_id: definition},
-            )
-        assert exc.value.status_code == 403
-        resolve.assert_not_awaited()
-    else:
-        result = await api.get_instance_skills(
-            "selected",
-            "team",
-            None,
-            "Bearer verified",
+    async with httpx.AsyncClient(transport=httpx.MockTransport(metadata)) as client:
+        container = cast(
+            Any, SimpleNamespace(get_control_plane_http_client=lambda: client)
+        )
+        args = (
+            INSTANCE_ID,
+            SPACE_ID,
+            KeycloakUser(uid="alice", username="alice", roles=[]),
+            "Bearer person-token",
             container,
             {definition.agent_id: definition},
         )
-        assert result == catalog.catalog
-        assert resolve.await_args is not None
-        assert resolve.await_args.kwargs["team_id"] == "team"
-        assert resolve.await_args.kwargs["access_token"] == "verified"
-    assert gate.await_args is not None
-    request = gate.await_args.args[0]
-    assert (
-        request.agent_instance_id == "selected"
-        and request.effective_team_id() == "team"
-    )
+        if denied:
+            with pytest.raises(HTTPException) as exc:
+                await api.get_instance_skills(*args, space_id=SPACE_ID)
+            assert exc.value.status_code == 403
+        else:
+            result = await api.get_instance_skills(*args, space_id=SPACE_ID)
+            assert result == catalog.catalog
+    assert len(requests) == 1
 
 
 @pytest.mark.asyncio
@@ -1304,21 +1302,16 @@ async def test_skill_preview_reuses_catalog_authorization_and_snapshot(
     from unittest.mock import AsyncMock
 
     from fastapi import HTTPException
-    from fred_runtime.app import agent_app
     from fred_runtime.skills import api
-    from test_history import _PingAgent
 
     location = skill(tmp_path, body="PROCEDURE\n```xml\n<tools>sample</tools>\n```")
     snapshot = PlatformSkills.from_directory(str(tmp_path))
     (location / "SKILL.md").write_text("Changed after startup")
-    definition = _PingAgent()
-    gate = AsyncMock(side_effect=HTTPException(status_code=403) if denied else None)
-    resolve = AsyncMock(
-        return_value=SimpleNamespace(definition=definition, team_id="team")
+    gate = AsyncMock(
+        side_effect=HTTPException(status_code=403) if denied else None,
+        return_value=snapshot.catalog,
     )
-    monkeypatch.setattr(agent_app, "_authorize_execution_or_raise", gate)
-    monkeypatch.setattr(agent_app, "_resolve_agent_instance", resolve)
-    monkeypatch.setattr(agent_app, "_validate_resolved_team", lambda *args: None)
+    monkeypatch.setattr(api, "get_instance_skills", gate)
     monkeypatch.setattr(
         api,
         "get_runtime_context",
@@ -1336,7 +1329,7 @@ async def test_skill_preview_reuses_catalog_authorization_and_snapshot(
                 "example", "selected", "team", None, None, container, {}
             )
         assert exc.value.status_code == 403
-        resolve.assert_not_awaited()
+        gate.assert_awaited_once()
     else:
         result = await api.get_instance_skill_detail(
             "example", "selected", "team", None, "Bearer verified", container, {}
@@ -1357,6 +1350,9 @@ async def test_skill_preview_reuses_catalog_authorization_and_snapshot(
                     name, "selected", "team", None, None, container, {}
                 )
             assert exc.value.status_code == status
+
+    assert gate.await_args is not None
+    assert gate.await_args.args[0:2] == ("selected", "team")
 
 
 class RecordingSkillKPIStore(BaseKPIStore):

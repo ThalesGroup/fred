@@ -925,10 +925,6 @@
         "description": "Permet à votre agent d'interroger les métriques Prometheus et d'exécuter des requêtes PromQL",
         "name": "Accès à Prometheus"
       },
-      "search_opensearch": {
-        "description": "Permet à votre agent de rechercher dans les indices opensearch",
-        "name": "Rechercher dans opensearch"
-      },
       "tabular": {
         "description": "Capacité d'exploiter les données issues des fichiers tabulaires présents dans les ressources (CSV, Excel...).",
         "name": "Exploiter les fichiers tabulaires"
@@ -2100,30 +2096,6 @@
           },
           "text": {
             "search_documents_using_vectorization": "Recherche dans les documents"
-          },
-          "opensearchOps": {
-            "os_health": "État de santé d'OpenSearch",
-            "os_pending_tasks": "Tâches OpenSearch en attente",
-            "os_cluster_settings": "Paramètres du cluster OpenSearch",
-            "os_cluster_state": "État du cluster OpenSearch",
-            "os_cluster_stats": "Statistiques du cluster OpenSearch",
-            "os_allocation_explain": "Explication de l'affectation d'un fragment OpenSearch",
-            "os_nodes_stats": "Statistiques des noeuds OpenSearch",
-            "os_nodes_info": "Informations sur les noeuds OpenSearch",
-            "os_nodes_hot_threads": "Analyse des threads actifs OpenSearch",
-            "os_indices": "Liste des index OpenSearch",
-            "os_index_stats": "Statistiques d'un index OpenSearch",
-            "os_index_mapping": "Structure des champs d'un index OpenSearch",
-            "os_index_settings": "Paramètres d'un index OpenSearch",
-            "os_index_recovery": "Récupération d'un index OpenSearch",
-            "os_tasks": "Tâches OpenSearch en cours",
-            "os_task_get": "Détails d'une tâche OpenSearch",
-            "os_shards": "État des fragments OpenSearch",
-            "os_cat_nodes": "Vue d'ensemble des noeuds OpenSearch",
-            "os_cat_allocation": "Répartition des fragments OpenSearch",
-            "os_cat_thread_pool": "État des groupes de threads OpenSearch",
-            "os_recovery": "Récupération des index OpenSearch",
-            "os_diagnostics": "Diagnostic global d'OpenSearch"
           },
           "prometheusOps": {
             "prometheus_query": "Exécution d'une requête instantanée Prometheus",

@@ -112,7 +112,6 @@ class DeepAssistantDefinition(DeepAgentDefinition):
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),
         # Removed from the prod defaults (#2429) - uncomment to restore (and
         # re-import the constants from fred_sdk):
-        # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS),
         # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS),
     )
 

@@ -53,6 +53,7 @@ from fred_sdk.authoring.api import ToolContext
 from fred_sdk.contracts.models import ReActAgentDefinition
 from fred_sdk.contracts.runtime import HistoryStorePort
 from langchain_core.messages import AIMessage
+from weaver_fixtures import create_managed_app, managed_payload
 
 pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
 
@@ -1072,13 +1073,19 @@ def test_runtime_rejects_missing_or_forged_skill_before_inference(
     config = _build_config(tmp_path)
     config.skills = PodSkillsConfig(directory="package")
     definition = _PingAgent()
-    app = create_agent_app(registry={definition.agent_id: definition}, config=config)
-    with TestClient(app) as client:
-        request = {
-            "agent_id": definition.agent_id,
-            "input": "notes",
-            "runtime_context": {"skill": {"name": "missing"}},
-        }
+    app = create_managed_app(
+        monkeypatch, registry={definition.agent_id: definition}, config=config
+    )
+    with TestClient(
+        app, headers={"Authorization": "Bearer test-person-token"}
+    ) as client:
+        request = managed_payload(
+            {
+                "agent_id": definition.agent_id,
+                "input": "notes",
+                "runtime_context": {"skill": {"name": "missing"}},
+            }
+        )
         response = client.post("/pod/v1/agents/execute", json=request)
         assert response.status_code == 422, response.text
         assert model.i == 0
@@ -1122,7 +1129,9 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
         root=str(tmp_path / "filesystem")
     )
     definition = DeepDefinition() if deep else _PingAgent()
-    app = create_agent_app(registry={definition.agent_id: definition}, config=config)
+    app = create_managed_app(
+        monkeypatch, registry={definition.agent_id: definition}, config=config
+    )
     selections = [{"name": "meeting-minutes"}, {"name": "mermaid"}]
     command = {
         "command": "summary",
@@ -1130,18 +1139,22 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
         "draft_text": "Before /summary /meeting-minutes /mermaid after",
         "draft_command_offset": 7,
     }
-    with TestClient(app) as client:
+    with TestClient(
+        app, headers={"Authorization": "Bearer test-person-token"}
+    ) as client:
         response = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": definition.agent_id,
-                "input": "Before\n\nPrompt instructions\n\n/meeting-minutes /mermaid after",
-                "runtime_context": {
-                    "session_id": "multiple-history",
-                    "skills": selections + selections[:1],
-                    "command": command,
-                },
-            },
+            json=managed_payload(
+                {
+                    "agent_id": definition.agent_id,
+                    "input": "Before\n\nPrompt instructions\n\n/meeting-minutes /mermaid after",
+                    "runtime_context": {
+                        "session_id": "multiple-history",
+                        "skills": selections + selections[:1],
+                        "command": command,
+                    },
+                }
+            ),
         )
         assert response.status_code == 200, response.text
         messages = model.calls[0]
@@ -1161,21 +1174,27 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
         before = len(model.calls)
         invalid = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": definition.agent_id,
-                "input": "notes",
-                "runtime_context": {"skills": [selections[0], {"name": "missing"}]},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": definition.agent_id,
+                    "input": "notes",
+                    "runtime_context": {"skills": [selections[0], {"name": "missing"}]},
+                }
+            ),
         )
         assert invalid.status_code == (200 if deep else 422), invalid.text
         assert len(model.calls) == before + (1 if deep else 0)
         forged = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": definition.agent_id,
-                "input": "notes",
-                "runtime_context": {"skills": [{"name": "mermaid", "body": "FORGED"}]},
-            },
+            json=managed_payload(
+                {
+                    "agent_id": definition.agent_id,
+                    "input": "notes",
+                    "runtime_context": {
+                        "skills": [{"name": "mermaid", "body": "FORGED"}]
+                    },
+                }
+            ),
         )
         assert forged.status_code == 422
 
@@ -1216,17 +1235,23 @@ def test_multiple_skills_reject_unsupported_runtime_configuration(
         "deep": DeepDefinition(),
         "graph": _GraphAgent(),
     }[family]
-    app = create_agent_app(registry={definition.agent_id: definition}, config=config)
-    with TestClient(app) as client:
+    app = create_managed_app(
+        monkeypatch, registry={definition.agent_id: definition}, config=config
+    )
+    with TestClient(
+        app, headers={"Authorization": "Bearer test-person-token"}
+    ) as client:
         response = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": definition.agent_id,
-                "input": "/meeting-minutes /mermaid notes",
-                "runtime_context": {
-                    "skills": [{"name": "meeting-minutes"}, {"name": "mermaid"}]
-                },
-            },
+            json=managed_payload(
+                {
+                    "agent_id": definition.agent_id,
+                    "input": "/meeting-minutes /mermaid notes",
+                    "runtime_context": {
+                        "skills": [{"name": "meeting-minutes"}, {"name": "mermaid"}]
+                    },
+                }
+            ),
         )
         assert response.status_code == 422, response.text
         assert model.calls == []
@@ -1264,19 +1289,25 @@ def test_deep_selection_reaches_native_inference_without_snapshot_preload(
         root=str(tmp_path / "filesystem")
     )
     definition = Definition()
-    app = create_agent_app(registry={definition.agent_id: definition}, config=config)
+    app = create_managed_app(
+        monkeypatch, registry={definition.agent_id: definition}, config=config
+    )
     text = f"/{selection} notes"
-    with TestClient(app) as client:
+    with TestClient(
+        app, headers={"Authorization": "Bearer test-person-token"}
+    ) as client:
         response = client.post(
             "/pod/v1/agents/execute",
-            json={
-                "agent_id": definition.agent_id,
-                "input": text,
-                "runtime_context": {
-                    "session_id": "native-history",
-                    "skill": {"name": selection},
-                },
-            },
+            json=managed_payload(
+                {
+                    "agent_id": definition.agent_id,
+                    "input": text,
+                    "runtime_context": {
+                        "session_id": "native-history",
+                        "skill": {"name": selection},
+                    },
+                }
+            ),
         )
         assert response.status_code == 200, response.text
         messages = model.calls[0]

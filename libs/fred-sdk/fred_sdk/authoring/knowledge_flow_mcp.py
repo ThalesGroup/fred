@@ -35,7 +35,6 @@ Example:
 - `mcp_servers=(MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),)`
 
 Current official Knowledge Flow MCP servers:
-- `MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS`: OpenSearch monitoring operations
 - `MCP_SERVER_KNOWLEDGE_FLOW_TABULAR`: tabular analysis operations
 """
 
@@ -44,11 +43,6 @@ from __future__ import annotations
 from typing import Final
 
 from ..contracts.models import MCPServerRef
-
-MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS: Final[str] = (
-    "mcp-knowledge-flow-opensearch-ops"
-)
-"""OpenSearch operations MCP server id used by Sentinel-style agents."""
 
 MCP_SERVER_KNOWLEDGE_FLOW_TABULAR: Final[str] = "mcp-knowledge-flow-mcp-tabular"
 """Tabular analysis MCP server id used by Tabular-style agents."""
@@ -60,7 +54,6 @@ MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS: Final[str] = (
 
 __all__ = [
     "MCPServerRef",
-    "MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR",
 ]

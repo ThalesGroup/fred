@@ -23,7 +23,6 @@ def test_corpus_and_filesystem_mcp_mounts_are_absent(app_context, monkeypatch) -
         "ResourceController",
         "McpFilesystemController",
         "TabularController",
-        "OpenSearchOpsController",
         "SchedulerController",
     ):
         monkeypatch.setattr(main_module, name, lambda *args, **kwargs: None)

@@ -19,20 +19,31 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fred_core.security import oidc
-from fred_core.security.delegation import preserved_delegation
+from fred_core.security.backend_to_backend_auth import M2MAuthConfig, M2MTokenProvider
+from fred_core.security.delegation import DelegationConfig, preserved_delegation
 from fred_core.security.rebac.authorization_binding import AuthorizationBinding
+from fred_core.security.structure import KeycloakUser
 from fred_runtime.app import agent_app as agent_app_module
+from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.common.kf_http_client import close_shared_kf_async_client
+from fred_runtime.common.outbound_credentials import (
+    DelegationRuntime,
+    get_delegation_runtime,
+    set_delegation_runtime,
+)
+from fred_runtime.model_routing.turn import current_turn
 from fred_runtime.runtime_context import (
     get_runtime_context_or_none,
     set_runtime_context,
 )
 from fred_sdk import load_agent_prompt_markdown
+from fred_sdk.contracts.weaver import WeaverRuntimeBinding
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
 
@@ -41,6 +52,7 @@ from langchain_core.messages import AIMessage
 def offline_pod_authorization(monkeypatch):
     """Smoke tests exercise shipped agents, with the startup authority mocked."""
     previous = get_runtime_context_or_none()
+    previous_delegation = get_delegation_runtime()
     monkeypatch.setattr(oidc, "KEYCLOAK_ENABLED", oidc.KEYCLOAK_ENABLED)
 
     async def prepare(container):
@@ -62,6 +74,7 @@ def offline_pod_authorization(monkeypatch):
         finally:
             close_shared_kf_async_client()
             set_runtime_context(previous)
+            set_delegation_runtime(previous_delegation)
 
 
 class ToolFriendlyFakeChatModel(FakeMessagesListChatModel):
@@ -105,26 +118,125 @@ class StaticChatModelFactory:
         self._model = model
 
     def build(self, definition, binding):  # type: ignore[override]
+        current_turn().check_context(binding.runtime_context, definition.agent_id)
         return self._model
 
 
-def _build_offline_agents_app(monkeypatch, tmp_path, factory) -> FastAPI:
-    """
-    Build the fred-agents pod app with an offline MCP catalog and fake model factory.
+SPACE_ID = "00000000-0000-0000-0000-000000000002"
+INSTANCE_ID = "00000000-0000-0000-0000-000000000003"
 
-    Why this helper exists:
-    - the smoke tests need the same fully offline pod wiring multiple times
-      without duplicating environment and monkeypatch setup
 
-    How to use it:
-    - pass the pytest `monkeypatch`, a temporary directory, and a test chat
-      model factory
-    - returns the fully initialized FastAPI app
+def _runtime_binding(request: httpx.Request, template_id: str) -> WeaverRuntimeBinding:
+    """Trusted Control Plane facts for one offline instance and model offer."""
+    from fred_agents.registry import REGISTRY
 
-    Example:
-    - `app = _build_offline_agents_app(monkeypatch, tmp_path, factory)`
-    """
+    tuning = agent_app_module._definition_to_agent_tuning(REGISTRY[template_id])
+    org = "00000000-0000-0000-0000-000000000001"
+    key = {"source_id": "offline", "upstream_model_id": "fake"}
+    return WeaverRuntimeBinding.model_validate(
+        {
+            "subject_id": "smoke-user",
+            "run_id": request.url.params["run"],
+            "conversation_id": request.url.params["conversation"],
+            "space": {
+                "id": SPACE_ID,
+                "kind": "team",
+                "organization_id": org,
+                "team_id": SPACE_ID,
+                "project_id": None,
+            },
+            "agent": {
+                "instance_id": INSTANCE_ID,
+                "runtime_id": "fred-agents",
+                "template_id": "00000000-0000-0000-0000-000000000004",
+                "template_key": template_id,
+                "configuration_updated_at": "2026-10-26T00:00:00Z",
+                "configuration": tuning.model_dump(mode="json"),
+            },
+            "models": {
+                "policy": {
+                    "organization_id": org,
+                    "revision": 1,
+                    "permitted": [key],
+                    "default": key,
+                    "fallback": None,
+                    "created_by": None,
+                    "created_at": None,
+                    "updated_by": None,
+                    "updated_at": None,
+                },
+                "recommendation": key,
+                "options": {},
+                "legacy_profile_id": None,
+                "requires_reselection": False,
+                "offers": [
+                    {
+                        "key": key,
+                        "permitted": True,
+                        "candidate": True,
+                        "selectable": True,
+                        "diagnostics": [],
+                        "metadata": {
+                            "chat": True,
+                            "chat_provenance": "source_guarantee",
+                            "display_name": None,
+                            "context_window_tokens": None,
+                            "max_input_tokens": None,
+                            "max_output_tokens": None,
+                        },
+                        "observation": {
+                            "source_id": "offline",
+                            "source_revision": 1,
+                            "enabled": True,
+                            "state": "ok",
+                            "error_code": None,
+                            "checked_at": None,
+                            "last_success_at": None,
+                            "snapshot_revision": 1,
+                            "snapshot_source_revision": 1,
+                        },
+                        "connection": {
+                            "provider": "openai",
+                            "api_root": "https://model.invalid/v1",
+                            "credential_binding": "offline",
+                        },
+                    }
+                ],
+            },
+        }
+    )
 
+
+def _build_offline_agents_app(
+    monkeypatch, tmp_path, factory, *, template_id="fred.github.sentinel"
+) -> FastAPI:
+    """Boot the shipped pod with fake identity, resolver HTTP, MCP and model I/O."""
+    user = KeycloakUser(uid="smoke-user", username="smoke-user", roles=[])
+    for dependency in ("_make_user_dependency", "_make_execution_dependency"):
+        monkeypatch.setattr(agent_app_module, dependency, lambda *args: lambda: user)
+    requests: list[httpx.Request] = []
+
+    def resolve(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert (
+            request.url.path
+            == f"/api/spaces/{SPACE_ID}/agent-instances/{INSTANCE_ID}/runtime"
+        )
+        assert request.headers["Authorization"] == "Bearer smoke-workload-token"
+        assert request.url.params["person"] == user.uid
+        assert request.url.params["agent"] == INSTANCE_ID
+        return httpx.Response(
+            200, json=_runtime_binding(request, template_id).model_dump(mode="json")
+        )
+
+    def initialize(container):
+        container._control_plane_http_client = httpx.AsyncClient(
+            transport=httpx.MockTransport(resolve)
+        )
+
+    monkeypatch.setattr(
+        PodApplicationContext, "initialize_control_plane_client", initialize
+    )
     monkeypatch.setattr(
         agent_app_module,
         "_build_chat_model_factory",
@@ -145,6 +257,7 @@ def _build_offline_agents_app(monkeypatch, tmp_path, factory) -> FastAPI:
     config_payload["storage"]["postgres"]["sqlite_path"] = str(
         tmp_path / "runtime.sqlite3"
     )
+    config_payload["platform"]["control_plane_url"] = "https://control.invalid/api"
     config_file = tmp_path / "configuration.yaml"
     config_file.write_text(yaml.safe_dump(config_payload), encoding="utf-8")
 
@@ -185,7 +298,27 @@ def _build_offline_agents_app(monkeypatch, tmp_path, factory) -> FastAPI:
     if sqlite_path:
         upgrade_sqlite_database(sqlite_path)
 
-    return create_app()
+    app = create_app()
+    monkeypatch.setenv("FRED_SMOKE_WORKLOAD_SECRET", "synthetic")
+    tokens = M2MTokenProvider(
+        M2MAuthConfig(
+            keycloak_realm_url="https://iam.invalid/realms/test",
+            client_id="smoke-workload",
+            secret_env="FRED_SMOKE_WORKLOAD_SECRET",  # pragma: allowlist secret - environment variable name only
+        ),
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200, json={"access_token": "smoke-workload-token", "expires_in": 300}
+            )
+        ),
+    )
+    set_delegation_runtime(
+        DelegationRuntime(
+            config=DelegationConfig(act_for_people=True), token_provider=tokens
+        )
+    )
+    app.state.resolver_requests = requests
+    return app
 
 
 def _parse_sse_payloads(stream_text: str) -> list[dict[str, object]]:
@@ -320,13 +453,14 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
         stream_response = client.post(
             "/fred/agents/v2/agents/execute/stream",
             json={
-                "agent_id": "fred.github.sentinel",
+                "agent_instance_id": INSTANCE_ID,
                 "input": "Give me a short health summary.",
                 "session_id": "sentinel-session",
-                "runtime_context": {"user_id": "sentinel-user"},
+                "runtime_context": {"space_id": SPACE_ID, "team_id": SPACE_ID},
             },
         )
-        assert stream_response.status_code == 200
+        assert stream_response.status_code == 200, stream_response.text
+        assert len(app.state.resolver_requests) == 1
 
     payloads = _parse_sse_payloads(stream_response.text)
     assert payloads
@@ -362,6 +496,7 @@ def test_fred_agents_pod_streams_deep_assistant_offline(monkeypatch, tmp_path) -
         monkeypatch,
         tmp_path,
         StaticChatModelFactory(model),
+        template_id="fred.github.deep_assistant",
     )
 
     with TestClient(app) as client:
@@ -377,13 +512,14 @@ def test_fred_agents_pod_streams_deep_assistant_offline(monkeypatch, tmp_path) -
         stream_response = client.post(
             "/fred/agents/v2/agents/execute/stream",
             json={
-                "agent_id": "fred.github.deep_assistant",
+                "agent_instance_id": INSTANCE_ID,
                 "input": "Say hello.",
                 "session_id": "deep-assistant-session",
-                "runtime_context": {"user_id": "deep-assistant-user"},
+                "runtime_context": {"space_id": SPACE_ID, "team_id": SPACE_ID},
             },
         )
-        assert stream_response.status_code == 200
+        assert stream_response.status_code == 200, stream_response.text
+        assert len(app.state.resolver_requests) == 1
 
     payloads = _parse_sse_payloads(stream_response.text)
     assert payloads
@@ -419,11 +555,8 @@ def test_mindmap_prompt_files_load_from_packaged_module() -> None:
         assert prompt.strip()
 
 
-def test_non_public_agent_is_hidden_and_not_directly_executable(monkeypatch, tmp_path):
-    """The self-test agent is `public=False` (AGENT-VISIBILITY-RFC): hidden from the
-    default template catalog, discoverable only with include_non_public, and NOT
-    executable through the bare-agent_id (no-grant) path — that is the runtime-side
-    enforcement of the visibility boundary."""
+def test_non_public_agent_is_hidden_unless_explicitly_requested(monkeypatch, tmp_path):
+    """The shipped self-test template stays out of the default public catalog."""
     model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
     app = _build_offline_agents_app(
         monkeypatch, tmp_path, StaticChatModelFactory(model)
@@ -443,15 +576,3 @@ def test_non_public_agent_is_hidden_and_not_directly_executable(monkeypatch, tmp
             ).json()
         }
         assert "fred.github.self_test" in all_ids
-
-        # Direct, grant-less execution of a non-public agent must be refused (404).
-        resp = client.post(
-            "/fred/agents/v2/agents/execute/stream",
-            json={
-                "agent_id": "fred.github.self_test",
-                "input": "hi",
-                "session_id": "s",
-                "runtime_context": {"user_id": "u"},
-            },
-        )
-        assert resp.status_code == 404

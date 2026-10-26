@@ -29,6 +29,7 @@ from typing import Any, ClassVar, cast
 
 import pytest
 from fred_runtime.app import agent_app as agent_app_module
+from fred_runtime.model_routing.turn import TurnAuthority
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -43,6 +44,7 @@ from fred_sdk.contracts.models import (
 )
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
 from fred_sdk.contracts.runtime import ExecutionConfig, RuntimeServices
+from weaver_fixtures import turn_binding
 
 
 class _DeepAgent(DeepAgentDefinition):
@@ -145,10 +147,11 @@ async def test_dispatch_routes_deep_definition_to_deep_runtime(
         agent_id=definition.agent_id, message="hello"
     )
 
+    request._turn_authority = TurnAuthority(turn_binding(definition.agent_id), None)
     payloads = [
         payload
         async for payload in agent_app_module._iterate_runtime_event_payloads(
-            definition, request
+            definition, request, owns_run_record=True
         )
     ]
 

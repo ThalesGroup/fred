@@ -1039,12 +1039,6 @@
           "title": "Resources Enabled",
           "type": "boolean"
         },
-        "opensearch_ops_enabled": {
-          "default": false,
-          "description": "Expose OpenSearch operational endpoints and the corresponding MCP server.",
-          "title": "Opensearch Ops Enabled",
-          "type": "boolean"
-        },
         "prometheus_ops_enabled": {
           "default": false,
           "description": "Expose Prometheus operational endpoints and the corresponding MCP server.",

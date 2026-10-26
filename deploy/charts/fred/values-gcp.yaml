@@ -126,9 +126,6 @@ applications:
           type: pgvector
           collection_name: fred_chunks
 
-      mcp:
-        opensearch_ops_enabled: false
-
     # MINIO_SECRET_KEY is not required on GCS. Keep DB + auth secrets in .env/secret.
     dotenv:
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
