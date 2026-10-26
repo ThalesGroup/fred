@@ -58,6 +58,7 @@ const integrityA = `sha512-${createHash("sha512").update(archiveBytesA).digest("
 const integrityB = `sha512-${createHash("sha512").update(archiveBytesB).digest("base64")}`;
 const tokenTarball =
   "https://registry.npmjs.org/@fred-oss/design-tokens/-/design-tokens-0.1.1-alpha.0.tgz";
+const localEnvironment = Object.freeze({ CI: "false" });
 
 test("dependency-free release guards match node-semver on tag-like boundaries", () => {
   for (const version of [
@@ -860,6 +861,7 @@ test("publish preflight, post-upload visibility, and verification hash selected-
     packageName: "iframe-sdk",
     releaseDirectory: existing.releaseDirectory,
     root: existing.root,
+    environment: localEnvironment,
     registry,
     fetchImpl: existingFetch.fetchImpl,
     runCommand: existing.runCommand,
@@ -887,6 +889,7 @@ test("publish preflight, post-upload visibility, and verification hash selected-
     packageName: "iframe-sdk",
     releaseDirectory: uploaded.releaseDirectory,
     root: uploaded.root,
+    environment: localEnvironment,
     registry,
     fetchImpl: uploadedFetch.fetchImpl,
     runCommand: async (command, arguments_) => {
@@ -1090,6 +1093,7 @@ test("UI publication validates the peer range packed in the prepared archive", a
     packageName: "ui",
     releaseDirectory: fixture.releaseDirectory,
     root: fixture.root,
+    environment: localEnvironment,
     dryRun: true,
     runCommand: fixture.runCommand,
     loadContract: async () => ({
@@ -1123,6 +1127,7 @@ test("matching existing publication succeeds without invoking npm", async () => 
     packageName: "iframe-sdk",
     releaseDirectory: fixture.releaseDirectory,
     root: fixture.root,
+    environment: localEnvironment,
     runCommand: async (command, arguments_) => {
       if (command === "tar") return fixture.runCommand(command, arguments_);
       mutations += 1;
@@ -1143,6 +1148,7 @@ test("publication outcome preserves the selected registry and shell-quotes recov
     packageName: "iframe-sdk",
     releaseDirectory: fixture.releaseDirectory,
     root: fixture.root,
+    environment: localEnvironment,
     registry,
     runCommand: fixture.runCommand,
     inspect: async (candidate) => {
@@ -1197,6 +1203,7 @@ test("conflicting existing publication stops before npm", async () => {
       packageName: "iframe-sdk",
       releaseDirectory: fixture.releaseDirectory,
       root: fixture.root,
+      environment: localEnvironment,
       runCommand: async (command, arguments_) => {
         if (command === "tar") return fixture.runCommand(command, arguments_);
         mutations += 1;
@@ -1216,6 +1223,7 @@ test("publication uploads exact bytes once and tolerates delayed visibility", as
     packageName: "iframe-sdk",
     releaseDirectory: fixture.releaseDirectory,
     root: fixture.root,
+    environment: localEnvironment,
     visibilityDelayMilliseconds: 0,
     runCommand: async (command, arguments_, options) => {
       if (command === "tar") return fixture.runCommand(command, arguments_);
@@ -1498,6 +1506,7 @@ test("definite npm authentication failures are not recorded as uncertain", async
         packageName: "iframe-sdk",
         releaseDirectory: fixture.releaseDirectory,
         root: fixture.root,
+        environment: localEnvironment,
         runCommand: async (command, arguments_) => {
           if (command === "tar") return fixture.runCommand(command, arguments_);
           const error = new Error(`npm error code ${npmCode}`);
@@ -1520,6 +1529,7 @@ test("definite npm authentication failures are not recorded as uncertain", async
       packageName: "iframe-sdk",
       releaseDirectory: fixture.releaseDirectory,
       root: fixture.root,
+      environment: localEnvironment,
       runCommand: async (command, arguments_, options) => {
         if (command === "tar") return fixture.runCommand(command, arguments_);
         await writeFile(
@@ -1542,6 +1552,7 @@ test("ambiguous upload writes an actionable uncertain result without retry", asy
       packageName: "iframe-sdk",
       releaseDirectory: fixture.releaseDirectory,
       root: fixture.root,
+      environment: localEnvironment,
       runCommand: async (command, arguments_) => {
         if (command === "tar") return fixture.runCommand(command, arguments_);
         publishes += 1;
@@ -1572,6 +1583,7 @@ test("post-publication registry failure is uncertain and never republishes", asy
       packageName: "iframe-sdk",
       releaseDirectory: fixture.releaseDirectory,
       root: fixture.root,
+      environment: localEnvironment,
       runCommand: async (command, arguments_) => {
         if (command === "tar") return fixture.runCommand(command, arguments_);
         publishes += 1;
@@ -1600,6 +1612,7 @@ test("publication dry run validates preflight but invokes no mutation", async ()
     packageName: "iframe-sdk",
     releaseDirectory: fixture.releaseDirectory,
     root: fixture.root,
+    environment: localEnvironment,
     dryRun: true,
     runCommand: async (command, arguments_) => {
       if (command === "tar") return fixture.runCommand(command, arguments_);
@@ -2016,6 +2029,7 @@ test("promotion verifies existence and dry run never changes a tag", async () =>
     version: "0.1.1-alpha.1",
     channel: "latest",
     root,
+    environment: localEnvironment,
     dryRun: true,
     inspect: async () => ({ state: "present" }),
     runCommand: async () => {
@@ -2030,6 +2044,7 @@ test("promotion verifies existence and dry run never changes a tag", async () =>
       version: "0.1.1-alpha.1",
       channel: "latest",
       root,
+      environment: localEnvironment,
       inspect: async () => ({ state: "absent" }),
     }),
     (error) => error.code === "version-absent",
@@ -2041,6 +2056,7 @@ test("promotion verifies existence and dry run never changes a tag", async () =>
     version: "0.1.1-alpha.1",
     channel: "latest",
     root,
+    environment: localEnvironment,
     inspect: async () => ({ state: "present" }),
     runCommand: async (command, arguments_, options) => {
       localInvocation = { command, arguments_, options };
