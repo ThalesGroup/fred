@@ -20,7 +20,7 @@ person's read permission on that space. Index metadata is never trusted here.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Container, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid5
@@ -98,6 +98,17 @@ def _published_chunks(manifest: Mapping[str, Any], wanted: set[str]) -> set[str]
     return found
 
 
+def is_live_document(row: Mapping[Any, Any], allowed: Container[UUID]) -> bool:
+    """In scope, not retired, in an active space, retrievable with no pending inclusion."""
+    return (
+        row["space_id"] in allowed
+        and row["deletion_id"] is None
+        and row["space_deletion_id"] is None
+        and bool(row["retrievable"])
+        and row["retrievable_pending"] is False
+    )
+
+
 def filter_candidates(
     scope: SearchScope,
     candidates: Sequence[Candidate],
@@ -108,12 +119,7 @@ def filter_candidates(
     visible: dict[UUID, Mapping[Any, Any]] = {
         row["id"]: row
         for row in documents
-        if row["space_id"] in allowed
-        and row["deletion_id"] is None
-        and row["space_deletion_id"] is None
-        and row["retrievable"]
-        and row["retrievable_pending"] is False
-        and row["manifest"] is not None
+        if is_live_document(row, allowed) and row["manifest"] is not None
     }
     wanted: dict[UUID, set[str]] = {}
     for candidate in candidates:
