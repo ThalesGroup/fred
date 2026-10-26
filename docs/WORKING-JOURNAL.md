@@ -94,6 +94,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | [F26](#f26-fusion-swift-et-préférences-utilisateur) | Fusion Swift : préférences personnelles en Rust | Implémenté ; validation fonctionnelle à faire | 02.1, A1, carte des sources |
 | [F27](#f27-primitive-de-visibilité-des-chunks) | Primitive Python de périmètre et de vérification des chunks | Implémentée, non branchée ; SQL non exécuté | Hors périmètre arc42 validé |
+| [F28](#f28-requêtes-opensearch-de-la-capacité-document-access) | Requêtes OpenSearch pures de Document Access | Implémentées, non branchées ; rien d'exécuté contre OpenSearch | Hors périmètre arc42 validé |
 
 ## Méthode de consolidation
 
@@ -2688,3 +2689,25 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
   PostgreSQL ; pas de niveaux ni dossiers ; `folder.deletion_id` ignoré (jamais
   posé) ; coût uuid5 linéaire en ordinals pour un chunk absent. Aucune
   validation fonctionnelle, aucun commit.
+
+## F28 Requêtes OpenSearch de la capacité Document Access
+
+- 2026-10-26 : port en fonctions pures de la partie OpenSearch de la recherche
+  Knowledge Flow API (`opensearch_vector_store.py`, `vector_search_service.py`),
+  pour que la recherche quitte l'API. Fichiers : `fred_capability_document_access/
+  opensearch_queries.py`, `tests/test_opensearch_queries.py`. Ni client, ni
+  embedding, ni port, ni branchement (assemblage au lot C).
+- `build_search` : semantic, strict, hybrid (`None` = hybrid) ; préfiltre
+  obligatoire `metadata.space_id` + `metadata.retrievable=true` dans chaque
+  sous-requête ; espaces vides refusés, pas de repli pour les index Swift sans
+  `retrievable`. Pipeline `hybrid-search-pipeline` référencé, jamais créé.
+- `read_response` : couples (`Candidate`, `VectorSearchHit`) dans l'ordre ;
+  `chunk_uid` = `_id` (vérifié : identifiant uuid5 écrit par le worker) ; hits sans
+  `_id`, `document_uid`, texte, ou à `chunk_uid` divergent écartés. Ni tags ni URL
+  d'aperçu (point ouvert), ni `retrieved_at`.
+- `make test-one TEST=tests/test_opensearch_queries.py` : 22 passés ;
+  `make code-quality` : sortie 0 (tri d'imports corrigé dans le test).
+- Limites : le préfiltre ne prouve rien, `verify_candidates` reste obligatoire ;
+  rangs avant vérification SQL ; métadonnée mal typée = erreur de validation.
+  Aucune requête jouée contre OpenSearch, aucune validation fonctionnelle, aucun
+  commit.
