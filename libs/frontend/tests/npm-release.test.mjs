@@ -13,35 +13,149 @@
 // limitations under the License.
 
 import assert from "node:assert/strict";
-import { access, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+  access,
+  chmod,
+  mkdtemp,
+  mkdir,
+  readFile,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import semver from "semver";
+
 import {
   assertAuthentication,
   inspectExactVersion,
+  main,
+  parseDryRun,
   prepareRelease,
   promoteRelease,
   publishRelease,
   releasePackages,
+  readReleaseInputs,
   resolveUiDesignTokens,
   selectPackage,
   validateReleaseDirectory,
   verifyRelease,
+  withCachedVerifiedUiToken,
   workspaceRoot,
 } from "../scripts/npm-release.mjs";
 import { run } from "../scripts/process.mjs";
 import { sha512Integrity } from "../scripts/release-evidence.mjs";
+import {
+  isExactSemanticVersion,
+  isSemanticVersionRangeLikeTag,
+} from "../scripts/release-operation-inputs.mjs";
 
-const integrityA = `sha512-${Buffer.alloc(64, 1).toString("base64")}`;
-const integrityB = `sha512-${Buffer.alloc(64, 2).toString("base64")}`;
+const archiveBytesA = Buffer.from("registry archive A");
+const archiveBytesB = Buffer.from("registry archive B");
+const integrityA = `sha512-${createHash("sha512").update(archiveBytesA).digest("base64")}`;
+const integrityB = `sha512-${createHash("sha512").update(archiveBytesB).digest("base64")}`;
+const tokenTarball =
+  "https://registry.npmjs.org/@fred-oss/design-tokens/-/design-tokens-0.1.1-alpha.0.tgz";
 
-function response(status, body) {
+test("dependency-free release guards match node-semver on tag-like boundaries", () => {
+  for (const version of [
+    "0.0.0",
+    "1.2.3-alpha.1+build.5",
+    "1.2.3-alpha.01",
+    "01.2.3",
+    "999999999999999999999.1.1",
+    "1.2.3-999999999999999999999",
+    "1.2.3+999999999999999999999",
+  ])
+    assert.equal(
+      isExactSemanticVersion(version),
+      semver.valid(version) !== null,
+      version,
+    );
+  for (const channel of [
+    "1",
+    "1.2",
+    "1.2.3",
+    "v1",
+    "v1.2.3",
+    "v",
+    "vx",
+    "x",
+    "x.0",
+    "x.0.0-alpha",
+    "x.01",
+    "1.x",
+    "1.x.0",
+    "1.x.0-alpha",
+    "1.x.01",
+    "0.x.1-alpha",
+    "1.2.x",
+    "1.2.x-alpha",
+    "1.2.x-alpha.01",
+    "1.2.3-alpha.1",
+    "1.2.3-01",
+    "999999999999999999999",
+    "999999999999999999999.x",
+    "9007199254740991",
+    "9007199254740991.x",
+    "1.9007199254740991.x",
+    "next",
+    "latest",
+    "beta",
+    "canary",
+  ])
+    assert.equal(
+      isSemanticVersionRangeLikeTag(channel),
+      semver.validRange(channel) !== null,
+      channel,
+    );
+  const components = [
+    "0",
+    "1",
+    "2",
+    "01",
+    "x",
+    "999999999999999999999",
+    "9007199254740991",
+  ];
+  const suffixes = ["", "-alpha", "-01", "-alpha.1", "-alpha.01"];
+  for (let length = 1; length <= 3; length += 1) {
+    const visit = (selected) => {
+      if (selected.length < length) {
+        for (const component of components) visit([...selected, component]);
+        return;
+      }
+      for (const prefix of ["", "v"])
+        for (const suffix of suffixes) {
+          const channel = `${prefix}${selected.join(".")}${suffix}`;
+          assert.equal(
+            isSemanticVersionRangeLikeTag(channel),
+            semver.validRange(channel) !== null,
+            channel,
+          );
+        }
+    };
+    visit([]);
+  }
+});
+
+function response(status, body, options = {}) {
   return {
     ok: status >= 200 && status < 300,
     status,
+    url: options.url,
+    headers: { get: (name) => options.headers?.[name.toLowerCase()] ?? null },
     json: async () => body,
+    arrayBuffer: async () => options.bytes,
+  };
+}
+
+function releaseContract(packages = {}) {
+  return {
+    packages,
+    releaseToolchain: { node: "24.21.0", npm: "11.19.0" },
   };
 }
 
@@ -70,13 +184,16 @@ async function fixtureRoot() {
   return root;
 }
 
-async function preparedFixture(packageName = "iframe-sdk") {
+async function preparedFixture(
+  packageName = "iframe-sdk",
+  releaseDirectoryName = "release",
+) {
   const root = await fixtureRoot();
   const selected = selectPackage(packageName);
   const manifest = JSON.parse(
     await readFile(path.join(root, selected.workspace, "package.json"), "utf8"),
   );
-  const releaseDirectory = path.join(root, "release");
+  const releaseDirectory = path.join(root, releaseDirectoryName);
   await mkdir(releaseDirectory);
   const archive = `${manifest.name.split("/").at(-1)}-${manifest.version}.tgz`;
   const archivePath = path.join(releaseDirectory, archive);
@@ -121,6 +238,72 @@ test("package selection accepts only the public Make selectors", () => {
     );
 });
 
+test("captured release inputs are parsed explicitly before operations", async () => {
+  const valid = {
+    FRED_RELEASE_PACKAGE: "iframe-sdk",
+    FRED_RELEASE_RELEASE_DIR: "/tmp/release with '$() and `ticks`",
+    FRED_RELEASE_AUTH_MODE: "token",
+    FRED_RELEASE_DRY_RUN: "yes",
+    FRED_RELEASE_REGISTRY: "http://127.0.0.1:4873/custom/",
+    FRED_RELEASE_VERSION: "0.1.1-alpha.1",
+    FRED_RELEASE_CHANNEL: "next-2026.10",
+  };
+  assert.deepEqual(
+    readReleaseInputs({ environment: valid, operation: "promote" }),
+    {
+      authMode: "token",
+      channel: "next-2026.10",
+      dryRun: true,
+      packageName: "iframe-sdk",
+      registry: "http://127.0.0.1:4873/custom/",
+      releaseDirectory: "/tmp/release with '$() and `ticks`",
+      version: "0.1.1-alpha.1",
+    },
+  );
+  for (const [value, expected] of [
+    ["", false],
+    ["0", false],
+    ["false", false],
+    ["no", false],
+    ["1", true],
+    ["true", true],
+    ["yes", true],
+  ])
+    assert.equal(parseDryRun(value), expected);
+  assert.throws(() => parseDryRun("TRUE"), /DRY_RUN must be/);
+  for (const channel of ["1", "1.2", "1.2.3", "1.x", "v1.2.3", "1.2.3-alpha.1"])
+    assert.throws(
+      () =>
+        readReleaseInputs({
+          environment: { ...valid, FRED_RELEASE_CHANNEL: channel },
+          operation: "promote",
+        }),
+      /semantic-version range/,
+      channel,
+    );
+  for (const [name, value, message] of [
+    ["FRED_RELEASE_PACKAGE", "ui\nnext", /single line/],
+    ["FRED_RELEASE_AUTH_MODE", "fallback", /AUTH_MODE/],
+    ["FRED_RELEASE_DRY_RUN", "sometimes", /DRY_RUN/],
+    ["FRED_RELEASE_REGISTRY", "https://example.test/no-slash", /slash/],
+  ])
+    assert.throws(
+      () =>
+        readReleaseInputs({
+          environment: { ...valid, [name]: value },
+          operation: "promote",
+        }),
+      message,
+    );
+  await assert.rejects(
+    main(
+      ["node", "npm-release.mjs", "promote", "--package", "iframe-sdk"],
+      valid,
+    ),
+    /Make environment boundary/,
+  );
+});
+
 test("preparation derives identity, runs selected checks, and writes exact metadata", async () => {
   const root = await fixtureRoot();
   const releaseDirectory = path.join(root, "portable");
@@ -133,7 +316,8 @@ test("preparation derives identity, runs selected checks, and writes exact metad
     root,
     environment: {},
     hashArchive: async () => integrityA,
-    loadContract: async () => ({ packages: {} }),
+    loadContract: async () => releaseContract(),
+    nodeVersion: "24.21.0",
     pack: async ({ validate }) => {
       calls.push(["pack", validate]);
       return { archivePath };
@@ -141,6 +325,7 @@ test("preparation derives identity, runs selected checks, and writes exact metad
     runChecks: async ({ selected, integrity }) =>
       calls.push(["checks", selected.package, integrity]),
     runCommand: async (command, arguments_) => {
+      if (command === "npm") return { stdout: "11.19.0\n", stderr: "" };
       if (command === "git" && arguments_[0] === "status")
         return { stdout: "", stderr: "" };
       if (command === "git" && arguments_[0] === "rev-parse")
@@ -186,22 +371,27 @@ test("preparation dispatches independently for all three packages", async () => 
       root,
       environment: {},
       hashArchive: async () => integrityA,
-      loadContract: async () => ({
-        packages: {
+      loadContract: async () =>
+        releaseContract({
           designTokens: { name: "@fred-oss/design-tokens" },
-        },
-      }),
-      fetchImpl: async () =>
-        response(200, {
-          name: "@fred-oss/design-tokens",
-          versions: {
-            "0.1.1-alpha.0": {
-              name: "@fred-oss/design-tokens",
-              version: "0.1.1-alpha.0",
-              dist: { integrity: integrityA },
-            },
-          },
         }),
+      nodeVersion: "24.21.0",
+      fetchImpl: async (endpoint) =>
+        endpoint.pathname.endsWith(".tgz")
+          ? response(200, undefined, {
+              bytes: archiveBytesA,
+              url: endpoint.href,
+            })
+          : response(200, {
+              name: "@fred-oss/design-tokens",
+              versions: {
+                "0.1.1-alpha.0": {
+                  name: "@fred-oss/design-tokens",
+                  version: "0.1.1-alpha.0",
+                  dist: { integrity: integrityA, tarball: tokenTarball },
+                },
+              },
+            }),
       pack: async ({ validate }) => {
         calls.push([packageName, "pack", validate]);
         return { archivePath };
@@ -209,6 +399,7 @@ test("preparation dispatches independently for all three packages", async () => 
       runChecks: async ({ selected: checked }) =>
         calls.push([packageName, "checks", checked.package]),
       runCommand: async (command, arguments_) => {
+        if (command === "npm") return { stdout: "11.19.0\n", stderr: "" };
         if (command === "git" && arguments_[0] === "status")
           return { stdout: "", stderr: "" };
         if (command === "git" && arguments_[0] === "rev-parse")
@@ -238,21 +429,114 @@ test("preparation rejects dirty source before packing", async () => {
       packageName: "design-tokens",
       releaseDirectory: path.join(root, "portable"),
       root,
-      loadContract: async () => ({ packages: {} }),
+      loadContract: async () => releaseContract(),
+      nodeVersion: "24.21.0",
       pack: async () => {
         packed = true;
         return {};
       },
       runCommand: async (command, arguments_) => ({
         stdout:
-          command === "git" && arguments_[0] === "status"
-            ? " M design-tokens/package.json\n"
-            : `${"c".repeat(40)}\n`,
+          command === "npm"
+            ? "11.19.0\n"
+            : command === "git" && arguments_[0] === "status"
+              ? " M design-tokens/package.json\n"
+              : `${"c".repeat(40)}\n`,
       }),
     }),
     (error) => error.code === "dirty-source",
   );
   assert.equal(packed, false);
+});
+
+test("preparation enforces the actual release toolchain before registry, pack, or checks", async () => {
+  for (const mismatch of [
+    { nodeVersion: "24.21.1", npmVersion: "11.19.0\n" },
+    { nodeVersion: "24.21.0", npmVersion: "11.19.1\n" },
+  ]) {
+    const root = await fixtureRoot();
+    let laterWork = 0;
+    await assert.rejects(
+      prepareRelease({
+        packageName: "ui",
+        root,
+        loadContract: async () =>
+          releaseContract({
+            designTokens: { name: "@fred-oss/design-tokens" },
+          }),
+        nodeVersion: mismatch.nodeVersion,
+        fetchImpl: async () => {
+          laterWork += 1;
+          return response(404);
+        },
+        pack: async () => {
+          laterWork += 1;
+          return {};
+        },
+        runChecks: async () => {
+          laterWork += 1;
+        },
+        runCommand: async (command) => {
+          assert.equal(command, "npm");
+          return { stdout: mismatch.npmVersion, stderr: "" };
+        },
+      }),
+      /release (?:Node|npm) version differs/,
+    );
+    assert.equal(laterWork, 0);
+  }
+
+  const root = await fixtureRoot();
+  let laterWork = 0;
+  await assert.rejects(
+    prepareRelease({
+      packageName: "ui",
+      root,
+      loadContract: async () => releaseContract(),
+      nodeVersion: "24.21.0",
+      fetchImpl: async () => {
+        laterWork += 1;
+        return response(404);
+      },
+      pack: async () => {
+        laterWork += 1;
+        return {};
+      },
+      runChecks: async () => {
+        laterWork += 1;
+      },
+      runCommand: async (command) => {
+        assert.equal(command, "npm");
+        throw new Error("npm is missing");
+      },
+    }),
+    /npm is missing/,
+  );
+  assert.equal(laterWork, 0);
+});
+
+test("preparation checks the toolchain before reading package or full-contract data", async () => {
+  const root = await fixtureRoot();
+  await writeFile(path.join(root, "ui/package.json"), "not JSON\n");
+  let contractReads = 0;
+  await assert.rejects(
+    prepareRelease({
+      packageName: "ui",
+      root,
+      nodeVersion: "24.21.1",
+      loadToolchain: async () => ({ node: "24.21.0", npm: "11.19.0" }),
+      loadContract: async () => {
+        contractReads += 1;
+        throw new Error("full contract must not be read");
+      },
+      runCommand: async (command) => {
+        assert.equal(command, "npm");
+        return { stdout: "11.19.0\n", stderr: "" };
+      },
+    }),
+    /release Node version differs/,
+  );
+  assert.equal(contractReads, 0);
 });
 
 test("preparation rejects source changes made while checks run", async () => {
@@ -266,10 +550,12 @@ test("preparation rejects source changes made while checks run", async () => {
       releaseDirectory: path.join(root, "portable"),
       root,
       hashArchive: async () => integrityA,
-      loadContract: async () => ({ packages: {} }),
+      loadContract: async () => releaseContract(),
+      nodeVersion: "24.21.0",
       pack: async () => ({ archivePath }),
       runChecks: async () => {},
       runCommand: async (command, arguments_) => {
+        if (command === "npm") return { stdout: "11.19.0\n", stderr: "" };
         if (command === "git" && arguments_[0] === "status") {
           statusReads += 1;
           return {
@@ -325,6 +611,22 @@ test("exact registry inspection distinguishes absence, matching bytes, conflict,
     version: "0.1.1-alpha.1",
     integrity: integrityA,
   };
+  const tarball =
+    "https://registry.npmjs.org/@fred-oss/iframe-sdk/-/iframe-sdk-0.1.1-alpha.1.tgz";
+  const registryFetch =
+    ({ metadataIntegrity, bytes = archiveBytesA }) =>
+    async (endpoint) =>
+      endpoint.pathname.endsWith(".tgz")
+        ? response(200, undefined, { bytes, url: endpoint.href })
+        : response(
+            200,
+            {
+              name: input.name,
+              version: input.version,
+              dist: { integrity: metadataIntegrity, tarball },
+            },
+            { url: endpoint.href },
+          );
   assert.equal(
     (
       await inspectExactVersion({
@@ -338,12 +640,7 @@ test("exact registry inspection distinguishes absence, matching bytes, conflict,
     (
       await inspectExactVersion({
         ...input,
-        fetchImpl: async () =>
-          response(200, {
-            name: input.name,
-            version: input.version,
-            dist: { integrity: integrityA },
-          }),
+        fetchImpl: registryFetch({ metadataIntegrity: integrityA }),
       })
     ).state,
     "matching",
@@ -352,12 +649,10 @@ test("exact registry inspection distinguishes absence, matching bytes, conflict,
     (
       await inspectExactVersion({
         ...input,
-        fetchImpl: async () =>
-          response(200, {
-            name: input.name,
-            version: input.version,
-            dist: { integrity: integrityB },
-          }),
+        fetchImpl: registryFetch({
+          bytes: archiveBytesB,
+          metadataIntegrity: integrityB,
+        }),
       })
     ).state,
     "conflict",
@@ -379,6 +674,231 @@ test("exact registry inspection distinguishes absence, matching bytes, conflict,
     }),
     (error) => error.code === "registry-network",
   );
+  await assert.rejects(
+    inspectExactVersion({
+      ...input,
+      fetchImpl: registryFetch({
+        bytes: archiveBytesB,
+        metadataIntegrity: integrityA,
+      }),
+    }),
+    (error) => error.code === "registry-integrity",
+  );
+  for (const invalidTarball of [
+    "https://evil.example/iframe-sdk.tgz",
+    "https://registry.npmjs.org/@fred-oss/iframe-sdk/-/other.tgz",
+    `${tarball}?token=secret`,
+  ])
+    await assert.rejects(
+      inspectExactVersion({
+        ...input,
+        fetchImpl: async (endpoint) =>
+          response(
+            200,
+            {
+              name: input.name,
+              version: input.version,
+              dist: { integrity: integrityA, tarball: invalidTarball },
+            },
+            { url: endpoint.href },
+          ),
+      }),
+      (error) => error.code === "registry-tarball",
+    );
+  await assert.rejects(
+    inspectExactVersion({
+      ...input,
+      fetchImpl: async (endpoint) =>
+        endpoint.pathname.endsWith(".tgz")
+          ? response(302, undefined, { url: endpoint.href })
+          : response(
+              200,
+              {
+                name: input.name,
+                version: input.version,
+                dist: { integrity: integrityA, tarball },
+              },
+              { url: endpoint.href },
+            ),
+    }),
+    (error) => error.code === "registry-redirect",
+  );
+  for (const [tarballResponse, expectedCode] of [
+    [response(401), "registry-authentication"],
+    [response(403), "registry-authorization"],
+    [response(404), "registry-response"],
+    [
+      response(200, undefined, {
+        bytes: archiveBytesA,
+        headers: { "content-length": String(50 * 1024 * 1024 + 1) },
+      }),
+      "registry-tarball",
+    ],
+  ])
+    await assert.rejects(
+      inspectExactVersion({
+        ...input,
+        fetchImpl: async (endpoint) =>
+          endpoint.pathname.endsWith(".tgz")
+            ? { ...tarballResponse, url: endpoint.href }
+            : response(
+                200,
+                {
+                  name: input.name,
+                  version: input.version,
+                  dist: { integrity: integrityA, tarball },
+                },
+                { url: endpoint.href },
+              ),
+      }),
+      (error) => error.code === expectedCode,
+    );
+  await assert.rejects(
+    inspectExactVersion({
+      ...input,
+      fetchImpl: async (endpoint) => {
+        if (endpoint.pathname.endsWith(".tgz")) {
+          const error = new Error("timed out");
+          error.name = "TimeoutError";
+          throw error;
+        }
+        return response(
+          200,
+          {
+            name: input.name,
+            version: input.version,
+            dist: { integrity: integrityA, tarball },
+          },
+          { url: endpoint.href },
+        );
+      },
+    }),
+    (error) => error.code === "registry-timeout",
+  );
+  await assert.rejects(
+    inspectExactVersion({
+      ...input,
+      fetchImpl: async (endpoint) => ({
+        ...response(200, undefined, { url: endpoint.href }),
+        json: async () => {
+          const error = new Error("metadata body timed out");
+          error.name = "AbortError";
+          throw error;
+        },
+      }),
+    }),
+    (error) => error.code === "registry-timeout",
+  );
+  await assert.rejects(
+    inspectExactVersion({
+      ...input,
+      fetchImpl: async (endpoint) =>
+        endpoint.pathname.endsWith(".tgz")
+          ? {
+              ...response(200, undefined, { url: endpoint.href }),
+              arrayBuffer: async () => {
+                const error = new Error("tarball body timed out");
+                error.name = "AbortError";
+                throw error;
+              },
+            }
+          : response(
+              200,
+              {
+                name: input.name,
+                version: input.version,
+                dist: { integrity: integrityA, tarball },
+              },
+              { url: endpoint.href },
+            ),
+    }),
+    (error) => error.code === "registry-timeout",
+  );
+});
+
+test("publish preflight, post-upload visibility, and verification hash selected-registry bytes", async () => {
+  const registry = "http://127.0.0.1:4873/custom/";
+  const exactPath = "/custom/@fred-oss%2fiframe-sdk/0.1.1-alpha.1";
+  const tarball =
+    "http://127.0.0.1:4873/custom/@fred-oss/iframe-sdk/-/iframe-sdk-0.1.1-alpha.1.tgz";
+  const createFetch = ({ absentReads = 0 } = {}) => {
+    const calls = [];
+    const fetchImpl = async (endpoint) => {
+      calls.push(endpoint.href);
+      if (endpoint.pathname === exactPath && absentReads > 0) {
+        absentReads -= 1;
+        return response(404, undefined, { url: endpoint.href });
+      }
+      if (endpoint.pathname.endsWith(".tgz"))
+        return response(200, undefined, {
+          bytes: fetchImpl.archiveBytes,
+          url: endpoint.href,
+        });
+      return response(
+        200,
+        {
+          name: "@fred-oss/iframe-sdk",
+          version: "0.1.1-alpha.1",
+          dist: {
+            integrity: fetchImpl.integrity,
+            tarball,
+          },
+        },
+        { url: endpoint.href },
+      );
+    };
+    return { calls, fetchImpl };
+  };
+
+  const existing = await preparedFixture();
+  const existingFetch = createFetch();
+  existingFetch.fetchImpl.archiveBytes = await readFile(
+    path.join(existing.releaseDirectory, existing.metadata.archive),
+  );
+  existingFetch.fetchImpl.integrity = existing.metadata.integrity;
+  const outcome = await publishRelease({
+    packageName: "iframe-sdk",
+    releaseDirectory: existing.releaseDirectory,
+    root: existing.root,
+    registry,
+    fetchImpl: existingFetch.fetchImpl,
+    runCommand: existing.runCommand,
+  });
+  assert.equal(outcome.state, "already-published");
+  assert(existingFetch.calls.some((url) => url === tarball));
+  const verified = await verifyRelease({
+    packageName: "iframe-sdk",
+    releaseDirectory: existing.releaseDirectory,
+    root: existing.root,
+    registry,
+    fetchImpl: existingFetch.fetchImpl,
+    runCommand: existing.runCommand,
+  });
+  assert.equal(verified.state, "verified");
+
+  const uploaded = await preparedFixture();
+  const uploadedFetch = createFetch({ absentReads: 1 });
+  uploadedFetch.fetchImpl.archiveBytes = await readFile(
+    path.join(uploaded.releaseDirectory, uploaded.metadata.archive),
+  );
+  uploadedFetch.fetchImpl.integrity = uploaded.metadata.integrity;
+  let npmPublishes = 0;
+  const published = await publishRelease({
+    packageName: "iframe-sdk",
+    releaseDirectory: uploaded.releaseDirectory,
+    root: uploaded.root,
+    registry,
+    fetchImpl: uploadedFetch.fetchImpl,
+    runCommand: async (command, arguments_) => {
+      if (command === "tar") return uploaded.runCommand(command, arguments_);
+      npmPublishes += 1;
+      return { stdout: "", stderr: "" };
+    },
+    visibilityDelayMilliseconds: 0,
+  });
+  assert.equal(published.state, "published");
+  assert.equal(npmPublishes, 1);
+  assert(uploadedFetch.calls.some((url) => url === tarball));
 });
 
 test("UI dependency resolution uses the declared range and exact published integrity", async () => {
@@ -392,35 +912,114 @@ test("UI dependency resolution uses the declared range and exact published integ
   const resolved = await resolveUiDesignTokens({
     contract,
     manifest,
-    fetchImpl: async () =>
-      response(200, {
-        name: "@fred-oss/design-tokens",
-        versions: {
-          "0.1.0-alpha.1": {
+    fetchImpl: async (endpoint) =>
+      endpoint.pathname.endsWith(".tgz")
+        ? response(200, undefined, {
+            bytes: archiveBytesB,
+            url: endpoint.href,
+          })
+        : response(200, {
             name: "@fred-oss/design-tokens",
-            version: "0.1.0-alpha.1",
-            dist: { integrity: integrityA },
-          },
-          "0.1.1-alpha.0": {
-            name: "@fred-oss/design-tokens",
-            version: "0.1.1-alpha.0",
-            dist: { integrity: integrityB },
-          },
-          "0.2.0-alpha.0": {
-            name: "@fred-oss/design-tokens",
-            version: "0.2.0-alpha.0",
-            dist: { integrity: integrityA },
-          },
-          "1.0.0": {
-            name: "@fred-oss/design-tokens",
-            version: "1.0.0",
-            dist: { integrity: integrityA },
-          },
-        },
-      }),
+            versions: {
+              "0.1.0-alpha.1": {
+                name: "@fred-oss/design-tokens",
+                version: "0.1.0-alpha.1",
+                dist: { integrity: integrityA, tarball: tokenTarball },
+              },
+              "0.1.1-alpha.0": {
+                name: "@fred-oss/design-tokens",
+                version: "0.1.1-alpha.0",
+                dist: { integrity: integrityB, tarball: tokenTarball },
+              },
+              "0.2.0-alpha.0": {
+                name: "@fred-oss/design-tokens",
+                version: "0.2.0-alpha.0",
+                dist: { integrity: integrityA, tarball: tokenTarball },
+              },
+              "1.0.0": {
+                name: "@fred-oss/design-tokens",
+                version: "1.0.0",
+                dist: { integrity: integrityA, tarball: tokenTarball },
+              },
+            },
+          }),
   });
   assert.equal(resolved.coordinate, "@fred-oss/design-tokens@0.1.1-alpha.0");
   assert.equal(resolved.integrity, integrityB);
+  assert.equal(resolved.registry, "https://registry.npmjs.org/");
+  assert.equal(resolved.tarball, tokenTarball);
+  assert.deepEqual(resolved.archiveBytes, archiveBytesB);
+  let cachedPath;
+  let consumedBytes;
+  let coordinateReresolution = false;
+  await withCachedVerifiedUiToken({
+    uiToken: resolved,
+    cachePath: path.join(root, "selected-token-cache"),
+    runCommand: async (command, arguments_) => {
+      assert.equal(command, "npm");
+      assert.deepEqual(arguments_.slice(0, 2), ["cache", "add"]);
+      coordinateReresolution ||= arguments_.includes(resolved.coordinate);
+      cachedPath = arguments_[2];
+      assert.deepEqual(await readFile(cachedPath), archiveBytesB);
+      return { stdout: "", stderr: "" };
+    },
+    action: async (archivePath) => {
+      assert.equal(archivePath, cachedPath);
+      consumedBytes = await readFile(archivePath);
+    },
+  });
+  assert.equal(coordinateReresolution, false);
+  assert.deepEqual(consumedBytes, archiveBytesB);
+  await assert.rejects(access(cachedPath), { code: "ENOENT" });
+  const customRegistry = "http://127.0.0.1:4873/custom/";
+  const customTarball =
+    "http://127.0.0.1:4873/custom/@fred-oss/design-tokens/-/design-tokens-0.1.1-alpha.0.tgz";
+  const customResolved = await resolveUiDesignTokens({
+    contract,
+    manifest,
+    registry: customRegistry,
+    fetchImpl: async (endpoint) =>
+      endpoint.pathname.endsWith(".tgz")
+        ? response(200, undefined, {
+            bytes: archiveBytesB,
+            url: endpoint.href,
+          })
+        : response(200, {
+            name: "@fred-oss/design-tokens",
+            versions: {
+              "0.1.1-alpha.0": {
+                name: "@fred-oss/design-tokens",
+                version: "0.1.1-alpha.0",
+                dist: { integrity: integrityB, tarball: customTarball },
+              },
+            },
+          }),
+  });
+  assert.equal(customResolved.registry, customRegistry);
+  assert.equal(customResolved.tarball, customTarball);
+  await assert.rejects(
+    resolveUiDesignTokens({
+      contract,
+      manifest,
+      registry: customRegistry,
+      fetchImpl: async () =>
+        response(200, {
+          name: "@fred-oss/design-tokens",
+          versions: {
+            "0.1.1-alpha.0": {
+              name: "@fred-oss/design-tokens",
+              version: "0.1.1-alpha.0",
+              dist: {
+                integrity: integrityB,
+                tarball:
+                  "http://127.0.0.1:4873/custom/@fred-oss/design-tokens/-/other-0.1.1-alpha.0.tgz",
+              },
+            },
+          },
+        }),
+    }),
+    (error) => error.code === "registry-tarball",
+  );
   await assert.rejects(
     resolveUiDesignTokens({
       contract,
@@ -496,17 +1095,22 @@ test("UI publication validates the peer range packed in the prepared archive", a
     loadContract: async () => ({
       packages: { designTokens: { name: "@fred-oss/design-tokens" } },
     }),
-    fetchImpl: async () =>
-      response(200, {
-        name: "@fred-oss/design-tokens",
-        versions: {
-          "0.1.1-alpha.0": {
+    fetchImpl: async (endpoint) =>
+      endpoint.pathname.endsWith(".tgz")
+        ? response(200, undefined, {
+            bytes: archiveBytesA,
+            url: endpoint.href,
+          })
+        : response(200, {
             name: "@fred-oss/design-tokens",
-            version: "0.1.1-alpha.0",
-            dist: { integrity: integrityA },
-          },
-        },
-      }),
+            versions: {
+              "0.1.1-alpha.0": {
+                name: "@fred-oss/design-tokens",
+                version: "0.1.1-alpha.0",
+                dist: { integrity: integrityA, tarball: tokenTarball },
+              },
+            },
+          }),
     inspect: async () => ({ state: "absent" }),
   });
   assert.equal(result.state, "dry-run");
@@ -527,6 +1131,62 @@ test("matching existing publication succeeds without invoking npm", async () => 
   });
   assert.equal(outcome.state, "already-published");
   assert.equal(mutations, 0);
+});
+
+test("publication outcome preserves the selected registry and shell-quotes recovery data", async () => {
+  const shellMarker = "FRED_COMMAND_MARKER";
+  const backtickMarker = "FRED_BACKTICK_MARKER";
+  const releaseDirectoryName = `release with 'quotes' $(touch ${shellMarker}) and \`touch ${backtickMarker}\``;
+  const fixture = await preparedFixture("iframe-sdk", releaseDirectoryName);
+  const registry = "http://127.0.0.1:4873/custom/";
+  const outcome = await publishRelease({
+    packageName: "iframe-sdk",
+    releaseDirectory: fixture.releaseDirectory,
+    root: fixture.root,
+    registry,
+    runCommand: fixture.runCommand,
+    inspect: async (candidate) => {
+      assert.equal(candidate.registry, registry);
+      return { state: "matching" };
+    },
+  });
+  assert.equal(outcome.registry, registry);
+  assert.equal(
+    outcome.verificationCommand,
+    `make verify-release PACKAGE='iframe-sdk' RELEASE_DIR='${fixture.releaseDirectory.replaceAll("'", `'"'"'`)}' REGISTRY='${registry}'`,
+  );
+  const bin = path.join(fixture.root, "bin");
+  const capture = path.join(fixture.root, "make-arguments.json");
+  await mkdir(bin);
+  const fakeMake = path.join(bin, "make");
+  await writeFile(
+    fakeMake,
+    `#!/usr/bin/env node
+import { writeFileSync } from "node:fs";
+writeFileSync(process.env.FRED_TEST_CAPTURE, JSON.stringify(process.argv.slice(2)));
+`,
+  );
+  await chmod(fakeMake, 0o755);
+  await run("sh", ["-c", outcome.verificationCommand], {
+    cwd: fixture.root,
+    env: {
+      ...process.env,
+      FRED_TEST_CAPTURE: capture,
+      PATH: `${bin}:${process.env.PATH}`,
+    },
+  });
+  assert.deepEqual(JSON.parse(await readFile(capture, "utf8")), [
+    "verify-release",
+    "PACKAGE=iframe-sdk",
+    `RELEASE_DIR=${fixture.releaseDirectory}`,
+    `REGISTRY=${registry}`,
+  ]);
+  await assert.rejects(access(path.join(fixture.root, shellMarker)), {
+    code: "ENOENT",
+  });
+  await assert.rejects(access(path.join(fixture.root, backtickMarker)), {
+    code: "ENOENT",
+  });
 });
 
 test("conflicting existing publication stops before npm", async () => {
@@ -696,6 +1356,99 @@ test("OIDC publication rejects a different workflow source before npm", async ()
   assert.equal(npmInvocations, 0);
 });
 
+test("OIDC publication dry run validates nonsecret identity without requesting credentials", async () => {
+  const fixture = await preparedFixture();
+  fixture.metadata.preparedBy = {
+    kind: "github-actions",
+    repository: "ThalesGroup/fred",
+    workflow:
+      "ThalesGroup/fred/.github/workflows/Publish-frontend-packages.yml@refs/heads/swift",
+    runId: "41",
+  };
+  await writeFile(
+    path.join(fixture.releaseDirectory, "release.json"),
+    `${JSON.stringify(fixture.metadata, null, 2)}\n`,
+  );
+  const environment = {
+    CI: "true",
+    GITHUB_ACTIONS: "true",
+    GITHUB_REPOSITORY: "ThalesGroup/fred",
+    GITHUB_WORKFLOW_REF: fixture.metadata.preparedBy.workflow,
+    GITHUB_SHA: fixture.metadata.sourceCommit,
+  };
+  let npmInvocations = 0;
+  const outcome = await publishRelease({
+    packageName: "iframe-sdk",
+    releaseDirectory: fixture.releaseDirectory,
+    root: fixture.root,
+    authMode: "oidc",
+    dryRun: true,
+    environment,
+    runCommand: async (command, arguments_) => {
+      if (command === "tar") return fixture.runCommand(command, arguments_);
+      if (command === "git")
+        return { stdout: `${fixture.metadata.sourceCommit}\n`, stderr: "" };
+      npmInvocations += 1;
+      return { stdout: "", stderr: "" };
+    },
+    inspect: async () => ({ state: "absent" }),
+  });
+  assert.equal(outcome.state, "dry-run");
+  assert.equal(npmInvocations, 0);
+
+  for (const changed of [
+    { GITHUB_SHA: "b".repeat(40) },
+    { GITHUB_REPOSITORY: "example/fork" },
+  ]) {
+    let registryReads = 0;
+    await assert.rejects(
+      publishRelease({
+        packageName: "iframe-sdk",
+        releaseDirectory: fixture.releaseDirectory,
+        root: fixture.root,
+        authMode: "oidc",
+        dryRun: true,
+        environment: { ...environment, ...changed },
+        runCommand: async (command, arguments_) => {
+          if (command === "tar") return fixture.runCommand(command, arguments_);
+          if (command === "git")
+            return { stdout: `${fixture.metadata.sourceCommit}\n`, stderr: "" };
+          npmInvocations += 1;
+          return { stdout: "", stderr: "" };
+        },
+        inspect: async () => {
+          registryReads += 1;
+          return { state: "absent" };
+        },
+      }),
+      (error) => error.code === "provenance",
+    );
+    assert.equal(registryReads, 0);
+  }
+
+  const local = await preparedFixture();
+  await assert.rejects(
+    publishRelease({
+      packageName: "iframe-sdk",
+      releaseDirectory: local.releaseDirectory,
+      root: local.root,
+      authMode: "oidc",
+      dryRun: true,
+      environment,
+      runCommand: async (command, arguments_) => {
+        if (command === "tar") return local.runCommand(command, arguments_);
+        if (command === "git")
+          return { stdout: `${local.metadata.sourceCommit}\n`, stderr: "" };
+        npmInvocations += 1;
+        return { stdout: "", stderr: "" };
+      },
+      inspect: async () => ({ state: "absent" }),
+    }),
+    /prepared outside GitHub Actions/,
+  );
+  assert.equal(npmInvocations, 0);
+});
+
 test("token publication uses an isolated registry-scoped npm configuration", async () => {
   const fixture = await preparedFixture();
   const states = ["absent", "matching"];
@@ -798,7 +1551,7 @@ test("ambiguous upload writes an actionable uncertain result without retry", asy
     }),
     (error) =>
       error.code === "publication-uncertain" &&
-      error.message.includes("make verify-release PACKAGE=iframe-sdk"),
+      error.message.includes("make verify-release PACKAGE='iframe-sdk'"),
   );
   assert.equal(publishes, 1);
   const outcome = JSON.parse(
@@ -834,7 +1587,7 @@ test("post-publication registry failure is uncertain and never republishes", asy
     }),
     (error) =>
       error.code === "publication-uncertain" &&
-      error.message.includes("make verify-release PACKAGE=iframe-sdk"),
+      error.message.includes("make verify-release PACKAGE='iframe-sdk'"),
   );
   assert.equal(publishes, 1);
   assert.equal(inspections, 2);
@@ -1034,47 +1787,196 @@ test("verification accepts matching bytes and rejects absence", async () => {
   );
 });
 
-test("promotion inputs cannot cross the actual Make command boundary", async () => {
+test("all release inputs remain opaque across every actual Make boundary", async () => {
   const directory = await mkdtemp(
-    path.join(os.tmpdir(), "fred-promotion-boundary-test-"),
+    path.join(os.tmpdir(), "fred-release-boundary-test-"),
   );
+  const bin = path.join(directory, "bin");
+  const capture = path.join(directory, "capture.jsonl");
+  await mkdir(bin);
+  const fakeNode = path.join(bin, "node");
+  await writeFile(
+    fakeNode,
+    `#!${process.execPath}
+import { appendFileSync } from "node:fs";
+const names = ${JSON.stringify([
+      "PACKAGE",
+      "RELEASE_DIR",
+      "AUTH_MODE",
+      "DRY_RUN",
+      "REGISTRY",
+      "VERSION",
+      "CHANNEL",
+    ])};
+appendFileSync(process.env.FRED_TEST_CAPTURE, JSON.stringify({
+  argv: process.argv.slice(2),
+  captured: Object.fromEntries(names.map((name) => [name, process.env["FRED_RELEASE_" + name]])),
+  public: Object.fromEntries(names.map((name) => [name, process.env[name]])),
+}) + "\\n");
+`,
+  );
+  await chmod(fakeNode, 0o755);
+  const valid = {
+    PACKAGE: "iframe-sdk",
+    RELEASE_DIR: "/tmp/release with 'quotes' $() and `ticks`",
+    AUTH_MODE: "token",
+    DRY_RUN: "1",
+    REGISTRY: "http://127.0.0.1:4873/custom/",
+    VERSION: "0.1.1-alpha.1",
+    CHANNEL: "next-2026.10",
+  };
+  const targets = {
+    "prepare-release": "prepare",
+    publish: "publish",
+    "verify-release": "verify",
+    promote: "promote",
+  };
+  const invoke = async ({ target, environmentValues, commandValues = {} }) => {
+    const environment = {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH}`,
+      FRED_TEST_CAPTURE: capture,
+    };
+    for (const name of Object.keys(valid))
+      delete environment[`FRED_RELEASE_${name}`];
+    Object.assign(environment, environmentValues);
+    const arguments_ = ["--no-print-directory", "-o", "node_modules", target];
+    for (const [name, value] of Object.entries(commandValues))
+      arguments_.push(`${name}=${value}`);
+    await run("make", arguments_, {
+      cwd: workspaceRoot,
+      env: environment,
+    });
+    const records = (await readFile(capture, "utf8"))
+      .trimEnd()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    return records.slice(-2);
+  };
+
+  for (const [target, operation] of Object.entries(targets)) {
+    const records = await invoke({ target, environmentValues: valid });
+    assert.deepEqual(
+      records.map(({ argv }) => argv),
+      [
+        ["scripts/release-preflight.mjs", operation],
+        ["scripts/npm-release.mjs", operation],
+      ],
+    );
+    for (const record of records) {
+      assert.deepEqual(record.captured, valid);
+      assert.deepEqual(record.public, {});
+    }
+  }
+
   const payloads = [
-    (marker) => `0.1.1$(printf REVIEW_INJECTION >${marker})`,
-    (marker) => `0.1.1"; printf REVIEW_INJECTION >${marker}; : "`,
-    (marker) => `0.1.1\nprintf REVIEW_INJECTION >${marker}`,
+    (marker) => `$(printf REVIEW_INJECTION >${marker})`,
+    (marker) => `"'; printf REVIEW_INJECTION >${marker}; : '"`,
+    (marker) => `line-one\nprintf REVIEW_INJECTION >${marker}`,
     (marker) => `$(shell printf REVIEW_INJECTION >${marker})`,
+    (marker) => `$(file >${marker},REVIEW_INJECTION)`,
+    (marker) => `\`printf REVIEW_INJECTION >${marker}\``,
   ];
   let sequence = 0;
   for (const origin of ["environment", "command-line"])
-    for (const field of ["VERSION", "CHANNEL"])
+    for (const field of Object.keys(valid))
       for (const payload of payloads) {
         const marker = path.join(directory, `${origin}-${field}-${sequence++}`);
-        const values = {
-          VERSION: field === "VERSION" ? payload(marker) : "0.1.1",
-          CHANNEL: field === "CHANNEL" ? payload(marker) : "latest",
-        };
-        const arguments_ = [
-          "promote",
-          "PACKAGE=iframe-sdk",
-          "AUTH_MODE=token",
-          "DRY_RUN=1",
-        ];
-        const environment = { ...process.env, CI: "true" };
-        if (origin === "environment") Object.assign(environment, values);
+        const value = payload(marker);
+        const environmentValues = { ...valid };
+        const commandValues = {};
+        if (origin === "environment") environmentValues[field] = value;
         else {
-          delete environment.VERSION;
-          delete environment.CHANNEL;
-          arguments_.push(
-            `VERSION=${values.VERSION}`,
-            `CHANNEL=${values.CHANNEL}`,
-          );
+          delete environmentValues[field];
+          commandValues[field] = value;
         }
-        await assert.rejects(
-          run("make", arguments_, { cwd: workspaceRoot, env: environment }),
-          field === "VERSION" ? /exact semantic version/ : /CHANNEL is invalid/,
+        const records = await invoke({
+          target: "publish",
+          environmentValues,
+          commandValues,
+        });
+        for (const record of records)
+          assert.equal(record.captured[field], value);
+        assert.deepEqual(
+          records.map(({ argv }) => argv),
+          [
+            ["scripts/release-preflight.mjs", "publish"],
+            ["scripts/npm-release.mjs", "publish"],
+          ],
         );
         await assert.rejects(access(marker), { code: "ENOENT" });
       }
+
+  for (const origin of ["environment", "command-line"]) {
+    const marker = path.join(directory, `internal-${origin}`);
+    const injected = `$(shell printf REVIEW_INJECTION >${marker})`;
+    const environmentValues = { ...valid };
+    const commandValues = {};
+    if (origin === "environment")
+      environmentValues.FRED_RELEASE_PACKAGE = injected;
+    else commandValues.FRED_RELEASE_PACKAGE = injected;
+    const records = await invoke({
+      target: "publish",
+      environmentValues,
+      commandValues,
+    });
+    for (const record of records)
+      assert.equal(record.captured.PACKAGE, valid.PACKAGE);
+    await assert.rejects(access(marker), { code: "ENOENT" });
+  }
+
+  const sideEffectBin = path.join(directory, "side-effect-bin");
+  await mkdir(sideEffectBin);
+  const fakeNpm = path.join(sideEffectBin, "npm");
+  await writeFile(
+    fakeNpm,
+    `#!/bin/sh
+printf side-effect > "$FRED_TEST_NESTED_MARKER"
+exit 99
+`,
+  );
+  await chmod(fakeNpm, 0o755);
+  for (const origin of ["environment", "command-line"])
+    for (const [field, invalidValue, expected] of [
+      ["PACKAGE", "invalid", /PACKAGE must be exactly one of/],
+      ["RELEASE_DIR", "invalid\npath", /single line/],
+      ["AUTH_MODE", "fallback", /AUTH_MODE/],
+      ["DRY_RUN", "sometimes", /DRY_RUN/],
+      ["REGISTRY", "invalid\nregistry", /single line/],
+      ["VERSION", "not-a-version", /exact semantic version/],
+      ["VERSION", "1.2.3-alpha.01", /exact semantic version/],
+      ["VERSION", "999999999999999999999.1.1", /exact semantic version/],
+      ["CHANNEL", "1.2.3", /semantic-version range/],
+      ["CHANNEL", "1.2.x-alpha", /semantic-version range/],
+      ["CHANNEL", "x.0", /semantic-version range/],
+      ["CHANNEL", "1.x.0", /semantic-version range/],
+      ["CHANNEL", "0.x.1-alpha", /semantic-version range/],
+    ]) {
+      const marker = path.join(directory, `invalid-${origin}-${field}`);
+      const environmentValues = {
+        ...valid,
+        CI: "true",
+        FRED_TEST_NESTED_MARKER: marker,
+        PATH: `${sideEffectBin}:${process.env.PATH}`,
+      };
+      const commandValues = {};
+      if (origin === "environment") environmentValues[field] = invalidValue;
+      else {
+        delete environmentValues[field];
+        commandValues[field] = invalidValue;
+      }
+      const arguments_ = ["--no-print-directory", "-B", "prepare-release"];
+      for (const [name, value] of Object.entries(commandValues))
+        arguments_.push(`${name}=${value}`);
+      await assert.rejects(
+        run("make", arguments_, {
+          cwd: workspaceRoot,
+          env: environmentValues,
+        }),
+        expected,
+      );
+      await assert.rejects(access(marker), { code: "ENOENT" });
+    }
 });
 
 test("invalid promotion inputs perform no registry read or mutation", async () => {

@@ -48,11 +48,13 @@ jobs:
       - name: Validate source and inputs
         env:
           OPERATION: ${{ inputs.operation }}
+          PACKAGE: ${{ inputs.package }}
           PREPARED_RUN_ID: ${{ inputs['prepared-run-id'] }}
           VERSION: ${{ inputs.version }}
           CHANNEL: ${{ inputs.channel }}
         run: |
           test "${GITHUB_REF}" = "refs/heads/swift"
+          node .github/scripts/frontend-release-workflow.mjs validate-inputs
           case "${OPERATION}" in
             prepare)
               test -z "${PREPARED_RUN_ID}"
@@ -63,7 +65,7 @@ jobs:
               fi
               ;;
             promote)
-              node .github/scripts/frontend-release-workflow.mjs validate-promotion
+              :
               ;;
             *) exit 1 ;;
           esac
@@ -82,19 +84,24 @@ jobs:
       - run: npm install --global npm@11.19.0
       - run: npm ci
         working-directory: libs/frontend
-      - name: Install production-host dependencies for iframe-sdk
-        if: inputs.package == 'iframe-sdk'
-        run: npm ci
-        working-directory: apps/frontend
       - name: Provision the selected consumer cache
         if: inputs.package == 'ui' || inputs.package == 'iframe-sdk'
-        run: make ${{ inputs.package == 'ui' && 'consumer-provision-react' || 'consumer-provision-iframe-sdk' }}
+        env:
+          PACKAGE: ${{ inputs.package }}
+        run: |
+          case "${PACKAGE}" in
+            ui) make consumer-provision-react ;;
+            iframe-sdk) make consumer-provision-iframe-sdk ;;
+            *) exit 1 ;;
+          esac
         working-directory: libs/frontend
       - name: Provision Chromium separately
         run: make browser-install
         working-directory: libs/frontend
       - name: Prepare the selected package
-        run: make prepare-release PACKAGE="${{ inputs.package }}"
+        env:
+          PACKAGE: ${{ inputs.package }}
+        run: make prepare-release
         working-directory: libs/frontend
       - name: Retain the portable release directory
         uses: actions/upload-artifact@v4
@@ -153,8 +160,9 @@ jobs:
           EXPECTED_WORKFLOW: ${{ steps.selected-run.outputs.workflow }}
           EXPECTED_RUN_ID: ${{ steps.selected-run.outputs.run_id }}
           EXPECTED_SOURCE_COMMIT: ${{ steps.selected-run.outputs.source_commit }}
+          PACKAGE: ${{ inputs.package }}
         run: |
-          mapfile -t metadata_files < <(find "target/releases/${{ inputs.package }}" -name release.json -type f -print)
+          mapfile -t metadata_files < <(find "target/releases/${PACKAGE}" -name release.json -type f -print)
           test "${#metadata_files[@]}" -eq 1
           metadata=${metadata_files[0]}
           release_dir=$(dirname "${metadata}")
@@ -162,7 +170,7 @@ jobs:
           case "${version}" in
             *[!0-9A-Za-z.+-]*|'') exit 1 ;;
           esac
-          test "${release_dir}" = "target/releases/${{ inputs.package }}/${version}"
+          test "${release_dir}" = "target/releases/${PACKAGE}/${version}"
           source_commit=$(node ../../.github/scripts/frontend-release-workflow.mjs validate-release-origin "${metadata}")
           case "${source_commit}" in
             *[!0-9a-f]*|'') exit 1 ;;
@@ -210,7 +218,11 @@ jobs:
           name: frontend-npm-release-resolved-${{ inputs.package }}-${{ github.run_id }}
           path: libs/frontend/target/release
       - name: Publish the exact prepared bytes
-        run: make publish PACKAGE="${{ inputs.package }}" RELEASE_DIR=target/release AUTH_MODE=oidc
+        env:
+          AUTH_MODE: oidc
+          PACKAGE: ${{ inputs.package }}
+          RELEASE_DIR: target/release
+        run: make publish
         working-directory: libs/frontend
 
   read-only:
@@ -240,12 +252,16 @@ jobs:
           path: libs/frontend/target/release
       - name: Verify or dry-run publication
         env:
+          AUTH_MODE: oidc
+          DRY_RUN: ${{ inputs.operation == 'publish' && '1' || '' }}
           OPERATION: ${{ inputs.operation }}
+          PACKAGE: ${{ inputs.package }}
+          RELEASE_DIR: target/release
         run: |
           if test "${OPERATION}" = verify; then
-            make verify-release PACKAGE="${{ inputs.package }}" RELEASE_DIR=target/release
+            make verify-release
           else
-            make publish PACKAGE="${{ inputs.package }}" RELEASE_DIR=target/release AUTH_MODE=token DRY_RUN=1
+            make publish
           fi
         working-directory: libs/frontend
 
@@ -267,9 +283,12 @@ jobs:
         working-directory: libs/frontend
       - name: Validate promotion without credentials
         env:
+          AUTH_MODE: token
+          DRY_RUN: "1"
+          PACKAGE: ${{ inputs.package }}
           VERSION: ${{ inputs.version }}
           CHANNEL: ${{ inputs.channel }}
-        run: make promote PACKAGE="${{ inputs.package }}" AUTH_MODE=token DRY_RUN=1
+        run: make promote
         working-directory: libs/frontend
 
   promote:
@@ -295,8 +314,10 @@ jobs:
         working-directory: libs/frontend
       - name: Promote an existing exact version
         env:
+          AUTH_MODE: token
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PACKAGE: ${{ inputs.package }}
           VERSION: ${{ inputs.version }}
           CHANNEL: ${{ inputs.channel }}
-        run: make promote PACKAGE="${{ inputs.package }}" AUTH_MODE=token
+        run: make promote
         working-directory: libs/frontend

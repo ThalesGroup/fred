@@ -16,25 +16,45 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-const numericIdentifier = String.raw`(?:0|[1-9]\d*)`;
-const prereleaseIdentifier = String.raw`(?:${numericIdentifier}|\d*[A-Za-z-][0-9A-Za-z-]*)`;
-const semanticVersionPattern = new RegExp(
-  String.raw`^${numericIdentifier}\.${numericIdentifier}\.${numericIdentifier}(?:-${prereleaseIdentifier}(?:\.${prereleaseIdentifier})*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`,
-);
+import {
+  isExactSemanticVersion,
+  isSemanticVersionRangeLikeTag,
+} from "../../libs/frontend/scripts/release-operation-inputs.mjs";
+
 const channelPattern = /^[a-z0-9][a-z0-9._-]*$/;
 const commitPattern = /^[0-9a-f]{40}$/;
 const runIdPattern = /^[1-9][0-9]*$/;
+const releasePackages = new Set(["design-tokens", "ui", "iframe-sdk"]);
 
 export const publishWorkflowPath =
   ".github/workflows/Publish-frontend-packages.yml";
 
 export function validatePromotionInputs({ version, channel }) {
   assert(
-    semanticVersionPattern.test(version ?? ""),
+    isExactSemanticVersion(version ?? ""),
     "version must be an exact semantic version",
   );
   assert(channelPattern.test(channel ?? ""), "channel is invalid");
+  assert(
+    !isSemanticVersionRangeLikeTag(channel),
+    "channel must not be a semantic-version range",
+  );
   return { version, channel };
+}
+
+export function validateWorkflowInputs({
+  operation,
+  packageName,
+  version,
+  channel,
+}) {
+  assert(
+    ["prepare", "publish", "verify", "promote"].includes(operation),
+    "operation is invalid",
+  );
+  assert(releasePackages.has(packageName), "package is invalid");
+  if (operation === "promote") validatePromotionInputs({ version, channel });
+  return { operation, packageName };
 }
 
 export async function resolveSelectedWorkflowRun({
@@ -108,8 +128,10 @@ export function validateReleaseOrigin({ metadata, identity }) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
-    if (process.argv[2] === "validate-promotion")
-      validatePromotionInputs({
+    if (process.argv[2] === "validate-inputs")
+      validateWorkflowInputs({
+        operation: process.env.OPERATION,
+        packageName: process.env.PACKAGE,
         version: process.env.VERSION,
         channel: process.env.CHANNEL,
       });

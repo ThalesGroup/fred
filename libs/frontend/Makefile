@@ -11,22 +11,29 @@ DRY_RUN ?=
 VERSION ?=
 CHANNEL ?=
 REGISTRY ?= https://registry.npmjs.org/
-RELEASE_DIR_ARG = $(if $(RELEASE_DIR),--release-dir "$(RELEASE_DIR)",)
-DRY_RUN_ARG = $(if $(filter 1 true yes,$(DRY_RUN)),--dry-run,)
 
-# Preserve promotion values as opaque environment data. $(value ...) prevents
-# command-line or inherited values from being expanded as Make expressions.
-export FRED_RELEASE_VERSION := $(value VERSION)
-export FRED_RELEASE_CHANNEL := $(value CHANNEL)
-unexport VERSION
-unexport CHANNEL
+# Preserve every public release value as opaque environment data. `$(value ...)`
+# prevents inherited and command-line text from being expanded as Make syntax,
+# and `override` prevents callers from replacing the internal capture directly.
+override FRED_RELEASE_PACKAGE := $(value PACKAGE)
+override FRED_RELEASE_RELEASE_DIR := $(value RELEASE_DIR)
+override FRED_RELEASE_AUTH_MODE := $(value AUTH_MODE)
+override FRED_RELEASE_DRY_RUN := $(value DRY_RUN)
+override FRED_RELEASE_REGISTRY := $(value REGISTRY)
+override FRED_RELEASE_VERSION := $(value VERSION)
+override FRED_RELEASE_CHANNEL := $(value CHANNEL)
+export FRED_RELEASE_PACKAGE FRED_RELEASE_RELEASE_DIR FRED_RELEASE_AUTH_MODE
+export FRED_RELEASE_DRY_RUN FRED_RELEASE_REGISTRY FRED_RELEASE_VERSION
+export FRED_RELEASE_CHANNEL
+unexport PACKAGE RELEASE_DIR AUTH_MODE DRY_RUN REGISTRY VERSION CHANNEL
 
-# Every target below that shells out to npm needs the installed tree; only
-# `help` and `clean` run on Node builtins alone. Declaring the dependency once
-# here is what keeps a fresh clone from failing with "eslint: not found".
-NPM_TARGETS := build lint format-check format-fix test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision consumer-provision-iframe-sdk consumer-provision-react compatibility-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test fixture-transfer-create fixture-transfer-validate registry-verify prepare-release publish verify-release promote
+# Ordinary npm-backed targets need the installed tree. Release operations are
+# separate because their built-in-only preflight must reject bad inputs (and,
+# for preparation, a wrong Node/npm pair) before dependency installation.
+NPM_TARGETS := build lint format-check format-fix test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision consumer-provision-iframe-sdk consumer-provision-react compatibility-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test fixture-transfer-create fixture-transfer-validate registry-verify
+RELEASE_TARGETS := prepare-release publish verify-release promote
 
-.PHONY: help install code-quality code-quality-fix clean $(NPM_TARGETS)
+.PHONY: help install code-quality code-quality-fix clean $(NPM_TARGETS) $(RELEASE_TARGETS)
 
 $(NPM_TARGETS): node_modules
 
@@ -127,16 +134,24 @@ registry-verify: ## Verify exact published coordinates (network; never local fal
 	npm run registry:verify -- $(SELECTION_ARGS)
 
 prepare-release: ## Build and validate one package into a portable release directory
-	PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run release:operation -- prepare --package "$(PACKAGE)" $(RELEASE_DIR_ARG) --registry "$(REGISTRY)"
+	node scripts/release-preflight.mjs prepare
+	$(MAKE) node_modules
+	PLAYWRIGHT_BROWSERS_PATH=target/playwright node scripts/npm-release.mjs prepare
 
 publish: ## Publish exact prepared bytes to next (use DRY_RUN=1 for no mutation)
-	npm run release:operation -- publish --package "$(PACKAGE)" $(RELEASE_DIR_ARG) --registry "$(REGISTRY)" --auth-mode "$(AUTH_MODE)" $(DRY_RUN_ARG)
+	node scripts/release-preflight.mjs publish
+	$(MAKE) node_modules
+	node scripts/npm-release.mjs publish
 
 verify-release: ## Verify prepared package bytes against the exact registry version
-	npm run release:operation -- verify --package "$(PACKAGE)" $(RELEASE_DIR_ARG) --registry "$(REGISTRY)"
+	node scripts/release-preflight.mjs verify
+	$(MAKE) node_modules
+	node scripts/npm-release.mjs verify
 
 promote: ## Move CHANNEL to an existing VERSION (use DRY_RUN=1 for no mutation)
-	npm run release:operation -- promote --package "$(PACKAGE)" --registry "$(REGISTRY)" --auth-mode "$(AUTH_MODE)" $(DRY_RUN_ARG)
+	node scripts/release-preflight.mjs promote
+	$(MAKE) node_modules
+	node scripts/npm-release.mjs promote
 
 clean: ## Remove disposable producer output and review evidence
 	node scripts/clean.mjs

@@ -146,6 +146,7 @@ export async function stageIsolatedReactConsumer({
   cachePath = consumerCache,
   contract: selectedContract,
   tokenArchivePath: suppliedTokenArchive,
+  publishedTokenArchivePath,
   uiArchivePath: suppliedUiArchive,
   compatibleToken,
   publishedToken,
@@ -179,6 +180,7 @@ export async function stageIsolatedReactConsumer({
     );
   }
   const registryToken = publishedToken ?? compatibleToken;
+  const registry = registryToken?.registry ?? contract.registry;
   if (publishedToken) {
     assert.equal(
       publishedToken.coordinate,
@@ -190,6 +192,15 @@ export async function stageIsolatedReactConsumer({
       /^sha512-[A-Za-z0-9+/]+={0,2}$/,
       "published token integrity is invalid",
     );
+    assert(
+      publishedTokenArchivePath,
+      "published token verified archive is required",
+    );
+    assert.equal(
+      await sha512Integrity(publishedTokenArchivePath),
+      publishedToken.integrity,
+      "published token archive integrity differs from selected registry bytes",
+    );
   }
   await assertReactConsumerFixture();
   await stat(path.join(cachePath, "_cacache")).catch(() => {
@@ -199,10 +210,11 @@ export async function stageIsolatedReactConsumer({
   });
   assert(
     !(registryToken && suppliedTokenArchive),
-    "token candidate and published token cannot be combined",
+    "token candidate and registry token cannot be combined",
   );
   const tokenArchive =
     compatibleToken?.archivePath ??
+    publishedTokenArchivePath ??
     suppliedTokenArchive ??
     (!registryToken
       ? (await packDesignTokens({ contract })).archivePath
@@ -244,14 +256,16 @@ export async function stageIsolatedReactConsumer({
     );
     const tokenTarget = path.join(consumerRoot, "design-tokens.tgz");
     const uiTarget = path.join(consumerRoot, "ui.tgz");
-    if (!registryToken) await cp(tokenArchive, tokenTarget);
+    if (!compatibleToken || publishedToken) await cp(tokenArchive, tokenTarget);
     await cp(uiArchive, uiTarget);
     const candidateEvidence = {
       packages: {
-        ...(!registryToken
+        ...(!compatibleToken || publishedToken
           ? {
               designTokens: {
-                coordinate: `${contract.packages.designTokens.name}@${contract.packages.designTokens.version}`,
+                coordinate:
+                  publishedToken?.coordinate ??
+                  `${contract.packages.designTokens.name}@${contract.packages.designTokens.version}`,
                 filename: path.basename(tokenTarget),
                 integrity: await sha512Integrity(tokenTarget),
               },
@@ -279,7 +293,9 @@ export async function stageIsolatedReactConsumer({
           "--legacy-peer-deps",
           "--save-exact",
           "--package-lock-only",
-          registryToken?.coordinate ?? "./design-tokens.tgz",
+          "--registry",
+          registry,
+          compatibleToken?.coordinate ?? "./design-tokens.tgz",
           "./ui.tgz",
         ],
         { cwd: consumerRoot, env },
@@ -293,7 +309,7 @@ export async function stageIsolatedReactConsumer({
         ),
         consumerRoot,
         evidence: candidateEvidence,
-        compatibilityOnly: registryToken
+        compatibilityOnly: compatibleToken
           ? [
               {
                 name: contract.packages.designTokens.name,
@@ -301,7 +317,10 @@ export async function stageIsolatedReactConsumer({
                   registryToken.coordinate.lastIndexOf("@") + 1,
                 ),
                 integrity: registryToken.integrity,
-                registry: contract.registry,
+                registry,
+                ...(registryToken.tarball
+                  ? { tarball: registryToken.tarball }
+                  : {}),
               },
             ]
           : [],
@@ -416,6 +435,10 @@ export async function stageIsolatedReactConsumer({
             compatibleToken: {
               coordinate: registryToken.coordinate,
               integrity: registryToken.integrity,
+              registry,
+              ...(registryToken.tarball
+                ? { tarball: registryToken.tarball }
+                : {}),
               mode: compatibleToken
                 ? "exact registry cache, provisioned and provenance-checked separately"
                 : "exact compatible published registry version",

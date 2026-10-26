@@ -24,6 +24,7 @@ import {
   resolveSelectedWorkflowRun,
   validatePromotionInputs,
   validateReleaseOrigin,
+  validateWorkflowInputs,
 } from "../../../.github/scripts/frontend-release-workflow.mjs";
 import {
   CI_INPUT_PATTERNS,
@@ -266,8 +267,10 @@ test("release workflow is a thin manual adapter with isolated publishing authori
   assert(
     promotionDryRun.steps.some(
       (step) =>
-        step.run ===
-          'make promote PACKAGE="${{ inputs.package }}" AUTH_MODE=token DRY_RUN=1' &&
+        step.run === "make promote" &&
+        step.env.AUTH_MODE === "token" &&
+        step.env.DRY_RUN === "1" &&
+        step.env.PACKAGE === "${{ inputs.package }}" &&
         step.env.VERSION === "${{ inputs.version }}" &&
         step.env.CHANNEL === "${{ inputs.channel }}",
     ),
@@ -282,16 +285,32 @@ test("release workflow is a thin manual adapter with isolated publishing authori
   assert(
     protectedJob.steps.some(
       (step) =>
-        step.run ===
-        'make publish PACKAGE="${{ inputs.package }}" RELEASE_DIR=target/release AUTH_MODE=oidc',
+        step.run === "make publish" &&
+        step.env.AUTH_MODE === "oidc" &&
+        step.env.PACKAGE === "${{ inputs.package }}" &&
+        step.env.RELEASE_DIR === "target/release",
     ),
   );
   assert(
     publishWorkflow.jobs.prepare.steps.some(
       (step) =>
-        step.run === 'make prepare-release PACKAGE="${{ inputs.package }}"',
+        step.run === "make prepare-release" &&
+        step.env.PACKAGE === "${{ inputs.package }}",
     ),
   );
+  assert.equal(
+    publishWorkflow.jobs.prepare.steps.some(
+      (step) => step["working-directory"] === "apps/frontend",
+    ),
+    false,
+  );
+  const readOnly = publishWorkflow.jobs["read-only"];
+  assert.equal(readOnly.permissions["id-token"], undefined);
+  const readOnlyOperation = readOnly.steps.find(
+    (step) => step.name === "Verify or dry-run publication",
+  );
+  assert.equal(readOnlyOperation.env.AUTH_MODE, "oidc");
+  assert.equal(readOnlyOperation.run.includes("AUTH_MODE="), false);
   assert(
     publishWorkflow.jobs["release-directory"].steps.some(
       (step) => step.uses === "actions/download-artifact@v4",
@@ -331,13 +350,59 @@ test("promotion inputs remain data across the workflow and Make boundary", () =>
       /channel is invalid/,
     );
   }
+  assert.throws(
+    () =>
+      validatePromotionInputs({
+        version: "999999999999999999999.1.1",
+        channel: "latest",
+      }),
+    /version must be an exact semantic version/,
+  );
+  assert.deepEqual(
+    validatePromotionInputs({ version: "1.2.3", channel: "1.2.3-01" }),
+    { version: "1.2.3", channel: "1.2.3-01" },
+  );
+  for (const channel of ["x.0", "1.x.0", "0.x.1-alpha"])
+    assert.throws(
+      () => validatePromotionInputs({ version: "1.2.3", channel }),
+      /channel must not be a semantic-version range/,
+    );
   const authorization = publishWorkflow.jobs.authorize.steps.find(
     (step) => step.name === "Validate source and inputs",
   );
-  assert(authorization.run.includes("validate-promotion"));
+  assert(authorization.run.includes("validate-inputs"));
+  assert.equal(authorization.env.PACKAGE, "${{ inputs.package }}");
+  for (const job of Object.values(publishWorkflow.jobs))
+    for (const step of job.steps ?? [])
+      if (step.run)
+        assert.equal(
+          step.run.includes("${{ inputs.package }}"),
+          false,
+          `${job.name ?? "job"} inserts package input into shell source`,
+        );
+  assert.deepEqual(
+    validateWorkflowInputs({
+      operation: "prepare",
+      packageName: "iframe-sdk",
+    }),
+    { operation: "prepare", packageName: "iframe-sdk" },
+  );
+  assert.throws(
+    () =>
+      validateWorkflowInputs({
+        operation: "prepare",
+        packageName: "not-a-package",
+      }),
+    /package is invalid/,
+  );
+  for (const channel of ["1", "1.2", "1.2.3", "1.x", "v1.2.3"])
+    assert.throws(
+      () => validatePromotionInputs({ version: "1.2.3", channel }),
+      /semantic-version range/,
+    );
   for (const jobName of ["promote-dry-run", "promote"]) {
-    const step = publishWorkflow.jobs[jobName].steps.find((candidate) =>
-      candidate.run?.startsWith("make promote "),
+    const step = publishWorkflow.jobs[jobName].steps.find(
+      (candidate) => candidate.run === "make promote",
     );
     assert.equal(step.run.includes("inputs.version"), false, jobName);
     assert.equal(step.run.includes("inputs.channel"), false, jobName);
@@ -558,7 +623,7 @@ test("preparation transfers one generated release directory to later operations"
   assert(resolver.includes("validate-release-origin"));
   assert(
     resolver.includes(
-      'test "${release_dir}" = "target/releases/${{ inputs.package }}/${version}"',
+      'test "${release_dir}" = "target/releases/${PACKAGE}/${version}"',
     ),
   );
   assert(

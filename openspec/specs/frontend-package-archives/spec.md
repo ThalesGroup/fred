@@ -1667,10 +1667,12 @@ Acceptance of the context extension SHALL exercise the actual packed SDK archive
 The extended UI surface MUST work without FRED aliases, application models, translation providers, routing, or task stores. Exported declarations MUST NOT reference `IconType`, `OptionModel`, or `react-i18next`. Icon-bearing props SHALL accept only the supported Material Symbols contract. KpiStatCard and DataTable SHALL accept caller-owned state and pagination labels, including count-dependent text. Table options SHALL preserve their numeric value typing. Internal Dialog, drawer, pagination and empty-state buttons SHALL NOT submit an enclosing form. The public TextArea SHALL be controlled (`value` and `onChange` required) and own its id. Controlled sorting SHALL require `sortState` and `onSortChange` together. Public DataTable labels SHALL be limited to pagination. ProgressBar SHALL accept a caller accessible name and announce the same bounded percentage it displays. The rows-per-page selector SHALL be named by its visible label. Breadcrumb SHALL accept a localized landmark label. FileDropzone SHALL associate and announce its error and accept the same file again after a pick. Switch SHALL NOT accept `type`, `children` or `dangerouslySetInnerHTML`. Existing FRED consumers SHALL retain their translated labels and current interactions.
 
 #### Scenario: Independent consumer supplies localized labels
+
 - **WHEN** a consumer renders loading/error/no-data KPI states and paginated tables with its own labels
 - **THEN** visible text and accessible action names use those labels without a translation provider, and generic row/value types remain intact
 
 #### Scenario: Unsupported public types are rejected
+
 - **WHEN** a consumer supplies an unsupported icon, invalid table value, or unsupported badge tone
 - **THEN** TypeScript rejects the assignment without exposing application-only types
 
@@ -1679,6 +1681,7 @@ The extended UI surface MUST work without FRED aliases, application models, tran
 StatusBadge SHALL render a label and exactly one of `success`, `error`, `warning`, `info`, or `neutral` as an outlined badge whose text and border use that tone's semantic design-system color. It MUST NOT depend on domain states or act as a removable input chip. Hosted applications SHALL own their domain-specific labels and tone mappings; the shared atom MUST remain available after retiring the built-in evaluation views.
 
 #### Scenario: All badge tones render in both themes
+
 - **WHEN** a consumer renders each supported tone in light and dark themed roots
 - **THEN** each label remains readable with its tone's semantic color token and no remove action
 
@@ -1687,10 +1690,12 @@ StatusBadge SHALL render a label and exactly one of `success`, `error`, `warning
 The alpha.3 archive SHALL retain all existing archive, runtime/declaration closure, source-isolation, React peer, asset/license, and scoped-style guarantees. Validators and the installed isolated React consumer SHALL cover every newly public component and relevant public type with positive and type-negative cases. Browser smoke SHALL render every added component in both themes and exercise forms, disclosure, row activation/sorting/pagination, file selection, overlay drawer dismissal, and toast dismissal/expiry. Canonical-source changes MUST select package validation in CI. UI release metadata SHALL identify `0.1.0-alpha.3` without changing unrelated package coordinates or bypassing protected publication.
 
 #### Scenario: The expanded packed surface works outside the checkout
+
 - **WHEN** the generated alpha.3 tarball is installed in the separately provisioned isolated consumer
 - **THEN** all added exports type-check, build, render, and pass representative interaction checks without source or network fallback
 
 #### Scenario: A transitive input or public export is missing
+
 - **WHEN** a candidate omits an added export, declaration, style, or required internal dependency
 - **THEN** archive or isolated-consumer validation rejects the candidate
 
@@ -1699,18 +1704,22 @@ The alpha.3 archive SHALL retain all existing archive, runtime/declaration closu
 The shared UI SHALL let consumers activate a typed table row by pointer without also activating its embedded controls. Activatable rows SHALL NOT be keyboard focus targets; consumers provide an equivalent control inside the row. Consumer-owned drawer close labels SHALL determine the accessible close action name. KPI values SHALL support the shared semantic outcome tones, preserving neutral defaults and visible labels/counts.
 
 #### Scenario: Row activation is isolated
+
 - **WHEN** a consumer clicks a row cell
 - **THEN** the row callback receives that row, while button/link/input/label/select/textarea actions do not additionally activate the row
 
 #### Scenario: Existing selection stays usable
+
 - **WHEN** a selectable table also exposes row activation
 - **THEN** background activation calls the row callback and the checkbox remains responsible for selecting that row
 
 #### Scenario: Localized dismissal and outcome colors
+
 - **WHEN** a consumer supplies a localized close label and a supported KPI tone
 - **THEN** the drawer close action uses that accessible label and the KPI value uses the corresponding light/dark design tokens
 
 #### Scenario: Existing callers remain compatible
+
 - **WHEN** consumers omit all new optional props
 - **THEN** English drawer close name and neutral KPI rendering remain unchanged
 
@@ -1719,10 +1728,12 @@ The shared UI SHALL let consumers activate a typed table row by pointer without 
 The `@fred-oss/ui` hosted surface SHALL expose only the components and behavioral variants a hosted application uses. A new export or behavioral variant SHALL be added with the consuming use case. Optional presentational props of a public component remain public. FRED-internal variants of a canonical component MAY remain outside the public types.
 
 #### Scenario: An internal variant is requested by a hosted consumer
+
 - **WHEN** a hosted application needs a prop that is not public
 - **THEN** the prop is added to the public type together with that use case and its packed-consumer evidence
 
 #### Scenario: Internal-only props are rejected
+
 - **WHEN** a consumer passes row selection to `DataTable` or a push, resizable or floating layout to `InlineDrawer`
 - **THEN** TypeScript rejects the assignment
 
@@ -1731,10 +1742,12 @@ The `@fred-oss/ui` hosted surface SHALL expose only the components and behaviora
 The public InlineDrawer SHALL be a single overlay drawer accepting `open`, `onClose`, `title`, `closeLabel`, `width`, `headerActions` and children, closing on its close action, backdrop or Escape, without application state dependencies. Nested hosted drawers are not supported. Like FRED's in-app overlay, opening it does not move keyboard focus and the page behind the backdrop remains focusable. The overlay never exceeds the viewport width. ToastProvider and `useToast` SHALL retain severity, dismissal and expiry. The dismiss action name SHALL be caller-configurable. The error-copy action stays FRED-internal. Visible content MUST retain consumer-root styles and light/dark theme inheritance.
 
 #### Scenario: Overlay drawer is dismissed
+
 - **WHEN** a consumer opens the overlay drawer and presses Escape or activates its labelled close action
 - **THEN** the drawer closes through the consumer's `onClose`
 
 #### Scenario: Toast lifecycle is driven by the consumer
+
 - **WHEN** a consumer displays toasts and activates a labelled dismiss action, or a timed toast expires
 - **THEN** dismissal/expiry removes the correct toast
 
@@ -1761,7 +1774,7 @@ Preparation SHALL create a portable release directory containing exactly one val
 
 ### Requirement: Prepared release bytes are immutable
 
-Preparation SHALL build only the selected member and run its applicable archive and isolated-consumer checks, including browser or host checks where required by that package contract. The prepared archive SHALL remain byte-identical through publication and verification. Every consuming operation MUST reject missing, additional, escaping, inconsistent, or altered release files before registry mutation.
+Preparation SHALL first observe the actual Node and npm executables and require the exact release-toolchain versions from the release contract. A mismatch or unavailable npm executable MUST fail before producer dependency installation, any UI registry lookup, build, pack, or package check. Preparation SHALL then install producer dependencies when needed, build only the selected member, and run its archive, isolated-consumer, and browser checks. It MUST NOT install the FRED application or run production-host integration; pull-request fixture transfer retains that separate application-toolchain compatibility gate. The prepared archive SHALL remain byte-identical through publication and verification. Every consuming operation MUST reject missing, additional, escaping, inconsistent, or altered release files before registry mutation.
 
 Publication MUST upload the exact prepared tarball, MUST NOT rebuild or silently prepare another archive, and MUST disable package lifecycle scripts. A dry run MUST validate the same release identity, bytes, dependency state, and registry preflight while invoking no publish or distribution-tag mutation.
 
@@ -1780,17 +1793,27 @@ Publication MUST upload the exact prepared tarball, MUST NOT rebuild or silently
 - **WHEN** the operator requests a publication dry run
 - **THEN** local validation and read-only preflight complete but no package upload or tag change command is invoked
 
+#### Scenario: Preparation uses the wrong toolchain
+
+- **WHEN** the observed Node or npm version differs from the exact release contract, or npm cannot be executed
+- **THEN** preparation fails before producer dependency installation, UI registry access, build, pack, archive validation, or consumer checks
+
+#### Scenario: iframe-sdk is prepared independently
+
+- **WHEN** iframe-sdk preparation runs locally or in the publication workflow
+- **THEN** it validates the packed SDK in its isolated consumer and browser fixture without installing or invoking `apps/frontend`, while pull-request fixture transfer continues to exercise production-host compatibility under the application toolchain
+
 ### Requirement: Registry comparison is exact and retry-safe
 
-Publication and verification SHALL query the configured registry for the exact prepared name and version and compare registry SHA-512 integrity with the prepared archive. An existing matching version SHALL be reported as success without upload. An existing version with different bytes SHALL be a conflict. Only a definite exact-version absence MAY authorize one publication attempt.
+Publication and verification SHALL query the configured registry for the exact prepared name and version, require exact name/version metadata plus an approved same-registry exact-coordinate `dist.tarball` URL, download that tarball with a bounded size and timeout while rejecting redirects, and require the downloaded SHA-512 to match both registry metadata and the prepared archive. An existing matching version SHALL be reported as success without upload. An existing version whose downloaded bytes differ SHALL be a conflict only after registry metadata and bytes agree; inconsistent registry evidence SHALL fail closed. Only a definite 404 from the exact-version metadata endpoint MAY authorize one publication attempt.
 
 Registry handling MUST distinguish absence from authentication, authorization, network, timeout, redirect, malformed-response, identity, and integrity failures. After an accepted publication, bounded read-only exact-version checks MAY wait for visibility. Exhausted temporary absence or an upload whose result cannot be established MUST produce an uncertain outcome and the exact verification instruction; it MUST NOT repeat publication automatically.
 
-Verification MUST use registry bytes and metadata and MUST NOT substitute a local rebuild, source tree, mutable tag, or unrelated version for the prepared identity.
+Verification, UI dependency resolution and caching, publication, post-upload visibility, recorded outcome, and recovery instructions MUST preserve the same selected registry. UI preparation MUST download and verify the exact approved token tarball selected from registry metadata, then populate the cache and run the offline consumer from those immutable local bytes without resolving the coordinate again. Verification MUST use registry bytes and metadata and MUST NOT substitute a local rebuild, source tree, mutable tag, or unrelated version for the prepared identity. A printed recovery command MUST encode package, directory, and registry as POSIX shell-safe data.
 
 #### Scenario: Exact version already matches
 
-- **WHEN** registry metadata for the prepared name and version reports the same SHA-512 integrity
+- **WHEN** exact registry metadata and downloaded tarball bytes for the prepared name and version report and compute the same SHA-512 integrity as the prepared archive
 - **THEN** publish and verify report success and no upload command runs
 
 #### Scenario: Exact version conflicts
@@ -1813,11 +1836,16 @@ Verification MUST use registry bytes and metadata and MUST NOT substitute a loca
 - **WHEN** an exact-version read returns an authentication or authorization failure
 - **THEN** the operation reports that class of failure and does not treat it as package absence
 
+#### Scenario: Registry tarball evidence is unsafe or inconsistent
+
+- **WHEN** `dist.tarball` redirects, leaves the selected registry path, exceeds the bound, times out, or its bytes do not match metadata
+- **THEN** publication and verification fail without upload and do not classify the exact version as matching
+
 ### Requirement: Shared commands drive local and CI releases
 
-`libs/frontend` SHALL expose `make prepare-release`, `make publish`, `make verify-release`, and `make promote` with one `PACKAGE` per operation. The same implementation SHALL run locally and in CI without depending on GitHub APIs. Publish SHALL default to the `next` distribution tag; promotion SHALL require an explicit existing version and channel and remain separate from publication.
+`libs/frontend` SHALL expose `make prepare-release`, `make publish`, `make verify-release`, and `make promote` with one `PACKAGE` per operation. `PACKAGE`, `RELEASE_DIR`, `AUTH_MODE`, `DRY_RUN`, `REGISTRY`, `VERSION`, and `CHANNEL` SHALL cross the Make boundary only as opaque captured environment data; original public variables and caller-supplied internal capture variables MUST NOT reach recipes, and recipe command arguments SHALL remain constant. The Node entry point SHALL explicitly parse and validate every captured value before operation side effects. The same implementation SHALL run locally and in CI without depending on GitHub APIs. Publish SHALL default to the `next` distribution tag; promotion SHALL require an explicit existing version and channel that is not itself a valid semantic-version range, and remain separate from publication.
 
-Local authentication SHALL use normal npm login and interactive authorization without claiming CI provenance. CI token and GitHub OIDC authentication SHALL be explicit, MUST NOT fall back to another mode, and GitHub OIDC publication SHALL request provenance only when the prepared source, publishing checkout, and original workflow source commit are identical. The release command MUST NOT overwrite CI identity variables to manufacture provenance. Promotion and publication dry runs MUST perform no registry mutation.
+Local authentication SHALL use normal npm login and interactive authorization without claiming CI provenance. CI token and GitHub OIDC authentication SHALL be explicit and MUST NOT fall back to another mode. GitHub OIDC publication, including credential-free dry runs, SHALL validate GitHub Actions, repository, workflow, prepared source, publishing checkout, and original workflow source identity; only a real upload SHALL require the OIDC token-request credential and request provenance. The release command MUST NOT overwrite CI identity variables to manufacture provenance. Promotion and publication dry runs MUST perform no registry mutation.
 
 #### Scenario: Local operator publishes prepared output
 
@@ -1834,6 +1862,11 @@ Local authentication SHALL use normal npm login and interactive authorization wi
 - **WHEN** an OIDC publication run starts from a commit different from the prepared source
 - **THEN** publication stops before npm and identifies explicit local or token mode as the supported path for the unchanged older bytes
 
+#### Scenario: GitHub publication is dry-run without OIDC permission
+
+- **WHEN** the read-only workflow invokes publication dry-run in OIDC mode without `id-token: write`
+- **THEN** nonsecret GitHub and prepared-source identity is validated, token credential acquisition and npm mutation are skipped, and a local preparation or older source at a newer workflow commit is rejected
+
 #### Scenario: Promotion targets an existing version
 
 - **WHEN** an operator requests a channel change for an exact version that exists
@@ -1848,6 +1881,11 @@ Local authentication SHALL use normal npm login and interactive authorization wi
 
 - **WHEN** a version or channel contains shell, quoting, newline, or Make-expression syntax
 - **THEN** the adapter rejects the value as data before any registry mutation and does not evaluate the syntax
+
+#### Scenario: Promotion channel is a semantic-version range
+
+- **WHEN** a syntactically tag-like channel is also accepted by the authoritative semantic-version range parser
+- **THEN** promotion rejects it before registry access or a distribution-tag command
 
 ### Requirement: Package dependency order is enforced without coupling independent releases
 

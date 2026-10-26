@@ -81,7 +81,7 @@ test("Make exposes one-package release operations and publication dry run", () =
   const cwd = path.resolve(import.meta.dirname, "..");
   const prepare = execFileSync(
     "make",
-    ["-n", "prepare-release", "PACKAGE=iframe-sdk"],
+    ["-n", "-B", "prepare-release", "PACKAGE=iframe-sdk"],
     { cwd, encoding: "utf8" },
   );
   const publish = execFileSync(
@@ -112,19 +112,28 @@ test("Make exposes one-package release operations and publication dry run", () =
     ],
     { cwd, encoding: "utf8" },
   );
-  assert.match(
-    prepare,
-    /npm run release:operation -- prepare --package "iframe-sdk"/,
-  );
+  assert.match(prepare, /node scripts\/release-preflight\.mjs prepare/);
+  assert.match(prepare, /node scripts\/npm-release\.mjs prepare/);
   assert.match(prepare, /PLAYWRIGHT_BROWSERS_PATH=target\/playwright/);
-  assert.match(publish, /--release-dir "\/tmp\/portable-release"/);
-  assert.match(publish, /--auth-mode "local" --dry-run/);
-  assert.match(
-    verify,
-    /npm run release:operation -- verify --package "iframe-sdk"/,
+  assert(
+    prepare.indexOf("node scripts/release-preflight.mjs prepare") <
+      prepare.indexOf("npm ci"),
   );
-  assert.doesNotMatch(promote, /--version|--channel/);
-  assert.match(promote, /--dry-run/);
+  assert(
+    prepare.indexOf("npm ci") <
+      prepare.indexOf("node scripts/npm-release.mjs prepare"),
+  );
+  assert.doesNotMatch(
+    publish,
+    /portable-release|--release-dir|--auth-mode|--dry-run/,
+  );
+  assert.match(verify, /node scripts\/release-preflight\.mjs verify/);
+  assert.match(verify, /node scripts\/npm-release\.mjs verify/);
+  for (const command of [prepare, publish, verify, promote])
+    assert.doesNotMatch(
+      command,
+      /--package|--release-dir|--registry|--auth-mode|--dry-run|--version|--channel/,
+    );
 });
 
 test("explicit invalid selections fail before packing", () => {

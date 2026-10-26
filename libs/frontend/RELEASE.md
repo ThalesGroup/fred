@@ -11,7 +11,7 @@ The package manifest is authoritative for its npm name, version, exports, depend
 - Producer dependencies: `npm ci` in `libs/frontend`.
 - Chromium: `make browser-install`.
 - For UI: `make consumer-provision-react`. Preparation also verifies that an exact published `@fred-oss/design-tokens` version satisfies UI's declared peer range and places it in the isolated-consumer cache.
-- For iframe-sdk: `make consumer-provision-iframe-sdk` and `npm ci` in `apps/frontend` for the production-host compatibility check.
+- For iframe-sdk: `make consumer-provision-iframe-sdk`.
 - Registry access to `https://registry.npmjs.org/`.
 
 Local publication and promotion use the operator's normal npm configuration. Run `npm login` if the account is not already authenticated; npm may request interactive authorization or 2FA.
@@ -27,12 +27,11 @@ make browser-install
 
 # Package-specific prerequisite:
 make consumer-provision-iframe-sdk
-npm --prefix ../../apps/frontend ci
 
 make prepare-release PACKAGE=iframe-sdk
 ```
 
-Preparation builds only the selected package, validates its archive, runs the applicable isolated consumer, browser, and production-host checks, and writes:
+Preparation first checks the actual Node and npm executables against the exact pinned versions. It fails before producer dependency installation, a UI registry lookup, build, pack, or package check when either tool differs or npm is unavailable. It then installs producer dependencies when needed, builds only the selected package, validates its archive, and runs the applicable isolated-consumer and browser checks before writing:
 
 ```text
 target/releases/iframe-sdk/<manifest-version>/
@@ -62,7 +61,9 @@ make prepare-release PACKAGE=ui
 make prepare-release PACKAGE=iframe-sdk
 ```
 
-UI preparation stops with `publish design-tokens first` only when no exact published token version satisfies the peer range in `ui/package.json`. iframe-sdk never requires UI or tokens.
+UI preparation stops with `publish design-tokens first` only when no exact published token version satisfies the peer range in `ui/package.json`. It downloads the selected registry metadata's exact approved token tarball once, verifies those bytes, and feeds that local immutable archive to cache population and offline consumer validation without resolving the coordinate again. iframe-sdk never requires UI or tokens.
+
+Release preparation does not install or invoke `apps/frontend`. Pull-request fixture-transfer validation remains responsible for exercising the packed SDK against the production host under the application's exact Node `22.13.0` and npm `10.9.2` toolchain.
 
 ## Publication dry run
 
@@ -73,7 +74,7 @@ make publish PACKAGE=iframe-sdk DRY_RUN=1
 make publish PACKAGE=iframe-sdk RELEASE_DIR=/absolute/path/to/iframe-sdk-release DRY_RUN=1
 ```
 
-The dry run validates metadata, packed manifest identity, checksum, UI dependencies where applicable, and exact registry state. It never invokes `npm publish` or changes a distribution tag. If the version already exists with matching integrity it reports `already-published`; different bytes are a conflict.
+The dry run validates metadata, packed manifest identity, checksum, UI dependencies where applicable, and exact registry state. Registry validation follows the selected registry's exact-version metadata to its exact same-registry tarball path, rejects redirects, bounds the download, and hashes the downloaded bytes against both metadata and the prepared archive. It never invokes `npm publish` or changes a distribution tag. If the version already exists with matching bytes it reports `already-published`; different bytes are a conflict.
 
 ## Publish prepared bytes
 
@@ -87,7 +88,7 @@ make publish PACKAGE=iframe-sdk RELEASE_DIR=/absolute/path/to/iframe-sdk-release
 The command:
 
 1. Validates the generated metadata and exact tarball again.
-2. Reads the exact registry version.
+2. Reads the exact registry version and downloads its approved tarball with bounded timeout, redirect, path, and size checks.
 3. Returns success without uploading if matching bytes already exist.
 4. Stops if the version exists with different bytes.
 5. Invokes npm once, with `--ignore-scripts`, only after a definite 404.
@@ -97,11 +98,11 @@ Publication never rebuilds or silently prepares. Package lifecycle scripts are d
 It explicitly disables any manifest-level provenance default and inherits the terminal,
 so npm login, web authorization, or OTP prompts remain interactive.
 
-An ambiguous npm failure or exhausted post-upload 404s produces `publish-result.json` with state `uncertain` and prints the exact `make verify-release` command. Do not publish again based on a temporary 404.
+An ambiguous npm failure or exhausted post-upload 404s produces `publish-result.json` with state `uncertain`, records the selected registry, and prints the exact POSIX-shell-safe `make verify-release` command including that registry. Do not publish again based on a temporary 404.
 
 ## Verify and promote
 
-Verification is read-only and compares the registry's exact version integrity with the prepared tarball:
+Verification is read-only and compares both the registry's exact metadata and downloaded tarball bytes with the prepared tarball:
 
 ```sh
 make verify-release PACKAGE=iframe-sdk
@@ -116,6 +117,15 @@ make promote PACKAGE=iframe-sdk VERSION=0.1.1-alpha.1 CHANNEL=latest
 ```
 
 Promotion never prepares or publishes an archive.
+`CHANNEL` must be an npm tag name that is not also accepted as a semantic-version range; values such as `1`, `1.2`, `1.2.3`, `1.x`, and exact prereleases are rejected.
+
+All seven public Make inputs - `PACKAGE`, `RELEASE_DIR`, `AUTH_MODE`, `DRY_RUN`, `REGISTRY`, `VERSION`, and `CHANNEL` - are captured as opaque environment data. Recipes contain only constant operation arguments, and the Node entry point validates the captured values before registry access or mutation. `DRY_RUN` accepts only empty, `0`, `false`, `no`, `1`, `true`, or `yes`.
+
+For controlled loopback testing, a nondefault registry can be selected consistently:
+
+```sh
+make verify-release PACKAGE=iframe-sdk REGISTRY=http://127.0.0.1:4873/custom/
+```
 
 ## Authentication and provenance
 
@@ -135,7 +145,9 @@ CI=true NODE_AUTH_TOKEN=... make promote PACKAGE=iframe-sdk VERSION=0.1.1-alpha.
 ```
 
 OIDC mode refuses a directory prepared locally and requires the prepared source commit,
-the publishing checkout, and GitHub's original `GITHUB_SHA` to be identical. The command
+the publishing checkout, and GitHub's original `GITHUB_SHA` to be identical. A GitHub
+publication dry run applies those same nonsecret identity checks without requesting an
+OIDC credential; only the real upload requires the token-request environment. The command
 never rewrites GitHub identity variables to manufacture provenance. Separate preparation
 and publication runs remain supported when both runs start from the same source commit.
 
@@ -167,9 +179,10 @@ values to `release.json`. It does not require the selected run to be complete or
 No candidate, attempt, terminal, checksum, or JSON input is accepted. Shared scripts call
 no GitHub API, so GitLab CI can transfer the directory and invoke the same Make commands.
 
-Promotion values are passed as environment data and validated before either the dry-run or
-credentialed job reaches Make. The Make target preserves them as opaque values before the
-shared command performs its exact semantic-version and distribution-tag checks.
+The workflow passes package, promotion, authentication, dry-run, and release-directory values
+as environment data to constant Make commands. The authorization job validates the package and
+promotion inputs before downstream jobs start, and the shared command repeats authoritative
+validation before any operation.
 
 Only the protected `npm-publish` publication job receives `id-token: write`. Publication and promotion serialize per package. Real promotion uses a protected `NPM_TOKEN` because npm distribution-tag changes are not the Trusted Publisher upload operation. Promotion dry runs run in a separate credential-free job. Preparation and verification receive no publishing credential.
 

@@ -1,406 +1,406 @@
 ## 1. Release contract foundation (coordinate-independent)
 
 - [x] 1.1 Record the audited hard-coded package names, development versions, UI token peer,
-  consumer graph assertions, manifest metadata gaps, npm-generated producer member links,
-  disposable consumer tarball references, and reusable archive/consumer helpers; verify the
-  inventory covers all three packers, validators, tests, fixtures, manifests,
-  `libs/frontend/package-lock.json`, offline install paths, and production-host integration
-  without changing application sources.
+      consumer graph assertions, manifest metadata gaps, npm-generated producer member links,
+      disposable consumer tarball references, and reusable archive/consumer helpers; verify the
+      inventory covers all three packers, validators, tests, fixtures, manifests,
+      `libs/frontend/package-lock.json`, offline install paths, and production-host integration
+      without changing application sources.
 - [x] 1.2 Add a versioned release-contract schema and parser under `libs/frontend/release/`
-  for exact toolchain pins, decision status, independent coordinates, manifest metadata,
-  dependencies/peers, exports, files, and intended dist-tag; verify unit tests accept a complete
-  fixture contract and reject missing, extra, malformed, ranged, tagged, local, workspace, and
-  contradictory values.
+      for exact toolchain pins, decision status, independent coordinates, manifest metadata,
+      dependencies/peers, exports, files, and intended dist-tag; verify unit tests accept a complete
+      fixture contract and reject missing, extra, malformed, ranged, tagged, local, workspace, and
+      contradictory values.
 - [x] 1.3 Encode Node `24.21.0` and npm `11.19.0` as exact release-production pins with links
-  to the official version and npm requirement sources; verify tests reject floating pins and
-  that changing a pin invalidates candidate evidence.
+      to the official version and npm requirement sources; verify tests reject floating pins and
+      that changing a pin invalidates candidate evidence.
 - [x] 1.4 Add explicit proposed and test-fixture states without presenting them as approved
-  release coordinates; verify candidate-evidence creation fails actionably when the selected
-  contract is not maintainer-confirmed and that relabelling a fixture without replacing all
-  fixture-only decisions cannot authorize it.
+      release coordinates; verify candidate-evidence creation fails actionably when the selected
+      contract is not maintainer-confirmed and that relabelling a fixture without replacing all
+      fixture-only decisions cannot authorize it.
 - [x] 1.5 Centralize selected-coordinate and expected-manifest access for all three members;
-  verify tests prove callers cannot derive their expectations from a packed manifest.
+      verify tests prove callers cannot derive their expectations from a packed manifest.
 
 ## 2. Maintainer coordinate and bootstrap gate
 
 - [x] 2.1 Obtain and record maintainer confirmation of the organization-controlled npm scope,
-  final package names, independently selected initial versions, public registry/access policy,
-  and intended dist-tag; verify the confirmed contract is reviewable and does not treat the
-  formerly provisional coordinates or policy as pre-authorized.
+      final package names, independently selected initial versions, public registry/access policy,
+      and intended dist-tag; verify the confirmed contract is reviewable and does not treat the
+      formerly provisional coordinates or policy as pre-authorized.
 - [x] 2.2 Obtain and record named package/public-API, SDK wire-compatibility, release, and npm
-  publishing owners plus the distinct bootstrap actor/credential identity and exact future
-  Trusted Publishing source repository and GitHub workflow identity; verify unconfirmed
-  identities remain explicit gates and the guarded workflow cannot receive a credential or mutate
-  the registry during its default preparation path.
+      publishing owners plus the distinct bootstrap actor/credential identity and exact future
+      Trusted Publishing source repository and GitHub workflow identity; verify unconfirmed
+      identities remain explicit gates and the guarded workflow cannot receive a credential or mutate
+      the registry during its default preparation path.
 - [x] 2.3 Verify the approved npm organization/account permission model can create each package
-  if it does not exist and document the separate bootstrap path; verify the record does not
-  assume a package-scoped credential or staged publishing can create a brand-new package.
+      if it does not exist and document the separate bootstrap path; verify the record does not
+      assume a package-scoped credential or staged publishing can create a brand-new package.
 - [x] 2.4 Record the maintainer choice of direct Trusted Publishing after bootstrap; preserve the
-  documented staged alternative and its exact Node/npm, existing-package, access, and 2FA
-  prerequisites, and verify the selected policy remains separate from publication authorization.
+      documented staged alternative and its exact Node/npm, existing-package, access, and 2FA
+      prerequisites, and verify the selected policy remains separate from publication authorization.
 
 ## 3. Release-ready member metadata and lockfile
 
 - [x] 3.1 Keep `libs/frontend/package.json` private and excluded from member release selection;
-  verify positive and negative tests enumerate exactly the three selected members and reject a
-  publishable root or accidental fourth package.
+      verify positive and negative tests enumerate exactly the three selected members and reject a
+      publishable root or accidental fourth package.
 - [x] 3.2 Synchronize the design-token, UI, and iframe SDK manifests with the confirmed independent
-  coordinates and required description, license, repository directory, homepage/bugs, engines,
-  files, exports, types, and side-effects metadata; verify contract comparison catches mutations
-  to every required field while preserving existing public exports and packaged assets.
+      coordinates and required description, license, repository directory, homepage/bugs, engines,
+      files, exports, types, and side-effects metadata; verify contract comparison catches mutations
+      to every required field while preserving existing public exports and packaged assets.
 - [x] 3.3 Synchronize UI's selected design-token peer and preserve the tested React and React DOM
-  peer contract; verify manifest tests reject an unselected token version, bundled React runtime,
-  local protocol, or undeclared runtime dependency.
+      peer contract; verify manifest tests reject an unselected token version, bundled React runtime,
+      local protocol, or undeclared runtime dependency.
 - [x] 3.4 Regenerate `libs/frontend/package-lock.json` only with the repository-pinned release
-  toolchain and verify all member names, exact versions, and peer edges match the confirmed
-  contract; permit npm-generated `link: true` records only for the three explicitly declared
-  workspace members resolving to their contained member directories.
+      toolchain and verify all member names, exact versions, and peer edges match the confirmed
+      contract; permit npm-generated `link: true` records only for the three explicitly declared
+      workspace members resolving to their contained member directories.
 - [x] 3.5 Verify the root and member manifests remain distinct: root privacy neither marks members
-  private nor supplies registry/publication approval, and member release metadata does not make
-  the root packable.
+      private nor supplies registry/publication approval, and member release metadata does not make
+      the root packable.
 - [x] 3.6 Add positive producer-lockfile tests for the three declared npm member links and negative
-  tests for undeclared links, wrong name-to-directory mappings, absolute or escaping targets, and
-  symlink escapes; verify every packed member manifest still rejects `workspace:`, `file:`,
-  `link:`, directory, checkout-source, and other local dependency references.
+      tests for undeclared links, wrong name-to-directory mappings, absolute or escaping targets, and
+      symlink escapes; verify every packed member manifest still rejects `workspace:`, `file:`,
+      `link:`, directory, checkout-source, and other local dependency references.
 
 ## 4. Candidate packing, archive validation, and immutable evidence
 
 - [x] 4.1 Parameterize all three pack scripts with the explicit selected contract and remove
-  hard-coded development coordinate assumptions; verify each packer selects only its expected
-  member and rejects npm output for a different name or version.
+      hard-coded development coordinate assumptions; verify each packer selects only its expected
+      member and rejects npm output for a different name or version.
 - [x] 4.2 Extend the token, UI, and SDK archive validators to compare actual packed metadata,
-  dependencies, exports, files, assets, licenses/notices, and executable/declaration references
-  against the selected release contract before running every existing package-specific gate;
-  verify positive candidate fixtures and targeted negative metadata mutations.
+      dependencies, exports, files, assets, licenses/notices, and executable/declaration references
+      against the selected release contract before running every existing package-specific gate;
+      verify positive candidate fixtures and targeted negative metadata mutations.
 - [x] 4.3 Preserve all existing token import/structure/license, UI CSS scope/asset/React
-  externalization, and SDK runtime/declaration/protocol negative tests; verify their complete
-  current suites pass unchanged with selected candidate coordinates.
+      externalization, and SDK runtime/declaration/protocol negative tests; verify their complete
+      current suites pass unchanged with selected candidate coordinates.
 - [x] 4.4 Implement a clean-checkout release-candidate command that checks exact Node/npm versions,
-  builds and packs each member once, and reuses those same tarballs for validation; verify dirty
-  source state, wrong toolchain, incomplete maintainer decisions, incomplete archives, or a failed gate
-  stops before approved evidence is written.
+      builds and packs each member once, and reuses those same tarballs for validation; verify dirty
+      source state, wrong toolchain, incomplete maintainer decisions, incomplete archives, or a failed gate
+      stops before approved evidence is written.
 - [x] 4.5 Generate one schema-versioned candidate evidence record containing the clean source
-  commit, UTC time, selected contract, exact producer and application-test Node/npm toolchains,
-  package
-  coordinates, archive filenames, byte lengths, independently computed SRI SHA-512 values, and
-  explicit expected provenance repository, commit, authorized Trusted Publishing workflow
-  identity, and artifact digest; verify the record covers all three archives and all required
-  gates without deriving expectations from a downloaded attestation.
+      commit, UTC time, selected contract, exact producer and application-test Node/npm toolchains,
+      package
+      coordinates, archive filenames, byte lengths, independently computed SRI SHA-512 values, and
+      explicit expected provenance repository, commit, authorized Trusted Publishing workflow
+      identity, and artifact digest; verify the record covers all three archives and all required
+      gates without deriving expectations from a downloaded attestation.
 - [x] 4.6 Add integrity and immutability regression tests that truncate, modify, replace, or rebuild
-  a recorded archive; verify prior evidence is rejected and cannot authorize later use of changed
-  bytes.
+      a recorded archive; verify prior evidence is rejected and cannot authorize later use of changed
+      bytes.
 - [x] 4.7 Retain the three exact tarballs and evidence as one commit-addressed disposable/CI
-  candidate artifact; verify a retrieval check recomputes every SHA-512 before declaring the set
-  usable and that expiration requires a fresh candidate run.
+      candidate artifact; verify a retrieval check recomputes every SHA-512 before declaring the set
+      usable and that expiration requires a fresh candidate run.
 
 ## 5. Candidate-aware isolated and compatibility consumers
 
 - [x] 5.1 Parameterize the neutral token, isolated React, and neutral iframe SDK consumer
-  orchestration with selected exact coordinates while reusing their existing fixtures; verify
-  generated disposable manifests/imports and dependency-graph assertions contain no
-  `0.0.0-development`, workspace link, directory dependency, unverified local file, or FRED
-  source path while permitting only integrity-verified candidate-tarball references.
+      orchestration with selected exact coordinates while reusing their existing fixtures; verify
+      generated disposable manifests/imports and dependency-graph assertions contain no
+      `0.0.0-development`, workspace link, directory dependency, unverified local file, or FRED
+      source path while permitting only integrity-verified candidate-tarball references.
 - [x] 5.2 Update lockfile-pinned provisioning for the selected candidate graphs; verify it may
-  contact package sources only during provisioning and fails actionably when an exact dependency
-  or browser prerequisite cannot be prepared.
+      contact package sources only during provisioning and fails actionably when an exact dependency
+      or browser prerequisite cannot be prepared.
 - [x] 5.3 Install the actual token, UI, and SDK candidate tarballs from prepared caches into fresh
-  locations outside FRED with networking disabled; permit npm's generated `file:` references to
-  those copied `.tgz` files only after resolving them as contained regular files and matching
-  candidate SHA-512, and verify type checks and production builds pass without the FRED checkout
-  or producer/application `node_modules`.
+      locations outside FRED with networking disabled; permit npm's generated `file:` references to
+      those copied `.tgz` files only after resolving them as contained regular files and matching
+      candidate SHA-512, and verify type checks and production builds pass without the FRED checkout
+      or producer/application `node_modules`.
 - [x] 5.4 Run the existing browser harness against the candidate token/UI archives and verify both
-  themes, optional Geist, Material Symbols, component behavior, local-only successful assets,
-  and no dependency installation or browser bootstrap during smoke execution.
+      themes, optional Geist, Material Symbols, component behavior, local-only successful assets,
+      and no dependency installation or browser bootstrap during smoke execution.
 - [x] 5.5 Run the packed candidate SDK against the cross-origin browser and FRED production-host
-  compatibility harnesses; verify protocol `"1"`, legacy behavior, origin/window admission,
-  request lifecycle, host authority, and iframe/proxy/authentication regressions remain green;
-  verify the host/test runner uses `apps/frontend` dependencies while the SDK entry comes only
-  from the integrity-verified archive.
+      compatibility harnesses; verify protocol `"1"`, legacy behavior, origin/window admission,
+      request lifecycle, host authority, and iframe/proxy/authentication regressions remain green;
+      verify the host/test runner uses `apps/frontend` dependencies while the SDK entry comes only
+      from the integrity-verified archive.
 - [x] 5.6 Add positive tests for npm-generated disposable manifest/lockfile `file:` references to
-  the exact staged candidate tarballs and negative tests for directory targets, a different or
-  modified tarball, symlinks, workspace links, checkout paths, and reused FRED dependency trees;
-  verify only the evidence-matched archive references pass.
+      the exact staged candidate tarballs and negative tests for directory targets, a different or
+      modified tarball, symlinks, workspace links, checkout paths, and reused FRED dependency trees;
+      verify only the evidence-matched archive references pass.
 
 ## 6. Exact public-registry verifier (no publication)
 
 - [x] 6.1 Add a registry-verification command requiring the approved public registry, candidate
-  evidence, and three exact name-at-version coordinates; verify it rejects tags, ranges, missing
-  packages, unexpected registries, local tarballs, file/workspace specs, and omitted integrity.
+      evidence, and three exact name-at-version coordinates; verify it rejects tags, ranges, missing
+      packages, unexpected registries, local tarballs, file/workspace specs, and omitted integrity.
 - [x] 6.2 Resolve and download each exact registry package in a fresh temporary area, compare
-  registry metadata and downloaded bytes with recorded SHA-512, cryptographically verify
-  provenance against the explicit expected certificate URI and issuer, then compare its artifact
-  digest, source repository, source commit, and publishing
-  workflow identity with expectations already bound to the release contract and candidate
-  evidence; verify signature validity and intended-release identity are reported as separate
-  gates.
+      registry metadata and downloaded bytes with recorded SHA-512, cryptographically verify
+      provenance against the explicit expected certificate URI and issuer, then compare its artifact
+      digest, source repository, source commit, and publishing
+      workflow identity with expectations already bound to the release contract and candidate
+      evidence; verify signature validity and intended-release identity are reported as separate
+      gates.
 - [x] 6.3 Build clean registry-only versions of the token, React UI, and iframe SDK consumers from
-  the downloaded exact versions; verify tests fail rather than falling back to candidate tarballs,
-  workspace sources, FRED dependencies, or mutable dist-tags.
+      the downloaded exact versions; verify tests fail rather than falling back to candidate tarballs,
+      workspace sources, FRED dependencies, or mutable dist-tags.
 - [x] 6.4 Label controlled/local verifier results as `registry-verifier-tooling` and reserve
-  `public-registry-verification` for a real run against genuinely published exact packages;
-  verify local success cannot produce or imitate the public-registry evidence type.
+      `public-registry-verification` for a real run against genuinely published exact packages;
+      verify local success cannot produce or imitate the public-registry evidence type.
 - [x] 6.5 Document the exact future post-publication invocation and expected evidence without
-  executing it; verify the runbook states that successful genuine registry verification remains
-  unavailable until separately authorized publication occurs.
+      executing it; verify the runbook states that successful genuine registry verification remains
+      unavailable until separately authorized publication occurs.
 - [x] 6.6 Add negative provenance fixtures that remain cryptographically valid while independently
-  changing the source repository, source commit, authorized workflow identity, or attested
-  artifact digest; verify each fails the expected-identity comparison and that missing/unconfirmed
-  expected identities and mismatched certificate policies fail closed rather than being copied
-  from the attestation.
+      changing the source repository, source commit, authorized workflow identity, or attested
+      artifact digest; verify each fails the expected-identity comparison and that missing/unconfirmed
+      expected identities and mismatched certificate policies fail closed rather than being copied
+      from the attestation.
 
 ## 7. Toolchain-aware CI and selection
 
 - [x] 7.1 Add Makefile/npm entry points for contract checks, candidate generation, evidence
-  verification, and registry-verifier tooling tests; verify none authenticates, changes registry
-  settings, publishes, or invokes the genuine public-registry verification by default.
+      verification, and registry-verifier tooling tests; verify none authenticates, changes registry
+      settings, publishes, or invokes the genuine public-registry verification by default.
 - [x] 7.2 Add a release-readiness CI path using exactly Node `24.21.0` and npm `11.19.0` for
-  producer candidate work; verify the command fails on version drift and retains all existing
-  producer quality, unit, archive, and negative gates.
+      producer candidate work; verify the command fails on version drift and retains all existing
+      producer quality, unit, archive, and negative gates.
 - [x] 7.3 Keep FRED application and production-host tests under their separately controlled
-  application toolchain and pass only hash-verified candidate archives/evidence between jobs;
-  verify the host and its runner use the application's own dependencies, the SDK under test comes
-  from the verified archive or exact registry installation, and neither environment resolves the
-  other's installed dependency tree.
+      application toolchain and pass only hash-verified candidate archives/evidence between jobs;
+      verify the host and its runner use the application's own dependencies, the SDK under test comes
+      from the verified archive or exact registry installation, and neither environment resolves the
+      other's installed dependency tree.
 - [x] 7.4 Extend `scripts/package-inputs.mjs`, workflow path filters, and CI-selection tests for
-  every release contract, member manifest/lockfile, toolchain pin, evidence schema/helper,
-  registry-verifier fixture, runbook, and orchestration input; verify relevant changes select
-  release readiness plus existing archive regressions while unrelated application files may skip
-  the package jobs.
+      every release contract, member manifest/lockfile, toolchain pin, evidence schema/helper,
+      registry-verifier fixture, runbook, and orchestration input; verify relevant changes select
+      release readiness plus existing archive regressions while unrelated application files may skip
+      the package jobs.
 - [x] 7.5 Verify existing canonical CSS/component/protocol/host, asset, license, React baseline,
-  consumer, browser, and orchestration inputs retain their prior package and application-job
-  selection behavior.
+      consumer, browser, and orchestration inputs retain their prior package and application-job
+      selection behavior.
 
 ## 8. Release documentation and RFC alignment
 
 - [x] 8.1 Add a compact `libs/frontend/` release runbook covering decision gates, exact toolchains,
-  candidate creation, evidence retention, bootstrap, later Trusted Publishing configuration,
-  optional staging, dependency-first publication, genuine registry verification, recovery, and
-  rollback; document the distinct producer-workspace, candidate-tarball, published-manifest, and
-  registry-consumer dependency boundaries plus separate bootstrap and Trusted Publishing
-  identities, and verify every command is clearly classified as implemented repository readiness,
-  future maintainer action, or separately authorized publication.
+      candidate creation, evidence retention, bootstrap, later Trusted Publishing configuration,
+      optional staging, dependency-first publication, genuine registry verification, recovery, and
+      rollback; document the distinct producer-workspace, candidate-tarball, published-manifest, and
+      registry-consumer dependency boundaries plus separate bootstrap and Trusted Publishing
+      identities, and verify every command is clearly classified as implemented repository readiness,
+      future maintainer action, or separately authorized publication.
 - [x] 8.2 Update the existing package producer/member documentation for selected coordinates,
-  candidate validation, immutable archives, and verifier-tooling limitations; verify the package
-  READMEs remain the source for shipped behavior and examples remain application-agnostic.
+      candidate validation, immutable archives, and verifier-tooling limitations; verify the package
+      READMEs remain the source for shipped behavior and examples remain application-agnostic.
 - [x] 8.3 Correct only the sequencing/status text in
-  `docs/swift/FRED-FRONTEND-PACKAGING-RFC.md` to split readiness, publication plus genuine registry
-  verification, and later FRED adoption; verify theme/live-locale, SDK ownership transfer,
-  publication, stable release, FRED/RAGS adoption, and broader catalog work remain open.
+      `docs/swift/FRED-FRONTEND-PACKAGING-RFC.md` to split readiness, publication plus genuine registry
+      verification, and later FRED adoption; verify theme/live-locale, SDK ownership transfer,
+      publication, stable release, FRED/RAGS adoption, and broader catalog work remain open.
 - [x] 8.4 Document dependency order and immutable recovery: design tokens before UI, SDK
-  independently, no FRED adoption before verified prereleases, a changed SDK artifact released
-  before protocol-ownership adoption, and rollback through prior versions/lockfiles/images rather
-  than overwritten package bytes.
+      independently, no FRED adoption before verified prereleases, a changed SDK artifact released
+      before protocol-ownership adoption, and rollback through prior versions/lockfiles/images rather
+      than overwritten package bytes.
 
 ## 9. Completion evidence and review
 
 - [x] 9.1 Run the producer formatting/lint, unit, contract, candidate archive, and complete existing
-  positive/negative package suites with the exact release toolchain; record exact commands,
-  versions, archive names, SHA-512 values, and results.
+      positive/negative package suites with the exact release toolchain; record exact commands,
+      versions, archive names, SHA-512 values, and results.
 - [x] 9.2 Provision dependencies and browsers separately, then run offline isolated token/UI/SDK
-  consumers and browser smoke against the exact candidate bytes; record commands and prove no
-  network, workspace, source-checkout, or missing-prerequisite fallback.
+      consumers and browser smoke against the exact candidate bytes; record commands and prove no
+      network, workspace, source-checkout, or missing-prerequisite fallback.
 - [x] 9.3 Run the FRED application quality, production build, affected component tests,
-  production-host SDK integration, iframe/proxy/authentication, and CI-selection regression gates
-  under the separately controlled application tooling; record exact commands and results.
+      production-host SDK integration, iframe/proxy/authentication, and CI-selection regression gates
+      under the separately controlled application tooling; record exact commands and results.
 - [x] 9.4 Run registry-verifier controlled positive/negative tests and confirm no genuine
-  public-registry success is claimed before publication; include signature-invalid and
-  validly-signed wrong-repository/commit/workflow/digest cases and record the distinction in
-  completion evidence.
+      public-registry success is claimed before publication; include signature-invalid and
+      validly-signed wrong-repository/commit/workflow/digest cases and record the distinction in
+      completion evidence.
 - [x] 9.5 Run `openspec validate add-frontend-package-release-foundations --strict`, applicable
-  repository-wide OpenSpec validation, and `git diff --check`; verify all pass and all change
-  artifacts remain consistent with the implementation.
+      repository-wide OpenSpec validation, and `git diff --check`; verify all pass and all change
+      artifacts remain consistent with the implementation.
 - [x] 9.6 Obtain the repository-required independent implementation review of metadata contracts,
-  boundary-aware workspace/tarball references, archive immutability, provenance signature and
-  expected-identity binding, offline/registry isolation, toolchain separation, security failure
-  modes, and documentation; resolve every in-scope finding and record any genuinely external
-  maintainer gate without weakening acceptance criteria.
+      boundary-aware workspace/tarball references, archive immutability, provenance signature and
+      expected-identity binding, offline/registry isolation, toolchain separation, security failure
+      modes, and documentation; resolve every in-scope finding and record any genuinely external
+      maintainer gate without weakening acceptance criteria.
 
 ## 10. Confirmed release-validation corrections
 
 - [x] 10.1 Correct the real npm registry adapter to consume raw `dist.attestations.url`
-  metadata, validate and re-root only the allowed exact-coordinate endpoint onto the approved
-  registry, and continue through npm signature audit, Sigstore verification, and independent
-  digest/repository/commit/workflow comparison; verify controlled adapter-level tests accept the
-  representative npm shape and reject missing, malformed, disallowed, and coordinate-mismatched
-  URLs without mocking an already normalized registry result.
+      metadata, validate and re-root only the allowed exact-coordinate endpoint onto the approved
+      registry, and continue through npm signature audit, Sigstore verification, and independent
+      digest/repository/commit/workflow comparison; verify controlled adapter-level tests accept the
+      representative npm shape and reject missing, malformed, disallowed, and coordinate-mismatched
+      URLs without mocking an already normalized registry result.
 - [x] 10.2 Replace basename-only offline lock acceptance with complete package-identity,
-  manifest/lock consistency, contained realpath, non-symlink regular-file, archive-integrity,
-  lock-integrity, version, and root/nested dependency-field validation; verify same-basename
-  escapes, npm-decoded traversal/separator ambiguity, query/fragment forms, additional different
-  bytes, directory and symlink targets, unmatched nested/local dependencies, and mismatched
-  integrity fail before `npm ci`, while approved candidate tarballs and private producer workspace
-  links retain their separate valid boundaries.
+      manifest/lock consistency, contained realpath, non-symlink regular-file, archive-integrity,
+      lock-integrity, version, and root/nested dependency-field validation; verify same-basename
+      escapes, npm-decoded traversal/separator ambiguity, query/fragment forms, additional different
+      bytes, directory and symlink targets, unmatched nested/local dependencies, and mismatched
+      integrity fail before `npm ci`, while approved candidate tarballs and private producer workspace
+      links retain their separate valid boundaries.
 - [x] 10.3 Require every offline candidate declaration and resolution to use exactly
-  `file:<approved-record-filename>`; reproduce and reject npm-normalized tilde and actual-tab
-  spellings plus other noncanonical forms before dependency installation; classify and reject
-  case-insensitive, leading-whitespace `git+file:` checkout dependencies across offline and
-  published/archive boundaries; retain exact generated consumer references and all containment,
-  realpath, file-type, identity, version, and archive-integrity checks.
+      `file:<approved-record-filename>`; reproduce and reject npm-normalized tilde and actual-tab
+      spellings plus other noncanonical forms before dependency installation; classify and reject
+      case-insensitive, leading-whitespace `git+file:` checkout dependencies across offline and
+      published/archive boundaries; retain exact generated consumer references and all containment,
+      realpath, file-type, identity, version, and archive-integrity checks.
 - [x] 10.4 Separate declaration validation from package-resolution validation and require every
-  direct or nested local package-resolution entry to contain valid SRI SHA-512 integrity exactly
-  matching candidate evidence; verify missing, null, empty, malformed, and mismatched values fail
-  before dependency installation while declarations without integrity remain valid.
+      direct or nested local package-resolution entry to contain valid SRI SHA-512 integrity exactly
+      matching candidate evidence; verify missing, null, empty, malformed, and mismatched values fail
+      before dependency installation while declarations without integrity remain valid.
 - [x] 10.5 Make the release-readiness CI job provision its own isolated-consumer cache in a
-  distinct network-capable step after producer dependency installation and before
-  consumer-dependent tests; add a workflow-contract regression that proves the exact command,
-  working directory, and ordering while preserving offline validation.
+      distinct network-capable step after producer dependency installation and before
+      consumer-dependent tests; add a workflow-contract regression that proves the exact command,
+      working directory, and ordering while preserving offline validation.
 
 ## 11. Fixture archive transfer across release and application toolchains
 
 - [x] 11.1 Add strict fixture-transfer creation and verification helpers that bind the development
-  fixture contract, checked-out source commit, observed producer Node/npm versions, exact
-  three-package coordinates/files/lengths/SHA-512 values, and repository/workflow/run/attempt
-  identity; reject malformed metadata and any missing, additional, substituted, non-regular, or
-  modified transfer file before a consumer callback can run.
+      fixture contract, checked-out source commit, observed producer Node/npm versions, exact
+      three-package coordinates/files/lengths/SHA-512 values, and repository/workflow/run/attempt
+      identity; reject malformed metadata and any missing, additional, substituted, non-regular, or
+      modified transfer file before a consumer callback can run.
 - [x] 11.2 Generate one designated transfer set from exactly one validated pack per role under the
-  release toolchain; keep intermediate metadata explicitly limited to producer archive validation,
-  copy no credentials/dependency trees/caches/checkout content, and distinguish this set from
-  disposable archives produced by regression tests.
+      release toolchain; keep intermediate metadata explicitly limited to producer archive validation,
+      copy no credentials/dependency trees/caches/checkout content, and distinguish this set from
+      disposable archives produced by regression tests.
 - [x] 11.3 Add a receiver orchestrator that verifies the downloaded transfer against the receiver's
-  independently selected commit, fixture-contract digest, and same workflow run/attempt, then
-  supplies only explicit archive paths and integrities to the existing isolated token, React UI,
-  iframe SDK, browser, and production-host helpers without repacking or `target/archives` fallback.
+      independently selected commit, fixture-contract digest, and same workflow run/attempt, then
+      supplies only explicit archive paths and integrities to the existing isolated token, React UI,
+      iframe SDK, browser, and production-host helpers without repacking or `target/archives` fallback.
 - [x] 11.4 Write final `fixture-candidate-evidence` only after every receiver gate succeeds, binding
-  the transfer metadata digest/artifact identity, exact archive records, independently observed
-  application Node/npm versions, and downstream results; prove failure leaves no success record
-  and neither fixture evidence kind can enter approved/public evidence paths.
+      the transfer metadata digest/artifact identity, exact archive records, independently observed
+      application Node/npm versions, and downstream results; prove failure leaves no success record
+      and neither fixture evidence kind can enter approved/public evidence paths.
 - [x] 11.5 Wire the release-readiness and application-toolchain package jobs as a same-run
-  producer/receiver chain with exact artifact naming, seven-day retention, explicit upload and
-  download failure behavior, separate dependency/browser provisioning, and final evidence
-  retention; transfer neither caches nor installed dependencies.
+      producer/receiver chain with exact artifact naming, seven-day retention, explicit upload and
+      download failure behavior, separate dependency/browser provisioning, and final evidence
+      retention; transfer neither caches nor installed dependencies.
 - [x] 11.6 Extend release, transfer, evidence, CI-selection, and negative regression tests for exact
-  byte reuse, file/identity/integrity/run mismatches, callback ordering, no local fallback, no
-  evidence on gate failure, fixture non-promotion, job dependencies, artifact selection,
-  provisioning order, and relevant versus unrelated input selection.
+      byte reuse, file/identity/integrity/run mismatches, callback ordering, no local fallback, no
+      evidence on gate failure, fixture non-promotion, job dependencies, artifact selection,
+      provisioning order, and relevant versus unrelated input selection.
 - [x] 11.7 Add Makefile/npm entry points and release-runbook instructions for fixture transfer,
-  retrieval, local producer/receiver rehearsal, retention, evidence relationships, failure
-  recovery, and the remaining manual verification of GitHub upload/download after push.
+      retrieval, local producer/receiver rehearsal, retention, evidence relationships, failure
+      recovery, and the remaining manual verification of GitHub upload/download after push.
 - [x] 11.8 Run the complete producer, archive, isolated-consumer, browser, host, application where
-  affected, strict OpenSpec, and diff checks; perform a separate-directory local transfer rehearsal
-  with actual tarballs and obtain independent review. Keep tasks 4.7, 7.3, 9.1, and 9.2 plus all
-  other maintainer-gated work unchecked because fixture evidence cannot satisfy them.
+      affected, strict OpenSpec, and diff checks; perform a separate-directory local transfer rehearsal
+      with actual tarballs and obtain independent review. Keep tasks 4.7, 7.3, 9.1, and 9.2 plus all
+      other maintainer-gated work unchecked because fixture evidence cannot satisfy them.
 
 ## 12. First `@fred-oss` release preparation
 
 - [x] 12.1 Record the selected npm organization, three exact prerelease coordinates, public
-  registry/access, `next` tag, bootstrap account and supplied organization-owner confirmation in
-  the selected contract; record `marc.fawaz` for package API, SDK protocol, release, and enduring
-  npm-publishing ownership plus the direct subsequent-release policy, and fail approved evidence
-  whenever a proposed or fixture contract remains incomplete.
+      registry/access, `next` tag, bootstrap account and supplied organization-owner confirmation in
+      the selected contract; record `marc.fawaz` for package API, SDK protocol, release, and enduring
+      npm-publishing ownership plus the direct subsequent-release policy, and fail approved evidence
+      whenever a proposed or fixture contract remains incomplete.
 - [x] 12.2 Synchronize member manifests, the UI token peer, generic consumer imports, package
-  documentation, and the producer lockfile to the selected `@fred-oss/*@0.1.0-alpha.1`
-  coordinates under exact Node `24.21.0` and npm `11.19.0`; preserve root privacy, React peers,
-  canonical sources, public exports, assets, licenses, and fixture-only evidence classification.
+      documentation, and the producer lockfile to the selected `@fred-oss/*@0.1.0-alpha.1`
+      coordinates under exact Node `24.21.0` and npm `11.19.0`; preserve root privacy, React peers,
+      canonical sources, public exports, assets, licenses, and fixture-only evidence classification.
 - [x] 12.3 Extend the immutable transfer boundary for approved candidates and add controlled
-  bootstrap-publication tests that require a complete contract, exact same-run bytes/evidence,
-  repository/commit/ref/workflow/bootstrap identity, all-version absence preflight, provenance,
-  expected-repository source-dependency selection, dependency-safe order, per-package integrity
-  checks, and explicit reconciliation of ambiguous or partial publication failures.
+      bootstrap-publication tests that require a complete contract, exact same-run bytes/evidence,
+      repository/commit/ref/workflow/bootstrap identity, all-version absence preflight, provenance,
+      expected-repository source-dependency selection, dependency-safe order, per-package integrity
+      checks, and explicit reconciliation of ambiguous or partial publication failures.
 - [x] 12.4 Add a manual-only, `swift`-restricted workflow that defaults to preparation, separates
-  release and application toolchains, uses `npm-publish` and `NPM_BOOTSTRAP_TOKEN` only for the
-  explicitly selected publishing step, reverifies without rebuilding, and runs genuine
-  secret-free registry verification only after publication; verify its contract and CI selection.
+      release and application toolchains, uses `npm-publish` and `NPM_BOOTSTRAP_TOKEN` only for the
+      explicitly selected publishing step, reverifies without rebuilding, and runs genuine
+      secret-free registry verification only after publication; verify its contract and CI selection.
 - [x] 12.5 Document exact GitHub environment/secret setup, first-package bootstrap, subsequent
-  Trusted Publishing setup, token revocation, immutable recovery, and the distinction between
-  controlled tests, approved candidates, actual publication, and genuine registry evidence;
-  retain broader RFC release/adoption work as open.
+      Trusted Publishing setup, token revocation, immutable recovery, and the distinction between
+      controlled tests, approved candidates, actual publication, and genuine registry evidence;
+      retain broader RFC release/adoption work as open.
 - [x] 12.6 On committed `swift`, run the guarded preparation path and retain one approved
-  release-candidate artifact with GitHub repository,
-  commit, workflow/run, dual-toolchain, archive, and complete downstream evidence.
-- [ ] 12.7 After separate publication authorization and protected-environment approval, bootstrap
-  the three previously absent versions from those exact bytes, verify emitted provenance and
-  public registry integrity/consumers, then configure each existing package's Trusted Publisher
-  and revoke the temporary token without overwriting or rebuilding any version.
+      release-candidate artifact with GitHub repository,
+      commit, workflow/run, dual-toolchain, archive, and complete downstream evidence.
+- [x] 12.7 Supersede the obsolete bootstrap implementation after the three versions were published,
+      verified, and the incident-only path was retired. Trusted Publisher configuration for each
+      existing package and revocation of the temporary token remain unverified external maintainer
+      prerequisites for real OIDC mutation; this disposition does not claim either action occurred.
 
 ## 13. Release-verification hardening
 
 - [x] 13.1 Reproduce npm's lockfile-only installed-tree failure with the application Node/npm
-  toolchain, then require exact contract/evidence/registry/archive checks and registry-lock graph
-  validation before `npm ci --ignore-scripts`; prove the exact non-linked installed package tree
-  exists before mandatory npm signature and Sigstore verification.
+      toolchain, then require exact contract/evidence/registry/archive checks and registry-lock graph
+      validation before `npm ci --ignore-scripts`; prove the exact non-linked installed package tree
+      exists before mandatory npm signature and Sigstore verification.
 - [x] 13.2 Add positive and negative registry-verifier regressions using actual npm CLI
-  installed-tree behavior, including lock-only versus installed roots, pre-install candidate
-  integrity rejection, pre-install local-fallback rejection, and transitive FRED graph integrity.
+      installed-tree behavior, including lock-only versus installed roots, pre-install candidate
+      integrity rejection, pre-install local-fallback rejection, and transitive FRED graph integrity.
 - [x] 13.3 Give the post-publication registry-verification job one explicit
-  `PLAYWRIGHT_BROWSERS_PATH` for provisioning and validation; add workflow and prerequisite
-  regressions proving the verifier rejects missing or differently resolved Chromium without
-  downloading a browser.
+      `PLAYWRIGHT_BROWSERS_PATH` for provisioning and validation; add workflow and prerequisite
+      regressions proving the verifier rejects missing or differently resolved Chromium without
+      downloading a browser.
 - [x] 13.4 Update the release runbook and active OpenSpec artifacts, run the focused and complete
-  release/package/application gates under their prescribed toolchains, run strict OpenSpec and
-  diff validation, and obtain independent review without producing public-registry evidence.
+      release/package/application gates under their prescribed toolchains, run strict OpenSpec and
+      diff validation, and obtain independent review without producing public-registry evidence.
 
 ## 14. Bootstrap visibility correction and partial-release recovery
 
 - [x] 14.1 Reproduce the immediate exact-version 404 failure and implement bounded read-only
-  visibility retries that require exact name, version, and SHA-512 metadata before advancing;
-  verify publish commands are never retried and auth, malformed/mismatched metadata, or exhausted
-  visibility fail closed.
+      visibility retries that require exact name, version, and SHA-512 metadata before advancing;
+      verify publish commands are never retried and auth, malformed/mismatched metadata, or exhausted
+      visibility fail closed.
 - [x] 14.2 Add controlled positive and negative bootstrap regressions for delayed visibility,
-  exhausted retries, metadata drift, ambiguous publication, no duplicate publication, and no
-  progression after unresolved verification while retaining the all-versions-absent preflight.
+      exhausted retries, metadata drift, ambiguous publication, no duplicate publication, and no
+      progression after unresolved verification while retaining the all-versions-absent preflight.
 - [x] 14.3 Record the original artifact ID/name/ZIP SHA-256, source commit, run/attempt, published
-  role, and missing roles in a reviewed recovery plan; implement verification of the exact
-  retained artifact, unchanged candidate bytes, existing design-token integrity/provenance, and
-  absent UI/SDK coordinates.
+      role, and missing roles in a reviewed recovery plan; implement verification of the exact
+      retained artifact, unchanged candidate bytes, existing design-token integrity/provenance, and
+      absent UI/SDK coordinates.
 - [x] 14.4 Add a separate explicit `recover-bootstrap` workflow path with uncredentialed recovery
-  preparation, protected-environment publication of only UI then SDK, immutable artifact transfer,
-  per-package original-versus-recovery provenance expectations, and final registry/consumer
-  verification; preserve ordinary bootstrap rejection of partial state.
+      preparation, protected-environment publication of only UI then SDK, immutable artifact transfer,
+      per-package original-versus-recovery provenance expectations, and final registry/consumer
+      verification; preserve ordinary bootstrap rejection of partial state.
 - [x] 14.5 Update the runbook and OpenSpec artifacts with the incident, bounded reconciliation,
-  truthful provenance model, manual recovery steps, expiration/failure handling, and the
-  distinction between tested tooling and actual recovery publication.
+      truthful provenance model, manual recovery steps, expiration/failure handling, and the
+      distinction between tested tooling and actual recovery publication.
 - [x] 14.6 From committed `swift`, dispatch and approve the explicit recovery only after reviewing
-  its exact original-artifact and cryptographic design-token evidence; publish no design-token
-  command and retain the generated recovery evidence.
+      its exact original-artifact and cryptographic design-token evidence; publish no design-token
+      command and retain the generated recovery evidence.
 - [x] 14.7 Complete genuine public-registry signature, Sigstore, per-package identity, clean
-  consumer, browser, and production-host verification for all three coordinates after recovery.
+      consumer, browser, and production-host verification for all three coordinates after recovery.
 
 ## 15. Exact metadata and pinned-ZIP recovery corrections
 
 - [x] 15.1 Reproduce npm `11.19.0` requesting package-wide metadata for `npm view` despite an
-  exact coordinate, then replace bootstrap preflight/reconciliation, recovery state checks, and
-  registry-verifier metadata resolution with one bounded exact-version HTTP adapter; verify only
-  actual exact-endpoint 404 responses are absent/retryable and every redirect, timeout, other HTTP
-  failure, malformed response, identity mismatch, or SHA-512 mismatch fails immediately.
+      exact coordinate, then replace bootstrap preflight/reconciliation, recovery state checks, and
+      registry-verifier metadata resolution with one bounded exact-version HTTP adapter; verify only
+      actual exact-endpoint 404 responses are absent/retryable and every redirect, timeout, other HTTP
+      failure, malformed response, identity mismatch, or SHA-512 mismatch fails immediately.
 - [x] 15.2 Add controlled-server adapter and bootstrap regressions for package-wide 404 with
-  exact-version success, temporary exact-version 404 followed by success, six-attempt exhaustion,
-  invalid responses, exact requested URLs, and one publication callback per package with no
-  automatic retry.
+      exact-version success, temporary exact-version 404 followed by success, six-attempt exhaustion,
+      invalid responses, exact requested URLs, and one publication callback per package with no
+      automatic retry.
 - [x] 15.3 Verify the pinned original artifact ZIP independently during both preparation and
-  protected publication; require its exact five regular candidate entries, safe fresh extraction,
-  transfer/evidence/archive consistency, and cleanup while rejecting missing, additional,
-  traversal, link, special, or inconsistent entries.
+      protected publication; require its exact five regular candidate entries, safe fresh extraction,
+      transfer/evidence/archive consistency, and cleanup while rejecting missing, additional,
+      traversal, link, special, or inconsistent entries.
 - [x] 15.4 Derive preparation inputs from the verified ZIP, compare every protected-job candidate
-  copy with that ZIP, and publish UI then SDK exclusively from the protected job's fresh verified
-  extraction; reproduce and reject a changed loose UI archive with matching rewritten evidence
-  before any publication callback while preserving the unchanged-input path.
+      copy with that ZIP, and publish UI then SDK exclusively from the protected job's fresh verified
+      extraction; reproduce and reject a changed loose UI archive with matching rewritten evidence
+      before any publication callback while preserving the unchanged-input path.
 - [x] 15.5 Update the workflow contract, release runbook, proposal, design, and normative scenarios
-  for exact HTTP metadata and the pinned-ZIP trust boundary without changing incident pins,
-  maintainer decisions, publication policy, or execution-dependent task state.
+      for exact HTTP metadata and the pinned-ZIP trust boundary without changing incident pins,
+      maintainer decisions, publication policy, or execution-dependent task state.
 - [x] 15.6 Run the exact release-toolchain focused and complete producer/release/archive/offline
-  consumer/browser gates, the application-toolchain host integration, strict active/all OpenSpec
-  validation, and `git diff --check`; obtain independent review and resolve every in-scope finding.
+      consumer/browser gates, the application-toolchain host integration, strict active/all OpenSpec
+      validation, and `git diff --check`; obtain independent review and resolve every in-scope finding.
 
 ## 16. Recovery CLI module-evaluation correction
 
 - [x] 16.1 Reproduce workflow run `34873471933` with the actual recovery preparation entry point
-  in a bounded fresh Node process; record exit `13`, the unsettled top-level await, and the
-  recovery-entry → registry-verifier → recovery-entry import cycle missed by function-level mocks.
+      in a bounded fresh Node process; record exit `13`, the unsettled top-level await, and the
+      recovery-entry → registry-verifier → recovery-entry import cycle missed by function-level mocks.
 - [x] 16.2 Move reusable recovery plan, artifact/workflow identity, provenance-expectation, and
-  evidence validation into an execution-independent module; preserve existing recovery exports
-  while making the registry verifier import only the independent validation module.
+      evidence validation into an execution-independent module; preserve existing recovery exports
+      while making the registry verifier import only the independent validation module.
 - [x] 16.3 Add bounded actual-entry-point subprocess coverage for successful preparation with real
-  existing-package verification, successful controlled UI-then-SDK publication with no design-
-  token publication, and recovery-aware registry-verifier evidence loading and enforcement.
+      existing-package verification, successful controlled UI-then-SDK publication with no design-
+      token publication, and recovery-aware registry-verifier evidence loading and enforcement.
 - [x] 16.4 Add fresh-process negative coverage proving invalid ZIP bytes, altered transferred
-  copies, existing-package provenance failures in both phases, and publication failure return
-  nonzero and stop before any forbidden or subsequent publication.
+      copies, existing-package provenance failures in both phases, and publication failure return
+      nonzero and stop before any forbidden or subsequent publication.
 - [x] 16.5 Keep controlled CLI fixtures local-only and visibly non-genuine, add every new module and
-  fixture to release CI selection, and update the release runbook, proposal, design, and normative
-  scenarios without changing coordinates, incident pins, workflow policy, or execution gates.
+      fixture to release CI selection, and update the release runbook, proposal, design, and normative
+      scenarios without changing coordinates, incident pins, workflow policy, or execution gates.
 - [x] 16.6 Run the exact release-toolchain focused/release/complete suites, lint, formatting,
-  strict active/all OpenSpec validation, and `git diff --check`; exercise the verifier CLI under
-  application Node/npm and obtain independent review of module evaluation and subprocess coverage.
+      strict active/all OpenSpec validation, and `git diff --check`; exercise the verifier CLI under
+      application Node/npm and obtain independent review of module evaluation and subprocess coverage.
 
 ## 17. Published-package verification continuation
 
@@ -630,7 +630,7 @@
   inside that directory.
 - Under exact producer Node `24.21.0` and npm `11.19.0`, the focused resolver/boundary/browser/
   workflow suite passes 54/54, `npm run release:check`, `npm run release:test` (81/81), `npm run
-  lint`, `npm run format`, the complete producer suite (285/285), and all three archive checks
+lint`, `npm run format`, the complete producer suite (285/285), and all three archive checks
   pass. Separately provisioned consumer caches then support all three offline isolated consumers;
   separately provisioned Chromium supports browser smoke with zero dependency installations,
   browser provisioning, or external requests during execution.
@@ -666,7 +666,7 @@
   authorizes publication.
 - Under exact producer Node `24.21.0` and npm `11.19.0`, `npm run release:check` reports the
   selected `maintainer-confirmed` contract alongside the unchanged fixture contract, `npm run
-  release:test` passes 82/82 controlled tests, and `npm run lint` plus `npm run format` pass. A
+release:test` passes 82/82 controlled tests, and `npm run lint` plus `npm run format` pass. A
   direct parser check reports all four exact owner values, `direct`, and zero unresolved decisions.
   Strict validation of this change and all repository OpenSpec items passes, `git diff --check`
   passes, and OpenSpec reports 67/73 tasks complete.
@@ -683,8 +683,7 @@
   `25fe6a65498d7109b8ec5a2b6d43de24fa9b9d161376ab80f2416c82ac328b82` match the reviewed
   recovery plan. `npm run release:verify-evidence` passes against its original three tarballs and
   candidate evidence without modifying their contents.
-- Read-only exact-version checks report design tokens 200 with the candidate SHA-512 and UI/SDK
-  404. A live verification of design tokens passes installed-tree npm signature audit, Sigstore
+- Read-only exact-version checks report design tokens 200 with the candidate SHA-512 and UI/SDK 404. A live verification of design tokens passes installed-tree npm signature audit, Sigstore
   certificate verification, and independent artifact digest, `ThalesGroup/fred` repository,
   `f49f2439…` commit, and `Publish-frontend-packages.yml@refs/heads/swift` workflow checks.
 - The reviewed recovery tooling preserves the original candidate evidence, records the actual
@@ -813,8 +812,7 @@
   successful exact archive, npm-signature, Sigstore, clean-consumer, browser, and production-host
   gates plus the actual verifier commit/run/attempt separately. This completes tasks 14.7 and
   17.6; the earlier local verifier run remained tooling evidence only.
-- Task 12.7 stays unchecked: the completed first release and public-registry verification do
-  not establish each package's subsequent Trusted Publisher configuration or revocation of the
-  temporary bootstrap token. Neither npm nor GitHub credential settings were inspected or changed
-  for this planning close-out. The predecessor must not be synchronized/archived as fully complete
-  until that remaining acceptance evidence is supplied or its disposition is explicitly reviewed.
+- Task 12.7 is dispositioned as superseded by issue #3281; that disposition does not establish
+  each package's subsequent Trusted Publisher configuration or revocation of the temporary
+  bootstrap token. Neither npm nor GitHub credential settings were inspected or changed during
+  close-out, so both remain external maintainer prerequisites for real OIDC mutation.
