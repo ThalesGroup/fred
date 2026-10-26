@@ -93,6 +93,7 @@ fiche plutôt que d'effacer les résultats précédents.
 | [F-012](#f-012-suppression-unifiée) | Suppression unifiée : retrait immédiat, purge différée | Conception validée par Dimi ; rien d'implémenté | 03, 04, 05, 08, A2, A3, A9 au fil des lots |
 
 | [F26](#f26-fusion-swift-et-préférences-utilisateur) | Fusion Swift : préférences personnelles en Rust | Implémenté ; validation fonctionnelle à faire | 02.1, A1, carte des sources |
+| [F27](#f27-primitive-de-visibilité-des-chunks) | Primitive Python de périmètre et de vérification des chunks | Implémentée, non branchée ; SQL non exécuté | Hors périmètre arc42 validé |
 
 ## Méthode de consolidation
 
@@ -2666,3 +2667,24 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
   et le worker Knowledge Flow. Constat courant : le runtime appelle encore
   `/vector/search` en HTTP et le chart déploie encore l'API.
 - Consignes et journal seulement ; aucun code, test, build, commit ni push.
+
+## F27 Primitive de visibilité des chunks
+
+- 2026-10-26 : primitive lecture seule `fred_core/documents/access.py`, tests
+  `fred_core/tests/documents/test_access.py`. Objectif : barrière SQL avant
+  exposition au LLM d'une future recherche locale (décision 5 d'OpenSpec
+  simplify-weaver-runtime-authorization). Aucun appelant, configuration ni connexion.
+- `resolve_scope` reproduit le chemin Rust (`domain.rs`, `spaces::scope`) : espace
+  et ancêtres, jamais enfants ni frères ; introuvable et en suppression distincts.
+  Ce n'est pas une autorisation : le droit de lecture reste à l'appelant.
+- `verify_candidates` : une requête groupée ; garde un chunk si son document est
+  dans le périmètre, non retiré, d'espace actif, retrievable sans inclusion en
+  attente, et si `chunk_uid` = uuid5(generation, ordinal) du manifest publié.
+  Ordre conservé ; erreur SQL ou manifest invalide remontent. Métadonnées
+  d'index ignorées.
+- `make test-one TEST=fred_core/tests/documents/test_access.py` : 18 passés ;
+  `make code-quality` (fred-core) : sortie 0.
+- Limites : requêtes compilées pour asyncpg/psycopg mais jamais exécutées contre
+  PostgreSQL ; pas de niveaux ni dossiers ; `folder.deletion_id` ignoré (jamais
+  posé) ; coût uuid5 linéaire en ordinals pour un chunk absent. Aucune
+  validation fonctionnelle, aucun commit.
