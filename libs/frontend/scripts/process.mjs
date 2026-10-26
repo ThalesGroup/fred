@@ -12,12 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
 export async function run(command, arguments_, options = {}) {
+  if (options.stdio === "inherit") {
+    await new Promise((resolve, reject) => {
+      const child = spawn(command, arguments_, options);
+      child.once("error", reject);
+      child.once("exit", (code, signal) => {
+        if (code === 0) resolve();
+        else {
+          const error = new Error(
+            `${command} ${arguments_.join(" ")} failed${signal ? ` with signal ${signal}` : ` with exit code ${code}`}`,
+          );
+          error.exitCode = code;
+          reject(error);
+        }
+      });
+    });
+    return { stdout: "", stderr: "" };
+  }
   try {
     return await execFileAsync(command, arguments_, {
       encoding: "utf8",

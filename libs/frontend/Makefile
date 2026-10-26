@@ -2,16 +2,22 @@
 
 FIXTURE_TRANSFER_ROOT ?= target/fixture-transfer
 FIXTURE_VALIDATION_ROOT ?= target/fixture-validation
-RELEASE_CONTRACT ?= release/proposed-release-contract.json
-RELEASE_TRANSFER_ROOT ?= target/release-transfer
-RELEASE_VALIDATION_ROOT ?= target/release-validation
 RELEASE_SELECTION ?=
 SELECTION_ARGS = $(if $(filter command line,$(origin RELEASE_SELECTION)),--select "$(RELEASE_SELECTION)",$(if $(RELEASE_SELECTION),--select "$(RELEASE_SELECTION)",))
+PACKAGE ?=
+RELEASE_DIR ?=
+AUTH_MODE ?= local
+DRY_RUN ?=
+VERSION ?=
+CHANNEL ?=
+REGISTRY ?= https://registry.npmjs.org/
+RELEASE_DIR_ARG = $(if $(RELEASE_DIR),--release-dir "$(RELEASE_DIR)",)
+DRY_RUN_ARG = $(if $(filter 1 true yes,$(DRY_RUN)),--dry-run,)
 
 # Every target below that shells out to npm needs the installed tree; only
 # `help` and `clean` run on Node builtins alone. Declaring the dependency once
 # here is what keeps a fresh clone from failing with "eslint: not found".
-NPM_TARGETS := build lint format-check format-fix test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision consumer-provision-iframe-sdk consumer-provision-react compatibility-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test fixture-transfer-create fixture-transfer-validate release-transfer-create release-transfer-validate release-candidate release-verify-evidence registry-verify
+NPM_TARGETS := build lint format-check format-fix test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision consumer-provision-iframe-sdk consumer-provision-react compatibility-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test fixture-transfer-create fixture-transfer-validate registry-verify prepare-release publish verify-release promote
 
 .PHONY: help install code-quality code-quality-fix clean $(NPM_TARGETS)
 
@@ -110,20 +116,20 @@ fixture-transfer-create: ## Produce the three-archive fixture transfer for this 
 fixture-transfer-validate: ## Verify and exercise the received fixture archives
 	PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run fixture:transfer:validate -- --transfer $(FIXTURE_TRANSFER_ROOT) --evidence $(FIXTURE_VALIDATION_ROOT)/final-evidence.json --stage-root $(FIXTURE_VALIDATION_ROOT)/staged $(SELECTION_ARGS)
 
-release-transfer-create: ## Produce a maintainer-confirmed candidate transfer
-	npm run release:transfer:create -- --contract $(RELEASE_CONTRACT) --output $(RELEASE_TRANSFER_ROOT) $(SELECTION_ARGS)
-
-release-transfer-validate: ## Validate candidate bytes under application tooling
-	PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run release:transfer:validate -- --contract $(RELEASE_CONTRACT) --transfer $(RELEASE_TRANSFER_ROOT) --evidence $(RELEASE_TRANSFER_ROOT)/candidate-evidence.json --stage-root $(RELEASE_VALIDATION_ROOT)/staged $(SELECTION_ARGS)
-
-release-candidate: ## Build evidence under an explicitly selected contract
-	PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run release:candidate -- $(SELECTION_ARGS)
-
-release-verify-evidence: ## Recompute integrity for an existing candidate set
-	npm run release:verify-evidence -- $(SELECTION_ARGS)
-
 registry-verify: ## Verify exact published coordinates (network; never local fallback)
 	npm run registry:verify -- $(SELECTION_ARGS)
+
+prepare-release: ## Build and validate one package into a portable release directory
+	PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run release:operation -- prepare --package "$(PACKAGE)" $(RELEASE_DIR_ARG) --registry "$(REGISTRY)"
+
+publish: ## Publish exact prepared bytes to next (use DRY_RUN=1 for no mutation)
+	npm run release:operation -- publish --package "$(PACKAGE)" $(RELEASE_DIR_ARG) --registry "$(REGISTRY)" --auth-mode "$(AUTH_MODE)" $(DRY_RUN_ARG)
+
+verify-release: ## Verify prepared package bytes against the exact registry version
+	npm run release:operation -- verify --package "$(PACKAGE)" $(RELEASE_DIR_ARG) --registry "$(REGISTRY)"
+
+promote: ## Move CHANNEL to an existing VERSION (use DRY_RUN=1 for no mutation)
+	npm run release:operation -- promote --package "$(PACKAGE)" --version "$(VERSION)" --channel "$(CHANNEL)" --registry "$(REGISTRY)" --auth-mode "$(AUTH_MODE)" $(DRY_RUN_ARG)
 
 clean: ## Remove disposable producer output and review evidence
 	node scripts/clean.mjs

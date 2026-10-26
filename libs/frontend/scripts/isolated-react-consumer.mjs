@@ -148,9 +148,14 @@ export async function stageIsolatedReactConsumer({
   tokenArchivePath: suppliedTokenArchive,
   uiArchivePath: suppliedUiArchive,
   compatibleToken,
+  publishedToken,
   expectedIntegrities = {},
 } = {}) {
   const contract = selectedContract ?? (await loadReleaseContract());
+  assert(
+    !(compatibleToken && publishedToken),
+    "historical and current published token inputs cannot be combined",
+  );
   if (compatibleToken) {
     const prepared = await assertCompatibleTokenProvision({
       contract,
@@ -173,6 +178,19 @@ export async function stageIsolatedReactConsumer({
       "offline token integrity differs from prepared baseline",
     );
   }
+  const registryToken = publishedToken ?? compatibleToken;
+  if (publishedToken) {
+    assert.equal(
+      publishedToken.coordinate,
+      `${contract.packages.designTokens.name}@${publishedToken.coordinate.slice(publishedToken.coordinate.lastIndexOf("@") + 1)}`,
+      "published token coordinate name differs",
+    );
+    assert.match(
+      publishedToken.integrity,
+      /^sha512-[A-Za-z0-9+/]+={0,2}$/,
+      "published token integrity is invalid",
+    );
+  }
   await assertReactConsumerFixture();
   await stat(path.join(cachePath, "_cacache")).catch(() => {
     throw new Error(
@@ -180,14 +198,16 @@ export async function stageIsolatedReactConsumer({
     );
   });
   assert(
-    !(compatibleToken && suppliedTokenArchive),
-    "token candidate and compatibility baseline cannot be combined",
+    !(registryToken && suppliedTokenArchive),
+    "token candidate and published token cannot be combined",
   );
   const tokenArchive =
     compatibleToken?.archivePath ??
     suppliedTokenArchive ??
-    (await packDesignTokens({ contract })).archivePath;
-  if (!compatibleToken) await validateArchive(tokenArchive, { contract });
+    (!registryToken
+      ? (await packDesignTokens({ contract })).archivePath
+      : undefined);
+  if (!registryToken) await validateArchive(tokenArchive, { contract });
   const uiArchive =
     suppliedUiArchive ?? (await packUi({ contract })).archivePath;
   await validateUiArchive(uiArchive, { contract });
@@ -224,11 +244,11 @@ export async function stageIsolatedReactConsumer({
     );
     const tokenTarget = path.join(consumerRoot, "design-tokens.tgz");
     const uiTarget = path.join(consumerRoot, "ui.tgz");
-    if (!compatibleToken) await cp(tokenArchive, tokenTarget);
+    if (!registryToken) await cp(tokenArchive, tokenTarget);
     await cp(uiArchive, uiTarget);
     const candidateEvidence = {
       packages: {
-        ...(!compatibleToken
+        ...(!registryToken
           ? {
               designTokens: {
                 coordinate: `${contract.packages.designTokens.name}@${contract.packages.designTokens.version}`,
@@ -259,7 +279,7 @@ export async function stageIsolatedReactConsumer({
           "--legacy-peer-deps",
           "--save-exact",
           "--package-lock-only",
-          compatibleToken?.coordinate ?? "./design-tokens.tgz",
+          registryToken?.coordinate ?? "./design-tokens.tgz",
           "./ui.tgz",
         ],
         { cwd: consumerRoot, env },
@@ -273,14 +293,14 @@ export async function stageIsolatedReactConsumer({
         ),
         consumerRoot,
         evidence: candidateEvidence,
-        compatibilityOnly: compatibleToken
+        compatibilityOnly: registryToken
           ? [
               {
                 name: contract.packages.designTokens.name,
-                version: compatibleToken.coordinate.slice(
-                  compatibleToken.coordinate.lastIndexOf("@") + 1,
+                version: registryToken.coordinate.slice(
+                  registryToken.coordinate.lastIndexOf("@") + 1,
                 ),
-                integrity: compatibleToken.integrity,
+                integrity: registryToken.integrity,
                 registry: contract.registry,
               },
             ]
@@ -301,7 +321,7 @@ export async function stageIsolatedReactConsumer({
       });
     } catch (error) {
       throw new Error(
-        `Offline React consumer installation failed using ${cachePath}; the lockfile-pinned cache may be incomplete. ${compatibleToken ? "Run make consumer-provision-react and then make compatibility-provision" : "Run npm run consumer:provision"} with network access, then retry offline validation.\n${error.message}`,
+        `Offline React consumer installation failed using ${cachePath}; the lockfile-pinned cache may be incomplete. ${compatibleToken ? "Run make consumer-provision-react and then make compatibility-provision" : "Run make consumer-provision-react with network access"}, then retry offline validation.\n${error.message}`,
         { cause: error },
       );
     }
@@ -312,8 +332,8 @@ export async function stageIsolatedReactConsumer({
     const parsedGraph = JSON.parse(resolvedGraph.stdout);
     for (const [dependency, version] of Object.entries({
       [contract.packages.designTokens.name]:
-        compatibleToken?.coordinate.slice(
-          compatibleToken.coordinate.lastIndexOf("@") + 1,
+        registryToken?.coordinate.slice(
+          registryToken.coordinate.lastIndexOf("@") + 1,
         ) ?? contract.packages.designTokens.version,
       [contract.packages.ui.name]: contract.packages.ui.version,
       react: "19.2.4",
@@ -391,12 +411,14 @@ export async function stageIsolatedReactConsumer({
       resolvedGraph: parsedGraph,
       runtimeInstallations,
       archiveResolution: archiveResolution.stdout.trim(),
-      ...(compatibleToken
+      ...(registryToken
         ? {
             compatibleToken: {
-              coordinate: compatibleToken.coordinate,
-              integrity: compatibleToken.integrity,
-              mode: "exact registry cache, provisioned and provenance-checked separately",
+              coordinate: registryToken.coordinate,
+              integrity: registryToken.integrity,
+              mode: compatibleToken
+                ? "exact registry cache, provisioned and provenance-checked separately"
+                : "exact compatible published registry version",
             },
           }
         : {}),

@@ -116,8 +116,6 @@ test("inventory, policy, baseline, records, changelogs, and manifests select rel
     "libs/frontend/release/package-inventory.json",
     "libs/frontend/release/proposed-release-contract.json",
     "libs/frontend/release/compatibility-baselines.json",
-    "libs/frontend/release/known-published-coordinates.json",
-    "libs/frontend/release/known-published-coordinates.schema.json",
     "libs/frontend/release/release-record.schema.json",
     "libs/frontend/design-tokens/CHANGELOG.md",
     "libs/frontend/ui/CHANGELOG.md",
@@ -129,12 +127,13 @@ test("inventory, policy, baseline, records, changelogs, and manifests select rel
   assert(!selectsPackageJob(["apps/frontend/src/rework/unrelated-page.tsx"]));
 });
 
-test("selected-candidate parsing, compatibility provisioning, and fourth-profile fixtures select CI", () => {
+test("shared release tooling and compatibility inputs select CI", () => {
   for (const sourcePath of [
-    "libs/frontend/scripts/release-selection.mjs",
+    "libs/frontend/scripts/npm-release.mjs",
     "libs/frontend/scripts/provision-compatible-token.mjs",
     "libs/frontend/scripts/isolated-react-consumer.mjs",
     "libs/frontend/scripts/fixture-transfer-validation.mjs",
+    "libs/frontend/tests/npm-release.test.mjs",
     "libs/frontend/tests/provision-compatible-token.test.mjs",
     "libs/frontend/fixtures/release-fourth-package.json",
     "libs/frontend/Makefile",
@@ -142,29 +141,13 @@ test("selected-candidate parsing, compatibility provisioning, and fourth-profile
   ])
     assert(selectsPackageJob([sourcePath]), sourcePath);
   assert(!selectsPackageJob(["apps/frontend/src/rework/unrelated-page.tsx"]));
-  const receiver = publishWorkflow.jobs["validate-application-compatibility"];
-  const provision = receiver.steps.findIndex(
-    (step) => step.run === "make consumer-provision-react",
-  );
-  const browser = receiver.steps.findIndex(
-    (step) => step.run === "make browser-install",
-  );
-  const validate = receiver.steps.findIndex(
-    (step) => step.name === "Validate selected immutable transfer",
-  );
-  assert(
-    provision >= 0 &&
-      browser >= 0 &&
-      provision < validate &&
-      browser < validate,
-  );
   assert.equal(
     publishWorkflow.on.workflow_dispatch.inputs.operation.default,
-    "prepare-only",
+    "prepare",
   );
-  assert.equal(
-    publishWorkflow.on.workflow_dispatch.inputs.packages.default,
-    "designTokens,ui,iframeSdk",
+  assert.deepEqual(
+    publishWorkflow.on.workflow_dispatch.inputs.package.options,
+    ["design-tokens", "ui", "iframe-sdk"],
   );
 });
 
@@ -197,148 +180,106 @@ test("release-readiness CI provisions isolated consumers before tests", () => {
   assert(consumerProvisionIndex < consumerDependentTestIndex);
 });
 
-test("retained release workflow is manual swift-only with isolated publishing authority", () => {
+test("release workflow is a thin manual adapter with isolated publishing authority", () => {
   assert.deepEqual(Object.keys(publishWorkflow.on), ["workflow_dispatch"]);
   const publication = publishWorkflow.on.workflow_dispatch.inputs.operation;
-  assert.equal(publication.default, "prepare-only");
-  assert.deepEqual(publication.options, ["prepare-only", "publish", "verify"]);
-  assert.deepEqual(Object.keys(publishWorkflow.jobs), [
-    "authorize-source",
-    "prepare-candidate",
-    "validate-application-compatibility",
+  assert.equal(publication.default, "prepare");
+  assert.deepEqual(publication.options, [
+    "prepare",
     "publish",
-    "verify-public-registry",
+    "verify",
+    "promote",
+  ]);
+  assert.deepEqual(Object.keys(publishWorkflow.jobs), [
+    "authorize",
+    "prepare",
+    "release-directory",
+    "publish",
+    "read-only",
+    "promote-dry-run",
+    "promote",
   ]);
   assert.deepEqual(publishWorkflow.permissions, { contents: "read" });
-  assert(
-    publishWorkflow.jobs["authorize-source"].steps.some(
-      (step) => step.run === "node scripts/release-dispatch.mjs",
-    ),
-  );
   for (const [name, job] of Object.entries(publishWorkflow.jobs)) {
     if (name === "publish") continue;
-    assert.equal(job.environment, undefined, name);
     assert.equal(job.permissions?.["id-token"], undefined, name);
   }
   const protectedJob = publishWorkflow.jobs.publish;
   assert.equal(protectedJob.environment, "npm-publish");
-  assert.deepEqual(
-    protectedJob.concurrency,
-    { group: "frontend-packages-publish", "cancel-in-progress": false },
-    "protected publishing dispatches must serialize without cancellation",
-  );
+  assert.deepEqual(protectedJob.concurrency, {
+    group: "frontend-npm-publish-${{ inputs.package }}",
+    "cancel-in-progress": false,
+  });
   assert.deepEqual(protectedJob.permissions, {
     contents: "read",
-    actions: "read",
-    "pull-requests": "read",
     "id-token": "write",
   });
-  assert(protectedJob.if.includes("operation == 'publish'"));
+  const promotionSetup = publishWorkflow.jobs.promote.steps.find(
+    (step) => step.uses === "actions/setup-node@v4",
+  );
+  assert.equal(
+    promotionSetup.with["registry-url"],
+    "https://registry.npmjs.org",
+  );
+  const promotionDryRun = publishWorkflow.jobs["promote-dry-run"];
+  assert.equal(promotionDryRun.environment, undefined);
+  assert.equal(
+    JSON.stringify(promotionDryRun).includes("secrets.NPM_TOKEN"),
+    false,
+  );
+  assert(
+    promotionDryRun.steps.some(
+      (step) =>
+        step.run ===
+        'make promote PACKAGE="${{ inputs.package }}" VERSION="${{ inputs.version }}" CHANNEL="${{ inputs.channel }}" AUTH_MODE=token DRY_RUN=1',
+    ),
+  );
   assert(
     protectedJob.steps.some(
       (step) =>
         step.run === "npm ci --ignore-scripts" &&
         step["working-directory"] === "libs/frontend",
     ),
-    "protected OIDC job must not execute dependency lifecycle scripts",
   );
   assert(
-    publishWorkflow.jobs["verify-public-registry"].if.includes(
-      "operation == 'verify'",
-    ),
-  );
-  assert(
-    publishWorkflow.jobs["verify-public-registry"].if.includes(
-      "needs.publish.result == 'success'",
-    ),
-  );
-  assert(
-    publishWorkflow.jobs["prepare-candidate"].if.includes("fresh == 'true'"),
-  );
-  const steps = protectedJob.steps;
-  assert(
-    steps.some(
+    protectedJob.steps.some(
       (step) =>
-        step.uses === "actions/checkout@v4" &&
-        step.with.ref === "${{ github.sha }}" &&
-        step.with["fetch-depth"] === 0,
-    ),
-    "protected job must execute the current reviewed policy/controller with full version-introduction history",
-  );
-  const persist = steps.findIndex(
-    (step) =>
-      step.uses === "actions/upload-artifact@v4" &&
-      step.name === "Durably retain pre-command attempt",
-  );
-  const readback = steps.findIndex(
-    (step) =>
-      step.name ===
-      "Read back attempt and publish demonstrably absent archives",
-  );
-  assert(persist >= 0 && readback > persist);
-  const terminalUpload = steps.findIndex(
-    (step) => step.name === "Durably retain aborted publishing boundaries",
-  );
-  assert(
-    terminalUpload > readback,
-    "terminal evidence must be retained only after the sole serialized publication step aborts",
-  );
-  assert(steps[terminalUpload].if.includes("failure()"));
-  assert.equal(steps[terminalUpload].uses, "actions/upload-artifact@v4");
-  assert.equal(
-    steps.filter(
-      (step) => step.run === "node scripts/release-publisher.mjs execute",
-    ).length,
-    1,
-    "no second publication path may follow a terminal boundary",
-  );
-  assert.equal(
-    publishWorkflow.on.workflow_dispatch.inputs["terminal-refs"].default,
-    "[]",
-  );
-  assert.equal(
-    protectedJob.env.RELEASE_PRIOR_TERMINAL_REFS,
-    "${{ needs.authorize-source.outputs.terminal_refs }}",
-  );
-  assert(
-    steps.every(
-      (step) => !JSON.stringify(step).includes("NPM_BOOTSTRAP_TOKEN"),
+        step.run ===
+        'make publish PACKAGE="${{ inputs.package }}" RELEASE_DIR=target/release AUTH_MODE=oidc',
     ),
   );
   assert(
-    publishWorkflow.jobs["verify-public-registry"].steps.every(
-      (step) => !JSON.stringify(step).includes("release-publisher.mjs"),
+    publishWorkflow.jobs.prepare.steps.some(
+      (step) =>
+        step.run === 'make prepare-release PACKAGE="${{ inputs.package }}"',
+    ),
+  );
+  assert(
+    publishWorkflow.jobs["release-directory"].steps.some(
+      (step) => step.uses === "actions/download-artifact@v4",
     ),
   );
   for (const retired of [
-    "publish-bootstrap",
-    "recover-bootstrap",
-    "verify-existing",
+    "candidate-ref",
+    "attempt-refs",
+    "terminal-refs",
+    "release-publisher.mjs",
+    "release-artifact.mjs",
     "NPM_BOOTSTRAP_TOKEN",
-    "NODE_AUTH_TOKEN",
-    "registry:prepare-existing",
-    "release:bootstrap-recovery",
-    "release:publish-bootstrap",
   ])
     assert.equal(publishWorkflowSource.includes(retired), false, retired);
 });
 
-test("preparation transfers one exact candidate between separate toolchains", () => {
-  const producer = publishWorkflow.jobs["prepare-candidate"];
-  const receiver = publishWorkflow.jobs["validate-application-compatibility"];
-  assert.equal(producer.needs, "authorize-source");
-  assert.deepEqual(receiver.needs, ["authorize-source", "prepare-candidate"]);
+test("preparation transfers one generated release directory to later operations", () => {
+  const producer = publishWorkflow.jobs.prepare;
+  const receiver = publishWorkflow.jobs["release-directory"];
+  assert.equal(producer.needs, "authorize");
+  assert.deepEqual(receiver.needs, ["authorize", "prepare"]);
   assert.equal(
     producer.steps.find((step) => step.uses === "actions/setup-node@v4").with[
       "node-version"
     ],
     "24.21.0",
-  );
-  assert.equal(
-    receiver.steps.find((step) => step.uses === "actions/setup-node@v4").with[
-      "node-version"
-    ],
-    "22.13.0",
   );
   assert(
     producer.steps.some(
@@ -346,83 +287,42 @@ test("preparation transfers one exact candidate between separate toolchains", ()
     ),
   );
   assert(
-    producer.steps.some(
-      (step) =>
-        step.run ===
-        "make release-check release-test code-quality test pack-check",
-    ),
-    "producer-wide unit/archive regressions must not be replaced by selected packing",
-  );
-  assert(
-    receiver.steps.some(
-      (step) => step.run === "npm install --global npm@10.9.2",
-    ),
-  );
-  assert(
-    receiver.steps.some(
-      (step) =>
-        step.run === "npm ci" && step["working-directory"] === "apps/frontend",
-    ),
-  );
-  const candidateName =
-    "frontend-packages-candidate-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}";
-  const approvedName =
-    "frontend-packages-release-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}";
-  assert(
-    producer.steps.some(
-      (step) => step.name === "Pack only selected release candidates",
-    ),
+    producer.steps.some((step) => step.name === "Prepare the selected package"),
   );
   assert(
     producer.steps.some(
       (step) =>
         step.uses === "actions/upload-artifact@v4" &&
-        step.with.name === candidateName &&
-        step.with.path === "libs/frontend/target/release-transfer",
+        step.with.name === "frontend-npm-release-${{ inputs.package }}" &&
+        step.with.path ===
+          "libs/frontend/target/releases/${{ inputs.package }}",
     ),
   );
   assert(
     receiver.steps.some(
       (step) =>
         step.uses === "actions/download-artifact@v4" &&
-        step.with.name === candidateName,
+        step.with.name === "frontend-npm-release-${{ inputs.package }}" &&
+        step.with["run-id"].includes("prepared-run-id"),
     ),
   );
   assert(
-    receiver.steps.some(
-      (step) => step.name === "Validate selected immutable transfer",
+    receiver.steps.some((step) => step.name === "Resolve generated metadata"),
+  );
+  const resolver = receiver.steps.find(
+    (step) => step.name === "Resolve generated metadata",
+  ).run;
+  assert(resolver.includes('test "${#metadata_files[@]}" -eq 1'));
+  assert(resolver.includes(".preparedBy =="));
+  assert(
+    resolver.includes(
+      'test "${release_dir}" = "target/releases/${{ inputs.package }}/${version}"',
     ),
   );
   assert(
-    receiver.steps.some(
-      (step) =>
-        step.uses === "actions/upload-artifact@v4" &&
-        step.with.name === approvedName &&
-        step.with["if-no-files-found"] === "error",
+    resolver.includes(
+      'git merge-base --is-ancestor "${source_commit}" "${GITHUB_SHA}"',
     ),
-  );
-  const provision = receiver.steps.findIndex(
-    (step) => step.run === "make consumer-provision-react",
-  );
-  const browser = receiver.steps.findIndex(
-    (step) => step.run === "make browser-install",
-  );
-  const validate = receiver.steps.findIndex(
-    (step) => step.name === "Validate selected immutable transfer",
-  );
-  assert(provision >= 0 && browser >= 0 && validate >= 0);
-  assert(provision < validate && browser < validate);
-  const producerRegressions = producer.steps.findIndex(
-    (step) =>
-      step.run ===
-      "make release-check release-test code-quality test pack-check",
-  );
-  assert(producerRegressions >= 0);
-  assert(
-    producer.steps.findIndex(
-      (step) => step.run === "make consumer-provision-iframe-sdk",
-    ) < producerRegressions,
-    "full producer test suite needs its own SDK cache before offline tests",
   );
 });
 

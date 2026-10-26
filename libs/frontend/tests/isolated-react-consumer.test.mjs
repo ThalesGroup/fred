@@ -107,6 +107,6 @@ test("an incomplete cache fails actionably without a network fallback", async (c
   await mkdir(path.join(temporary, "_cacache"));
   await assert.rejects(
     stageIsolatedReactConsumer({ cachePath: temporary }),
-    /lockfile-pinned cache may be incomplete.*consumer:provision/s,
+    /lockfile-pinned cache may be incomplete.*consumer-provision-react/s,
   );
 });
