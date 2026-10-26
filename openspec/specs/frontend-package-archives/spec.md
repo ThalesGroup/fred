@@ -1817,7 +1817,7 @@ Verification MUST use registry bytes and metadata and MUST NOT substitute a loca
 
 `libs/frontend` SHALL expose `make prepare-release`, `make publish`, `make verify-release`, and `make promote` with one `PACKAGE` per operation. The same implementation SHALL run locally and in CI without depending on GitHub APIs. Publish SHALL default to the `next` distribution tag; promotion SHALL require an explicit existing version and channel and remain separate from publication.
 
-Local authentication SHALL use normal npm login and interactive authorization without claiming CI provenance. CI token and GitHub OIDC authentication SHALL be explicit, MUST NOT fall back to another mode, and GitHub OIDC publication SHALL request provenance only for bytes prepared from the workflow's committed source. Promotion and publication dry runs MUST perform no registry mutation.
+Local authentication SHALL use normal npm login and interactive authorization without claiming CI provenance. CI token and GitHub OIDC authentication SHALL be explicit, MUST NOT fall back to another mode, and GitHub OIDC publication SHALL request provenance only when the prepared source, publishing checkout, and original workflow source commit are identical. The release command MUST NOT overwrite CI identity variables to manufacture provenance. Promotion and publication dry runs MUST perform no registry mutation.
 
 #### Scenario: Local operator publishes prepared output
 
@@ -1829,6 +1829,11 @@ Local authentication SHALL use normal npm login and interactive authorization wi
 - **WHEN** the protected GitHub publication job invokes the same Make target in explicit OIDC mode
 - **THEN** only that job receives `id-token: write`, provenance describes its committed source truthfully, and no local or token fallback is attempted
 
+#### Scenario: GitHub workflow source advanced after preparation
+
+- **WHEN** an OIDC publication run starts from a commit different from the prepared source
+- **THEN** publication stops before npm and identifies explicit local or token mode as the supported path for the unchanged older bytes
+
 #### Scenario: Promotion targets an existing version
 
 - **WHEN** an operator requests a channel change for an exact version that exists
@@ -1838,6 +1843,11 @@ Local authentication SHALL use normal npm login and interactive authorization wi
 
 - **WHEN** the requested exact version is absent or registry verification fails
 - **THEN** promotion stops before any distribution-tag command
+
+#### Scenario: Promotion input contains executable syntax
+
+- **WHEN** a version or channel contains shell, quoting, newline, or Make-expression syntax
+- **THEN** the adapter rejects the value as data before any registry mutation and does not evaluate the syntax
 
 ### Requirement: Package dependency order is enforced without coupling independent releases
 
@@ -1860,14 +1870,24 @@ UI preparation and publication SHALL validate its declared `@fred-oss/design-tok
 
 ### Requirement: The GitHub workflow is a thin release adapter
 
-The existing publication workflow filename SHALL be preserved and expose simple operation and package inputs. It SHALL invoke the shared Make commands, retain GitHub-specific artifact upload/download and an optional explicit run selector in the adapter, preserve the `npm-publish` approval boundary, restrict mutation credentials and `id-token: write` to mutation jobs, and serialize publication per package.
+The existing publication workflow filename SHALL be preserved and expose simple operation and package inputs. It SHALL invoke the shared Make commands, retain GitHub-specific artifact upload/download and an optional explicit run selector in the adapter, preserve the `npm-publish` approval boundary, restrict mutation credentials and `id-token: write` to mutation jobs, and serialize publication per package. The adapter SHALL perform one targeted GitHub API lookup for the selected run and independently verify its repository, workflow path, source branch, and head commit before accepting artifact metadata.
 
 The workflow MUST NOT require manual candidate, attempt, terminal, hash, or JSON inputs; enumerate repository-wide artifact history; dispatch another workflow; or implement a second publication/recovery engine. Verification and preparation jobs MUST remain read-only with respect to npm.
 
 #### Scenario: Preparation and publication use separate runs
 
 - **WHEN** CI publishes a release directory prepared by an earlier workflow run
-- **THEN** the adapter resolves the selected package artifact from the explicit run selector, downloads it, and invokes the same publish Make target without exposing artifact mechanics to the shared implementation
+- **THEN** the adapter verifies the selected run's actual origin, resolves that run's package artifact, binds generated metadata to the verified run identity, and invokes the same publish Make target without exposing artifact mechanics to the shared implementation
+
+#### Scenario: Preparation is intentionally skipped for reused output
+
+- **WHEN** publication, verification, or publication dry run selects a prior preparation run
+- **THEN** the requested downstream job runs after successful authorization and artifact resolution even though the current run's preparation job was skipped
+
+#### Scenario: Selected artifact claims another origin
+
+- **WHEN** generated metadata disagrees with the selected run's independently verified repository, workflow, branch, or head commit
+- **THEN** the adapter rejects the artifact before any publication or verification command
 
 #### Scenario: Publication requires approval and serialization
 

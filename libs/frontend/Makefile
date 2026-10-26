@@ -14,6 +14,13 @@ REGISTRY ?= https://registry.npmjs.org/
 RELEASE_DIR_ARG = $(if $(RELEASE_DIR),--release-dir "$(RELEASE_DIR)",)
 DRY_RUN_ARG = $(if $(filter 1 true yes,$(DRY_RUN)),--dry-run,)
 
+# Preserve promotion values as opaque environment data. $(value ...) prevents
+# command-line or inherited values from being expanded as Make expressions.
+export FRED_RELEASE_VERSION := $(value VERSION)
+export FRED_RELEASE_CHANNEL := $(value CHANNEL)
+unexport VERSION
+unexport CHANNEL
+
 # Every target below that shells out to npm needs the installed tree; only
 # `help` and `clean` run on Node builtins alone. Declaring the dependency once
 # here is what keeps a fresh clone from failing with "eslint: not found".
@@ -129,7 +136,7 @@ verify-release: ## Verify prepared package bytes against the exact registry vers
 	npm run release:operation -- verify --package "$(PACKAGE)" $(RELEASE_DIR_ARG) --registry "$(REGISTRY)"
 
 promote: ## Move CHANNEL to an existing VERSION (use DRY_RUN=1 for no mutation)
-	npm run release:operation -- promote --package "$(PACKAGE)" --version "$(VERSION)" --channel "$(CHANNEL)" --registry "$(REGISTRY)" --auth-mode "$(AUTH_MODE)" $(DRY_RUN_ARG)
+	npm run release:operation -- promote --package "$(PACKAGE)" --registry "$(REGISTRY)" --auth-mode "$(AUTH_MODE)" $(DRY_RUN_ARG)
 
 clean: ## Remove disposable producer output and review evidence
 	node scripts/clean.mjs

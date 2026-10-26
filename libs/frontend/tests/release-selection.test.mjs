@@ -123,7 +123,7 @@ test("Make exposes one-package release operations and publication dry run", () =
     verify,
     /npm run release:operation -- verify --package "iframe-sdk"/,
   );
-  assert.match(promote, /--version "0.1.1-alpha.1" --channel "latest"/);
+  assert.doesNotMatch(promote, /--version|--channel/);
   assert.match(promote, /--dry-run/);
 });
 

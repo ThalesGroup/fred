@@ -49,9 +49,10 @@ make prepare-release PACKAGE=iframe-sdk RELEASE_DIR=/absolute/path/to/iframe-sdk
 ```
 
 The destination must be empty. Transfer the complete directory unchanged.
-The receiving checkout must still expose the same package name and version; CI checks
-out the recorded source commit automatically. UI dependency validation reads the peer
-range packed into the prepared tarball, not a later working-tree edit.
+The receiving checkout must still expose the same package name and version. UI dependency
+validation reads the peer range packed into the prepared tarball, not a later working-tree
+edit. GitHub CI checks out the recorded source commit, but OIDC publication additionally
+requires the workflow itself to have been dispatched from that same commit.
 
 Equivalent preparation commands are:
 
@@ -133,7 +134,18 @@ CI=true NODE_AUTH_TOKEN=... make publish PACKAGE=iframe-sdk AUTH_MODE=token
 CI=true NODE_AUTH_TOKEN=... make promote PACKAGE=iframe-sdk VERSION=0.1.1-alpha.1 CHANNEL=latest AUTH_MODE=token
 ```
 
-OIDC mode refuses a directory prepared locally and refuses a publishing commit different from the recorded source commit. This prevents a transferred local build from being described as CI-built. Authentication modes never silently fall back.
+OIDC mode refuses a directory prepared locally and requires the prepared source commit,
+the publishing checkout, and GitHub's original `GITHUB_SHA` to be identical. The command
+never rewrites GitHub identity variables to manufacture provenance. Separate preparation
+and publication runs remain supported when both runs start from the same source commit.
+
+If `swift` advances after preparation, a later GitHub OIDC run cannot truthfully publish
+that older archive. Download the complete unchanged release directory, verify it, and use
+explicit local authentication, or an explicitly configured token-mode CI job, to publish
+the same bytes without CI provenance. Do not rebuild, edit the metadata, or silently fall
+back from OIDC.
+
+Authentication modes never silently fall back.
 Token mode generates a temporary registry-scoped npm configuration and removes it after
 the mutation. OIDC uses an isolated token-free npm configuration. Local, token, and OIDC
 credentials cannot be mixed; select the mode that owns the credential explicitly.
@@ -148,7 +160,16 @@ credentials cannot be mixed; select the mode that owns the credential explicitly
 - `version` and `channel` for promotion;
 - `dry-run` for non-mutating publication or promotion validation.
 
-The workflow keeps GitHub artifact upload/download and run selection in the adapter. It resolves `release.json` automatically; no candidate, attempt, terminal, checksum, or JSON input is accepted. Shared scripts call no GitHub API, so GitLab CI can transfer the directory and invoke the same Make commands.
+The workflow keeps GitHub artifact upload/download and run selection in the adapter. For
+the one selected run, it performs a bounded GitHub API lookup and verifies the actual
+repository, workflow path, `swift` source branch, and head commit before binding those
+values to `release.json`. It does not require the selected run to be complete or successful.
+No candidate, attempt, terminal, checksum, or JSON input is accepted. Shared scripts call
+no GitHub API, so GitLab CI can transfer the directory and invoke the same Make commands.
+
+Promotion values are passed as environment data and validated before either the dry-run or
+credentialed job reaches Make. The Make target preserves them as opaque values before the
+shared command performs its exact semantic-version and distribution-tag checks.
 
 Only the protected `npm-publish` publication job receives `id-token: write`. Publication and promotion serialize per package. Real promotion uses a protected `NPM_TOKEN` because npm distribution-tag changes are not the Trusted Publisher upload operation. Promotion dry runs run in a separate credential-free job. Preparation and verification receive no publishing credential.
 

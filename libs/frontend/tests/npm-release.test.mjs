@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -31,6 +31,7 @@ import {
   verifyRelease,
   workspaceRoot,
 } from "../scripts/npm-release.mjs";
+import { run } from "../scripts/process.mjs";
 import { sha512Integrity } from "../scripts/release-evidence.mjs";
 
 const integrityA = `sha512-${Buffer.alloc(64, 1).toString("base64")}`;
@@ -586,7 +587,7 @@ test("publication uploads exact bytes once and tolerates delayed visibility", as
   }
 });
 
-test("OIDC publication binds provenance to a transferred release source", async () => {
+test("OIDC publication preserves a matching GitHub workflow identity", async () => {
   const fixture = await preparedFixture();
   fixture.metadata.preparedBy = {
     kind: "github-actions",
@@ -599,26 +600,26 @@ test("OIDC publication binds provenance to a transferred release source", async 
     `${JSON.stringify(fixture.metadata, null, 2)}\n`,
   );
   const sourceCommit = fixture.metadata.sourceCommit;
-  const triggeringCommit = "b".repeat(40);
   let publishArguments;
   let publishEnvironment;
   let oidcUserConfig;
   const states = ["absent", "matching"];
+  const environment = {
+    CI: "true",
+    GITHUB_ACTIONS: "true",
+    ACTIONS_ID_TOKEN_REQUEST_URL: "https://example.test",
+    ACTIONS_ID_TOKEN_REQUEST_TOKEN: "test",
+    GITHUB_REPOSITORY: "ThalesGroup/fred",
+    GITHUB_WORKFLOW_REF:
+      "ThalesGroup/fred/.github/workflows/publish.yml@refs/heads/swift",
+    GITHUB_SHA: sourceCommit,
+  };
   const outcome = await publishRelease({
     packageName: "iframe-sdk",
     releaseDirectory: fixture.releaseDirectory,
     root: fixture.root,
     authMode: "oidc",
-    environment: {
-      CI: "true",
-      GITHUB_ACTIONS: "true",
-      ACTIONS_ID_TOKEN_REQUEST_URL: "https://example.test",
-      ACTIONS_ID_TOKEN_REQUEST_TOKEN: "test",
-      GITHUB_REPOSITORY: "ThalesGroup/fred",
-      GITHUB_WORKFLOW_REF:
-        "ThalesGroup/fred/.github/workflows/publish.yml@refs/heads/swift",
-      GITHUB_SHA: triggeringCommit,
-    },
+    environment,
     runCommand: async (command, arguments_, options) => {
       if (command === "tar") return fixture.runCommand(command, arguments_);
       if (command === "git") return { stdout: `${sourceCommit}\n`, stderr: "" };
@@ -636,9 +637,63 @@ test("OIDC publication binds provenance to a transferred release source", async 
   assert(publishArguments.includes("--provenance"));
   assert(!publishArguments.includes("--provenance=false"));
   assert.equal(publishEnvironment.GITHUB_SHA, sourceCommit);
-  assert.notEqual(publishEnvironment.GITHUB_SHA, triggeringCommit);
+  assert.equal(environment.GITHUB_SHA, sourceCommit);
   assert.equal(publishEnvironment.NODE_AUTH_TOKEN, undefined);
   assert.equal(oidcUserConfig, "");
+});
+
+test("OIDC publication rejects a different workflow source before npm", async () => {
+  const fixture = await preparedFixture();
+  fixture.metadata.preparedBy = {
+    kind: "github-actions",
+    repository: "ThalesGroup/fred",
+    workflow: "ThalesGroup/fred/.github/workflows/publish.yml@refs/heads/swift",
+    runId: "41",
+  };
+  await writeFile(
+    path.join(fixture.releaseDirectory, "release.json"),
+    `${JSON.stringify(fixture.metadata, null, 2)}\n`,
+  );
+  const sourceCommit = fixture.metadata.sourceCommit;
+  const triggeringCommit = "b".repeat(40);
+  const environment = {
+    CI: "true",
+    GITHUB_ACTIONS: "true",
+    ACTIONS_ID_TOKEN_REQUEST_URL: "https://example.test",
+    ACTIONS_ID_TOKEN_REQUEST_TOKEN: "test",
+    GITHUB_REPOSITORY: "ThalesGroup/fred",
+    GITHUB_WORKFLOW_REF:
+      "ThalesGroup/fred/.github/workflows/publish.yml@refs/heads/swift",
+    GITHUB_SHA: triggeringCommit,
+  };
+  let registryReads = 0;
+  let npmInvocations = 0;
+  await assert.rejects(
+    publishRelease({
+      packageName: "iframe-sdk",
+      releaseDirectory: fixture.releaseDirectory,
+      root: fixture.root,
+      authMode: "oidc",
+      environment,
+      runCommand: async (command, arguments_) => {
+        if (command === "tar") return fixture.runCommand(command, arguments_);
+        if (command === "git")
+          return { stdout: `${sourceCommit}\n`, stderr: "" };
+        npmInvocations += 1;
+        return { stdout: "", stderr: "" };
+      },
+      inspect: async () => {
+        registryReads += 1;
+        return { state: "absent" };
+      },
+    }),
+    (error) =>
+      error.code === "provenance" &&
+      error.message.includes("GitHub workflow source differs"),
+  );
+  assert.equal(environment.GITHUB_SHA, triggeringCommit);
+  assert.equal(registryReads, 0);
+  assert.equal(npmInvocations, 0);
 });
 
 test("token publication uses an isolated registry-scoped npm configuration", async () => {
@@ -977,6 +1032,78 @@ test("verification accepts matching bytes and rejects absence", async () => {
     }),
     (error) => error.code === "version-absent",
   );
+});
+
+test("promotion inputs cannot cross the actual Make command boundary", async () => {
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), "fred-promotion-boundary-test-"),
+  );
+  const payloads = [
+    (marker) => `0.1.1$(printf REVIEW_INJECTION >${marker})`,
+    (marker) => `0.1.1"; printf REVIEW_INJECTION >${marker}; : "`,
+    (marker) => `0.1.1\nprintf REVIEW_INJECTION >${marker}`,
+    (marker) => `$(shell printf REVIEW_INJECTION >${marker})`,
+  ];
+  let sequence = 0;
+  for (const origin of ["environment", "command-line"])
+    for (const field of ["VERSION", "CHANNEL"])
+      for (const payload of payloads) {
+        const marker = path.join(directory, `${origin}-${field}-${sequence++}`);
+        const values = {
+          VERSION: field === "VERSION" ? payload(marker) : "0.1.1",
+          CHANNEL: field === "CHANNEL" ? payload(marker) : "latest",
+        };
+        const arguments_ = [
+          "promote",
+          "PACKAGE=iframe-sdk",
+          "AUTH_MODE=token",
+          "DRY_RUN=1",
+        ];
+        const environment = { ...process.env, CI: "true" };
+        if (origin === "environment") Object.assign(environment, values);
+        else {
+          delete environment.VERSION;
+          delete environment.CHANNEL;
+          arguments_.push(
+            `VERSION=${values.VERSION}`,
+            `CHANNEL=${values.CHANNEL}`,
+          );
+        }
+        await assert.rejects(
+          run("make", arguments_, { cwd: workspaceRoot, env: environment }),
+          field === "VERSION" ? /exact semantic version/ : /CHANNEL is invalid/,
+        );
+        await assert.rejects(access(marker), { code: "ENOENT" });
+      }
+});
+
+test("invalid promotion inputs perform no registry read or mutation", async () => {
+  let registryReads = 0;
+  let mutations = 0;
+  for (const invalid of [
+    { version: "0.1.1$(printf injected)", channel: "latest" },
+    { version: "0.1.1", channel: "latest\nprintf injected" },
+  ])
+    await assert.rejects(
+      promoteRelease({
+        packageName: "iframe-sdk",
+        ...invalid,
+        dryRun: true,
+        authMode: "token",
+        environment: { CI: "true" },
+        root: await fixtureRoot(),
+        inspect: async () => {
+          registryReads += 1;
+          return { state: "present" };
+        },
+        runCommand: async () => {
+          mutations += 1;
+          return { stdout: "", stderr: "" };
+        },
+      }),
+    );
+  assert.equal(registryReads, 0);
+  assert.equal(mutations, 0);
 });
 
 test("promotion verifies existence and dry run never changes a tag", async () => {

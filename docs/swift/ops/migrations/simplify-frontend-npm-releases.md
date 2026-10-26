@@ -21,7 +21,7 @@ No deployment configuration changes are required. Existing npm Trusted Publisher
 
 ## Upgrade
 
-Deploy Fred normally. For future frontend npm releases, use the shared `prepare-release`, `publish`, `verify-release`, and `promote` Make targets instead of retained attempt/recovery inputs.
+Deploy Fred normally. For future frontend npm releases, use the shared `prepare-release`, `publish`, `verify-release`, and `promote` Make targets instead of retained attempt/recovery inputs. If `swift` advances after preparation, publish the unchanged older directory through explicit local or token authentication; GitHub OIDC publication intentionally requires the workflow source commit to match the prepared commit.
 
 ## Validation
 

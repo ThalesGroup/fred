@@ -748,6 +748,11 @@ export function assertAuthentication({
         "provenance",
         "checked-out publishing source differs from the prepared source commit",
       );
+    if (environment.GITHUB_SHA !== metadata.sourceCommit)
+      throw releaseError(
+        "provenance",
+        "GitHub workflow source differs from the prepared source commit; use explicit local or token authentication for these unchanged bytes",
+      );
     if (environment.GITHUB_REPOSITORY !== metadata.preparedBy.repository)
       throw releaseError(
         "provenance",
@@ -970,15 +975,9 @@ export async function publishRelease({
     registry,
   });
   try {
-    const mutationEnvironment = auth.provenance
-      ? {
-          ...mutationAuth.environment,
-          GITHUB_SHA: release.metadata.sourceCommit,
-        }
-      : mutationAuth.environment;
     await runCommand("npm", arguments_, {
       cwd: release.directory,
-      env: mutationEnvironment,
+      env: mutationAuth.environment,
       ...(mutationAuth.interactive ? { stdio: "inherit" } : {}),
     });
   } catch (error) {
@@ -1174,9 +1173,11 @@ export async function main(argv = process.argv) {
     result = await promoteRelease({
       ...common,
       authMode: optionValue("--auth-mode", argv) ?? "local",
-      channel: optionValue("--channel", argv),
+      channel:
+        optionValue("--channel", argv) ?? process.env.FRED_RELEASE_CHANNEL,
       dryRun: argv.includes("--dry-run"),
-      version: optionValue("--version", argv),
+      version:
+        optionValue("--version", argv) ?? process.env.FRED_RELEASE_VERSION,
     });
   else
     throw releaseError(

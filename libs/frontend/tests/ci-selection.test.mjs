@@ -20,6 +20,12 @@ import test from "node:test";
 import { parse } from "yaml";
 
 import {
+  publishWorkflowPath,
+  resolveSelectedWorkflowRun,
+  validatePromotionInputs,
+  validateReleaseOrigin,
+} from "../../../.github/scripts/frontend-release-workflow.mjs";
+import {
   CI_INPUT_PATTERNS,
   FONT_SOURCES,
   IFRAME_HOST_COMPATIBILITY_PATHS,
@@ -74,6 +80,35 @@ function selectsFrontendJob(changedPaths) {
   return changedPaths.some((changedPath) =>
     frontendPatterns.some((pattern) => matches(changedPath, pattern)),
   );
+}
+
+function normalizedCondition(job) {
+  return job.if.replaceAll(/\s+/g, " ").trim();
+}
+
+function releaseDirectoryRuns({ authorize, operation, prepare }) {
+  return (
+    authorize === "success" &&
+    ["publish", "verify"].includes(operation) &&
+    ["success", "skipped"].includes(prepare)
+  );
+}
+
+function downstreamRuns({
+  authorize,
+  cancelled = false,
+  dryRun,
+  operation,
+  releaseDirectory,
+}) {
+  const allowed =
+    !cancelled && authorize === "success" && releaseDirectory === "success";
+  return {
+    publish: allowed && operation === "publish" && !dryRun,
+    readOnly:
+      allowed &&
+      (operation === "verify" || (operation === "publish" && dryRun)),
+  };
 }
 
 test("CI filter exactly covers the declared package input contract", () => {
@@ -138,6 +173,7 @@ test("shared release tooling and compatibility inputs select CI", () => {
     "libs/frontend/fixtures/release-fourth-package.json",
     "libs/frontend/Makefile",
     "libs/frontend/package-lock.json",
+    ".github/scripts/frontend-release-workflow.mjs",
   ])
     assert(selectsPackageJob([sourcePath]), sourcePath);
   assert(!selectsPackageJob(["apps/frontend/src/rework/unrelated-page.tsx"]));
@@ -231,7 +267,9 @@ test("release workflow is a thin manual adapter with isolated publishing authori
     promotionDryRun.steps.some(
       (step) =>
         step.run ===
-        'make promote PACKAGE="${{ inputs.package }}" VERSION="${{ inputs.version }}" CHANNEL="${{ inputs.channel }}" AUTH_MODE=token DRY_RUN=1',
+          'make promote PACKAGE="${{ inputs.package }}" AUTH_MODE=token DRY_RUN=1' &&
+        step.env.VERSION === "${{ inputs.version }}" &&
+        step.env.CHANNEL === "${{ inputs.channel }}",
     ),
   );
   assert(
@@ -268,6 +306,210 @@ test("release workflow is a thin manual adapter with isolated publishing authori
     "NPM_BOOTSTRAP_TOKEN",
   ])
     assert.equal(publishWorkflowSource.includes(retired), false, retired);
+});
+
+test("promotion inputs remain data across the workflow and Make boundary", () => {
+  assert.deepEqual(
+    validatePromotionInputs({
+      version: "12.3.4-alpha.1+build.5",
+      channel: "next-2026.10",
+    }),
+    { version: "12.3.4-alpha.1+build.5", channel: "next-2026.10" },
+  );
+  for (const value of [
+    "0.1.1$(printf injected)",
+    '0.1.1"; printf injected; : "',
+    "0.1.1\nprintf injected",
+    "$(shell printf injected)",
+  ]) {
+    assert.throws(
+      () => validatePromotionInputs({ version: value, channel: "latest" }),
+      /version must be an exact semantic version/,
+    );
+    assert.throws(
+      () => validatePromotionInputs({ version: "0.1.1", channel: value }),
+      /channel is invalid/,
+    );
+  }
+  const authorization = publishWorkflow.jobs.authorize.steps.find(
+    (step) => step.name === "Validate source and inputs",
+  );
+  assert(authorization.run.includes("validate-promotion"));
+  for (const jobName of ["promote-dry-run", "promote"]) {
+    const step = publishWorkflow.jobs[jobName].steps.find((candidate) =>
+      candidate.run?.startsWith("make promote "),
+    );
+    assert.equal(step.run.includes("inputs.version"), false, jobName);
+    assert.equal(step.run.includes("inputs.channel"), false, jobName);
+    assert.equal(step.env.VERSION, "${{ inputs.version }}", jobName);
+    assert.equal(step.env.CHANNEL, "${{ inputs.channel }}", jobName);
+  }
+});
+
+test("publication and verification explicitly handle skipped preparation", () => {
+  const releaseDirectory = publishWorkflow.jobs["release-directory"];
+  assert(
+    normalizedCondition(releaseDirectory).startsWith(
+      "always() && !cancelled() &&",
+    ),
+  );
+  assert.equal(
+    releaseDirectoryRuns({
+      authorize: "success",
+      operation: "publish",
+      prepare: "success",
+    }),
+    true,
+  );
+  assert.equal(
+    releaseDirectoryRuns({
+      authorize: "success",
+      operation: "publish",
+      prepare: "skipped",
+    }),
+    true,
+  );
+  const publishCondition = normalizedCondition(publishWorkflow.jobs.publish);
+  const readOnlyCondition = normalizedCondition(
+    publishWorkflow.jobs["read-only"],
+  );
+  for (const condition of [publishCondition, readOnlyCondition]) {
+    assert(condition.startsWith("always() && !cancelled() &&"));
+    assert(condition.includes("needs.authorize.result == 'success'"));
+    assert(condition.includes("needs.release-directory.result == 'success'"));
+  }
+  assert.deepEqual(
+    downstreamRuns({
+      authorize: "success",
+      dryRun: false,
+      operation: "publish",
+      releaseDirectory: "success",
+    }),
+    { publish: true, readOnly: false },
+  );
+  assert.deepEqual(
+    downstreamRuns({
+      authorize: "success",
+      dryRun: false,
+      operation: "verify",
+      releaseDirectory: "success",
+    }),
+    { publish: false, readOnly: true },
+  );
+  assert.deepEqual(
+    downstreamRuns({
+      authorize: "success",
+      dryRun: true,
+      operation: "publish",
+      releaseDirectory: "success",
+    }),
+    { publish: false, readOnly: true },
+  );
+  for (const blocked of [
+    { authorize: "failure", releaseDirectory: "success" },
+    { authorize: "success", releaseDirectory: "failure" },
+    { authorize: "success", releaseDirectory: "success", cancelled: true },
+  ])
+    assert.deepEqual(
+      downstreamRuns({
+        ...blocked,
+        dryRun: false,
+        operation: "publish",
+      }),
+      { publish: false, readOnly: false },
+    );
+});
+
+test("selected artifact origin comes from one targeted workflow-run lookup", async () => {
+  const sourceCommit = "a".repeat(40);
+  const run = {
+    id: 41,
+    path: publishWorkflowPath,
+    head_branch: "swift",
+    head_sha: sourceCommit,
+    repository: { full_name: "ThalesGroup/fred" },
+    head_repository: { full_name: "ThalesGroup/fred" },
+  };
+  const calls = [];
+  const resolve = (overrides = {}) =>
+    resolveSelectedWorkflowRun({
+      github: {
+        rest: {
+          actions: {
+            getWorkflowRun: async (request) => {
+              calls.push(request);
+              return { data: { ...run, ...overrides } };
+            },
+          },
+        },
+      },
+      owner: "ThalesGroup",
+      repo: "fred",
+      runId: "41",
+    });
+  assert.deepEqual(await resolve(), {
+    repository: "ThalesGroup/fred",
+    workflow:
+      "ThalesGroup/fred/.github/workflows/Publish-frontend-packages.yml@refs/heads/swift",
+    runId: "41",
+    sourceCommit,
+  });
+  assert.deepEqual(calls, [{ owner: "ThalesGroup", repo: "fred", run_id: 41 }]);
+  for (const forged of [
+    { id: 42 },
+    { path: ".github/workflows/other.yml" },
+    { head_branch: "feature" },
+    { head_sha: "not-a-commit" },
+    { repository: { full_name: "other/fred" } },
+    { head_repository: { full_name: "fork/fred" } },
+  ])
+    await assert.rejects(resolve(forged));
+
+  const identity = await resolve();
+  const metadata = {
+    sourceCommit,
+    preparedBy: {
+      kind: "github-actions",
+      repository: identity.repository,
+      workflow: identity.workflow,
+      runId: identity.runId,
+    },
+  };
+  assert.equal(validateReleaseOrigin({ metadata, identity }), sourceCommit);
+  for (const forged of [
+    {
+      ...metadata,
+      sourceCommit: "b".repeat(40),
+    },
+    {
+      ...metadata,
+      preparedBy: { ...metadata.preparedBy, workflow: "forged/workflow" },
+    },
+    {
+      ...metadata,
+      preparedBy: { ...metadata.preparedBy, runId: "42" },
+    },
+  ])
+    assert.throws(() => validateReleaseOrigin({ metadata: forged, identity }));
+
+  const receiver = publishWorkflow.jobs["release-directory"];
+  const originStep = receiver.steps.find(
+    (step) => step.name === "Resolve the selected workflow run",
+  );
+  assert.equal(originStep.uses, "actions/github-script@v7");
+  assert(originStep.with.script.includes("resolveSelectedWorkflowRun"));
+  const metadataStep = receiver.steps.find(
+    (step) => step.name === "Resolve generated metadata",
+  );
+  assert.equal(
+    metadataStep.env.EXPECTED_SOURCE_COMMIT,
+    "${{ steps.selected-run.outputs.source_commit }}",
+  );
+  assert(
+    metadataStep.run.includes(
+      "frontend-release-workflow.mjs validate-release-origin",
+    ),
+  );
 });
 
 test("preparation transfers one generated release directory to later operations", () => {
@@ -313,7 +555,7 @@ test("preparation transfers one generated release directory to later operations"
     (step) => step.name === "Resolve generated metadata",
   ).run;
   assert(resolver.includes('test "${#metadata_files[@]}" -eq 1'));
-  assert(resolver.includes(".preparedBy =="));
+  assert(resolver.includes("validate-release-origin"));
   assert(
     resolver.includes(
       'test "${release_dir}" = "target/releases/${{ inputs.package }}/${version}"',

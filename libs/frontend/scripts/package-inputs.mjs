@@ -181,11 +181,14 @@ export const PACKAGE_WORKSPACE_PATTERN = "libs/frontend/**";
 export const WORKFLOW_PATH = ".github/workflows/Check-pending-requests.yml";
 export const PUBLISH_WORKFLOW_PATH =
   ".github/workflows/Publish-frontend-packages.yml";
+export const PUBLISH_WORKFLOW_HELPER_PATH =
+  ".github/scripts/frontend-release-workflow.mjs";
 
 export const VALIDATION_ORCHESTRATION_PATHS = [
   "Makefile",
   WORKFLOW_PATH,
   PUBLISH_WORKFLOW_PATH,
+  PUBLISH_WORKFLOW_HELPER_PATH,
 ];
 
 export const RELEASE_TOOLING_INPUTS = [
