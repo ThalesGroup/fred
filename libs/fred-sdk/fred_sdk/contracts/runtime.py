@@ -159,6 +159,7 @@ def unwrap_run_stop_error(exc: BaseException) -> RunStopError | None:
 
 class RuntimeEventKind(str, Enum):
     STATUS = "status"
+    STEERED_USER_MESSAGE = "steered_user_message"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
     THOUGHT_START = "thought_start"
@@ -233,6 +234,14 @@ class StatusRuntimeEvent(RuntimeEventBase):
     status: str = Field(..., min_length=1)
     detail: str | None = None
     skill_load: SkillLoadAttribution | None = None
+
+
+class SteeredUserMessageRuntimeEvent(RuntimeEventBase):
+    kind: Literal[RuntimeEventKind.STEERED_USER_MESSAGE] = (
+        RuntimeEventKind.STEERED_USER_MESSAGE
+    )
+    message_id: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1)
 
 
 class ThoughtStartEvent(RuntimeEventBase):
@@ -544,6 +553,7 @@ class RuntimeErrorEvent(RuntimeEventBase):
 
 RuntimeEvent: TypeAlias = Annotated[
     StatusRuntimeEvent
+    | SteeredUserMessageRuntimeEvent
     | ThoughtStartEvent
     | ThoughtDeltaEvent
     | ThoughtEndEvent

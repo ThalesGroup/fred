@@ -307,10 +307,6 @@ vi.mock("../../../features/capabilities/ComposerOptionChips", () => ({
   COMPOSER_CHIP_WIDGETS: new Set<string>(),
   ComposerOptionChips: () => null,
 }));
-vi.mock("@shared/molecules/ComposerActionsMenu/ComposerActionsMenu", () => ({
-  ComposerActionsMenu: () => null,
-}));
-
 import ManagedChatPage from "./ManagedChatPage";
 
 const PANEL_KEY = "writable_document:writable_document_pane";
@@ -426,6 +422,30 @@ const baseChatValue = (messages: Record<string, unknown>[]) => {
     waitResponse: false,
   };
 };
+
+describe("ManagedChatPage pending messages", () => {
+  it("keeps the composer open and stacks pending rows above it", () => {
+    chatValue = {
+      ...baseChatValue([]),
+      waitResponse: true,
+      pendingMessages: [
+        { id: "first", text: "first question", status: "waiting" },
+        { id: "second", text: "second question", status: "waiting" },
+      ],
+    };
+    const html = renderToStaticMarkup(<ManagedChatPage />);
+    expect(html).toContain('data-composer-disabled="false"');
+    expect(html).toContain("first question");
+    expect(html).toContain("second question");
+    expect(html.indexOf("first question")).toBeLessThan(html.indexOf("second question"));
+    expect(html).toContain("chatbot.pendingMessages.send");
+    expect(html).toContain("chatbot.pendingMessages.actions");
+    expect(html).toContain('aria-label="chatbot.pendingMessages.send: first question"');
+    expect(html).toContain('aria-label="chatbot.pendingMessages.actions: second question"');
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain("more_horiz");
+  });
+});
 
 describe("ManagedChatPage agent todo panel", () => {
   const todoCall = (todos: Record<string, unknown>[]) => ({

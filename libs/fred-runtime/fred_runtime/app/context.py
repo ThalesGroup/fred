@@ -226,7 +226,7 @@ class PodApplicationContext:
             # not hours later as an UndefinedTableError mid-turn (#2137).
             await require_tables(
                 engine,
-                [SessionHistoryRow.__tablename__],
+                [SessionHistoryRow.__tablename__, "runtime_turn_steering"],
                 component="fred-runtime",
                 migrate_command=_MIGRATE_COMMAND,
                 version_table=_RUNTIME_VERSION_TABLE,

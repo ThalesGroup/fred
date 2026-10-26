@@ -478,8 +478,8 @@ control" below).
 Conversation-level projection of the latest valid Deep Agent `write_todos` snapshot. The panel is
 mounted by `ManagedChatPage` between the scrollable conversation and the composer, aligned to the
 composer's 720px content lane, so the current plan stays visible while messages scroll. The panel
-extends behind the higher-stacking composer by its corner radius plus one spacing step. Hovering
-`Tasks` highlights only that header; the backing surface never changes colour through the composer.
+has a complete rounded border and a small gap above the composer, like the pending-message list.
+Hovering `Tasks` highlights only that header.
 
 The compact header shows `Tasks` plus the number of pending or in-progress items. Expanded content
 keeps all three states visible: pending uses an open circle, in-progress uses the primary-colour
