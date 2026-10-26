@@ -506,6 +506,30 @@ fallback and an unavailable external connection are acceptance cases for the
 forthcoming implementation plan. Do not infer a completed physical SQL schema,
 runtime wiring or performance gain from the conceptual ownership diagram.
 
+### 5c. First administration increment: pod-owned catalog storage
+
+The additive `0014` migration stores observations in `runtime_catalog`, offerings
+in `runtime_capability`, and consumers in `runtime_template_capability`. Composite
+primary/foreign keys preserve `(runtime_id, capability_id)`; one runtime key binds
+the template's local identifier and its offered capability. Templates remain
+executable pod definitions, not stored code. Instance tuning keeps its existing
+trusted source runtime; this increment adds no instance-selection foreign keys.
+
+`agents::catalog` validates complete normalized snapshots and replaces one pod's
+inventory in a transaction, serialized by its runtime row. Duplicate identities,
+conflicting descriptor provenance and links to absent offerings fail before writing.
+Disappeared offerings are retained as unadvertised; failed discovery preserves the
+last inventory and separately records unreachability. Version changes update only
+that pod's offering. Neither observation flag proves execution readiness, installed
+replica uniformity, configuration compatibility or permission.
+
+This is internal storage only. Platform configuration still owns runtime identity
+and URLs; no browser/pod-supplied owner becomes authority. Discovery wiring, complete
+pod inventory, admin API/client generation, model policy and configuration validation
+follow in the increments in tasks.md. No current Swift consumer is replaced by this
+storage seam; removing legacy catalog consumers now would break unrelated screens.
+No migration, test, build or deployment was run.
+
 ### 6. Preserve guarantees and remove old owners
 
 | Swift guarantee / enforcement | Weaver owner / replacement | Removal or proof condition |

@@ -4,6 +4,31 @@ Restore the existing Custom Assistant creation, configuration and chat behavior 
 
 ## ADDED Requirements
 
+### Requirement: Catalog persistence preserves pod ownership
+
+Each capability offering SHALL be identified by `(runtime_id, capability_id)`.
+Template capability links SHALL use the same runtime owner and reference an
+existing offering of that runtime. Version and public descriptor changes SHALL
+update only that offering. A complete successful inventory SHALL replace one pod
+atomically; failed discovery SHALL preserve its last successful inventory and
+record unreachability separately. Catalog observations SHALL NOT grant permission
+or establish execution readiness.
+
+#### Scenario: Two pods share a capability library
+- **WHEN** pods A and B declare the same local capability ID at different versions
+- **THEN** both offerings coexist and updating A does not modify B
+- **AND** a template of A cannot link to an offering present only on B
+
+#### Scenario: Withdrawal differs from discovery failure
+- **WHEN** a successful inventory omits a previously declared capability
+- **THEN** its last descriptor remains stored with advertised set to false
+- **WHEN** discovery fails instead
+- **THEN** the last successful inventory and links remain, with the pod marked unreachable
+
+#### Scenario: An inconsistent snapshot is submitted
+- **WHEN** a snapshot repeats an identity or links to an undeclared local capability
+- **THEN** the whole replacement is refused without partially updating the inventory
+
 ### Requirement: Custom Assistant retains its managed-instance behavior
 
 Weaver SHALL support creating, listing, reading, editing, enabling/disabling and deleting configured Custom Assistant instances through the existing product flow. A template SHALL remain a runtime-supplied definition; an instance SHALL retain a stable identifier, canonical owning space, source template/runtime and saved configuration. ReBAC changes SHALL NOT require replacing the Custom's agent definition or execution engine. Editing SHALL require the applicable space write permission; use SHALL require the canonical space/template execution conditions. No separate instance permission object SHALL be required.

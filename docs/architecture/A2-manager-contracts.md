@@ -167,6 +167,15 @@ This catalogue covers the Rust control-plane's PostgreSQL tables. In the local k
 configuration they live in database `fred`, schema `public`. It does not describe
 the private schemas of Keycloak, Temporal, OpenFGA or other Fred services.
 
+Internal catalog storage is defined by
+[`0014_runtime_capability_catalog.sql`](../../apps/control-plane/migrations/0014_runtime_capability_catalog.sql)
+and [`agents/catalog.rs`](../../apps/control-plane/src/agents/catalog.rs).
+Offerings and template links share the composite runtime/capability key; successful
+replacement and failed observation retain withdrawn or last-known declarations.
+This storage has no discovery/API caller yet and the migration has not been applied
+in this increment. It establishes no validated administration or execution journey.
+The [administration journey](02.3-agent-administration.md) remains agreed behavior.
+
 The source of truth is the complete ordered SQL migration chain. Key references:
 
 | Migration | Responsibility |

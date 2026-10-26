@@ -452,8 +452,9 @@ async fn lifecycle_filtered_batches_lost_ack_and_unrelated_state() {
         fault.calls
     );
     // Six cleanup batches: two folder batches, three tuple batches (one lost
-    // acknowledgment), then final metadata removal; five filtered Reads each.
-    assert_eq!(fault.calls.get("read"), Some(&33));
+    // acknowledgment), then final metadata removal; six filtered Reads each,
+    // including incoming space and agent_template references.
+    assert_eq!(fault.calls.get("read"), Some(&39));
     assert_eq!(fault.calls.get("write"), Some(&7));
     for write in &fault.written {
         let count = ["writes", "deletes"]
@@ -844,7 +845,8 @@ async fn lifecycle_orphan_pages_keep_anchors_through_lost_acknowledgments() {
         let result = cleanup::batch(&e.pool, &observed, receipt.id).await;
         if pass == 0 {
             let fault = proxy.fault.lock().await;
-            assert_eq!(fault.calls.get("read"), Some(&13));
+            // Six base Reads plus five per orphan level, including template references.
+            assert_eq!(fault.calls.get("read"), Some(&16));
             assert_eq!(fault.calls.get("write"), Some(&1));
         }
         if result.is_err() {
@@ -1020,7 +1022,8 @@ async fn lifecycle_orphans_cannot_expand_the_committed_manifest_or_depth() {
         .await
         .unwrap();
     let fault = proxy.fault.lock().await;
-    assert_eq!(fault.calls.get("read"), Some(&6));
+    // Six base Reads, then the first malformed placement page rejects descent.
+    assert_eq!(fault.calls.get("read"), Some(&7));
     assert_eq!(fault.calls.get("write"), None);
     let blocked = store::status(&e.pool, &e.fga, "root", receipt.id)
         .await

@@ -1254,7 +1254,8 @@ async fn instances_additive_migration_and_opaque_storage() {
             .fetch_all(&mut *conn)
             .await
             .unwrap();
-    migrator.run(&mut *conn).await.unwrap();
+    // Exercise the 11 -> 12 upgrade independently of later migrations.
+    migrator.run_to(12, &mut *conn).await.unwrap();
     let after: Value = sqlx::query_scalar("select to_jsonb(s) from space s where id=$1")
         .bind(org)
         .fetch_one(&mut *conn)

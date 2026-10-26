@@ -58,6 +58,36 @@ template omission, propagated FGA errors, retired/revoked space access and listi
 independent of catalog/runtime availability. Also cover distinct-template check
 deduplication/concurrency and SQL/authorized-projection error propagation.
 
+## Administration increments under decision 5b (2026-10-26)
+
+1. Pod-owned persistence: additive catalog observation, capability offerings keyed
+   by `(runtime_id, capability_id)`, and template links constrained to that owner.
+2. Complete pod inventory and organization-authorized read/refresh contracts;
+   unavailable/withdrawn states, public OpenAPI and generated clients together.
+3. Organization agent decisions and permitted model identities, with pod-local
+   profiles kept separate; approved endpoints/credentials remain platform-owned.
+4. Instance configuration validation at the owning pod and persistence of its
+   envelopes, including incompatible/unavailable diagnostics and policy checks.
+
+Increment 1 adds internal storage only (`0014_runtime_capability_catalog.sql`,
+`agents/catalog.rs`). A complete snapshot replaces one runtime atomically; missing
+capabilities retain their descriptor with `advertised=false`. A failed discovery
+can mark that runtime unreachable without erasing its last successful inventory.
+The runtime row serializes writes for that pod. No discovery caller or public API
+uses this store yet; existing APIs, instances, permissions and execution are unchanged.
+The internal caller must supply a trusted configured runtime and a complete inventory;
+`/agents/templates` pickers alone do not establish completeness. Future read callers
+must use a consistent SQL snapshot when combining observations, offers and links.
+
+Static reading only. Migration not applied; no tests, quality commands, build,
+deployment or client generation run. Source declarations and SQL constraints are
+not dynamic validation. Dimi's checks for this increment: two pods offer the same
+local ID with different versions; updating A preserves B; a template cannot link
+to a capability present only on B; duplicate/dangling links roll back; disappearance
+and failed discovery preserve metadata distinctly; recovery replaces one inventory.
+No model restriction, configuration compatibility check or runtime enforcement is
+claimed. Existing no-tool guards remain until their replacements are connected.
+
 ## Steps 1-7 validation milestone (2026-10-25, incomplete)
 
 Dimi separately authorized tests, scoped fixes, contract generation, secondary k3d

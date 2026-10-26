@@ -21,6 +21,7 @@ Paths in the frontend column are relative to `apps/frontend/src/`.
 | Evaluate roles and parent relationships | [roles.rs](roles.rs), [fga.rs](fga.rs), [OpenFGA model](../openfga/model.fga) | Generated authorization queries, no independent frontend grant authority | `tests/integration.rs` |
 | Stream the embedded hello-world agent | [embedded_agent.rs](embedded_agent.rs), [agent library](../agent/src/lib.rs) | None; direct HTTP call | [manual call](../agent/README.md); execution not yet validated |
 | Discover runtime agent definitions and change organization defaults | [agents.rs](agents.rs), command in [main.rs](main.rs) | `FeaturesPage.tsx` Agents tab; organization-scoped default switch and operator discovery CLI | `tests` module in [agents.rs](agents.rs) |
+| Persist pod-owned capability observations and template links | [agents/catalog.rs](agents/catalog.rs), `0014_runtime_capability_catalog.sql` | None; internal storage, discovery not connected | Static source only; migration and runtime behavior unvalidated |
 | Apply/check SQL migrations | [main.rs](main.rs), [db.rs](db.rs), [migrations](../migrations/) | None | `tests/integration.rs` |
 | Configure/start the process | [config.rs](config.rs), [main.rs](main.rs) | Public configuration handler in `api.rs` | [component commands](../README.md) |
 

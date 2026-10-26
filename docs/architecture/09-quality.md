@@ -79,13 +79,16 @@ These counts exclude authentication/admission, SQL and startup.
 | --- | --- | --- |
 | First acceptance | `4 + D`: platform version Read, owner capability Check, organization version Read, descendant Reads by exact parent/organization subject plus `object=space:`, one four-operation guard Write | Platform then organization locks, held through complete subtree validation, retirement and commit; no Temporal RPC |
 | Receipt replay/status | One current platform capability Check | Indexed receipt lookup, no mutation lock for an already committed receipt |
-| Ordinary cleanup batch | Five Reads: platform version, organization guard existence, organization version, exact target object, and incoming `user=space:<id>, object=space:`; zero or one Write, at most 96 payload deletes plus four guard operations | One bounded transaction, up to 1000 folder leaves or one tuple batch or one space row; no retention/retry sleep under locks |
-| Orphan descendant cleanup | Ordinary five Reads plus at most four filtered Reads per absent descendant level (two placement checks, exact object, incoming references); at most two levels, hence 13 Reads and one guarded Write for a supported chain | SQL existence is checked under the same platform/organization locks before each descent; no SQL space counter increment for ghosts |
-| Final organization removal | Seven Reads and one Write with the guard present; recovery after its removal uses five Reads and one platform fence Write | Final root metadata and receipt completion commit together |
+| Ordinary cleanup batch | Six Reads: platform version, organization guard existence, organization version, exact target object, and incoming `user=space:<id>` for both `object=space:` and `object=agent_template:`; zero or one Write, at most 96 payload deletes plus four guard operations | One bounded transaction, up to 1000 folder leaves or one tuple batch or one space row; no retention/retry sleep under locks |
+| Orphan descendant cleanup | Ordinary six Reads plus at most five filtered Reads per absent descendant level (two placement checks, exact object, incoming space and template references); at most two levels, hence 16 Reads and one guarded Write for a supported chain | SQL existence is checked under the same platform/organization locks before each descent; no SQL space counter increment for ghosts |
+| Final organization removal | Eight Reads and one Write with the guard present; recovery after its removal uses six Reads and one platform fence Write | Final root metadata and receipt completion commit together |
 | Due candidate selection | No FGA RPC; indexed SQL selection and visit timestamp update | Row locks use `SKIP LOCKED`; at most configured batch size |
 
 Reference cleanup drains fresh first pages; it never reuses a cursor across a
-mutation. Current model metadata allows incoming space references only. Guard reads
+mutation. Current model metadata allows space subjects on space and agent-template
+objects. The baseline budgets above exclude template anchors: each discovered
+template organization anchor adds one exact-object Read to drain its grants
+before removing the anchor. Guard reads
 are exact and independent of role volume. Discovery cost grows with spaces and
 hierarchy pages; cleanup cost grows with target tuples, folders and reachable abandoned creations. Unrelated users,
 memberships and documents do not induce full-store scans. OpenFGA's internal Check
@@ -102,14 +105,13 @@ The lifecycle budget fixture has three spaces, 1001 target folders and 243 targe
 tuples; another organization holds 241 member tuples plus its owner/admin grants.
 Its expected acceptance budget is three Reads, one Check and one Write. Six cleanup
 attempts, including one committed FGA delete with a lost acknowledgment, bring the
-total to 33 Reads, one Check and seven Writes. Assertions cap each Write at 100 tuple
+total to 39 Reads, one Check and seven Writes. Assertions cap each Write at 100 tuple
 operations and require filtered Reads; SQL progress records 1001 folders and one
 space removed while unrelated grants remain.
-An additional single-cleanup-stream fixture, run alongside the 85-test integration
-suite, has one committed organization, one absent team, 100 absent projects and
-240 ghost grants. Alternating lost acknowledgments still converge: 1360 filtered
-Reads and 106 Writes in total, with a maximum of 13 Reads per supported orphan
-batch. A malformed ghost with 161 parent links blocks after six Reads and no Write.
+An additional single-cleanup-stream fixture, run alongside the nine lifecycle tests, has one committed organization, one absent team, 100 absent projects and
+240 ghost grants. Alternating lost acknowledgments still converge: 1673 filtered
+Reads and 106 Writes in total, with a maximum of 16 Reads per supported orphan
+batch. A malformed ghost with 161 parent links blocks after seven Reads and no Write.
 These counts include retry work; no orphan contributes to the SQL space counter.
 Eight concurrent receipt retries in a separate two-space fixture returned one UUID
 in 165 ms. These are service elapsed times, not isolated lock-hold measurements or

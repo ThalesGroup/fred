@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Embedded and live runtime template discovery. No enrollment or persistent catalog.
+//! Embedded and live runtime template discovery, with pod-scoped catalog storage.
+
+pub mod catalog;
 
 use std::{collections::BTreeMap, time::Duration};
 

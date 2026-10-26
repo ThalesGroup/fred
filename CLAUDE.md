@@ -290,14 +290,11 @@ issue, the PR and the commit message are where the trail lives. Existing
 occurrences are not worth a cleanup pass of their own, but drop them from any
 line you are already rewriting.
 
-**Step 5 — Verification.** In the touched project root:
-
-```
-make code-quality   # ruff + format (Python) or tsc + prettier (frontend)
-make test           # offline unit tests only
-```
-
-Fix before proceeding. Do not report done with red tests or lint errors.
+**Step 5 — Verification.** Follow
+[AGENTS.md - Incremental collaboration](AGENTS.md#incremental-collaboration---default-working-mode)
+for mandatory scoped formatting, local code-quality checks and reporting, and for
+which additional validation requires an explicit request. This is the shared rule
+for Codex and Claude; this legacy workflow does not authorize a test campaign.
 Performance carries the same weight as these checks, not a lesser one — see
 `docs/CONVENTIONS.md §Performance & concurrency`. If the change touches the
 agent execution loop, an LLM or tool call site, KPI/log emission, a shared

@@ -2614,6 +2614,25 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
   Relecture Markdown uniquement, sans test ni build ni validation visuelle Mermaid.
 
 
+### F25 : socle de persistance des offres par pod (2026-10-26)
+
+- Branche `weaver`, arbre propre au début de ce lot. Lecture ciblée Rust, contrats
+  SDK/pod et consommateurs UI ; Swift sert uniquement de référence fonctionnelle.
+- Premier incrément de la décision 5b : migration additive 0014 et module interne
+  `agents/catalog.rs`. Identité composée runtime/capacité, liens de templates vers
+  une offre du même pod, remplacement atomique sérialisé par runtime. Les offres
+  retirées gardent leur descripteur ; une panne conserve le dernier inventaire.
+- Pas de branchement découverte/API à ce stade : les pickers de templates ne
+  garantissent pas un inventaire exhaustif du pod. Aucun contrôle de modèle ni
+  validation de configuration spécialisée n'est revendiqué. Les anciens refus
+  explicites restent en place jusqu'au raccordement de leurs remplaçants.
+- Découpage et cas manuels dans l'OpenSpec existante, décision 5c et tasks.md.
+  Suite : inventaire complet et contrats admin générés, choix agents/modèles,
+  validation/sauvegarde des configurations par leur pod propriétaire.
+- Relecture statique seulement. Aucun test, qualité, génération, build, migration
+  appliquée, déploiement, commit ou push. Annexes arc42 : référence au stockage
+  interne uniquement ; parcours 02.3 toujours spécifié, non validé de bout en bout.
+
 ## F26 Fusion Swift et préférences utilisateur
 
 - 2026-10-25 : résolution de `git merge swift` à la demande de Dimi. Le commit

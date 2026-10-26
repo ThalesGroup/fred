@@ -40,12 +40,25 @@ Implement the requested adaptation, keeping the code simple, clear and robust,
 then present the relevant diff and explain the concrete behavior. Do not expand
 an implementation request into a general readiness or verification campaign.
 
-The developer owns tests and quality validation. Unless explicitly requested,
-do not launch tests, code-quality commands, audits, independent reviewer agents,
-benchmarks, builds or deployments, and do not add a testing campaign to the lot.
-Do not repeatedly ask permission to run them; hand back the code for review.
-Read the code and affected callers as needed to implement the change correctly.
-Flag a concrete unresolved issue briefly instead of widening the task.
+Formatting and local code-quality checks are part of every code increment:
+
+- During editing, apply the repository's formatter to the files changed by the
+  lot; do not approximate its rules manually or reformat unrelated files.
+- Before handing back code, run `make code-quality` in each affected component,
+  or its documented equivalent. Fix issues introduced by the lot and rerun the
+  affected checks after the last relevant edit. Local compilation required by
+  these checks, including Clippy, is authorized without another request.
+- Report the commands and results. If a check cannot run or fails on a pre-existing
+  issue, state the blocker and do not claim quality validation. Do not widen the
+  lot to fix unrelated failures or weaken checks to obtain a pass.
+
+Documentation-only changes do not require application code-quality commands.
+The developer owns functional validation. Unless explicitly requested, do not
+launch tests, audits, independent reviewer agents, benchmarks, release builds or
+deployments, and do not add a testing campaign to the lot. Other compilation
+commands also remain outside the default scope. Do not repeatedly ask permission
+to run them. Read the code and affected callers as needed to implement the change
+correctly; flag a concrete unresolved issue briefly instead of widening the task.
 
 Existing OpenSpec, RFC and arc42 documents inform implementation; they do not
 automatically require new planning artifacts, approval gates or a documentation
