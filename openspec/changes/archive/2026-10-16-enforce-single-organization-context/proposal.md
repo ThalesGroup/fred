@@ -3,7 +3,7 @@
 A person must enter their one organization after signing in, without choosing a tenant.
 The current POC permits grants across organizations. This is the prerequisite to
 personal-space navigation agreed with the developer, tracked under #3092 on
-`chore/rust-rebac`.
+`weaver`.
 
 ## What Changes
 

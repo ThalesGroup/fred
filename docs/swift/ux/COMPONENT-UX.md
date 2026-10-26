@@ -4925,7 +4925,7 @@ is stored; a failed read is shown explicitly and leaves that value unchanged.
 
 ### `ProvisioningPage` (`/admin/provisioning`, #3092)
 
-On `chore/rust-rebac`, the first-user journey uses the existing `App`, `MainLayout`,
+On `weaver`, the first-user journey uses the existing `App`, `MainLayout`,
 sidebar, Home and account menu. Home retains its original dashboard; team navigation
 uses manager memberships while organization information appears only in Profile.
 Provisioning appears in the existing administration console. Product routes, menus,
@@ -4940,7 +4940,7 @@ import, and displays server counts or an error with explicit replay guidance.
 Desktop and narrow browser screenshots cover the responsive report grid. Behavior
 and automated acceptance: [manager README](../../../apps/control-plane/README.md#import-through-the-frontend).
 
-### Shared account pages on `chore/rust-rebac` (#3092)
+### Shared account pages on `weaver` (#3092)
 
 After admission, `UserProfile` exposes Profile and the configured external support
 link. Profile receives initial keyboard focus; Escape restores the avatar trigger.

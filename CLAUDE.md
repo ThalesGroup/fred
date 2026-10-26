@@ -17,6 +17,11 @@ For Weaver runtime and authorization work, apply
 This is the authoritative boundary for the revamp; historical Swift mechanisms
 and proposed migration plans do not override it.
 
+On branch `weaver` (Fred 5.x), read
+[AGENTS.md - Weaver current state versus target](AGENTS.md#weaver-fred-5x-current-state-versus-target)
+before any audit or task. The Python control-plane and Alembic guidance below
+describes Swift (4.x); it is comparison material there, not Weaver's state or target.
+
 ---
 
 ## Prime directive — extend, do not duplicate

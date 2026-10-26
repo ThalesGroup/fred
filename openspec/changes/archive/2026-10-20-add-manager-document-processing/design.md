@@ -1,7 +1,7 @@
 ## Context
 
 See [proposal.md](proposal.md) for scope. Discovery base: `b50e5217a`, clean
-`chore/rust-rebac`, including original storage commit `3a39c4eb5`.
+`weaver`, including original storage commit `3a39c4eb5`.
 
 | Existing implementation | Reuse and required change |
 | --- | --- |
@@ -256,7 +256,7 @@ they are not part of the zero-FGA dispatch/progress budget.
 
 ## Migration Plan
 
-After scope confirmation, implement on `chore/rust-rebac` without pushing. Edit the
+After scope confirmation, implement on `weaver` without pushing. Edit the
 single manager baseline and reset only the explicitly selected disposable local
 installation; inventory existing data and document the destructive reset procedure
 before executing it. Never reset an unrelated running installation to run tests.

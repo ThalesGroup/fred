@@ -467,6 +467,45 @@ Document selection becomes usable with the subsequent local-document lot. Unsupp
 artifact or other dependencies remain refused. No substitute catalog registration
 mechanism, general capability management UI or model-routing redesign belongs here.
 
+### 5b. Organization administration and pod-owned capabilities
+
+Dimi's accepted direction (2026-10-26) supersedes the no-tool-first delivery
+sequence and the exclusion of capability/model administration in 5a. Complete
+the Agents, Models and pod-scoped Capabilities administration contract first;
+Applications and Knowledge Bases remain outside this slice. The arc42 introduction
+and administrator journey express the agreed behavior, not implemented coverage.
+
+An offered capability has exactly one logical runtime owner. Its identity is the
+pair (runtime_id, capability_id); version and configuration describe that offering.
+Two pods installing the same Python package do not create one global executable
+capability. Templates can select only capabilities of their own runtime; validation
+and execution return to that owner. The owner may be inherited from a trusted
+enclosing instance rather than repeated in every stored configuration envelope.
+SQL constraints and generated contracts must preserve this identity when the
+data-model lot is implemented. This decision does not introduce a capability
+microservice, dynamic loading or an OpenFGA object per capability.
+
+The purpose is independent adoption of shared libraries, not proliferation of
+capability variants. With three deployed pods using the same library, one team
+can integrate, validate and deploy its new release without coordinating a rebuild
+of the other two. Each pod retains responsibility for its configurations and the
+supported runtime contract; a catalog entry must not impose a global library
+version or replace another pod's declaration.
+
+Organization administrators authorize agents and restrict eligible models;
+activation never expands that model set. Existing routing must enforce it for
+defaults, overrides and fallbacks. Capabilities explain functions, configuration,
+dependencies and consumers under their pod; no independent user/capability grant
+or grant-all-dependencies confirmation is retained. Template availability alone
+does not approve new external destinations, credentials or data access. Platform
+ownership of external connection configuration remains distinct from organization
+choices. Resource/operation checks and current authority remain required.
+
+The same-name/two-pod case, isolation between organizations, forbidden-model
+fallback and an unavailable external connection are acceptance cases for the
+forthcoming implementation plan. Do not infer a completed physical SQL schema,
+runtime wiring or performance gain from the conceptual ownership diagram.
+
 ### 6. Preserve guarantees and remove old owners
 
 | Swift guarantee / enforcement | Weaver owner / replacement | Removal or proof condition |

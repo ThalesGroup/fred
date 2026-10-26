@@ -41,7 +41,7 @@ Developer approved the complete proposed scope, platform-owner authority and P7D
 
 ## Implementation review and verification
 
-- Implemented on `chore/rust-rebac` for #3160. Reviewed base/HEAD was
+- Implemented on `weaver` for #3160. Reviewed base/HEAD was
   `ec26cc51b114430c46380fec0a160464bec3d6c4` plus the working implementation.
   Actual branch target is `origin/swift`; merge-base is
   `e24856249275cede3447b5be18dcc854e2a460ff`.

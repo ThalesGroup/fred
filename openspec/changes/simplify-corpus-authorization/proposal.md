@@ -9,7 +9,7 @@ architecture that must later be replaced.
 Tracking: [#2938](https://github.com/ThalesGroup/fred/issues/2938);
 organization/project context: [#2921](https://github.com/ThalesGroup/fred/issues/2921).
 
-For `chore/rust-rebac`, the accepted conversation design is recorded here for
+For `weaver`, the accepted conversation design is recorded here for
 future integration. The implemented organization/team/project and role foundation
 is described in [Fred architecture](../../../docs/architecture/README.md) and
 [manager provisioning](../../specs/control-plane-provisioning/spec.md). This decision

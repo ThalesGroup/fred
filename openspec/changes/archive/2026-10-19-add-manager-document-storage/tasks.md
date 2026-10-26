@@ -25,7 +25,7 @@
 - [x] 4.2 Measure the specified OpenFGA calls/pages/tuple operations, SQL lock duration, memory/temp bounds and latency with stated users, memberships, spaces, documents, replicas and upload concurrency; verify budgets and absence of body/S3 IO while holding the organization lock.
 - [x] 4.3 Obtain an independent read-only manager reconstruction review of this implemented lot and affected consumers; record base/head, coverage, findings/dispositions, add regression tests for actionable findings and obtain a correction re-review. This is not full-PR readiness.
 - [x] 4.4 After review, update arc42 02, 03, 03a, 05, 08, 09 and A1-A3 to verified present behavior, regenerate derived references and add relevant `// Proves: I<n>` tests; verify the dossier neither claims ingestion nor embeds this plan.
-- [x] 4.5 Run manager `make test`, `make test-integration`, `make code-quality`, root `make -C docs/architecture check`, relevant frontend checks and strict OpenSpec validation; record commands/results, then reconcile/sync/archive the completed change and make one clean implementation/documentation commit on `chore/rust-rebac`. Do not push without explicit developer agreement.
+- [x] 4.5 Run manager `make test`, `make test-integration`, `make code-quality`, root `make -C docs/architecture check`, relevant frontend checks and strict OpenSpec validation; record commands/results, then reconcile/sync/archive the completed change and make one clean implementation/documentation commit on `weaver`. Do not push without explicit developer agreement.
 
 ## Planning review
 

@@ -1,3 +1,10 @@
+2026-10-26 sequencing update: Dimi prioritizes complete agent/model and
+pod-scoped capability administration before the first chat. Design decision 5b
+supersedes the earlier no-tool-first sequence below; those tasks remain technical
+work, not the current delivery order. Arc42 now contains a proposed explanatory
+introduction and the agreed administrator journey. No production implementation
+or schema migration is included in this documentation step.
+
 The next delivery is **lot 1: the existing Custom Assistant working under Weaver rights**. Preserve Swift's template/instance/configuration/form/chat logic; replace the missing Control Plane backend in Rust and the ReBAC/admission boundary. Lots 2 and 3 are subsequent deliveries, not prerequisites to close lot 1. Only Custom Assistant, Custom Planning Assistant and Test Assistant are retained targets; Rico and other specialized agents are not migration work.
 
 Preserve existing dirty changes. No compatibility mode, legacy authorization alias, data migration or unrelated refactoring. Remove the replaced path in the lot that replaces it. Dimi owns dynamic validation: the evidence below is a handoff criterion, not permission to run tests/builds/deployments. Keep all tasks unchecked until implemented.

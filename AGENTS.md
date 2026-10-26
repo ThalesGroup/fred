@@ -56,6 +56,50 @@ a push or publication. State accurately which validation was not performed.
 This working mode takes precedence over the automatic workflow, verification,
 review and close-out requirements below and in legacy guidance or skills.
 
+## Weaver (Fred 5.x): current state versus target
+
+Branch `weaver` carries Fred 5.x. It changes Fred's architecture, not what Fred
+does: one Control Plane concentrates permissions, documents and user/organization
+administration, which Swift (Fred 4.x, branch `swift`) spread across Python
+services. Rust is an implementation detail of that Control Plane. The target
+keeps exactly two Python components, because they rely on Python libraries:
+the agent pod (LangChain/LangGraph) and Knowledge Flow processing (Docling,
+PDF libraries, LangChain embeddings).
+
+| Component | Target role | On `weaver` today |
+| --- | --- | --- |
+| Control Plane (`apps/control-plane`, Rust) | Identity and admission, OpenFGA permissions, organizations, teams, spaces, users, document drive, ingestion through Temporal, agent instances | Replaces the deleted Python `apps/control-plane-backend`; covers part of the product. Unported screens still call `slices/legacyControlPlane` and fail. |
+| Agent pod (`apps/fred-agents`, `libs/fred-runtime`, `fred-sdk`, capability libraries) | Runs agents; reaches knowledge only through capabilities, search included | Wiring into Weaver in progress; search still calls Knowledge Flow over HTTP (`kf_vectorsearch_client.py`). |
+| Knowledge Flow worker (`main_worker.py`) | Temporal worker for document processing | Native ingestion path being finished. |
+| Knowledge Flow API (`main.py`) | Removed; search moves into a capability library (constraints in the next section) | Still in the code and the chart. |
+| Frontend | Same business UI, rebound to the Control Plane | Partially rebound. |
+
+Keep the two columns apart in every audit, review, plan and report:
+
+- Label each claim **current** (observed in `weaver` code, with evidence),
+  **target** (this section, the security section below, an OpenSpec change) or
+  **Swift** (4.x behavior, comparison material only). Code present in the tree
+  is not a wired Weaver journey; only Dimi's validation recorded in
+  `docs/WORKING-JOURNAL.md` makes a journey validated.
+- A gap between current and target is migration distance, not a defect, unless
+  the lot under review claims to close it. Report it as such, briefly.
+- Do not invest in what the target removes (Knowledge Flow API routes, the
+  legacy control-plane client) beyond what the requested lot needs, and add no
+  new consumer of them. Do not implement target pieces outside the agreed lot.
+- On this branch, `docs/swift/` and the Swift-specific parts of `CLAUDE.md`
+  (Python control plane, Alembic) describe 4.x. `docs/architecture/` describes
+  only the current validated state, per the fred-architecture skill.
+
+Codex and Claude both work on this branch, in separate lots:
+
+- State the lot's scope (components, files) before editing and stay inside it.
+- Uncommitted changes you did not make belong to Dimi or the other assistant:
+  never revert, reformat, stage or commit them. If your lot must touch such a
+  file, stop and ask. Stage explicit paths, never `git add -A` or `git add .`.
+- Re-check shared sequences just before creating an entry: next SQL migration
+  number, OpenFGA model, generated clients. In the journal, edit only your
+  lot's record.
+
 ## Weaver: preserve Swift's security model while simplifying ReBAC
 
 This is Dimi's explicit Weaver direction. Weaver reinvents the ReBAC data model
@@ -310,7 +354,7 @@ set of related files has changed. During implementation, run only the narrow
 check needed to resolve a concrete risk. Honor a developer's request for manual
 feature validation before running tests.
 
-## control-plane reconstruction on chore/rust-rebac
+## control-plane reconstruction on weaver
 
 For a reconstruction audit, use
 [`audit-control-plane`](.agents/skills/audit-control-plane/SKILL.md). It scopes the

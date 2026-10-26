@@ -8,7 +8,7 @@ folder grants and document-parent tuples; corpus metadata stores `tag_ids`.
 read-only; preserve existing modes rather than invent a nested-picker feature.
 
 The Python conversion below is a broader, unimplemented plan. On
-`chore/rust-rebac`, manager already supplies organization/team/project ownership
+`weaver`, manager already supplies organization/team/project ownership
 and direct space roles; its [implemented contracts](../../../docs/architecture/README.md)
 govern those foundations. Decision 3 records the accepted conversation design
 for that POC. It does not authorize implementing the remaining conversion tasks

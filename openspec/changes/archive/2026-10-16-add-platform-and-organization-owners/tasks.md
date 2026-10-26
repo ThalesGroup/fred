@@ -18,7 +18,7 @@
 ## 4. Documentation and close-out
 
 - [x] 4.1 Update arc42 chapters 2, 3, 4, 9 and A1-A3, the manager README, the demo bundle, and the migration note.
-- [x] 4.2 Record verification evidence, then one commit on `chore/rust-rebac`; no push.
+- [x] 4.2 Record verification evidence, then one commit on `weaver`; no push.
 
 ## Verification evidence (2026-10-15)
 

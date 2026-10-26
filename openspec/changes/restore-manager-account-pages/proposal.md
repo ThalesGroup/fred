@@ -1,6 +1,6 @@
 ## Why
 
-During the 2026-10-18 manual recipe on `chore/rust-rebac`, the platform owner reached the empty Home view and successfully imported the demo bundle, but their account menu exposed only identity and logout. They could not open Fred's usual profile or release notes. Restore that user journey using the existing pages and shared components. The subsequent Priya recipe exposed a broader regression: Home, team navigation and routes had been replaced or removed. The developer explicitly requires the complete swift UI as the invariant for reconstruction and manual revalidation.
+During the 2026-10-18 manual recipe on `weaver`, the platform owner reached the empty Home view and successfully imported the demo bundle, but their account menu exposed only identity and logout. They could not open Fred's usual profile or release notes. Restore that user journey using the existing pages and shared components. The subsequent Priya recipe exposed a broader regression: Home, team navigation and routes had been replaced or removed. The developer explicitly requires the complete swift UI as the invariant for reconstruction and manual revalidation.
 
 ## What Changes
 

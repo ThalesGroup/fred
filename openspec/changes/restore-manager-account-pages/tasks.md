@@ -14,7 +14,7 @@
 ## 3. Reconcile and preserve the lot
 
 - [x] 3.1 Update implemented behavior in arc42 chapters 02, A1 and 09, the relevant existing UX guidance and the eventual PR migration note; verify `make -C docs/architecture check` and reconcile this change with the actual result.
-- [ ] 3.2 Validate/sync/archive the completed OpenSpec change through the repository procedures and commit the reviewed step on `chore/rust-rebac`; verify a clean scoped diff and recorded checks, preserving unrelated changes and requiring explicit developer agreement before any push.
+- [ ] 3.2 Validate/sync/archive the completed OpenSpec change through the repository procedures and commit the reviewed step on `weaver`; verify a clean scoped diff and recorded checks, preserving unrelated changes and requiring explicit developer agreement before any push.
 
 ## 4. Restore the UI invariant after the Priya recipe
 
@@ -25,7 +25,7 @@
 
 ## Verification evidence
 
-- Local implementation on `chore/rust-rebac`, base `2576134ed`. On 2026-10-18 the developer confirmed the deployed recipe ("c'est bon") and explicitly requested commit and push.
+- Local implementation on `weaver`, base `2576134ed`. On 2026-10-18 the developer confirmed the deployed recipe ("c'est bon") and explicitly requested commit and push.
 - `tsc -p tsconfig.build.json --noEmit` and `tsc --noEmit`: passed. The full typecheck caught an invalid role literal in a new test; corrected to the generated `platform_owner` value, then passed.
 - `node --check apps/frontend/tests/provisioning-browser.mjs`, `git diff --check` and `openspec validate restore-manager-account-pages --strict`: passed.
 - Independent read-only review of the account-page diff, affected manager/auth consumers and documentation against base/HEAD `2576134ed25b8a33f50ff622952568b72e6ff58e`: one P2 (different browser/manager mock subjects with auth disabled), corrected and re-reviewed with regression coverage. Additional test assertions for account identity, real theme selection and missing release assets were also reviewed. No remaining actionable finding. This is not a full branch/PR audit or runtime validation.

@@ -6,7 +6,7 @@
 - [x] 1.4 Add direct platform-role list/grant/revoke and effective `/me` reporting, sharing the platform lock with bootstrap; verify target existence before grants, stale-grant removal, root-only admin changes, root protection, absent direct grant errors and authorization-after-lock races.
 - [x] 1.5 Add authenticated self capability checks, delegated team creation and metadata-only registry listing; verify team-manager/feature-manager boundaries, no caller role side effects, and denial of project/content/governance escalation.
 - [x] 1.6 Run author review and independent review of the complete role delta; fix every actionable finding with a regression test, then obtain review of the corrections and record dispositions in the task response.
-- [x] 1.7 After review, update applicable arc42 chapters and component usage docs with implemented behavior only; regenerate blocks, then run all three manager Make checks and the architecture check. Commit this complete role step on chore/rust-rebac without pushing.
+- [x] 1.7 After review, update applicable arc42 chapters and component usage docs with implemented behavior only; regenerate blocks, then run all three manager Make checks and the architecture check. Commit this complete role step on weaver without pushing.
 
 ## 2. Authenticated provisioning import
 

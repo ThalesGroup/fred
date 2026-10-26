@@ -1,6 +1,6 @@
 ## Why
 
-The Rust provisioning importer has no generated frontend contract or browser journey. A reproducible UI import must exercise the actual ZIP, bearer authentication and manager authorization instead of treating a manual HTTP request as acceptance. This extends #3092 on `chore/rust-rebac`.
+The Rust provisioning importer has no generated frontend contract or browser journey. A reproducible UI import must exercise the actual ZIP, bearer authentication and manager authorization instead of treating a manual HTTP request as acceptance. This extends #3092 on `weaver`.
 
 ## What Changes
 

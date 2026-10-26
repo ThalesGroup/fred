@@ -1,6 +1,6 @@
 # Fred Frontend
 
-On `chore/rust-rebac`, the [manager first-user journey](#manager-provisioning)
+On `weaver`, the [manager first-user journey](#manager-provisioning)
 requires control-plane while preserving the complete existing UI. Non-migrated
 features keep their existing service calls and ordinary loading/error states.
 

@@ -6,7 +6,7 @@ the existing Knowledge Flow Temporal workers while keeping identity and authorit
 in manager.
 
 Tracking: [#3180](https://github.com/ThalesGroup/fred/issues/3180), following original
-storage [#3172](https://github.com/ThalesGroup/fred/issues/3172), on `chore/rust-rebac`.
+storage [#3172](https://github.com/ThalesGroup/fred/issues/3172), on `weaver`.
 
 ## What Changes
 

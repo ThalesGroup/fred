@@ -46,7 +46,7 @@ fiche plutôt que d'effacer les résultats précédents.
 | [REL-1](#rel-1-génération-weaver-500) | Alignement des versions Weaver | Préparé localement, non publié | Sans changement architectural |
 | [F-013](#f-013-synthese-organisationnelle-en-lecture) | Synthèse organisationnelle et détail équipe | Backend et UI implémentés ; validation des parcours attendue | A2/A7/A8, chapitres 04/09 |
 | [F23](#f23-stockage-des-instances-dagents) | Stockage Rust des instances d'agents | Tests ciblés passants ; jalon global bloqué | Hors périmètre arc42 validé |
-| [F25](#f25-création-et-relecture-dune-instance-custom) | Création/relecture, liste, édition partielle et suppression d'une instance Custom | Création UI déployée confirmée par Dimi ; autres opérations et chat à valider | Hors périmètre arc42 validé |
+| [F25](#f25-création-et-relecture-dune-instance-custom) | Instances et administration des agents | Création UI confirmée ; parcours admin et propriété des capacités décidés, raccordement à réaliser | 00 et 02.3 : principes/parcours spécifiés, pas de validation runtime |
 | [F24](#f24-catalogue-des-templates-par-espace) | Catalogue des templates par espace | Tests ciblés passants ; parcours UI non validé | Hors périmètre arc42 validé |
 | [F22](#f22-agent-rust-embarqué-hello-world) | Agent Rust embarqué, hello-world SSE | Implémenté, à valider | Hors périmètre arc42 validé |
 | [DOC-3](#doc-3-vue-densemble-de-weaver) | Vue d'ensemble de Weaver | Texte et schémas rédigés | 01 |
@@ -492,7 +492,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 ## F-010 Périmètre de revue et préparation du commit
 
-Revue du 2026-10-21 : branche `chore/rust-rebac`, HEAD
+Revue du 2026-10-21 : branche `weaver`, HEAD
 `8d3b66e7dd721beab2a46a29afc336188a458984`, avec index et arbre de travail locaux.
 Comparaison d'orientation : merge-base avec la référence locale `swift`
 `c32c3069db80c4590af730b93ff4b9c2eb04c2d5`, sans cible de PR supposée.
@@ -552,7 +552,7 @@ commits suivants et valider les parcours jusqu'à satisfaction de Dimi.
   sans suppression de données. Topologie arc42 alignée sur les trois déploiements.
   Implémentation à valider par Dimi ; aucun test ni déploiement exécuté pour ce lot.
 
-- Objectif : travailler dans `~/Rebac/fred` sur `chore/rust-rebac`, avec le
+- Objectif : travailler dans `~/Rebac/fred` sur `weaver`, avec le
   cluster `fred-secondary`, sans perturber l'environnement Swift.
 - Composition souhaitée : control-plane Rust, Knowledge Flow worker et frontend.
   Pas de Knowledge Flow API ni de satellites dans ce parcours.
@@ -923,7 +923,7 @@ parcours manuel dans l’UI Rebac. Résultat encore à observer.
 
 ## 2026-10-23 — Merge Swift : registre des suppressions du control plane Python
 
-Merge de `swift` (`09dda98e2`) dans `chore/rust-rebac` (`bbbf41afa`),
+Merge de `swift` (`09dda98e2`) dans `weaver` (`bbbf41afa`),
 base commune `19709b017f7bff35e254df3242f38f6e5b0edd02`.
 Les 12 conflits « supprimé ici, modifié dans Swift » sont résolus en conservant
 la suppression de l'ancien service. Cela ne signifie pas que ses fonctionnalités
@@ -2578,6 +2578,42 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
   ouvertes et arc42 n'est pas étendu à un parcours chat non validé.
 
 
+### F25 : parcours de l'administratrice et appartenance des capacités (2026-10-26)
+
+- Dimi valide la distinction : autoriser les agents, encadrer les modèles,
+  configurer les fonctions du pod, contrôler les données et connexions externes.
+  Pas de permission utilisateur/capacité ni de confirmation d'activation de toutes
+  les dépendances. L'activation d'un agent ne permet pas un modèle interdit.
+- Une capacité offerte appartient à un seul pod logique. Deux pods intégrant le
+  même package exposent deux offres distinctes ; aucune fusion globale par nom.
+  Cette appartenance devra être portée par le modèle de données et les contrats.
+- Dimi demande explicitement de commencer par une proposition arc42 : introduction,
+  deux schémas simples, conventions Alice/Bob/Carol et parcours admin organisation.
+  Le périmètre éditorial est étendu à ces décisions et à ce parcours spécifié,
+  sans affirmer leur réalisation dans l'UI ou le runtime.
+- Proposition rédigée dans 00 et le nouveau 02.3 ; index raccordés. Exemples
+  Resources/documents et annexes harmonisés avec Acme/Research/Bob ; les vrais
+  noms Priya/Demo/fredlab des fixtures restent explicitement identifiés comme tels.
+- Décision 5b du change existant enregistrée ; l'ancien ordre Custom sans outil
+  n'est plus le jalon prioritaire. Applications et Knowledge Bases laissées à part.
+- Aucun code de production, schéma SQL ou contrat généré modifié. Aucun test,
+  génération, build, déploiement, commit ou push. Relecture des sources Markdown
+  seulement ; pas de validation visuelle du rendu Mermaid. Aucun gain de performance
+  mesuré. Prochaine étape : modèle de données/contrats et lots.
+- Dimi approuve le récit et précise son bénéfice : trois équipes peuvent partager
+  une bibliothèque Fred tout en adoptant ses versions à leur rythme. Une seule
+  peut mettre son pod à jour en production sans attendre les deux autres.
+  L'introduction et le parcours expliquent cette adoption progressive, avec un
+  exemple à trois pods ; la coexistence facilite la convergence, sans encourager
+  les forks ni une multiplication de variantes. La décision 5b reprend ce motif.
+  Cette précision reste documentaire et ne constitue pas une validation runtime.
+- A la demande de Dimi, lecture allégée : trois schémas ciblés au total dans
+  l'introduction et le parcours (droits, appartenance, mise à jour indépendante).
+  Le récit est condensé et les décisions administratives regroupées en tableau ;
+  les limites de sécurité et le statut de spécification restent explicites.
+  Relecture Markdown uniquement, sans test ni build ni validation visuelle Mermaid.
+
+
 ## F26 Fusion Swift et préférences utilisateur
 
 - 2026-10-25 : résolution de `git merge swift` à la demande de Dimi. Le commit
@@ -2597,3 +2633,17 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
 - Génération OpenAPI/client uniquement, avec compilation du générateur ; aucune
   migration appliquée, campagne de tests/qualité, installation, déploiement,
   commit ou push. Parcours manuel et validation PostgreSQL à faire par Dimi.
+
+
+## DOC-5 Etat courant et cible Weaver dans les consignes
+
+- 2026-10-26 : à la demande de Dimi, section `Weaver (Fred 5.x): current state
+  versus target` ajoutée dans `AGENTS.md`, avec renvoi depuis `CLAUDE.md`.
+  Tableau composant par composant (rôle cible, état sur `weaver`), étiquetage
+  obligatoire courant / cible / Swift dans audits et rapports, et règles de
+  coordination des lots parallèles Codex/Claude.
+- Dimi confirme la cible : Knowledge Flow API disparaît ; sa recherche passe dans
+  une bibliothèque de capacités du pod agent. Seuls restent en Python le pod agent
+  et le worker Knowledge Flow. Constat courant : le runtime appelle encore
+  `/vector/search` en HTTP et le chart déploie encore l'API.
+- Consignes et journal seulement ; aucun code, test, build, commit ni push.

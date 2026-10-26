@@ -32,7 +32,7 @@ The original `UserSettingsPage` remains in place with its shared controls and SC
 
 No schema or identity migration. After implementation and manual feature validation, run focused component/router checks and the existing isolated provisioning browser recipe, then the applicable quality/review checks. Document the actual implemented path in arc42 chapters 02, A1 and 09 and the frontend UX guidance. Add the ordinary no-operator-action migration note required for the eventual PR.
 
-Rebuild/deploy the branch's frontend with the existing factory workflow; manager and imported data retain their state. A frontend rollback removes the restored navigation without changing consent, grants or imports. Keep commits local on `chore/rust-rebac`; pushing requires the developer's explicit agreement.
+Rebuild/deploy the branch's frontend with the existing factory workflow; manager and imported data retain their state. A frontend rollback removes the restored navigation without changing consent, grants or imports. Keep commits local on `weaver`; pushing requires the developer's explicit agreement.
 
 ## UI parity correction requested during the Priya recipe
 

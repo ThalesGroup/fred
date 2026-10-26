@@ -1,6 +1,6 @@
 ---
 name: audit-control-plane
-description: Independently audit the implemented Rust control-plane reconstruction against arc42, existing Fred behavior and affected UI/security contracts. Use for a PoC or chore/rust-rebac audit, not a whole-Fred review or a demand to implement future migration slices.
+description: Independently audit the implemented Rust control-plane reconstruction against arc42, existing Fred behavior and affected UI/security contracts. Use for a PoC or weaver audit, not a whole-Fred review or a demand to implement future migration slices.
 ---
 
 # Audit the control-plane reconstruction
@@ -21,7 +21,7 @@ it does not execute document deletion or corrections.
 
 Read root `AGENTS.md`, applicable legacy guidance and nested instructions first.
 Locate the user's Rust checkout through Git; do not assume the current checkout is
-`chore/rust-rebac`, switch branches or audit the Python checkout by accident.
+`weaver`, switch branches or audit the Python checkout by accident.
 Record branch, HEAD, actual comparison base/merge-base and local changes.
 
 By default, audit **all currently implemented manager responsibilities**, including

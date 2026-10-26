@@ -1,6 +1,6 @@
 ## Context
 
-See proposal.md for motivation. Baseline: Fred `8d3b66e7dd721beab2a46a29afc336188a458984`, branch `chore/rust-rebac`; the checkout also contains a large unrelated staged merge. The factory remains on `swift`. No running installation has been inspected or changed for this proposal.
+See proposal.md for motivation. Baseline: Fred `8d3b66e7dd721beab2a46a29afc336188a458984`, branch `weaver`; the checkout also contains a large unrelated staged merge. The factory remains on `swift`. No running installation has been inspected or changed for this proposal.
 
 The developer clarified that production uses GCS on S3NS. Its exact API surface, identity mechanism, object inventory and bucket policies have not been inspected. SeaweedFS-only success cannot establish compatibility with that environment.
 

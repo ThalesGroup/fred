@@ -13,6 +13,7 @@ follow the relevant domain chapter.
 | [2. Journeys](02-journeys.md) | How do the architectural rules work together in practice? |
 | [2.1. User journeys](02.1-user-journeys.md) | How does a user go from first login to creating a folder? |
 | [2.2. Document journey](02.2-document-journey.md) | How does a user import a document and read the result? |
+| [2.3. Agent administration](02.3-agent-administration.md) | How does Alice choose agents and models while inspecting capabilities within their owning pod? |
 | [3. Security](03-security.md) | Who is authenticated, admitted and authorized, and why? |
 | [4. Organizations and spaces](04-organizations.md) | How are people, spaces and their relationships organized? |
 | [5. Documents and knowledge](05-documents.md) | How does knowledge enter, circulate and leave Fred? |
@@ -22,7 +23,9 @@ follow the relevant domain chapter.
 Chapter 2 groups the journeys into numbered subchapters. Start with the user
 journey through folder creation, then follow the document-ingestion journey or
 the relevant domain chapters and SQL catalogue. The dossier describes code behavior, not proof that the current build has
-passed its tests or that Dimi has validated every screen.
+passed its tests or that Dimi has validated every screen. The introduction's
+agent-governance principles and chapter 2.3 are explicitly identified as agreed
+design, not a completed UI/runtime journey.
 
 ## Find a function
 
@@ -32,7 +35,7 @@ passed its tests or that Dimi has validated every screen.
 | Organization owner/admin selection and creation | [Organization creation](02.1-user-journeys.md#a-platform-owner-creates-an-organization), [Organizations](04-organizations.md#platform-organization-administration) | Source map rows directory and organizations |
 | Organization totals, team detail and their disclosure boundary | [Overview](04-organizations.md#organization-supervision), [Supervision contract](A8-organizations.md#organization-supervision), [Read budget](09-quality.md#organization-supervision-read-budget) | [Implementation trace](A8-organizations.md#pagination-freshness-and-implementation-trace); organization supervision page |
 | Import accounts, teams and roles | [Provisioning journey](02.1-user-journeys.md#provisioning-the-business-account), [ZIP contract](A2-manager-contracts.md#provisioning-declarations) | Source map row ZIP import |
-| Who can enter a space or create a folder? | [Resources journey](02.1-user-journeys.md#priya-opens-resources), [Action/role matrix](A7-action-role-matrix.md), [Security](03-security.md) | Source map rows spaces, authorization, folders and roles |
+| Who can enter a space or create a folder? | [Resources journey](02.1-user-journeys.md#bob-opens-resources), [Action/role matrix](A7-action-role-matrix.md), [Security](03-security.md) | Source map rows spaces, authorization, folders and roles |
 | Where are data and permissions stored? | [SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue), [OpenFGA model](A2-manager-contracts.md#openfga-model) | `migrations/`, `db.rs`, `openfga/model.fga` in the source map |
 | API endpoints and frontend bindings | [Generated routes](A2-manager-contracts.md#control-plane-http-surface) | Source map section contracts/generated code |
 | Startup, SQL migration or local deployment | [Operations](08-operations.md), [SQLx procedure](A3-manager-operations.md#sqlx-schema-evolution) | Source map rows startup/migrations and local profile |

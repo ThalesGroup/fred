@@ -90,7 +90,7 @@ can leave remote effects already completed; it does not promise rollback. Correc
 the reported cause before replaying. Replay preserves committed space identities
 and does not remove grants absent from the bundle.
 
-## Priya opens her personal space
+## Bob opens his personal space
 
 A provisioned user with the organization role `personal_space_creator` and the
 required organization read access can open Personal space. The first successful
@@ -103,7 +103,7 @@ organization or team content rights. Opening it does not repair revoked roles.
 The existing space sidebar provides Resources. A business user may instead choose
 an ordinary team on Home if their roles allow it.
 
-## Priya opens Resources
+## Bob opens Resources
 
 Resources displays the selected space's current directory. The breadcrumb identifies
 the destination; opening a folder changes that destination. The existing creation

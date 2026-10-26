@@ -19,7 +19,7 @@
 ## 4. Documentation and close-out
 
 - [x] 4.1 Update arc42 chapters 3, 4, 9 and references A1-A3 in the present tense, the manager README, and add the migration note requiring a local reset.
-- [x] 4.2 Record verification evidence here, then one commit on `chore/rust-rebac`; no push. Independent review is handled by the developer's batch.
+- [x] 4.2 Record verification evidence here, then one commit on `weaver`; no push. Independent review is handled by the developer's batch.
 
 ## Verification evidence (2026-10-15)
 

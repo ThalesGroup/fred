@@ -1,7 +1,7 @@
 ## Context
 
 See [proposal.md](proposal.md) for the outcome and exclusions. Inspection baseline:
-`chore/rust-rebac` at `a722a6e47eb19b710208eac2d8e664aad2eaed5f`, initially clean.
+`weaver` at `a722a6e47eb19b710208eac2d8e664aad2eaed5f`, initially clean.
 The manager deployment integration and subsequent Home fixes are already committed.
 Do not replace their control-plane service/image/configuration contract.
 

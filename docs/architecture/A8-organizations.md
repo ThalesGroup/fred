@@ -34,7 +34,7 @@ for existing grants: those checks run when assigning roles. An isolated direct
 project role therefore resolves to its SQL organization in both context and
 membership discovery; permission remains an OpenFGA decision.
 
-Bob's provisioning roles attach him to TSN. After authentication and personal CGU,
+Bob's provisioning roles attach him to Acme. After authentication and personal CGU,
 `GET /me/spaces` returns his authorized memberships within that context. Home
 retains its usual dashboard and team/personal navigation at `/home`; the organization
 name appears in Profile. Team/project selection uses a space identifier. There is
@@ -88,7 +88,7 @@ it for Priya in the organization's roles. First activation creates one private
 workspace; further activations reuse it under current read authority. A personal
 space whose organization link is missing is refused (409) rather than duplicated. Import and
 organization creation grant no implicit entitlement and create no personal space.
-See the [Priya journey](02.1-user-journeys.md#priya-opens-her-personal-space).
+See the [Bob journey](02.1-user-journeys.md#bob-opens-his-personal-space).
 
 SQL stores each space's identity, kind, name, personal owner and immutable placement:
 `organization_id` is the root's own ID for an organization, and the containing
@@ -105,21 +105,28 @@ personal space. Current permission still requires an OpenFGA Check.
 
 ```mermaid
 flowchart TB
-    tsn["TSN<br/>organization<br/>path: tsn"]
-    bid["BID<br/>team<br/>path: tsn, bid"]
-    alice["alice<br/>personal space<br/>path: alice"]
-    p1["Bid 2026<br/>project<br/>path: tsn, bid, p1"]
-    tsn -- parent --> bid
-    bid -- parent --> p1
-    tsn -. organization .-> alice
+    acme["Acme<br/>organization<br/>path: O"]
+    research["Research<br/>team<br/>path: O, T"]
+    personal["Bob's personal space<br/>path: P"]
+    project["Study<br/>project<br/>path: O, T, J"]
+    acme -- parent --> research
+    research -- parent --> project
+    acme -. organization .-> personal
+
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
+    class acme,research,personal,project neutral
 ```
 
 | Scope requested from | Search scope (`space_id` in) |
 | --- | --- |
-| BID | TSN, BID |
-| Bid 2026 | TSN, BID, Bid 2026 |
-| Bid 2026, levels `project` | Bid 2026 |
-| alice | alice |
+| Research | Acme, Research |
+| Study | Acme, Research, Study |
+| Study, levels `project` | Study |
+| Bob's personal space | Bob's personal space |
+
+The letters stand for canonical space IDs, not display-name paths. This example
+introduces Study as a project in Research and assumes Bob's personal-space
+eligibility explicitly; neither is created merely by signing in.
 
 A caller may restrict a scope to `organization`, `team`, `project` or `personal`;
 levels only remove spaces from it. `team` excludes personal spaces. Retention

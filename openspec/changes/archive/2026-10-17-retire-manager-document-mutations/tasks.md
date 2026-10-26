@@ -11,7 +11,7 @@
 ## Review and verification evidence
 
 Independent read-only review compared the working change against base/HEAD
-`7387684683229a2c8477fefc7d47fbdf6ac67191` on `chore/rust-rebac`.
+`7387684683229a2c8477fefc7d47fbdf6ac67191` on `weaver`.
 Coverage: removed HTTP/schema/client operations; retained authorization, Resources
 and folders; API startup; lifecycle worker/configuration; deployment/reset consumers
 and arc42. Three findings were corrected and re-reviewed: stale generated-hook

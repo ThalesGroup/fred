@@ -113,7 +113,7 @@ retries and stale activities cannot overwrite the published artifacts. A new
 attempt restores the preceding stage by replacing the final generation segment.
 Original paths and the bucket name need no rename for this layout.
 
-`TSN`, `fredlab` and `ArxivAi` are display names, never S3 path components. The
+`Acme`, `Research` and `Papers` are display names, never S3 path components. The
 folder UUID/path lives in PostgreSQL and the worker descriptor, not the object
 key. Derived generations isolate activity attempts. Their manifests live in
 `document_processing.generations` and the published `document_processing.manifest`;
@@ -169,7 +169,7 @@ the body. The browser checks the final length and keeps at most one original Blo
 bounded by the 100 MiB ceiling. No presigned public URL or content conversion is
 involved.
 
-See the [Resources journey](02.1-user-journeys.md#priya-opens-resources),
+See the [Resources journey](02.1-user-journeys.md#bob-opens-resources),
 [request costs](09-quality.md#original-storage-costs-and-failure-evidence),
 [runtime](A1-manager-runtime.md#original-storage) and
 [operations](A3-manager-operations.md#original-storage).

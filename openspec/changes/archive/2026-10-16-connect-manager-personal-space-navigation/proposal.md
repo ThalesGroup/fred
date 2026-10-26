@@ -6,7 +6,7 @@ without redesigning Fred or introducing a manual space-creation workflow. The co
 on a Fred instance and enters that organization automatically after admission.
 
 Tracking: [#3092](https://github.com/ThalesGroup/fred/issues/3092), on
-`chore/rust-rebac`. This is the navigation prerequisite to the separate Resources
+`weaver`. This is the navigation prerequisite to the separate Resources
 integration, not the broader `simplify-corpus-authorization` conversion.
 
 ## What Changes

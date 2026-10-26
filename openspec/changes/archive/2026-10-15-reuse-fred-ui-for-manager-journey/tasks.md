@@ -13,7 +13,7 @@
 ## 3. Reconcile and commit
 
 - [x] 3.1 After review, update the arc42 journey/security/runtime references and affected frontend/manager READMEs in present tense, remove obsolete parallel-entry descriptions, and update the existing migration guidance. Verify `make -C docs/architecture generate` and `make -C docs/architecture check`.
-- [x] 3.2 Reconcile these artifacts with the implementation, validate strictly, sync/archive the completed change, and create one clean implementation commit on `chore/rust-rebac` with no unrelated changes. Verify clean diff/status and report the commit; do not push or reset the deployment.
+- [x] 3.2 Reconcile these artifacts with the implementation, validate strictly, sync/archive the completed change, and create one clean implementation commit on `weaver` with no unrelated changes. Verify clean diff/status and report the commit; do not push or reset the deployment.
 
 ## Planning review
 
