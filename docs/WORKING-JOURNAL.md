@@ -96,6 +96,7 @@ fiche plutôt que d'effacer les résultats précédents.
 | [F27](#f27-primitive-de-visibilité-des-chunks) | Primitive Python de périmètre et de vérification des chunks | Implémentée, non branchée ; SQL non exécuté | Hors périmètre arc42 validé |
 | [F28](#f28-requêtes-opensearch-de-la-capacité-document-access) | Requêtes OpenSearch pures de Document Access | Implémentées, non branchées ; rien d'exécuté contre OpenSearch | Hors périmètre arc42 validé |
 | [F29](#f29-liste-sql-des-documents-visibles-dun-périmètre) | Liste SQL des documents visibles d'un périmètre | Implémentée, non branchée ; SQL non exécuté | Hors périmètre arc42 validé |
+| [F30](#f30-rendu-texte-de-larbre-de-documents) | Rendu texte de l'arbre de documents de Document Access | Implémenté, non branché | Hors périmètre arc42 validé |
 
 ## Méthode de consolidation
 
@@ -3391,3 +3392,25 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
 - Limites : requêtes jamais exécutées contre PostgreSQL ; tri des dossiers par identifiants ;
   `folder.deletion_id` filtré mais jamais posé. Aucune validation fonctionnelle,
   aucun commit.
+
+## F30 Rendu texte de l'arbre de documents
+
+- 2026-10-26 : port en fonctions pures du rendu de l'arbre de Knowledge Flow API
+  (`corpus_tree/tree_builder.py`), alimenté par le `DocumentListing` de F29 au lieu
+  des tags Swift. Fichiers : `fred_capability_document_access/document_tree.py`,
+  `tests/test_document_tree.py`. Ni SQL, ni port, ni runtime ; `capability.py`
+  inchangé.
+- `render_listing(listing, *, working_directory=None, max_chars=20_000)` :
+  espaces avec documents en dossiers de premier niveau sans `folder_id`, dans
+  l'ordre du périmètre ; vrais dossiers avec `folder_id`, triés par nom puis id ;
+  nœuds identifiés par UUID (aucune fusion par nom) ; feuilles triées par nom puis
+  uid, `created`/`modified` à null, `mime_type` si non vide. `working_directory` :
+  préfixe exact par segments, segments vides ignorés, arbre depuis la racine.
+  Élagage KF repris (profondeur puis blocs complets de premier niveau). Liste
+  tronquée en amont : drapeau vrai et note finale vers
+  `search_documents_using_vectorization`. `max_chars < 500` refusé.
+- `make test-one TEST=tests/test_document_tree.py` : 23 passés ; `make code-quality`
+  : sortie 0.
+- Limites : un nom contenant `/` n'est pas adressable par `working_directory` ;
+  document sans espace étiqueté = `ValueError` (invariant de F29). Aucune
+  validation fonctionnelle, aucun commit.
