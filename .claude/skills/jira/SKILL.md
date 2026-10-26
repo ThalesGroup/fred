@@ -105,7 +105,8 @@ python3 .claude/skills/jira/scripts/jira.py assign PRISM-68 \
 
 Always start the same way: `jira.py show <KEY>`, then `jira.py attachments <KEY>` and
 `Read` the images if it lists any. Move the ticket to "Analysis in progress" (below). Then
-branch on the type.
+branch on the type. Treat `Bug` and `Service Request` tickets the same throughout
+investigation, planning, resolution and closure; leave their Jira issue type unchanged.
 
 ### Ticket status
 
@@ -115,9 +116,9 @@ Keep the status in step with the work: the reporter watches it, and the team fil
 | ------------------------------------------------------------------------ | ---------------------- |
 | You start investigating                                                  | `Analysis in progress` |
 | A public reply asking the reporter a question is posted                  | `Waiting for customer` |
-| Bug: GitHub bug issue created and public reply with its link posted       | `Planned`              |
-| Bug: fix deployed on the reporter's production platform                  | `Resolved`             |
-| Bug: second-person verification of fix and customer satisfaction         | `Closed`               |
+| GitHub bug issue created and public reply with its link posted           | `Planned`              |
+| Fix deployed on the reporter's production platform                       | `Resolved`             |
+| Second-person verification of fix and customer satisfaction              | `Closed`               |
 
 ```bash
 acli jira workitem transition --key PRISM-68 --status "Analysis in progress" --yes
@@ -125,21 +126,25 @@ acli jira workitem transition --key PRISM-68 --status "Analysis in progress" --y
 
 - Move only after the step is actually done. `Waiting for customer` and `Planned` follow a
   public reply, so they wait for the developer's approval of that reply (rule 2).
-- From `Analysis in progress`, reaching `Planned` requires `CCB` -> `Planned`.
+- For `Bug` tickets, reaching `Planned` from `Analysis in progress` requires
+  `CCB` -> `Planned`.
   Once the planning criteria above are met, move through `CCB` and immediately to
   `Planned`. `CCB` normally holds tickets where the decision to fix is still uncertain
   and is currently used rarely; this required intermediate transition adds no new
   approval step for bugs already accepted for a fix. Verify each resulting status.
-- For bugs, keep the ticket `Planned` while the fix is developed, reviewed, merged or
-  tagged. Move it to `Resolved` only after confirmed deployment on the reporter's
-  production platform: this status notifies the customer that their bug is resolved.
+- For `Service Request` tickets, Jira offers the `Ready` transition directly from
+  `Analysis in progress` to `Planned`; use it once the same planning criteria are met.
+- For bugs and service requests, keep the ticket `Planned` while the fix is developed,
+  reviewed, merged or tagged. Move it to `Resolved` only after confirmed deployment
+  on the reporter's production platform: this status notifies the customer that their
+  problem is resolved.
   Deployment detection is being worked on separately; for now, wait for the developer
   to confirm deployment rather than inferring it from a merge, tag or release.
 - `Resolved` -> `Closed` is a second verification by someone other than the person who
   resolved the ticket. Move it only after that person checks that the bug was indeed
   addressed and the customer appears satisfied; deployment alone does not close it.
-- The post-analysis bug lifecycle above applies to `Bug` tickets. For other ticket types,
-  ask the developer before planning, resolving or closing a ticket.
+- The post-analysis lifecycle above applies to both `Bug` and `Service Request`.
+  For other ticket types, ask the developer before planning, resolving or closing a ticket.
 - `Analysis in progress` and `Waiting for customer` apply to `Bug`, `Improvement`,
   `Service Request` and `Platform Incident`.
   `Task` and `Sub-task` use a different workflow (`Work in progress`, `Completed`, …), so
@@ -147,7 +152,7 @@ acli jira workitem transition --key PRISM-68 --status "Analysis in progress" --y
 - If a transition fails (a required field, or a status unreachable from the current one),
   report the error to the developer rather than trying another route.
 
-### Bug
+### Bug / Service Request
 
 Try to **reproduce** it, and locate the cause in this repo (`git log`, `grep`, run it).
 
