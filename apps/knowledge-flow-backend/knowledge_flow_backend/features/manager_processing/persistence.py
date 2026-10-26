@@ -15,6 +15,15 @@ from knowledge_flow_backend.features.manager_processing.client import ManagerErr
 from knowledge_flow_backend.features.manager_processing.contracts import Descriptor
 
 
+def _placement(descriptor: Descriptor) -> dict[str, str]:
+    """Placement is immutable in Control Plane SQL, so values written here stay true."""
+    return {
+        "organization_id": str(descriptor.organization_id),
+        "space_id": str(descriptor.space_id),
+        "folder_path": descriptor.folder_path,
+    }
+
+
 class ScopedVectors:
     """Journal bounded deterministic IDs before writes, including adaptive retry splits."""
 
@@ -37,9 +46,12 @@ class ScopedVectors:
         from knowledge_flow_backend.features.manager_processing.contracts import VectorPlan
 
         d = self.descriptor
+        placement = _placement(d)
         previous = len(self.documents)
         identifiers = []
         for document, logical_id in zip(documents, ids, strict=True):
+            # Descriptor placement wins over extractor metadata of the same name.
+            document.metadata.update(placement)
             if logical_id not in self.aliases:
                 ordinal = len(self.documents)
                 if ordinal >= d.max_chunks:
@@ -80,6 +92,7 @@ class ScopedVectors:
         finally:
             vector_write_observer.reset(token)
         d = self.descriptor
+        placement = _placement(d)
         records = []
         ordinals = []
         for identifier in written:
@@ -92,6 +105,7 @@ class ScopedVectors:
                 or stored.get("text") != document.page_content
                 or metadata.get("document_uid") != str(d.work.document_id)
                 or metadata.get("chunk_uid") != identifier
+                or any(metadata.get(key) != value for key, value in placement.items())
             ):
                 raise ManagerError("indexing_failed")
             records.append(to_json({"id": identifier, "text": document.page_content, "metadata": document.metadata}).decode("utf-8"))

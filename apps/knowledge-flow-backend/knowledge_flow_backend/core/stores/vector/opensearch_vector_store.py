@@ -73,6 +73,10 @@ SAFE_METADATA_MAPPING_UPDATES: dict[str, Dict[str, str]] = {
     # "dataset_pointer" chunk describing a structured/tabular dataset that isn't
     # itself vectorized (RAG-DATASET-DISCOVERY-RFC.md).
     "chunk_kind": {"type": "keyword"},
+    # Weaver ingestion placement, written from the Control Plane descriptor.
+    "organization_id": {"type": "keyword"},
+    "space_id": {"type": "keyword"},
+    "folder_path": {"type": "keyword"},
 }
 
 VECTOR_METADATA_PROPERTIES: Dict[str, Any] = {

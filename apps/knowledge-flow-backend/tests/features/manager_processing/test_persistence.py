@@ -112,6 +112,51 @@ def test_adaptive_retry_ids_are_fenced_before_writes(descriptor, tmp_path, journ
     assert vector_write_observer.get() is None
 
 
+def test_descriptor_placement_overrides_extractor_values_on_every_chunk(descriptor, tmp_path, journal):
+    from knowledge_flow_backend.core.stores.vector.base_vector_store import vector_write_observer
+
+    forged = {"organization_id": "forged", "space_id": "forged", "folder_path": "/forged/"}
+    placement = {"organization_id": str(descriptor.organization_id), "space_id": str(descriptor.space_id), "folder_path": descriptor.folder_path}
+    store = SimpleNamespace()
+
+    def add(documents, ids):
+        # Adaptive retry parts arrive with extractor values again; the fence must rewrite them.
+        observer = vector_write_observer.get()
+        parts = [Document(page_content=text, metadata={**documents[0].metadata, **forged}) for text in ("first", "second")]
+        assigned = observer.before_write(parts, [f"{ids[0]}::part::{i}" for i in range(2)])
+        store.saved = dict(zip(assigned, parts, strict=True))
+        return assigned
+
+    store.add_documents = add
+    store.get_chunk = lambda document, identifier: {"text": store.saved[identifier].page_content, "metadata": store.saved[identifier].metadata}
+    vectors = ScopedVectors(store, descriptor, None, tmp_path, None)
+    vectors.add_documents([Document(page_content="first second", metadata={"retrievable": True, **forged})])
+    assert [{key: doc.metadata[key] for key in placement} for doc in store.saved.values()] == [placement, placement]
+    records = [json.loads(line) for line in (tmp_path / "chunks.jsonl").read_text().splitlines()]
+    assert [{key: record["metadata"][key] for key in placement} for record in records] == [placement, placement]
+
+
+def test_stored_chunk_with_another_space_fails_indexing(descriptor, tmp_path, journal):
+    saved = {}
+
+    def add(documents, ids):
+        saved.update(zip(ids, documents, strict=True))
+        return ids
+
+    store = SimpleNamespace(add_documents=add, get_chunk=lambda _, identifier: {"text": saved[identifier].page_content, "metadata": {**saved[identifier].metadata, "space_id": str(uuid4())}})
+    vectors = ScopedVectors(store, descriptor, None, tmp_path, None)
+    with pytest.raises(RuntimeError, match="indexing_failed"):
+        vectors.add_documents([Document(page_content="moved", metadata={"retrievable": True})])
+    assert vectors.count == 0
+
+
+def test_placement_fields_are_opensearch_keywords():
+    from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import VECTOR_METADATA_PROPERTIES
+
+    for field in ("organization_id", "space_id", "folder_path"):
+        assert VECTOR_METADATA_PROPERTIES[field] == {"type": "keyword"}
+
+
 def test_optional_pointer_failure_keeps_cleanup_journal_separate(descriptor, tmp_path, journal):
     def fail(*_, **__):
         raise RuntimeError("provider unavailable")
