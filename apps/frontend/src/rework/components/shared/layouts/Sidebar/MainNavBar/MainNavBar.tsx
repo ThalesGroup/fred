@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { isAgentManagementRoute } from "@core/utils/agentManagementRoute";
 import type { CSSProperties } from "react";
 import styles from "./MainNavBar.module.scss";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
@@ -51,7 +52,7 @@ function BusinessMainNavBar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const capabilities = useUserCapabilities(
-    ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, "")),
+    isAgentManagementRoute(pathname) || ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, "")),
   );
   const organization = useOrganizationAdmin(pathname.replace(/\/$/, "") !== "/admin/supervision");
   const supervision = useOrganizationSupervisionAccess();

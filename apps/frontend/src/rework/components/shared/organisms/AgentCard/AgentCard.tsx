@@ -48,13 +48,29 @@ export interface AgentCardMarketplace {
 }
 
 export interface AgentCardProps {
-  instance: ManagedAgentInstanceSummary;
+  instance: Pick<
+    ManagedAgentInstanceSummary,
+    | "agent_instance_id"
+    | "display_name"
+    | "role"
+    | "description"
+    | "status"
+    | "created_by"
+    | "updated_by"
+    | "created_at"
+    | "updated_at"
+    | "suspension_reason"
+    | "catalog_warnings"
+    | "marketplace"
+  >;
   templateDisplayName?: string;
   runtimeId?: string;
   /** Needed to build the managed-chat route for the Chat button. */
   teamId?: string;
   canManageAgents: boolean;
   offline?: boolean;
+  unavailableActionsReason?: string;
+  managementBusy?: boolean;
   /** Resolved audit users for `created_by`/`updated_by`, batched once for the
    *  whole list by the caller rather than one query per card. */
   auditUserById?: Map<string, UserSummary>;
@@ -85,6 +101,8 @@ export default function AgentCard({
   teamId,
   canManageAgents,
   offline = false,
+  unavailableActionsReason,
+  managementBusy = false,
   auditUserById,
   onEdit,
   onToggleEnabled,
@@ -160,13 +178,15 @@ export default function AgentCard({
       size="medium"
       icon={{ category: "outlined", type: "reviews" }}
       className={styles.chatButton}
-      disabled={!isEnabled}
+      disabled={!isEnabled || !!unavailableActionsReason}
+      title={unavailableActionsReason}
     >
       {t("rework.agentCard.chat")}
     </Button>
   );
 
   const handleMoreMenuSelect = (action: MoreMenuAction) => {
+    if (managementBusy || (unavailableActionsReason && ["duplicate", "copyTo", "publish"].includes(action))) return;
     if (action === "edit") onEdit();
     else if (action === "toggle") {
       if (isSuspended) return;
@@ -184,6 +204,7 @@ export default function AgentCard({
     menuOptions.push(
       {
         key: "edit",
+        disabled: managementBusy,
         value: "edit",
         label: t("rework.agentCard.edit"),
         icon: { category: "outlined", type: "edit" },
@@ -193,16 +214,20 @@ export default function AgentCard({
         value: "toggle",
         label: toggleLabel,
         icon: { category: "outlined", type: isEnabled ? "visibility_off" : "visibility" },
-        disabled: isSuspended,
+        disabled: isSuspended || managementBusy,
       },
       {
         key: "duplicate",
+        disabled: !!unavailableActionsReason,
+        tooltip: unavailableActionsReason,
         value: "duplicate",
         label: t("rework.agentCard.duplicate"),
         icon: { category: "outlined", type: "content_copy" },
       },
       {
         key: "copyTo",
+        disabled: !!unavailableActionsReason,
+        tooltip: unavailableActionsReason,
         value: "copyTo",
         label: t("rework.agentCard.copyTo"),
         icon: { category: "outlined", type: "drive_file_move" },
@@ -233,6 +258,7 @@ export default function AgentCard({
   if (canManageAgents) {
     menuOptions.push({
       key: "delete",
+      disabled: managementBusy,
       value: "delete",
       label: t("rework.agentCard.delete"),
       icon: { category: "outlined", type: "delete" },
@@ -283,7 +309,7 @@ export default function AgentCard({
               <Icon category="outlined" type="info" accessibleName={t("rework.agentCard.tooltip.label")} />
             </span>
           </Tooltip>
-          {isEnabled && teamId ? (
+          {isEnabled && teamId && !unavailableActionsReason ? (
             <Link to={`/team/${teamId}/managed-chat/${instance.agent_instance_id}`} className={styles.chatLink}>
               {chatButton}
             </Link>

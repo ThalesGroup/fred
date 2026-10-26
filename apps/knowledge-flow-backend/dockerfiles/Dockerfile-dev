@@ -57,6 +57,8 @@ WORKDIR /app
 COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/Makefile apps/knowledge-flow-backend/pyproject.toml apps/knowledge-flow-backend/uv.lock* knowledge-flow-backend/
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-pod fred-pod
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core fred-core
+# Install the same canonical model used by Rust, including editable installs.
+COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane/openfga/model.json /app/fred-core/fred_core/security/rebac/weaver-model.json
 COPY --chown=${USER_ID}:${GROUP_ID} scripts scripts
 
 # Copy the rest of the project files

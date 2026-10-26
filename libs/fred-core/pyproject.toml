@@ -75,7 +75,7 @@ include = ["fred_core*"]
 
 [tool.setuptools.package-data]
 "fred_core" = ["py.typed"]
-"fred_core.security.rebac" = ["schema.fga", "schema.fga.json"]
+"fred_core.security.rebac" = ["schema.fga", "schema.fga.json", "weaver-model.json"]
 "fred_core.kpi" = ["model_impact_factors.yaml"]
 
 [dependency-groups]

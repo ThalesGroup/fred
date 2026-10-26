@@ -44,7 +44,7 @@ spec:
           command: ["python3", "-c"]
           args:
             - |
-              import json, ssl, sys, time, urllib.request
+              import json, ssl, sys, time, urllib.error, urllib.request
 
               TOKEN  = open("/var/run/secrets/kubernetes.io/serviceaccount/token").read()
               NS     = open("/var/run/secrets/kubernetes.io/serviceaccount/namespace").read()
@@ -60,6 +60,15 @@ spec:
                   if data:
                       req.add_header("Content-Type", "application/strategic-merge-patch+json")
                   return json.load(urllib.request.urlopen(req, context=ctx))
+
+              # An upgrade can enable an application that was not deployed before.
+              try:
+                  k8s(BASE)
+              except urllib.error.HTTPError as exc:
+                  if exc.code != 404:
+                      raise
+                  print(f"Deployment {NAME} does not exist; no scale-down needed.")
+                  sys.exit(0)
 
               print(f"Scaling down {NAME} to 0 replicas...")
               k8s(f"{BASE}/scale", "PATCH", json.dumps({"spec": {"replicas": 0}}).encode())

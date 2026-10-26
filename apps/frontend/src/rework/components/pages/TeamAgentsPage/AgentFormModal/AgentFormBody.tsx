@@ -20,31 +20,21 @@ import { IconType } from "@shared/utils/Type.ts";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import { useDispatch } from "react-redux";
-import { setCapabilityBaseUrls } from "../../../../../common/capabilityRoutingSlice.ts";
 import type {
   AgentTemplateSummary,
-  CapabilityCatalogEntry,
-  ManagedAgentFieldSpec,
   ManagedAgentInstanceSummary,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
-import { useUsersByIdsQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts";
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type {
+  CapabilityCatalogEntry,
+  FieldSpec as ManagedAgentFieldSpec,
+} from "../../../../../slices/runtime/runtimeOpenApi";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
-import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard/CapabilityCard.tsx";
+import { CapabilityCard } from "./CapabilityCard/CapabilityCard.tsx";
 import { SimpleCapabilitiesView } from "./SimpleCapabilitiesView/SimpleCapabilitiesView.tsx";
 import type { CapabilitySelectionState } from "./toolPackLogic.ts";
-import {
-  CAP_DOCUMENT_ACCESS,
-  CAP_PPT_FILLER,
-  CAP_TEAM_WIKI,
-  DOC_ACCESS_TEAM_DOCUMENTS,
-  type ToolPack,
-} from "./toolPacks.ts";
-import { PptFillerPackOptions } from "../../../../features/capabilities/ppt_filler/PptFillerPackOptions.tsx";
-import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions/DocumentAccessPackOptions.tsx";
-import { RecommendedModelField } from "./RecommendedModelField/RecommendedModelField.tsx";
+
 import { helpPagePath } from "@rework/features/helpCenter/content";
 import { isHelpLang } from "@rework/features/helpCenter/manifest";
 import styles from "./AgentFormBody.module.css";
@@ -150,7 +140,6 @@ export function AgentFormBody({
   tuningFieldValues,
   selectedCapabilityIds,
   capabilityConfigValues,
-  capabilityAssetFiles,
   isSubmitting,
   submitAttempted,
   activeSection,
@@ -164,19 +153,14 @@ export function AgentFormBody({
   onRoleChange,
   onDescriptionChange,
   onUsageStatementChange,
-  onRecommendedChatProfileIdChange,
   onTuningChange,
   onCapabilitySelectionChange,
   onCapabilitySelectionReplace,
-  onCapabilityConfigChange,
-  onCapabilityAssetFileChange,
-  onCapabilityBlockingErrorChange,
   draftRevision = 0,
 }: AgentFormBodyProps) {
   const { t, i18n } = useTranslation();
   const uiLang = i18n.language.split("-")[0];
   const helpLang = isHelpLang(uiLang) ? uiLang : "fr";
-  const dispatch = useDispatch();
   // Simple = new "capability packs" view (default); Advanced = the flat
   // per-capability list. UI-only, reset to Simple on each mount (#2220).
   const [capabilityView, setCapabilityView] = useState<"simple" | "advanced">("simple");
@@ -189,57 +173,16 @@ export function AgentFormBody({
     if (draftRevision > 0) setPromptPickerExplicit({});
   }, [draftRevision]);
 
-  // Resolve audit uids (created_by / updated_by) to display names (#1952).
-  const auditUids = Array.from(
-    new Set([editInstance?.created_by, editInstance?.updated_by].filter((uid): uid is string => Boolean(uid))),
-  );
-  const { data: auditUsers = [] } = useUsersByIdsQuery({ ids: auditUids }, { skip: auditUids.length === 0 });
-  const auditUserById = new Map(auditUsers.map((summary) => [summary.id, summary]));
-
   const selectedTemplate = templates.find((tpl) => tpl.template_id === templateId);
   const templateMissing = mode === "edit" && !selectedTemplate;
-  const capabilities = selectedTemplate?.available_capabilities ?? [];
+  const capabilities = (selectedTemplate?.available_capabilities ?? []) as CapabilityCatalogEntry[];
   // False: `capabilities` are included with the agent, always on, only configured.
+  const availableCapabilityIds = new Set(capabilities.map((item) => item.id));
   const supportsCapabilities = selectedTemplate?.supports_capabilities ?? true;
 
-  // Pre-save capability routing (RFC §9.1): custom config widgets may call
-  // their capability's own pod routes (e.g. ppt_filler's stateless /analyze,
-  // #1903) BEFORE any session exists, so the per-capability base URLs are
-  // populated here straight from the template catalog — the template-bound
-  // counterpart of the prep-time population in `useChatSse`.
-  useEffect(() => {
-    if (capabilities.length === 0) return;
-    dispatch(setCapabilityBaseUrls(Object.fromEntries(capabilities.map((entry) => [entry.id, entry.route_base_url]))));
-  }, [dispatch, capabilities]);
-
-  // #1975 (RFC §3.9): a platform-suspended instance renders its broken
-  // capability in an error state with plain-language text and the two fix paths
-  // (untick/reset the capability and re-save, or contact a platform admin). A
-  // successful save re-validates every active slice and clears the suspension —
-  // there is no second clearing mechanism. The offending capability id is only
-  // derivable for the availability reasons (a selected id the template no
-  // longer advertises, including MCP capabilities, which are FGA/team-gated
-  // like every other capability); `capability_config_invalid` names no id (the
-  // pod's 422 wording is not carried on the summary), so its message is generic.
-  const suspensionReason = mode === "edit" ? editInstance?.suspension_reason : undefined;
-  const availableCapabilityIds = new Set(capabilities.map((c) => c.id));
-  const missingCapabilityIds =
-    suspensionReason && suspensionReason !== "capability_config_invalid"
-      ? (editInstance?.selected_capability_ids ?? []).filter((id) => !availableCapabilityIds.has(id))
-      : [];
-  const suspensionMessage = (() => {
-    if (!suspensionReason) return undefined;
-    const capabilityList = missingCapabilityIds.join(", ") || "—";
-    if (suspensionReason === "capability_config_invalid") {
-      return t("rework.teams.formAgent.suspended.configInvalid");
-    }
-    if (suspensionReason === "capability_access_revoked") {
-      return t("rework.teams.formAgent.suspended.accessRevoked", { capabilities: capabilityList });
-    }
-    return t("rework.teams.formAgent.suspended.unavailable", { capabilities: capabilityList });
-  })();
-
-  const visibleFields = (selectedTemplate?.default_tuning_fields ?? []).filter((f) => !f.ui?.hide);
+  const visibleFields = ((selectedTemplate?.default_tuning_fields ?? []) as ManagedAgentFieldSpec[]).filter(
+    (f) => !f.ui?.hide,
+  );
   const promptFields = visibleFields.filter((f) => routeField(f) === "prompts");
   const generalFields = visibleFields.filter((f) => routeField(f) === "general");
 
@@ -263,7 +206,10 @@ export function AgentFormBody({
   // across sections — drives `ui.visible_when` even when the gating field lives
   // in another section.
   const effectiveTuningValues = Object.fromEntries(
-    (selectedTemplate?.default_tuning_fields ?? []).map((f) => [f.key, tuningFieldValues[f.key] ?? f.default]),
+    (selectedTemplate?.default_tuning_fields ?? []).map((f) => [
+      f.key,
+      mode === "edit" ? tuningFieldValues[f.key] : (tuningFieldValues[f.key] ?? f.default),
+    ]),
   );
 
   // A reserved system-prompt tag is refused by the backend (422) whichever way
@@ -272,7 +218,9 @@ export function AgentFormBody({
     const value = tuningFieldValues[field.key];
     const reservedTag = reservedTagInPromptField(field, value);
     if (reservedTag) return t("rework.promptEditor.reservedTag", { tag: reservedTag });
-    return submitAttempted && field.required && !value ? `${field.title} is required` : undefined;
+    return submitAttempted && field.required && (value === undefined || value === null || value === "")
+      ? `${field.title} is required`
+      : undefined;
   };
 
   const renderFieldList = (fields: ManagedAgentFieldSpec[]) =>
@@ -284,98 +232,14 @@ export function AgentFormBody({
         onChange={onTuningChange}
         disabled={isSubmitting}
         teamId={teamId}
+        disconnected
+        useDefaults={mode === "create"}
         allValues={effectiveTuningValues}
         pickerExplicit={promptPickerExplicit[field.key] ?? null}
         onPickerExplicitChange={(v) => setPromptPickerExplicit((prev) => ({ ...prev, [field.key]: v }))}
         error={fieldError(field)}
       />
     ));
-
-  // One capability's `config_fields` form, shared by the Advanced cards and the
-  // Simple view's included capabilities.
-  const renderConfigForm = (capability: CapabilityCatalogEntry) =>
-    (capability.config_fields ?? []).length > 0 && (
-      <CapabilityConfigForm
-        capability={capability}
-        configFields={capability.config_fields ?? []}
-        configValues={capabilityConfigValues[capability.id] ?? {}}
-        disabled={isSubmitting}
-        teamId={teamId}
-        agentInstanceId={editInstance?.agent_instance_id}
-        agentDisplayName={editInstance?.display_name}
-        assetFiles={capabilityAssetFiles[capability.id] ?? {}}
-        onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
-        onAssetFileChange={(slotKey, file) => onCapabilityAssetFileChange(capability.id, slotKey, file)}
-        onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(capability.id, message)}
-      />
-    );
-
-  // Simple view of an included capability: document access keeps the same
-  // library-binding control as the Team documents pack.
-  const renderIncludedOptions = (capability: CapabilityCatalogEntry) =>
-    capability.id === CAP_DOCUMENT_ACCESS ? (
-      <DocumentAccessPackOptions
-        configValues={capabilityConfigValues[CAP_DOCUMENT_ACCESS] ?? {}}
-        onConfigChange={(key, value) => onCapabilityConfigChange(CAP_DOCUMENT_ACCESS, key, value)}
-        teamId={teamId}
-        disabled={isSubmitting}
-      />
-    ) : (
-      renderConfigForm(capability)
-    );
-
-  // Per-pack options for the Simple capabilities view — each wired to the same
-  // capability config/asset state the Advanced view writes, so the two stay in
-  // sync. Only offered when the team can actually use the backing capability.
-  const renderPackOptions = (pack: ToolPack) => {
-    // Library binding only narrows the team documents, so only that pack offers it.
-    if (pack.documentSource === DOC_ACCESS_TEAM_DOCUMENTS && availableCapabilityIds.has(CAP_DOCUMENT_ACCESS)) {
-      return (
-        <DocumentAccessPackOptions
-          configValues={capabilityConfigValues[CAP_DOCUMENT_ACCESS] ?? {}}
-          onConfigChange={(key, value) => onCapabilityConfigChange(CAP_DOCUMENT_ACCESS, key, value)}
-          teamId={teamId}
-          disabled={isSubmitting}
-        />
-      );
-    }
-    // Team wiki → the capability's own `mode` field, rendered by the same
-    // renderer the Advanced card uses so the two views share one control and one
-    // set of labels. Read from the live manifest rather than restated here.
-    if (pack.enablesCapabilityIds.includes(CAP_TEAM_WIKI) && availableCapabilityIds.has(CAP_TEAM_WIKI)) {
-      const modeField = capabilities
-        .find((capability) => capability.id === CAP_TEAM_WIKI)
-        ?.config_fields?.find((field) => field.key === "mode");
-      if (!modeField) return undefined;
-      return (
-        <TuningFieldRenderer
-          field={modeField}
-          value={capabilityConfigValues[CAP_TEAM_WIKI]?.[modeField.key]}
-          onChange={(key, value) => onCapabilityConfigChange(CAP_TEAM_WIKI, key, value)}
-          disabled={isSubmitting}
-          teamId={teamId}
-        />
-      );
-    }
-    // PowerPoint → the same mandatory-template upload as the Advanced ppt_filler
-    // card, wired to the same config/asset/blocking-error state so Save is gated
-    // identically.
-    if (pack.enablesCapabilityIds.includes(CAP_PPT_FILLER) && availableCapabilityIds.has(CAP_PPT_FILLER)) {
-      return (
-        <PptFillerPackOptions
-          disabled={isSubmitting}
-          teamId={teamId}
-          agentInstanceId={editInstance?.agent_instance_id}
-          agentDisplayName={editInstance?.display_name}
-          configValues={capabilityConfigValues[CAP_PPT_FILLER] ?? {}}
-          assetFiles={capabilityAssetFiles[CAP_PPT_FILLER] ?? {}}
-          onAssetFileChange={(slotKey, file) => onCapabilityAssetFileChange(CAP_PPT_FILLER, slotKey, file)}
-          onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(CAP_PPT_FILLER, message)}
-        />
-      );
-    }
-    return undefined;
-  };
 
   return (
     <div className={styles.body}>
@@ -400,13 +264,7 @@ export function AgentFormBody({
         <p className={styles.templateUnavailableNotice}>{t("rework.teams.formAgent.templateUnavailable")}</p>
       )}
 
-      {suspensionMessage && (
-        <div className={styles.suspensionBanner} role="alert">
-          <strong>{t("rework.teams.formAgent.suspended.title")}</strong> {suspensionMessage}
-        </div>
-      )}
-
-      {!templateMissing && (
+      {
         <>
           {errorSections.size > 0 && (
             <div className={styles.validationBanner} role="alert">
@@ -466,11 +324,11 @@ export function AgentFormBody({
                   maxLength={500}
                   disabled={isSubmitting}
                 />
-                <RecommendedModelField
-                  teamId={teamId}
-                  value={recommendedChatProfileId}
-                  onChange={onRecommendedChatProfileIdChange}
-                  disabled={isSubmitting}
+                <TextInput
+                  label={t("rework.weaverAgents.modelProfile")}
+                  value={recommendedChatProfileId ?? ""}
+                  disabled
+                  explanation={t("rework.weaverAgents.modelUnavailable")}
                 />
                 {renderFieldList(generalFields)}
               </>
@@ -501,16 +359,18 @@ export function AgentFormBody({
                     />
                   </label>
                 </div>
+                <p>{t("rework.weaverAgents.capabilitiesUnavailable")}</p>
+                {selectedCapabilityIds.length > 0 && <p>{selectedCapabilityIds.join(", ")}</p>}
                 {capabilityView === "simple" ? (
                   <SimpleCapabilitiesView
                     availableIds={availableCapabilityIds}
                     supportsCapabilities={supportsCapabilities}
                     includedCapabilities={capabilities}
-                    renderIncludedOptions={renderIncludedOptions}
+                    renderIncludedOptions={() => null}
                     selection={{ selectedCapabilityIds, capabilityConfigValues }}
-                    disabled={isSubmitting}
+                    disabled
                     onSelectionChange={onCapabilitySelectionReplace}
-                    renderPackOptions={renderPackOptions}
+                    renderPackOptions={() => null}
                   />
                 ) : (
                   <ul className={styles.toolsList}>
@@ -524,7 +384,7 @@ export function AgentFormBody({
                             name={name}
                             description={description}
                             included
-                            subForm={renderConfigForm(capability)}
+                            subForm={undefined}
                           />
                         );
                       }
@@ -541,9 +401,9 @@ export function AgentFormBody({
                           name={name}
                           description={description}
                           checked={checked}
-                          disabled={isSubmitting}
+                          disabled
                           onToggle={toggle}
-                          subForm={checked && renderConfigForm(capability)}
+                          subForm={undefined}
                         />
                       );
                     })}
@@ -568,19 +428,19 @@ export function AgentFormBody({
             )}
           </div>
         </>
-      )}
+      }
 
       {mode === "edit" && editInstance?.created_by && (
         <p className={styles.metadataFooter}>
           {t("rework.teams.formAgent.createdBy", {
-            user: userDisplayName(editInstance.created_by, auditUserById.get(editInstance.created_by)),
+            user: userDisplayName(editInstance.created_by, undefined),
           })}
           {editInstance.created_at && ` · ${formatRelativeDate(editInstance.created_at)}`}
           {editInstance.updated_by && (
             <>
               {" — "}
               {t("rework.teams.formAgent.updatedBy", {
-                user: userDisplayName(editInstance.updated_by, auditUserById.get(editInstance.updated_by)),
+                user: userDisplayName(editInstance.updated_by, undefined),
               })}
               {editInstance.updated_at && ` · ${formatRelativeDate(editInstance.updated_at)}`}
             </>

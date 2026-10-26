@@ -183,13 +183,14 @@ class PodApplicationContext:
         from fred_core.history.postgres_history_store import PostgresHistoryStore
         from fred_core.sql.base_sql import create_async_engine_from_config
         from fred_core.sql.schema_guard import require_tables
-        from fred_core.users.store.postgres_user_store import init_user_store
         from sqlalchemy import text
 
         from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 
         postgres_config = self.configuration.storage.postgres
         engine = create_async_engine_from_config(postgres_config)
+        # Register ownership before the first await, including cancelled startup.
+        self._sql_engine = engine
 
         async def _ping() -> None:
             # SQLAlchemy async engines are lazy — nothing above opened a real
@@ -210,36 +211,19 @@ class PodApplicationContext:
                 postgres_config.database,
                 type(exc).__name__,
             )
-            # This engine never reaches self._sql_engine on this path, so
-            # shutdown()'s own dispose() (below) can never reach it either —
-            # dispose it here or it leaks. Harmless today (the sole caller,
-            # agent_app.py's lifespan, has no retry and the process exits on
-            # this raise) but becomes a real leak the moment any retry/backoff
-            # wrapper is added around initialize_sql() or the lifespan.
-            await engine.dispose()
             raise
 
-        try:
-            # Startup-only (never on a read/write path): the history store no
-            # longer creates its own tables — Alembic owns that DDL (#2290) —
-            # so an install that skipped its migration job must be caught here,
-            # not hours later as an UndefinedTableError mid-turn (#2137).
-            await require_tables(
-                engine,
-                [SessionHistoryRow.__tablename__],
-                component="fred-runtime",
-                migrate_command=_MIGRATE_COMMAND,
-                version_table=_RUNTIME_VERSION_TABLE,
-            )
-        except Exception:
-            # Same leak-on-failure reasoning as the ping path above.
-            await engine.dispose()
-            raise
+        # Runtime migrations own history/checkpoints, never the Python manager.
+        await require_tables(
+            engine,
+            [SessionHistoryRow.__tablename__],
+            component="fred-runtime",
+            migrate_command=_MIGRATE_COMMAND,
+            version_table=_RUNTIME_VERSION_TABLE,
+        )
 
-        init_user_store(engine)
         checkpointer = FredSqlCheckpointer(engine, kpi=self.get_kpi_writer())
         history_store = PostgresHistoryStore(engine, kpi=self.get_kpi_writer())
-        self._sql_engine = engine
         self._checkpointer = checkpointer
         self._history_store = history_store
         logger.info(
@@ -400,17 +384,34 @@ class PodApplicationContext:
         if self._kpi_tasks:
             await asyncio.gather(*self._kpi_tasks, return_exceptions=True)
         self._kpi_tasks = []
-        if self._sql_engine is not None:
-            await self._sql_engine.dispose()
-            logger.info("[fred-runtime] SQL engine disposed")
-        if self._platform_sql is not None:
-            await self._platform_sql.dispose()
-            logger.info("[fred-runtime] platform SQL engine disposed")
-        if self.web_research is not None:
-            await self.web_research.close()
-        if self._control_plane_http_client is not None:
-            await self._control_plane_http_client.aclose()
-        self._stop_metrics_exporter()
+        # Each independent resource is attempted even if another close fails.
+        try:
+            for label, close in (
+                ("SQL engine", self._sql_engine.dispose if self._sql_engine else None),
+                (
+                    "platform SQL",
+                    self._platform_sql.dispose if self._platform_sql else None,
+                ),
+                (
+                    "web research",
+                    self.web_research.close if self.web_research else None,
+                ),
+                (
+                    "Control Plane HTTP",
+                    self._control_plane_http_client.aclose
+                    if self._control_plane_http_client
+                    else None,
+                ),
+            ):
+                if close is not None:
+                    try:
+                        await close()
+                    except Exception:
+                        logger.error(
+                            "[fred-runtime] Resource closure failed: %s", label
+                        )
+        finally:
+            self._stop_metrics_exporter()
 
     def _stop_metrics_exporter(self) -> None:
         if self._metrics_exporter is None:

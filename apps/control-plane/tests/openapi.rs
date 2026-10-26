@@ -139,6 +139,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /spaces/{space_id}/agent-instances",
         "get /spaces/{space_id}/agent-instances",
         "get /spaces/{space_id}/agent-instances/{agent_instance_id}",
+        "get /spaces/{space_id}/agent-instances/{agent_instance_id}/runtime",
         "patch /spaces/{space_id}/agent-instances/{agent_instance_id}",
         "delete /spaces/{space_id}/agent-instances/{agent_instance_id}",
         "get /organizations/{organization_id}/supervision",

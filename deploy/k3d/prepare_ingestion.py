@@ -53,8 +53,9 @@ def prepare() -> None:
     if kpi["enabled"]:
         indexes.append(concrete_index(kpi.get("index")))
     deploys = {item["metadata"]["name"]: item for item in manifests if item["kind"] == "Deployment"}
-    if set(deploys) != {"control-plane-backend", "knowledge-flow-worker", "frontend"}:
-        raise RuntimeError("Expected only control-plane-backend, knowledge-flow-worker and frontend deployments")
+    expected_deployments = {"control-plane-backend", "knowledge-flow-worker", "frontend", "fred-agents"}
+    if set(deploys) != expected_deployments:
+        raise RuntimeError("Expected only control-plane-backend, knowledge-flow-worker, frontend and fred-agents deployments")
     image = deploys["knowledge-flow-worker"]["spec"]["template"]["spec"]["containers"][0]["image"]
     image_id = run(["docker", "image", "inspect", "--format", "{{.Id}}", image]).strip()
     with tempfile.TemporaryDirectory(prefix="fred-contract-") as directory:

@@ -20,7 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   isPersonalTeam: false,
-  pathname: "/team/team-1/agents",
+  pathname: "/team/team-1/resources",
   relations: ["team_member"] as string[],
   charterEnabled: undefined as boolean | undefined,
   applicationsEnabled: false,
@@ -30,6 +30,11 @@ const h = vi.hoisted(() => ({
   },
   refetchKnowledgeBases: vi.fn(),
   knowledgeBasesQuery: vi.fn(),
+  selectedTeam: vi.fn(),
+  bootstrap: vi.fn(),
+  wiki: vi.fn(),
+  applications: vi.fn(),
+  flags: vi.fn(),
   canUseKnowledgeBases: true,
   knowledgeBases: { currentData: undefined, isError: false } as {
     currentData?: { definition_id: string; name: string; description: string }[];
@@ -63,18 +68,21 @@ vi.mock("../../../../../../hooks/useFrontendProperties.ts", () => ({
   }),
 }));
 vi.mock("../../../../../../hooks/useSelectedTeam.ts", () => ({
-  useSelectedTeam: () => ({
-    teamId: "team-1",
-    isPersonalTeam: h.isPersonalTeam,
-    selectedTeam: {
-      id: "team-1",
-      name: "Team One",
-      is_member: true,
-      my_relations: h.relations,
-      avatar_image_url: h.teamAvatarImageUrl,
-    },
-    canOpenTeamSettings: false,
-  }),
+  useSelectedTeam: (skip: boolean) => (
+    h.selectedTeam(skip),
+    {
+      teamId: "team-1",
+      isPersonalTeam: h.isPersonalTeam,
+      selectedTeam: {
+        id: "team-1",
+        name: "Team One",
+        is_member: true,
+        my_relations: h.relations,
+        avatar_image_url: h.teamAvatarImageUrl,
+      },
+      canOpenTeamSettings: false,
+    }
+  ),
 }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({
   useTeamCapabilities: () => ({
@@ -84,31 +92,42 @@ vi.mock("@hooks/useTeamCapabilities.ts", () => ({
   }),
 }));
 vi.mock("../../../../../../hooks/useFrontendBootstrap.ts", () => ({
-  useFrontendBootstrap: () => ({
-    bootstrap:
-      h.charterEnabled === undefined && h.userPictureUrl === undefined
-        ? undefined
-        : {
-            team_admin_charter_enabled: h.charterEnabled,
-            current_user: { id: "u-1", avatar_image_url: h.userPictureUrl },
-          },
-  }),
+  useFrontendBootstrap: (skip: boolean) => (
+    h.bootstrap(skip),
+    {
+      bootstrap:
+        h.charterEnabled === undefined && h.userPictureUrl === undefined
+          ? undefined
+          : {
+              team_admin_charter_enabled: h.charterEnabled,
+              current_user: { id: "u-1", avatar_image_url: h.userPictureUrl },
+            },
+    }
+  ),
 }));
 vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
-  useFrontendFeatureFlag: () => ({ enabled: h.applicationsEnabled, isLoading: false }),
+  useFrontendFeatureFlag: (name: string, skip: boolean) => (
+    h.flags(name, skip), { enabled: h.applicationsEnabled, isLoading: false }
+  ),
 }));
 vi.mock("@hooks/teamCapabilities.ts", () => ({ hasElevatedTeamRole: () => false }));
 vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
-  useTeamApplications: () => h.result,
+  useTeamApplications: (teamId: string, skip: boolean) => {
+    h.applications(teamId, skip);
+    return h.result;
+  },
 }));
 vi.mock("../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useKnowledgeBaseDefinitionsQuery: (args: unknown, options: unknown) => {
     h.knowledgeBasesQuery(args, options);
     return { ...h.knowledgeBases, refetch: h.refetchKnowledgeBases };
   },
-  useWikiAvailabilityQuery: () => ({
-    data: h.wikiEnabled === undefined ? undefined : { enabled: h.wikiEnabled },
-  }),
+  useWikiAvailabilityQuery: (args: unknown, options: unknown) => (
+    h.wiki(args, options),
+    {
+      data: h.wikiEnabled === undefined ? undefined : { enabled: h.wikiEnabled },
+    }
+  ),
 }));
 vi.mock("@shared/organisms/ChatList/ChatList.tsx", () => ({ default: () => <div data-chat-list /> }));
 
@@ -326,7 +345,7 @@ describe("TeamContentNavbar — cross-session knowledge base availability", () =
 });
 
 afterEach(() => {
-  h.pathname = "/team/team-1/agents";
+  h.pathname = "/team/team-1/resources";
   h.relations = ["team_member"];
   h.charterEnabled = undefined;
 });
@@ -366,4 +385,17 @@ describe("retired evaluation navigation", () => {
     expect(html).not.toContain("/settings/evaluations");
     expect(html).not.toContain("rework.teamSettings.navigation.evaluations");
   });
+});
+
+it("skips every legacy sidebar read and chat list on agent management", () => {
+  h.pathname = "/team/team-1/agents";
+  const html = renderToStaticMarkup(<TeamContentNavbar />);
+  expect(h.selectedTeam).toHaveBeenLastCalledWith(true);
+  expect(h.bootstrap).toHaveBeenLastCalledWith(true);
+  expect(h.flags).toHaveBeenLastCalledWith("enableApplications", true);
+  expect(h.applications).toHaveBeenLastCalledWith("team-1", true);
+  expect(h.wiki).toHaveBeenLastCalledWith({ teamId: "team-1" }, { skip: true });
+  expect(h.knowledgeBasesQuery).toHaveBeenLastCalledWith({ teamId: "team-1" }, expect.objectContaining({ skip: true }));
+  expect(html).not.toContain("data-chat-list");
+  expect(html).toContain("rework.weaverAgents.chatUnavailable");
 });

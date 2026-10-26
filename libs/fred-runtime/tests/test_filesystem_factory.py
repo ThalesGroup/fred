@@ -119,20 +119,9 @@ def test_minio_runtime_filesystem_requires_secret(
 
 
 def test_conversation_filesystem_quotas_allow_partial_and_complete_overrides() -> None:
-    partial = _config({"type": "local"}).model_copy(
-        update={
-            "storage": _config({"type": "local"}).storage.model_copy(
-                update={
-                    "conversation_filesystem": {
-                        "scratchpad_max_files": 7,
-                    }
-                }
-            )
-        }
-    )
-    # Validate through the public configuration boundary, rather than relying
-    # on model_copy's deliberately non-validating update semantics.
-    partial = AgentPodConfig.model_validate(partial.model_dump())
+    values = _config({"type": "local"}).model_dump()
+    values["storage"]["conversation_filesystem"] = {"scratchpad_max_files": 7}
+    partial = AgentPodConfig.model_validate(values)
     complete = AgentPodConfig.model_validate(
         {
             **_config({"type": "local"}).model_dump(),

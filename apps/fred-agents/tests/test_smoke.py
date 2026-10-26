@@ -16,14 +16,52 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
+import pytest
 import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from fred_core.security import oidc
+from fred_core.security.delegation import preserved_delegation
+from fred_core.security.rebac.authorization_binding import AuthorizationBinding
 from fred_runtime.app import agent_app as agent_app_module
+from fred_runtime.common.kf_http_client import close_shared_kf_async_client
+from fred_runtime.runtime_context import (
+    get_runtime_context_or_none,
+    set_runtime_context,
+)
 from fred_sdk import load_agent_prompt_markdown
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
+
+
+@pytest.fixture(autouse=True)
+def offline_pod_authorization(monkeypatch):
+    """Smoke tests exercise shipped agents, with the startup authority mocked."""
+    previous = get_runtime_context_or_none()
+    monkeypatch.setattr(oidc, "KEYCLOAK_ENABLED", oidc.KEYCLOAK_ENABLED)
+
+    async def prepare(container):
+        security = container.configuration.security
+        assert security is not None
+        oidc.configure_token_security(security)
+        oidc.initialize_user_security(security.user)
+        await container.initialize_sql()
+        return security.rebac, AuthorizationBinding("fred", "test-store", "test-model")
+
+    engine = SimpleNamespace(enabled=False, get_client=AsyncMock(), close=AsyncMock())
+    monkeypatch.setattr(agent_app_module, "prepare_authorization", prepare)
+    monkeypatch.setattr(
+        agent_app_module, "PublishedOpenFgaRebacEngine", lambda *a, **k: engine
+    )
+    with preserved_delegation():
+        try:
+            yield
+        finally:
+            close_shared_kf_async_client()
+            set_runtime_context(previous)
 
 
 class ToolFriendlyFakeChatModel(FakeMessagesListChatModel):

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { isAgentManagementRoute } from "@core/utils/agentManagementRoute";
 import { useEffect } from "react";
 import { useMySpacesQuery } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./TeamContentNavbar.module.scss";
@@ -60,13 +61,23 @@ export default function TeamContentNavbar() {
   const { t } = useTranslation();
   const location = useLocation();
   const { pathname } = location;
+  const agentManagement = isAgentManagementRoute(pathname);
   const navigate = useNavigate();
 
-  const { teamId, isPersonalTeam: legacyPersonalTeam, selectedTeam, canOpenTeamSettings } = useSelectedTeam();
+  const {
+    teamId,
+    isPersonalTeam: legacyPersonalTeam,
+    selectedTeam,
+    canOpenTeamSettings,
+  } = useSelectedTeam(agentManagement);
   const memberships = useMySpacesQuery(undefined, { refetchOnMountOrArgChange: 60 });
-  const space = !memberships.isError ? memberships.currentData?.find((item) => item.id === teamId) : undefined;
+  const space = !memberships.isError
+    ? memberships.currentData?.find((item) =>
+        agentManagement && teamId === "personal" ? item.kind === "personal" : item.id === teamId,
+      )
+    : undefined;
   const isPersonalTeam = space ? space.kind === "personal" : legacyPersonalTeam;
-  const { bootstrap } = useFrontendBootstrap();
+  const { bootstrap } = useFrontendBootstrap(agentManagement);
 
   // Record every entry into a team so the Home nav-panel switcher can offer a
   // "recently viewed" sort. Client-only (localStorage), best-effort.
@@ -96,10 +107,10 @@ export default function TeamContentNavbar() {
   // construction: a personal space is never `canOpenTeamSettings`.
   const usageBase = `/team/${teamId}/usage`;
   const inUsage = !!teamId && pathname.startsWith(usageBase);
-  const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications");
+  const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications", agentManagement);
   const { data: teamApplications, isError: applicationsError } = useTeamApplications(
     teamId,
-    isPersonalTeam || inSettings || inUsage,
+    agentManagement || isPersonalTeam || inSettings || inUsage,
   );
   // Every entry the Control Plane returns is already registered and authorized
   // for this team; Fred no longer compiles application code, so there is no
@@ -113,14 +124,17 @@ export default function TeamContentNavbar() {
   // optimistically: an entry that appears and then vanishes on a slow answer
   // reads worse than one that arrives a moment late, and the control-plane
   // refuses the wiki routes anyway.
-  const { data: wikiAvailability } = useWikiAvailabilityQuery({ teamId: teamId ?? "" }, { skip: !teamId });
+  const { data: wikiAvailability } = useWikiAvailabilityQuery(
+    { teamId: teamId ?? "" },
+    { skip: agentManagement || !teamId },
+  );
   const showWiki = wikiAvailability?.enabled === true;
   // Enablement is an administration decision taken elsewhere, so this
   // always-mounted subscription refreshes like the application catalog does.
   // A failed refresh keeps the last known answer: an entry that vanishes on one
   // bad poll and returns a minute later reads worse than a stale one, and the
   // control-plane refuses the routes anyway.
-  const skipKnowledgeBases = !teamId || !capabilities.canUseTeamKnowledgeBases;
+  const skipKnowledgeBases = agentManagement || !teamId || !capabilities.canUseTeamKnowledgeBases;
   const { currentData: knowledgeBaseDefinitions, refetch: refetchKnowledgeBases } = useKnowledgeBaseDefinitionsQuery(
     { teamId: teamId ?? "" },
     crossSessionRefreshOptions(skipKnowledgeBases),
@@ -396,7 +410,7 @@ export default function TeamContentNavbar() {
           <>
             <NavigationMenu items={navigationItems} />
             <Separator margin={"var(--spacing-m)"} />
-            <ChatList teamId={teamId} />
+            {agentManagement ? <p>{t("rework.weaverAgents.chatUnavailable")}</p> : <ChatList teamId={teamId} />}
           </>
         )}
       </div>

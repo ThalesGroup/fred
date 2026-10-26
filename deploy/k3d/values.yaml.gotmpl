@@ -1,4 +1,4 @@
-# Complete Rust control-plane ingestion overlay owned by this checkout.
+# Rust ingestion and Python agent catalog overlay owned by this checkout.
 # make k3d-app ENV=secondary APP=fred DIR=../fred
 # prepare exports the selected worker's contract and provisions application identities.
 
@@ -24,9 +24,21 @@ applications:
           paths:
             - {path: /, pathType: Prefix, service: {name: frontend, port: 80}}
             - {path: /control-plane, pathType: Prefix, service: {name: control-plane-backend, port: 8222}}
+            - {path: /fred/agents/v2, pathType: Prefix, service: {name: fred-agents, port: 80}}
 
   fred-agents:
-    enabled: false
+    # Deploy the real Python runtime; organization template activation stays in the UI.
+    enabled: true
+    migration:
+      enabled: true
+      extraEnvVars: [*postgres]
+    configuration:
+      app:
+        gcu_version: v1
+      security:
+        profile: c3
+        rebac:
+          store_name: control-plane
 
   control-plane-backend:
     lifecycle_policy_catalog:
@@ -75,6 +87,11 @@ applications:
       limits: {cpu: "2", memory: 1Gi, ephemeral-storage: 2Gi}
     configuration:
       # The chart defaults plus these k3d addresses; the factory supplies none of it.
+      platform:
+        runtime_catalog_sources:
+          - runtime_id: fred-agents
+            base_url: http://fred-agents/fred/agents/v2
+            enabled: true
       security:
         m2m: {realm_url: {{ requiredEnv "K3D_REALM_URL" | quote }}}
         user: {realm_url: {{ requiredEnv "K3D_REALM_URL" | quote }}}

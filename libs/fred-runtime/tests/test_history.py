@@ -55,6 +55,8 @@ from fred_sdk.contracts.models import ReActAgentDefinition
 from fred_sdk.contracts.runtime import HistoryStorePort
 from langchain_core.messages import AIMessage
 
+pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
+
 
 @tool("noop.ping", description="Return pong.")
 async def _noop_ping(ctx: ToolContext) -> str:

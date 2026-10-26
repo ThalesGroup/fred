@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AgentTemplateSummary,
   ManagedAgentInstanceSummary,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var

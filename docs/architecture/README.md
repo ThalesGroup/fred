@@ -60,6 +60,9 @@ the [SQL table catalogue](A2-manager-contracts.md#control-plane-sql-catalogue),
 [security mechanisms](A6-security.md), the [action and role matrix](A7-action-role-matrix.md),
 [organization and provisioning contracts](A8-organizations.md), and
 [document storage and processing](A9-documents.md).
+[Open Issues](A10-open-issues.md) records unresolved quality questions
+and the evidence needed to revisit retained choices, without committing to an
+implementation change.
 Generated blocks remain tied to
 source code; they are references, not another handwritten API specification.
 

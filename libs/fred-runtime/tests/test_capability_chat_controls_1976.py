@@ -61,6 +61,8 @@ from test_capability_endpoints_1974 import (
     _fake_control_plane,
 )
 
+pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
+
 # ---------------------------------------------------------------------------
 # A capability that both computes chat controls and reads a typed turn-options
 # slice — the two halves #1976 adds.

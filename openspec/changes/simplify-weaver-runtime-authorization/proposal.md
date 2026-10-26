@@ -14,6 +14,11 @@ Weaver discovers Fred agent templates but does not yet persist their configured 
 - Preserve Swift capability declarations, registry, effective configuration, model selection/routing, clients and credential renewal. Template activation authorizes only its configured dependencies; no independent capability/model ReBAC catalogue is introduced. Missing dependencies still prevent activation/execution.
 - Remove replaced paths and their configuration/registrations as each lot lands. Keep reusable credential, storage and lifecycle mechanisms.
 
+The 2026-10-25 sequencing decision prioritizes core Weaver ReBAC for the next
+increment. Swift global admission filtering remains required but is deferred to a
+subsequent lot, not a prerequisite for this increment. See design decision 2a and
+task 4.1; do not add temporary feature refusals or infer a replacement global policy.
+
 ## Capabilities
 
 ### New Capabilities

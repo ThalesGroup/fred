@@ -13,7 +13,9 @@ Readers can consult content; editors can import documents and manage folders.
 An import checks the destination, filename and available quota. A name conflict
 does not overwrite an existing document. Each file has its own outcome: one
 failed upload does not undo the others. Once stored, the original is preserved
-unchanged.
+unchanged. The [coordination overview](01-system-overview.md#13-coordinating-document-writes)
+explains how Control Plane protects these reservations and publications when
+several editors write concurrently.
 
 ## 5.2. Process the content
 

@@ -257,11 +257,56 @@ during FGA checks or cross-request cache is added. DELETE remains unchanged:
 space Write still permits removal after template revocation, without a visibility
 exception or new management status. Dynamic validation remains the next milestone.
 
+### 1h. Agent management UI sub-lot of 1.7 (2026-10-25)
+
+Reuse TeamAgentsPage, its cards and full tabbed form with the generated Rust
+space contracts. Resolve route identity against /me/spaces, admit only team and
+personal spaces and ask the existing authorize endpoint for Write. List/GET remain
+independent of the management catalog and its failures. Keep space-scoped RTK
+cache tags and discard open selections when scope changes. Edit from GET and send
+only changed fields, preserving saved tuning and unsupported capability/profile
+settings. Keep adjacent unsupported actions visible and explicitly unavailable,
+without legacy calls. Preserve other shared-component consumers.
+
+The user authorizes focused frontend regression tests, TypeScript and frontend
+build for this sub-lot. No backend changes, deployment, migration, commit or push.
+Execution preparation, sessions and chat remain outside this delivery; task 1.7
+stays open. Dimi owns validation after redeployment; no arc42 boundary expansion.
+
 ### 2. Consume one published authorization binding
 
 At startup, use configured PostgreSQL access to read the singleton binding. Validate configured identity and the exact fetched model against the canonical Weaver contract; pin `active_store` and `model_id` on every check. Reuse the checked-in Control Plane model artifact; do not maintain a second hand-written Python schema.
 
 Missing/mismatched binding, unsupported model or unavailable dependencies prevent readiness. Runtime does not select latest, create a store, synchronize a schema or fall back. Tuple checks use higher consistency and no cross-operation authorization cache. Binding replacement is not hot-reloaded: a future model rollout must coordinate consumers; it is not authorized here.
+
+### 2a. Deliver core ReBAC before global admission filtering
+
+On 2026-10-25, after reviewing the Swift admission rules, Dimi explicitly retained
+all global admission features but deferred their port to a subsequent lot. The
+next increment targets core Weaver ReBAC and its runtime integration. Rebuilding
+the recent global filtering feature is not a prerequisite for that increment.
+
+The deferred scope includes the filtering switch, identity-attribute allow/block
+policies with all/any conditions, access-manager admission, individual exceptions,
+authorized-team admission and Free-link-derived admission. Preserve the rules'
+alternative admission paths and the verified-person semantics of delegated calls
+when porting them. This is retained work, not removal of the product requirement.
+Dimi did not select organization membership alone as a substitute global policy.
+
+JWT validation, person/workload separation, trusted delegation, CGU, space/template
+permissions and applicable lifecycle controls remain required within their agreed
+scopes. Existing decisions on departure without automatic restoration and the
+five-minute run/delegation bound are unchanged; this decision does not reinstate
+reversible suspension. It does not pull conversation/run implementation into the
+current startup increment.
+
+Do not add a catalog mode, compatibility flag, temporary execution refusal or
+replacement admission policy while waiting for filtering. Remove replaced legacy
+wiring only within the implemented scope, preserving unrelated controls and shared
+consumers. Earlier sequencing that made a complete filtering port a prerequisite
+for core ReBAC is superseded. Core ReBAC progress must not be reported as complete
+Swift admission parity, a working startup or a validated user journey without the
+corresponding evidence. Tasks 1.4 and 4.1 track the separate deliveries.
 
 ### 3. Resolve canonical context; keep credentials outside it
 

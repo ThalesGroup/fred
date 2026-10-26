@@ -58,6 +58,8 @@ from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import ValidationError
 from test_capability_endpoints_1974 import _app_with_capabilities
 
+pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
+
 _GENERATE = "/pod/v1/agents/creation-assistant/draft"
 
 

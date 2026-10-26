@@ -24,7 +24,7 @@ export function normalizeAgentName(name: string): string {
 
 /** The team's names, normalised, without the agent being edited. */
 export function takenAgentNames(
-  instances: ManagedAgentInstanceSummary[],
+  instances: Pick<ManagedAgentInstanceSummary, "agent_instance_id" | "display_name">[],
   excludeAgentInstanceId?: string,
 ): Set<string> {
   return new Set(
@@ -52,5 +52,8 @@ export function freeAgentName(name: string, taken: ReadonlySet<string>, word: st
 /** True for the server's name conflict, on a create or rename error body. */
 export function isAgentNameConflict(error: unknown): boolean {
   const detail = (error as { data?: { detail?: unknown } } | null)?.data?.detail;
-  return (detail as { code?: unknown } | null)?.code === AGENT_NAME_CONFLICT;
+  return (
+    (error as { data?: { code?: string } } | null)?.data?.code === AGENT_NAME_CONFLICT ||
+    (detail as { code?: unknown } | null)?.code === AGENT_NAME_CONFLICT
+  );
 }

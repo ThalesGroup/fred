@@ -27,11 +27,17 @@ pub enum DirectoryKind {
     Local,
 }
 
-/// Only identity classification is needed here, not delegated grant acceptance.
-/// These are the existing Python security.delegation claim settings.
+/// Shared identity classification and runtime-resolver delegation settings.
+/// Names and defaults match Python security.delegation; acceptance is route-scoped.
 #[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct DirectoryDelegation {
+    /// Accept person/run/agent assertions only at the runtime resolver.
+    pub accept_delegated_calls: bool,
+    /// Keycloak client-credentials markers are mandatory when enabled.
+    pub service_accounts_only: bool,
+    /// Human login clients, in addition to security.user.client_id, cannot delegate.
+    pub user_clients: Vec<String>,
     pub audience: String,
     pub caller_role: String,
     pub caller_roles_claim: Option<Vec<String>>,
@@ -39,6 +45,9 @@ pub struct DirectoryDelegation {
 impl Default for DirectoryDelegation {
     fn default() -> Self {
         Self {
+            accept_delegated_calls: false,
+            service_accounts_only: false,
+            user_clients: Vec::new(),
             audience: "fred-delegation".into(),
             caller_role: "delegation_caller".into(),
             caller_roles_claim: None,
@@ -69,6 +78,13 @@ impl DirectoryDelegation {
             })
             .transpose()?;
         Ok(Self {
+            accept_delegated_calls: self.accept_delegated_calls,
+            service_accounts_only: self.service_accounts_only,
+            user_clients: self
+                .user_clients
+                .iter()
+                .map(|client| identifier(client))
+                .collect::<anyhow::Result<Vec<_>>>()?,
             audience: identifier(&self.audience)?,
             caller_role: identifier(&self.caller_role)?,
             caller_roles_claim,

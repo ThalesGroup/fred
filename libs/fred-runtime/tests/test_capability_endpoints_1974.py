@@ -64,6 +64,8 @@ from langchain_core.tools import tool
 from pydantic import BaseModel
 from test_agent_app import _build_test_config, _EchoAgent
 
+pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
+
 # ---------------------------------------------------------------------------
 # Test capabilities
 # ---------------------------------------------------------------------------

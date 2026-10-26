@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AgentTemplateSummary,
   ManagedAgentInstanceSummary,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 const h = vi.hoisted(() => ({
   body: vi.fn(),
@@ -129,72 +129,20 @@ const assistantButton = () =>
     node.textContent?.includes("rework.teams.formAgent.creationAssistant.open"),
   ) as HTMLButtonElement;
 const lastBodyProps = () => h.body.mock.lastCall?.[0] as Record<string, unknown>;
-const lastDialogProps = () =>
-  h.dialog.mock.lastCall?.[0] as {
-    open: boolean;
-    capabilities: unknown[];
-    onApply: (draft: unknown) => void;
-    current: unknown;
-  };
-
-describe("AgentFormModal creation assistant", () => {
-  it("stays hidden on the template step and appears once a template is chosen", () => {
+describe("Weaver creation assistant", () => {
+  it("retains its place after template selection but cannot open an unconnected dialog", () => {
     render("create");
     expect(assistantButton()).toBeUndefined();
-
     act(() => [...document.querySelectorAll("button")].find((node) => node.textContent === "pick-template")?.click());
-    expect(assistantButton().disabled).toBe(false);
+    expect(assistantButton().disabled).toBe(true);
+    expect(assistantButton().title).toBe("rework.weaverAgents.notConnected");
+    act(() => assistantButton().click());
+    expect(h.dialog).not.toHaveBeenCalled();
   });
-
-  it("opens from the header in edit mode and writes the applied draft into the form", () => {
+  it("keeps the saved prompt and does not mount the assistant while editing", () => {
     render("edit");
-    expect(assistantButton().disabled).toBe(false);
-    expect(document.querySelector('[data-testid="assistant-dialog"]')).toBeNull();
-
-    act(() => assistantButton().click());
-    expect(document.querySelector('[data-testid="assistant-dialog"]')).not.toBeNull();
-    expect(lastDialogProps().current).toEqual({
-      name: "Existing",
-      role: "Old role",
-      description: "",
-      systemPrompt: "Old prompt",
-      capabilityIds: [],
-      capabilityConfigValues: {},
-    });
-
-    act(() =>
-      lastDialogProps().onApply({ name: "New name", systemPrompt: "New prompt", capabilityIds: ["team_wiki"] }),
-    );
-
-    const props = lastBodyProps();
-    expect(props.displayName).toBe("New name");
-    expect(props.role).toBe("Old role");
-    expect(props.tuningFieldValues).toEqual({ "prompts.system": "New prompt" });
-    expect(props.selectedCapabilityIds).toEqual(["team_wiki"]);
-    expect(props.draftRevision).toBe(1);
-    expect(document.querySelector('[data-testid="assistant-dialog"]')).toBeNull();
-  });
-
-  it("keeps included Graph capabilities and their saved configuration when applying a draft", () => {
-    const config = {
-      document_access: { schema_version: 1, config: { attachments: true, team_documents: false } },
-    };
-    render(
-      "edit",
-      {
-        ...TEMPLATE,
-        supports_capabilities: false,
-        available_capabilities: [{ id: "document_access" }],
-      } as AgentTemplateSummary,
-      { ...INSTANCE, capability_config: config },
-    );
-    act(() => assistantButton().click());
-    expect(lastDialogProps().capabilities).toEqual([]);
-
-    act(() => lastDialogProps().onApply({ name: "Graph helper", capabilityIds: ["document_access"] }));
-
-    expect(lastBodyProps().displayName).toBe("Graph helper");
-    expect(lastBodyProps().selectedCapabilityIds).toEqual([]);
-    expect(lastBodyProps().capabilityConfigValues).toEqual({ document_access: config.document_access.config });
+    expect(lastBodyProps().tuningFieldValues).toEqual(INSTANCE.tuning_field_values);
+    expect(assistantButton().disabled).toBe(true);
+    expect(h.dialog).not.toHaveBeenCalled();
   });
 });

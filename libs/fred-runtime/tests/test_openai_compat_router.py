@@ -79,6 +79,8 @@ from fred_sdk.contracts.openai_compat import OpenAIChatRequest
 from langchain_core.messages import AIMessage
 from starlette.requests import ClientDisconnect
 
+pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
+
 
 @tool("demo.hello", description="Return a greeting.")
 async def _demo_hello(ctx: ToolContext) -> str:

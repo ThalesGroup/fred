@@ -1119,6 +1119,24 @@
     "updateSuccess": "Mis à jour"
   },
   "rework": {
+    "weaverAgents": {
+      "notConnected": "Pas encore raccordé à Weaver.",
+      "chatUnavailable": "Le chat et l’historique des conversations ne sont pas encore raccordés à Weaver.",
+      "scopeUnavailable": "Cet espace équipe ou personnel est indisponible ou vous n’y avez pas accès.",
+      "modelProfile": "Profil de modèle recommandé",
+      "modelUnavailable": "La sélection de profils de modèle n’est pas encore raccordée. La recommandation enregistrée est conservée.",
+      "capabilitiesUnavailable": "Les capacités et l’envoi de fichiers ne sont pas encore raccordés. Les sélections et la configuration enregistrées sont conservées. Le serveur refusera la création d’un agent dont le template impose des capacités actives.",
+      "errors": {
+        "unauthorized": "Votre session a expiré. Veuillez vous reconnecter.",
+        "forbidden": "Vous n’avez pas les droits nécessaires pour cette opération.",
+        "notFound": "La ressource ou la route API demandée est introuvable.",
+        "conflict": "Le nom ou la ressource entre en conflit avec une entrée existante.",
+        "validation": "Certaines valeurs du formulaire ont été refusées. Votre saisie est conservée.",
+        "network": "Impossible de joindre le serveur. Vérifiez votre connexion.",
+        "server": "Le serveur n’a pas pu traiter la demande. Réessayez plus tard.",
+        "unexpected": "La demande n’a pas pu être traitée."
+      }
+    },
     "supervision": {
       "collectionDetails": "Dates et périmètre de collecte",
       "distribution": "Répartition des données",

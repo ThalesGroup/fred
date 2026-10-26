@@ -802,21 +802,11 @@ async def test_reverify_team_authorization_blocks_denied_tool_call() -> None:
     assert audit.records[1].reason == "AuthorizationError"  # type: ignore[attr-defined]
 
 
-@pytest.mark.parametrize(
-    ("error", "account_status_error"),
-    [
-        (AuthorizationError("synthetic-person", "can_use", Resource.TEAM), None),
-        (None, AccountStatusError()),
-        (None, AccountStatusError(unavailable=True)),
-    ],
-    ids=["permission-refused", "account-suspended", "account-status-unavailable"],
-)
 @pytest.mark.asyncio
-async def test_delegated_local_recheck_stops_before_tool_execution(
-    error: Exception | None, account_status_error: Exception | None
-) -> None:
+async def test_delegated_local_recheck_stops_before_tool_execution() -> None:
     engine = _FakeRebacEngine(
-        enabled=True, error=error, account_status_error=account_status_error
+        enabled=True,
+        error=AuthorizationError("synthetic-person", "can_use", Resource.TEAM),
     )
     middleware = ToolObservabilityMiddleware(kpi=None, binding=_binding())
     called = False
@@ -1351,126 +1341,41 @@ async def test_command_trace_captures_only_matching_tool_result(capture: bool) -
     [("team-1", [("user-1", "team-1")]), ("personal-user-1", []), (None, [])],
     ids=["collaborative", "personal", "no-team"],
 )
-@pytest.mark.parametrize("unavailable", [False, True], ids=["refused", "unavailable"])
-async def test_a_delegated_tool_call_requires_an_active_account_in_every_team(
+@pytest.mark.parametrize("delegated", [False, True])
+async def test_tool_recheck_uses_permissions_without_swift_account_status(
     team_id: str | None,
     permission_checks: list[tuple[str, str]],
-    unavailable: bool,
+    delegated: bool,
 ) -> None:
     engine = _FakeRebacEngine(
-        enabled=True, account_status_error=AccountStatusError(unavailable=unavailable)
+        enabled=True, account_status_error=AssertionError("Swift check must not run")
     )
-    middleware = ToolObservabilityMiddleware(
-        kpi=None,
-        binding=BoundRuntimeContext(
-            runtime_context=PortableRuntimeContext(),
-            portable_context=PortableContext(
-                request_id="request-1",
-                correlation_id="correlation-1",
-                actor="user-1",
-                tenant="team-1",
-                environment=PortableEnvironment.DEV,
-                session_id="session-1",
-                user_id="user-1",
-                team_id=team_id,
-            ),
-        ),
-    )
-
-    async def handler(request: ToolCallRequest) -> ToolMessage:
-        raise AssertionError("tool must not run")
-
     with _with_rebac_engine(engine), RunScope.open() as scope:
-        scope.set_delegated_credentials(True)
-        with pytest.raises(AuthorityLostError):
-            await middleware.awrap_tool_call(
-                _request(name="fake.search", tool_obj=None), handler
-            )
-    assert engine.account_status_checks == ["user-1"]
+        scope.set_delegated_credentials(delegated)
+        await ToolExecution._reverify_team_authorization(
+            user_id="user-1", team_id=team_id, is_service_agent=False
+        )
+    assert engine.account_status_checks == []
     assert engine.calls == permission_checks
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("team_id", ["personal-user-1", None])
-async def test_a_personal_delegated_tool_call_allows_an_active_person(
-    team_id: str | None,
-) -> None:
-    engine = _FakeRebacEngine(enabled=True, deny=True)
-    with _with_rebac_engine(engine), RunScope.open() as scope:
-        scope.set_delegated_credentials(True)
-        await ToolExecution._reverify_team_authorization(
-            user_id="user-1", team_id=team_id, is_service_agent=False
-        )
-    assert engine.account_status_checks == ["user-1"]
-    assert engine.calls == []
-
-
-class _Rendezvous(_FakeRebacEngine):
-    """Each check waits until the other has started: run one after the other,
-    the first never returns."""
-
-    def __init__(self, *, account_status_delay: float = 0, **kwargs: Any) -> None:
-        super().__init__(enabled=True, **kwargs)
-        self.account_status_delay = account_status_delay
-        self.account_status_started = asyncio.Event()
-        self.permission_started = asyncio.Event()
-
-    async def require_active_account(self, user_id: str) -> None:
-        self.account_status_started.set()
-        await asyncio.wait_for(self.permission_started.wait(), timeout=1)
-        await asyncio.sleep(self.account_status_delay)
-        await super().require_active_account(user_id)
-
-    async def check_permission_or_raise(
-        self, subject: Any, permission: Any, resource: Any, **kwargs: Any
-    ) -> None:
-        self.permission_started.set()
-        await asyncio.wait_for(self.account_status_started.wait(), timeout=1)
-        await super().check_permission_or_raise(subject, permission, resource, **kwargs)
-
-
-@pytest.mark.asyncio
-async def test_a_delegated_collaborative_team_checks_account_status_and_permission_concurrently() -> (
+async def test_delegated_permission_outage_is_not_masked_by_swift_account_status() -> (
     None
 ):
-    engine = _Rendezvous()
-    with _with_rebac_engine(engine), RunScope.open() as scope:
-        scope.set_delegated_credentials(True)
-        await ToolExecution._reverify_team_authorization(
-            user_id="user-1", team_id="team-1", is_service_agent=False
-        )
-    assert engine.account_status_checks == ["user-1"]
-    assert engine.calls == [("user-1", "team-1")]
-
-
-@pytest.mark.asyncio
-async def test_an_account_status_refusal_wins_over_a_permission_failure() -> None:
-    """The permission check fails first with an ordinary error; the later account
-    status refusal still ends the delegated run as a lost authority."""
-    engine = _Rendezvous(
-        account_status_delay=0.05,
+    engine = _FakeRebacEngine(
+        enabled=True,
         error=RuntimeError("synthetic outage"),
         account_status_error=AccountStatusError(),
     )
     with _with_rebac_engine(engine), RunScope.open() as scope:
         scope.set_delegated_credentials(True)
-        with pytest.raises(AuthorityLostError):
+        with pytest.raises(RuntimeError, match="synthetic outage"):
             await ToolExecution._reverify_team_authorization(
                 user_id="user-1", team_id="team-1", is_service_agent=False
             )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("team_id", ["team-1", "personal-user-1", None])
-async def test_an_undelegated_tool_call_makes_no_account_status_check(
-    team_id: str | None,
-) -> None:
-    engine = _FakeRebacEngine(enabled=True, account_status_error=AccountStatusError())
-    with _with_rebac_engine(engine):
-        await ToolExecution._reverify_team_authorization(
-            user_id="user-1", team_id=team_id, is_service_agent=False
-        )
     assert engine.account_status_checks == []
+    assert engine.calls == [("user-1", "team-1")]
 
 
 @pytest.mark.asyncio

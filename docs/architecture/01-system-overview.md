@@ -34,3 +34,25 @@ flowchart TB
     class ui,cp,kf fred
     class temporal,stores cots
 ```
+
+## 1.3. Coordinating document writes
+
+Control Plane decides when an original or a processing result becomes available.
+PostgreSQL holds its placement, lifecycle and publication state; OpenFGA holds
+permissions. Their changes do not share a single transaction. Control Plane
+coordinates authorization checks and publication with an organization-wide
+PostgreSQL lock and version guards in OpenFGA. The lock prevents participating
+mutations from interleaving between their checks and their commit; the guards
+also reject stale remote writes. Together with database constraints, this
+preserves current authority, lifecycle rules and shared quota reservations.
+
+The organization lock is held for reservation and publication, including their
+authorization calls, not for file transfer, extraction or embedding computation.
+These sections run one at a time across the organization's teams and across all
+Control Plane replicas. Document reads and standalone permission checks do not
+take this write lock. Sections are intended to be short; their actual duration
+and accumulated waiting depend on load and dependency latency.
+
+The [document journey](02.2-document-journey.md#concurrent-imports-and-publication)
+illustrates the guarantee. [Open Issues](A10-open-issues.md#oi-1-document-write-concurrency)
+records the retained design and the evidence needed to assess its performance.

@@ -292,3 +292,88 @@ class RecordingTracer(Tracer):
         self.parents.append(parent)
         self.spans.append((name, dict(attributes or {}), span))
         return span
+
+
+@pytest.fixture
+def restore_pod_security(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Restore process-wide identity and runtime state after a test boots a pod."""
+    from fred_core.security import oidc
+    from fred_core.security.delegation import preserved_delegation
+    from fred_runtime.common.outbound_credentials import get_delegation_runtime
+    from fred_runtime.runtime_context import (
+        get_runtime_context_or_none,
+        set_runtime_context,
+    )
+
+    for name in (
+        "KEYCLOAK_ENABLED",
+        "KEYCLOAK_URL",
+        "KEYCLOAK_JWKS_URL",
+        "KEYCLOAK_CLIENT_ID",
+        "USER_AUDIENCE",
+        "USER_ISSUER",
+        "USER_TOKEN_ENDPOINT",
+        "USER_SECURITY_CONFIG",
+        "_JWKS_CLIENT",
+        "_REALM_ISSUERS",
+        "STRICT_ISSUER",
+        "STRICT_AUDIENCE",
+    ):
+        monkeypatch.setattr(oidc, name, getattr(oidc, name))
+    previous_context = get_runtime_context_or_none()
+    previous_delegation = get_delegation_runtime()
+    with preserved_delegation():
+        try:
+            yield
+        finally:
+            set_runtime_context(previous_context)
+            set_delegation_runtime(previous_delegation)
+            oidc._JWT_CACHE.clear()
+
+
+def mock_pod_infrastructure(monkeypatch):
+    """Route tests keep real SQLite stores and mock the Weaver startup boundary.
+
+    Production C3, PostgreSQL and published-model requirements are covered by
+    test_authorization_startup without this fixture.
+    """
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from fred_core.security import oidc
+    from fred_core.security.rebac.authorization_binding import AuthorizationBinding
+    from fred_runtime.app import agent_app
+
+    async def prepare(container):
+        security = container.configuration.security
+        assert security is not None
+        oidc.configure_token_security(security)
+        oidc.initialize_user_security(security.user)
+        await container.initialize_sql()
+        return security.rebac, AuthorizationBinding("fred", "store-test", "model-test")
+
+    monkeypatch.setattr(agent_app, "prepare_authorization", prepare)
+    engine = SimpleNamespace(enabled=False, get_client=AsyncMock(), close=AsyncMock())
+    monkeypatch.setattr(
+        agent_app, "PublishedOpenFgaRebacEngine", lambda *a, **k: engine
+    )
+    return engine
+
+
+@pytest.fixture
+def offline_pod_infrastructure(monkeypatch, restore_pod_security):
+    return mock_pod_infrastructure(monkeypatch)
+
+
+@pytest.fixture
+def empty_runtime_context(restore_pod_security) -> None:
+    """Give pure capability assembly tests their own runtime configuration."""
+    from fred_runtime.runtime_context import (
+        RuntimeConfig,
+        RuntimeContext,
+        set_runtime_context,
+    )
+
+    set_runtime_context(
+        RuntimeContext(RuntimeConfig(knowledge_flow_url="http://kf.invalid"))
+    )

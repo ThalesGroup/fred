@@ -1,378 +1,65 @@
 // Copyright Thales 2026
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
-import type {
-  AgentTemplateSummary,
-  ManagedAgentInstanceSummary,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
-import {
-  draftTargets,
-  buildAgentFormSubmitPayload,
-  defaultCapabilitySelection,
-  extractCapabilityConfigValues,
-} from "./AgentFormModal";
+import { buildAgentFormSubmitPayload, defaultCapabilitySelection } from "./AgentFormModal";
+import { createAgentRequest, updateAgentRequest, resolveAgentSpace } from "../weaverAgents";
+import { INSTANCE, SPACES, TEMPLATE } from "../weaverAgentFixtures";
 
-function makeCapabilityTemplate(capabilityIds: string[]): AgentTemplateSummary {
-  return {
-    template_id: "runtime:agent",
-    display_name: "Agent",
-    available_capabilities: capabilityIds.map((id) => ({
-      id,
-      version: "1",
-      name: id,
-      description: id,
-      icon: "extension",
-      config_fields: [{ key: "tone", title: "Tone", type: "string" }],
-    })),
-  } as AgentTemplateSummary;
-}
-
-const EMPTY_CAPABILITY_STATE = {
-  selectedCapabilityIds: [] as string[],
-  capabilityConfigValues: {} as Record<string, Record<string, unknown>>,
-  capabilityAssetFiles: {} as Record<string, Record<string, File | undefined>>,
-  capabilityBlockingErrors: {} as Record<string, string | null>,
-};
-
-describe("defaultCapabilitySelection", () => {
-  it("pre-ticks the template's declared defaults", () => {
-    const template = {
-      ...makeCapabilityTemplate(["platform_postgres", "other_tool"]),
-      default_capability_ids: ["platform_postgres"],
-    };
-
-    expect(defaultCapabilitySelection(template)).toEqual(["platform_postgres"]);
-  });
-
-  it("drops a default the template does not advertise to this team", () => {
-    // `available_capabilities` is `can_use`-filtered server-side, so an
-    // admin-gated default the team is not enabled for arrives absent from it.
-    // It must not be pre-ticked — the save would 403 on an explicit selection.
-    const template = {
-      ...makeCapabilityTemplate(["other_tool"]),
-      default_capability_ids: ["platform_postgres"],
-    };
-
-    expect(defaultCapabilitySelection(template)).toEqual([]);
-  });
-
-  it("returns nothing for a template declaring no defaults, or no template", () => {
-    expect(defaultCapabilitySelection(makeCapabilityTemplate(["other_tool"]))).toEqual([]);
-    expect(defaultCapabilitySelection(undefined)).toEqual([]);
-  });
+const form = () => ({
+  templateId: TEMPLATE.template_id,
+  displayName: INSTANCE.display_name,
+  role: INSTANCE.role,
+  description: INSTANCE.description ?? "",
+  usageStatement: INSTANCE.usage_statement,
+  recommendedChatProfileId: INSTANCE.recommended_chat_profile_id ?? null,
+  tuningValues: INSTANCE.tuning_field_values,
+  selectedCapabilityIds: INSTANCE.selected_capability_ids ?? [],
+  capabilityConfigValues: {},
+  capabilityAssetFiles: {},
+  capabilityBlockingErrors: {},
 });
-
-describe("buildAgentFormSubmitPayload", () => {
-  it("trims display name, role, description, and usage statement on create submit", () => {
-    const payload = buildAgentFormSubmitPayload(
-      {
-        templateId: "runtime:agent",
-        displayName: "  DT Aegis  ",
-        role: "  Guardian  ",
-        description: "  Guardrails  ",
-        usageStatement: "  Screens inbound requests for policy violations.  ",
-        recommendedChatProfileId: null,
-        tuningValues: {},
-        ...EMPTY_CAPABILITY_STATE,
-      },
-      makeCapabilityTemplate([]),
-    );
-
-    expect(payload).toMatchObject({
-      displayName: "DT Aegis",
-      role: "Guardian",
-      description: "Guardrails",
-      usageStatement: "Screens inbound requests for policy violations.",
-      recommendedChatProfileId: null,
-    });
+describe("Weaver form fidelity", () => {
+  it("keeps unchanged tuning objects by reference and omits every unchanged PATCH field", () => {
+    const payload = buildAgentFormSubmitPayload(form(), TEMPLATE);
+    expect(payload.tuningFieldValues).toBe(INSTANCE.tuning_field_values);
+    expect(updateAgentRequest(payload, INSTANCE)).toEqual({});
   });
-
-  it("submits every included capability and its config for a template without free selection", () => {
-    // A Graph agent's included capability stays active whatever the stored
-    // selection says (often [] for an instance saved before it was shown).
-    const template = {
-      ...makeCapabilityTemplate(["document_access"]),
-      supports_capabilities: false,
-      default_capability_ids: ["document_access"],
-    } as AgentTemplateSummary;
-    const bound = { bind_libraries: true, library_tag_ids: ["lib-a"] };
+  it("omits tuning when an edit is reverted before a metadata save", () => {
     const payload = buildAgentFormSubmitPayload(
-      {
-        templateId: "runtime:agent",
-        displayName: "Mindmap",
-        role: "",
-        description: "",
-        usageStatement: "",
-        recommendedChatProfileId: null,
-        tuningValues: {},
-        ...EMPTY_CAPABILITY_STATE,
-        capabilityConfigValues: { document_access: bound },
-      },
-      template,
+      { ...form(), displayName: "New", tuningValues: { ...INSTANCE.tuning_field_values } },
+      TEMPLATE,
     );
-
-    expect(payload.selectedCapabilityIds).toEqual(["document_access"]);
-    expect(payload.capabilityConfigValues).toEqual({ document_access: bound });
-    expect(payload.templateHasCapabilities).toBe(true);
+    expect(updateAgentRequest(payload, INSTANCE)).toEqual({ display_name: "New" });
   });
-
-  it("flags templateHasCapabilities false and empties capability selection for capability-less templates", () => {
-    const payload = buildAgentFormSubmitPayload(
-      {
-        templateId: "runtime:agent",
-        displayName: "Agent",
-        role: "",
-        description: "",
-        usageStatement: "",
-        recommendedChatProfileId: null,
-        tuningValues: {},
-        ...EMPTY_CAPABILITY_STATE,
-        selectedCapabilityIds: ["ghost-cap"],
-        capabilityConfigValues: { "ghost-cap": { tone: "warm" } },
-      },
-      makeCapabilityTemplate([]),
-    );
-
-    expect(payload.templateHasCapabilities).toBe(false);
-    expect(payload.selectedCapabilityIds).toEqual([]);
-    expect(payload.capabilityConfigValues).toEqual({});
+  it("does not replace a null description with an empty string in a metadata-only edit", () => {
+    const saved = { ...INSTANCE, description: null };
+    const payload = buildAgentFormSubmitPayload({ ...form(), description: "", displayName: "New" }, TEMPLATE);
+    expect(updateAgentRequest(payload, saved)).toEqual({ display_name: "New" });
   });
-
-  it("keeps config only for selected, template-advertised capabilities", () => {
-    const payload = buildAgentFormSubmitPayload(
-      {
-        templateId: "runtime:agent",
-        displayName: "Agent",
-        role: "",
-        description: "",
-        usageStatement: "",
-        recommendedChatProfileId: null,
-        tuningValues: {},
-        ...EMPTY_CAPABILITY_STATE,
-        // "gone" is not advertised; "unselected" is advertised but not ticked.
-        selectedCapabilityIds: ["ppt-filler", "gone"],
-        capabilityConfigValues: {
-          "ppt-filler": { tone: "formal" },
-          unselected: { tone: "casual" },
-          gone: { tone: "warm" },
-        },
-      },
-      makeCapabilityTemplate(["ppt-filler", "unselected"]),
-    );
-
-    expect(payload.templateHasCapabilities).toBe(true);
-    expect(payload.selectedCapabilityIds).toEqual(["ppt-filler"]);
-    expect(payload.capabilityConfigValues).toEqual({ "ppt-filler": { tone: "formal" } });
+  it("sends an explicit empty tuning map only when the user changed tuning", () => {
+    const payload = buildAgentFormSubmitPayload({ ...form(), tuningValues: {} }, TEMPLATE);
+    expect(updateAgentRequest(payload, INSTANCE)).toEqual({ tuning_field_values: {} });
   });
-
-  it("preserves partial document access selections on an unrelated edit", () => {
-    const template = makeCapabilityTemplate([
-      "document_access",
-      "document_summarize",
-      "document_similarity",
-      "mcp-knowledge-flow-mcp-tabular",
+  it("does not drop defaults absent from the catalog to make creation succeed", () => {
+    expect(defaultCapabilitySelection({ ...TEMPLATE, default_capability_ids: ["unconnected"] })).toEqual([
+      "unconnected",
     ]);
-    const cases = [
-      {
-        ids: ["document_access", "document_summarize"],
-        config: { attachments: true, team_documents: false },
-      },
-      {
-        ids: ["document_access", "document_similarity", "mcp-knowledge-flow-mcp-tabular"],
-        config: { attachments: false, team_documents: true },
-      },
-    ];
-
-    for (const { ids, config } of cases) {
-      const payload = buildAgentFormSubmitPayload(
-        {
-          templateId: "runtime:agent",
-          displayName: "Renamed agent",
-          role: "",
-          description: "",
-          usageStatement: "",
-          recommendedChatProfileId: null,
-          tuningValues: {},
-          ...EMPTY_CAPABILITY_STATE,
-          selectedCapabilityIds: ids,
-          capabilityConfigValues: { document_access: config },
-        },
-        template,
-      );
-
-      expect(payload.selectedCapabilityIds).toEqual(ids);
-      expect(payload.capabilityConfigValues).toEqual({ document_access: config });
-    }
   });
-
-  it("keeps MCP capabilities like any other capability (#1988 — MCP capability ids are plain catalog server ids)", () => {
+  it("retains selection, configuration and profile even if the catalog no longer advertises them", () => {
     const payload = buildAgentFormSubmitPayload(
-      {
-        templateId: "runtime:agent",
-        displayName: "Agent",
-        role: "",
-        description: "",
-        usageStatement: "",
-        recommendedChatProfileId: null,
-        tuningValues: {},
-        ...EMPTY_CAPABILITY_STATE,
-        selectedCapabilityIds: ["knowledge-flow-mcp-text"],
-        capabilityConfigValues: {
-          "knowledge-flow-mcp-text": { "chat_options.libraries_binding": true },
-        },
-      },
-      makeCapabilityTemplate(["knowledge-flow-mcp-text"]),
+      { ...form(), selectedCapabilityIds: ["unknown"], capabilityConfigValues: { unknown: { retained: true } } },
+      TEMPLATE,
     );
-
-    expect(payload.templateHasCapabilities).toBe(true);
-    expect(payload.selectedCapabilityIds).toEqual(["knowledge-flow-mcp-text"]);
-    expect(payload.capabilityConfigValues).toEqual({
-      "knowledge-flow-mcp-text": { "chat_options.libraries_binding": true },
+    expect(createAgentRequest(payload)).toMatchObject({
+      capability_ids: ["unknown"],
+      capability_config_values: { unknown: { retained: true } },
+      recommended_chat_profile_id: "saved-profile",
     });
   });
-
-  it("carries the recommended model, null meaning follow the team", () => {
-    const base = {
-      templateId: "runtime:agent",
-      displayName: "Agent",
-      role: "",
-      description: "",
-      usageStatement: "",
-      tuningValues: {},
-      ...EMPTY_CAPABILITY_STATE,
-    };
-
-    expect(
-      buildAgentFormSubmitPayload({ ...base, recommendedChatProfileId: "chat.gpt5" }, makeCapabilityTemplate([])),
-    ).toMatchObject({ recommendedChatProfileId: "chat.gpt5" });
-    expect(
-      buildAgentFormSubmitPayload({ ...base, recommendedChatProfileId: null }, makeCapabilityTemplate([])),
-    ).toMatchObject({ recommendedChatProfileId: null });
-  });
-});
-
-describe("extractCapabilityConfigValues", () => {
-  it("unwraps the stored {schema_version, config} envelope into flat config", () => {
-    const stored: ManagedAgentInstanceSummary["capability_config"] = {
-      "ppt-filler": { schema_version: "1", config: { tone: "formal", slides: 12 } },
-      empty: { schema_version: "1", config: {} },
-    };
-
-    expect(extractCapabilityConfigValues(stored)).toEqual({
-      "ppt-filler": { tone: "formal", slides: 12 },
-      empty: {},
-    });
-  });
-
-  it("returns an empty object when no capability config is stored", () => {
-    expect(extractCapabilityConfigValues(undefined)).toEqual({});
-  });
-
-  it("reads legacy document access keys as the two sources", () => {
-    const stored: ManagedAgentInstanceSummary["capability_config"] = {
-      document_access: {
-        schema_version: "0.1.0",
-        config: { show_attach_files_control: true, search_attachments_only: true, bind_libraries: false },
-      },
-      other: { schema_version: "1", config: { search_attachments_only: true } },
-    };
-
-    expect(extractCapabilityConfigValues(stored)).toEqual({
-      document_access: { attachments: true, team_documents: false, bind_libraries: false },
-      other: { search_attachments_only: true },
-    });
-  });
-});
-
-describe("draftTargets", () => {
-  const template = {
-    template_id: "t",
-    display_name: "Template name",
-    description: "Template description",
-    description_by_lang: { fr: "Description du modèle" },
-    default_capability_ids: ["team_wiki"],
-    available_capabilities: [{ id: "team_wiki" }, { id: "html_artifact" }],
-    default_tuning_fields: [{ key: "prompts.system", type: "prompt", default: "Seed prompt" }],
-  } as unknown as AgentTemplateSummary;
-
-  it("treats values still equal to the template's seeds as empty", () => {
-    const targets = draftTargets(
-      {
-        displayName: "Template name",
-        role: "",
-        description: "Description du modèle",
-        tuningValues: { "prompts.system": "Seed prompt" },
-        selectedCapabilityIds: ["team_wiki"],
-        capabilityConfigValues: {},
-      },
-      template,
-      "fr",
-      "prompts.system",
-      "create",
-    );
-    expect(targets).toEqual({
-      name: "",
-      role: "",
-      description: "",
-      systemPrompt: "",
-      capabilityIds: [],
-      capabilityConfigValues: {},
-    });
-  });
-
-  it("keeps what the user wrote", () => {
-    const targets = draftTargets(
-      {
-        displayName: "Mine",
-        role: "My role",
-        description: "My text",
-        tuningValues: { "prompts.system": "My prompt" },
-        selectedCapabilityIds: ["html_artifact"],
-        capabilityConfigValues: {},
-      },
-      template,
-      "fr",
-      "prompts.system",
-      "create",
-    );
-    expect(targets).toEqual({
-      name: "Mine",
-      role: "My role",
-      description: "My text",
-      systemPrompt: "My prompt",
-      capabilityIds: ["html_artifact"],
-      capabilityConfigValues: {},
-    });
-  });
-
-  it("keeps saved values equal to the template's seeds when editing an agent", () => {
-    const saved = {
-      displayName: "Template name",
-      role: "",
-      description: "Description du modèle",
-      tuningValues: { "prompts.system": "Seed prompt" },
-      selectedCapabilityIds: ["team_wiki"],
-      capabilityConfigValues: {},
-    };
-    expect(draftTargets(saved, template, "fr", "prompts.system", "edit")).toEqual({
-      name: "Template name",
-      role: "",
-      description: "Description du modèle",
-      systemPrompt: "Seed prompt",
-      capabilityIds: ["team_wiki"],
-      capabilityConfigValues: {},
-    });
+  it("does not resolve organization or project spaces, unknown ids, or personal-shaped legacy ids", () => {
+    for (const kind of ["organization", "project"] as const)
+      expect(resolveAgentSpace([{ ...SPACES[0], kind }], SPACES[0].id)).toBeUndefined();
+    expect(resolveAgentSpace(SPACES, "personal-reader")).toBeUndefined();
+    expect(resolveAgentSpace(SPACES, "personal")?.id).toBe(SPACES[1].id);
   });
 });

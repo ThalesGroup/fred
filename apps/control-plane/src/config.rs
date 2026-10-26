@@ -270,9 +270,21 @@ impl Configuration {
         if u.provider == "oidc" && s.user_directory != crate::users::DirectoryKind::Local {
             bail!("security.user_directory must be local when security.user.provider=oidc");
         }
+        let delegation = s.delegation.validated()?;
+        if delegation.accept_delegated_calls && !u.enabled {
+            bail!("security.delegation.accept_delegated_calls requires user authentication");
+        }
+        if u.provider == "oidc" {
+            if delegation.service_accounts_only {
+                bail!("security.delegation.service_accounts_only requires Keycloak");
+            }
+            if delegation.accept_delegated_calls && delegation.caller_roles_claim.is_none() {
+                bail!("security.delegation.caller_roles_claim is required for OIDC delegation");
+            }
+        }
         let defaults = UserClaims::default();
         Ok(SecuritySettings {
-            directory_delegation: s.delegation.validated()?,
+            directory_delegation: delegation,
             enabled: u.enabled,
             provider: match u.provider.as_str() {
                 "keycloak" => Provider::Keycloak,

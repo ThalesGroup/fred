@@ -23,12 +23,12 @@ import fred_runtime.app.agent_app as agent_app_module
 import httpx
 import pytest
 from conftest import StaticWorkloadTokens
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from fred_core.security import oidc as oidc_module
 from fred_core.security.delegation import DelegationConfig, initialize_delegation
-from fred_core.security.models import AccountStatusError
 from fred_core.security.structure import KeycloakUser
+from fred_runtime.app import security as pod_security
 from fred_runtime.app.agent_app import _write_turn_history, create_agent_app
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.common.outbound_credentials import (
@@ -54,6 +54,9 @@ from test_agent_app import (
     _build_test_config,
     _EchoAgent,
 )
+
+pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
+
 
 STREAM_PATH = "/pod/v1/agents/execute/stream"
 PERSON_TOKEN = "person-token"
@@ -116,6 +119,8 @@ def _person_pod(
         ),
     )
     rebac = SimpleNamespace(
+        get_client=AsyncMock(),
+        close=AsyncMock(),
         requires_active_accounts=True,
         enabled=True,
         validate_account_status_model=AsyncMock(),
@@ -123,7 +128,7 @@ def _person_pod(
         check_user_team_permission_or_raise=AsyncMock(),
     )
     monkeypatch.setattr(
-        agent_app_module, "rebac_factory", lambda *args, **kwargs: rebac
+        agent_app_module, "PublishedOpenFgaRebacEngine", lambda *args, **kwargs: rebac
     )
     config = _build_test_config(
         tmp_path,
@@ -298,9 +303,9 @@ _DIRECT_TURN = {"agent_id": "rags.sample.echo", "input": "hello"}
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("unavailable", "expected_status", "cause"),
-    [(True, 503, "account_status_unavailable"), (False, 403, "account_suspended")],
+    [(True, 503, "terms_acceptance_unavailable"), (False, 403, "user_not_accept_gcu")],
 )
-async def test_direct_stream_preserves_account_status_decision_at_http_boundary(
+async def test_direct_stream_preserves_terms_decision_at_http_boundary(
     monkeypatch, tmp_path, unavailable, expected_status, cause
 ) -> None:
     app = _person_pod(monkeypatch, tmp_path)
@@ -309,14 +314,15 @@ async def test_direct_stream_preserves_account_status_decision_at_http_boundary(
         _install_delegation()
         rebac = get_runtime_context().config.rebac_engine
         assert rebac is not None
-        rebac.require_active_account.side_effect = AccountStatusError(
-            unavailable=unavailable
-        )
+        terms = AsyncMock(side_effect=HTTPException(expected_status, cause))
+        monkeypatch.setattr(pod_security, "_require_accepted", terms)
         response = await asyncio.wait_for(_post(client, _DIRECT_TURN), TIMEOUT)
 
     assert response.status_code == expected_status
-    assert response.headers["X-Fred-Denial-Cause"] == cause
-    rebac.require_active_account.assert_awaited_once_with("owner-a")
+    assert response.json()["detail"] == cause
+    assert terms.await_args is not None
+    assert terms.await_args.args[1].uid == "owner-a"
+    rebac.require_active_account.assert_not_awaited()
     assert "owner-a" not in response.text
     assert PERSON_TOKEN not in response.text
 
@@ -324,9 +330,9 @@ async def test_direct_stream_preserves_account_status_decision_at_http_boundary(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("unavailable", "expected_status", "cause"),
-    [(True, 503, "account_status_unavailable"), (False, 403, "account_suspended")],
+    [(True, 503, "terms_acceptance_unavailable"), (False, 403, "user_not_accept_gcu")],
 )
-async def test_managed_stream_preserves_account_status_decision_at_http_boundary(
+async def test_managed_stream_preserves_terms_decision_at_http_boundary(
     monkeypatch, tmp_path, unavailable, expected_status, cause
 ) -> None:
     app = _person_pod(monkeypatch, tmp_path)
@@ -335,9 +341,8 @@ async def test_managed_stream_preserves_account_status_decision_at_http_boundary
         _install_delegation()
         rebac = get_runtime_context().config.rebac_engine
         assert rebac is not None
-        rebac.require_active_account.side_effect = AccountStatusError(
-            unavailable=unavailable
-        )
+        terms = AsyncMock(side_effect=HTTPException(expected_status, cause))
+        monkeypatch.setattr(pod_security, "_require_accepted", terms)
         response = await asyncio.wait_for(
             _post(
                 client,
@@ -351,8 +356,10 @@ async def test_managed_stream_preserves_account_status_decision_at_http_boundary
         )
 
     assert response.status_code == expected_status
-    assert response.headers["X-Fred-Denial-Cause"] == cause
-    rebac.require_active_account.assert_awaited_once_with("owner-a")
+    assert response.json()["detail"] == cause
+    assert terms.await_args is not None
+    assert terms.await_args.args[1].uid == "owner-a"
+    rebac.require_active_account.assert_not_awaited()
     rebac.check_user_team_permission_or_raise.assert_not_awaited()
     assert "owner-a" not in response.text
     assert PERSON_TOKEN not in response.text
@@ -419,7 +426,7 @@ async def test_a_delegated_stream_runs_once_and_carries_no_run_handle(
 
     assert response.status_code == 200
     # The request's own account status check is the run's only one at admission.
-    rebac.require_active_account.assert_awaited_once_with("owner-a")
+    rebac.require_active_account.assert_not_awaited()
     assert "x-fred-run-id" not in response.headers
     assert not any(line.startswith("id:") for line in response.text.splitlines())
     assert _payloads(response.text)[-1]["kind"] == expected_kind

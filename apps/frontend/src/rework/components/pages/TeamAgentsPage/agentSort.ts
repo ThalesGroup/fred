@@ -57,10 +57,10 @@ function byRecency(a: string | null | undefined, b: string | null | undefined): 
  * Alphabetical uses `localeCompare` with base sensitivity so accents and case
  * fall where a reader expects ("Élan" next to "Elan", not after "Zulu").
  */
-export function sortAgents(
-  instances: ManagedAgentInstanceSummary[],
+export function sortAgents<T extends Pick<ManagedAgentInstanceSummary, "display_name" | "created_at" | "updated_at">>(
+  instances: T[],
   sort: AgentSortValue,
-): ManagedAgentInstanceSummary[] {
+): T[] {
   const sorted = [...instances];
   switch (sort) {
     case "created_at:desc":

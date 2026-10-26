@@ -19,6 +19,7 @@ import TeamAdminCharterGate from "@shared/organisms/TeamAdminCharterGate/TeamAdm
 import { useTaskPolling } from "../../../../features/tasks/useTaskPolling";
 import { useTaskRehydration } from "../../../../features/tasks/useTaskRehydration";
 import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
+import { isAgentManagementRoute } from "@core/utils/agentManagementRoute";
 import styles from "./MainLayout.module.css";
 
 function AdmittedWorkspace() {
@@ -45,7 +46,15 @@ export default function MainLayout({ children, navigation = true }: PropsWithChi
         />
       </nav>
       <main className={styles.content}>
-        {navigation ? isAdmin || organizationArea ? <Outlet /> : <AdmittedWorkspace /> : children}
+        {navigation ? (
+          isAdmin || organizationArea || isAgentManagementRoute(pathname) ? (
+            <Outlet />
+          ) : (
+            <AdmittedWorkspace />
+          )
+        ) : (
+          children
+        )}
       </main>
     </div>
   );

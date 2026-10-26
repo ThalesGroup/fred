@@ -18,7 +18,7 @@ import { useTeamApplicationsQuery } from "../../../slices/legacyControlPlane/leg
 
 /** One bounded, team-keyed subscription shared by the sidebar and app pages. */
 export function useTeamApplications(teamId: string | undefined, skip = false) {
-  const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications");
+  const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications", skip);
   const shouldSkip = !applicationsEnabled || skip || !teamId;
   // Security-sensitive catalog: a grant revoked in another session has to
   // replace an already-open app without waiting for the next poll.

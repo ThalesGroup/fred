@@ -1,3 +1,4 @@
+import { isAgentManagementRoute } from "@core/utils/agentManagementRoute";
 import PlatformAccessPage from "@components/pages/admin/PlatformAccessPage/PlatformAccessPage";
 import PlatformAccessDeniedPage from "@components/pages/PlatformAccessPage/PlatformAccessDeniedPage";
 import FreeEnrollmentPage from "@components/pages/PlatformAccessPage/FreeEnrollmentPage";
@@ -52,7 +53,7 @@ import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPag
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
 import React, { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
-import { createBrowserRouter, Navigate, RouteObject, useParams, Outlet } from "react-router-dom";
+import { createBrowserRouter, Navigate, RouteObject, useParams, Outlet, useLocation } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
 import { adminLandingPath, canEnterAdminSection, Protected } from "@core/guards/Protected";
@@ -81,15 +82,17 @@ import {
 const basename = getConfig().frontend_basename;
 
 function AdmittedContent() {
+  const { pathname } = useLocation();
+  const agentManagement = isAgentManagementRoute(pathname);
   return (
     <GcuGuard>
       <BootstrapGuard>
         <OrganizationSupervisionAccessProvider>
           <ManagerArea>
             <div className={appStyles.appContent}>
-              <AnnouncementStack />
+              {!agentManagement && <AnnouncementStack />}
               <div className={appStyles.routedContent}>
-                <PatchNoteGate />
+                {!agentManagement && <PatchNoteGate />}
                 <Outlet />
               </div>
             </div>

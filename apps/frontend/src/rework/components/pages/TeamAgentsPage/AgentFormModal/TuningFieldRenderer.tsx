@@ -34,6 +34,8 @@ import styles from "./TuningFieldRenderer.module.css";
 
 type TuningFieldRendererProps = {
   field: ManagedAgentFieldSpec;
+  disconnected?: boolean;
+  useDefaults?: boolean;
   value: unknown;
   onChange: (key: string, value: unknown) => void;
   disabled: boolean;
@@ -54,6 +56,8 @@ type TuningFieldRendererProps = {
 
 export function TuningFieldRenderer({
   field,
+  disconnected = false,
+  useDefaults = true,
   value,
   onChange,
   disabled,
@@ -82,11 +86,11 @@ export function TuningFieldRenderer({
 
   const { data: contextPrompts = [] } = useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery(
     { teamId: teamId ?? "" },
-    { skip: !teamId || !isPromptField },
+    { skip: disconnected || !teamId || !isPromptField },
   );
   const { data: promptCategories = [] } = useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery(
     { teamId: teamId ?? "" },
-    { skip: !teamId || !isPromptField },
+    { skip: disconnected || !teamId || !isPromptField },
   );
 
   const [fetchDetail, { isLoading: isLoadingDetail }] =
@@ -95,7 +99,7 @@ export function TuningFieldRenderer({
   const [recordUse] = usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation();
 
   const handlePickPrompt = async (promptId: string) => {
-    if (!teamId) return;
+    if (disconnected || !teamId) return;
     const result = await fetchDetail({ teamId, promptId });
     if (!result.data) return;
     onChange(field.key, result.data.text);
@@ -109,7 +113,7 @@ export function TuningFieldRenderer({
   // value is truthy. Display-only — the hidden field keeps its stored value.
   if (field.ui?.visible_when && !allValues?.[field.ui.visible_when]) return null;
 
-  const fieldValue = value ?? field.default ?? "";
+  const fieldValue = value ?? (useDefaults ? field.default : undefined) ?? "";
   const label = `${fieldTitle}${field.required ? " *" : ""}`;
 
   if (field.enum && field.enum.length > 0) {
@@ -201,6 +205,11 @@ export function TuningFieldRenderer({
 
     return (
       <div className={styles.promptFieldWrapper}>
+        {isPromptField && disconnected && (
+          <Button color="primary" variant="text" size="small" disabled title={t("rework.weaverAgents.notConnected")}>
+            {t("rework.teams.formAgent.promptField.pickFromLibrary")}
+          </Button>
+        )}
         {hasLibrary && (
           <div className={styles.promptEditingHeader}>
             <Button
@@ -248,6 +257,11 @@ export function TuningFieldRenderer({
     // `ui.widget` stock form widgets. "document_libraries" renders the
     // library/document tree picker instead of a raw tag-id text input; an
     // unknown widget id falls through to the default TagInput.
+    if (field.ui?.widget === "document_libraries" && disconnected) {
+      return (
+        <TextInput label={label} value={tags.join(", ")} disabled explanation={t("rework.weaverAgents.notConnected")} />
+      );
+    }
     if (field.ui?.widget === "document_libraries") {
       return (
         <div className={styles.field}>

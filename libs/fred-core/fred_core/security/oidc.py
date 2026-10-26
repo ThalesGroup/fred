@@ -220,31 +220,23 @@ def validate_provider_configuration(config: SecurityConfiguration) -> None:
 
 
 def apply_security_profile(config: SecurityConfiguration) -> None:
+    """Configure Swift admission and the shared JWT/delegation security profile.
+
+    Knowledge Flow and the first-party SDK still own their Swift admission path.
+    Weaver pods call configure_token_security and install their own terms owner.
     """
-    Enforce a hardened security profile at startup (RUNTIME-07 rev. 2, F5/F6).
-
-    When ``security.profile == 'c3'``:
-    - force strict JWT issuer + audience validation (closes F5 soft defaults),
-    - require user + m2m auth enabled — no no-security / mock-admin (F6),
-    - require ReBAC (OpenFGA) enabled, so the pod authorizes every request and
-      fails closed (no permissive Noop engine).
-
-    The control-plane issues NO signed grant; authorization is decided at the pod
-    by a Keycloak JWT + OpenFGA check. Raises ValueError on any violation so the
-    service FAILS CLOSED — it refuses to start in an insecure configuration rather
-    than silently degrading.
-
-    Installs ``security.delegation`` for the shared user dependency under every
-    profile; the profile enforcement itself is a no-op for any non-c3 profile
-    (dev behavior unchanged).
-    """
-    global STRICT_ISSUER, STRICT_AUDIENCE, _REALM_ISSUERS
-
     from fred_core.security.platform_access.access_control import (
         configure_platform_access,
     )
 
     configure_platform_access(config)
+    configure_token_security(config)
+
+
+def configure_token_security(config: SecurityConfiguration) -> None:
+    """Configure JWT validation and trusted delegation, without Swift admission."""
+    global STRICT_ISSUER, STRICT_AUDIENCE, _REALM_ISSUERS
+
     _JWT_CACHE.clear()
     validate_provider_configuration(config)
 
@@ -785,12 +777,27 @@ async def get_current_user_without_gcu(
     request: Request,
     token: str = Security(oauth2_scheme),
 ) -> KeycloakUser | AssertedUser:
-    """Fetches the current user from Keycloak token with robust diagnostics.
+    """Authenticate and apply the Swift account/global admission controls."""
+    subject = await authenticate_request(request, token)
+    if not KEYCLOAK_ENABLED:
+        return subject
+    await _enforce_swift_admission(request, subject, query_only=False)
+    from fred_core.security.platform_access.access_control import (
+        platform_access_available,
+    )
 
-    Returns an `AssertedUser` instead when this backend accepts delegated calls and a
-    caller holding the delegation caller role presented a whole grant beside its own
-    verified bearer. With a delegation switch on, the subject's account status is
-    checked once here, before the route runs.
+    if not platform_access_available():
+        await require_active_subject(subject)
+    return subject
+
+
+async def authenticate_request(
+    request: Request,
+    token: str = Security(oauth2_scheme),
+) -> KeycloakUser | AssertedUser:
+    """Verify credentials and delegation, retaining caller and effective subject.
+
+    Admission is owned by the consuming backend, after this common trust boundary.
     """
     if not KEYCLOAK_ENABLED:
         logger.debug("[AUTH] Authentication is DISABLED. Returning a mock user.")
@@ -819,13 +826,7 @@ async def get_current_user_without_gcu(
 
     logger.debug("[AUTH] Received bearer credential")
     caller = decode_jwt(token)
-    subject = await resolve_request_principal(request, caller)
-    from fred_core.security.platform_access.access_control import (
-        platform_access_available,
-    )
-
-    if not platform_access_available():
-        await require_active_subject(subject)
+    subject = await resolve_verified_principal(request, caller)
     if not is_service_agent(subject):
         bind_operation_context(user_id=subject.uid)
     return subject
@@ -837,22 +838,44 @@ async def resolve_request_principal(
     *,
     query_only: bool = False,
 ) -> KeycloakUser | AssertedUser:
-    asserted = await resolve_delegated_principal(request, caller, query_only=query_only)
-    subject = asserted or caller
+    """Resolve a Swift backend's principal and enforce its admission owner."""
+    subject = await resolve_verified_principal(request, caller, query_only=query_only)
+    await _enforce_swift_admission(request, subject, query_only=query_only)
+    return subject
+
+
+async def _enforce_swift_admission(
+    request: Request,
+    subject: KeycloakUser | AssertedUser,
+    *,
+    query_only: bool,
+) -> None:
     from fred_core.security.platform_access.access_control import (
         enforce_platform_access,
         platform_access_available,
     )
 
     if platform_access_available():
+        caller = request.state.principal_context.caller
         pure_workload_mount = (
             query_only
-            and asserted is None
+            and not isinstance(subject, AssertedUser)
             and (caller.service_account or is_service_agent(caller))
         )
         if not pure_workload_mount:
             await require_active_subject(subject)
         await enforce_platform_access(subject)
+
+
+async def resolve_verified_principal(
+    request: Request,
+    caller: KeycloakUser,
+    *,
+    query_only: bool = False,
+) -> KeycloakUser | AssertedUser:
+    """Resolve only trusted assertions; ordinary bearer fields confer no authority."""
+    asserted = await resolve_delegated_principal(request, caller, query_only=query_only)
+    subject = asserted or caller
     request.state.principal_context = PrincipalContext(caller=caller, subject=subject)
     if isinstance(subject, AssertedUser):
         admit_delegated_log_context(

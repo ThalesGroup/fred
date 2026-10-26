@@ -346,6 +346,69 @@ impl Authenticator {
         };
         v.decode(token).await
     }
+
+    /// The Python runtime may use its renewable workload bearer instead of a
+    /// person's bearer. Only this receiver accepts the extra delegation audience;
+    /// ordinary UI and embedded-agent authentication keeps its existing contract.
+    pub(crate) async fn authenticate_runtime(
+        &self,
+        token: Option<&str>,
+    ) -> Result<CurrentUser, AuthError> {
+        let token = token
+            .filter(|t| !t.is_empty())
+            .ok_or(AuthError::MissingToken)?;
+        // This contract always needs verified credentials, including on dev servers.
+        let v = self.verifier.as_ref().ok_or(AuthError::Invalid)?;
+        let delegation = &v.settings.directory_delegation;
+        let caller = v
+            .decode_with_audience(
+                token,
+                delegation
+                    .accept_delegated_calls
+                    .then_some(delegation.audience.as_str()),
+            )
+            .await?;
+        let user_audience = v
+            .settings
+            .audience
+            .as_deref()
+            .unwrap_or(&v.settings.client_id);
+        if !caller
+            .token_audiences
+            .iter()
+            .any(|aud| aud == user_audience)
+            && !self.accepts_runtime_delegation(&caller)
+        {
+            return Err(AuthError::Invalid);
+        }
+        Ok(caller)
+    }
+
+    /// Same trust predicate as fred-core is_delegation_caller. The asserted
+    /// person never inherits the caller's roles or service-account privileges.
+    pub(crate) fn accepts_runtime_delegation(&self, caller: &CurrentUser) -> bool {
+        let Some(v) = &self.verifier else {
+            return false;
+        };
+        let Some(client) = caller.client_id.as_deref().filter(|id| !id.is_empty()) else {
+            return false;
+        };
+        let config = &v.settings.directory_delegation;
+        config.accept_delegated_calls
+            && caller.delegation_caller
+            && caller.token_type.as_deref().is_none_or(|kind| {
+                kind.eq_ignore_ascii_case("bearer") || kind.eq_ignore_ascii_case("at+jwt")
+            })
+            && caller.token_issuer.as_deref().is_some_and(|issuer| {
+                v.realm_issuers
+                    .iter()
+                    .any(|trusted| trusted == issuer.trim_end_matches('/'))
+            })
+            && caller.token_audiences.contains(&config.audience)
+            && client != v.settings.client_id
+            && !config.user_clients.iter().any(|human| human == client)
+            && (!config.service_accounts_only || caller.service_account)
+    }
 }
 
 // Parse both sides so equivalent origins (including explicit default ports) match.
@@ -361,6 +424,14 @@ fn same_realm(left: &str, right: &str) -> bool {
 
 impl Verifier {
     async fn decode(&self, token: &str) -> Result<CurrentUser, AuthError> {
+        self.decode_with_audience(token, None).await
+    }
+
+    async fn decode_with_audience(
+        &self,
+        token: &str,
+        delegation_audience: Option<&str>,
+    ) -> Result<CurrentUser, AuthError> {
         let s = &self.settings;
         let kid = jsonwebtoken::decode_header(token).ok().and_then(|h| h.kid);
         let key = match kid {
@@ -376,7 +447,9 @@ impl Verifier {
         let mut validation = Validation::new(Algorithm::RS256);
         validation.leeway = s.clock_skew_seconds;
         validation.validate_nbf = true;
-        validation.set_audience(&[&user_audience]);
+        let mut audiences = vec![user_audience.as_str()];
+        audiences.extend(delegation_audience);
+        validation.set_audience(&audiences);
         validation.set_issuer(&self.realm_issuers);
         validation
             .required_spec_claims
@@ -576,7 +649,7 @@ fn check_times(
 }
 
 /// `OAuth2PasswordBearer(auto_error=False)`: only `Authorization: Bearer <token>`.
-fn bearer(parts: &Parts) -> Option<&str> {
+pub(crate) fn bearer(parts: &Parts) -> Option<&str> {
     let value = parts.headers.get(header::AUTHORIZATION)?.to_str().ok()?;
     let (scheme, token) = value.split_once(' ')?;
     scheme

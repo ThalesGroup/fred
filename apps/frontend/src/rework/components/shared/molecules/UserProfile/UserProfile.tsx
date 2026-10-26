@@ -29,10 +29,12 @@ import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 /** The account menu remains available before admission and never queries business data. */
 export default function UserProfile({
   admitted = false,
+  agentManagement = false,
   platformArea = false,
   organizationArea = false,
 }: {
   admitted?: boolean;
+  agentManagement?: boolean;
   platformArea?: boolean;
   organizationArea?: boolean;
 }) {
@@ -40,8 +42,8 @@ export default function UserProfile({
   const navigate = useNavigate();
   const { contactSupportLink } = useFrontendProperties();
   const [open, setOpen] = useState(false);
-  const { bootstrap } = useFrontendBootstrap(!admitted || platformArea || organizationArea);
-  const { notes: patchNotes } = usePatchNoteHistory(!admitted || platformArea || organizationArea);
+  const { bootstrap } = useFrontendBootstrap(!admitted || platformArea || organizationArea || agentManagement);
+  const { notes: patchNotes } = usePatchNoteHistory(!admitted || platformArea || organizationArea || agentManagement);
   const [readingPatchNotes, setReadingPatchNotes] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);

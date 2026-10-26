@@ -17,28 +17,19 @@ import SettingsModal from "@shared/organisms/SettingsModal/SettingsModal.tsx";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
-import {
-  useAvailableModelProfilesQuery,
-  useTeamRoutingPolicyQuery,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts";
 import type {
   AgentTemplateSummary,
-  ManagedAgentFieldSpec,
   ManagedAgentInstanceSummary,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type { FieldSpec as ManagedAgentFieldSpec } from "../../../../../slices/runtime/runtimeOpenApi";
 import { AgentFormBody, type SectionKey } from "./AgentFormBody.tsx";
-import { CreationAssistantDialog } from "./CreationAssistantDialog/CreationAssistantDialog.tsx";
-import {
-  type AppliedDraft,
-  applyRecommendedCapabilities,
-  type DraftTargets,
-  findSystemPromptField,
-} from "./CreationAssistantDialog/creationAssistant.ts";
+
 import styles from "./AgentFormModal.module.css";
 import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
-import { applyDocumentAccessConfigChange, normalizeDocumentAccessConfig } from "./toolPackLogic.ts";
+import { applyDocumentAccessConfigChange } from "./toolPackLogic.ts";
 import { CAP_DOCUMENT_ACCESS } from "./toolPacks.ts";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
+import { hasTuningChanges } from "../weaverAgents";
 import { isAgentNameTaken } from "../agentNames.ts";
 
 export type AgentFormPayload = {
@@ -107,140 +98,47 @@ function sectionOfField(field: ManagedAgentFieldSpec): SectionKey {
   return g === "prompts" ? "prompts" : "general";
 }
 
-/**
- * The capability ids `template` advertises to THIS team.
- *
- * Server-side, `available_capabilities` is already filtered to what the team
- * `can_use` (CAPAB-01), so this set doubles as the authorization boundary: an
- * admin-gated capability the team is not enabled for is simply absent. Both
- * the default seeding and the submit payload narrow through it, so the two
- * cannot drift apart.
- */
-function advertisedCapabilityIds(template: AgentTemplateSummary | undefined): Set<string> {
-  return new Set((template?.available_capabilities ?? []).map((cap) => cap.id));
-}
-
-/**
- * The capabilities a save activates: the ticked ones the template advertises,
- * or, for a template without free selection, every capability included with
- * it (the backend ignores a selection there, so the form never offers one).
- */
-function activeCapabilityIds(selectedIds: string[], template: AgentTemplateSummary | undefined): string[] {
-  const advertised = advertisedCapabilityIds(template);
-  if (template?.supports_capabilities === false) return [...advertised];
-  return selectedIds.filter((id) => advertised.has(id));
-}
-
-/**
- * The capabilities a NEW instance of `template` starts with ticked: its
- * declared defaults, narrowed to what it advertises to this team.
- *
- * Because `advertisedCapabilityIds` is already `can_use`-filtered, a default
- * the team is not enabled for is neither seeded nor rendered — there is no
- * pre-ticked box the save would 403 on, and no second authorization signal is
- * needed on the wire.
- *
- * Why this exists at all: the form always submits an explicit `capability_ids`
- * for a template that has capabilities, and the backend reads an explicit `[]`
- * as "none" — which bypasses its own template-default path. Seeding here is
- * what makes a template's declared defaults actually reach a new instance.
- */
+/** Keep declared defaults intact; the server explains unsupported dependencies. */
 export function defaultCapabilitySelection(template: AgentTemplateSummary | undefined): string[] {
-  const advertised = advertisedCapabilityIds(template);
-  return (template?.default_capability_ids ?? []).filter((capabilityId) => advertised.has(capabilityId));
+  return template?.default_capability_ids ?? [];
 }
 
 /** Tuning values a NEW instance of `template` starts with, in the UI language. */
 function defaultTuningValues(template: AgentTemplateSummary | undefined, lang: string): Record<string, unknown> {
   return Object.fromEntries(
-    (template?.default_tuning_fields ?? [])
+    ((template?.default_tuning_fields ?? []) as ManagedAgentFieldSpec[])
       .filter((f) => f.default_by_lang?.[lang] != null || (f.default !== null && f.default !== undefined))
       .map((f) => [f.key, f.default_by_lang?.[lang] ?? f.default]),
   );
 }
 
 /**
- * What the creation assistant would replace. On create, a value still equal to
- * the template's seed counts as empty: the user did not write it, so replacing
- * it needs no confirmation. On edit, every value is the saved agent's.
- */
-export function draftTargets(
-  form: Pick<
-    FormState,
-    "displayName" | "role" | "description" | "tuningValues" | "selectedCapabilityIds" | "capabilityConfigValues"
-  >,
-  template: AgentTemplateSummary | undefined,
-  lang: string,
-  promptKey: string | undefined,
-  mode: "create" | "edit",
-): DraftTargets {
-  const unlessSeed = (value: string, seed: string | undefined) =>
-    mode === "create" && value.trim() === (seed ?? "").trim() ? "" : value;
-  const seedPrompt = promptKey ? defaultTuningValues(template, lang)[promptKey] : undefined;
-  const prompt = promptKey ? String(form.tuningValues[promptKey] ?? "") : "";
-  const seedCapabilities = defaultCapabilitySelection(template);
-  const sameAsSeed =
-    mode === "create" &&
-    form.selectedCapabilityIds.length === seedCapabilities.length &&
-    seedCapabilities.every((id) => form.selectedCapabilityIds.includes(id));
-  return {
-    name: unlessSeed(form.displayName, template?.display_name),
-    role: form.role,
-    description: unlessSeed(form.description, template?.description_by_lang?.[lang] ?? template?.description ?? ""),
-    systemPrompt: unlessSeed(prompt, seedPrompt === undefined || seedPrompt === null ? "" : String(seedPrompt)),
-    capabilityIds: sameAsSeed ? [] : form.selectedCapabilityIds,
-    capabilityConfigValues: form.capabilityConfigValues,
-  };
-}
-
-/**
- * Builds the submit payload using the selected template contract so stale
- * capability keys from previous UI versions cannot leak into create or edit
- * requests.
+ * Keep saved tuning and selections intact. The page sends only changed fields
+ * on edit, including when a catalog no longer exposes a saved capability.
  */
 export function buildAgentFormSubmitPayload(
   form: FormState,
   selectedTemplate: AgentTemplateSummary | undefined,
 ): AgentFormPayload {
-  // Drop selections and config slices for ids the template no longer exposes,
-  // and for capabilities that are not active, so deselected config never
-  // reaches the pod.
-  const availableCapabilityIds = advertisedCapabilityIds(selectedTemplate);
-  const effectiveCapabilityIds = activeCapabilityIds(form.selectedCapabilityIds, selectedTemplate);
-  const effectiveCapabilityConfig = Object.fromEntries(
-    Object.entries(form.capabilityConfigValues).filter(([id]) => effectiveCapabilityIds.includes(id)),
-  );
-  // Asset files only travel for ACTIVE capabilities, with undefined slots
-  // dropped, so a deselected capability's staged upload never reaches the pod.
-  const effectiveAssetFiles = Object.fromEntries(
-    Object.entries(form.capabilityAssetFiles)
-      .filter(([id]) => effectiveCapabilityIds.includes(id))
-      .map(([id, slots]) => [
-        id,
-        Object.fromEntries(Object.entries(slots).filter(([, file]) => file instanceof File)) as Record<string, File>,
-      ])
-      .filter(([, slots]) => Object.keys(slots).length > 0),
-  );
-
   return {
     templateId: form.templateId,
     displayName: form.displayName.trim(),
-    role: form.role.trim(),
-    description: form.description.trim(),
-    usageStatement: form.usageStatement.trim(),
+    role: form.role,
+    description: form.description,
+    usageStatement: form.usageStatement,
     recommendedChatProfileId: form.recommendedChatProfileId,
     tuningFieldValues: form.tuningValues,
-    selectedCapabilityIds: effectiveCapabilityIds,
-    capabilityConfigValues: effectiveCapabilityConfig,
-    capabilityAssetFiles: effectiveAssetFiles,
-    templateHasCapabilities: availableCapabilityIds.size > 0,
+    selectedCapabilityIds: form.selectedCapabilityIds,
+    capabilityConfigValues: form.capabilityConfigValues,
+    capabilityAssetFiles: {},
+    templateHasCapabilities: (selectedTemplate?.available_capabilities.length ?? 0) > 0,
   };
 }
 
 /**
  * Unwraps the persisted per-capability `{schema_version, config}` envelopes into
  * the flat `{ [capabilityId]: config }` shape the edit form renders and mutates.
- * Legacy `document_access` keys are read as its two sources.
+ * Saved envelopes are preserved by omission in metadata PATCH requests.
  */
 export function extractCapabilityConfigValues(
   storedConfig: ManagedAgentInstanceSummary["capability_config"],
@@ -249,17 +147,9 @@ export function extractCapabilityConfigValues(
   return Object.fromEntries(
     Object.entries(storedConfig).map(([id, envelope]) => {
       const config = (envelope as { config?: Record<string, unknown> })?.config ?? {};
-      return [id, id === CAP_DOCUMENT_ACCESS ? normalizeDocumentAccessConfig(config) : config];
+      return [id, config];
     }),
   );
-}
-
-/** Save-blocking problems reported by config widgets. Only ACTIVE capabilities count. */
-function isCapabilityBlocked(
-  form: Pick<FormState, "selectedCapabilityIds" | "capabilityBlockingErrors">,
-  template: AgentTemplateSummary | undefined,
-): boolean {
-  return activeCapabilityIds(form.selectedCapabilityIds, template).some((id) => !!form.capabilityBlockingErrors[id]);
 }
 
 const NO_NAMES: ReadonlySet<string> = new Set();
@@ -298,27 +188,15 @@ export default function AgentFormModal({
   });
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionKey>("general");
-  const [assistantOpen, setAssistantOpen] = useState(false);
-  const [draftRevision, setDraftRevision] = useState(0);
   // The name is checked when the field is left, never while typing; a name the
   // form filled in itself (template, edited agent) counts as checked.
   const [nameChecked, setNameChecked] = useState(false);
-  const skipModelRead = !isOpen || !teamId;
-  const { currentData: routingPolicy, isError: routingPolicyError } = useTeamRoutingPolicyQuery(
-    { teamId: teamId ?? "" },
-    { skip: skipModelRead },
-  );
-  const { currentData: availableModels, isError: availableModelsError } = useAvailableModelProfilesQuery(
-    { teamId: teamId ?? "" },
-    { skip: skipModelRead },
-  );
 
   useEffect(() => {
     setNameChecked(isOpen);
     if (!isOpen) {
       setSubmitAttempted(false);
       setActiveSection("general");
-      setAssistantOpen(false);
       return;
     }
     if (mode === "edit" && editInstance) {
@@ -418,50 +296,44 @@ export default function AgentFormModal({
   };
 
   const selectedTemplate = templates.find((tpl) => tpl.template_id === form.templateId);
-  const requiredFields = (selectedTemplate?.default_tuning_fields ?? []).filter((f) => f.required && !f.ui?.hide);
-  const missingRequired = requiredFields.some((f) => !form.tuningValues[f.key]);
+  const validateTuning =
+    mode === "create" || hasTuningChanges(form.tuningValues, editInstance?.tuning_field_values ?? {});
+  const requiredFields = ((selectedTemplate?.default_tuning_fields ?? []) as ManagedAgentFieldSpec[]).filter(
+    (f) => validateTuning && f.required && !f.ui?.hide,
+  );
+  const missingRequired = requiredFields.some(
+    (f) =>
+      form.tuningValues[f.key] === undefined || form.tuningValues[f.key] === null || form.tuningValues[f.key] === "",
+  );
   // Mirrors the backend's 422 on reserved system-prompt tags (AgentFormBody
   // shows the message under the field); saving would only bounce.
-  const reservedTagFields = (selectedTemplate?.default_tuning_fields ?? []).filter(
-    (f) => !f.ui?.hide && reservedTagInPromptField(f, form.tuningValues[f.key]) !== null,
+  const reservedTagFields = ((selectedTemplate?.default_tuning_fields ?? []) as ManagedAgentFieldSpec[]).filter(
+    (f) => validateTuning && !f.ui?.hide && reservedTagInPromptField(f, form.tuningValues[f.key]) !== null,
   );
-  // A capability config widget may block the save (e.g. ppt_filler while its
-  // mandatory template is missing, #1903) — only ACTIVE capabilities count.
-  const capabilityBlocked = isCapabilityBlocked(form, selectedTemplate);
   const nameTaken = nameChecked && isAgentNameTaken(form.displayName, takenNames);
-  const recommendedProfile = availableModels?.profiles?.find(
-    (profile) => profile.profile_id === form.recommendedChatProfileId,
-  );
-  const recommendationReadComplete =
-    !!routingPolicy && !!availableModels && !routingPolicyError && !availableModelsError;
-  const unavailableRecommendation =
-    recommendationReadComplete &&
-    form.recommendedChatProfileId !== null &&
-    (!recommendedProfile || (routingPolicy?.disabled_model_ids ?? []).includes(recommendedProfile.capability_id));
-  const recommendedChatProfileId = unavailableRecommendation ? null : form.recommendedChatProfileId;
-  const recommendationReadPending =
-    form.recommendedChatProfileId !== null &&
-    !recommendationReadComplete &&
-    !routingPolicyError &&
-    !availableModelsError;
+  const recommendedChatProfileId = form.recommendedChatProfileId;
   const isFormValid =
     !!form.templateId &&
     !!form.displayName.trim() &&
     !!form.usageStatement.trim() &&
     !missingRequired &&
     reservedTagFields.length === 0 &&
-    !capabilityBlocked &&
-    !nameTaken &&
-    !recommendationReadPending;
+    !nameTaken;
   const canSave = isFormValid && !isSubmitting;
 
   // Every section holding a blocking problem, computed once: the tab badges
   // (after a submit attempt) and the tab the failed submit jumps to read it.
   const sectionsWithErrors = new Set<SectionKey>([
-    ...requiredFields.filter((f) => !form.tuningValues[f.key]).map((f) => sectionOfField(f)),
+    ...requiredFields
+      .filter(
+        (f) =>
+          form.tuningValues[f.key] === undefined ||
+          form.tuningValues[f.key] === null ||
+          form.tuningValues[f.key] === "",
+      )
+      .map((f) => sectionOfField(f)),
     ...reservedTagFields.map((f) => sectionOfField(f)),
     ...(!form.displayName.trim() || nameTaken ? (["general"] as const) : []),
-    ...(capabilityBlocked ? (["tools"] as const) : []),
     ...(!form.usageStatement.trim() ? (["commitments"] as const) : []),
   ]);
   const errorSections = submitAttempted ? sectionsWithErrors : new Set<SectionKey>();
@@ -478,43 +350,6 @@ export default function AgentFormModal({
     await onSubmit(buildAgentFormSubmitPayload({ ...form, recommendedChatProfileId }, selectedTemplate));
   };
 
-  // The assistant drafts the template's main prompt field and picks among the
-  // capabilities the template advertises to this team.
-  const lang = i18n.language.split("-")[0];
-  const promptField = findSystemPromptField((selectedTemplate?.default_tuning_fields ?? []).filter((f) => !f.ui?.hide));
-  const templateCapabilities =
-    selectedTemplate?.supports_capabilities === false ? [] : (selectedTemplate?.available_capabilities ?? []);
-  const assistantReady = !!selectedTemplate && !!teamId;
-
-  const applyDraft = (draft: AppliedDraft) => {
-    if (draft.name !== undefined) setNameChecked(true);
-    setForm((prev) => {
-      const next = { ...prev };
-      if (draft.name !== undefined) next.displayName = draft.name;
-      if (draft.role !== undefined) next.role = draft.role;
-      if (draft.description !== undefined) next.description = draft.description;
-      if (draft.systemPrompt !== undefined && promptField) {
-        next.tuningValues = { ...prev.tuningValues, [promptField.key]: draft.systemPrompt };
-      }
-      if (draft.capabilityIds && selectedTemplate?.supports_capabilities !== false) {
-        Object.assign(
-          next,
-          applyRecommendedCapabilities(
-            draft.capabilityIds,
-            {
-              selectedCapabilityIds: prev.selectedCapabilityIds,
-              capabilityConfigValues: prev.capabilityConfigValues,
-            },
-            advertisedCapabilityIds(selectedTemplate),
-          ),
-        );
-      }
-      return next;
-    });
-    setDraftRevision((revision) => revision + 1);
-    setAssistantOpen(false);
-  };
-
   const assistantButton = (
     <Button
       color="primary"
@@ -522,8 +357,8 @@ export default function AgentFormModal({
       size="small"
       icon={{ category: "outlined", type: "auto_awesome" }}
       className={styles.assistantButton}
-      onClick={() => setAssistantOpen(true)}
-      disabled={!assistantReady || isSubmitting}
+      title={t("rework.weaverAgents.notConnected")}
+      disabled
     >
       {t("rework.teams.formAgent.creationAssistant.open")}
     </Button>
@@ -559,7 +394,7 @@ export default function AgentFormModal({
               color={submitAttempted && !isFormValid ? "warning" : "primary"}
               variant="filled"
               size="medium"
-              disabled={nameTaken || recommendationReadPending}
+              disabled={nameTaken || isSubmitting}
               onClick={handleSubmit}
             >
               {mode === "edit" ? t("rework.save") : t("rework.create")}
@@ -620,19 +455,6 @@ export default function AgentFormModal({
           onCapabilityConfigChange={handleCapabilityConfigChange}
           onCapabilityAssetFileChange={handleCapabilityAssetFileChange}
           onCapabilityBlockingErrorChange={handleCapabilityBlockingErrorChange}
-          draftRevision={draftRevision}
-        />
-      )}
-      {assistantReady && teamId && (
-        <CreationAssistantDialog
-          open={assistantOpen}
-          teamId={teamId}
-          templateId={form.templateId}
-          capabilities={templateCapabilities}
-          hasPromptField={!!promptField}
-          current={draftTargets(form, selectedTemplate, lang, promptField?.key, mode)}
-          onApply={applyDraft}
-          onClose={() => setAssistantOpen(false)}
         />
       )}
     </SettingsModal>

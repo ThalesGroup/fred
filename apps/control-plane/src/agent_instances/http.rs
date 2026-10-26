@@ -174,7 +174,7 @@ fn record_to_summary(record: AgentInstance) -> AppResult<ManagedAgentInstanceSum
     })
 }
 
-fn require_instance_space(kind: SpaceKind) -> AppResult<()> {
+pub(super) fn require_instance_space(kind: SpaceKind) -> AppResult<()> {
     if matches!(kind, SpaceKind::Team | SpaceKind::Personal) {
         Ok(())
     } else {
@@ -191,6 +191,7 @@ pub fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(get_agent_instance))
         .routes(utoipa_axum::routes!(update_agent_instance))
         .routes(utoipa_axum::routes!(delete_agent_instance))
+        .merge(super::runtime::routes())
 }
 
 #[utoipa::path(

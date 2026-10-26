@@ -30832,8 +30832,13 @@
                     },
                     "delegation": {
                       "additionalProperties": false,
-                      "description": "Only identity classification is needed here, not delegated grant acceptance.\nThese are the existing Python security.delegation claim settings.",
+                      "description": "Shared identity classification and runtime-resolver delegation settings.\nNames and defaults match Python security.delegation; acceptance is route-scoped.",
                       "properties": {
+                        "accept_delegated_calls": {
+                          "default": false,
+                          "description": "Accept person/run/agent assertions only at the runtime resolver.",
+                          "type": "boolean"
+                        },
                         "audience": {
                           "default": "fred-delegation",
                           "type": "string"
@@ -30851,6 +30856,19 @@
                             "array",
                             "null"
                           ]
+                        },
+                        "service_accounts_only": {
+                          "default": false,
+                          "description": "Keycloak client-credentials markers are mandatory when enabled.",
+                          "type": "boolean"
+                        },
+                        "user_clients": {
+                          "default": [],
+                          "description": "Human login clients, in addition to security.user.client_id, cannot delegate.",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
                         }
                       },
                       "type": "object"
@@ -32624,8 +32642,13 @@
                     },
                     "delegation": {
                       "additionalProperties": false,
-                      "description": "Only identity classification is needed here, not delegated grant acceptance.\nThese are the existing Python security.delegation claim settings.",
+                      "description": "Shared identity classification and runtime-resolver delegation settings.\nNames and defaults match Python security.delegation; acceptance is route-scoped.",
                       "properties": {
+                        "accept_delegated_calls": {
+                          "default": false,
+                          "description": "Accept person/run/agent assertions only at the runtime resolver.",
+                          "type": "boolean"
+                        },
                         "audience": {
                           "default": "fred-delegation",
                           "type": "string"
@@ -32643,6 +32666,19 @@
                             "array",
                             "null"
                           ]
+                        },
+                        "service_accounts_only": {
+                          "default": false,
+                          "description": "Keycloak client-credentials markers are mandatory when enabled.",
+                          "type": "boolean"
+                        },
+                        "user_clients": {
+                          "default": [],
+                          "description": "Human login clients, in addition to security.user.client_id, cannot delegate.",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
                         }
                       },
                       "type": "object"

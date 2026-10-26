@@ -91,27 +91,12 @@ class ToolExecution:
         delegated = scope is not None and scope.delegated_credentials
         try:
             if not team_id or is_personal_team_id(team_id):
-                if delegated:
-                    await rebac.require_active_account(user_id)
                 return
-            permission = rebac.check_permission_or_raise(
+            await rebac.check_permission_or_raise(
                 RebacReference(Resource.USER, user_id),
                 TeamPermission.CAN_USE_TEAM_AGENTS,
                 RebacReference(Resource.TEAM, team_id),
             )
-            if not delegated:
-                await permission
-                return
-            # Both are awaited to the end so an account status refusal wins over a
-            # permission check failure, whichever arrives first.
-            outcomes = await asyncio.gather(
-                rebac.require_active_account(user_id),
-                permission,
-                return_exceptions=True,
-            )
-            for outcome in outcomes:
-                if isinstance(outcome, BaseException):
-                    raise outcome
         except AuthorizationError:
             if delegated:
                 raise AuthorityLostError() from None

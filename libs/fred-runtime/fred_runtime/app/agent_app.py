@@ -90,17 +90,19 @@ from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_core.security.delegation import (
     AssertedUser,
     DelegationGrant,
-    enforce_account_status,
     holds_caller_role,
 )
 from fred_core.security.models import AuthorizationError
+from fred_core.security.rebac.published_engine import PublishedOpenFgaRebacEngine
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
     TeamPermission,
 )
-from fred_core.security.rebac.rebac_factory import rebac_factory
-from fred_core.security.structure import KeycloakUser, is_service_agent
+from fred_core.security.structure import (
+    KeycloakUser,
+    is_service_agent,
+)
 from fred_sdk.contracts.agent_draft import (
     AgentDraftPodRequest,
     AgentDraftResult,
@@ -175,6 +177,7 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.types import Receive, Scope, Send
 
 from fred_runtime.app.execution_diagnostics import report_execution_error
+from fred_runtime.app.security import prepare_authorization
 from fred_runtime.app.web_research_activity import WebResearchActivity
 from fred_runtime.capabilities import (
     AssetSlotViolationError,
@@ -7004,24 +7007,9 @@ def create_agent_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        # Boot order (must be preserved — each step depends on the previous):
-        # 1. log_setup         — formatter/handlers ready for all subsequent logs
-        # 2. install_gc_diagnostics — independent of everything below; installed
-        #    early so SIGUSR1/SIGUSR2 (fred_core.diagnostics) are live for the
-        #    pod's whole lifetime, protecting every agent pod (ours and third
-        #    parties' alike) against the reference-cycle class of leak found in
-        #    ISSUE-010 without any per-pod code
-        # 3. initialize_kpi_writer — needed by bootstrap_observability
-        # 4. initialize_control_plane_client — sync, no network until first call
-        # 5. bootstrap_observability — global tracer + metrics provider
-        # 6. attach_pod_container — container in app.state before any request
-        # 7. initialize_filesystem — one object-store client for the pod lifetime
-        # 8. initialize_sql    — async, may take time
-        # 9. initialize_platform_sql — dedicated read-only SQL adapter, after
-        #    initialize_sql proved the Postgres config (OPSCAP-01-PG)
-        # 10. start_metrics_exporter — prometheus thread, after KPI writer exists
-        # 11. start_kpi_tasks  — asyncio tasks, after SQL engine is known
-        # 12. set_runtime_context — wires all built parts into the global config
+        # Observability and identity first, then durable SQL. Release the binding
+        # query connection before fetching its exact model from OpenFGA. Only
+        # after these prerequisites are ready do we expose the runtime context.
         log_setup(
             service_name=config.app.runtime_id,
             log_level=config.app.log_level,
@@ -7034,6 +7022,7 @@ def create_agent_app(
         )
         gc_diagnostics = install_gc_diagnostics()
         container = build_pod_container(config)
+        rebac_engine: PublishedOpenFgaRebacEngine | None = None
         try:
             container.initialize_kpi_writer()
             container.initialize_control_plane_client()
@@ -7041,50 +7030,27 @@ def create_agent_app(
                 config.observability, kpi_writer=container.get_kpi_writer()
             )
             attach_pod_container(app, container)
-            if security_enabled and user_security is not None:
-                from fred_core.security.oidc import initialize_user_security
-
-                initialize_user_security(user_security)
-            if security is not None:
-                # Enforce the hardened profile (C3) at startup — fails closed.
-                from fred_core.security.oidc import apply_security_profile
-
-                apply_security_profile(security)
-            # Pod-side authorization engine (RUNTIME-07 rev. 2). The pod authorizes
-            # every execution against OpenFGA; a disabled/Noop engine (dev) means
-            # identity-only. Safe in all modes — the factory returns a Noop with a
-            # KeycloackDisabled admin client when user/m2m auth is off.
-            rebac_engine = (
-                rebac_factory(security, kpi_writer=container.get_kpi_writer())
-                if security is not None
-                else None
+            rebac_config, binding = await prepare_authorization(container)
+            sql_engine = container.get_sql_engine()
+            assert sql_engine is not None  # owned by the prepared container
+            rebac_engine = PublishedOpenFgaRebacEngine(
+                rebac_config, binding, kpi_writer=container.get_kpi_writer()
             )
-            if rebac_engine is not None:
-                await enforce_account_status(rebac_engine)
+            await rebac_engine.get_client()
+            if config.app.gcu_version is not None:
+                # Check the Rust-owned contract before readiness, without writes.
+                from sqlalchemy import text
+
+                async with sql_engine.connect() as connection:
+                    await connection.execute(
+                        text("select user_id, version from terms_acceptance limit 0")
+                    )
             chat_factory = _build_chat_model_factory(config)
             if model_provider is not None and isinstance(
                 chat_factory, RoutedChatModelFactory
             ):
                 chat_factory = chat_factory.with_provider(model_provider)
             await container.initialize_filesystem()
-            await container.initialize_sql()
-            if (
-                security is not None
-                and rebac_engine is not None
-                and rebac_engine.enabled
-            ):
-                from fred_core.security.platform_access.access_control import (
-                    initialize_platform_access,
-                )
-
-                platform_engine = container.get_sql_engine()
-                if platform_engine is None or rebac_engine is None:
-                    raise ValueError(
-                        "Platform access requires shared PostgreSQL and ReBAC"
-                    )
-                await initialize_platform_access(
-                    security, platform_engine, rebac_engine
-                )
             await container.initialize_web_research()
             container.initialize_platform_sql()
             container.start_metrics_exporter()
@@ -7167,36 +7133,40 @@ def create_agent_app(
                 )
             yield
         finally:
-            # Shutdown must RUN and must COMPLETE.
-            # - `finally`: a plain sequence after `yield` is skipped entirely
-            #   when an exception propagates out of the app through the
-            #   generator, which is exactly the case where releasing sockets
-            #   and stopping tasks matters most.
-            # - per-step guard: these three release INDEPENDENT resources, so a
-            #   raising `container.shutdown()` must not strand the Keycloak
-            #   refresh pool behind it. The pod is going away either way;
-            #   losing a connection pool because an unrelated subsystem failed
-            #   is strictly worse than logging both failures.
-            # `except Exception` deliberately lets `CancelledError` through —
-            # a shutdown being cancelled is not a step failing.
-            for label, close in (
-                ("gc diagnostics", gc_diagnostics.stop),
-                ("pod container", container.shutdown),
-                # Release the Keycloak refresh pool deterministically rather
-                # than leaving it to GC, as the control-plane client above is.
-                ("keycloak refresh pool", aclose_token_refresh_client),
-            ):
-                try:
-                    await close()
-                except Exception:
-                    if delegation.enabled:
-                        logger.error(
-                            "event=runtime_shutdown outcome=failed reason=cleanup_failed"
-                        )
-                    else:
-                        logger.exception(
-                            "[fred-runtime] shutdown step failed: %s", label
-                        )
+            try:
+                if rebac_engine is not None:
+                    await rebac_engine.close()
+            finally:
+                # Shutdown must RUN and must COMPLETE.
+                # - `finally`: a plain sequence after `yield` is skipped entirely
+                #   when an exception propagates out of the app through the
+                #   generator, which is exactly the case where releasing sockets
+                #   and stopping tasks matters most.
+                # - per-step guard: these three release INDEPENDENT resources, so a
+                #   raising `container.shutdown()` must not strand the Keycloak
+                #   refresh pool behind it. The pod is going away either way;
+                #   losing a connection pool because an unrelated subsystem failed
+                #   is strictly worse than logging both failures.
+                # `except Exception` deliberately lets `CancelledError` through —
+                # a shutdown being cancelled is not a step failing.
+                for label, close in (
+                    ("gc diagnostics", gc_diagnostics.stop),
+                    ("pod container", container.shutdown),
+                    # Release the Keycloak refresh pool deterministically rather
+                    # than leaving it to GC, as the control-plane client above is.
+                    ("keycloak refresh pool", aclose_token_refresh_client),
+                ):
+                    try:
+                        await close()
+                    except Exception:
+                        if delegation.enabled:
+                            logger.error(
+                                "event=runtime_shutdown outcome=failed reason=cleanup_failed"
+                            )
+                        else:
+                            logger.exception(
+                                "[fred-runtime] shutdown step failed: %s", label
+                            )
 
     app = RequestLoggingFastAPI(
         title=config.app.name,
@@ -7206,6 +7176,9 @@ def create_agent_app(
         openapi_url=f"{base_url}/openapi.json" if base_url else "/openapi.json",
         lifespan=lifespan,
     )
+    from fred_runtime.app.security import install_admission
+
+    install_admission(app)
     register_authorization_handlers(app)
     app.dependency_overrides[get_config] = _build_config_provider(config)
     app.state.capability_registry = capability_registry

@@ -6,8 +6,43 @@ import { controlPlaneApi } from "./controlPlaneOpenApi";
 // The generator types binary fields as Blob, but sends the enclosing object as
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
 export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
-  addTagTypes: ["Folders", "Documents", "DocumentUploads", "OrganizationAgents"],
+  addTagTypes: ["Folders", "Documents", "DocumentUploads", "OrganizationAgents", "AgentInstances", "AgentTemplates"],
   endpoints: {
+    listAgentInstances: {
+      providesTags: (_result, _error, { spaceId }) => [{ type: "AgentInstances", id: spaceId }],
+    },
+    getAgentInstance: {
+      providesTags: (_result, _error, { spaceId, agentInstanceId }) => [
+        { type: "AgentInstances", id: `${spaceId}:${agentInstanceId}` },
+      ],
+    },
+    spaceAgentTemplates: {
+      providesTags: (_result, _error, { spaceId }) => [{ type: "AgentTemplates", id: spaceId }],
+    },
+    createAgentInstance: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { spaceId }) => (error ? [] : [{ type: "AgentInstances", id: spaceId }]),
+    },
+    updateAgentInstance: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { spaceId, agentInstanceId }) =>
+        error
+          ? []
+          : [
+              { type: "AgentInstances", id: spaceId },
+              { type: "AgentInstances", id: `${spaceId}:${agentInstanceId}` },
+            ],
+    },
+    deleteAgentInstance: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { spaceId, agentInstanceId }) =>
+        error
+          ? []
+          : [
+              { type: "AgentInstances", id: spaceId },
+              { type: "AgentInstances", id: `${spaceId}:${agentInstanceId}` },
+            ],
+    },
     organizationAgents: {
       providesTags: (_result, _error, arg) => [{ type: "OrganizationAgents", id: arg.organizationId }],
     },
@@ -76,6 +111,12 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
 });
 
 export const {
+  useListAgentInstancesQuery,
+  useGetAgentInstanceQuery,
+  useCreateAgentInstanceMutation,
+  useUpdateAgentInstanceMutation,
+  useDeleteAgentInstanceMutation,
+  useSpaceAgentTemplatesQuery,
   useAuthorizeSpaceMutation,
   useOrganizationSupervisionQuery,
   useTeamSupervisionQuery,

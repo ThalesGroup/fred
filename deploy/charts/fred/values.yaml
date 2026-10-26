@@ -669,6 +669,7 @@ applications:
         # runtime_catalog_sources: that equality is what joins a log line to
         # its own KPI.
         runtime_id: "fred-agents"
+        gcu_version: v1 # Must match the Control Plane terms version.
         name: "Fred default agents"
         base_url: "/fred/agents/v2"
         host: "0.0.0.0"
@@ -693,9 +694,8 @@ applications:
         # and runs a pod-side OpenFGA check on every request (no control-plane grant).
         # `profile: c3` hardens this at STARTUP and FAILS CLOSED — the pod refuses to
         # boot unless user + m2m + rebac below are all enabled, and it forces strict
-        # JWT issuer/audience validation. Leave unset for C1/C2 (dev / baseline).
-        # See deploy/README.md "Security profiles & classification tiers".
-        # profile: c3
+        # JWT issuer/audience validation. Weaver pods require this profile.
+        profile: c3
         m2m:
           enabled: true
           client_id: "agentic"
@@ -726,15 +726,15 @@ applications:
         authorized_origins:
           - "http://your.host:80"
         rebac:
-          enabled: true                    # Set false to bypass ReBAC (warning: all private resources will become public)
+          enabled: true
           type: openfga
-          api_url: "http://openfga:8080"    # OpenFGA HTTP endpoint
-          # store_name: "fred"                # OpenFGA store name. Reuse the same store across services
-          # create_store_if_needed: true      # Automates store bootstrap (disable if pre-provisioned)
-          # sync_schema_on_init: true         # Pushes the default Fred authorization model
-          # authorization_model_id: null      # Authorization model id to use in case `sync_schema_on_init: false`
-          # token_env_var: "OPENFGA_API_TOKEN" # Env var holding the bearer token
-          timeout_millisec: 5000             # Bound account-status and membership checks
+          api_url: "http://openfga:8080"
+          # Compare with authorization_store.configured_store; never discover by name.
+          store_name: control-plane
+          # Store/model IDs come only from the published binding. The pod never
+          # creates a store, synchronizes a schema or selects the latest model.
+          # token_env_var: "OPENFGA_API_TOKEN"
+          timeout_millisec: 5000
           # headers:
           #   X-Custom-Header: "value"
         delegation:

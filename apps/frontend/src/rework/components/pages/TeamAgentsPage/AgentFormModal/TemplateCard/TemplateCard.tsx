@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useTranslation } from "react-i18next";
-import type { AgentTemplateSummary } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
+import type { AgentTemplateSummary } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import styles from "./TemplateCard.module.css";
 
 type TemplateCardProps = {
@@ -26,16 +26,8 @@ export function TemplateCard({ template, selected, onSelect }: TemplateCardProps
   const { i18n } = useTranslation();
   const lang = i18n.language.split("-")[0];
   const description = template.description_by_lang?.[lang] ?? template.description;
-  const unavailable = template.status === "unavailable";
   return (
-    <button
-      type="button"
-      className={styles.card}
-      data-selected={selected}
-      data-unavailable={unavailable}
-      onClick={onSelect}
-      disabled={unavailable}
-    >
+    <button type="button" className={styles.card} data-selected={selected} onClick={onSelect}>
       <span className={styles.name}>{template.display_name}</span>
       {description && <span className={styles.description}>{description}</span>}
       <div className={styles.cardFooter}>

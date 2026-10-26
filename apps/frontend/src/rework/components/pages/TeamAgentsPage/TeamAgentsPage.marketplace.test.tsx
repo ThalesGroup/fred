@@ -1,419 +1,454 @@
 // @vitest-environment happy-dom
 // Copyright Thales 2026
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-  AgentMarketplaceState,
-  ManagedAgentInstanceSummary,
-  TeamPermission,
-  TeamWithPermissions,
-} from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { configureStore } from "@reduxjs/toolkit";
+import { Provider } from "react-redux";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import type { ManagedAgentInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { INSTANCE, SPACE_A, SPACE_B, SPACES, TEMPLATE } from "./weaverAgentFixtures";
 
-declare global {
-  // eslint-disable-next-line no-var
-  var IS_REACT_ACT_ENVIRONMENT: boolean;
-}
-globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-type ConfirmOptions = { title: string; message?: string; criticalAction?: boolean; onConfirm: () => void };
-
-const h = vi.hoisted(() => ({
-  team: undefined as unknown,
-  instances: [] as unknown[],
-  refetched: undefined as unknown[] | undefined,
-  refetch: vi.fn(),
-  patch: vi.fn(),
-  publish: vi.fn(),
-  unpublish: vi.fn(),
-  dismiss: vi.fn(),
-  confirm: vi.fn(),
-  showError: vi.fn(),
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string, opts?: Record<string, unknown>) => (opts ? `${key} ${JSON.stringify(opts)}` : key),
-    i18n: { language: "en" },
-  }),
-}));
-
-vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
-  useToast: () => ({ showSuccess: vi.fn(), showError: h.showError, showWarn: vi.fn() }),
-}));
-
-vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
-  useConfirmationDialog: () => ({ showConfirmationDialog: h.confirm }),
-}));
-
-vi.mock("../../../../hooks/useFrontendBootstrap.ts", () => ({
-  useFrontendBootstrap: () => ({ activeTeam: { id: "personal" } }),
-}));
-
-vi.mock("../../../../hooks/useFrontendProperties.ts", () => ({
+vi.mock("../../../../hooks/useFrontendProperties", () => ({
   useFrontendProperties: () => ({
-    agentsNicknamePlural: "Agents",
     agentsNicknameSingular: "Agent",
+    agentsNicknamePlural: "Agents",
     agentIconName: "smart_toy",
   }),
 }));
-
-vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
-  useGetTeamQuery: () => ({ data: h.team }),
-  useUsersByIdsQuery: () => ({ data: [] }),
-  usePublishAgentMutation: () => [h.publish, { isLoading: false }],
-  useUnpublishAgentMutation: () => [h.unpublish, { isLoading: false }],
-  useDismissAgentMarketplaceRemovalMutation: () => [h.dismiss, { isLoading: false }],
+const notices = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), confirm: vi.fn() }));
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }) }));
+vi.mock("../../../../security/KeycloakService", () => ({
+  KeyCloakService: {
+    GetToken: () => "fixture",
+    GetUserId: () => "reader",
+    GetSessionIdentity: () => "reader-session",
+    ensureFreshToken: vi.fn(async () => false),
+    CallLogout: vi.fn(),
+  },
+}));
+vi.mock("../../../../common/platformAccess", () => ({ handlePlatformAccessDenial: vi.fn() }));
+vi.mock("../../../../app/userPreferences", () => ({
+  useCurrentUserPreference: () => "name",
+  persistUserPreference: vi.fn(),
+}));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({ showSuccess: notices.success, showError: notices.error }),
+}));
+vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
+  useConfirmationDialog: () => ({ showConfirmationDialog: notices.confirm }),
+}));
+vi.mock("@shared/organisms/SettingsModal/SettingsModal", () => ({
+  default: ({ children, actions, footer }: { children: ReactNode; actions: ReactNode; footer: ReactNode }) => (
+    <section data-form>
+      {actions}
+      {children}
+      {footer}
+    </section>
+  ),
+}));
+vi.mock("@shared/molecules/PromptEditor/PromptEditor", () => ({
+  PROMPT_EDITOR_ROWS: 10,
+  PromptEditor: ({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) => (
+    <textarea aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} />
+  ),
 }));
 
-vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
-  useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery: () => ({
-    data: h.instances,
-    isLoading: false,
-    isError: false,
-    refetch: h.refetch,
-  }),
-  useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery: () => ({
-    data: [{ template_id: "pod:basic", display_name: "Basic", source_runtime_id: "pod" }],
-    isLoading: false,
-    isError: false,
-  }),
-  usePatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchMutation: () => [
-    h.patch,
-    { isLoading: false },
-  ],
-  usePatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchMutation:
-    () => [vi.fn(), { isLoading: false }],
-  useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation: () => [vi.fn()],
-  usePostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostMutation: () => [
-    vi.fn(),
-    { isLoading: false },
-  ],
-  usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation: () => [vi.fn(), { isLoading: false }],
-  usePostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostMutation: () => [
-    vi.fn(),
-    { isLoading: false },
-  ],
-}));
-
-// The form is exercised elsewhere; here it only needs to submit a save.
-vi.mock("./AgentFormModal/AgentFormModal.tsx", () => ({
-  default: ({ isOpen, onSubmit }: { isOpen: boolean; onSubmit: (payload: unknown) => void }) =>
-    isOpen ? (
-      <button
-        type="button"
-        data-testid="save-agent"
-        onClick={() =>
-          onSubmit({
-            templateId: "pod:basic",
-            displayName: "Helper",
-            role: "Helps",
-            description: "",
-            usageStatement: "",
-            reasoningEnabled: false,
-            reasoningDefaultOn: false,
-            tuningFieldValues: {},
-            selectedCapabilityIds: [],
-            capabilityConfigValues: {},
-            capabilityAssetFiles: {},
-            templateHasCapabilities: false,
-          })
-        }
-      />
-    ) : null,
-}));
-vi.mock("./CopyAgentDialog/CopyAgentDialog.tsx", () => ({ default: () => null }));
-vi.mock("./DuplicateAgentDialog/DuplicateAgentDialog.tsx", () => ({ default: () => null }));
-
+import { enhancedControlPlaneApi as api } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { legacyControlPlaneApi as legacy } from "../../../../slices/legacyControlPlane/legacyControlPlaneApi";
 import TeamAgentsPage from "./TeamAgentsPage";
 
-const PUBLISHED: AgentMarketplaceState = {
-  state: "published",
-  version: 3,
-  published_at: "2026-10-01T10:00:00Z",
-  like_count: 1,
-  import_count: 2,
-};
-
-const MEMBER: TeamPermission[] = ["can_read"];
-const EDITOR: TeamPermission[] = [
-  ...MEMBER,
-  "can_update_agents",
-  "can_publish_marketplace_agents",
-  "can_unpublish_marketplace_agents",
-];
-
-function team(permissions: TeamPermission[], published = 1, quota = 5): TeamWithPermissions {
-  return {
-    id: "team-1",
-    name: "Team",
-    visibility: "public",
-    permissions,
-    marketplace: {
-      agents_publishing_enabled: true,
-      agents_publish_quota: quota,
-      published_count: published,
-    },
-  };
-}
-
-function agent(over: Partial<ManagedAgentInstanceSummary> = {}): ManagedAgentInstanceSummary {
-  return {
-    agent_instance_id: "a1",
-    team_id: "team-1",
-    template_id: "pod:basic",
-    display_name: "Helper",
-    role: "Helps",
-    status: "enabled",
-    ...over,
-  };
-}
-
-const resolved = (value: unknown = {}) => ({ unwrap: () => Promise.resolve(value) });
-const rejected = (error: unknown) => ({ unwrap: () => Promise.reject(error) });
-
-let container: HTMLDivElement;
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+const NativeRequest = globalThis.Request;
 let root: Root;
-
-async function render() {
-  container = document.createElement("div");
-  document.body.appendChild(container);
-  root = createRoot(container);
-  await act(async () => {
-    root.render(
-      <MemoryRouter initialEntries={["/team/team-1/agents"]}>
-        <Routes>
-          <Route path="/team/:teamId/agents" element={<TeamAgentsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+let host: HTMLDivElement;
+let store: ReturnType<typeof makeStore>;
+let router: ReturnType<typeof createMemoryRouter>;
+let rows: ManagedAgentInstanceSummary[];
+let writable: boolean;
+let catalogEmpty: boolean;
+let emptyContext: boolean;
+let failure: { target: "list" | "catalog" | "write" | "authorize" | "get"; status: number | "network" } | undefined;
+let blockedSpace: string | undefined;
+let releaseList: (() => void) | undefined;
+let calls: { method: string; path: string; body: Record<string, unknown> | undefined }[];
+const makeStore = () =>
+  configureStore({
+    reducer: { [api.reducerPath]: api.reducer, [legacy.reducerPath]: legacy.reducer },
+    middleware: (defaults) => defaults().concat(api.middleware, legacy.middleware),
   });
-}
-
-async function click(el: Element | null | undefined) {
-  if (!el) throw new Error("element not found");
-  await act(async () => {
-    (el as HTMLElement).click();
-  });
-}
-
-function menuItem(key: string): HTMLElement | undefined {
-  return Array.from(document.querySelectorAll('[role="option"]')).find((el) => el.textContent?.includes(key)) as
-    | HTMLElement
-    | undefined;
-}
-
-async function openMenu() {
-  await click(container.querySelector('[aria-label="rework.agentCard.moreMenu"]'));
-}
-
-const bar = () => container.querySelector('[aria-label="rework.agentMarketplace.barLabel"]');
-
-const lastConfirm = (): ConfirmOptions => h.confirm.mock.lastCall?.[0] as ConfirmOptions;
+const json = (data: unknown, status = 200) =>
+  new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
 
 beforeEach(() => {
-  h.refetched = undefined;
-  h.refetch.mockImplementation(() => Promise.resolve({ data: h.refetched ?? h.instances }));
-  h.patch.mockImplementation(() => resolved());
-  h.publish.mockImplementation(() => resolved());
-});
-
-afterEach(() => {
-  act(() => root.unmount());
-  container.remove();
-  document.body.innerHTML = "";
+  rows = [structuredClone(INSTANCE)];
+  writable = true;
+  catalogEmpty = false;
+  emptyContext = false;
+  failure = undefined;
+  calls = [];
+  blockedSpace = undefined;
+  releaseList = undefined;
   vi.clearAllMocks();
+  vi.stubGlobal(
+    "Request",
+    class extends NativeRequest {
+      constructor(input: RequestInfo | URL, init?: RequestInit) {
+        super(typeof input === "string" ? new URL(input, "http://localhost") : input, init);
+      }
+    },
+  );
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (request: Request) => {
+      const path = new URL(request.url).pathname;
+      const body = request.method === "GET" || request.method === "DELETE" ? undefined : await request.json();
+      calls.push({ path, method: request.method, body });
+      const target = path.endsWith("/authorize/space")
+        ? "authorize"
+        : path.endsWith("/agent-templates")
+          ? "catalog"
+          : request.method !== "GET"
+            ? "write"
+            : path.endsWith("/agent-instances")
+              ? "list"
+              : "get";
+      if (failure?.target === target) {
+        if (failure.status === "network") throw new TypeError("Offline");
+        return json(
+          { detail: "Rejected", code: failure.status === 409 ? "agent_name_conflict" : "refused" },
+          failure.status,
+        );
+      }
+      if (path.endsWith("/me/spaces")) return json(emptyContext ? [] : SPACES);
+      if (target === "authorize") return json({ allowed: writable });
+      if (target === "catalog") return json(catalogEmpty ? [] : [TEMPLATE]);
+      const match = path.match(/\/spaces\/([^/]+)\/agent-instances(?:\/([^/]+))?$/);
+      if (!match) throw new Error(`Unexpected request ${path}`);
+      const [, spaceId, id] = match;
+      if (request.method === "GET" && !id && spaceId === blockedSpace)
+        await new Promise<void>((resolve) => {
+          releaseList = resolve;
+        });
+      if (request.method === "GET")
+        return json(
+          id
+            ? rows.find((row) => row.space_id === spaceId && row.agent_instance_id === id)
+            : rows.filter((row) => row.space_id === spaceId),
+        );
+      if (request.method === "POST") {
+        const row = {
+          ...INSTANCE,
+          ...body,
+          space_id: spaceId,
+          agent_instance_id: "created",
+          tuning_field_values: body.tuning_field_values ?? {},
+          selected_capability_ids: body.capability_ids,
+          capability_config: {},
+        };
+        rows.push(row);
+        return json(row, 201);
+      }
+      if (request.method === "PATCH") {
+        rows = rows.map((row) => (row.agent_instance_id === id ? { ...row, ...body } : row));
+        return json(rows.find((row) => row.agent_instance_id === id));
+      }
+      rows = rows.filter((row) => row.agent_instance_id !== id);
+      return new Response(null, { status: 204 });
+    }),
+  );
+  store = makeStore();
+  host = document.createElement("div");
+  document.body.append(host);
+  root = createRoot(host);
 });
-
-describe("TeamAgentsPage marketplace", () => {
-  it("offers Publish to an editor and no menu to a member", async () => {
-    h.team = team(MEMBER);
-    h.instances = [agent()];
-    await render();
-    expect(container.querySelector('[aria-label="rework.agentCard.moreMenu"]')).toBeNull();
-    act(() => root.unmount());
-    container.remove();
-    document.body.innerHTML = "";
-
-    h.team = team(EDITOR);
-    await render();
-    await openMenu();
-    expect(menuItem("menu.publish")).toBeDefined();
+afterEach(() => {
+  releaseList?.();
+  act(() => root.unmount());
+  router?.dispose();
+  store.dispatch(api.util.resetApiState());
+  store.dispatch(legacy.util.resetApiState());
+  host.remove();
+  expect(
+    calls.every(({ path }) =>
+      /^\/control-plane\/v1\/(me\/spaces|authorize\/space|spaces\/[^/]+\/agent-(instances|templates))/.test(path),
+    ),
+  ).toBe(true);
+  vi.unstubAllGlobals();
+});
+async function settle() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 40));
   });
-
-  it("shows no bar for an unpublished agent, to an editor or a member", async () => {
-    h.team = team(EDITOR);
-    h.instances = [agent()];
-    await render();
-    expect(bar()).toBeNull();
-    act(() => root.unmount());
-    container.remove();
-    document.body.innerHTML = "";
-
-    h.team = team(MEMBER);
-    await render();
-    expect(bar()).toBeNull();
+}
+async function mount(id = SPACE_A) {
+  router = createMemoryRouter([{ path: "/team/:teamId/agents", element: <TeamAgentsPage /> }], {
+    initialEntries: [`/team/${id}/agents`],
   });
-
-  it("shows the bar only on published cards in a mixed team", async () => {
-    h.team = team(EDITOR);
-    h.instances = [agent(), agent({ agent_instance_id: "a2", display_name: "Other", marketplace: PUBLISHED })];
-    await render();
-    expect(container.querySelectorAll('[aria-label="rework.agentMarketplace.barLabel"]')).toHaveLength(1);
+  await act(async () => {
+    root.render(
+      <Provider store={store}>
+        <RouterProvider router={router} />
+      </Provider>,
+    );
   });
-
-  it("shows no bar on any card when the team cannot publish", async () => {
-    h.instances = [agent(), agent({ agent_instance_id: "a2", display_name: "Other", marketplace: PUBLISHED })];
-    const off = team(EDITOR);
-    h.team = { ...off, marketplace: { ...off.marketplace!, agents_publishing_enabled: false } };
-    await render();
-    expect(bar()).toBeNull();
-    act(() => root.unmount());
-    container.remove();
-    document.body.innerHTML = "";
-
-    h.team = { ...team(EDITOR), visibility: "private" };
-    await render();
-    expect(bar()).toBeNull();
+  await settle();
+}
+function button(text: string) {
+  return [...document.querySelectorAll<HTMLButtonElement>("button, [role=option]")].find(
+    (item) => item.textContent?.includes(text) || item.getAttribute("aria-label") === text,
+  )!;
+}
+async function click(text: string) {
+  const node = button(text);
+  expect(node, text).toBeTruthy();
+  await act(async () => node.click());
+  await settle();
+}
+async function input(label: string, value: string) {
+  const labelNode = [...document.querySelectorAll("label")].find((item) => item.textContent?.includes(label));
+  const node = (
+    labelNode?.htmlFor ? document.getElementById(labelNode.htmlFor) : document.querySelector(`[aria-label="${label}"]`)
+  ) as HTMLInputElement | HTMLTextAreaElement;
+  expect(node, label).toBeTruthy();
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(
+      node instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
+      "value",
+    )!.set!.call(node, value);
+    node.dispatchEvent(new Event("input", { bubbles: true }));
   });
+}
+async function menu(action: string) {
+  await click("rework.agentCard.moreMenu");
+  await click(action);
+}
+const writes = () => calls.filter((call) => call.method !== "GET" && !call.path.endsWith("/authorize/space"));
 
-  it("gives a team admin who is not an editor a menu with Remove only", async () => {
-    h.team = team(["can_read", "can_administer_members", "can_unpublish_marketplace_agents"]);
-    h.instances = [agent({ marketplace: PUBLISHED })];
-    await render();
-    await openMenu();
-    const options = Array.from(document.querySelectorAll('[role="option"]'));
-    expect(options).toHaveLength(1);
-    expect(options[0].textContent).toContain("menu.remove");
-  });
-
-  it("confirms the deactivation of a published agent as a critical action", async () => {
-    h.team = team(EDITOR);
-    h.instances = [agent({ marketplace: PUBLISHED })];
-    await render();
-    await openMenu();
-    await click(menuItem("rework.agentCard.deactivate"));
-    expect(h.patch).not.toHaveBeenCalled();
-    expect(lastConfirm()).toMatchObject({
-      criticalAction: true,
-      title: "rework.agentMarketplace.deactivateDialog.title",
+describe("Weaver agent management and unavailable adjacent actions", () => {
+  it("reads canonical space routes, asks Write rather than inferring roles, and keeps unsupported actions disabled", async () => {
+    await mount();
+    expect(host.textContent).toContain("Saved Agent");
+    expect(calls.find((call) => call.path.endsWith("/authorize/space"))?.body).toEqual({
+      space_id: SPACE_A,
+      permission: "write",
     });
-    await act(async () => lastConfirm().onConfirm());
-    expect(h.patch).toHaveBeenCalledWith(
-      expect.objectContaining({ updateAgentInstanceRequest: { status: "disabled" } }),
-    );
+    expect(button("rework.agentCard.chat").disabled).toBe(true);
+    await click("rework.agentCard.moreMenu");
+    for (const text of [
+      "rework.agentCard.duplicate",
+      "rework.agentCard.copyTo",
+      "rework.agentMarketplace.menu.publish",
+    ]) {
+      expect(button(text).getAttribute("aria-disabled")).toBe("true");
+      await click(text);
+    }
+    expect(writes()).toHaveLength(0);
   });
-
-  it("says the deletion of a published agent removes it from the marketplace", async () => {
-    h.team = team(EDITOR);
-    h.instances = [agent({ marketplace: PUBLISHED })];
-    await render();
-    await openMenu();
-    await click(menuItem("rework.agentCard.delete"));
-    expect(lastConfirm().criticalAction).toBe(true);
-    expect(lastConfirm().message).toContain("rework.agentMarketplace.deleteRemoves");
+  it("does not read the creation catalog or expose management to a reader", async () => {
+    writable = false;
+    await mount();
+    expect(host.textContent).toContain("Saved Agent");
+    expect(button("rework.teams.agents.create")).toBeUndefined();
+    expect(button("rework.agentCard.moreMenu")).toBeUndefined();
+    expect(calls.some((call) => call.path.endsWith("/agent-templates"))).toBe(false);
   });
-
-  it("proposes to update the marketplace after an editor saves a change, then opens the warning dialog", async () => {
-    h.team = team(EDITOR);
-    h.instances = [agent({ marketplace: PUBLISHED })];
-    h.refetched = [agent({ marketplace: { ...PUBLISHED, modified: true } })];
-    await render();
-    await openMenu();
-    await click(menuItem("rework.agentCard.edit"));
-    await click(container.querySelector('[data-testid="save-agent"]'));
-
-    const proposal = document.querySelector('[role="alertdialog"]');
-    expect(proposal?.textContent).toContain("rework.agentMarketplace.proposal.saved");
-    const update = Array.from(proposal?.querySelectorAll("button") ?? []).find((b) =>
-      b.textContent?.includes("proposal.update"),
-    );
-    await click(update);
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("publishDialog.titleRepublish");
+  it("distinguishes an empty list and an empty catalog without hiding existing agents", async () => {
+    catalogEmpty = true;
+    await mount();
+    expect(host.textContent).toContain("Saved Agent");
+    expect(host.textContent).toContain("rework.teams.formAgent.noTemplates");
+    expect(button("rework.teams.agents.create").disabled).toBe(true);
   });
-
-  it("does not propose to republish after a save that changed nothing", async () => {
-    h.team = team(EDITOR);
-    h.instances = [agent({ marketplace: PUBLISHED })];
-    await render();
-    await openMenu();
-    await click(menuItem("rework.agentCard.edit"));
-    await click(container.querySelector('[data-testid="save-agent"]'));
-    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+  it("shows the existing empty state with a working create action", async () => {
+    rows = [];
+    await mount();
+    expect(host.textContent).toContain("rework.teams.agents.noAgent");
+    expect(button("rework.teams.agents.firstCreate").disabled).toBe(false);
   });
-
-  it("proposes to publish again after reactivation, greyed when the quota is reached", async () => {
-    h.team = team(EDITOR, 5, 5);
-    h.instances = [
-      agent({
-        status: "disabled",
-        marketplace: { ...PUBLISHED, state: "removed", removed_reason: "deactivated", removed_at: "2026-10-02" },
-      }),
-    ];
-    await render();
-    await openMenu();
-    await click(menuItem("rework.agentCard.activate"));
-    const proposal = document.querySelector('[role="alertdialog"]');
-    expect(proposal?.textContent).toContain("rework.agentMarketplace.proposal.reactivated");
-    expect(proposal?.textContent).toContain("rework.agentMarketplace.blocked.quotaReached");
-    const publish = Array.from(proposal?.querySelectorAll("button") ?? []).find((b) =>
-      b.textContent?.includes("proposal.publish"),
-    ) as HTMLButtonElement;
-    expect(publish.disabled).toBe(true);
+  it("keeps the list available when the management catalog is refused", async () => {
+    failure = { target: "catalog", status: 403 };
+    await mount();
+    expect(host.textContent).toContain("Saved Agent");
+    expect(host.textContent).toContain("rework.weaverAgents.errors.forbidden");
   });
-
-  it("refreshes the card and explains a stale version on publish", async () => {
-    h.team = team(EDITOR);
-    h.instances = [agent({ marketplace: { ...PUBLISHED, state: "dismissed" } })];
-    h.publish.mockImplementation(() =>
-      rejected({ status: 409, data: { detail: { code: "marketplace_version_conflict", message: "stale" } } }),
-    );
-    await render();
-    await openMenu();
-    await click(menuItem("menu.publish"));
-    await click(document.querySelector('[role="dialog"] input[type="checkbox"]'));
-    const confirm = Array.from(document.querySelectorAll('[role="dialog"] button')).find((b) =>
-      b.textContent?.includes("publishDialog.confirm"),
-    );
-    await click(confirm);
-
-    expect(h.publish).toHaveBeenCalledWith({
-      teamId: "team-1",
-      agentInstanceId: "a1",
-      publishAgentRequest: { expected_version: 3 },
+  it("keeps readable instances when the Write authorization request fails", async () => {
+    failure = { target: "authorize", status: 403 };
+    await mount();
+    expect(host.textContent).toContain("Saved Agent");
+    expect(calls.some((call) => call.path.endsWith("/agent-templates"))).toBe(false);
+  });
+  it.each([
+    [401, "unauthorized"],
+    [403, "forbidden"],
+    [404, "notFound"],
+    [500, "server"],
+    [503, "server"],
+    ["network", "network"],
+  ] as const)("classifies list error %s", async (status, key) => {
+    failure = { target: "list", status };
+    await mount();
+    expect(host.textContent).toContain(`rework.weaverAgents.errors.${key}`);
+    expect(host.textContent).not.toContain("rework.serviceNotice.controlPlane");
+  });
+  it("opens GET state and changes metadata without resending tuning, capabilities or profile", async () => {
+    await mount();
+    await menu("rework.agentCard.edit");
+    expect(calls.some((call) => call.method === "GET" && call.path.endsWith(INSTANCE.agent_instance_id))).toBe(true);
+    await input("rework.teams.formAgent.fields.name.label", "Renamed");
+    await click("rework.save");
+    expect(writes()[writes().length - 1]?.body).toEqual({ display_name: "Renamed" });
+    expect(host.textContent).toContain("Renamed");
+    expect(rows[0].tuning_field_values).toEqual(INSTANCE.tuning_field_values);
+    expect(rows[0].selected_capability_ids).toBeNull();
+    expect(rows[0].capability_config).toEqual(INSTANCE.capability_config);
+  });
+  it("edits metadata even with no catalog", async () => {
+    catalogEmpty = true;
+    await mount();
+    await menu("rework.agentCard.edit");
+    await input("rework.teams.formAgent.fields.name.label", "No catalog");
+    await click("rework.save");
+    expect(writes()[writes().length - 1]?.body).toEqual({ display_name: "No catalog" });
+  });
+  it("shows the saved prompt and preserves hidden values when changing one tuning value", async () => {
+    await mount();
+    await menu("rework.agentCard.edit");
+    await click("rework.teams.formAgent.sections.prompts");
+    expect((document.querySelector('[aria-label="Prompt"]') as HTMLTextAreaElement).value).toBe("SAVED PROMPT");
+    expect(button("rework.teams.formAgent.promptField.pickFromLibrary").disabled).toBe(true);
+    await input("Prompt", "Edited prompt");
+    await click("rework.save");
+    expect(writes()[writes().length - 1]?.body).toEqual({
+      tuning_field_values: { ...INSTANCE.tuning_field_values, prompt: "Edited prompt" },
     });
-    expect(h.refetch).toHaveBeenCalled();
-    expect(h.showError).toHaveBeenCalledWith(
-      expect.objectContaining({ detail: expect.stringContaining("marketplace_version_conflict") }),
-    );
   });
-
-  it("removes with the version the card shows", async () => {
-    h.team = team(EDITOR);
-    h.instances = [agent({ marketplace: PUBLISHED })];
-    h.unpublish.mockImplementation(() => resolved());
-    await render();
-    await openMenu();
-    await click(menuItem("menu.remove"));
-    await act(async () => lastConfirm().onConfirm());
-    expect(h.unpublish).toHaveBeenCalledWith({
-      teamId: "team-1",
-      agentInstanceId: "a1",
-      unpublishAgentRequest: { expected_version: 3 },
+  it("creates with the canonical template then rereads the saved instance", async () => {
+    rows = [];
+    await mount();
+    await click("rework.teams.agents.firstCreate");
+    await click("Custom");
+    expect(button("rework.teams.formAgent.creationAssistant.open").disabled).toBe(true);
+    await click("rework.teams.formAgent.sections.commitments");
+    await input("rework.teams.formAgent.fields.usageStatement.label", "My use");
+    await click("rework.create");
+    expect(writes()[0].body).toMatchObject({
+      template_id: TEMPLATE.template_id,
+      capability_ids: [],
+      recommended_chat_profile_id: null,
+      tuning_field_values: { prompt: "CATALOG DEFAULT", temperature: 0.8 },
     });
+    await menu("rework.agentCard.edit");
+    expect(calls.some((call) => call.path.endsWith("/agent-instances/created") && call.method === "GET")).toBe(true);
+  });
+  it.each([
+    [401, "unauthorized"],
+    [403, "forbidden"],
+    [404, "notFound"],
+    [409, "conflict"],
+    [422, "validation"],
+    [500, "server"],
+    ["network", "network"],
+  ] as const)("keeps input and reports failed mutation %s", async (status, key) => {
+    await mount();
+    await menu("rework.agentCard.edit");
+    await input("rework.teams.formAgent.fields.name.label", "My draft");
+    failure = { target: "write", status };
+    await click("rework.save");
+    expect(notices.error).toHaveBeenCalledWith({
+      summary: expect.stringContaining(`rework.weaverAgents.errors.${key}`),
+    });
+    expect(notices.success).not.toHaveBeenCalled();
+    expect([...document.querySelectorAll("input")].some((node) => node.value === "My draft")).toBe(true);
+  });
+  it("does not infer lost space Write from an instance-level 403", async () => {
+    await mount();
+    await menu("rework.agentCard.edit");
+    await input("rework.teams.formAgent.fields.name.label", "My draft");
+    failure = { target: "write", status: 403 };
+    await click("rework.save");
+    await click("rework.cancel");
+    failure = undefined;
+    await menu("rework.agentCard.delete");
+    await act(async () => notices.confirm.mock.lastCall![0].onConfirm());
+    await settle();
+    expect(writes().some((call) => call.method === "DELETE")).toBe(true);
+  });
+  it("toggles both ways and deletes only after confirmation, refreshing the list", async () => {
+    await mount();
+    await menu("rework.agentCard.deactivate");
+    expect(writes()[writes().length - 1]?.body).toEqual({ status: "disabled" });
+    await menu("rework.agentCard.activate");
+    expect(writes()[writes().length - 1]?.body).toEqual({ status: "enabled" });
+    await menu("rework.agentCard.delete");
+    expect(writes().some((call) => call.method === "DELETE")).toBe(false);
+    await act(async () => {
+      await notices.confirm.mock.lastCall![0].onConfirm();
+    });
+    await settle();
+    expect(host.textContent).not.toContain("Saved Agent");
+    expect(host.textContent).toContain("rework.teams.agents.noAgent");
+  });
+  it("discards the old list and open form on a space change, including the personal alias", async () => {
+    await mount();
+    await menu("rework.agentCard.edit");
+    blockedSpace = SPACE_B;
+    await act(async () => {
+      await router.navigate("/team/personal/agents");
+    });
+    await settle();
+    expect(host.textContent).not.toContain("Saved Agent");
+    expect(host.textContent).toContain("rework.teams.agents.loading");
+    await act(async () => releaseList?.());
+    await settle();
+    expect(host.textContent).not.toContain("Saved Agent");
+    expect(document.querySelector("[data-form]")).toBeNull();
+    expect(calls.some((call) => call.path === `/control-plane/v1/spaces/${SPACE_B}/agent-instances`)).toBe(true);
+    const queries = Object.values(store.getState()[api.reducerPath].queries);
+    expect(queries.filter((query) => query?.endpointName === "listAgentInstances")).toHaveLength(2);
+  });
+  it("invalidates only the mutated space and rereads an edited instance", async () => {
+    await mount();
+    const other = store.dispatch(api.endpoints.listAgentInstances.initiate({ spaceId: SPACE_B }));
+    await act(async () => {
+      await other.unwrap();
+    });
+    const otherReads = () =>
+      calls.filter((call) => call.path === `/control-plane/v1/spaces/${SPACE_B}/agent-instances`).length;
+    expect(otherReads()).toBe(1);
+    await menu("rework.agentCard.edit");
+    await input("rework.teams.formAgent.fields.name.label", "New saved name");
+    await click("rework.save");
+    await menu("rework.agentCard.edit");
+    expect([...document.querySelectorAll("input")].some((node) => node.value === "New saved name")).toBe(true);
+    expect(otherReads()).toBe(1);
+    expect(
+      calls.filter((call) => call.method === "GET" && call.path.endsWith(INSTANCE.agent_instance_id)).length,
+    ).toBeGreaterThanOrEqual(2);
+    other.unsubscribe();
+  });
+  it("does not send a stale delete confirmation after changing spaces", async () => {
+    await mount();
+    await menu("rework.agentCard.delete");
+    await act(async () => {
+      await router.navigate(`/team/${SPACE_B}/agents`);
+    });
+    await settle();
+    await act(async () => notices.confirm.mock.lastCall![0].onConfirm());
+    expect(writes()).toHaveLength(0);
+  });
+  it("shows a failed reread rather than editing stale list data", async () => {
+    await mount();
+    failure = { target: "get", status: 404 };
+    await menu("rework.agentCard.edit");
+    expect(host.textContent).toContain("rework.weaverAgents.errors.notFound");
+    expect(document.querySelector("[data-form]")).toBeNull();
+  });
+  it("refuses an unresolved legacy team id instead of treating it as a space id", async () => {
+    await mount("legacy-team");
+    expect(host.textContent).toContain("rework.weaverAgents.scopeUnavailable");
+    expect(calls).toHaveLength(1);
   });
 });

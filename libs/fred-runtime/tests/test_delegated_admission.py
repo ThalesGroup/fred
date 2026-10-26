@@ -27,7 +27,7 @@ import time
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import httpx
@@ -52,7 +52,7 @@ from fred_core.security.delegation import (
     initialize_delegation,
     preserved_delegation,
 )
-from fred_core.security.models import AccountStatusError, AuthorizationError, Resource
+from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.oidc import get_current_user_without_gcu
 from fred_core.security.structure import KeycloakUser
 from fred_core.tests.security.rebac_fakes import (
@@ -60,6 +60,7 @@ from fred_core.tests.security.rebac_fakes import (
     account_status_engine,
 )
 from fred_runtime.app import agent_app as agent_app_module
+from fred_runtime.app import security as pod_security
 from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.app.dependencies import get_pod_container_from_app
@@ -77,7 +78,6 @@ from fred_runtime.common.outbound_credentials import (
 from fred_runtime.common.structures import AgentSettingsLike
 from fred_runtime.runtime_context import (
     RuntimeConfig,
-    get_runtime_context,
     set_runtime_context,
 )
 from fred_runtime.runtime_context import RuntimeContext as FredRuntimeContext
@@ -104,6 +104,9 @@ from test_agent_app import (
     _EchoAgent,
 )
 from test_delegation_receiver_integration import _NOW, _FixedDateTime, _Jwks
+
+pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
+
 
 PERSON_TOKEN = "person-bearer-token"
 # The workload that asks this pod to run for someone it names, trusted through
@@ -1658,8 +1661,10 @@ def _own_credential_app(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         agent_app_module,
-        "rebac_factory",
+        "PublishedOpenFgaRebacEngine",
         lambda *args, **kwargs: SimpleNamespace(
+            get_client=AsyncMock(),
+            close=AsyncMock(),
             requires_active_accounts=True,
             enabled=True,
             validate_account_status_model=AsyncMock(),
@@ -1686,10 +1691,6 @@ def _enable_workload_delegation() -> None:
         issuers=["https://issuer.test/realms/fred"],
         user_clients=["browser"],
     )
-    # A new block drops the engine the pod installed at startup.
-    engine = get_runtime_context().config.rebac_engine
-    assert engine is not None
-    asyncio.run(enforce_account_status(engine))
 
 
 @pytest.mark.parametrize(
@@ -1811,10 +1812,13 @@ def refusing_pod(
     act_for_people: bool,
     accept_delegated_calls: bool,
     refusal: Any = None,
-    account_status: Any = None,
+    terms_error: HTTPException | None = None,
 ):
-    """A pod whose relationship engine answers the team check with `refusal`
-    and the request's account status check with `account_status`."""
+    """A pod with independently controllable permission and terms decisions."""
+    if terms_error is not None:
+        monkeypatch.setattr(
+            pod_security, "_require_accepted", AsyncMock(side_effect=terms_error)
+        )
     monkeypatch.setattr(
         agent_app_module,
         "_build_chat_model_factory",
@@ -1841,13 +1845,17 @@ def refusing_pod(
         ),
     )
     engine = SimpleNamespace(
+        get_client=AsyncMock(),
+        close=AsyncMock(),
         requires_active_accounts=act_for_people,
         enabled=True,
         validate_account_status_model=AsyncMock(),
-        require_active_account=AsyncMock(side_effect=account_status),
+        require_active_account=AsyncMock(),
         check_user_team_permission_or_raise=AsyncMock(side_effect=refusal),
     )
-    monkeypatch.setattr(agent_app_module, "rebac_factory", lambda *a, **k: engine)
+    monkeypatch.setattr(
+        agent_app_module, "PublishedOpenFgaRebacEngine", lambda *a, **k: engine
+    )
     app = agent_app_module.create_agent_app(
         registry={_EchoAgent().agent_id: _EchoAgent()},
         config=_build_test_config(
@@ -1957,10 +1965,10 @@ def test_a_refused_team_permission_is_audited_once_without_identifiers(
 
 @pytest.mark.parametrize(
     ("unavailable", "status_code", "cause"),
-    [(False, 403, "account_suspended"), (True, 503, "account_status_unavailable")],
+    [(False, 403, "user_not_accept_gcu"), (True, 503, "terms_acceptance_unavailable")],
     ids=["refused", "unavailable"],
 )
-def test_an_account_status_decision_at_managed_admission_is_not_a_permission_audit(
+def test_a_terms_decision_at_managed_admission_is_not_a_permission_audit(
     monkeypatch,
     tmp_path,
     _restore_security,
@@ -1973,7 +1981,7 @@ def test_an_account_status_decision_at_managed_admission_is_not_a_permission_aud
         tmp_path,
         act_for_people=True,
         accept_delegated_calls=False,
-        account_status=AccountStatusError(unavailable=unavailable),
+        terms_error=HTTPException(status_code, cause),
     )
 
     response, records, pod_view = refused_execution(
@@ -1981,12 +1989,13 @@ def test_an_account_status_decision_at_managed_admission_is_not_a_permission_aud
     )
 
     assert response.status_code == status_code
-    assert response.headers["X-Fred-Denial-Cause"] == cause
-    engine.require_active_account.assert_awaited_once_with(REFUSED_PERSON)
+    assert response.json()["detail"] == cause
+    engine.require_active_account.assert_not_awaited()
+    terms = cast(AsyncMock, pod_security._require_accepted)
+    assert terms.await_args is not None
+    assert terms.await_args.args[1].uid == REFUSED_PERSON
     engine.check_user_team_permission_or_raise.assert_not_awaited()
-    assert [getattr(r, "audit_event", None) for r in records] == [
-        "authorization.account.refused"
-    ]
+    assert not [r for r in records if getattr(r, "audit_event", None) == "rebac_denied"]
     assert not [e for e in pod_view if e["audit_event"] == "rebac_denied"]
 
 

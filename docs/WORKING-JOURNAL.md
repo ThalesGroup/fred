@@ -46,7 +46,7 @@ fiche plutôt que d'effacer les résultats précédents.
 | [REL-1](#rel-1-génération-weaver-500) | Alignement des versions Weaver | Préparé localement, non publié | Sans changement architectural |
 | [F-013](#f-013-synthese-organisationnelle-en-lecture) | Synthèse organisationnelle et détail équipe | Backend et UI implémentés ; validation des parcours attendue | A2/A7/A8, chapitres 04/09 |
 | [F23](#f23-stockage-des-instances-dagents) | Stockage Rust des instances d'agents | Tests ciblés passants ; jalon global bloqué | Hors périmètre arc42 validé |
-| [F25](#f25-création-et-relecture-dune-instance-custom) | Création/relecture, liste, édition partielle et suppression API d'une instance Custom | Tests API passants ; jalon global bloqué | Hors périmètre arc42 validé |
+| [F25](#f25-création-et-relecture-dune-instance-custom) | Création/relecture, liste, édition partielle et suppression d'une instance Custom | Création UI déployée confirmée par Dimi ; autres opérations et chat à valider | Hors périmètre arc42 validé |
 | [F24](#f24-catalogue-des-templates-par-espace) | Catalogue des templates par espace | Tests ciblés passants ; parcours UI non validé | Hors périmètre arc42 validé |
 | [F22](#f22-agent-rust-embarqué-hello-world) | Agent Rust embarqué, hello-world SSE | Implémenté, à valider | Hors périmètre arc42 validé |
 | [DOC-3](#doc-3-vue-densemble-de-weaver) | Vue d'ensemble de Weaver | Texte et schémas rédigés | 01 |
@@ -429,6 +429,14 @@ fiche plutôt que d'effacer les résultats précédents.
   Aucun commit ni push.
 
 ## F02 Attente du verrou des écritures
+
+- 2026-10-25 : Dimi choisit de conserver le verrou par organisation pour le moment
+  et demande une explication arc42 de sa garantie et de sa portée. Vue générale
+  1.3 et parcours documentaire complétés ; annexe [Open Issues](architecture/A10-open-issues.md)
+  ajoutée pour distinguer durée de détention, attente, effet de plusieurs réplicas
+  et alternatives éventuelles. Aucun problème de performance établi par cet
+  échange ; décision à réexaminer sur des mesures représentatives. Documentation
+  uniquement, sans changement de code, test, benchmark ni validation fonctionnelle.
 
 - 2026-10-21 : Dimi confirme que tout passe et autorise commit/push. Tests Rust
   (45 unitaires, 10 contrats), intégration (108) et DocumentWorkspace (195) réussis.
@@ -1325,6 +1333,125 @@ Les modifications des autres travaux sont conservées.
   aucun test, build, déploiement, commit ou push exécuté ; relecture seule.
 
 
+- 2026-10-25 : sous-incrément Python de 1.4, lecture seule du singleton
+  `authorization_store` dans `fred_core.security.rebac.authorization_binding`.
+  Résultat immuable typé (`configured_store`, `active_store`, `model_id`) ; champs
+  textuels non vides et comparaison exacte avec le `store_name` configuré, sans
+  résolution par nom. Erreurs explicites sans valeurs ni détails du pilote SQL.
+  Le lecteur emprunte l'AsyncEngine fourni et libère sa connexion après le SELECT.
+  Aucun appel OpenFGA, écriture SQL, pool supplémentaire ou branchement du lifespan.
+  Relecture statique uniquement ; vérifications proposées à Dimi : binding valide,
+  absent, identité configurée différente, données invalides et erreur SQL, avec
+  restitution de la connexion et moteur réutilisable. Aucun test, lint, build,
+  déploiement, génération, commit ou push exécuté. La tâche 1.4 reste ouverte :
+  modèle exact, distribution dans l'image et raccordement du démarrage restent
+  aux lots suivants ; aucun parcours agent intégré ou validé dans arc42.
+
+
+- 2026-10-25 : sous-incrément suivant de 1.4, consommateur asynchrone
+  `authorization_model.validate_authorization_binding(binding, config, *, token=None)`.
+  GET du store/modèle publié uniquement ; même binding rendu après comparaison
+  JSON brute avec `Fga::bind` et les seuls défauts de `normalized_model` Rust.
+  Erreurs distinctes : ressource canonique absente/invalide, distant absent,
+  réponse invalide, incompatibilité, communication ; messages sans données sensibles.
+  Client HTTP possédé/fermé par la primitive, sans SQL, retry ni initialisation FGA.
+- Distribution préparée depuis `apps/control-plane/openfga/model.json` : hooks
+  setuptools wheel/sdist/editable et package-data ; COPY explicite dans l'image
+  finale fred-agents. Copie générée ignorée par Git, provenance et commandes dans
+  le README fred-core. Aucune copie générée ni installation/build vérifié ici.
+- Relecture statique seule. Vérifications proposées à Dimi : modèle exact et
+  défauts autorisés acceptés ; ID/schéma/relation/condition/champ inconnu non vide
+  ou ordre de tableau différent refusés ; 404/JSON invalide/réseau distingués ;
+  unique GET exact sans mutation ; ressource dans wheel/sdist/install/image hors
+  checkout ; fermeture HTTP sur succès/échec/annulation et moteur SQL réutilisable.
+  Aucun test, lint, build, génération, déploiement, commit, push ou autre assistant.
+  Lot 1 et travaux étrangers conservés. Tâche 1.4 ouverte : raccordement du
+  démarrage et admission Weaver restent à faire ; aucun parcours agent validé
+  ni extension du dossier arc42 au-delà de son périmètre accepté.
+
+- 2026-10-25 : complément de distribution du modèle du lot 2 : COPY canonique
+  ajouté à Knowledge Flow prod (y compris ses variantes) et dev, après fred-core
+  et avant installation ; fred-agents avait déjà cette copie. Les builders prod
+  excluent les paquets locaux. La ressource générée est exclue du contexte Docker,
+  sans exclure la source Rust suivie par Git : aucune dépendance à une copie locale
+  absente ou périmée. Relecture statique seule, aucun test, build, génération ou
+  déploiement ; packaging non validé dynamiquement. Le Dockerfile dev conserve
+  son écart préexistant entre /app et les chemins ../../libs et ../../scripts,
+  hors périmètre. Lots 1/2 et modifications étrangères préservés ; tâche 1.4 ouverte.
+
+
+- 2026-10-25 : priorité confirmée par Dimi au socle ReBAC pour le prochain lot ;
+  portage complet du filtrage d'admission globale Swift conservé mais différé.
+  Voir l'arbitrage SEC-1 et la décision 2a du change existant. Aucun blocage
+  temporaire des autres fonctions à introduire ; raccordement non encore validé.
+
+
+
+- 2026-10-25 : raccordement du vrai lifespan Python au binding Weaver : stockage
+  durable d'abord, SELECT de `authorization_store` et restitution SQL, validation
+  du modèle exact, puis client OpenFGA lié à `active_store`/`model_id`, y compris
+  après recréation, avec HIGHER_CONSISTENCY. Pas de résolution par nom, création,
+  synchronisation ou latest. Fermeture du client ajoutée au finally ; moteur SQL
+  possédé avant le premier await et fermetures des ressources indépendantes.
+- Pod : suppression des initialisations Swift d'admission/suspension et du store
+  `users`, ainsi que des appels de suspension avant outil. Les contrôles métier
+  de ressources restent présents. Les dépendances utilisateur communes du pod
+  utilisent la même vérification JWT/délégation, puis `terms_acceptance` selon
+  la version configurée, y compris pour la personne déléguée canonique. Aucun
+  annuaire écrit ni resolver Rust délégué annoncé. Knowledge Flow, MCP Swift et
+  `rebac_sdk_factory` conservent leurs helpers d'admission existants.
+- Profil C3/PostgreSQL requis ; identité de store `control-plane` et CGU v1
+  alignées dans les configurations livrées du pod et l'overlay k3d, sans activation.
+  Catalogue, Custom sans outil par défaut, modèles, historique/checkpoints et
+  observabilité conservés. Les migrations runtime/capacités restent nécessaires,
+  jamais celles du manager Python. Le filtrage global reste différé en 4.1.
+- Relecture statique seule : aucun test, lint, build, génération, démarrage,
+  déploiement, commit, push ou autre assistant. Tâche 1.4 et parcours global non
+  cochés ; arc42 et travaux étrangers préservés. Vérifications proposées à Dimi :
+  démarrage Weaver sans tables Swift, échecs binding/modèle/CGU explicites,
+  fermeture après échec/annulation, modèle figé après recréation du client,
+  catalogue réel, JWT invalides, CGU absentes/périmées, OIDC non UUID et assertions
+  d'un bearer ordinaire refusées. Catalogue servi ne prouve pas conversation.
+
+
+
+- 2026-10-25 : resolver Rust pour le pod Python, sous-incrément de 1.5 :
+  `GET /spaces/{space_id}/agent-instances/{agent_instance_id}/runtime` lit
+  l'instance persistée et rend `subject_id`, le placement canonique et
+  `agent.{instance_id,runtime_id,template_id,template_key,configuration}`.
+  `configuration` restitue le JSON tuning sauvegardé complet, sans redécouverte
+  ni définition/exécution d'agent Rust. Espaces équipe/personnel comme les
+  instances existantes ; niveaux absents null, personnel sans héritage documentaire.
+- Identité : vérification JWT existante, audience déléguée acceptée uniquement
+  par ce resolver si `security.delegation.accept_delegated_calls=true`.
+  `person/run/agent` exigent rôle, audience, issuer, restrictions de clients et
+  éventuels marqueurs de service ; grant incomplet/invalide ou cible différente
+  refusé. Un workload sans personne ne prend pas les droits d'un utilisateur.
+  CGU de la personne effective, espace actif/lisible, instance dans cet espace
+  et activée, provenance du template et `can_use` sont contrôlés à chaque appel.
+- Contrat OpenAPI déclaré dans le code, sans génération. Aucun changement au
+  consommateur Python, sessions, frontend, Ralph ou moteur embarqué. Renouvellement
+  des credentials conservé côté Python ; aucun nouveau jeton/bail émis. Pas de
+  filtrage global ajouté. Relecture statique seulement, aucun test, génération,
+  build, déploiement, commit/push. Tâche 1.5 ouverte jusqu'au raccordement Python
+  et à la validation Dimi ; le parcours de conversation n'est pas déclaré acquis.
+
+- 2026-10-25 : préparation du déploiement catalogue sur `k3d secondary` à la
+  demande de Dimi. Overlay : pod Python `fred-agents` activé, migrations runtime /
+  capacités activées avec le secret PostgreSQL existant, source Rust
+  `http://fred-agents/fred/agents/v2` et route ingress `/fred/agents/v2` ajoutées.
+  Le hook de préparation accepte désormais les quatre déploiements attendus ;
+  son contrôle précédent à trois aurait refusé la nouvelle topologie.
+- Catalogue existant conservé, sans changement de protocole ni auto-activation
+  des templates. Adresse retour du pod vers le Rust déjà fournie par le chart ;
+  secrets, modèles, issuer secondary et stockage hérités conservés. README k3d
+  actualisé pour remplacer le blocage de démarrage devenu obsolète.
+- Activation métier laissée à Dimi dans l'UI après son déploiement. La découverte
+  ne valide pas le chat : consommateur Python du resolver, contrôles d'exécution,
+  préparation/sessions et réception déléguée configurée restent au raccordement
+  suivant. Aucun changement de Ralph ni du lot de démarrage. Lecture statique
+  seule ; aucun test, rendu, génération, build, déploiement, commit ou push.
+
 ## DOC-3 Vue d'ensemble de Weaver
 
 - 2026-10-23 : à la demande de Dimi, le chapitre 1 contient uniquement le
@@ -2205,6 +2332,50 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
   aucun test, build, déploiement, commit, push ou validation dynamique exécuté.
 
 
+- 2026-10-25, arbitrage de périmètre après inventaire des règles Swift : Dimi
+  confirme que toutes les fonctions d'admission globale restent nécessaires,
+  mais reporte leur portage à un lot ultérieur. Le prochain lot traite le socle
+  ReBAC Weaver ; le filtrage global récent n'en est pas un prérequis.
+- Le report couvre la politique sur attributs d'identité (allow/block, all/any),
+  les exceptions individuelles, l'admission des gestionnaires d'accès, les équipes
+  autorisées et les adhésions par liens Free, avec leurs contrôles sur la personne
+  déléguée. Ce besoin est conservé, pas abandonné ni remplacé par la seule règle
+  « appartenir à une organisation ». Le détail du séquencement est consigné dans
+  la décision 2a du change simplify-weaver-runtime-authorization.
+- Identité/JWT, distinction personne-service, délégation, CGU, droits sur les
+  espaces/templates et cycle de vie restent dans leurs périmètres de sécurité
+  acquis. Les décisions antérieures sur le départ sans restauration automatique
+  et la borne de cinq minutes restent inchangées ; « tout » ne réintroduit pas
+  la suspension réversible écartée précédemment.
+- Aucun mode catalogue, refus temporaire des autres fonctions, fallback Swift ou
+  politique d'admission de substitution à ajouter pour attendre ce portage.
+  Le découpage précédent qui imposait le filtrage complet avant le socle ReBAC
+  est remplacé par cette décision. Elle ne prouve ni démarrage opérationnel ni
+  équivalence complète avec l'admission Swift.
+- Traçabilité documentaire uniquement : aucun code, test, build, génération,
+  déploiement, commit ou push dans cette mise à jour.
+
+
+### SEC-1 : remise au vert des tests locaux (2026-10-25)
+
+- À la demande de Dimi, réparation des tests après le passage du pod au socle
+  Weaver : fixtures de démarrage hors ligne, attentes CGU/permissions à jour,
+  isolation des contextes globaux, reprise après crash et fermeture des ressources.
+- Les vérifications existantes de démarrage sont regroupées dans
+  `fred_runtime.app.security.prepare_authorization`, avec accord explicite de Dimi
+  pour modifier le code de production. Les règles C3, PostgreSQL et OpenFGA sont
+  conservées et testées séparément des fixtures de routes ; tests dédiés des CGU.
+- Contrat OpenAPI du resolver runtime et schémas générés du control-plane/chart
+  remis en cohérence avec les changements déjà présents.
+- `make test` à la racine réussi sur les 17 sous-modules, dont 2 263 tests runtime
+  et 134 tests fred-agents. Qualité runtime et fred-agents réussie ; cinq
+  avertissements de typage préexistants côté runtime. Contrôle de dérive des
+  schémas de chart réussi. Les skips/xfails et avertissements restants sont
+  conservés ; aucun test d'intégration ou parcours déployé validé par ce lot.
+- Aucun commit, push ou déploiement. Cette vérification technique ne clôt pas
+  les lots fonctionnels Weaver ni la validation des parcours par Dimi.
+
+
 ## F23 Stockage des instances d'agents
 
 - 2026-10-25 : premier sous-incrément demandé de la tâche 1.1 du change
@@ -2335,6 +2506,76 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
   Clippy passe ; rustfmt retrouve les seuls écarts préexistants. Le rendu k3d de
   cette sélection passe avec les images du chart, sans build ni déploiement.
   Un commit local conserve le lot ; aucun push tant que les blocages persistent.
+
+
+### F25 : raccordement de la gestion UI Weaver (sous-lot 1.7, 2026-10-25)
+
+- Demande explicite de Dimi : implémenter ce sous-lot, exécuter les tests frontend
+  ciblés, TypeScript et le build ; aucun déploiement, test cluster, migration,
+  commit ou push. Les modifications locales préexistantes sont conservées.
+- `TeamAgentsPage` utilise les six opérations déjà présentes dans le client Rust
+  généré : liste/catalogue, création, GET individuel, PATCH et DELETE. Aucun
+  fichier généré ni backend modifié pour ce lot. Les URLs restent `/team/:teamId/agents`.
+  L'identité vient de `/me/spaces` : UUID canonique équipe/personnel ou résolution
+  de l'alias personnel ; aucun ancien teamId accepté sans correspondance, aucun
+  espace organisation/projet ajouté.
+- La lecture et l'état du catalogue sont indépendants. La gestion dépend de la
+  réponse serveur à `authorize/space` avec `write`, pas des libellés de rôle.
+  Pas de catalogue pour un lecteur. Les contrôles backend Read/Write/can_use et
+  le parcours d'authentification/CGU restent l'autorité.
+- Formulaire complet conservé : métadonnées, rôle, usage, onglets et FieldSpecs.
+  L'édition part d'un GET et le PATCH omet les valeurs inchangées ; tuning,
+  sélection null/[], enveloppes de capacités et profil non pris en charge restent
+  sauvegardés. Un tuning modifié puis rétabli n'est pas renvoyé. Sans catalogue,
+  l'édition des métadonnées reste disponible ; les FieldSpecs sauvegardés ne sont
+  pas exposés par GET, donc aucun champ de tuning n'est inventé dans ce cas.
+- RTK invalide seulement la liste et l'instance du bon espace après succès.
+  Les données `currentData` et le remontage par espace empêchent de réafficher
+  l'ancienne liste ou sélection ; une confirmation de suppression devenue étrangère
+  au contexte ne déclenche pas de requête. Les erreurs de mutation gardent la saisie.
+- Chat, copie/duplication, publication, assistant de création, bibliothèque de
+  prompts, sélection de profils/capacités et assets sont explicitement indisponibles.
+  Les composants partagés gardent leur comportement hors de cette route. Les
+  branchements legacy de page/formulaire/auteurs sont retirés ; les lectures legacy
+  annexes du shell sont sautées sur Agents seulement (équipe/bootstrap, applications,
+  wiki, knowledge bases, sessions, tâches, charte Swift et annonces). L'identifiant
+  d'auteur reste affiché sans résolution legacy de son nom.
+- Les états vide/chargement et erreurs 401/403/404/409/422/réseau/serveur sont distincts,
+  en français et anglais. Un catalogue vide/403 ne masque pas les instances lisibles.
+  Un 403 d'instance n'est pas converti en perte supposée du droit Write de l'espace.
+- Vérifications finales, depuis `apps/frontend` : 30 fichiers / 256 tests ciblés
+  passent (commande dans le suivi OpenSpec), `npm run typecheck` passe,
+  `npm run build` passe. Avertissement Vite sur des chunks > 500 kB, sans échec.
+  `git diff --check -- apps/frontend` passe ; client généré inchangé. Les premières
+  erreurs introduites de typage et de montage des tests sont corrigées ; aucun
+  échec restant signalé par ces contrôles. Pas de campagne globale ni test backend.
+- Pas de validation utilisateur déployée. Tâche 1.7 entière toujours ouverte :
+  préparation, sessions et chat hors lot. Dossier arc42 non étendu ; report des
+  explications d'agents après validation explicite de Dimi.
+- Essai proposé après redéploiement : Éditeur, créer/reouvrir/modifier le rôle ou
+  nom seul (prompt intact), activer/désactiver, supprimer après confirmation ;
+  Lecteur, consulter/rechercher/trier sans commande de gestion ni appel catalogue ;
+  accès refusé, réponse 403 explicite et aucune donnée étrangère. Tester aussi
+  espace personnel, bascule entre espaces et fonctions désactivées sans appel legacy.
+
+
+### F25 : création confirmée et découpage du chat (2026-10-25)
+
+- Dimi confirme avoir créé son instance dans l'UI déployée ; le bouton Discuter
+  reste désactivé conformément au périmètre précédent. Cette observation ne
+  valide pas encore l'édition, la suppression, les autres rôles ou le chat.
+- Dimi confirme la frontière : Rust reprend seulement les responsabilités du
+  Control Plane Python Swift. Exécution, streaming, modèles/outils, messages,
+  checkpoints, renouvellement et arrêt des runs restent dans le pod Python.
+- Plan simple ajouté au change OpenSpec existant : A consommateur du resolver,
+  B exécution Python, C métadonnées/association des sessions, D préparation,
+  E raccordement du chat existant. Un diff ciblé et un résultat vérifiable par
+  incrément ; contrôle dynamique par Dimi. Première cible : Custom sans outil.
+- Durée maximale d'un tour et budget de nettoyage à expliciter avant la mise en
+  oeuvre de la borne de cinq minutes ; aucune nouvelle surveillance dans Rust.
+- Cette étape prépare le plan uniquement : aucun code de production modifié,
+  test, build, migration, déploiement, commit ou push. Les tâches parentes restent
+  ouvertes et arc42 n'est pas étendu à un parcours chat non validé.
 
 
 ## F26 Fusion Swift et préférences utilisateur

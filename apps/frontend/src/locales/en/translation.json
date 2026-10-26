@@ -1119,6 +1119,24 @@
     "updateSuccess": "Updated"
   },
   "rework": {
+    "weaverAgents": {
+      "notConnected": "Not yet connected to Weaver.",
+      "chatUnavailable": "Chat and conversation history are not yet connected to Weaver.",
+      "scopeUnavailable": "This team or personal space is unavailable or you do not have access.",
+      "modelProfile": "Recommended model profile",
+      "modelUnavailable": "Model profile selection is not yet connected. The saved recommendation is preserved.",
+      "capabilitiesUnavailable": "Capabilities and asset uploads are not yet connected. Saved selections and configuration are preserved. Creating an agent with active template dependencies will be refused by the server.",
+      "errors": {
+        "unauthorized": "Your session has expired. Please sign in again.",
+        "forbidden": "You do not have permission for this operation.",
+        "notFound": "The requested resource or API route was not found.",
+        "conflict": "The name or resource conflicts with an existing entry.",
+        "validation": "Some form values were refused. Your input has been kept.",
+        "network": "Unable to reach the server. Check your connection.",
+        "server": "The server could not complete the request. Please try again later.",
+        "unexpected": "The request could not be completed."
+      }
+    },
     "supervision": {
       "collectionDetails": "Collection dates and scope",
       "distribution": "Data distribution",

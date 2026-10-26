@@ -48,6 +48,8 @@ from fred_sdk.graph.runtime import GraphNodeContext
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import create_async_engine
 
+pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
+
 RUNS: Counter[str] = Counter()
 ORDER: list[str] = []
 BEHAVIOUR: dict[str, str] = {}
@@ -623,11 +625,13 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 from fastapi.testclient import TestClient
-from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
+from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel, mock_pod_infrastructure
+from pytest import MonkeyPatch
 from langchain_core.messages import AIMessage
 import test_graph_interrupted_execution as t
 
 model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+mock_pod_infrastructure(MonkeyPatch())
 with patch("fred_runtime.app.agent_app._build_chat_model_factory",
            lambda config: StaticChatModelFactory(model)):
     with TestClient(t._app_with(t._Agent(), Path(sys.argv[1]))) as client:

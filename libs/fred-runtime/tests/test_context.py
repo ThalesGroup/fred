@@ -260,6 +260,7 @@ async def test_initialize_sql_succeeds_and_wires_checkpointer_and_history_store(
     assert container.get_sql_engine() is not None
     assert container.get_checkpointer() is not None
     assert container.get_history_store() is not None
+    await container.shutdown()
 
 
 @pytest.mark.asyncio
@@ -329,12 +330,11 @@ async def test_initialize_sql_propagates_when_postgres_is_unreachable(
     with pytest.raises(ConnectionRefusedError):
         await container.initialize_sql()
 
-    assert container.get_sql_engine() is None
+    assert container.get_sql_engine() is engine
     assert container.get_checkpointer() is None
     assert container.get_history_store() is None
-    # This engine never reaches self._sql_engine on this failure path, so
-    # shutdown()'s own dispose() can never reach it either — it must be
-    # disposed on the failure path itself, or it leaks.
+    assert engine.disposed is False
+    await container.shutdown()
     assert engine.disposed is True
 
 
@@ -388,8 +388,8 @@ async def test_initialize_sql_bounds_the_connectivity_ping(
         await container.initialize_sql()
 
     assert container.get_checkpointer() is None
-    # Same leak-on-failure regression as the unreachable-Postgres case above
-    # — the timeout path must dispose the engine too.
+    assert container.get_sql_engine() is engine
+    await container.shutdown()
     assert engine.disposed is True
 
 
@@ -418,10 +418,11 @@ async def test_initialize_sql_fails_fast_when_the_schema_was_never_migrated(
     message = str(excinfo.value)
     assert "session_history" in message
     assert "python -m fred_runtime migrate" in message
-    # No partially initialized store may be published on this path.
-    assert container.get_sql_engine() is None
+    # Ownership is retained for shutdown; no partially initialized store is exposed.
+    assert container.get_sql_engine() is not None
     assert container.get_checkpointer() is None
     assert container.get_history_store() is None
+    await container.shutdown()
 
 
 @pytest.mark.asyncio
@@ -444,3 +445,35 @@ async def test_initialize_sql_does_not_create_the_history_schema_itself(
     second.initialize_kpi_writer()
     with pytest.raises(SchemaNotMigratedError):
         await second.initialize_sql()
+    await second.shutdown()
+    await container.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_sql_startup_retains_engine_for_shutdown(
+    minimal_config, tmp_path, monkeypatch
+) -> None:
+    from fred_core.sql import base_sql
+
+    entered = asyncio.Event()
+
+    class CancelledConnection(_SlowConnection):
+        async def __aenter__(self):
+            entered.set()
+            await asyncio.Future()
+            return self
+
+    engine = _HangingEngine()
+    monkeypatch.setattr(engine, "connect", CancelledConnection)
+    monkeypatch.setattr(base_sql, "create_async_engine_from_config", lambda _: engine)
+    container = PodApplicationContext(_sqlite_config(minimal_config, tmp_path))
+    container.initialize_kpi_writer()
+    task = asyncio.create_task(container.initialize_sql())
+    await asyncio.wait_for(entered.wait(), 1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert container.get_sql_engine() is engine
+    assert container.get_history_store() is None
+    await container.shutdown()
+    assert engine.disposed

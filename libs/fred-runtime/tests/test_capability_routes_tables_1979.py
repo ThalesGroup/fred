@@ -53,6 +53,8 @@ from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from test_agent_app import _build_test_config, _EchoAgent
 
+pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
+
 # ---------------------------------------------------------------------------
 # Helpers — a running pod with the demo capability discovered
 # ---------------------------------------------------------------------------

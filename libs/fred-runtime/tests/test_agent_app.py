@@ -95,6 +95,8 @@ from fred_sdk.contracts.runtime import (
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.base import empty_checkpoint
 
+pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
+
 
 @tool("demo.echo", description="Echo the provided text.")
 async def _demo_echo(ctx: ToolContext, text: str) -> str:
@@ -448,8 +450,10 @@ def _secured_pod(
     )
     monkeypatch.setattr(
         agent_app_module,
-        "rebac_factory",
+        "PublishedOpenFgaRebacEngine",
         lambda *args, **kwargs: SimpleNamespace(
+            get_client=AsyncMock(),
+            close=AsyncMock(),
             requires_active_accounts=requires_active_accounts,
             enabled=True,
             validate_account_status_model=AsyncMock(
@@ -539,7 +543,7 @@ def test_a_service_bearer_without_the_caller_role_runs_as_itself_under_delegatio
         ]
 
     assert response.status_code == 200
-    engine.require_active_account.assert_awaited_once_with("workload-caller")
+    engine.require_active_account.assert_not_awaited()
     assert admitted == []
     assert len(delegation.records) == 0
 
@@ -2478,34 +2482,17 @@ async def test_resolve_agent_instance_supports_concurrent_calls_on_one_client(
     assert {call["headers"]["X-Request-Id"] for call in calls} == set(request_ids)
 
 
-def test_create_agent_app_initializes_user_store_during_startup(
+def test_create_agent_app_does_not_initialize_swift_user_store(
     monkeypatch, tmp_path
 ) -> None:
-    """
-    Ensure pod startup initializes the shared UserStore before secured requests.
-
-    Why this test exists:
-    - secured pod routes depend on `get_current_user()`, which now always asks
-      for a `UserStore`
-    - a missing startup initialization caused real `POST /agents/execute/stream`
-      requests to fail with `StoreNotInitializedError`
-
-    How to use it:
-    - run via the default offline `make test` suite in `fred-runtime`
-    - the test resets the module-global store first, then starts a pod app and
-      asserts startup rebuilt it from the pod SQL configuration
-
-    Example:
-    - `pytest tests/test_agent_app.py -q`
-    """
-
+    """Weaver admission reads Rust-owned terms and never initializes Swift users."""
     model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="startup ready")])
     monkeypatch.setattr(
         agent_app_module,
         "_build_chat_model_factory",
         lambda config: StaticChatModelFactory(model),
     )
-    postgres_user_store._user_store = None
+    monkeypatch.setattr(postgres_user_store, "_user_store", None)
 
     app = create_agent_app(
         registry={_EchoAgent().agent_id: _EchoAgent()},
@@ -2513,7 +2500,7 @@ def test_create_agent_app_initializes_user_store_during_startup(
     )
 
     with TestClient(app):
-        assert postgres_user_store.get_user_store() is not None
+        assert postgres_user_store._user_store is None
 
 
 def test_create_agent_app_overrides_shared_config_dependency(tmp_path) -> None:
@@ -5400,6 +5387,7 @@ def test_apply_runtime_tuning_ignores_blank_system_prompt() -> None:
         )
 
 
+@pytest.mark.usefixtures("empty_runtime_context")
 def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> None:
     """
     Ensure _apply_runtime_tuning distinguishes None from [] for MCP activation.
@@ -5462,6 +5450,7 @@ def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> N
     assert list(disabled.default_mcp_servers) == []
 
 
+@pytest.mark.usefixtures("empty_runtime_context")
 def test_capability_block_delivers_mcp_agent_instructions_for_active_server() -> None:
     """
     Ensure `_build_capability_block` delivers an active MCP server's catalog
@@ -5539,6 +5528,7 @@ def test_capability_block_delivers_mcp_agent_instructions_for_active_server() ->
     assert fragments == ["Always cite retrieved claims."]
 
 
+@pytest.mark.usefixtures("empty_runtime_context")
 def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> None:
     """
     Ensure `_build_capability_block` skips a non-selected MCP server's
@@ -5613,6 +5603,7 @@ def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> 
     assert server_ids == ["mcp-storage"]
 
 
+@pytest.mark.usefixtures("empty_runtime_context")
 def test_build_capability_block_for_graph_agent_returns_tools() -> None:
     """
     Ensure `_build_capability_block` builds a non-empty block for a Graph agent.
@@ -5746,6 +5737,7 @@ def test_build_capability_block_for_graph_agent_returns_tools() -> None:
     assert [t.name for t in block.tools] == ["graph_probe"]
 
 
+@pytest.mark.usefixtures("empty_runtime_context")
 def test_build_capability_block_rejects_react_only_capability_for_graph_agent() -> None:
     """
     A capability declaring `execution_models=("react",)` (a `middleware()`-only
@@ -5862,6 +5854,7 @@ def test_build_capability_block_rejects_react_only_capability_for_graph_agent() 
         )
 
 
+@pytest.mark.usefixtures("empty_runtime_context")
 def test_build_capability_block_accepts_hitl_gated_capability_for_graph_agent() -> None:
     """Graph now consumes the same capability HITL declarations as ReAct/Deep."""
     from collections.abc import Mapping as _Mapping
@@ -5980,6 +5973,7 @@ def test_build_capability_block_accepts_hitl_gated_capability_for_graph_agent() 
     assert block.hitl["gated_probe"].spec.require
 
 
+@pytest.mark.usefixtures("empty_runtime_context")
 def test_build_capability_block_ignores_stale_selection_for_capability_unsupported_graph_agent() -> (
     None
 ):
@@ -6116,6 +6110,7 @@ def test_build_capability_block_ignores_stale_selection_for_capability_unsupport
     assert block is None
 
 
+@pytest.mark.usefixtures("empty_runtime_context")
 def test_capability_block_orders_mcp_prompt_groups_by_server_id() -> None:
     """
     Ensure `block.mcp_prompt_groups` comes back id-sorted, not in selection
@@ -6943,11 +6938,10 @@ async def test_authorize_and_resolve_times_pod_authz_and_runtime_binding_phases(
 @pytest.mark.parametrize(
     "accept_delegated_calls", [False, True], ids=["acting-only", "also-accepting"]
 )
-def test_delegation_startup_validates_the_account_status_model_and_writes_nothing(
+def test_delegation_startup_opens_published_engine_without_swift_model_checks(
     monkeypatch, tmp_path, _pod_inbound_security, accept_delegated_calls: bool
 ) -> None:
-    """Every person without a suspension has an active account, so startup only
-    reads the model: the engine exposes no write, and nothing else is awaited."""
+    """The published engine opens once and never validates the retired Swift model."""
     app, _ = _secured_pod(
         monkeypatch,
         tmp_path,
@@ -6964,33 +6958,9 @@ def test_delegation_startup_validates_the_account_status_model_and_writes_nothin
             if isinstance(value, AsyncMock) and value.await_count
         }
 
-    assert awaited == {"validate_account_status_model"}
-    engine.validate_account_status_model.assert_awaited_once_with()
-
-
-@pytest.mark.parametrize(
-    "accept_delegated_calls", [False, True], ids=["acting-only", "also-accepting"]
-)
-def test_delegation_refuses_to_start_on_a_model_without_the_suspended_relation(
-    monkeypatch, tmp_path, _pod_inbound_security, accept_delegated_calls: bool
-) -> None:
-    """A model that cannot record a suspension cannot refuse anyone, so the pod
-    stops before serving instead of admitting every person."""
-    app, _ = _secured_pod(
-        monkeypatch,
-        tmp_path,
-        caller_client_id="caller-1",
-        account_status_model_error=RuntimeError(
-            "Account status authorization model is not available."
-        ),
-        accept_delegated_calls=accept_delegated_calls,
-    )
-
-    with pytest.raises(
-        RuntimeError, match="^Account status authorization model is not available.$"
-    ):
-        with TestClient(app):
-            pass
+    assert awaited == {"get_client"}
+    engine.validate_account_status_model.assert_not_awaited()
+    engine.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio

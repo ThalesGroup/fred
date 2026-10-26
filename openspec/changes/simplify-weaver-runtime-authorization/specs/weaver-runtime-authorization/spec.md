@@ -22,6 +22,33 @@ Weaver SHALL support creating, listing, reading, editing, enabling/disabling and
 - **THEN** creation, streamed exchange and conversation reopening work without the Python Control Plane or Knowledge Flow API
 - **AND** local document retrieval and other specialized agents are not prerequisites for this path
 
+### Requirement: Agent management UI uses canonical Weaver space contracts
+
+The existing agent page and full configuration form SHALL use generated space
+CRUD/catalog contracts in team and personal spaces resolved from the Weaver
+context. Management SHALL follow the server's Write decision, without a local role
+matrix. Readable lists SHALL remain independent of creation-catalog availability.
+Mutation errors SHALL retain input and distinguish authorization, absence, conflict,
+validation and transport/server failures. Adjacent unconnected actions SHALL stay
+explicitly unavailable without legacy requests; other shared consumers are preserved.
+
+#### Scenario: A reader opens Agents
+- **WHEN** the instance list is readable but Write is not allowed
+- **THEN** the visible instances remain searchable and sortable
+- **AND** no creation catalog or management mutation is requested
+
+#### Scenario: An editor changes only metadata
+- **WHEN** an editor opens the saved instance through GET and changes its name or role
+- **THEN** PATCH omits unchanged tuning, selection, capability configuration and profile
+- **AND** a catalog failure or empty catalog does not discard the stored settings
+- **AND** a failed mutation keeps the draft and is not reported as success
+
+#### Scenario: The selected space changes while data or a dialog is pending
+- **WHEN** navigation selects another canonical team or personal space
+- **THEN** the previous list and open selection are not displayed as belonging to it
+- **AND** successful mutations invalidate only their owning space and instance
+- **AND** an old delete confirmation cannot initiate deletion from the new context
+
 ### Requirement: Instance listing reads authorized saved configuration
 
 GET /spaces/{space_id}/agent-instances SHALL require AdmittedUser, space Read on

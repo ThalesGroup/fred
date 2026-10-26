@@ -38,9 +38,9 @@ export interface SelectedTeamState {
  * resolve the same team from the same derivation — no duplicated selection
  * logic, no chance of the two drifting apart.
  */
-export function useSelectedTeam(): SelectedTeamState {
+export function useSelectedTeam(skip = false): SelectedTeamState {
   const { teamId } = useParams<{ teamId: string }>();
-  const { activeTeam, availableTeams } = useFrontendBootstrap();
+  const { activeTeam, availableTeams } = useFrontendBootstrap(skip);
 
   // Identity is derived from the id shape (`personal-<uuid>`), not from a
   // comparison against the bootstrap-loaded activeTeam.id. On the very first
@@ -48,7 +48,7 @@ export function useSelectedTeam(): SelectedTeamState {
   // the non-personal path until the user switched teams and came back.
   const isPersonalTeam = isPersonalTeamId(teamId) || teamId === activeTeam?.id;
 
-  const { data: team } = useGetTeamQuery({ teamId: teamId }, { skip: !teamId || isPersonalTeam });
+  const { data: team } = useGetTeamQuery({ teamId: teamId }, { skip: skip || !teamId || isPersonalTeam });
   const bootstrapTeam = isPersonalTeam ? activeTeam : availableTeams.find((candidate) => candidate.id === teamId);
   const selectedTeam = isPersonalTeam ? activeTeam : (team ?? bootstrapTeam);
 

@@ -51,6 +51,8 @@ from fred_sdk.contracts.runtime import AgentAssetPort, RuntimeServices
 from pydantic import BaseModel
 from test_capability_endpoints_1974 import _app_with_capabilities
 
+pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
+
 
 class _MemoryAssets(AgentAssetPort):
     def __init__(self, files: dict[str, bytes] | None = None) -> None:

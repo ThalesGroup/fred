@@ -1,4 +1,4 @@
-# Weaver: local ingestion deployment and agent catalog preparation
+# Weaver: local ingestion and Python agent catalog deployment
 
 On `weaver`, `deploy/k3d/build` builds `apps/control-plane` as the
 `control-plane-backend` image. The ingestion profile runs it as `control-plane serve`:
@@ -20,77 +20,55 @@ URLs, its shared base values and the generic build/import/sync sequence. Its
 `APP=fred DIR=...` command selects the checkout's Helmfile when present.
 No Rust-specific profile is added to the factory.
 
-## Agent catalog preparation: activation blocked
+## Python agent catalog on secondary
 
-`deploy/k3d/build` also builds `apps/fred-agents` through its existing
-`docker-build` target. The same content-derived `k3d-<digest>` tag is written to
-`images.txt` and to `images.yaml` under the `fred-agents` consumer. Build output
-is still published only after all four images succeed. Building this image does
-not enable its deployment.
+The profile enables the real `fred-agents` Python deployment and its runtime /
+installed-capability migration job. `deploy/k3d/build` already builds that image
+through its existing `docker-build` target and supplies its content-derived tag
+through `images.txt` and `images.yaml`. The preparation hook accepts the four
+application deployments, including this pod.
 
-The chart confirms Service `fred-agents`, port 80 targeting container port 8000,
-and HTTP prefix `/fred/agents/v2`. Rust appends `/agents/templates`; that public
-route lists public registry definitions by default without calling the control
-plane or invoking a model. The existing organization Agents UI consumes the Rust
-catalog. No UI change or runtime registration is needed.
+The Control Plane is configured with runtime ID `fred-agents` and base URL
+`http://fred-agents/fred/agents/v2`. It reads the existing public
+`GET /agents/templates` response, including `fred.github.assistant` and its full
+tuning metadata. There is no runtime registration callback or new announcement
+protocol. Service `fred-agents` maps port 80 to container port 8000; the ingress
+also routes `/fred/agents/v2` to this service on the secondary host.
 
-**Do not enable the inherited Swift runtime profile yet.** Source inspection
-found two startup contracts incompatible with a Weaver-only installation:
+The pod's Weaver startup reads the Rust-published `authorization_store` binding
+from PostgreSQL, validates the exact canonical model distributed in its image,
+and pins OpenFGA store/model IDs with HIGHER_CONSISTENCY. It does not create or
+synchronize an OpenFGA model or require the old Python Control Plane admission
+tables. C3, verified identity/delegation and the configured `terms_acceptance`
+contract remain required. Both services use CGU version `v1` and the configured
+store identity `control-plane`.
 
-- `enforce_account_status` requires OpenFGA `organization.suspended: [user]`.
-  Weaver uses `space` and has no such type/relation. The inherited Python defaults
-  select store `fred`, allow store creation and synchronize the Swift model at
-  startup. Pointing those defaults at Weaver's store would publish the wrong
-  model; using a separate Swift store would not enforce Weaver's authority.
-- With user, M2M and ReBAC security enabled, `initialize_platform_access` requires
-  the legacy Python tables `platform_access_settings`, `platform_access_users`,
-  `platform_access_removals`, `users`, `teammetadata`, `platform_access_links` and
-  `platform_access_link_joiners`, and reads them at startup. Weaver migrations
-  do not provide that admission contract. Runtime/capability migrations do not
-  replace the Python control-plane migrations.
+The inherited factory settings are retained:
 
-These checks precede serving even the public catalog. Disabling authentication,
-ReBAC or delegation, creating a parallel authority, installing legacy manager
-migrations, or replacing the OpenFGA model is not a deployment-only solution.
-A separate runtime/authorization adaptation must define how the pod retains
-Weaver's admission and authorization guarantees before activation.
-
-The following inherited dependencies also become active with `fred-agents`:
-
-| Dependency | Inherited behavior |
+| Dependency | Effective profile |
 | --- | --- |
-| Migrations / PostgreSQL | Factory enables the pre-upgrade runtime and installed-capability migration job, including scale-down; runtime requires durable SQL and `session_history` at startup. Database `fred`, user `fred`, host `postgres`; password from `fred-secrets/POSTGRES_FRED_PASSWORD`. |
-| OpenFGA | `http://openfga:9080`, token from `fred-secrets/OPENFGA_API_TOKEN`; unsafe default store creation/model synchronization must be resolved before activation. |
-| Keycloak | C3, user and M2M authentication, outgoing delegation; client `agentic`, secret `fred-secrets/KEYCLOAK_AGENTIC_CLIENT_SECRET`. Factory infrastructure provisions this client and its service/delegation roles; checkout identities only add the ingestion worker. Secondary realm/origins are inherited. OpenAI-compatible execution is already disabled. |
-| Storage / observability | SeaweedFS runtime object store with inherited admin credential `fred-secrets/SEAWEEDFS_ADMIN_PASSWORD`; OpenSearch logs with `fred-secrets/OPENSEARCH_PASSWORD`, Prometheus metrics, and the node CA mount. This does not reuse the ingestion worker's scoped credentials. |
-| Models | Mounted Mistral and in-process mock profiles; required `fred-model-credentials/OPENAI_API_KEY`. Web research remains disabled and its provider Secret optional. Catalog discovery makes no LLM request. |
-| Legacy APIs | Startup creates a lazy control-plane HTTP client. Managed execution later calls the legacy team/agent-instance runtime binding; discovery does not. Knowledge Flow HTTP is disabled in this profile, so its legacy tools are not established either. |
+| PostgreSQL / migrations | Database `fred`, user `fred`, host `postgres`; password from `fred-secrets/POSTGRES_FRED_PASSWORD`. The enabled job runs `python -m fred_runtime migrate`, including installed capabilities, without old Python Control Plane migrations. |
+| OpenFGA | `http://openfga:9080`, token from `fred-secrets/OPENFGA_API_TOKEN`; Rust must have published the binding. |
+| Keycloak | Secondary issuer/origins, user and M2M authentication; workload client `agentic` and secret `fred-secrets/KEYCLOAK_AGENTIC_CLIENT_SECRET`. Existing outgoing delegation is retained. |
+| Storage / observability | SeaweedFS runtime object store, OpenSearch logs/KPI, Prometheus and node CA mount; their inherited credential references are retained. |
+| Models | Existing mounted Mistral and mock profiles; `fred-model-credentials/OPENAI_API_KEY` remains required by preparation. Catalog discovery invokes no model. Web research stays disabled. |
+| Control Plane | Pod URL `http://control-plane-backend:8222/control-plane/v1` comes from the chart. The Rust resolver is implemented, but the Python execution consumer still requires adaptation. |
 
-`applications.fred-agents.enabled` therefore remains false and no external Rust
-source is activated. Once the startup contract is resolved, the intended addition
-belongs in this checkout's `values.yaml.gotmpl`, alongside enabling the pod:
+After deploying, use organization administration -> Agents to find and activate
+`fred.github.assistant`, then verify the list after reload. The deployment does
+not enable templates in organizations, select models or alter instance settings.
+Ralph and its embedded execution path are unchanged. Unavailable template
+dependencies still prevent their activation. Discovery still fails globally if
+an enabled catalog source cannot be reached, including while the pod is starting.
 
-```yaml
-applications:
-  control-plane-backend:
-    configuration:
-      platform:
-        runtime_catalog_sources:
-          - runtime_id: fred-agents
-            base_url: http://fred-agents/fred/agents/v2
-            enabled: true
-```
-
-The base/secondary adapters continue to drop factory control-plane configuration;
-no Rust configuration moves to the factory. Discovery still fails globally if
-any enabled source fails, including the organization list containing Ralph.
-The refusal to activate templates with unavailable dependencies is unchanged.
-
-After resolving the blocker and deploying, Dimi validates with `o1admin`:
-organization administration -> Agents shows Ralph and the public fred-agents
-templates, including after reload. This proves catalog discovery only, not
-instance creation or execution. No dynamic validation, tests, builds or deployments
-were run for this preparation; the current diff cannot yet satisfy that criterion.
+This increment prepares deployment and discovery; it does not complete the chat
+journey. The Python consumer of `/spaces/.../runtime`, resource execution gates,
+preparation and session/UI wiring remain subsequent work. The new Rust incoming
+delegation setting is not activated in this discovery-only increment; it belongs
+with the Python consumer and the corresponding generated config schema update.
+The pod remains the actual runtime, with no catalog mode or temporary execution
+block added. No build, render, schema generation, test or deployment was run by
+the assistant; Dimi owns those checks and the cluster rollout.
 
 ## Prepare and deploy
 
@@ -116,11 +94,13 @@ own Helmfile. The model key must already exist in the secondary cluster's
 key from another checkout or cluster. Host Python needs PyYAML, as do the
 factory's identity helpers.
 
-The three application deployments are `control-plane-backend`, `knowledge-flow-worker`
-and `frontend`. The manager image occupies the chart's `control-plane-backend`
-key and runs `control-plane serve`; the separate control-plane worker, KF HTTP
-API, its SQL migration and Fred Agents are disabled. The manager's own SQL
-migration remains enabled. Only manager accesses PostgreSQL and OpenFGA.
+The four application deployments are `control-plane-backend`, `knowledge-flow-worker`,
+`frontend` and `fred-agents`. The manager image occupies the chart's
+`control-plane-backend` key and runs `control-plane serve`; the separate
+control-plane worker and KF HTTP API / SQL migration remain disabled. Manager
+and runtime migrations are enabled. Manager and the Python agent runtime access
+PostgreSQL and the published OpenFGA model; the ingestion worker keeps its scoped
+storage credentials.
 
 The generic identity hook provisions `knowledge-flow-worker`. The checkout's
 `prepare` hook then:
