@@ -60,6 +60,17 @@ const tokenTarball =
   "https://registry.npmjs.org/@fred-oss/design-tokens/-/design-tokens-0.1.1-alpha.0.tgz";
 const localEnvironment = Object.freeze({ CI: "false" });
 
+test("process execution accepts only named commands without a shell", async () => {
+  await assert.rejects(
+    run("/tmp/untrusted-executable", []),
+    /unsupported executable/,
+  );
+  await assert.rejects(
+    run("node", ["-e", "process.exit(0)"], { shell: true }),
+    /shell execution is forbidden/,
+  );
+});
+
 test("dependency-free release guards match node-semver on tag-like boundaries", () => {
   for (const version of [
     "0.0.0",

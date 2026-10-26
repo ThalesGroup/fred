@@ -401,13 +401,13 @@ export async function stageIsolatedReactConsumer({
       ),
     ]);
     const typecheck = await run(
-      path.join(consumerRoot, "node_modules/.bin/tsc"),
-      ["--noEmit"],
+      "node",
+      [path.join(consumerRoot, "node_modules/typescript/bin/tsc"), "--noEmit"],
       { cwd: consumerRoot, env },
     );
     const build = await run(
-      path.join(consumerRoot, "node_modules/.bin/vite"),
-      ["build"],
+      "node",
+      [path.join(consumerRoot, "node_modules/vite/bin/vite.js"), "build"],
       { cwd: consumerRoot, env },
     );
     const outputRoot = path.join(consumerRoot, "dist");

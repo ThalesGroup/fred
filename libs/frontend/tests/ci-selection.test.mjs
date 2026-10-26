@@ -306,6 +306,17 @@ test("release workflow is a thin manual adapter with isolated publishing authori
   );
   const readOnly = publishWorkflow.jobs["read-only"];
   assert.equal(readOnly.permissions["id-token"], undefined);
+  for (const jobName of ["publish", "read-only"]) {
+    const checkout = publishWorkflow.jobs[jobName].steps.find(
+      (step) => step.uses === "actions/checkout@v4",
+    );
+    assert.equal(checkout.with.ref, "${{ github.sha }}", jobName);
+    assert.equal(
+      JSON.stringify(checkout).includes("source_commit"),
+      false,
+      jobName,
+    );
+  }
   const readOnlyOperation = readOnly.steps.find(
     (step) => step.name === "Verify or dry-run publication",
   );
