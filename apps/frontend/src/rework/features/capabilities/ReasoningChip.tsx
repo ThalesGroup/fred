@@ -22,12 +22,9 @@ import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
-import type {
-  ChatControlDescriptor,
-  EffectiveChatModel,
-} from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { ChatControlDescriptor, PreparationModels } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { ChatTurnControlComposerState } from "./types";
-import { currentModelRow, offersReasoning } from "./modelChoice";
+import { currentModelRow, offersReasoning, modelChoiceKey, offerLabel } from "./modelChoice";
 import styles from "./ReasoningChip.module.css";
 
 export const COMPOSER_CHIP_WIDGETS = new Set(["reasoning_toggle"]);
@@ -87,7 +84,7 @@ interface ReasoningChipProps {
   /** Mirrors the add/tune menu buttons: no picking while a response streams. */
   disabled?: boolean;
   /** The agent's resolved model and the models a member may pick. */
-  effectiveModel?: EffectiveChatModel;
+  effectiveModel?: PreparationModels;
   /** The conversation's model choice; null runs the recommended model. */
   chatProfileId?: string | null;
   onChatProfileChange?: (profileId: string) => void;
@@ -132,8 +129,7 @@ export function ReasoningChip({
     };
   }, [open]);
 
-  const locked = effectiveModel?.choice_locked === true;
-  const rows = locked ? [] : (effectiveModel?.selectable_models ?? []);
+  const rows = effectiveModel?.offers.filter((offer) => offer.selectable) ?? [];
   const current = currentModelRow(effectiveModel, chatProfileId);
   // A model the routed turn would strip reasoning from gets no reasoning row.
   const showReasoning = offersReasoning(chatControls, effectiveModel, chatProfileId);
@@ -145,14 +141,20 @@ export function ReasoningChip({
   const offLabel = t("chatbot.composerSettings.reasoningOff");
   // The "(Raisonnement)" wording lives in the menu only.
   const onMenuLabel = t("chatbot.composerSettings.reasoningOnMenu");
+  const retainedKey = effectiveModel?.recommendation ?? effectiveModel?.default;
   const displayLabel = current
-    ? modelLabel(current.display_name, current.name, current.capability_id)
-    : modelLabel(effectiveModel?.display_name, effectiveModel?.name, effectiveModel?.capability_id);
+    ? offerLabel(current)
+    : (chatProfileId ??
+      effectiveModel?.legacy_profile_id ??
+      (retainedKey
+        ? `${retainedKey.upstream_model_id} (${retainedKey.source_id})`
+        : rows.length
+          ? t("chatbot.composerSettings.reasoningModelsSection")
+          : null));
   const stateLabel = on ? onLabel : offLabel;
-  // The recommended model the team cannot use fails the turn: say so up front.
-  const unavailable = !current && effectiveModel?.enabled_for_team === false;
+  const unavailable = !!displayLabel && (!effectiveModel || !current || !current.candidate);
   const unavailableLabel = t("chatbot.composerSettings.modelNotEnabledForTeam");
-  const canPickModel = rows.length > 1 && !!onChatProfileChange;
+  const canPickModel = rows.length > 0 && !!onChatProfileChange;
 
   if (!showReasoning && !displayLabel) return null;
 
@@ -198,20 +200,20 @@ export function ReasoningChip({
   // as one read-only row. A locked choice lists none.
   const modelRows = rows.length
     ? rows.map((row) => {
-        const selected = row.profile_id === current?.profile_id;
+        const selected = modelChoiceKey(row.key) === (current ? modelChoiceKey(current.key) : null);
         return (
           <MenuPopoverItem
-            key={row.profile_id}
+            key={modelChoiceKey(row.key)}
             role="option"
-            label={modelLabel(row.display_name, row.name, row.capability_id) ?? row.profile_id}
+            label={offerLabel(row)}
             selected={selected}
             accentSelected
             trailingIcon={selected ? "check_circle" : undefined}
-            onClick={canPickModel ? () => pickModel(row.profile_id) : undefined}
+            onClick={canPickModel ? () => pickModel(modelChoiceKey(row.key)) : undefined}
           />
         );
       })
-    : !locked && displayLabel
+    : displayLabel
       ? [
           <MenuPopoverItem
             key="model"

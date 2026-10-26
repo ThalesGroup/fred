@@ -152,10 +152,8 @@ def test_default_mcp_catalog_loads_packaged_instructions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Boot from installed package metadata without a checkout config directory."""
-    (tmp_path / "models.yaml").write_text("models: []", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("FRED_MCP_CATALOG_FILE", raising=False)
-    monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(tmp_path / "models.yaml"))
     config = apply_external_catalog_overrides(
         AgentPodConfig.model_validate(
             {

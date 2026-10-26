@@ -24,17 +24,15 @@ import { useChatSse } from "@hooks/useChatSse";
 import type { HitlBatchAnswer, InterruptedRunChoice, RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import { hitlHoldsComposer } from "./hitlHoldsComposer";
 import {
-  useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
-  usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
-  usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
-} from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
-import type { EffectiveChatModel } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+  useListAgentInstancesQuery,
+  useUpdateSessionMutation,
+  useCreateSessionMutation,
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+
 import { useConversationAvailability } from "./useConversationAvailability";
 import { useSessionHistory } from "./useSessionHistory";
-import { setCachedSessionHistory } from "./sessionHistoryCache";
 import { useChatAttachments } from "./useChatAttachments";
-import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
-import { offersReasoning } from "../../../features/capabilities/modelChoice";
+import { parseModelChoice } from "../../../features/capabilities/modelChoice";
 import { reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
 import type { ChatMessage, SkillInvocation, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
@@ -83,18 +81,32 @@ function resolvedHitlAnswer(
 interface UseManagedChatParams {
   teamId: string;
   agentInstanceId: string;
-  /** The agent's resolved model and the models a member may pick for it. */
-  effectiveChatModel?: EffectiveChatModel;
+  spaceId?: string;
 }
 
-export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: UseManagedChatParams) {
+export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseManagedChatParams) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { showError, showWarn } = useToast();
+  const { showError } = useToast();
   const { notifyApiError } = useApiErrorToast();
   const { t } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
 
   const sessionId = searchParams.get("session");
+  const actorRef = useRef(KeyCloakService.GetSessionIdentity());
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  const isScopeCurrent = useCallback(
+    () => mountedRef.current && actorRef.current === KeyCloakService.GetSessionIdentity(),
+    [],
+  );
+  const [persistedSessionId, setPersistedSessionId] = useState<string | null>(null);
+  const visibleSessionRef = useRef(sessionId);
+  const sameSession = visibleSessionRef.current === sessionId;
   const [input, setInput] = useState("");
   const executionDisabledRef = useRef(false);
   const locallyCreatedSessionIdRef = useRef<string | null>(null);
@@ -193,47 +205,13 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     [replaceStagedHitlAnswers, selectedHitlKey],
   );
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
-  // Ordered chat-context prompts attached to this session (PROMPT-05). Source of
-  // truth is the control-plane session; hydrated from sessionData and persisted
-  // via PATCH on every change.
-  const [contextPromptIds, setContextPromptIds] = useState<string[]>([]);
-  // Monotonic counter, PER SESSION ID — the "generation" of the most
-  // recently issued setContextPrompts call for that sid. A write's failure
-  // callback only rolls back if its own generation still matches the
-  // CURRENT generation for the SAME sid it was issued for (i.e. no newer
-  // selection for that same session has since superseded it) — otherwise an
-  // old rejection could stomp a newer already-applied selection, regardless
-  // of network resolution order. Keyed by sid (not a single global counter)
-  // so session A's write settling after navigating to session B can never
-  // even be mistaken for "still current" — B's generation for A's sid never
-  // moves, since nothing ever calls setContextPrompts against A's sid again.
-  const contextPromptGenerationBySidRef = useRef<Map<string, number>>(new Map());
-  // The last context-prompt selection we know the server actually holds,
-  // PER SESSION ID — the correct rollback target on a failed PATCH. Kept in
-  // sync by every successful write and by the session-load rehydrate
-  // effect, both scoped to the sid they apply to.
-  const lastConfirmedContextPromptIdsBySidRef = useRef<Map<string, string[]>>(new Map());
-  // Always the CURRENTLY active session id, refreshed every render — a
-  // callback closure captures `sid` (whatever session it was issued for) at
-  // call time, but must compare against the LATEST active session at
-  // settlement time, which requires a ref (a plain closure over `sessionId`
-  // would be frozen at call time too). A settling write for a session the
-  // user has since navigated away from must never touch `contextPromptIds`
-  // (a single, not-per-session piece of UI state) or show a toast for it.
+  const contextPromptIds: string[] = [];
   const activeSessionIdRef = useRef(sessionId);
   activeSessionIdRef.current = sessionId ?? locallyCreatedSessionIdRef.current;
   // Live mirror of the rendered thread. `handleHitlAnswer`'s continuation
   // settles after arbitrary delay and must read the CURRENT thread, not the one
   // captured when the user answered.
   const latestMessagesRef = useRef<ChatMessage[]>([]);
-  // Whether a local context-prompt mutation has happened for the CURRENTLY
-  // active session. Once true, the rehydrate effect below stops applying
-  // incoming `sessionData` snapshots — a GET that resolves late (e.g. after
-  // a refetch) must never overwrite an already-pending or already-confirmed
-  // local selection with an older server snapshot. Reset to false by the
-  // sessionId-change effect below, so entering a (new or different) session
-  // always starts with normal rehydration.
-  const hasLocalMutationForActiveSessionRef = useRef(false);
   // Suppresses the sessionId-change reset when handleSend itself binds a new session.
   const skipResetOnSessionBindRef = useRef(false);
   // The attempt owns preflight before SSE starts. Navigation revokes it even
@@ -246,16 +224,16 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     [],
   );
 
-  const { data: agentInstances } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
-    { teamId },
-    { skip: !teamId },
+  const { currentData: agentInstances } = useListAgentInstancesQuery(
+    { spaceId },
+    { skip: !spaceId, refetchOnMountOrArgChange: true },
   );
   const agentInstance = agentInstances?.find((i) => i.agent_instance_id === agentInstanceId);
   // Capabilities active in this session — drives the capability side-panel slot
   // (#1979, RFC §9 item 3). The host resolves each id against the plugin index.
-  const capabilityIds = agentInstance?.selected_capability_ids ?? [];
+  const capabilityIds: string[] = [];
 
-  const attachments = useChatAttachments({ teamId, sessionId });
+  const attachments = useChatAttachments({ teamId, sessionId, enabled: false });
 
   useEffect(() => {
     const attempt = sendAttemptRef.current;
@@ -265,9 +243,17 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   }, [sessionId]);
   const locallyCreatingSession =
     sessionId !== null &&
+    sessionId !== persistedSessionId &&
     (locallyCreatedSessionIdRef.current === sessionId || sessionCreateFailedIdRef.current.has(sessionId));
-  const { sessionData, isReadOnly, executionDisabled, sessionUnavailable, refetchSession } =
-    useConversationAvailability(teamId, agentInstanceId, sessionId, locallyCreatingSession);
+  const {
+    sessionData,
+    isReadOnly,
+    executionDisabled,
+    sessionUnavailable,
+    historyRevision,
+    sessionErrorKey,
+    refetchSession,
+  } = useConversationAvailability(spaceId, agentInstanceId, sessionId, locallyCreatingSession);
   const agentDisplayName =
     (isReadOnly ? sessionData?.agent_display_name : (agentInstance?.display_name ?? sessionData?.agent_display_name)) ??
     t("rework.sidebar.chatList.unknownAgent", { agentsNicknameSingular });
@@ -282,20 +268,21 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   const refetchSessionRef = useRef(refetchSession);
   refetchSessionRef.current = refetchSession;
 
-  const [registerSession] = usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation();
-  const [refreshSession] = usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation();
+  const [registerSession] = useCreateSessionMutation();
+  const [refreshSession] = useUpdateSessionMutation();
   // Bumps the session's activity timestamp (tile date + chat-list ordering) —
   // called both at send time (so the tile jumps to the top the moment the
   // user hits Enter) and again when the turn completes.
   const touchSessionActivity = useCallback(
     (sid: string) => {
+      if (!isScopeCurrent()) return;
       refreshSession({
-        teamId,
+        spaceId,
         sessionId: sid,
         updateSessionRequest: { updated_at: new Date().toISOString() },
       }).catch(() => {});
     },
-    [refreshSession, teamId],
+    [refreshSession, spaceId, isScopeCurrent],
   );
 
   const bindSessionId = useCallback(
@@ -326,7 +313,10 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     ): Promise<{ ok: boolean; sessionCreation?: boolean }> => {
       const previousTail = writeTailsRef.current.get(sid) ?? Promise.resolve({ ok: true });
       const nextTail: Promise<{ ok: boolean; sessionCreation?: boolean }> = previousTail
-        .then(() => action())
+        .then(() => {
+          if (!isScopeCurrent()) throw new Error("Conversation closed");
+          return action();
+        })
         .then(() => {
           if (!sessionCreation) failedContextWriteIdsRef.current.delete(sid);
           return { ok: true, sessionCreation };
@@ -339,7 +329,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       writeTailsRef.current.set(sid, nextTail);
       return nextTail;
     },
-    [],
+    [isScopeCurrent],
   );
 
   // Re-read after each await so writes queued during a flush also settle before
@@ -410,18 +400,27 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     if (activeSessionIdRef.current !== rejectedSessionId || submitted?.sessionId !== rejectedSessionId) return;
     setInput(submitted.draft);
   }, []);
-  const isTurnCurrent = useCallback((turnSessionId: string) => {
-    const attempt = sendAttemptRef.current;
-    return activeSessionIdRef.current === turnSessionId && !(attempt?.sessionId === turnSessionId && attempt.cancelled);
-  }, []);
+  const isTurnCurrent = useCallback(
+    (turnSessionId: string) => {
+      const attempt = sendAttemptRef.current;
+      return (
+        isScopeCurrent() &&
+        activeSessionIdRef.current === turnSessionId &&
+        !(attempt?.sessionId === turnSessionId && attempt.cancelled)
+      );
+    },
+    [isScopeCurrent],
+  );
 
-  const isExecutionAllowed = useCallback(() => !executionDisabledRef.current, []);
+  const isExecutionAllowed = useCallback(() => isScopeCurrent() && !executionDisabledRef.current, [isScopeCurrent]);
 
   const {
     messages,
     waitResponse,
     chatControls,
     maxChatInputChars,
+    preparation,
+    preparationUnavailable,
     prepareChatControls,
     send,
     sendHitlResume,
@@ -431,9 +430,16 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   } = useChatSse({
     agentInstanceId,
     teamId,
+    spaceId,
     flushPendingWrites: flushSessionWrites,
     onBindDraftAgentToSessionId: bindSessionId,
-    onTurnPersisted: touchSessionActivity,
+    onTurnPersisted: useCallback(
+      (sid: string) => {
+        touchSessionActivity(sid);
+        if (activeSessionIdRef.current === sid) setPersistedSessionId(sid);
+      },
+      [touchSessionActivity],
+    ),
     onAwaitingHuman: handleAwaitingHuman,
     onError: handleChatError,
     onTurnStarted: handleTurnStarted,
@@ -468,38 +474,11 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   const waitResponseRef = useRef(waitResponse);
   waitResponseRef.current = waitResponse;
   const isTurnActive = useCallback(() => waitResponseRef.current, []);
+  const getCurrentMessages = useCallback(() => latestMessagesRef.current, []);
 
-  // Mirrors read by the departure-snapshot cleanup below: a cleanup closure
-  // captures its own render's values, but must snapshot what is on screen at
-  // DEPARTURE time.
-  const displayedMessagesRef = useRef(messages);
-  displayedMessagesRef.current = messages;
-  const isLoadingHistoryRef = useRef(false);
-
-  // #2239: on leaving a session (switch or unmount), snapshot the displayed
-  // thread into the session-history cache — this cleanup runs BEFORE the next
-  // session's reset effect wipes the state, and it is what folds
-  // live-streamed turns into the cache without any extra fetch. Skipped while
-  // the initial history load is still in flight: caching a half-loaded thread
-  // would make the next visit render it as if it were complete.
+  const composer = useComposerSettings(sessionId, chatControls, preparation?.models);
   useEffect(() => {
-    if (!sessionId) return;
-    return () => {
-      if (isLoadingHistoryRef.current) return;
-      setCachedSessionHistory(sessionId, displayedMessagesRef.current);
-    };
-  }, [sessionId]);
-
-  const handleModelChoiceDropped = useCallback(
-    (model: string) => showWarn({ summary: t("chatbot.composerSettings.modelChoiceLost", { model }) }),
-    [showWarn, t],
-  );
-  // A conversation that cannot run ignores the model read: it may describe
-  // another agent, or none (deleted), and must not judge the stored choice.
-  const composerModel = executionDisabled ? undefined : effectiveChatModel;
-  const composer = useComposerSettings(sessionId, chatControls, composerModel, handleModelChoiceDropped);
-
-  useEffect(() => {
+    visibleSessionRef.current = sessionId;
     if (skipResetOnSessionBindRef.current) {
       console.debug(
         `[useManagedChat] sessionId changed → skipping reset (bound by handleSend) — sessionId=${sessionId ?? "null"}`,
@@ -524,44 +503,25 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     setHitlFreeText("");
     setInput("");
     setSessionTitle(null);
-    setContextPromptIds([]);
     // A genuine entry into a (new or different) session — normal
     // rehydration governs from here until the first local mutation.
-    hasLocalMutationForActiveSessionRef.current = false;
     composer.reset(sessionId, chatControlsRef.current);
   }, [sessionId, reset, composer.reset, replacePendingHitls, replaceStagedHitlAnswers]);
 
+  // Reading an existing conversation needs no execution preparation. Typing
+  // expresses send intent; a fresh draft can prepare immediately.
+  const preparingExecution = !sessionId || input.length > 0;
   useEffect(() => {
-    if (executionDisabled) return;
-    void prepareChatControls(sessionId).catch(() => refetchSessionRef.current());
-  }, [sessionId, executionDisabled, prepareChatControls]);
+    if (executionDisabled || !sameSession || !preparingExecution || (sessionId && locallyCreatingSession)) return;
+    const request = prepareChatControls(sessionId);
+    void request.catch(() => refetchSessionRef.current());
+    return () => request.abort();
+  }, [sessionId, executionDisabled, preparingExecution, prepareChatControls, sameSession, locallyCreatingSession]);
 
   useEffect(() => {
-    if (sessionData?.title != null) setSessionTitle(sessionData.title);
+    if (sessionData) setSessionTitle(sessionData.title);
   }, [sessionData]);
 
-  // Rehydrate attached chat-context prompts from the persisted session so the
-  // pills survive a reload (PROMPTS.md §5). Also resets the rollback target
-  // (see setContextPrompts) to this freshly-loaded, durably-confirmed value.
-  //
-  // Guarded by `hasLocalMutationForActiveSessionRef`: `sessionData` is an
-  // RTK Query result that can resolve or re-resolve (a refetch, a slow
-  // initial fetch racing a fast local PATCH) at any time, including WHILE a
-  // local mutation for this same session is pending or has already
-  // committed. Once the user has made at least one local mutation for the
-  // CURRENTLY active session, an incoming (possibly older) server snapshot
-  // must never silently replace their pending/confirmed selection — this
-  // effect goes back to applying it only once a genuinely new session is
-  // entered (the sessionId-change effect above resets the flag).
-  useEffect(() => {
-    if (!sessionId) return;
-    if (sessionData?.context_prompt_ids == null) return;
-    if (hasLocalMutationForActiveSessionRef.current) return;
-    setContextPromptIds(sessionData.context_prompt_ids);
-    lastConfirmedContextPromptIdsBySidRef.current.set(sessionId, sessionData.context_prompt_ids);
-  }, [sessionData, sessionId]);
-
-  const threadMessages = useMemo(() => toThreadMessages(messages, waitResponse), [messages, waitResponse]);
   const inputCharacterCount = useMemo(() => countUnicodeCodePoints(input.trim()), [input]);
   const inputTooLong = maxChatInputChars !== undefined && inputCharacterCount > maxChatInputChars;
 
@@ -591,13 +551,23 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     isLoading: isLoadingHistory,
     isSettled: isHistorySettled,
     isUnavailable: historyUnavailable,
+    errorKey: historyErrorKey,
   } = useSessionHistory({
     sessionId: locallyCreatingSession && !sessionData ? null : sessionId,
+    spaceId,
+    revision: historyRevision,
     messagesUrl: sessionData ? (sessionData.messages_url ?? null) : sessionUnavailable ? null : undefined,
     onLoaded: handleHistoryLoaded,
     isTurnActive,
+    getCurrentMessages,
   });
-  isLoadingHistoryRef.current = isLoadingHistory;
+
+  const mayShowMessages = sameSession && !sessionUnavailable && (!historyUnavailable || waitResponse);
+  const threadMessages = useMemo(
+    () => toThreadMessages(mayShowMessages ? messages : [], waitResponse),
+    [mayShowMessages, messages, waitResponse],
+  );
+  executionDisabledRef.current = executionDisabled;
 
   const notifySessionSaveFailed = useCallback(
     (error: unknown) =>
@@ -620,7 +590,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
         sid,
         () =>
           registerSession({
-            teamId,
+            spaceId,
             createSessionRequest: { session_id: sid, agent_instance_id: agentInstanceId, title },
           }).unwrap(),
         (error) => {
@@ -631,10 +601,11 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       ).then((result) => {
         if (result.ok) {
           sessionCreateFailedIdRef.current.delete(sid);
+          confirmedSessionIdsRef.current.add(sid);
         }
       });
     },
-    [agentInstanceId, enqueueSessionWrite, notifySessionSaveFailed, registerSession, teamId],
+    [agentInstanceId, enqueueSessionWrite, notifySessionSaveFailed, registerSession, spaceId],
   );
 
   const ensureSessionForAttachments = useCallback((): string => {
@@ -657,86 +628,19 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
 
   const handleAddAttachments = useCallback(
     (files: File[], source: AttachmentSource) => {
-      if (executionDisabledRef.current) return;
+      if (executionDisabledRef.current || !chatControls.some((control) => control.widget === "attach_files")) return;
       const sid = ensureSessionForAttachments();
       void attachments.addFiles(files, source, sid);
     },
-    [attachments.addFiles, ensureSessionForAttachments],
+    [attachments.addFiles, ensureSessionForAttachments, chatControls],
   );
 
-  // The composer's context for one turn, shared by send and HITL resume so a
-  // resumed turn keeps the user's search scope, attachments and reasoning choice.
   const buildTurnContext = useCallback(
-    (resumedExchangeId?: string) => {
-      // `document_scope`'s params carry the same `bound_library_ids` the retired
-      // `EffectiveChatOptions.bound_library_ids` did (CAPAB-01 #1976) — an
-      // MCP-server-bound library scope the picker cannot override.
-      const documentScopeControl = chatControls.find((c) => c.widget === "document_scope");
-      const boundLibraryIds =
-        (documentScopeControl?.params as { bound_library_ids?: string[] | null } | undefined)?.bound_library_ids ??
-        null;
-      // The picker's per-turn selection reaches the OWNING capability's typed
-      // `turn_options[capability_id]` slice (RFC §3.5) — but ONLY
-      // `document_access` declares a TurnOptionsModel for it. The MCP
-      // capability's document_scope widget reads RuntimeContext (built below)
-      // and validates turn_options against EmptyModel, so sending it a slice
-      // is a typed 422.
-      const turnOptions =
-        documentScopeControl && documentScopeControl.capability_id === "document_access"
-          ? {
-              [documentScopeControl.capability_id]: {
-                library_tag_ids: composer.selectedLibraryIds,
-                document_uids: composer.selectedDocumentUids,
-              },
-            }
-          : undefined;
-      // The reasoning value is explicit while the composer shows its row, and
-      // absent otherwise; the model choice rides along when one is made.
-      const reasoningShown = offersReasoning(chatControls, composerModel, composer.chatProfileId);
-      const extras = resumedExchangeId
-        ? latestMessagesRef.current.find(
-            (message) => message.exchange_id === resumedExchangeId && message.role === "user",
-          )?.metadata?.extras
-        : null;
-      const selections: unknown =
-        extras?.skill_invocations ?? (extras?.skill_invocation ? [extras.skill_invocation] : []);
-      const skills = Array.isArray(selections)
-        ? selections.flatMap((item: unknown) =>
-            item && typeof item === "object" && "name" in item && typeof item.name === "string"
-              ? [{ name: item.name }]
-              : [],
-          )
-        : [];
-      return {
-        runtimeContext: {
-          ...buildComposerRuntimeContext({
-            selectedLibraryIds: composer.selectedLibraryIds,
-            selectedDocumentUids: composer.selectedDocumentUids,
-            searchPolicy: composer.searchPolicy,
-            ragScope: composer.ragScope,
-            boundLibraryIds,
-            attachmentsMarkdown: attachments.attachmentsMarkdown,
-            ...(reasoningShown ? { reasoning: composer.reasoning } : {}),
-            askUser: composer.askUser,
-            chatProfileId: composer.chatProfileId,
-          }),
-          ...(skills?.length ? { skills } : {}),
-        },
-        turnOptions,
-      };
-    },
-    [
-      attachments.attachmentsMarkdown,
-      chatControls,
-      composer.selectedLibraryIds,
-      composer.selectedDocumentUids,
-      composer.searchPolicy,
-      composer.ragScope,
-      composer.reasoning,
-      composer.askUser,
-      composer.chatProfileId,
-      composerModel,
-    ],
+    (_resumedExchangeId?: string) => ({
+      runtimeContext: composer.chatProfileId ? { model_choice: parseModelChoice(composer.chatProfileId) } : {},
+      turnOptions: undefined,
+    }),
+    [composer.chatProfileId],
   );
 
   // Read at answer time so handleHitlAnswer keeps its identity across keystrokes.
@@ -835,7 +739,13 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
         // onError above); nothing further to show here, just don't proceed —
         // the message stays in the composer for an explicit retry.
         const writesOk = await flushSessionWrites(sid);
-        if (!writesOk || executionDisabledRef.current || attempt.cancelled || activeSessionIdRef.current !== sid) {
+        if (
+          !writesOk ||
+          !isScopeCurrent() ||
+          executionDisabledRef.current ||
+          attempt.cancelled ||
+          activeSessionIdRef.current !== sid
+        ) {
           console.debug("[useManagedChat] sendTurn() ABORTED — a pending session write failed");
           return false;
         }
@@ -868,6 +778,10 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
           turnOptions,
           interrupted,
         );
+      } catch (error) {
+        if (isScopeCurrent() && !attempt.cancelled && activeSessionIdRef.current === attempt.sessionId)
+          notifySessionSaveFailed(error);
+        return false;
       } finally {
         if (sendAttemptRef.current === attempt) sendAttemptRef.current = null;
       }
@@ -888,9 +802,11 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       bindSessionId,
       createSessionRow,
       flushSessionWrites,
+      isScopeCurrent,
       touchSessionActivity,
       send,
       maxChatInputChars,
+      notifySessionSaveFailed,
       showError,
       t,
     ],
@@ -1177,73 +1093,19 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   }, [setSearchParams, replacePendingHitls, replaceStagedHitlAnswers, reset, sessionId]);
 
   const commitTitle = useCallback(
-    (title: string) => {
-      if (!sessionId) return;
-      setSessionTitle(title);
-      refreshSession({ teamId, sessionId, updateSessionRequest: { title } }).catch(() => {});
+    async (title: string) => {
+      if (!sessionId || sessionUnavailable) return;
+      try {
+        const saved = await refreshSession({ spaceId, sessionId, updateSessionRequest: { title } }).unwrap();
+        if (isScopeCurrent() && activeSessionIdRef.current === sessionId) setSessionTitle(saved.title);
+      } catch (error) {
+        if (isScopeCurrent() && activeSessionIdRef.current === sessionId) notifySessionSaveFailed(error);
+      }
     },
-    [teamId, sessionId, refreshSession],
+    [spaceId, sessionId, sessionUnavailable, refreshSession, notifySessionSaveFailed, isScopeCurrent],
   );
 
-  // Replace the full ordered set of attached chat-context prompts and persist it.
-  // Ensures a session exists first so prompts can be attached before the first
-  // message of a brand-new conversation. Optimistic for a snappy UI; on a
-  // failed PATCH, rolled back — but ONLY if:
-  // - this call is still the most recent one FOR THIS SID (per-sid
-  //   generation counter), so a slow/failed old write can never stomp a
-  //   newer selection for the SAME session, regardless of which write's
-  //   network response lands first (both are additionally serialized
-  //   per-sid — see `enqueueSessionWrite` — so this guard is defense-in-depth
-  //   against the fact that the optimistic update itself is synchronous and
-  //   not part of that serialization);
-  // - AND `sid` is still the currently active session (`activeSessionIdRef`)
-  //   — a write for session A settling after the user has navigated to
-  //   session B must never touch B's `contextPromptIds` (a single, shared
-  //   piece of UI state, not itself keyed by session) or show a toast in B's
-  //   context. A's own write still completes normally server-side either
-  //   way; only the UI-facing side effects are suppressed.
-  const setContextPrompts = useCallback(
-    (ids: string[]) => {
-      if (executionDisabledRef.current) return;
-      const sid = ensureSessionForAttachments();
-      const myGeneration = (contextPromptGenerationBySidRef.current.get(sid) ?? 0) + 1;
-      contextPromptGenerationBySidRef.current.set(sid, myGeneration);
-      hasLocalMutationForActiveSessionRef.current = true;
-      setContextPromptIds(ids);
-      void enqueueSessionWrite(
-        sid,
-        () => refreshSession({ teamId, sessionId: sid, updateSessionRequest: { context_prompt_ids: ids } }).unwrap(),
-        (error) => {
-          if (activeSessionIdRef.current !== sid) {
-            // The user has navigated away from `sid` entirely — its write
-            // still failed for real (surfaced nowhere now, by design: there
-            // is no longer a UI context to attach the error to), but must
-            // not touch whatever session is displayed now.
-            return;
-          }
-          if (myGeneration !== contextPromptGenerationBySidRef.current.get(sid)) {
-            // Superseded by a newer selection for this SAME session — that
-            // one's own outcome now governs the UI; showing an error for a
-            // choice the user has already moved past would be confusing
-            // and, worse, could silently revert their newer, already-
-            // confirmed selection.
-            return;
-          }
-          setContextPromptIds(lastConfirmedContextPromptIdsBySidRef.current.get(sid) ?? []);
-          notifyApiError(error, {
-            summary: t("chatbot.errors.contextPromptSaveFailedSummary"),
-            fallbackDetail: t("chatbot.errors.contextPromptSaveFailedDetail"),
-          });
-        },
-      ).then((result) => {
-        // Always recorded, even for a no-longer-active sid — this is the
-        // durable per-session bookkeeping a LATER visit to `sid` (or a
-        // still-current write for it) may need, not a UI side effect.
-        if (result.ok) lastConfirmedContextPromptIdsBySidRef.current.set(sid, ids);
-      });
-    },
-    [enqueueSessionWrite, ensureSessionForAttachments, notifyApiError, refreshSession, t, teamId],
-  );
+  const setContextPrompts = useCallback((_ids: string[]) => {}, []);
 
   const guardChange = useCallback(
     <Args extends unknown[]>(action: (...args: Args) => unknown) =>
@@ -1287,15 +1149,19 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
 
   return {
     sessionId,
-    sessionTitle,
+    sessionTitle: sameSession && !sessionUnavailable ? sessionTitle : null,
     agentDisplayName,
     isReadOnly,
     executionDisabled,
     sessionUnavailable,
+    preparationUnavailable,
+    historyErrorKey: sessionErrorKey ?? historyErrorKey,
     historyUnavailable,
     agentInstance,
     capabilityIds,
     chatControls,
+    models: preparation?.models,
+    supportsHitl: preparation?.supports_hitl === true,
     input,
     setInput: setComposerInput,
     inputCharacterCount,
@@ -1336,7 +1202,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     contextPromptIds,
     setContextPrompts,
     threadMessages,
-    messages,
+    messages: mayShowMessages ? messages : [],
     waitResponse,
     isLoadingHistory,
     isHistorySettled,

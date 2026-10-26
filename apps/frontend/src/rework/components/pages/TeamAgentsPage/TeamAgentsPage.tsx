@@ -257,6 +257,8 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
                   instance.source_agent_id
                 }
                 runtimeId={instance.source_runtime_id}
+                teamId={spaceId}
+                chatAvailable
                 canManageAgents={canManageAgents}
                 managementBusy={busy}
                 unavailableActionsReason={unavailable}

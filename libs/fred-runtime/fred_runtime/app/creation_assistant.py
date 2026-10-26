@@ -50,7 +50,6 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, ValidationError
 
-from ..model_routing import RoutedChatModelFactory
 from ..react.react_prompting import normalize_response_language
 from ..runtime_context import get_runtime_context
 from ..runtime_support.model_metadata import runtime_metadata_from_message
@@ -297,27 +296,11 @@ _DRAFT_JSON_SCHEMA = _GeneratedDraft.model_json_schema()
 def creation_assistant_model(
     profile_id: str | None = None, *, reasoning_effort: str = "off"
 ) -> tuple[BaseChatModel, str | None, BaseChatModel | None]:
-    """The admin-chosen chat model (else the pod default) at the admin's
-    reasoning effort, its name and, when it reasons, the same model without
-    reasoning as a fallback; 503 when no chat model is routable."""
-    factory = get_runtime_context().config.chat_model_factory
-    if not isinstance(factory, RoutedChatModelFactory):
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="No default chat model is configured on this agent runtime.",
-        )
-    try:
-        return factory.build_chat_for_profile(
-            profile_id, reasoning_effort=reasoning_effort
-        )
-    except Exception as exc:  # any provider or catalog failure: no usable model
-        logger.warning(
-            "event=creation_assistant_model_unavailable error=%s", type(exc).__name__
-        )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="No default chat model is configured on this agent runtime.",
-        ) from exc
+    """This helper is not covered by the instance resolver's turn authority."""
+    raise HTTPException(
+        status_code=503,
+        detail="Creation assistant inference is not connected to Weaver turn authorization",
+    )
 
 
 def build_draft_messages(

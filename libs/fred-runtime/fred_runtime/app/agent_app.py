@@ -56,18 +56,23 @@ from collections.abc import (
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, cast
-from uuid import uuid4
+from typing import Any, Literal, cast
+from uuid import UUID, uuid4
 
 import httpx
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fred_core.common.config_loader import get_config
-from fred_core.common.fastapi_handlers import (
-    ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
-    DENIAL_CAUSE_HEADER,
-)
 from fred_core.common.fastapi_handlers import (
     register_exception_handlers as register_authorization_handlers,
 )
@@ -86,18 +91,15 @@ from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingFastAPI
 from fred_core.logs.log_setup import log_setup
 from fred_core.logs.log_store_factory import build_log_store
 from fred_core.logs.propagation import outbound_context_headers
-from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_core.security.delegation import (
     AssertedUser,
     DelegationGrant,
     holds_caller_role,
 )
-from fred_core.security.models import AuthorizationError
 from fred_core.security.rebac.published_engine import PublishedOpenFgaRebacEngine
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
-    TeamPermission,
 )
 from fred_core.security.structure import (
     KeycloakUser,
@@ -120,13 +122,11 @@ from fred_sdk.contracts.capability import (
     StoredCapabilityConfig,
     UploadedFile,
 )
-from fred_sdk.contracts.capability.manifest import ReasoningEffortLevel
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
     BoundRuntimeContext,
     ConversationTurn,
-    ModelBinding,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
@@ -167,16 +167,29 @@ from fred_sdk.contracts.runtime import (
 )
 from fred_sdk.contracts.skills import SkillCatalog, SkillDetail, SkillInvocation
 from fred_sdk.contracts.ui_part_union import current_ui_part_union
+from fred_sdk.contracts.weaver import ModelOfferKey, WeaverRuntimeBinding
 from fred_sdk.support.authored_toolsets import (
     AuthoredToolRuntimePorts,
     build_authored_tool_handlers,
 )
-from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    PrivateAttr,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 from starlette.background import BackgroundTask
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.types import Receive, Scope, Send
 
 from fred_runtime.app.execution_diagnostics import report_execution_error
+from fred_runtime.app.history_access import (
+    authorize_history_read,
+    readable_history_sessions,
+    require_history_person,
+)
 from fred_runtime.app.security import prepare_authorization
 from fred_runtime.app.web_research_activity import WebResearchActivity
 from fred_runtime.capabilities import (
@@ -212,7 +225,6 @@ from fred_runtime.common.outbound_credentials import (
     delegation_enabled,
     get_delegation_runtime,
     set_delegation_runtime,
-    static_person_provider,
 )
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
@@ -224,6 +236,7 @@ from fred_runtime.execution_errors import UserFacingExecutionError
 from fred_runtime.graph.graph_executor import GraphExecutor
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.model_routing import ModelProvider, RoutedChatModelFactory
+from fred_runtime.model_routing.turn import TurnAuthority, current_turn
 from fred_runtime.react.react_runtime import ReActRuntime
 from fred_runtime.runtime_support.authority import (
     AuthorityLostError,
@@ -492,58 +505,8 @@ def _execute_response_adapter() -> TypeAdapter[Any]:
 
 
 def _build_chat_model_factory(config: AgentPodConfig) -> ChatModelFactoryPort:
-    """
-    Build a ChatModelFactoryPort for the configured model backend.
-
-    Resolution:
-    - the resolved mandatory `models_catalog.yaml` path is attached during
-      `load_agent_pod_config()`
-    - this function loads it and builds a `RoutedChatModelFactory` backed by
-      `ModelRoutingResolver`
-    - rules in the catalog are evaluated per-request against the real
-      `BoundRuntimeContext` (agent_id, team_id, user_id)
-
-    Why this returns a ChatModelFactoryPort (not a zero-arg callable):
-    - `RoutedChatModelFactory.build(definition, binding)` receives the full
-      runtime context per invocation, enabling per-request rule evaluation.
-    """
-    from ..model_routing import (
-        ModelRoutingResolver,
-        RoutedChatModelFactory,
-        load_model_catalog,
-    )
-
-    catalog_path = config.get_models_catalog_path()
-    if not catalog_path:
-        raise RuntimeError(
-            "AgentPodConfig is missing the resolved models catalog path. "
-            "Use load_agent_pod_config() for pod startup."
-        )
-
-    catalog = load_model_catalog(catalog_path)
-    catalog_verified = True
-    for source in catalog.discovery_sources:
-        try:
-            catalog = catalog.resolve_discovery(source_id=source.source_id)
-        except ValueError as exc:
-            logger.warning(
-                "[fred-runtime] startup model discovery failed for %s; managed turns can apply the saved URL: %s",
-                source.source_id,
-                exc,
-            )
-            catalog_verified = False
-    policy = catalog.to_policy()
-    logger.info(
-        "[fred-runtime] model routing from catalog=%s profiles=%d agent_overrides=%d",
-        catalog_path,
-        len(policy.profiles),
-        len(policy.agent_profile_overrides),
-    )
-    return RoutedChatModelFactory(
-        resolver=ModelRoutingResolver(policy),
-        catalog=catalog,
-        catalog_verified=catalog_verified,
-    )
+    """Models come exclusively from the complete turn resolver, never pod discovery."""
+    return RoutedChatModelFactory(credentials=config.inference_credentials)
 
 
 @dataclass(slots=True)
@@ -774,11 +737,6 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         access_token: str | None,
         capability_registry: CapabilityRegistry | None = None,
         *,
-        platform_chat_model_binding: ModelBinding | None = None,
-        pod_chat_default_profile_id: str | None = None,
-        platform_chat_model_fallback: ModelBinding | None = None,
-        pod_chat_fallback_profile_id: str | None = None,
-        confirmed_removed_chat_profiles: dict[str, str] | None = None,
         platform_prompt: str | None = None,
         credentials: OutboundCredentialProvider | None = None,
     ) -> None:
@@ -788,27 +746,13 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         # The parent's provider object, not a credential read off it: a child
         # asks it per call, so it observes whatever the run's own provider does.
         self._credentials = credentials
-        # TRUSTED — the caller's own `BoundRuntimeContext.platform_chat_model_binding`
-        # (see `_build_runtime_services`), carried privately on this invoker so a
-        # nested `context.invoke_agent(...)` child inherits the same
-        # control-plane-resolved binding instead of silently losing it to the
-        # nested `_iterate_runtime_event_payloads` call's `None` default. Never
-        # exposed on `RuntimeContext`, `PortableContext`, `AgentInvocationRequest`,
-        # or any other channel a caller/child could read or forge — the only way
-        # to reach it is this private attribute on the invoker itself.
-        self._platform_chat_model_binding = platform_chat_model_binding
-        self._pod_chat_default_profile_id = pod_chat_default_profile_id
-        self._platform_chat_model_fallback = platform_chat_model_fallback
-        self._pod_chat_fallback_profile_id = pod_chat_fallback_profile_id
-        self._confirmed_removed_chat_profiles = confirmed_removed_chat_profiles or {}
-        # TRUSTED, same private channel and same reason: without it a nested
-        # `context.invoke_agent(...)` child would compose its prompt with
-        # `platform_prompt=None` and silently fall back to the pod default —
-        # including when an admin deliberately saved `""` to suppress the
-        # block, which is precisely the state that must not be undone.
+        # Descendants share RunScope's fixed authority; this prompt is unrelated.
         self._platform_prompt = platform_prompt
 
     async def invoke(self, request: AgentInvocationRequest) -> AgentInvocationResult:
+        authority = current_turn()
+        authority.check(agent_id=request.agent_id)
+        authority.check_context(request.context, request.agent_id)
         definition = self._registry.get(request.agent_id)
         if definition is None:
             return AgentInvocationResult(
@@ -836,7 +780,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
                 context_dict["search_policy"] = request.scope.search_policy
         execute_request = _AgentExecuteRequest.model_construct(
             agent_id=request.agent_id,
-            agent_instance_id=None,
+            agent_instance_id=str(authority.binding.agent.instance_id),
             message=request.message,
             context=context_dict,
             resume_payload=None,
@@ -897,14 +841,6 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             registry=self._registry,
             capability_registry=self._capability_registry,
             credential_provider=credentials,
-            # Private trusted propagation (see __init__): the child inherits
-            # the parent turn's platform chat binding, never the request's
-            # own `context` — that dict has no field for it at all.
-            platform_chat_model_binding=self._platform_chat_model_binding,
-            pod_chat_default_profile_id=self._pod_chat_default_profile_id,
-            platform_chat_model_fallback=self._platform_chat_model_fallback,
-            pod_chat_fallback_profile_id=self._pod_chat_fallback_profile_id,
-            confirmed_removed_chat_profiles=self._confirmed_removed_chat_profiles,
             platform_prompt=self._platform_prompt,
         ):
             kind = payload.get("kind")
@@ -1107,17 +1043,6 @@ def _build_runtime_services(
             or PersonCredentialProvider(
                 lambda: _current_person_token(binding.runtime_context)
             ),
-            # Private trusted propagation (LocalRegistryAgentInvoker
-            # docstring): carries THIS turn's trusted platform chat binding
-            # onto the invoker so a nested context.invoke_agent(...) child
-            # inherits it, instead of the nested call silently defaulting to
-            # None. `binding` is this same request's BoundRuntimeContext —
-            # never the child's, and never a client-controlled value.
-            platform_chat_model_binding=binding.platform_chat_model_binding,
-            pod_chat_default_profile_id=binding.pod_chat_default_profile_id,
-            platform_chat_model_fallback=binding.platform_chat_model_fallback,
-            pod_chat_fallback_profile_id=binding.pod_chat_fallback_profile_id,
-            confirmed_removed_chat_profiles=binding.confirmed_removed_chat_profiles,
             platform_prompt=binding.platform_prompt,
         )
         if registry is not None
@@ -1224,6 +1149,7 @@ def _normalize_base_url(base_url: str) -> str:
 
 
 class _AgentExecuteRequest(BaseModel):
+    _turn_authority: TurnAuthority | None = PrivateAttr(default=None)
     """
     Input payload for the agent execution endpoints.
 
@@ -1362,6 +1288,18 @@ class _AgentTemplateSummary(BaseModel):
     max_chat_input_chars: int
 
 
+class _PodTemplateCapability(BaseModel):
+    source_agent_id: str
+    capability_id: str
+    default_selected: bool
+
+
+class _PodCapabilityInventory(BaseModel):
+    complete: Literal[True]
+    capabilities: list[CapabilityCatalogEntry]
+    template_capabilities: list[_PodTemplateCapability]
+
+
 class _McpCatalogEntry(BaseModel):
     id: str
     name: str
@@ -1372,56 +1310,6 @@ class _McpCatalogEntry(BaseModel):
 
 class _McpCatalogResponse(BaseModel):
     servers: list[_McpCatalogEntry]
-
-
-class _ModelCatalogEntry(BaseModel):
-    id: str
-    provider: str
-    name: str
-    description: str | None = None
-    profile_ids: list[str] = Field(default_factory=list)
-    capabilities: list[str] = Field(default_factory=list)
-    chat_capability_verified: bool = False
-    """Every `models_catalog.yaml` profile_id sharing this entry's model
-    identity — TEAM-ROUTING-POLICY-RFC.md §7.1's id-space
-    translation: a routing policy picks by profile_id (finer-grained than
-    this capability id). The complete list describes the model inventory;
-    chat policy uses the typed subset below. Declaration order in the source
-    YAML is preserved, first-seen first."""
-    chat_profile_ids: list[str] = Field(default_factory=list)
-    """The chat-capable subset of `profile_ids`, derived from each profile's
-    declared capability. Team routing consumes this explicit subset and never
-    infers capability from a profile-id prefix."""
-    thinking_profile_ids: list[str] = Field(default_factory=list)
-    """The subset of `profile_ids` above declaring `supports_thinking`
-    (`MODEL-REASONING-ENABLEMENT-RFC.md` §5.3, REASON-01). DERIVED here,
-    never authored twice: aptitude is declared per profile (§4, where the
-    behaviour actually differs), while the admin toggle is keyed per model
-    because that is what the capability id space and the admin UI both are
-    (§5.2 — the id space is not negotiable). This field is the projection
-    between the two.
-
-    Empty means this model has NO reasoning-capable profile, and the admin row
-    shows no reasoning control at all — aptitude is not a choice, an
-    administrator cannot make a model reason. Non-empty means the row carries
-    the toggle. Same established join as `profile_ids` above."""
-    reasoning_efforts: dict[str, list[ReasoningEffortLevel]] = Field(
-        default_factory=dict
-    )
-    """Selectable reasoning levels per profile id of `thinking_profile_ids`,
-    for profiles declaring two or more (`ModelProfile.reasoning_levels`).
-    Absent: that thinking profile is on/off only. Empty: no level a platform
-    helper can send (`ModelProfile.reasoning_on_effort` is None)."""
-    display_name: str | None = None
-    """The ops-authored `model_display_name` of this model's first profile that
-    declares one — the label the composer shows instead of splitting the
-    capability id apart. None means no profile named this model and the
-    frontend falls back to that heuristic. First-declared wins, same
-    first-seen rule as `description` above."""
-    context_window_tokens: int | None = None
-    max_input_tokens: int | None = None
-    max_output_tokens: int | None = None
-    platform_binding: ModelBinding | None = None
 
 
 class _PlatformPromptFileResponse(BaseModel):
@@ -1467,289 +1355,6 @@ def _platform_prompt_file_field(config: AgentPodConfig, field: str) -> str | Non
     return value if isinstance(value, str) else None
 
 
-class _ModelDiscoveryAdvertisement(BaseModel):
-    source_id: str
-    yaml_url: str
-    effective_url: str
-    discovered_model_ids: list[str] = Field(default_factory=list)
-
-
-class _ModelCatalogResponse(BaseModel):
-    models: list[_ModelCatalogEntry]
-    preparation_token: str | None = None
-    active_revision: int = 0
-    discovery_source_id: str | None = None
-    discovery_yaml_url: str | None = None
-    discovery_effective_url: str | None = None
-    discovered_model_ids: list[str] = Field(default_factory=list)
-    discovery_sources: list[_ModelDiscoveryAdvertisement] = Field(default_factory=list)
-    default_chat_profile_id: str | None = None
-    """This pod's effective manual chat default — the LOWEST precedence
-    level (`LLM_ROUTING_FRED.md` §Deterministic precedence), and the one that
-    actually serves the turn whenever nobody chose anything.
-
-    Advertised for control-plane (#2387), which resolves the same precedence at
-    its own `effective-chat-model` read to tell the composer which model the
-    next turn will use (not at prepare-execution — that path must stay free of
-    pod-catalog fetches).
-    Before this field existed control-plane could not see the two pod-owned
-    levels at all, so the composer named the single reasoning-enabled model
-    instead — a value unrelated to routing, and wrong the moment any override
-    applied.
-
-    `None` when no explicit default or sole manual chat profile exists: a legal
-    pod that cannot serve a chat turn unless a higher level names a profile."""
-    agent_chat_profile_overrides: dict[str, str] = Field(default_factory=dict)
-    """This pod's ops-authored `agent_profile_overrides`, restricted to entries
-    targeting a CHAT profile — the deployment's local escape hatch, and the
-    HIGHEST precedence level below the platform binding. A team can never beat
-    it, which is exactly why control-plane has to know about it: a team override
-    that loses to a static one must not be displayed as if it had won.
-
-    Restricted to chat here rather than by the consumer, mirroring the runtime's
-    long-standing rule that a static override naming a profile of a different
-    capability is skipped, not fatal (`ModelRoutingResolver.agent_overrides_for`).
-    That keeps `resolve_effective_chat_profile`'s precondition — both override
-    maps are already chat-only — satisfied at the source for both callers."""
-
-
-def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
-    """One `_ModelCatalogEntry` per distinct model identity
-    (`ModelProfile.capability_id`) in a loaded `ModelCatalog` (OBSERV-02 v3,
-    `AGENT-CAPABILITY-RFC.md` §8.7).
-
-    Pulled out of `get_models_catalog` as a pure function so it is directly
-    unit-testable without a running app (`agent_app.py` has no existing
-    FastAPI TestClient harness — building one just for this route would be
-    disproportionate; this function is where the actual logic worth testing
-    lives). `catalog` is typed `Any` here to avoid a module-level
-    `..model_routing` import (see the route's own lazy import for why);
-    callers pass a real `ModelCatalog`.
-    """
-    from ..model_routing import ModelCapability
-
-    seen: dict[str, _ModelCatalogEntry] = {}
-    chat_bindings: dict[str, ModelBinding | None] = {}
-    ambiguous_chat_bindings: set[str] = set()
-    resolved_models = {
-        profile.profile_id: profile.model
-        for profile in catalog.model_copy(
-            update={"agent_profile_overrides": {}, "default_profile_by_capability": {}}
-        )
-        .to_policy()
-        .profiles
-    }
-    for profile in catalog.profiles:
-        provider = profile.model.provider
-        name = profile.model.name
-        # ModelProfile.validate_model (contracts.py) already guarantees both
-        # are non-empty strings for every profile that exists — asserted
-        # (not a skip/continue) so this narrows the type instead of hiding
-        # an invariant violation the validator itself is supposed to prevent.
-        assert provider and name, (
-            f"ModelProfile {profile.profile_id!r} passed validation without provider/name"
-        )
-        # Grouped by the entry id itself, not the wire name (which a gateway's
-        # models share): keying on anything else could emit two entries whose
-        # ids collide once normalized.
-        key = profile.capability_id
-        binding: ModelBinding | None = None
-        if profile.capability == ModelCapability.CHAT:
-            resolved = resolved_models[profile.profile_id]
-            settings = dict(resolved.settings or {})
-            settings.pop("timeout", None)
-            settings.pop("http_client_limits", None)
-            if provider == "openai" and "openai_api_base" in settings:
-                settings["base_url"] = settings.pop("openai_api_base")
-            try:
-                binding = ModelBinding.model_validate(
-                    {"provider": provider, "name": name, "settings": settings}
-                )
-            except ValueError:
-                # Catalog settings outside the platform contract stay pod-local.
-                pass
-        existing = seen.get(key)
-        if existing is None:
-            existing = _ModelCatalogEntry(
-                id=key,
-                provider=provider,
-                name=name,
-                description=profile.description,
-                display_name=profile.model_display_name,
-                context_window_tokens=profile.context_window_tokens,
-                max_input_tokens=profile.max_input_tokens,
-                max_output_tokens=profile.max_output_tokens,
-                profile_ids=[profile.profile_id],
-                platform_binding=binding,
-            )
-            seen[key] = existing
-        else:
-            existing.profile_ids.append(profile.profile_id)
-            # First declaring profile wins; a later one only fills a gap.
-            if existing.display_name is None:
-                existing.display_name = profile.model_display_name
-            if existing.context_window_tokens is None:
-                existing.context_window_tokens = profile.context_window_tokens
-            if existing.max_input_tokens is None:
-                existing.max_input_tokens = profile.max_input_tokens
-            if existing.max_output_tokens is None:
-                existing.max_output_tokens = profile.max_output_tokens
-        if profile.capability.value not in existing.capabilities:
-            existing.capabilities.append(profile.capability.value)
-        if profile.profile_id in catalog.verified_chat_profile_ids:
-            existing.chat_capability_verified = True
-        if profile.capability == ModelCapability.CHAT:
-            existing.chat_profile_ids.append(profile.profile_id)
-            previous = chat_bindings.setdefault(key, binding)
-            if binding != previous:
-                ambiguous_chat_bindings.add(key)
-            existing.platform_binding = (
-                None if key in ambiguous_chat_bindings else previous
-            )
-        # REASON-01 §5.3: aptitude is per profile, the toggle is per model —
-        # this one condition is the whole projection between them.
-        if profile.supports_thinking:
-            existing.thinking_profile_ids.append(profile.profile_id)
-            if profile.reasoning_levels:
-                existing.reasoning_efforts[profile.profile_id] = list(
-                    profile.reasoning_levels
-                )
-            elif profile.reasoning_on_effort is None:
-                # Nothing a platform helper could send: reported as no levels.
-                existing.reasoning_efforts[profile.profile_id] = []
-    return list(seen.values())
-
-
-def _project_model_catalog_response(
-    catalog: Any, *, yaml_catalog: Any | None = None, source_id: str | None = None
-) -> _ModelCatalogResponse:
-    """Project a loaded `ModelCatalog` into the full `/agents/models-catalog`
-    payload: the per-model-identity inventory plus the two pod-owned
-    precedence levels control-plane needs.
-
-    Pure, for the same reason `_project_model_catalog_entries` is — this is the
-    logic worth unit-testing, and `agent_app.py` has no FastAPI TestClient
-    harness. `catalog` is typed `Any` to keep `..model_routing` out of this
-    module's import graph; callers pass a real `ModelCatalog`.
-    """
-
-    from ..model_routing import ModelCapability
-
-    capability_by_profile_id = {
-        profile.profile_id: profile.capability for profile in catalog.profiles
-    }
-    yaml_sources = {
-        source.source_id: source
-        for source in (yaml_catalog or catalog).discovery_sources
-    }
-    advertisements = []
-    for source in catalog.discovery_sources:
-        owned_ids = {
-            profile_id
-            for profile_id, owner in catalog.discovered_profile_sources.items()
-            if owner == source.source_id
-        }
-        advertisements.append(
-            _ModelDiscoveryAdvertisement(
-                source_id=source.source_id,
-                yaml_url=f"{yaml_sources[source.source_id].base_url}/models",
-                effective_url=f"{source.base_url}/models",
-                discovered_model_ids=[
-                    profile.capability_id
-                    for profile in catalog.profiles
-                    if profile.profile_id in owned_ids
-                ],
-            )
-        )
-    selected = next(
-        (item for item in advertisements if item.source_id == source_id),
-        advertisements[0] if source_id is None and advertisements else None,
-    )
-    return _ModelCatalogResponse(
-        models=_project_model_catalog_entries(catalog),
-        discovery_sources=advertisements,
-        discovery_source_id=selected.source_id if selected else None,
-        discovery_yaml_url=selected.yaml_url if selected else None,
-        discovery_effective_url=selected.effective_url if selected else None,
-        discovered_model_ids=selected.discovered_model_ids if selected else [],
-        default_chat_profile_id=catalog.effective_default_profile_by_capability.get(
-            ModelCapability.CHAT
-        ),
-        agent_chat_profile_overrides={
-            agent_id: profile_id
-            for agent_id, profile_id in catalog.agent_profile_overrides.items()
-            # Skips both a non-chat target and one naming a profile this catalog
-            # does not contain — neither can ever route a chat turn, so
-            # advertising them would make control-plane predict a model the pod
-            # would not actually use.
-            if capability_by_profile_id.get(profile_id) == ModelCapability.CHAT
-        },
-    )
-
-
-def _catalog_for_advertisement(path: str, snapshot: Any | None) -> Any:
-    # Remote discovery must advertise the same inventory the router loaded.
-    from ..model_routing import load_model_catalog
-
-    return snapshot if snapshot is not None else load_model_catalog(path)
-
-
-class _ModelCatalogRefreshRequest(BaseModel):
-    models_url: str | None = None
-    source_id: str | None = None
-    prepare: bool = False
-    preparation_token: str | None = None
-    rollback_token: str | None = None
-    revision: int | None = None
-
-
-def _model_catalog_refresh_permission(
-    body: _ModelCatalogRefreshRequest, approved_url: str | None
-) -> OrganizationPermission:
-    if body.models_url is not None and body.models_url != approved_url:
-        return OrganizationPermission.CAN_MANAGE_PLATFORM
-    return OrganizationPermission.CAN_MANAGE_CAPABILITIES
-
-
-class _ResolvedAgentInstance(BaseModel):
-    agent_instance_id: str
-    template_agent_id: str
-    display_name: str = ""
-    owner_scope: str
-    owner_user_id: str | None = None
-    owner_team_id: str | None = None
-    enabled: bool = True
-    tuning: AgentTuning
-    # Per-team enablement settings resolved control-plane-side at session prep
-    # (CAPAB-01 / #1980, RFC §8.2), keyed by capability id and already
-    # restricted to the instance's selected capabilities.
-    team_capability_settings: dict[str, dict[str, Any]] = Field(default_factory=dict)
-    # Which models currently have reasoning switched on, resolved fresh by
-    # control-plane on this same call — see
-    # `_ResolvedExecutionTarget.reasoning_enabled_model_ids` for why this
-    # replaced reading the same field off the caller-supplied context.
-    reasoning_enabled_model_ids: list[str] = Field(default_factory=list)
-    # Models the team disabled, resolved on this same call. Defaults empty so
-    # an older control plane that does not send it stays compatible.
-    team_disabled_model_ids: list[str] = Field(default_factory=list)
-    # Platform-operator `chat` model binding, resolved fresh by control-plane
-    # on this same call — see
-    # `_ResolvedExecutionTarget.platform_chat_model_binding` for why this is
-    # never read off the caller-supplied context either.
-    platform_chat_model_binding: ModelBinding | None = None
-    pod_chat_default_profile_id: str | None = None
-    platform_chat_model_fallback: ModelBinding | None = None
-    pod_chat_fallback_profile_id: str | None = None
-    model_discovery_urls: dict[str, str] = Field(default_factory=dict)
-    model_discovery_revisions: dict[str, int] = Field(default_factory=dict)
-    confirmed_removed_chat_profiles: dict[str, str] = Field(default_factory=dict)
-    # Platform-wide platform prompt, resolved fresh by control-plane on this same
-    # call — same trust boundary again: it becomes the FIRST block of the
-    # composed system prompt, ahead of every agent template. `None` means no admin
-    # ever saved one and the pod's shipped `config/platform_prompt.json` applies.
-    platform_prompt: str | None = None
-
-
 @dataclass(slots=True)
 class _ResolvedExecutionTarget:
     definition: ReActAgentDefinition | GraphAgentDefinition
@@ -1765,32 +1370,6 @@ class _ResolvedExecutionTarget:
     # capability id. Reaches each capability as `CapabilityContext.team_settings`
     # — never an LLM tool signature. Empty for direct template execution.
     team_settings: dict[str, dict[str, Any]] = field(default_factory=dict)
-    # Which models currently have reasoning switched on. Resolved by
-    # control-plane on the SAME per-turn call that fetches `tuning` above, not
-    # read from the caller-supplied `context`: that copy is a session-open
-    # snapshot the frontend replays on every turn unchanged, so a stale or
-    # tampered copy could keep reasoning on past the moment an admin switched
-    # it off platform-wide. The routing-profile fields nearby stay
-    # client-forwarded because they're a frugality/comfort lever, not an admin
-    # control — this one is, so it's worth a fresh check. Empty for direct
-    # template execution, same as `tuning`.
-    reasoning_enabled_model_ids: tuple[str, ...] = field(default_factory=tuple)
-    # Models the team disabled, resolved on the same per-turn call and for the
-    # same reason: the pod must not trust a client-forwarded copy.
-    team_disabled_model_ids: tuple[str, ...] = field(default_factory=tuple)
-    # Platform-operator `chat` model binding (V1 platform-binding hardening).
-    # Resolved by control-plane on the SAME per-turn call as
-    # `reasoning_enabled_model_ids` above, for the same reason — never read
-    # from the caller-supplied `context`, so a forged/stale request-body
-    # value can never influence chat model selection. `None` for direct
-    # (non-managed) template execution: V1 platform binding applies to
-    # managed agent-instance execution only, and direct execution stays
-    # pod-local routing.
-    platform_chat_model_binding: ModelBinding | None = None
-    pod_chat_default_profile_id: str | None = None
-    platform_chat_model_fallback: ModelBinding | None = None
-    pod_chat_fallback_profile_id: str | None = None
-    confirmed_removed_chat_profiles: dict[str, str] = field(default_factory=dict)
     # Platform-wide platform prompt, resolved on the SAME per-turn call as the
     # two fields above and for the same reason. `None` for direct (non-managed)
     # template execution, where the pod default applies instead.
@@ -1952,176 +1531,153 @@ async def _resolve_agent_instance(
     request_id: str | None = None,
     credentials: OutboundCredentialProvider | None = None,
 ) -> _ResolvedExecutionTarget:
-    """
-    Resolve a direct or managed execution target into a concrete definition.
-
-    Why this exists:
-    - `/agents/execute*` now supports both raw template execution and managed
-      agent instances stored in control-plane, while the lower runtime path
-      still wants one concrete `ReActAgentDefinition`
-
-    How to use it:
-    - call from execute routes before invoking the runtime
-
-    Example:
-    - `target = await _resolve_agent_instance(...)`
-    """
-
-    if request.agent_id is not None:
-        definition = registry.get(request.agent_id)
-        # Direct agent_id execution takes no grant, so it is the enforcement point
-        # for agent visibility: a non-public agent (AgentDefinition.public=False) is
-        # internal — it may only be executed through a managed instance (whose
-        # enrollment is admin-gated), never directly by id. Treat it as unknown so
-        # its existence is not even confirmed. See AGENT-VISIBILITY-RFC §3.1.
-        if definition is None or not getattr(definition, "public", True):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Unknown agent_id: {request.agent_id!r}.",
-            )
-        if request.inline_tuning:
-            definition = _apply_runtime_tuning(
-                definition,
-                AgentTuning(
-                    role=definition.role,
-                    description=definition.description,
-                    tags=list(definition.tags),
-                    fields=list(definition.fields),
-                    values=request.inline_tuning,
-                ),
-            )
-        # Direct execution has no persisted capability selection; carry a
-        # template-default tuning so the execution path still assembles the
-        # template's MCP servers as capabilities and delivers their
-        # `agent_instructions` prompt fragments (#1978 — otherwise the
-        # non-negotiable grounding contract would be lost on this path).
-        return _ResolvedExecutionTarget(
-            definition=definition,
-            effective_agent_id=definition.agent_id,
-            team_id=team_id,
-            tuning=_definition_to_agent_tuning(definition),
-        )
-
-    if control_plane_url is None:
+    """One trusted space resolution. No retry, local catalog or prior-turn fallback."""
+    ctx = request.context or {}
+    space_id = ctx.get("space_id")
+    if request.agent_id is not None or not request.agent_instance_id or not space_id:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "Managed agent instances require platform.control_plane_url in the pod configuration."
-            ),
+            status_code=403,
+            detail="Weaver requires a managed instance and canonical space",
         )
-
-    # Team-scoped resolution (RUNTIME-07 rev. 2). The pod resolves the instance's
-    # template + tuning from the control-plane binding scoped to the caller's team
-    # (ReBAC-gated, store.get_for_team) — the replacement for the signed grant.
-    # The end user has already been authorized at this pod (Keycloak + OpenFGA).
-    if team_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "Managed agent instance execution requires a team context "
-                "(runtime_context.team_id)."
-            ),
-        )
-    url = (
-        f"{control_plane_url.rstrip('/')}/teams/{team_id}/agent-instances/"
-        f"{request.agent_instance_id}/runtime"
-    )
-    provider = credentials or static_person_provider(access_token)
-    call_credentials = await provider.credentials()
-    headers: dict[str, str] = {}
-    if call_credentials.authorization:
-        headers["Authorization"] = call_credentials.authorization
-    if request_id:
-        # Correlates this pod-side call with the control-plane request it
-        # triggers — both sides stamp the same id as `trace.trace_id` on their
-        # `runtime.stage_latency_ms{runtime_stage=runtime_binding*}` event
-        # (TURN-01 evidence gap: no way to join a turn to its binding call
-        # besides timestamps).
-        headers["X-Request-Id"] = request_id
-    if call_credentials.delegated:
-        headers.update(outbound_context_headers())
-    request_kwargs: dict[str, Any] = {"headers": headers or None}
-    if call_credentials.delegated:
-        request_kwargs["follow_redirects"] = False
-    if call_credentials.parameters:
-        request_kwargs["params"] = dict(call_credentials.parameters)
-    if isinstance(provider, DelegatedCredentialProvider):
-        request_kwargs["auth"] = M2MBearerAuth(provider)
-    response = await http_client.get(url, **request_kwargs)
-    if (
-        response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-        and response.headers.get(DENIAL_CAUSE_HEADER)
-        == ACCOUNT_STATUS_UNAVAILABLE_CAUSE
+    if not control_plane_url or not isinstance(
+        credentials, DelegatedCredentialProvider
     ):
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Account status could not be checked. Try again shortly.",
-            headers={DENIAL_CAUSE_HEADER: ACCOUNT_STATUS_UNAVAILABLE_CAUSE},
+            status_code=503, detail="Trusted delegated resolver access is required"
         )
-    if response.status_code == status.HTTP_404_NOT_FOUND:
+    call = await credentials.credentials()
+    if not call.delegated:
         raise HTTPException(
-            status_code=404, detail=response.text or "Unknown agent instance."
+            status_code=503, detail="Trusted delegated resolver access is unavailable"
         )
-    if response.status_code == status.HTTP_403_FORBIDDEN:
-        raise HTTPException(status_code=403, detail=response.text or "Forbidden.")
-    if response.status_code >= 400:
+    params = dict(call.parameters or {})
+    if (
+        params.get("person") != ctx.get("user_id")
+        or params.get("agent") != request.agent_instance_id
+    ):
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=(
-                f"Failed to resolve agent instance '{request.agent_instance_id}' through control-plane: "
-                f"{response.text or response.reason_phrase}"
-            ),
+            status_code=403, detail="Resolver delegation does not match the request"
         )
-
-    resolution = _ResolvedAgentInstance.model_validate(response.json())
-    if resolution.model_discovery_urls:
-        runtime_config = get_runtime_context().config
-        factory = runtime_config.chat_model_factory
-        if (
-            isinstance(factory, RoutedChatModelFactory)
-            and factory.catalog is not None
-            and runtime_config.models_catalog_path
-        ):
-            for source in factory.catalog.discovery_sources:
-                effective_url = resolution.model_discovery_urls.get(source.source_id)
-                if effective_url is not None:
-                    try:
-                        await factory.refresh_catalog(
-                            runtime_config.models_catalog_path,
-                            models_url=effective_url,
-                            source_id=source.source_id,
-                            revision=resolution.model_discovery_revisions.get(
-                                source.source_id, 0
-                            ),
-                        )
-                    except ValueError as exc:
-                        logger.warning(
-                            "Model discovery URL could not be applied; keeping the active catalog: %s",
-                            exc,
-                        )
-    definition = registry.get(resolution.template_agent_id)
+    conversation = ctx.get("session_id")
+    if conversation:
+        params["conversation"] = conversation
+    # UUID validation prevents URL path interpolation from changing the target.
+    try:
+        space_id = str(UUID(space_id))
+        instance_id = str(UUID(request.agent_instance_id))
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(
+            status_code=422, detail="Invalid space or instance UUID"
+        ) from None
+    # Delegated credentials carry assertions only. Acquire the service bearer
+    # through the live-run provider, which checks lifetime before/after the await.
+    # Do not use M2MBearerAuth here: its 401 retry would resolve authority twice.
+    lease = await credentials.get_token_lease()
+    headers = {**outbound_context_headers(), "Authorization": f"Bearer {lease.token}"}
+    if request_id:
+        headers["X-Request-Id"] = request_id
+    try:
+        response = await http_client.get(
+            f"{control_plane_url.rstrip('/')}/spaces/{space_id}/agent-instances/{instance_id}/runtime",
+            headers=headers,
+            params=params,
+            auth=None,  # Never inherit client auth or a transparent resolver retry.
+            follow_redirects=False,
+        )
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=403 if response.status_code in (401, 403, 404) else 503,
+                detail="Weaver runtime resolution was refused or unavailable",
+            )
+        # A run terminated while the resolver was in flight cannot acquire a turn.
+        # This checks the local run record, not remote model authority.
+        await credentials.credentials()
+        resolution = WeaverRuntimeBinding.model_validate(response.json())
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(
+            status_code=503,
+            detail="Weaver runtime resolution is unavailable or incomplete",
+        ) from None
+    runtime = get_runtime_context().config
+    if (
+        resolution.subject_id != ctx.get("user_id")
+        or str(resolution.space.id) != space_id
+        or str(resolution.agent.instance_id) != instance_id
+        or resolution.agent.runtime_id != runtime.service_name
+        or resolution.run_id != params.get("run")
+        or resolution.conversation_id != conversation
+        or (
+            team_id is not None
+            and team_id
+            != (str(resolution.space.team_id) if resolution.space.team_id else None)
+        )
+    ):
+        raise HTTPException(status_code=403, detail="Weaver runtime binding mismatch")
+    if any(o.candidate and o.connection is None for o in resolution.models.offers):
+        raise HTTPException(
+            status_code=503, detail="Incomplete trusted inference connections"
+        )
+    definition = registry.get(resolution.agent.template_key)
     if definition is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                f"Resolved template_agent_id '{resolution.template_agent_id}' is not registered in this pod."
-            ),
+            status_code=409,
+            detail="Resolved template is not registered in this runtime",
         )
+    try:
+        # Prompt/capability tuning only. M3 recommendation and model options remain
+        # authoritative in resolution.models, consumed by the existing model router.
+        tuning = AgentTuning.model_validate(resolution.agent.configuration)
+        choice = (
+            ModelOfferKey.model_validate(ctx["model_choice"])
+            if ctx.get("model_choice")
+            else None
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=503, detail="Invalid resolved agent configuration"
+        ) from None
+    if ctx.get("chat_profile_id") is not None:
+        raise HTTPException(
+            status_code=422,
+            detail="Legacy model profile requires explicit offer re-selection",
+        )
+    # Check conversation provenance before any history/checkpoint content is loaded.
+    if conversation:
+        checkpointer, history = runtime.checkpointer, runtime.history_store
+        if checkpointer is None or history is None:
+            raise HTTPException(
+                status_code=503, detail="Conversation binding storage is required"
+            )
+        association = {
+            "subject_id": resolution.subject_id,
+            "space_id": space_id,
+            "instance_id": instance_id,
+            "runtime_id": resolution.agent.runtime_id,
+            "template_id": str(resolution.agent.template_id),
+        }
+        accepted = await checkpointer.abind_conversation(
+            conversation,
+            association,
+            allow_create=not await history.session_exists(conversation),
+        )
+        if not accepted:
+            raise HTTPException(
+                status_code=403,
+                detail="Conversation binding mismatch or missing provenance",
+            )
+    request._turn_authority = TurnAuthority(resolution, choice)
+    request.context = {
+        **ctx,
+        "space_id": space_id,
+        "agent_instance_id": instance_id,
+        "template_agent_id": resolution.agent.template_key,
+        "team_id": str(resolution.space.team_id) if resolution.space.team_id else None,
+    }
     return _ResolvedExecutionTarget(
-        definition=_apply_runtime_tuning(definition, resolution.tuning),
-        effective_agent_id=resolution.agent_instance_id,
-        team_id=resolution.owner_team_id,
-        agent_instance_name=resolution.display_name or None,
-        tuning=resolution.tuning,
-        team_settings=resolution.team_capability_settings,
-        reasoning_enabled_model_ids=tuple(resolution.reasoning_enabled_model_ids),
-        team_disabled_model_ids=tuple(resolution.team_disabled_model_ids),
-        platform_chat_model_binding=resolution.platform_chat_model_binding,
-        pod_chat_default_profile_id=resolution.pod_chat_default_profile_id,
-        platform_chat_model_fallback=resolution.platform_chat_model_fallback,
-        pod_chat_fallback_profile_id=resolution.pod_chat_fallback_profile_id,
-        confirmed_removed_chat_profiles=resolution.confirmed_removed_chat_profiles,
-        platform_prompt=resolution.platform_prompt,
+        definition=_apply_runtime_tuning(definition, tuning),
+        effective_agent_id=instance_id,
+        team_id=str(resolution.space.team_id) if resolution.space.team_id else None,
+        tuning=tuning,
     )
 
 
@@ -2198,154 +1754,18 @@ async def _authorize_execution_or_raise(
     authenticated_user: KeycloakUser | AssertedUser | None,
     container: PodApplicationContext,
 ) -> None:
-    """
-    Pod-side OpenFGA authorization for one execution request (RUNTIME-07 rev. 2).
-
-    The pod is the execution authority. Identity is proven by the Keycloak JWT
-    (`authenticated_user`); authorization is decided HERE, per request, by an
-    OpenFGA check on the team the caller is acting in. This is the model already
-    homologated on `main` (agentic-backend), re-instantiated per pod — it replaces
-    the control-plane-signed grant, which is being removed.
-
-    Behaviour:
-    - security disabled (no authenticated user) → skip (dev/local).
-    - ReBAC engine absent or disabled (Noop) → skip (identity-only dev posture);
-      the C3 profile guarantees an enabled engine in classified deployments.
-    - a personal space (`personal-<uid>`) is a real ReBAC team object (AUTHZ-08):
-      the owner's `team_editor` tuple self-heals on first touch inside
-      `RebacEngine.check_user_team_permission_or_raise`, and `add_relation`'s
-      write-guard refuses any tuple naming a personal team except that one, so
-      the `CAN_USE_TEAM_AGENTS` check below already authorizes the owner
-      (`team_editor` implies `team_member`) and denies everyone else (another
-      user's space, or the bare `"personal"` alias, for which no tuple is
-      ever provisioned) — no special-casing needed here.
-    - otherwise require the caller to hold `CAN_USE_TEAM_AGENTS` on the
-      requested team — `team_member`-only, unlike `CAN_READ` (which also
-      admits the `public` marketplace-discovery relation, TEAM-09/TEAM-10).
-      Execution is real content access, not discovery, so a public-team
-      visitor must not pass here even though they can see the team profile.
-      This used to check `CAN_READ` (the same relation the control-plane
-      required before it would mint a grant) — that predates TEAM-09's
-      `public` relation and was never revisited; `product/api.py`'s
-      `post_prepare_execution` made the identical correction for the same
-      reason (returns prompt content, not just config). The team is
-      caller-supplied but safe: OpenFGA only authorizes teams the user
-      actually holds a relation to. Authorization and denial are both audited;
-      any OpenFGA denial fails closed (403).
-
-    Covers execute, execute/stream, evaluate AND resume — every path funnels
-    through this call, so no half-authenticated session is possible.
-
-    Direct template execution (`agent_id`) is **forbidden under the c3 profile**
-    (RUNTIME-07 F-D); in dev/non-c3 it stays identity-only. Managed execution
-    (`agent_instance_id`) requires a team and an OpenFGA grant whenever ReBAC is
-    active; a missing team then fails closed.
-    """
-    if authenticated_user is None:
-        # Security disabled (dev mode) — no identity to authorize.
-        return
-    profile = getattr(get_runtime_context().config, "security_profile", None)
-    delegation = get_delegation_runtime()
-    delegated = delegation is not None and delegation.enabled
-    if delegated:
-        _refuse_a_workload_without_a_person(authenticated_user)
-
-    # Direct template execution (agent_id): no team scope, no managed instance.
-    if request.agent_id is not None:
-        if profile == "c3":
-            _emit_audit_event(
-                container,
-                "warning",
-                "direct_execution_forbidden",
-                user_id=authenticated_user.uid,
-                agent_id=request.agent_id,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=(
-                    "direct agent_id execution is not permitted under the c3 "
-                    "security profile; use a managed agent instance"
-                ),
-            )
-        # A service identity runs as itself, identity-only, as with delegation off.
-        team_id = request.effective_team_id()
-        if delegated and team_id and not is_service_agent(authenticated_user):
-            rebac = get_runtime_context().config.rebac_engine
-            if rebac is not None:
-                await rebac.check_user_team_permission_or_raise(
-                    authenticated_user, TeamPermission.CAN_USE_TEAM_AGENTS, team_id
-                )
-        return
-
-    # Managed execution (agent_instance_id).
-    rebac = get_runtime_context().config.rebac_engine
-    if rebac is None or not rebac.enabled:
-        # ReBAC not active (Noop / unconfigured) — identity-only dev posture. The
-        # c3 profile guarantees an enabled engine in production (fail-closed).
-        return
-    team_id = request.effective_team_id()
-    if team_id is None:
-        _emit_audit_event(
-            container,
-            "warning",
-            "managed_execution_without_team",
-            user_id=authenticated_user.uid,
-            agent_instance_id=request.agent_instance_id,
-        )
+    """Keep JWT/person admission; Weaver resolves space and instance permissions once."""
+    if authenticated_user is None or is_service_agent(authenticated_user):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "managed agent instance execution requires a team context "
-                "(runtime_context.team_id)"
-            ),
+            status_code=403, detail="An authenticated person is required"
         )
-    # A delegation client holds the service role too; whatever the switches, it
-    # is authorized by the ReBAC check below like anyone else.
-    if is_service_agent(authenticated_user) and not holds_caller_role(
-        authenticated_user
-    ):
-        # Solution A (RFC EVAL-AUTH): a service identity (the evaluation worker) is
-        # recognized for execution, scoped to the request team_id, without any stored
-        # OpenFGA relation. Legitimacy is anchored upstream at campaign creation. The
-        # team_id is guaranteed non-None above, so this stays team-scoped (never global).
-        _emit_audit_event(
-            container,
-            "info",
-            "service_agent_authorized",
-            user_id=authenticated_user.uid,
-            team_id=team_id,
-            agent_instance_id=request.agent_instance_id,
+    _refuse_a_workload_without_a_person(authenticated_user)
+    if request.agent_id is not None or request.agent_instance_id is None:
+        raise HTTPException(
+            status_code=403, detail="Direct template execution has no Weaver authority"
         )
-        return
-    # Personal spaces (AUTHZ-08, supersedes AUTHZ-05 item 8b) are now real
-    # ReBAC team objects: `RebacEngine.check_user_team_permission_or_raise`
-    # self-heals the owner's own `team_editor` tuple on first touch and
-    # `add_relation`'s write-guard refuses any other shape naming a personal
-    # team, so the bare `check_user_team_permission_or_raise` call below
-    # already authorizes the owner and denies everyone else — no special-
-    # casing needed here (the bare "personal" alias also denies normally,
-    # since no tuple is ever provisioned for that literal string).
-    try:
-        await rebac.check_user_team_permission_or_raise(
-            authenticated_user, TeamPermission.CAN_USE_TEAM_AGENTS, team_id
-        )
-    except AuthorizationError:
-        _emit_audit_event(
-            container,
-            "warning",
-            "rebac_denied",
-            outcome="rejected",
-            reason="permission_refused",
-        )
-        raise
-    _emit_audit_event(
-        container,
-        "info",
-        "rebac_authorized",
-        user_id=authenticated_user.uid,
-        team_id=team_id,
-        agent_instance_id=request.agent_instance_id,
-    )
+    if request.runtime_context is None or request.runtime_context.space_id is None:
+        raise HTTPException(status_code=422, detail="A canonical space_id is required")
 
 
 async def _enforce_session_ownership(
@@ -2612,12 +2032,10 @@ async def _authorize_and_resolve(
     Shared pre-execution gate for execute / execute-stream / evaluate (and HITL
     resume, which is a field on those endpoints) — RUNTIME-07 rev. 2.
 
-    The pod is the execution authority: there is NO control-plane-signed grant.
-    1. validate checkpoint/session access,
-    2. authorize the caller against OpenFGA on their team (identity = Keycloak JWT),
-    3. resolve the managed instance template + tuning from the control-plane,
-       team-scoped and ReBAC-gated (config only — never a secret or capability),
-    4. cross-check the resolved owner team against the caller's claimed team.
+    Validate caller identity and session ownership, then admit delegated credentials
+    and resolve the complete Weaver context once. Check canonical placement and
+    conversation provenance before loading checkpoint content. Model authority is
+    held privately for this turn; no invocation re-reads it from Control Plane.
 
     Returns the internal request plus the resolved execution target.
     """
@@ -2636,9 +2054,6 @@ async def _authorize_and_resolve(
                 "access_token_expires_at": None,  # nosec B105
             }
         )
-    previously_pending_occurrence_ids = await _validate_session_checkpoint_access(
-        request
-    )
     await _enforce_session_ownership(
         request.effective_session_id(),
         authenticated_user,
@@ -2647,9 +2062,6 @@ async def _authorize_and_resolve(
     )
     async with runtime_stage_timer(container.get_kpi_writer(), "pod_authz"):
         await _authorize_execution_or_raise(request, authenticated_user, container)
-    if await _validate_agent_question_answer(request):
-        base_ctx = request.runtime_context or RuntimeContext()
-        request.runtime_context = base_ctx.model_copy(update={"ask_user": True})
     # After authorization, before the context is copied into the internal
     # request: the record is written only for a run this pod accepted, and the
     # copy below must not carry a token this run may no longer use.
@@ -2657,26 +2069,10 @@ async def _authorize_and_resolve(
         credentials = _admission_credentials(request, authenticated_user, container)
     except ValueError:
         raise HTTPException(status_code=409, detail="run_already_admitted") from None
+    internal_req = _to_internal_request(request)
     try:
-        internal_req = _to_internal_request(request)
-        internal_req.previously_pending_occurrence_ids = (
-            previously_pending_occurrence_ids
-        )
-        # Stamp the trusted service-agent verdict (never the caller-supplied
-        # context) so per-tool-call re-authorization can mirror the bypass
-        # `_authorize_execution_or_raise` already granted above (RFC EVAL-AUTH,
-        # Solution A) instead of re-running a ReBAC check this identity was
-        # never meant to satisfy. Overwritten unconditionally, both ways, so a
-        # caller can't spoof it via a body-supplied `context.is_service_agent`.
         ctx = dict(internal_req.context or {})
-        if (
-            authenticated_user is not None
-            and is_service_agent(authenticated_user)
-            and not holds_caller_role(authenticated_user)
-        ):
-            ctx["is_service_agent"] = "true"
-        else:
-            ctx.pop("is_service_agent", None)
+        ctx.pop("is_service_agent", None)
         internal_req.context = ctx
         binding_request_id = str(current_context().get("request_id") or uuid4())
         async with runtime_stage_timer(
@@ -2690,9 +2086,14 @@ async def _authorize_and_resolve(
                 http_client=container.get_control_plane_http_client(),
                 team_id=request.effective_team_id(),
                 request_id=binding_request_id,
-                credentials=credentials or static_person_provider(access_token),
+                credentials=credentials,
             )
-        _validate_resolved_team(request, target.team_id, container)
+        internal_req.previously_pending_occurrence_ids = (
+            await _validate_session_checkpoint_access(request)
+        )
+        if await _validate_agent_question_answer(request):
+            internal_req.context = {**(internal_req.context or {}), "ask_user": True}
+
         selections = (
             request.runtime_context.selected_skills if request.runtime_context else ()
         )
@@ -2711,6 +2112,8 @@ async def _authorize_and_resolve(
     except BaseException as exc:
         # Nothing past admission got as far as starting the run, so the record
         # it wrote has no owner left to release it.
+        if internal_req._turn_authority is not None:
+            internal_req._turn_authority.close()
         _discard_run_record(credentials)
         if isinstance(exc, RunStopError):
             raise HTTPException(
@@ -3925,13 +3328,6 @@ async def _stream(
     tuning: AgentTuning | None = None,
     capability_registry: CapabilityRegistry | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
-    reasoning_enabled_model_ids: tuple[str, ...] | None = None,
-    team_disabled_model_ids: tuple[str, ...] = (),
-    platform_chat_model_binding: ModelBinding | None = None,
-    pod_chat_default_profile_id: str | None = None,
-    platform_chat_model_fallback: ModelBinding | None = None,
-    pod_chat_fallback_profile_id: str | None = None,
-    confirmed_removed_chat_profiles: dict[str, str] | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
 ) -> AsyncGenerator[str, None]:
@@ -3979,13 +3375,6 @@ async def _stream(
         tuning=tuning,
         capability_registry=capability_registry,
         team_settings=team_settings,
-        reasoning_enabled_model_ids=reasoning_enabled_model_ids,
-        team_disabled_model_ids=team_disabled_model_ids,
-        platform_chat_model_binding=platform_chat_model_binding,
-        pod_chat_default_profile_id=pod_chat_default_profile_id,
-        platform_chat_model_fallback=platform_chat_model_fallback,
-        pod_chat_fallback_profile_id=pod_chat_fallback_profile_id,
-        confirmed_removed_chat_profiles=confirmed_removed_chat_profiles,
         platform_prompt=platform_prompt,
         credential_provider=credential_provider,
         owns_run_record=True,
@@ -4577,13 +3966,6 @@ async def _iterate_runtime_event_payloads(
     tuning: AgentTuning | None = None,
     capability_registry: CapabilityRegistry | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
-    reasoning_enabled_model_ids: tuple[str, ...] | None = None,
-    team_disabled_model_ids: tuple[str, ...] = (),
-    platform_chat_model_binding: ModelBinding | None = None,
-    pod_chat_default_profile_id: str | None = None,
-    platform_chat_model_fallback: ModelBinding | None = None,
-    pod_chat_fallback_profile_id: str | None = None,
-    confirmed_removed_chat_profiles: dict[str, str] | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
     owns_run_record: bool = False,
@@ -4604,13 +3986,6 @@ async def _iterate_runtime_event_payloads(
         tuning=tuning,
         capability_registry=capability_registry,
         team_settings=team_settings,
-        reasoning_enabled_model_ids=reasoning_enabled_model_ids,
-        team_disabled_model_ids=team_disabled_model_ids,
-        platform_chat_model_binding=platform_chat_model_binding,
-        pod_chat_default_profile_id=pod_chat_default_profile_id,
-        platform_chat_model_fallback=platform_chat_model_fallback,
-        pod_chat_fallback_profile_id=pod_chat_fallback_profile_id,
-        confirmed_removed_chat_profiles=confirmed_removed_chat_profiles,
         platform_prompt=platform_prompt,
         credential_provider=credential_provider,
         owns_run_record=owns_run_record,
@@ -4632,14 +4007,26 @@ async def _iterate_runtime_event_payloads(
         ),
         RunScope.open() as scope,
     ):
-        if owns_run_record:
-            scope.set_delegated_credentials(
-                credential_provider is not None and credential_provider.delegated
-            )
-            scope.set_owner_authority_end(
-                lambda: _mark_run_terminal(credential_provider)
-            )
+        authority = None
         try:
+            if owns_run_record:
+                if request._turn_authority is None or scope.turn_authority is not None:
+                    raise AuthorityLostError()
+                request._turn_authority.start(scope)
+                scope.turn_authority = request._turn_authority
+            authority = current_turn()
+            authority.check(agent_id=definition.agent_id)
+            if owns_run_record:
+                scope.set_delegated_credentials(
+                    credential_provider is not None and credential_provider.delegated
+                )
+
+                def end_turn_authority() -> None:
+                    if authority is not None:
+                        authority.close()
+                    _mark_run_terminal(credential_provider)
+
+                scope.set_owner_authority_end(end_turn_authority)
             async for payload in iterator:
                 if payload.get("kind") == "execution_error":
                     outcome = "failed"
@@ -4666,6 +4053,10 @@ async def _iterate_runtime_event_payloads(
         finally:
             try:
                 if owns_run_record:
+                    if authority is not None:
+                        authority.close()
+                    elif request._turn_authority is not None:
+                        request._turn_authority.close()
                     _mark_run_terminal(credential_provider)
                 try:
                     await complete_cleanup(iterator.aclose())
@@ -4696,13 +4087,6 @@ async def _iterate_runtime_event_payloads_inner(
     tuning: AgentTuning | None = None,
     capability_registry: CapabilityRegistry | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
-    reasoning_enabled_model_ids: tuple[str, ...] | None = None,
-    team_disabled_model_ids: tuple[str, ...] = (),
-    platform_chat_model_binding: ModelBinding | None = None,
-    pod_chat_default_profile_id: str | None = None,
-    platform_chat_model_fallback: ModelBinding | None = None,
-    pod_chat_fallback_profile_id: str | None = None,
-    confirmed_removed_chat_profiles: dict[str, str] | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
     owns_run_record: bool = False,
@@ -4767,19 +4151,6 @@ async def _iterate_runtime_event_payloads_inner(
             if value is not None
         }
     )
-    # kind="model" enforcement (OBSERV-02 v3, AGENT-CAPABILITY-RFC.md §8.7):
-    # computed ONCE per turn, here — never inside model-routing resolution,
-    # which runs multiple times per turn and must never itself make a ReBAC
-    # call. No team context (agent-to-agent invocation) → no restriction,
-    # the same posture _authorize_execution_or_raise already applies to a
-    # teamless request.
-    usable_model_ids: tuple[str, ...] | None = None
-    if resolved_team_id is not None:
-        from ..model_routing import usable_model_capability_ids
-
-        rebac = get_runtime_context().config.rebac_engine
-        ids = await usable_model_capability_ids(rebac, resolved_team_id)
-        usable_model_ids = tuple(ids) if ids is not None else None
     execution_action = ctx.get("execution_action") or (
         ExecutionGrantAction.RESUME.value
         if request.resume_payload is not None
@@ -4855,21 +4226,9 @@ async def _iterate_runtime_event_payloads_inner(
         # When the final file is deleted this is absent, so the per-turn runtime
         # notice disappears without leaving a checkpointed system message behind.
         attachments_markdown=ctx.get("attachments_markdown"),
-        # Team default: client-forwarded from prepare-execution, bounded by the
-        # per-turn `can_use` gate. The user's per-conversation choice rides the
-        # same channel and is validated in `RoutedChatModelFactory.select`; it
-        # applies to managed instances only, so direct template runs drop it.
-        chat_default_profile_id=ctx.get("chat_default_profile_id"),
-        chat_profile_id=(
-            ctx.get("chat_profile_id")
-            if request.agent_instance_id is not None
-            else None
-        ),
-        # TRUSTED: the platform list from this turn's runtime-binding call, never
-        # `ctx`. No managed instance (agent-to-agent invocation) means no ceiling.
-        reasoning_enabled_model_ids=(
-            list(reasoning_enabled_model_ids or ()) if tuning is not None else []
-        ),
+        space_id=ctx.get("space_id"),
+        model_choice=ctx.get("model_choice"),
+        chat_profile_id=ctx.get("chat_profile_id"),
         ask_user=ctx.get("ask_user"),
         # Only an explicit True reasons; None (non-composer callers) does not.
         reasoning=ctx.get("reasoning"),
@@ -4878,25 +4237,6 @@ async def _iterate_runtime_event_payloads_inner(
     binding = BoundRuntimeContext(
         runtime_context=runtime_context,
         portable_context=portable_context,
-        usable_model_ids=usable_model_ids,
-        # TRUSTED — resolved by control-plane on this turn's own
-        # runtime-binding call (see the `platform_chat_model_binding`
-        # parameter's caller), never read from caller-supplied `ctx`. A
-        # request-body field can never set this: unlike
-        # chat_default_profile_id above, there is no ctx.get(...) for it at all.
-        platform_chat_model_binding=platform_chat_model_binding,
-        pod_chat_default_profile_id=pod_chat_default_profile_id,
-        platform_chat_model_fallback=platform_chat_model_fallback,
-        pod_chat_fallback_profile_id=pod_chat_fallback_profile_id,
-        confirmed_removed_chat_profiles=confirmed_removed_chat_profiles or {},
-        # TRUSTED, same channel: no ctx.get(...) exists for either field.
-        team_disabled_model_ids=tuple(team_disabled_model_ids),
-        recommended_chat_profile_id=(
-            tuning.recommended_chat_profile_id if tuning is not None else None
-        ),
-        # TRUSTED, same channel and same reasoning as the binding above: no
-        # `ctx.get(...)` exists for it, so a request body can never prepend
-        # text ahead of every agent on this deployment.
         platform_prompt=platform_prompt,
     )
 
@@ -5395,6 +4735,45 @@ def _build_agent_router(
         )
         return {"deleted": count}
 
+    @router.get("/capabilities", operation_id="get_pod_capability_inventory")
+    def get_capability_inventory(http_request: Request) -> _PodCapabilityInventory:
+        """Describe the whole installed registry, without connection or instance values."""
+        capabilities = _capability_registry_of(http_request)
+        if capabilities is None:
+            raise HTTPException(
+                status_code=503, detail="capability_registry_unavailable"
+            )
+        entries = [
+            CapabilityCatalogEntry.from_manifest(
+                capabilities.capability(cap_id).manifest
+            )
+            for cap_id in capabilities.ids()
+            if capabilities.capability(cap_id).manifest.kind == "tool"
+        ]
+        for entry in entries:
+            # Inventory describes fields; defaults, choices and UI hints can carry
+            # private connection values and belong to configuration, not discovery.
+            for spec in [*entry.config_fields, *entry.team_settings_fields]:
+                spec.default = None
+                spec.default_by_lang = None
+                spec.enum = None
+                spec.pattern = None
+                spec.ui = type(spec.ui)()
+        return _PodCapabilityInventory(
+            complete=True,
+            capabilities=entries,
+            template_capabilities=[
+                _PodTemplateCapability(
+                    source_agent_id=definition.agent_id,
+                    capability_id=entry.id,
+                    default_selected=entry.id
+                    in {ref.id for ref in definition.default_mcp_servers},
+                )
+                for definition in registry.values()
+                for entry in _template_capability_entries(definition, entries)
+            ],
+        )
+
     @router.get("/templates")
     async def list_agent_templates(
         http_request: Request,
@@ -5461,6 +4840,7 @@ def _build_agent_router(
         http_request: Request,
         agent_instance_id: str,
         team_id: str,
+        space_id: str | None = None,
         container: PodApplicationContext = Depends(get_pod_container),
         caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> SkillCatalog:
@@ -5474,6 +4854,7 @@ def _build_agent_router(
             http_request.headers.get("Authorization"),
             container,
             registry,
+            space_id=space_id,
         )
 
     @router.get(
@@ -5486,6 +4867,7 @@ def _build_agent_router(
         skill_name: str,
         agent_instance_id: str,
         team_id: str,
+        space_id: str | None = None,
         container: PodApplicationContext = Depends(get_pod_container),
         caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> SkillDetail:
@@ -5499,6 +4881,7 @@ def _build_agent_router(
             http_request.headers.get("Authorization"),
             container,
             registry,
+            space_id=space_id,
         )
 
     @router.get("/mcp-catalog")
@@ -5535,174 +4918,6 @@ def _build_agent_router(
             ]
         )
 
-    @router.get("/models-catalog")
-    async def get_models_catalog() -> _ModelCatalogResponse:
-        """
-        Return this pod's routable models, one entry per distinct model
-        identity (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7).
-
-        Why this endpoint exists:
-        - control-plane's capability catalog aggregation
-          (`aggregate_capability_catalog`) has no other way to learn what
-          models this pod can route to — `models_catalog.yaml` is loaded
-          only here, for routing, with no prior control-plane consumer.
-        - one entry per model identity, not per catalog profile: model
-          enablement is independent from the typed usage (`chat` today,
-          potentially `embedding` once a production consumer exists).
-
-        A discovered inventory is held from startup so this route never
-        advertises a model the router has not loaded. Static-only catalogs
-        retain their existing local-file read on each admin request.
-
-        How to use it:
-        - call from control-plane's `_model_capabilities_for_source`
-
-        Example:
-        - `GET /fred/agents/v2/agents/models-catalog`
-        """
-        catalog_path = get_runtime_context().config.models_catalog_path
-        if not catalog_path:
-            return _ModelCatalogResponse(models=[])
-        factory = get_runtime_context().config.chat_model_factory
-        catalog = _catalog_for_advertisement(
-            catalog_path,
-            (
-                factory.catalog
-                if isinstance(factory, RoutedChatModelFactory)
-                and factory.catalog is not None
-                and factory.catalog.discovery_sources
-                else None
-            ),
-        )
-        from ..model_routing import load_model_catalog
-
-        result = _project_model_catalog_response(
-            catalog, yaml_catalog=load_model_catalog(catalog_path)
-        )
-        if isinstance(factory, RoutedChatModelFactory):
-            result.active_revision = factory.active_revision_for(
-                result.discovery_source_id
-            )
-        return result
-
-    @router.post("/models-catalog/refresh", response_model=_ModelCatalogResponse)
-    async def refresh_models_catalog(
-        body: _ModelCatalogRefreshRequest,
-        caller: KeycloakUser | None = Depends(_authenticated_user),
-    ) -> _ModelCatalogResponse:
-        config = get_runtime_context().config
-        rebac = config.rebac_engine
-        factory = config.chat_model_factory
-        catalog = (
-            factory.catalog if isinstance(factory, RoutedChatModelFactory) else None
-        )
-        try:
-            source = (
-                catalog.discovery_source(body.source_id)
-                if catalog is not None
-                else None
-            )
-        except ValueError:
-            source = None
-        approved_url = f"{source.base_url}/models" if source is not None else None
-        allow_url_change = not security_enabled
-        if security_enabled:
-            if caller is None or rebac is None or not rebac.enabled:
-                raise HTTPException(
-                    status_code=403, detail="model_discovery_access_denied"
-                )
-            await rebac.check_user_permission_or_raise(
-                caller,
-                _model_catalog_refresh_permission(body, approved_url),
-                ORGANIZATION_ID,
-            )
-            if body.models_url is not None and body.models_url != approved_url:
-                allow_url_change = True
-            if body.preparation_token is not None or body.rollback_token is not None:
-                allow_url_change = await rebac.has_user_permission(
-                    caller, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
-                )
-        if not config.models_catalog_path or not isinstance(
-            factory, RoutedChatModelFactory
-        ):
-            raise HTTPException(status_code=409, detail="model_discovery_unavailable")
-        if factory.catalog is None or not factory.catalog.discovery_sources:
-            raise HTTPException(status_code=409, detail="model_discovery_unconfigured")
-        try:
-            if body.rollback_token is not None:
-                catalog = await factory.rollback_prepared_catalog(
-                    body.rollback_token, allow_url_change=allow_url_change
-                )
-                token = None
-            elif body.preparation_token is not None:
-                catalog = await factory.activate_prepared_catalog(
-                    body.preparation_token,
-                    revision=body.revision,
-                    allow_url_change=allow_url_change,
-                )
-                token = None
-            elif body.models_url is not None and body.prepare:
-                token, catalog = await factory.prepare_catalog(
-                    config.models_catalog_path,
-                    models_url=body.models_url,
-                    source_id=body.source_id,
-                )
-            elif body.models_url is not None:
-                catalog = await factory.refresh_catalog(
-                    config.models_catalog_path,
-                    models_url=body.models_url,
-                    source_id=body.source_id,
-                    force=True,
-                    allow_url_change=allow_url_change,
-                )
-                token = None
-            else:
-                raise HTTPException(
-                    status_code=422,
-                    detail="models_url or preparation_token is required",
-                )
-        except ValueError as exc:
-            raise HTTPException(status_code=502, detail=str(exc)) from None
-        from ..model_routing import load_model_catalog
-
-        result = _project_model_catalog_response(
-            catalog,
-            yaml_catalog=load_model_catalog(config.models_catalog_path),
-            source_id=body.source_id,
-        )
-        result.preparation_token = token
-        result.active_revision = factory.active_revision_for(result.discovery_source_id)
-        return result
-
-    @router.get("/models-catalog/detail", response_model=dict[str, Any])
-    async def get_discovered_model_detail(
-        source_id: str,
-        model_id: str,
-        caller: KeycloakUser | None = Depends(_authenticated_user),
-    ) -> dict[str, Any]:
-        config = get_runtime_context().config
-        rebac = config.rebac_engine
-        if security_enabled:
-            if caller is None or rebac is None or not rebac.enabled:
-                raise HTTPException(
-                    status_code=403, detail="model_discovery_access_denied"
-                )
-            await rebac.check_user_permission_or_raise(
-                caller, OrganizationPermission.CAN_MANAGE_CAPABILITIES, ORGANIZATION_ID
-            )
-        factory = config.chat_model_factory
-        if not isinstance(factory, RoutedChatModelFactory) or factory.catalog is None:
-            raise HTTPException(status_code=409, detail="model_discovery_unavailable")
-        try:
-            return await factory.catalog.fetch_discovered_model_detail(
-                source_id=source_id, model_id=model_id
-            )
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=404 if str(exc) == "Unknown discovered model" else 502,
-                detail=str(exc),
-            ) from None
-
     @router.get("/platform-prompt")
     async def get_platform_prompt_file() -> _PlatformPromptFileResponse:
         """
@@ -5714,14 +4929,13 @@ def _build_agent_router(
           holds the value in force until one is saved to Postgres) and the
           read-only platform instructions. Control-plane serves that page, runs
           in a different container, and so cannot read this pod's filesystem —
-          exactly the situation `/agents/models-catalog` already solves for
-          `models_catalog.yaml`.
+          so this endpoint exposes the prompt configuration.
         - without it the admin page would show an empty editor on a fresh
           deployment while agents were already running on this file, which is
           the one thing the page exists to make visible.
 
-        Serves the file parsed once at boot rather than re-reading it, unlike
-        `/models-catalog`: the prompt composer uses these same in-memory values
+        Serves the file parsed once at boot: the prompt composer uses these
+        same in-memory values
         on every turn, so re-reading here could report a file that agents are
         not actually using until the pod restarts.
 
@@ -6045,29 +5259,25 @@ def _build_agent_router(
 
     @router.get("/sessions")
     async def list_sessions(
+        http_request: Request,
+        response: Response,
         caller: KeycloakUser | None = Depends(_authenticated_user),
         user_id: str | None = None,
     ) -> list[str]:
-        """
-        Return the session IDs for the authenticated user, most recent first.
+        """List the person's currently readable, provenanced session IDs.
 
-        GET <configured base_url>/agents/sessions
-        Authorization: Bearer <user JWT>
-
-        Security: user identity is always extracted from the JWT token.
-        The user_id query parameter is accepted only in dev mode (security
-        disabled) for CLI convenience; it is ignored when security is enabled.
+        user_id is ignored; identity always comes from the authenticated person.
+        Each candidate is checked through M5a, independently of execution state.
         """
+        authorization = http_request.headers.get("Authorization")
+        person = require_history_person(caller, authorization)
         history_store = get_runtime_context().config.history_store
         if history_store is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="No history store configured — session listing is unavailable.",
-            )
-        effective_uid = caller.uid if caller is not None else user_id
-        if effective_uid is None:
-            return []
-        return await history_store.list_sessions(user_id=effective_uid)
+            raise HTTPException(status_code=503, detail="History storage unavailable")
+        candidates = await history_store.list_sessions(user_id=person.uid)
+        result = await readable_history_sessions(candidates, person, authorization)
+        response.headers["Cache-Control"] = "no-store"
+        return result
 
     @router.get(
         "/sessions/{session_id}/messages",
@@ -6075,28 +5285,24 @@ def _build_agent_router(
     )
     async def get_session_messages(
         session_id: str,
+        http_request: Request,
+        response: Response,
         caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> list[ChatMessage]:
+        """Read private messages after current space rights and provenance checks.
+
+        Unknown, foreign, revoked or unbound histories return the same 404.
+        An authorized, bound conversation with no messages returns [].
+        Infrastructure failures are errors, never an empty history.
         """
-        Return the conversation history for a session as a flat message list.
-
-        GET <configured base_url>/agents/sessions/{session_id}/messages
-        Authorization: Bearer <user JWT>
-
-        Security: only rows belonging to the authenticated user are returned.
-        Returns [] when the session does not exist or belongs to another user —
-        callers cannot distinguish the two cases by design.
-
-        Returns 503 when no history store is configured (stateless pod mode).
-        """
+        person = await authorize_history_read(
+            session_id, caller, http_request.headers.get("Authorization")
+        )
         history_store = get_runtime_context().config.history_store
         if history_store is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="No history store configured — session history is unavailable.",
-            )
-        caller_uid = caller.uid if caller is not None else None
-        return await history_store.get(session_id=session_id, user_id=caller_uid)
+            raise HTTPException(status_code=503, detail="History storage unavailable")
+        response.headers["Cache-Control"] = "no-store"
+        return await history_store.get(session_id=session_id, user_id=person.uid)
 
     @router.delete(
         "/sessions/{session_id}",
@@ -6241,6 +5447,8 @@ def _build_agent_router(
 
     @router.get("/checkpoints")
     async def list_checkpoint_threads(
+        http_request: Request,
+        response: Response,
         caller: KeycloakUser | None = Depends(_authenticated_user),
         limit: int = 100,
     ) -> list[_CheckpointThreadSummary]:
@@ -6261,8 +5469,18 @@ def _build_agent_router(
 
         Returns 503 when the pod has no persistent storage configured.
         """
-        from sqlalchemy import desc, func, select
+        from sqlalchemy import desc, func, or_, select
 
+        authorization = http_request.headers.get("Authorization")
+        person = require_history_person(caller, authorization)
+        history_store = get_runtime_context().config.history_store
+        if history_store is None:
+            raise HTTPException(status_code=503, detail="History storage unavailable")
+        candidates = await history_store.list_sessions(user_id=person.uid)
+        readable = await readable_history_sessions(candidates, person, authorization)
+        if not readable:
+            response.headers["Cache-Control"] = "no-store"
+            return []
         cp = _get_checkpointer()
         await cp._ensure_tables()
         ct = cp.checkpoints_table
@@ -6302,6 +5520,18 @@ def _build_agent_router(
                 )
                 .outerjoin(blob_sub, blob_sub.c.thread_id == ct.c.thread_id)
                 .outerjoin(write_sub, write_sub.c.thread_id == ct.c.thread_id)
+                .where(
+                    or_(
+                        *(
+                            cp.session_threads(
+                                ct.c.thread_id,
+                                session_id,
+                                graph_thread_prefix(session_id),
+                            )
+                            for session_id in readable
+                        )
+                    )
+                )
                 .group_by(
                     ct.c.thread_id,
                     blob_sub.c.blob_cnt,
@@ -6313,13 +5543,7 @@ def _build_agent_router(
             )
             rows = (await conn.execute(stmt)).fetchall()
 
-        # Scope to the caller's own sessions using the history store as the
-        # ownership oracle (checkpoint tables carry no user_id column).
-        caller_uid = caller.uid if caller is not None else None
-        history_store = _get_history_store_for_owned_access(caller)
-        if caller_uid is not None and history_store is not None:
-            owned = set(await history_store.list_sessions(user_id=caller_uid))
-            rows = [r for r in rows if str(r.thread_id) in owned]
+        response.headers["Cache-Control"] = "no-store"
 
         return [
             _CheckpointThreadSummary(
@@ -6391,6 +5615,8 @@ def _build_agent_router(
     @router.get("/checkpoints/{session_id}")
     async def get_checkpoint_thread(
         session_id: str,
+        http_request: Request,
+        response: Response,
         caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> _CheckpointThreadDetail:
         """
@@ -6413,20 +5639,12 @@ def _build_agent_router(
 
         Returns 503 when no checkpointer is configured.
         Returns an empty checkpoints list when the session has no rows.
-        Returns 403 when the session does not belong to the authenticated user.
+        Returns 404 for unknown, foreign, revoked or unbound conversations.
         """
-        _refuse_reserved_session_id(session_id)
-        caller_uid = caller.uid if caller is not None else None
-        history_store = _get_history_store_for_owned_access(caller)
-        if (
-            caller_uid is not None
-            and history_store is not None
-            and not await history_store.session_belongs_to_user(session_id, caller_uid)
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied.",
-            )
+        await authorize_history_read(
+            session_id, caller, http_request.headers.get("Authorization")
+        )
+        response.headers["Cache-Control"] = "no-store"
 
         from sqlalchemy import desc, func, select
 
@@ -6577,15 +5795,14 @@ def _build_agent_router(
 
         POST <configured base_url>/agents/execute
         Authorization: Bearer <user JWT>
-        Body: RuntimeExecuteRequest (agent_instance_id + runtime_context.team_id for managed exec)
+        Body: RuntimeExecuteRequest (agent_instance_id + canonical runtime_context.space_id)
         Response: application/json containing the terminal runtime payload
 
-        Security (RUNTIME-07 rev. 2 — the pod is the execution authority):
-        - Identity is the caller's Keycloak JWT (validated against Keycloak JWKS).
-        - Authorization is a pod-side OpenFGA check on runtime_context.team_id,
-          enforced per request. There is NO control-plane-signed grant.
-        - Managed instances resolve their template+tuning from the control-plane
-          team-scoped binding (config only).
+        Security:
+        - Identity comes from the validated caller credential.
+        - One delegated Weaver space resolution admits the managed instance and
+          binds its complete model authority to this turn's RunScope.
+        - LLM invocations and retries enforce that authority locally.
 
         Architectural note:
         - This endpoint does not implement pod discovery or routing.
@@ -6595,11 +5812,6 @@ def _build_agent_router(
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
 
-        exchange_id = await _resolve_exchange_id(
-            resume_payload=request.resume_payload,
-            session_id=request.effective_session_id(),
-            history_store=get_runtime_context().config.history_store,
-        )
         turn_start = time.monotonic()
         internal_req, target = await _authorize_and_resolve(
             request,
@@ -6609,10 +5821,17 @@ def _build_agent_router(
             access_token=access_token,
         )
         try:
+            exchange_id = await _resolve_exchange_id(
+                resume_payload=request.resume_payload,
+                session_id=request.effective_session_id(),
+                history_store=get_runtime_context().config.history_store,
+            )
             _enforce_turn_options(
                 request, target, _capability_registry_of(http_request)
             )
-        except Exception:
+        except BaseException:
+            if internal_req._turn_authority is not None:
+                internal_req._turn_authority.close()
             _discard_run_record(target.credential_provider)
             raise
         payloads = [
@@ -6629,13 +5848,6 @@ def _build_agent_router(
                 tuning=target.tuning,
                 capability_registry=_capability_registry_of(http_request),
                 team_settings=target.team_settings,
-                reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
-                team_disabled_model_ids=target.team_disabled_model_ids,
-                platform_chat_model_binding=target.platform_chat_model_binding,
-                pod_chat_default_profile_id=target.pod_chat_default_profile_id,
-                platform_chat_model_fallback=target.platform_chat_model_fallback,
-                pod_chat_fallback_profile_id=target.pod_chat_fallback_profile_id,
-                confirmed_removed_chat_profiles=target.confirmed_removed_chat_profiles,
                 platform_prompt=target.platform_prompt,
                 credential_provider=target.credential_provider,
                 owns_run_record=True,
@@ -6707,11 +5919,6 @@ def _build_agent_router(
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
 
-        exchange_id = await _resolve_exchange_id(
-            resume_payload=request.resume_payload,
-            session_id=request.effective_session_id(),
-            history_store=get_runtime_context().config.history_store,
-        )
         turn_start = time.monotonic()
         internal_req, target = await _authorize_and_resolve(
             request,
@@ -6721,10 +5928,17 @@ def _build_agent_router(
             access_token=access_token,
         )
         try:
+            exchange_id = await _resolve_exchange_id(
+                resume_payload=request.resume_payload,
+                session_id=request.effective_session_id(),
+                history_store=get_runtime_context().config.history_store,
+            )
             _enforce_turn_options(
                 request, target, _capability_registry_of(http_request)
             )
-        except Exception:
+        except BaseException:
+            if internal_req._turn_authority is not None:
+                internal_req._turn_authority.close()
             _discard_run_record(target.credential_provider)
             raise
         payloads = [
@@ -6741,13 +5955,6 @@ def _build_agent_router(
                 tuning=target.tuning,
                 capability_registry=_capability_registry_of(http_request),
                 team_settings=target.team_settings,
-                reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
-                team_disabled_model_ids=target.team_disabled_model_ids,
-                platform_chat_model_binding=target.platform_chat_model_binding,
-                pod_chat_default_profile_id=target.pod_chat_default_profile_id,
-                platform_chat_model_fallback=target.platform_chat_model_fallback,
-                pod_chat_fallback_profile_id=target.pod_chat_fallback_profile_id,
-                confirmed_removed_chat_profiles=target.confirmed_removed_chat_profiles,
                 platform_prompt=target.platform_prompt,
                 credential_provider=target.credential_provider,
                 owns_run_record=True,
@@ -6814,7 +6021,7 @@ def _build_agent_router(
 
         POST <configured base_url>/agents/execute/stream
         Authorization: Bearer <user JWT>
-        Body: RuntimeExecuteRequest (agent_instance_id + runtime_context.team_id for managed exec)
+        Body: RuntimeExecuteRequest (agent_instance_id + canonical runtime_context.space_id)
         Response: text/event-stream, each `data:` line is a RuntimeEvent JSON
 
         Stream termination:
@@ -6833,11 +6040,9 @@ def _build_agent_router(
           stream closes. Do not rely on it as an end-of-turn signal here.
 
         Security:
-        - There is no ExecutionGrant. Identity is the caller's Keycloak JWT; for
-          managed execution (agent_instance_id) the runtime authorizes each request
-          itself with a per-request ReBAC (OpenFGA) check on runtime_context.team_id.
-          The control plane issues no signed grant or capability token.
-        - RBAC via Keycloak and REBAC via OpenFGA protect this endpoint.
+        - Caller identity is validated before one delegated Weaver space resolution.
+        - The private RunScope authority covers this turn, its retries and covered
+          descendants. No per-invocation authority refresh or SSE-token check occurs.
 
         Architectural note:
         - This endpoint does not implement pod discovery or routing.
@@ -6874,13 +6079,6 @@ def _build_agent_router(
             tuning=target.tuning,
             capability_registry=_capability_registry_of(http_request),
             team_settings=target.team_settings,
-            reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
-            team_disabled_model_ids=target.team_disabled_model_ids,
-            platform_chat_model_binding=target.platform_chat_model_binding,
-            pod_chat_default_profile_id=target.pod_chat_default_profile_id,
-            platform_chat_model_fallback=target.platform_chat_model_fallback,
-            pod_chat_fallback_profile_id=target.pod_chat_fallback_profile_id,
-            confirmed_removed_chat_profiles=target.confirmed_removed_chat_profiles,
             platform_prompt=target.platform_prompt,
             credential_provider=provider,
         )
@@ -6929,8 +6127,8 @@ def create_agent_app(
     - registry: maps agent_id → ReActAgentDefinition; built at startup, read-only
     - config: AgentPodConfig loaded from `config/configuration.yaml`
     - extra_routers: additional APIRouter instances mounted under `config.app.base_url`
-    - model_provider: builds catalog models; defaults to fred-core. A pod passes
-      its own to serve extra providers (e.g. an in-process test model)
+    - model_provider: custom adapters are explicitly refused until connected to
+      Weaver authority; the default factory consumes approved source connections.
 
     Security (from config.security):
     - when `config.security.user.enabled` is True:
@@ -7049,7 +6247,9 @@ def create_agent_app(
             if model_provider is not None and isinstance(
                 chat_factory, RoutedChatModelFactory
             ):
-                chat_factory = chat_factory.with_provider(model_provider)
+                raise ValueError(
+                    "Custom inference adapters are not connected to Weaver"
+                )
             await container.initialize_filesystem()
             await container.initialize_web_research()
             container.initialize_platform_sql()
@@ -7085,14 +6285,6 @@ def create_agent_app(
                             config.storage.conversation_filesystem
                         ),
                         mcp_configuration=config.get_mcp_configuration(),
-                        models_catalog_path=config.get_models_catalog_path(),
-                        model_catalog_snapshot=(
-                            chat_factory.catalog
-                            if isinstance(chat_factory, RoutedChatModelFactory)
-                            and chat_factory.catalog is not None
-                            and chat_factory.catalog.discovery_sources
-                            else None
-                        ),
                         default_platform_prompt=_platform_prompt_file_field(
                             config, "platform_prompt"
                         ),

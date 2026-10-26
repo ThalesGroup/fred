@@ -14,25 +14,9 @@
 
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 
-// Per-session history cache backing instant conversation switches (#2239).
-//
-// Two layers, same bounded LRU semantics:
-// - a module-level Map (the authority while the page lives) — module-level ON
-//   PURPOSE: ManagedChatPage remounts with key={agentInstanceId} when
-//   switching agents, so hook/ref state would be lost exactly when the user
-//   hops between two agents' conversations;
-// - a best-effort sessionStorage mirror, so the cache also survives a page
-//   refresh (F5). sessionStorage — not localStorage — deliberately: it is
-//   per-tab and cleared when the tab closes, the same lifetime already
-//   accepted for `chat.composer.<sessionId>`, so conversation content never
-//   outlives the user's tab on a shared machine. Every storage access is
-//   wrapped: quota exhaustion or a blocked storage API degrades to
-//   in-memory-only, never to an error.
-//
-// Client-side only, per the History Ownership Contract (CHAT-UI-BACKLOG.md
-// §0.4): the control-plane must never cache or serve message history, and the
-// runtime stays the source of truth — every cached entry is revalidated
-// against it on re-entry (useSessionHistory's serve-then-revalidate).
+// Bounded per-tab snapshots keyed by authenticated session, space and conversation.
+// A snapshot is not proof of access: useSessionHistory only displays the result
+// of a current authorized pod read and evicts the entry on failure.
 const MAX_CACHED_SESSIONS = 20;
 const STORAGE_PREFIX = "chat.history.";
 const STORAGE_INDEX_KEY = "chat.history#index";
@@ -171,4 +155,10 @@ export function clearSessionHistoryCache(): void {
 // Test-only: simulates a page reload (JS heap gone, sessionStorage kept).
 export function dropInMemorySessionHistoryForTests(): void {
   cache.clear();
+}
+
+export function deleteCachedSessionHistory(key: string): void {
+  cache.delete(key);
+  storageDeleteEntry(key);
+  storageWriteIndex(storageReadIndex().filter((id) => id !== key));
 }

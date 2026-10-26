@@ -12,14 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { KeyCloakService } from "../../../../security/KeycloakService";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SearchPolicyName } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import type {
-  ChatControlDescriptor,
-  EffectiveChatModel,
-} from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
-import { currentModelRow, recommendedModelRow } from "../../../features/capabilities/modelChoice";
-import { modelLabel } from "../../../features/capabilities/ReasoningChip";
+import type { ChatControlDescriptor, PreparationModels } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { modelChoiceKey, offerLabel } from "../../../features/capabilities/modelChoice";
 
 type RagScope = "corpus_only" | "hybrid" | "general_only";
 
@@ -57,7 +54,7 @@ function offeredRagScope(scope: RagScope, chatControls: readonly ChatControlDesc
 }
 
 function storageKey(sessionId: string): string {
-  return `chat.composer.${sessionId}`;
+  return `chat.composer.${KeyCloakService.GetSessionIdentity()}.${sessionId}`;
 }
 
 function readStorage(sessionId: string | null): Partial<ComposerState> {
@@ -78,18 +75,14 @@ function writeStorage(sessionId: string, state: ComposerState): void {
   }
 }
 
-function buildInitial(
-  sessionId: string | null,
-  chatControls: readonly ChatControlDescriptor[],
-  effectiveModel: EffectiveChatModel | undefined,
-): ComposerState {
+function buildInitial(sessionId: string | null, chatControls: readonly ChatControlDescriptor[]): ComposerState {
   const defaults: ComposerState = {
     searchPolicy: findDefault<SearchPolicyName>(chatControls, "search_policy") ?? "hybrid",
     ragScope: findDefault<RagScope>(chatControls, "rag_scope") ?? "hybrid",
     selectedLibraryIds: [],
     selectedDocumentUids: [],
     // The team's reasoning default for the model the conversation starts on.
-    reasoning: recommendedModelRow(effectiveModel)?.reasoning_default_on ?? false,
+    reasoning: findDefault<boolean>(chatControls, "reasoning_toggle") ?? false,
     askUser: findDefault<boolean>(chatControls, "ask_user_toggle") ?? true,
     chatProfileId: null,
     chatModelLabel: null,
@@ -103,28 +96,6 @@ function buildInitial(
   }
   delete stored.reasoningEffort;
   return { ...defaults, ...stored };
-}
-
-/** `state` without a model choice `model` no longer offers, falling back to the
- *  recommended model; `dropped` names the lost choice. An empty list (locked
- *  choice, unreachable pod) proves nothing and keeps the choice. */
-function withoutStaleChoice(
-  state: ComposerState,
-  model: EffectiveChatModel | undefined,
-): { state: ComposerState; dropped: string | null } {
-  const rows = model?.selectable_models ?? [];
-  if (!state.chatProfileId || rows.length === 0 || rows.some((row) => row.profile_id === state.chatProfileId)) {
-    return { state, dropped: null };
-  }
-  return {
-    state: {
-      ...state,
-      chatProfileId: null,
-      chatModelLabel: null,
-      reasoning: recommendedModelRow(model)?.reasoning_default_on ?? false,
-    },
-    dropped: state.chatModelLabel ?? state.chatProfileId,
-  };
 }
 
 /**
@@ -146,18 +117,15 @@ function withoutStaleChoice(
 export function useComposerSettings(
   sessionId: string | null,
   chatControls: readonly ChatControlDescriptor[],
-  effectiveModel?: EffectiveChatModel,
-  onChoiceDropped?: (modelLabel: string) => void,
+  effectiveModel?: PreparationModels,
+  _onChoiceDropped?: (modelLabel: string) => void,
 ) {
-  const [state, setState] = useState<ComposerState>(() => buildInitial(sessionId, chatControls, effectiveModel));
+  const [state, setState] = useState<ComposerState>(() => buildInitial(sessionId, chatControls));
 
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
   const effectiveModelRef = useRef(effectiveModel);
   effectiveModelRef.current = effectiveModel;
-  const onChoiceDroppedRef = useRef(onChoiceDropped);
-  onChoiceDroppedRef.current = onChoiceDropped;
-
   // Read by bindSession() below, which fires from a callback and so cannot
   // close over the render-time state.
   const stateRef = useRef(state);
@@ -181,33 +149,8 @@ export function useComposerSettings(
     if (chatControls.length === 0) return;
     if (userEditedRef.current) return;
     if (Object.keys(readStorage(sessionIdRef.current)).length > 0) return;
-    setState(buildInitial(sessionIdRef.current, chatControls, effectiveModelRef.current));
+    setState(buildInitial(sessionIdRef.current, chatControls));
   }, [chatControls]);
-
-  // Drops a choice the current model list no longer offers, visibly; run when
-  // the list refreshes and when another conversation's choice is loaded.
-  const dropStaleChoice = useCallback((candidate: ComposerState, targetSessionId: string | null) => {
-    const { state: checked, dropped } = withoutStaleChoice(candidate, effectiveModelRef.current);
-    if (dropped === null) return candidate;
-    if (targetSessionId) writeStorage(targetSessionId, checked);
-    onChoiceDroppedRef.current?.(dropped);
-    return checked;
-  }, []);
-
-  // The selectable models arrive (or refresh) after mount.
-  useEffect(() => {
-    if (!effectiveModel) return;
-    const current = stateRef.current;
-    const checked = dropStaleChoice(current, sessionIdRef.current);
-    if (checked !== current) {
-      setState(checked);
-      return;
-    }
-    if (userEditedRef.current) return;
-    if (Object.keys(readStorage(sessionIdRef.current)).length > 0) return;
-    const seeded = currentModelRow(effectiveModel, current.chatProfileId)?.reasoning_default_on ?? false;
-    setState((prev) => (prev.reasoning === seeded ? prev : { ...prev, reasoning: seeded }));
-  }, [effectiveModel, dropStaleChoice]);
 
   const update = useCallback(
     (patch: Partial<ComposerState>) => {
@@ -221,14 +164,11 @@ export function useComposerSettings(
     [sessionId],
   );
 
-  const reset = useCallback(
-    (nextSessionId: string | null, nextChatControls: readonly ChatControlDescriptor[]) => {
-      userEditedRef.current = false;
-      const initial = buildInitial(nextSessionId, nextChatControls, effectiveModelRef.current);
-      setState(dropStaleChoice(initial, nextSessionId));
-    },
-    [dropStaleChoice],
-  );
+  const reset = useCallback((nextSessionId: string | null, nextChatControls: readonly ChatControlDescriptor[]) => {
+    userEditedRef.current = false;
+    const initial = buildInitial(nextSessionId, nextChatControls);
+    setState(initial);
+  }, []);
 
   // Called by the caller that MINTS a session id for a conversation that had
   // none (#2369) — the flag above keeps the pick alive for the rest of the
@@ -260,14 +200,9 @@ export function useComposerSettings(
   const setChatProfileId = useCallback(
     (profileId: string) => {
       const model = effectiveModelRef.current;
-      const row = model?.selectable_models?.find((entry) => entry.profile_id === profileId);
+      const row = model?.offers.find((entry) => modelChoiceKey(entry.key) === profileId && entry.selectable);
       if (!row) return;
-      const recommended = row === recommendedModelRow(model);
-      update({
-        chatProfileId: recommended ? null : row.profile_id,
-        chatModelLabel: recommended ? null : modelLabel(row.display_name, row.name, row.capability_id),
-        reasoning: row.reasoning_default_on ?? false,
-      });
+      update({ chatProfileId: modelChoiceKey(row.key), chatModelLabel: offerLabel(row) });
     },
     [update],
   );

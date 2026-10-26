@@ -47,6 +47,7 @@ from fred_core.store import VectorSearchHit
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 from .skills import SkillInvocation
+from .weaver import ModelOfferKey
 
 # NOTE: This module is the canonical home for portable context + UI parts.
 # Keep Link/Geo parts and RuntimeContext here to avoid circular imports.
@@ -524,6 +525,13 @@ class RuntimeContext(BaseModel):
             "remains an ops-level override this can never beat."
         ),
     )
+    space_id: str | None = Field(
+        default=None,
+        description="Requested canonical Weaver space UUID; verified at admission.",
+    )
+    model_choice: ModelOfferKey | None = Field(
+        default=None, description="Requested source/upstream offer; never an authority."
+    )
     chat_profile_id: str | None = Field(
         default=None,
         description=(
@@ -941,86 +949,13 @@ class BoundRuntimeContext(FrozenModel):
             "Use this for tracing, correlation, identity, and small non-sensitive execution metadata."
         ),
     )
-    usable_model_ids: tuple[str, ...] | None = Field(
-        default=None,
-        description=(
-            'kind="model" capability ids this turn\'s team may use (OBSERV-02 '
-            "v3, AGENT-CAPABILITY-RFC.md §8.7), computed ONCE per turn by the "
-            "caller (never inside model-routing resolution — that runs "
-            "multiple times per turn and must never trigger a network call). "
-            "None means ReBAC is disabled/unconfigured — no restriction, the "
-            "same dev/identity-only posture every other pod-side check "
-            "already applies. A non-None, possibly-empty tuple means ReBAC "
-            "is active and this is exactly what is allowed; "
-            "RoutedChatModelFactory fails closed against it."
-        ),
-    )
-    platform_chat_model_binding: ModelBinding | None = Field(
-        default=None,
-        description=(
-            "Platform-operator-asserted `chat` capability model binding, "
-            "trusted and resolved fresh on every managed turn (including HITL "
-            "resume) by the caller's per-turn control-plane "
-            "`ManagedAgentRuntimeBinding` lookup — the same trust boundary as "
-            "`reasoning_enabled_model_ids`, never a client-forwarded field. "
-            "Direct (non-managed) `agent_id` execution never populates this: "
-            "V1 platform binding applies to managed agent-instance execution "
-            "only, and direct execution stays pod-local routing.\n\n"
-            "When set, `RoutedChatModelFactory.select` returns it "
-            "unconditionally for the `chat` capability, before the resolver "
-            "(and therefore every profile-valued level) is even consulted, and the resulting "
-            "`ModelSelectionSource.PLATFORM_BINDING` selection is exempted "
-            "from the `usable_model_ids` ReBAC gate above — the platform "
-            "operator is the authority on what is actually "
-            "reachable/licensed, so a team-level `can_use` restriction cannot "
-            "veto it. `None` means no platform binding is set for `chat`, "
-            "which is every deployment before this feature — routing falls "
-            "through to the profile-valued levels exactly as before."
-        ),
-    )
-    pod_chat_default_profile_id: str | None = Field(
-        default=None,
-        description="Trusted admin override for this agent pod's chat default, resolved on the managed turn.",
-    )
-    platform_chat_model_fallback: ModelBinding | None = Field(
-        default=None,
-        description="Trusted platform fallback used only for a confirmed removed chat profile.",
-    )
-    pod_chat_fallback_profile_id: str | None = Field(
-        default=None,
-        description="Trusted manual catalog chat profile for a confirmed removed selection.",
-    )
-    confirmed_removed_chat_profiles: dict[str, str] = Field(
-        default_factory=dict,
-        description="Trusted removed profile id to model capability id mapping from the last successful inventory.",
-    )
-    team_disabled_model_ids: tuple[str, ...] = Field(
-        default=(),
-        description=(
-            'kind="model" capability ids the turn\'s team has disabled. '
-            "TRUSTED: resolved per managed turn on the server-to-server "
-            "`ManagedAgentRuntimeBinding` lookup, never read from request "
-            "content. `RoutedChatModelFactory` ignores a user choice or an "
-            "instance recommendation naming one of these models, and fails "
-            "closed on a team default naming one. Empty outside managed turns."
-        ),
-    )
-    recommended_chat_profile_id: str | None = Field(
-        default=None,
-        description=(
-            "The managed instance's recommended chat profile "
-            "(`AgentTuning.recommended_chat_profile_id`). TRUSTED: copied from "
-            "the server-resolved instance tuning, never from request content. "
-            "Validated like the user's choice; an invalid value is ignored."
-        ),
-    )
     platform_prompt: str | None = Field(
         default=None,
         description=(
             "Platform-wide platform prompt — the FIRST block of every composed "
             "system prompt (`react_prompting.compose_system_prompt`). Set by a platform "
             "admin in the admin UI and stored as a single control-plane row; "
-            "like `platform_chat_model_binding` above it is trusted and "
+            "it is trusted and "
             "resolved fresh on every managed turn from the caller's "
             "`ManagedAgentRuntimeBinding` lookup, never a client-forwarded "
             "field — a client that could set this could prepend arbitrary "

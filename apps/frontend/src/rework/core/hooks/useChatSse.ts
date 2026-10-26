@@ -15,17 +15,12 @@ import { handlePlatformAccessResponse } from "../../../common/platformAccess";
 
 import { runtimeExecuteStreamPath } from "../utils/runtimeExecutionUrl";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useDispatch } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 
-import { setCapabilityBaseUrls } from "../../../common/capabilityRoutingSlice";
 import { KeyCloakService } from "../../../security/KeycloakService";
-import type {
-  ChatControlDescriptor,
-  ExecutionPreparation,
-} from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
-import { usePrepareAgentExecutionMutation } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { ChatControlDescriptor, ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import { usePrepareExecutionMutation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type {
   AssistantDeltaRuntimeEvent,
   AwaitingHumanRuntimeEvent,
@@ -46,19 +41,9 @@ import type {
   TurnPersistedEvent,
 } from "../../../slices/runtime/runtimeOpenApi";
 import { toolResultCallId, upsertOne } from "./chatSseUtils";
-import { mergePreparation, parseSseFrames } from "../utils/runtimeStream";
+import { parseSseFrames } from "../utils/runtimeStream";
 import { countUnicodeCodePoints } from "../utils/chatInput";
-import { personalTeamId } from "../../components/shared/utils/teamId";
 import { normalizeApiError } from "../errors/normalizeApiError";
-
-// The UI may still carry the bare "personal" placeholder (teamId.ts) in the URL
-// before bootstrap resolves the real per-user id. The control-plane resolves
-// that alias server-side (teams/system.py), but fred-runtime's OpenFGA check
-// does not — it authorizes the raw team_id in runtime_context. Canonicalize
-// before it reaches the runtime, mirroring usePipelineRun.ts.
-function canonicalizeRuntimeTeamId(teamId: string): string {
-  return teamId === "personal" ? personalTeamId(KeyCloakService.GetUserId() ?? "") : teamId;
-}
 
 // ── Turn-start token preflight ────────────────────────────────────────────────
 // The runtime pod forwards this turn's bearer to Knowledge Flow for the WHOLE
@@ -308,11 +293,12 @@ export function useChatSse(
   params: {
     agentInstanceId: string;
     teamId: string;
+    spaceId?: string;
   } & ChatSseCallbacks,
 ) {
   const {
     agentInstanceId,
-    teamId,
+    spaceId = "",
     onBindDraftAgentToSessionId,
     onTurnPersisted,
     onAwaitingHuman,
@@ -324,8 +310,7 @@ export function useChatSse(
     flushPendingWrites,
   } = params;
 
-  const [prepareExecution] = usePrepareAgentExecutionMutation();
-  const dispatch = useDispatch();
+  const [prepareExecution] = usePrepareExecutionMutation();
   const { i18n } = useTranslation();
 
   const abortRef = useRef<AbortController | null>(null);
@@ -374,6 +359,9 @@ export function useChatSse(
   // `effectiveChatOptions`. Populated by prepare-execution; the composer
   // resolves each descriptor's `widget` id against the chat-turn-control
   // registry (plugin first, then the capability-agnostic stock kit).
+  const [preparationUnavailable, setPreparationUnavailable] = useState(false);
+  const preparationGeneration = useRef(0);
+  const [preparation, setPreparation] = useState<ExecutionPreparation>();
   const [chatControls, setChatControls] = useState<ChatControlDescriptor[]>([]);
   const [maxChatInputChars, setMaxChatInputChars] = useState<number | undefined>();
 
@@ -395,17 +383,19 @@ export function useChatSse(
   // by the eager open-time prep, every send(), and HITL resume.
   const applyPreparation = useCallback(
     (prep: ExecutionPreparation) => {
-      setChatControls(prep.chat_controls ?? []);
+      if (prep.space_id !== spaceId || prep.agent_instance_id !== agentInstanceId || !prep.supports_streaming) {
+        throw new Error("Execution preparation does not match the selected instance");
+      }
+      setPreparationUnavailable(false);
+      setPreparation(prep);
+      setChatControls(prep.chat_controls);
       setMaxChatInputChars(
         typeof prep.max_chat_input_chars === "number" && prep.max_chat_input_chars > 0
           ? prep.max_chat_input_chars
           : undefined,
       );
-      // #1979: publish the instance-bound capability route base URLs so each
-      // capability's generated RTK slice can reach its pod routes directly.
-      dispatch(setCapabilityBaseUrls(prep.capability_base_urls ?? {}));
     },
-    [dispatch],
+    [spaceId, agentInstanceId],
   );
 
   const reset = useCallback(() => {
@@ -420,6 +410,9 @@ export function useChatSse(
     setWaitResponse(false);
     thoughtBufsRef.current.clear();
     setAll([]);
+    preparationGeneration.current += 1;
+    setPreparationUnavailable(false);
+    setPreparation(undefined);
     setChatControls([]);
     setMaxChatInputChars(undefined);
   }, [setAll]);
@@ -1013,8 +1006,9 @@ export function useChatSse(
       let exchangeId: string;
       let effectiveSessionId: string;
       try {
+        preparationGeneration.current += 1;
         prep = await prepareExecution({
-          teamId,
+          spaceId,
           agentInstanceId,
           ...(sessionId ? { sessionId } : {}),
         }).unwrap();
@@ -1041,17 +1035,14 @@ export function useChatSse(
         const askUserControl = prep.chat_controls?.find((control) => control.widget === "ask_user_toggle");
         const { ask_user: requestedAskUser, ...contextWithoutAskUser } = runtimeContext ?? {};
         const askUserDefault = askUserControl?.params?.default;
-        effectiveContext = mergePreparation(
-          {
-            ...contextWithoutAskUser,
-            ...(askUserControl
-              ? { ask_user: requestedAskUser ?? (typeof askUserDefault === "boolean" ? askUserDefault : true) }
-              : {}),
-            team_id: canonicalizeRuntimeTeamId(teamId),
-            language: i18n.language?.split("-")[0] || undefined,
-          },
-          prep,
-        );
+        effectiveContext = {
+          ...contextWithoutAskUser,
+          ...(askUserControl
+            ? { ask_user: requestedAskUser ?? (typeof askUserDefault === "boolean" ? askUserDefault : true) }
+            : {}),
+          space_id: spaceId,
+          language: i18n.language?.split("-")[0] || undefined,
+        };
         exchangeId = uuidv4();
         effectiveSessionId = sessionId ?? "draft";
       } catch (err) {
@@ -1060,6 +1051,11 @@ export function useChatSse(
         // unhandled promise rejection — silently dropping the turn with no
         // toast and `waitResponse` never set, so the composer looked idle
         // with no sign the message never sent.
+        if (!ac.signal.aborted) {
+          setPreparation(undefined);
+          setChatControls([]);
+          setPreparationUnavailable(true);
+        }
         failPreflight("prepare-execution", err);
         return false;
       }
@@ -1196,7 +1192,7 @@ export function useChatSse(
     },
     [
       agentInstanceId,
-      teamId,
+      spaceId,
       prepareExecution,
       streamToMessages,
       onError,
@@ -1275,7 +1271,8 @@ export function useChatSse(
 
       let prep: ExecutionPreparation;
       try {
-        prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
+        prep = await prepareExecution({ spaceId, agentInstanceId, sessionId: pending.session_id }).unwrap();
+        if (!prep.supports_hitl) throw new Error("HITL is unavailable for this execution");
       } catch (err) {
         if (!ac.signal.aborted) {
           onError?.(`Could not resume this turn: ${(err as Error)?.message ?? String(err)}`);
@@ -1399,15 +1396,12 @@ export function useChatSse(
             // the matching comment in send() above.
             // The same composer context and prepared routing as a send: the
             // resumed turn keeps the session's model, prompt and search scope.
-            runtime_context: mergePreparation(
-              {
-                ...(runtimeContext ?? {}),
-                ...(agentQuestion ? { ask_user: true } : {}),
-                team_id: canonicalizeRuntimeTeamId(teamId),
-                language: i18n.language?.split("-")[0] || undefined,
-              },
-              prep,
-            ),
+            runtime_context: {
+              ...(runtimeContext ?? {}),
+              ...(agentQuestion ? { ask_user: true } : {}),
+              space_id: spaceId,
+              language: i18n.language?.split("-")[0] || undefined,
+            },
             turn_options: turnOptions,
             resume_payload: batchAnswers
               ? {
@@ -1561,7 +1555,7 @@ export function useChatSse(
     },
     [
       agentInstanceId,
-      teamId,
+      spaceId,
       prepareExecution,
       streamToMessages,
       isTurnCurrent,
@@ -1572,27 +1566,39 @@ export function useChatSse(
     ],
   );
 
-  // Eager prep (RFC §3.7): call prepare-execution at chat open — not only
-  // inside send() — so `chatControls` are populated before the first message
-  // and the composer isn't empty until the user sends something. Safe to call
-  // with no session yet (sessionId omitted); the composer's own state
-  // (selected libraries/policy/scope) is unaffected until a real send happens.
   const prepareChatControls = useCallback(
-    async (sessionId?: string | null) => {
-      const prep = await prepareExecution({
-        teamId,
-        agentInstanceId,
-        ...(sessionId ? { sessionId } : {}),
-      }).unwrap();
-      applyPreparation(prep);
-      return prep;
+    (sessionId?: string | null) => {
+      const generation = ++preparationGeneration.current;
+      const request = prepareExecution({ spaceId, agentInstanceId, ...(sessionId ? { sessionId } : {}) });
+      const result = request
+        .unwrap()
+        .then((prep) => {
+          if (generation === preparationGeneration.current) applyPreparation(prep);
+          return prep;
+        })
+        .catch((error: unknown) => {
+          if (generation === preparationGeneration.current) {
+            setPreparation(undefined);
+            setChatControls([]);
+            setPreparationUnavailable(true);
+          }
+          throw error;
+        });
+      return Object.assign(result, {
+        abort: () => {
+          if (generation === preparationGeneration.current) preparationGeneration.current += 1;
+          request.abort();
+        },
+      });
     },
-    [teamId, agentInstanceId, prepareExecution, applyPreparation],
+    [spaceId, agentInstanceId, prepareExecution, applyPreparation],
   );
 
   return {
     messages,
     waitResponse,
+    preparation,
+    preparationUnavailable,
     chatControls,
     maxChatInputChars,
     prepareChatControls,

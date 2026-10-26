@@ -1,5 +1,14 @@
 # Control Plane Product Contract — Phase 3a
 
+> **Weaver M5a contract (2026-10-26).** The Swift authorization paths below are
+> comparison material. Rust now owns private `/spaces/{space_id}/sessions`
+> metadata and instance `/prepare-execution`; the existing chat remains unbound.
+> See the [Rust product API contract](../../../apps/control-plane/README.md#conversation-metadata-and-browser-preparation-m5a)
+> for exact routes, idempotency, retained history, supported controls and public
+> routing. Model facts reuse M2/M3 composite identities; no inference connection,
+> credential binding, local profile or execution grant is returned. M4 still
+> authorizes each turn. This is implementation, not functional validation.
+
 > ✅ **`prepare-execution` issues no `ExecutionGrant` (RUNTIME-07 rev. 2, 2026-06-28 — RFC
 > decision D5).** The control-plane is the **catalogue + display-filtering + resolution**
 > authority: `prepare-execution` returns the runtime URLs and the session's resolved context,

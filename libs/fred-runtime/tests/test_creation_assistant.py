@@ -706,36 +706,7 @@ def test_runtime_settings_default_to_reasoning_off() -> None:
         CreationAssistantRuntimeSettings.model_validate({"reasoning_effort": "max"})
 
 
-@pytest.mark.parametrize(
-    "error", [RuntimeError("no provider"), ImportError("langchain_x"), KeyError("k")]
-)
-def test_any_model_build_failure_is_503(kpi, error) -> None:
-    from fred_runtime.model_routing import (
-        ModelRoutingPolicy,
-        ModelRoutingResolver,
-        RoutedChatModelFactory,
-    )
-
-    class _Factory(RoutedChatModelFactory):
-        def build_chat_for_profile(
-            self, profile_id: str | None = None, **_kw: Any
-        ) -> Any:
-            raise error
-
-    set_runtime_context(
-        RuntimeContext(
-            RuntimeConfig(
-                knowledge_flow_url="http://kf.invalid",
-                chat_model_factory=_Factory(
-                    resolver=ModelRoutingResolver(
-                        ModelRoutingPolicy(
-                            default_profile_by_capability={}, profiles=()
-                        )
-                    )
-                ),
-            )
-        )
-    )
+def test_creation_assistant_without_weaver_turn_is_503(kpi) -> None:
     with pytest.raises(HTTPException) as exc:
         creation_assistant.creation_assistant_model("chat.large")
     assert exc.value.status_code == 503

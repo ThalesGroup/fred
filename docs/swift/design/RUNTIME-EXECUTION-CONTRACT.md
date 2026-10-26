@@ -864,6 +864,14 @@ Platform concerns belong to:
 
 ## 8. SSE Contract Gaps — Fixed (April–May 2026)
 
+Weaver contract note (2026-10-26): the additive `/agents/capabilities` read surface
+advertises the complete installed tool registry and registered template consumer links.
+It reuses manifest descriptors without configured values or connection details;
+agent/model/Application/KB projections remain outside this inventory. Execution
+contracts are unchanged. See decision 5d in
+[the Weaver change](../../../openspec/changes/simplify-weaver-runtime-authorization/design.md#5d-complete-inventory-and-organization-readrefresh).
+
+
 These gaps were surfaced while implementing an external SSE bench client.
 All four have been resolved in commit `eedbc610` (branch `agentic-pod`).
 
@@ -7155,3 +7163,40 @@ The outer request authenticates before MCP dispatch; the inner FastAPI request
 gets only the verified grant and admitted log context. The upgrade preserves
 tool names, descriptions and callable input schemas, allowing existing agents
 and legacy HTTP peers to use the same catalog entries.
+
+
+### 8.119 Weaver M3 resolver data contract (2026-10-26)
+
+Weaver's existing Rust space/instance resolver adds typed model policy, candidate
+facts, revisions, references and instance invocation options. Approved inference
+connections are visible only on trusted delegated workload calls; discovery
+credentials are never returned. Legacy profile strings remain diagnostic-only and
+are excluded from the resolver configuration copy. The canonical contract is
+[Control Plane M3](../../../apps/control-plane/README.md#instance-recommendations-and-resolver-data-m3),
+with decision 5e in the active `simplify-weaver-runtime-authorization` change.
+This local implementation does not connect Python routing, choose pod credentials
+or enforce restrictions before invocations. Those remain the separate M4 lot;
+the Swift behavior described above is not proof of Weaver runtime integration.
+
+### 8.120 Weaver M5a browser preparation and registered conversation association (2026-10-26)
+
+Rust adds the product-facing metadata/preparation boundary described in the
+[Control Plane contract](../../../apps/control-plane/README.md#conversation-metadata-and-browser-preparation-m5a).
+Public routes come only from explicit platform ingress configuration; preparation
+returns M2/M3 model facts through a DTO without inference connections or credential
+references. It neither issues a grant nor calls runtime execution or proxies SSE.
+
+A supplied conversation must be registered to the authenticated/delegated person
+and requested space/instance/runtime/template. M4 checks that association inside
+its existing one-per-turn resolver call; the pod then compares its checkpoint
+binding before loading content. No Python loop, retry, descendant, credential
+renewal or cancellation behavior changes. Runtime remains sole owner of messages
+and checkpoints, and histories without provenance are not implicitly adopted.
+
+Deleting/disabling an instance does not remove the CP metadata or its public history
+route. Metadata read/rename requires current space Read and ownership, independently
+of execution eligibility. The existing direct runtime history read enforces owner
+filtering only; a Weaver space/admission gate independent of live instance state
+remains a prerequisite for chat cutover. No functional validation is claimed by
+this API-only delivery; UI/chat, attachments, prompt libraries and migration remain
+outside M5a.

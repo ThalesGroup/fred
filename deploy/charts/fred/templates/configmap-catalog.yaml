@@ -1,6 +1,6 @@
 {{- define "common-library.configmap-catalog" }}
 
-{{- if or .app.agents_catalog .app.models_catalog .app.mcp_catalog_external .app.conversation_policy_catalog .app.lifecycle_policy_catalog }}
+{{- if or .app.agents_catalog .app.mcp_catalog_external .app.conversation_policy_catalog .app.lifecycle_policy_catalog }}
 
 ---
 apiVersion: v1
@@ -15,10 +15,6 @@ data:
 {{ .app.agents_catalog | toYaml | indent 4 }}
 {{- end }}
 
-{{- if .app.models_catalog }}
-  models_catalog.yaml: |
-{{ .app.models_catalog | toYaml | indent 4 }}
-{{- end }}
 
 {{- if .app.mcp_catalog_external }}
   mcp_catalog_external.yaml: |

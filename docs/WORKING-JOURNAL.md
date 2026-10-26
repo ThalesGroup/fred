@@ -46,7 +46,7 @@ fiche plutôt que d'effacer les résultats précédents.
 | [REL-1](#rel-1-génération-weaver-500) | Alignement des versions Weaver | Préparé localement, non publié | Sans changement architectural |
 | [F-013](#f-013-synthese-organisationnelle-en-lecture) | Synthèse organisationnelle et détail équipe | Backend et UI implémentés ; validation des parcours attendue | A2/A7/A8, chapitres 04/09 |
 | [F23](#f23-stockage-des-instances-dagents) | Stockage Rust des instances d'agents | Tests ciblés passants ; jalon global bloqué | Hors périmètre arc42 validé |
-| [F25](#f25-création-et-relecture-dune-instance-custom) | Instances et administration des agents | Création UI confirmée ; parcours admin et propriété des capacités décidés, raccordement à réaliser | 00 et 02.3 : principes/parcours spécifiés, pas de validation runtime |
+| [F25](#f25-création-et-relecture-dune-instance-custom) | Instances et administration des agents | Création UI confirmée ; M1-M5c implémentés et contrôlés techniquement, parcours chat non validé | 00 et 02.3 : principes/parcours spécifiés, pas de validation runtime |
 | [F24](#f24-catalogue-des-templates-par-espace) | Catalogue des templates par espace | Tests ciblés passants ; parcours UI non validé | Hors périmètre arc42 validé |
 | [F22](#f22-agent-rust-embarqué-hello-world) | Agent Rust embarqué, hello-world SSE | Implémenté, à valider | Hors périmètre arc42 validé |
 | [DOC-3](#doc-3-vue-densemble-de-weaver) | Vue d'ensemble de Weaver | Texte et schémas rédigés | 01 |
@@ -2635,6 +2635,664 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
 - Relecture statique seulement. Aucun test, qualité, génération, build, migration
   appliquée, déploiement, commit ou push. Annexes arc42 : référence au stockage
   interne uniquement ; parcours 02.3 toujours spécifié, non validé de bout en bout.
+
+### F25 : inventaire complet et API administrative par pod (2026-10-26)
+
+- Sous-lot réalisé sur `weaver`, arbre propre au départ ; migration 0014 conservée
+  sans modification. Le registre Python et ses descripteurs alimentent maintenant
+  `/agents/capabilities`, y compris les capacités sans consommateur. Seul `tool`
+  entre dans cet inventaire ; les liens de tous les templates enregistrés réutilisent
+  leurs règles de compatibilité et de sélection par défaut. Ce sont des déclarations,
+  pas des exécutions constatées. Registre absent : 503, jamais un succès vide.
+- Rust réutilise les sources configurées et `agents/catalog.rs`. Consultation par
+  organisation et rafraîchissement ciblé par runtime ; identité/URL issues de la
+  configuration plateforme. Réponse complète valide : remplacement atomique du pod
+  seul. Offres retirées conservées ; panne/réponse invalide : observation indisponible,
+  ancien inventaire intact. Lecture cohérente en repeatable read, états et dates
+  explicites ; sources désactivées visibles mais non rafraîchissables.
+- Admission, placement organisation, lifecycle et Manage réutilisés, sans droit
+  implicite plateforme. Recontrôle sous verrou/fence après découverte, puis écriture
+  dans la même transaction autorisée. Appel pod hors SQL, dix secondes, deux MiB,
+  sans redirection. Doublons, liens absents et provenances contradictoires refusés.
+  Descriptions de configuration sans valeurs, réglages privés de connexion ni secrets.
+- Sources OpenAPI et deux clients régénérés ; aucun écran adapté. Configurations,
+  historiques, droits agents/modèles, exécution, Applications et KB restent hors lot.
+  Décision 5d, spécification et cas manuels ajoutés au change OpenSpec existant.
+  Arc42 02.3/A2 distingue l'API implémentée du parcours non validé ; note de contrat
+  runtime ajoutée. Aucun nouveau plan, branche, commit ou publication.
+- Commandes : rustfmt ciblé, `ruff format` ciblé ; `make code-quality` Control Plane,
+  fred-runtime et frontend ; depuis frontend, `make update-runtime-api` et
+  `make update-control-plane-api`, puis Prettier ciblé sur les clients générés.
+  Rust/Python/frontend réussis ; Python signale cinq avertissements de code inaccessible
+  dans des fichiers hors lot. Premier Clippy : import inutilisé corrigé, relance
+  réussie. Contrats relus : marqueur complet requis, défauts SDK conservés,
+  types de champs et modèles d’exécution typés, descriptions localisées absentes
+  omises plutôt que null pour correspondre au client généré.
+  `openspec validate simplify-weaver-runtime-authorization --strict` et
+  `git diff --check` réussis.
+- Aucun test, campagne fonctionnelle, migration sur une installation, déploiement,
+  commit ou push. Le contrôle arc42 complet n'est pas lancé : sa cible applique
+  les migrations dans un conteneur ; seul le bloc de routes concerné est régénéré.
+  Cas à jouer par Dimi dans `tasks.md` : même identifiant sur deux pods, absence de
+  consommateur, retrait/panne/invalide/récupération, doublons/provenance/liens étrangers,
+  admission/Manage/organisation étrangère et correspondance JSON/contrats générés.
+
+
+### F25 : cadrage du catalogue de modèles plateforme (2026-10-26)
+
+- Analyse seule sur `weaver`, en préservant les modifications en cours des deux
+  incréments capacités. Cadrage consolidé dans le change OpenSpec existant,
+  décision 5e, exigences acquises et incréments M1-M5 ; aucun plan parallèle.
+- Direction acquise : découverte API uniquement, identité source/modèle amont,
+  inventaire et décisions dans le Control Plane, destinations/credentials sous
+  contrôle plateforme, inférence dans les pods. Aucun modèle interdit utilisable
+  par défaut/fallback/autorisation d'agent ; aucun catalogue manuel de pod cible.
+- Constat code Swift présent : découverte avec `OPENAI_API_KEY`, URL d'inférence
+  dérivée du catalogue, défaut/fallback manuels ; `PLATFORM_BINDING` et
+  `POD_FALLBACK` exclus du contrôle final `usable_model_ids`. Leur remplacement
+  et les consommateurs à adapter sont identifiés, sans modification runtime.
+- Propositions à arbitrer : credentials de découverte distincts, qualification
+  chat/complétude des sources, maintien des choix existants en panne, références
+  d'offres sans profil administrable séparé et lecture courante de politique par
+  le gate du pod. Aucun de ces mécanismes n'est présenté comme implémenté.
+- Cas ciblés consignés : deux sources/même nom, isolation organisationnelle,
+  fallback interdit, panne/retrait/réapparition, destination non approuvée,
+  credentials distincts et révocation avant une nouvelle invocation.
+- Seuls les quatre documents du change et ce suivi F25 sont actualisés. Arc42,
+  code, migrations, configurations, clients générés, UI/chat, Applications,
+  Knowledge Bases et embeddings/traitement Knowledge Flow inchangés par ce lot.
+  Relecture statique et contrôle du diff documentaire seulement ; aucun test,
+  qualité applicative, génération, build, migration appliquée, déploiement,
+  commit, push ou autre assistant. Implémentation à lancer séparément après examen.
+
+- Arbitrage accepté par Dimi après relecture du cadrage : préférer de vrais droits
+  de découverte seuls ; si le fournisseur ne les sépare pas, acceptation plateforme
+  explicite par source, sans exclusion automatique ni transfert implicite de clé.
+  Accepter les sources mixtes avec métadonnées fiables ; distinguer présence,
+  aptitude chat et retrait confirmé. Maintien des choix autorisés pendant une panne
+  de découverte, sans fallback ; défaut de lecture d'autorisation bloquant.
+- Références d'offres sans profil administrable séparé retenues. Suppression des
+  exceptions plateforme/fallback imposée par l'invariant déjà décidé. Accès SQL
+  limité recommandé, contrat précis à cadrer dans M4 sans bloquer M1.
+- Préparation de M1 uniquement : configuration des sources, découverte et
+  persistance. Prompt remis pour lancement par Dimi ; aucun code de M1 ni lancement
+  d'assistant. Documents existants harmonisés, sans modification d'arc42.
+
+
+### F25 : M1 catalogue de modèles plateforme (2026-10-26)
+
+- Réalisé sur la branche `weaver` existante, en préservant les changements capacités
+  et cadrage présents au départ. M1 seulement : `platform.model_sources`, module
+  Rust `model_catalog/{config,discovery,store}`, migration additive 0015 après
+  revérification de la séquence ; aucune migration antérieure modifiée.
+- Approbations persistées au démarrage sans appel fournisseur. Sources vides par
+  défaut ; URLs découverte/inférence distinctes, provider/périmètre et références
+  de credentials explicites. Secrets via ENV_FILE/environnement existant, jamais
+  valeur SQL/réponse/log. Droits réels déclarés ; autorité d'inférence du credential
+  de découverte soumise à acceptation explicite par source. Aucun secret de pod lu.
+- Adaptateur unique : HTTP 200, data[], IDs exacts distincts/bornés, cinq secondes,
+  un MiB, sans redirection. Enveloppe conservative ; pagination, réponse partielle
+  ou tronquée et absence de garantie de complétude ne remplacent pas l'inventaire.
+  Panne, invalide et incomplet distingués. Sources chat qualifiées ou mixtes avec
+  `capabilities.completion_chat` booléen ; métadonnées absentes/invalides inconnues,
+  aucune aptitude déduite du nom. Présence distincte de l'aptitude au chat.
+- Deux tables indépendantes des pods. Publication source/offres atomique,
+  identité composée, dates première/dernière présence et retrait conservées.
+  Réapparition sur la même clé, panne sans retrait. Révisions strictes et jeton de
+  rafraîchissement SQL : dernier démarré seul autorisé à publier, y compris pour
+  les échecs. Changement/désactivation de source invalide l'ancien résultat ;
+  aucune connexion/transaction SQL pendant HTTP. Suppression d'une source active
+  de la configuration refusée jusqu'à sa désactivation explicite.
+- `configure_sources`, `refresh` et `inventory` internes ; aucune route, CLI ou
+  découverte automatique. M2 devra apporter ses autorisations et son recontrôle
+  après découverte. Aucune politique, instance, résolution, UI ou exécution modifiée.
+  Knowledge Flow, OpenFGA et exceptions Swift PLATFORM_BINDING/POD_FALLBACK intacts.
+- Documentation : M1 coché comme implémenté uniquement, détail en décision 5e,
+  contrat de composant, pointeurs de sources et annexe A2. Aucun parcours admin ou
+  runtime déclaré validé. Cas manuels M1 remis dans tasks.md : identités A/B,
+  qualification mixte/inconnue, vide/retrait/retour, erreurs/limites/pagination,
+  révision/concurrence/annulation et liaison/confidentialité des credentials.
+- Vérifications techniques : `rustfmt --edition 2024 --config skip_children=true`
+  ciblé puis `make code-quality` dans `apps/control-plane` réussis (Clippy all-targets,
+  fmt --check, parité modèle FGA). `make generate-config-schema` réussi, sans chargement
+  de configuration ni service. `make generate-chart-schema` bloqué par le bootstrap
+  existant : `target/scripts-venv/venv/bin/pip` absent. Reprise réussie par
+  `python3 scripts/generate_chart_schema.py --fred-agents apps/fred-agents/config/schema/configuration.schema.json --knowledge-flow apps/knowledge-flow-backend/config/schema/configuration.schema.json --control-plane apps/control-plane/config/schema/configuration.schema.json --output deploy/charts/fred/values.schema.json`.
+  Aucun fichier généré édité à la main ni environnement réparé hors lot.
+- Validation statique des valeurs Helm réussie avec
+  `libs/fred-runtime/.venv/bin/python scripts/check_chart_values.py deploy/charts/fred/values.schema.json deploy/charts/fred/values.yaml`
+  (le Python système manque de `jsonschema`).
+  `openspec validate simplify-weaver-runtime-authorization --strict` et
+  `git diff --check` réussis. Comparaison à l'état initial : modifications des autres
+  lots préservées, migrations 0001-0014 identiques. Le constructeur d'une fixture
+  Rust est adapté au nouveau champ par défaut ; aucun test exécuté. Relecture
+  statique du lot, sans autre assistant.
+- Aucun fournisseur réel, test, campagne fonctionnelle, migration appliquée,
+  déploiement, commit ou push. La migration et les comportements SQL/réseau restent
+  à valider manuellement ; un endpoint tronquant silencieusement son inventaire
+  exige une garantie plateforme et ne peut être détecté à partir des IDs seuls.
+
+
+### F25 : M2 administration des modèles par organisation (2026-10-26)
+
+- Implémentation locale sur `weaver`, au-dessus des changements M1/capacités présents
+  au départ et préservés. Quatre routes : inventaire avec observation/offres/politique
+  cohérents, refresh d'une source approuvée, GET/PUT de politique. Admission, placement,
+  lifecycle et Manage existants, sans exception plateforme ; aucun objet modèle FGA.
+- Migration additive 0016, après revérification de la séquence, non appliquée : politique
+  et permissions par organisation, références composites aux offres, défaut/fallback
+  contraints à l'ensemble permis, révision et attribution. Remplacement atomique sous
+  verrou existant ; conflit 409 si révision dépassée. Purge physique d'organisation
+  supprime ses décisions par cascade ; retrait ou départ d'une personne ne les efface pas.
+- Nouvelles permissions et choix modifiés vérifiés seulement : offre connue, source
+  active, observation réussie à la révision courante, présence et chat établi. Ancien
+  snapshot après rotation insuffisant. Choix conservés en panne/retrait/non-chat visibles
+  avec leurs diagnostics ; révocation/réduction/effacement restent possibles. Défaut
+  révoqué à effacer ou remplacer explicitement dans la même écriture. Aucun choix implicite.
+- Refresh M1 scindé en claim/publication sur connexion du caller. Autorisation avant
+  découverte et après HTTP sous verrou/guard/fence, avant publication dans cette même
+  transaction. Aucune connexion SQL pendant HTTP. Configuration exacte et dernier jeton
+  démarré continuent de protéger sources/révisions ; refus tardif ne publie ni succès
+  ni échec. Dernier succès conservé, aucune politique modifiée par la découverte.
+- Projections typées sans destinations, références de credentials ou configuration
+  privée. Adaptateur M1 réutilisé ; aucun fournisseur au démarrage, polling, source réelle,
+  UI, instance, resolver, binding, routeur ou gate runtime ajouté. Exceptions Swift,
+  Knowledge Flow et catalogues de capacités inchangés par ce lot. Arrêt avant M3.
+- Contrat de composant, décision 5e, tâches/scénarios M2, source map et annexe/parcours
+  d'administration mis à jour. M2 coché uniquement comme implémenté ; cas d'acceptation
+  précis dans `tasks.md` restant à jouer, sans déclaration de validation runtime.
+- Vérifications exécutées depuis la racine, sauf indication :
+  - `/home/dimi/.cargo/bin/rustfmt --edition 2024 --config skip_children=true apps/control-plane/src/api.rs apps/control-plane/src/model_catalog/{mod,store,discovery,policy,http}.rs` : réussi.
+  - `make -C apps/control-plane code-quality` : premier passage refusé par Clippy
+    pour deux `needless_borrows_for_generic_args` dans le nouveau `policy.rs`.
+    Corrections, puis `/home/dimi/.cargo/bin/rustfmt --edition 2024 --config skip_children=true apps/control-plane/src/model_catalog/policy.rs`
+    et relance de la même commande qualité : réussies (Clippy all-targets,
+    rustfmt --check, parité du modèle FGA). Compilation technique, aucun test exécuté.
+  - Depuis `apps/frontend`, `make update-control-plane-api` : réussi ; appelle
+    `make -C ../control-plane generate-openapi` puis
+    `npx --no-install @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json`.
+    OpenAPI local (ignoré par Git) et client générés, aucun fichier généré édité à la main.
+  - Depuis `apps/frontend`, `npx --no-install prettier --config .prettierrc --write src/slices/controlPlane/controlPlaneOpenApi.ts`,
+    puis `make code-quality` : réussis (tsc --noEmit, Prettier, ESLint).
+  - Régénération ciblée du seul A2 par `regenerate` du générateur canonique
+    `docs/architecture/tools/docs.py`, chargé via `importlib.util` dans le script
+    d'édition du lot. Pas de `make -C docs/architecture check`, car sa cible `er`
+    applique les migrations dans un conteneur, contrairement à la consigne du lot.
+  - `openspec validate simplify-weaver-runtime-authorization --strict` et
+    `git diff --check` : réussis, relancés après la dernière édition documentaire.
+- Relecture statique des sources/contraintes et du JSON OpenAPI généré : quatre routes,
+  PUT avec quatre champs requis et choix nullables, aucun schéma privé ModelSource,
+  InferenceDestination ou DiscoveryAuthentication. Comparaison au snapshot initial :
+  client existant conservé avec ajouts M2, fichiers hors lot inchangés, migrations
+  antérieures intactes. Ce constat ne valide pas la SQL ni les interleavings réseau.
+- Aucun blocage préexistant rencontré par les contrôles demandés ; bootstrap Helm non
+  touché. Aucun test, campagne, appel fournisseur, migration appliquée, déploiement,
+  commit, push ou autre assistant. Cas M2 restant à jouer dans `tasks.md` : refus/isolation,
+  révocation pendant HTTP, concurrence refresh/politique, inconnus/non-chat/retraits,
+  panne/révision et confidentialité. Aucun parcours runtime déclaré validé.
+
+
+### F25 : M3 recommandations, options et contrat du resolver (2026-10-26)
+
+- Implémentation locale sur `weaver`, au-dessus des changements M1/M2/capacités
+  préexistants sauvegardés puis préservés. Aucun autre assistant. Périmètre :
+  `agent_instances/{http,tuning,runtime}`, `model_catalog/{instance,mod,policy,store}`,
+  client Control Plane généré, affichage/sauvegarde du formulaire existant et docs.
+- POST/PATCH/GET/list ajoutent `recommended_model` composite et `model_options`
+  dans le JSON existant ; aucune migration. Organisation canonique de l'espace,
+  personnel inclus. Nouvelle recommandation : permission courante et garde M2
+  `require_selectable`, dans la transaction et les locks existants. Les locks
+  source/offre empêchent une publication/configuration concurrente d'invalider
+  les faits avant commit. Aucun deuxième catalogue/profil/sélecteur backend.
+- Options limitées à temperature finie, max_tokens entier positif, top_p fini [0, 1].
+  Objets fermés ; aucune option de transport, credentials ou reasoning. Limites
+  connues de sortie/contexte vérifiées quand applicables, sans défaut fournisseur
+  inventé ni preuve de compatibilité fournisseur. Omission PATCH conserve ; null
+  efface la recommandation ou remet les options à {} ; objet options remplace
+  complètement ses trois valeurs. Réglages non concernés inchangés.
+- Resolver authentifié existant enrichi : snapshot repeatable-read de configuration,
+  politique, sources/offres et connexions approuvées ; révisions, métadonnées connues,
+  permissions, candidats, sélection possible et diagnostics séparés. Admission,
+  délégation personne/workload, espace, template et état conservés ; droits recontrôlés
+  après lecture. Connexions uniquement pour workloads délégués de confiance et offres
+  candidates ; pas dans CRUD/admin ni pour un appel personne. Aucun secret ni
+  paramètre de découverte. Le binding reste une photographie, pas un bail.
+- Ancien `recommended_chat_profile_id` conservé en stockage/lectures ordinaires,
+  non-null refusé en écriture. Dans le resolver seulement, référence retirée de la
+  copie de configuration et exposée comme diagnostic avec re-sélection requise.
+  Re-sélection composite explicite sans effacement automatique de l'ancien identifiant.
+  Révocation/retrait/panne n'effacent rien ; édition descriptive et effacement possibles.
+- Frontend exact : `weaverAgents.ts` omet le profil lors de la création et conserve
+  son PATCH descriptif ; `AgentFormBody.tsx` affiche source/modèle dans le même champ
+  déjà désactivé, ou l'ancien profil avec explication explicite. Libellés EN/FR adaptés.
+  Aucun écran, parcours, onglet, contrôle, style ou interaction ajouté/déplacé ; aucun
+  sélecteur, option UI, parcours organisationnel ou raccordement chat ajouté.
+- Vérifications exécutées :
+  - `/home/dimi/.cargo/bin/rustfmt --edition 2024 --config skip_children=true apps/control-plane/src/agent_instances/{http,tuning,runtime}.rs apps/control-plane/src/model_catalog/{instance,mod,policy,store}.rs` : réussi.
+  - `make -C apps/control-plane code-quality` : premier passage Clippy refusé pour
+    une variable inutilisée introduite dans `instance.rs`, corrigée ; relances après
+    corrections et dernière adaptation Rust réussies (Clippy all-targets, rustfmt,
+    parité FGA). Compilation technique seulement, aucun test exécuté.
+  - `make update-control-plane-api` depuis `apps/frontend` : réussi, via le générateur
+    OpenAPI Rust puis RTK codegen canonique. Aucun fichier généré édité à la main.
+  - Depuis `apps/frontend`, `npx --no-install prettier --config .prettierrc --write`
+    sur le client Control Plane, `weaverAgents.ts`, `AgentFormBody.tsx` et les traductions
+    EN/FR du lot, puis `make code-quality` : réussis (tsc, Prettier, ESLint).
+  - Relecture statique du schéma généré : trois options fermées et nullables,
+    contraintes numériques, nouveaux champs d'instances/resolver, aucun schéma privé
+    ModelSource/DiscoveryAuthentication/InferenceDestination. Relecture des consommateurs
+    legacy, du contrôle de divulgation et des requêtes paramétrées, sans test dynamique.
+  - Régénération ciblée A2 par `regenerate` du générateur canonique `docs.py` ; pas de
+    `make -C docs/architecture check`, dont la cible `er` applique les migrations
+    dans un conteneur et contreviendrait à la consigne explicite.
+  - `openspec validate simplify-weaver-runtime-authorization --strict` et
+    `git diff --check` : réussis après la dernière édition documentaire.
+- Documentation : composant, source map, décision 5e, tâches/scénarios M3, delta spec,
+  proposition, annexe A2, explication 02.3 et note contractuelle Weaver actualisés.
+  M3 coché comme implémenté, sans validation fonctionnelle. Cas précis restant à jouer
+  dans tasks.md : création/relecture, omission/null, limites/options invalides,
+  révocation, panne/récupération, retrait, révision périmée et courses, organisation
+  personnelle canonique, délégation/confidentialité, ancien profil et conservation UX.
+- Aucun test, campagne, fournisseur réel, source activée, migration appliquée,
+  déploiement, commit ou push. Aucun blocage technique restant dans les contrôles
+  exécutés. M4 non commencé : pas de routeur/factory Python, choix de credentials,
+  SQL pod, gate par invocation ou suppression des exceptions/catalogues runtime.
+  L'ordre choix explicite/recommandation/défaut et le fallback pour retrait confirmé
+  sont documentés pour le consommateur futur, pas déclarés appliqués aux invocations.
+
+
+### F25 : arbitrage M4, autorisation une fois par tour (2026-10-26)
+
+- Dimi confirme un appel unique et complet au resolver Control Plane au début de
+  chaque tour. Le pod applique ensuite localement ce contexte à tous les appels
+  LLM, sorties structurées, clients réutilisés, retries et descendants. Aucun
+  appel HTTP/SQL/OpenFGA supplémentaire pour actualiser l'autorité pendant le tour.
+- Révocation ou décommissionnement d'une personne/instance/template/source et
+  retrait de modèle après admission : effet au tour suivant. Le tour engagé peut
+  finir. Cet arbitrage remplace les relectures à chaque invocation et la garantie
+  de révocation sous cinq minutes pour ces changements. Annulation explicite,
+  terminaison, limites d'exécution et contrôles propres aux données/services restent
+  distincts. Un retry ou un enfant ne renouvelle ni n'élargit l'autorité du tour.
+- Proposition de vue SQL, rôle et connexion de lecture dédiés à l'autorisation M4
+  abandonnée. Le compte SQL existant pour historiques/checkpoints n'est pas modifié.
+  Support initial d'inférence compatible OpenAI accepté ; credentials locaux liés
+  à chaque source, aucun secret envoyé par le resolver ni mutation globale d'env.
+- Lecture ciblée : le pod appelle encore le resolver Swift /teams/... et calcule
+  usable_model_ids une fois par tour, avec exceptions plateforme/fallback. Le
+  resolver Weaver /spaces/... et son contrat M3 doivent être raccordés dans M4.
+  RunScope/credentials sont réutilisables ; aucun gate distant par invocation
+  préexistant n'est présumé. Ces constats ne valent pas validation fonctionnelle.
+- Consignes AGENTS et quatre documents OpenSpec harmonisés ; historique M1-M3
+  préservé, arc42 inchangé. Cadrage accepté seulement, aucun code, test, fournisseur,
+  migration, déploiement, commit ou push. M4 reste non implémenté.
+
+### F25 : M4 Python et retrait du catalogue du pod, validation conjointe à faire (2026-10-26)
+
+- Code local raccordé : un appel au resolver Weaver /spaces/... par admission
+  execute/stream/evaluate, via délégation personne/workload. Contrôle des identités,
+  runtime, run/conversation et complétude des offres. Rust renvoie run_id et
+  conversation_id ; SDK typé et clients générés actualisés. Aucun secours Swift.
+- TurnAuthority privée dans RunScope, jamais sérialisée. Les retries et descendants
+  restent dans le tour ; un autre template est refusé. Fin, pause HITL, annulation
+  et déconnexion ferment l'autorité ; reprise ultérieure = nouvelle admission.
+  Révocations/retraits après admission : effet au tour suivant, sans relecture,
+  polling, SQL d'autorité ou contrôle par token SSE, ni délai artificiel de 5 min.
+- Routeur existant : choix explicite, recommandation, défaut d'organisation ;
+  identité source/modèle. Ancien profil ou choix interdit refusé. Fallback seulement
+  pour retrait confirmé et destination autorisée/utilisable. Contrôles locaux au
+  client et à chaque envoi HTTP effectif, y compris retry, outils et sortie structurée.
+- OpenAI-compatible seulement. Configuration `inference_credentials` : source_id,
+  api_root, credential_binding et nom d'env secret local doivent correspondre à
+  la connexion approuvée. Pas de secret CP, pas de mutation d'env, pools réutilisés.
+  Aucun changement du comportement par défaut de la factory Knowledge Flow.
+- Provenance de conversation ajoutée à la table existante checkpoint_thread_owner
+  (`binding_json`, identifiants seulement). Le code de création paresseuse contient
+  l'ajout de colonne ; aucune évolution SQL exécutée. Anciennes conversations sans
+  provenance refusées, pas de réattribution implicite. Effacement des checkpoints
+  avec conservation d'historique : reprise à traiter explicitement.
+- Dimi confirme explicitement la suppression du catalogue et des tests Swift et
+  demande d'avancer sans nouvelle campagne de contrôles, puis de valider ensemble.
+  Supprimés : model_routing/catalog.py et authz.py, YAML du pod, bootstrap et câblage
+  Docker/Helm, contrats de profils/politique locale et anciens cas associés.
+  Les tests Weaver préparés restent présents et n'ont pas été exécutés.
+- Complément demandé explicitement par Dimi : les trois routes HTTP /models-catalog,
+  /refresh, /detail et leurs quatre DTO ont ensuite été supprimés. Après le refus
+  initial pour risque de rupture API avant M5, la revue automatique des commandes
+  Codex a accepté cette suppression ciblée avec la nouvelle autorisation. OpenAPI
+  runtime et client RTK régénérés ; aucun consommateur applicatif manuscrit restant.
+  Les surfaces OpenAI direct-template et
+  creation-assistant refusent explicitement en 503. Métadonnées de skills : lecture
+  personne via espace canonique, distincte de l'admission et sans connexion secrète.
+- Contrôles déjà terminés avant ce dernier nettoyage : make code-quality dans
+  fred-core, fred-sdk, fred-runtime, fred-agents, control-plane, zéro erreur ; cinq
+  avertissements de code inaccessible préexistants côté runtime. Pas de revalidation
+  du diff final. Ruff ciblé appliqué aux fichiers nettoyés.
+- Génération canonique : make update-control-plane-api et make update-runtime-api
+  dans apps/frontend réussis. Schéma AgentPodConfig généré ; sous-cible chart en
+  échec (pip absent du venv scripts), puis scripts/generate_chart_schema.py et
+  scripts/generate_pod_chart_schemas.py exécutés avec apps/fred-agents/.venv/bin/python,
+  succès. Aucun fichier généré édité à la main.
+- À faire ensemble avant clôture M4 : qualité finale des composants/frontend,
+  OpenSpec strict, git diff --check, fixtures d'intégration Swift restantes, puis
+  dix appels/une résolution, révocation au tour suivant, resolver indisponible,
+  choix/fallback/profil refusés, isolation A/B, structured output/bind_tools/retries,
+  enfant non couvert, annulation/fin/reprise et provenance concurrente. Détail dans
+  les tâches M4 et décision 5e. Aucune validation fonctionnelle revendiquée.
+- Aucun test, campagne, fournisseur réel, migration appliquée, déploiement, commit
+  ou push. M4 reste ouvert pour validation conjointe ; M5 et parcours chat complet
+  non entrepris/validés. Modifications préexistantes et lots concurrents préservés.
+
+### F25 : clôture technique M4 après nettoyage autorisé (2026-10-26)
+
+- À la demande de Dimi, les contrôles finaux ont été exécutés sans campagne ni
+  test fonctionnel. M4 coché pour code et qualité technique, pas pour validation
+  du parcours chat. M5 reste non commencé.
+- `make code-quality` : succès (exit 0) dans libs/fred-core, libs/fred-sdk,
+  libs/fred-runtime, apps/fred-agents, apps/frontend et apps/control-plane
+  (PATH=/home/dimi/.cargo/bin:$PATH pour Rust). Aucun échec introduit. Runtime :
+  cinq avertissements préexistants de code inaccessible, zéro erreur. Core/SDK/pod :
+  zéro avertissement. Frontend : tsc, Prettier, ESLint ; Rust : Clippy, fmt, parité FGA.
+- Corrections finales : descriptions OpenAPI encore Swift remplacées, références
+  de catalogue dans les fixtures MCP/config et exemples de chart retirées. Aucun
+  catalogue, profil ou chemin local réintroduit. Runtime, pod et frontend revérifiés
+  après ces corrections. `make update-runtime-api` et Prettier ciblé réussis.
+- Charts : `scripts/check_chart_values.py` avec le Python fred-agents et `helm lint
+  deploy/charts/fred` passent. Le lint nu agent-pod refusait les valeurs obligatoires
+  runtime_id/security absentes, comme documenté. `helm lint deploy/charts/agent-pod
+  -f /tmp/fred-m4-agent-pod-values.yaml` passe avec l'exemple du README. Générateurs
+  canoniques chart vers /tmp puis diff des deux schémas : aucun écart. Aucun rendu
+  n'a été installé/déployé ; pas de build d'image.
+- `openspec validate simplify-weaver-runtime-authorization --strict` et
+  `git diff --check` passent, y compris après cette dernière mise à jour.
+  Commandes détaillées et matrice des contrats/consommateurs dans les tâches M4.
+- Recommandations et réglages M3 conservés : recommended_model reste stocké et
+  géré par Rust, transmis comme models.recommendation ; model_options devient
+  models.options, appliqué par la factory (temperature, max_tokens, top_p). La
+  projection AgentTuning concerne prompts/capacités et ne remplace pas ces faits.
+  Priorité explicite > recommandation > défaut ; ancien profil diagnostic seulement.
+  Types générés et affichage existant de gestion restent cohérents, sans nouveau sélecteur.
+- Confirmé par lecture du code : une résolution complète par tour externe ; aucun
+  contrôle distant d'autorité supplémentaire par appel LLM ; retries et descendants
+  limités au RunScope ; autre template refusé ; autorité terminée inutilisable ;
+  révocations/retraits considérés au tour suivant. Les contrôles de données/services
+  et credentials restent distincts. Ce constat n'est pas une mesure fonctionnelle.
+- Suppression finale des trois routes /models-catalog et quatre DTO confirmée,
+  avec clients régénérés et absence de consommateur applicatif manuscrit restant.
+  Modules/YAML/catalogues/profils locaux, bootstrap et montages supprimés ; seules
+  références locales de credentials de source subsistent, sans pouvoir d'autorisation.
+- Les scénarios M4 préparés restent non exécutés ; les anciennes fixtures d'intégration
+  d'exécution Swift seront à adapter lors de leur reprise. Pas de résultat annoncé
+  pour ces suites. OpenAI direct-template/creation-assistant restent explicitement
+  non raccordés (503) ; conversations sans provenance refusées ; OpenAI-compatible
+  seulement. Aucun fournisseur réel, migration, déploiement, commit ou push.
+
+### F25 : correction du bearer de service à l'admission M4 (2026-10-26)
+
+- Défaut signalé par Dimi : `_resolve_agent_instance` exigeait un Authorization
+  dans `DelegatedCredentialProvider.credentials()`, alors que ce contrat fournit
+  seulement les assertions personne/run/agent. Les contrôles statiques précédents
+  ne détectaient pas cette incompatibilité de comportement ; le vrai fournisseur
+  était donc refusé avant tout appel au resolver.
+- Correction ciblée dans agent_app.py : exiger le fournisseur délégué, conserver
+  ses assertions et acquérir le bearer avec son `get_token_lease()` existant.
+  Cette acquisition préserve les vérifications du run avant/après l'attente et
+  l'acquisition/caching M2M existants. Le bearer utilisateur n'est jamais utilisé
+  en secours ; aucun contrat OutboundCredentials artificiel n'a été ajouté.
+- Un seul GET au resolver par tour : Authorization construit avec le token de
+  service, `auth=None` pour ne pas hériter d'une authentification/retry du client,
+  `follow_redirects=False`, aucun replay sur 401. M2MBearerAuth n'est pas utilisé
+  ici car son retry 401 ferait une seconde résolution. L'acquisition IAM reste
+  distincte de la résolution d'autorité. Après la réponse, une vérification locale
+  du fournisseur refuse un run devenu terminal pendant le GET, sans relecture
+  distante ni création d'autorité pour ce run.
+- Cas préparés dans tests/test_weaver_resolver_credentials.py : vrai
+  DelegatedCredentialProvider, vrai M2MTokenProvider via MockIdentityProvider et
+  transport IAM simulé ; assertions exactes, Authorization absent des credentials
+  mais présent sur le GET, absence du bearer personne, un envoi sur succès et
+  refus 401/403/503, identité incohérente, token indisponible, run terminal/supprimé,
+  terminaison pendant acquisition et pendant résolution. Aucun de ces tests exécuté.
+- Après formatage et ajout complet du fichier, `make code-quality` dans
+  libs/fred-runtime et apps/fred-agents : exit 0. Runtime : zéro erreur et cinq
+  avertissements préexistants de code inaccessible ; pod : zéro erreur/avertissement.
+  `openspec validate simplify-weaver-runtime-authorization --strict` et
+  `git diff --check` : succès, revérifiés après cette note. Aucun changement de
+  contrat HTTP public : aucune régénération de client nécessaire pour ce correctif.
+- Aucun test fonctionnel, campagne, fournisseur réel, migration, déploiement,
+  commit, push ou travail M5. Les autres modifications du checkout sont préservées.
+
+### F25 : M5a métadonnées privées et préparation navigateur (2026-10-26)
+
+- Reprise du lot le 2026-10-26 : les API, la migration 0017, les contrats et les
+  cas manuels ci-dessous étaient déjà présents dans le checkout. Leur lecture a été
+  recroisée avec les consommateurs Swift et la provenance M4 ; aucune nouvelle
+  implémentation ni migration concurrente ajoutée. Générations canoniques, formatage
+  ciblé, `make code-quality` Control Plane/frontend, validation des valeurs Helm,
+  `helm lint`, OpenSpec strict et `git diff --check` relancés avec succès. Les
+  générations ne changent pas les contrats existants. Validation fonctionnelle
+  toujours non exécutée ; aucun fichier du chantier documentaire parallèle modifié.
+
+- Lot local uniquement sur `weaver`, sans raccordement des pages/hooks ni changement
+  UX. Ajout de POST/GET `/spaces/{space_id}/sessions`, GET/PATCH
+  `/spaces/{space_id}/sessions/{session_id}` et POST de l'instance
+  `/prepare-execution?session_id=...`. Le client choisi conserve son identifiant ;
+  Rust fixe propriétaire authentifié et provenance espace/instance/template/runtime.
+- Migration additive `0017_session_metadata.sql`, numéro revérifié juste avant
+  création, non appliquée. Table privée distincte des instances partagées, sans
+  messages/checkpoints ni FK en cascade. Suppression de l'instance ou purge de
+  l'espace n'efface pas la provenance ; un espace absent/retiré reste inaccessible.
+- Admission et Read de l'espace restent obligatoires. Les métadonnées appartiennent
+  uniquement à leur propriétaire, sans exception Manage/plateforme. Reprise POST
+  identique : 200 et ligne inchangée, même après suppression/désactivation d'instance ;
+  création initiale 201 ; propriétaire/espace étranger 404 ; autre association
+  possédée 409. PATCH ne prend que titre/activité, champs d'autorité refusés en 422.
+  Activité monotone plafonnée à l'heure serveur ; titre seul sans réordonnancement ;
+  tri activité décroissante puis identifiant. Liste/lecture/renommage restent possibles
+  après suppression/désactivation d'instance, sous les droits de l'espace.
+- Routage : `public_base_url` explicite sur la source runtime, chemin d'ingress
+  canonique de même origine ; aucune déduction depuis `base_url` interne ni URL
+  navigateur. Sans source activée/routage approuvé : historique URL null et préparation
+  refusée. Suppression d'instance seule : URL historique conservée et agent_deleted=true.
+  Nom courant ou snapshot de l'inscription après suppression, sans synchronisation.
+- Préparation : Read + Use du template, état/provenance de l'instance, source approuvée,
+  catalogue actuel et association privée si session fournie. Familles react/graph
+  sans outils seulement, streaming/UI parts existants, limite d'entrée annoncée par
+  le pod ; HITL false, chat_controls vide. Outils actifs/famille non raccordée refusés
+  explicitement. Découverte hors transaction via le client existant, sans fallback.
+- Faits modèles réutilisés via M3 resolve(false), DTO navigateur sans connexion,
+  URL d'inférence, référence de credential ni nouvelle politique. Recommandation,
+  défaut/fallback, réglages et diagnostics restent ceux de M2/M3. Préparation sans
+  grant ni promesse de disponibilité fournisseur, réponses no-store.
+- Resolver M4 : vérification SQL de l'association enregistrée dans l'unique requête
+  d'admission existante. Aucun changement Python ni relecture d'autorité dans les
+  appels LLM/retries/descendants ; provenance checkpoint M4 comparée localement,
+  ancien historique sans provenance toujours refusé. Aucun moteur de synchronisation.
+- Générations canoniques réussies : `PATH=/home/dimi/.cargo/bin:$PATH make
+  update-control-plane-api` dans apps/frontend ; `make generate-config-schema`
+  dans apps/control-plane ; `python3 scripts/generate_chart_schema.py` avec les
+  trois schémas existants. Runtime OpenAPI/client inchangés. Schémas/types lus :
+  routes attendues, nullabilité requise et absence de connexions dans le DTO de
+  préparation confirmées. Aucun fichier généré édité à la main.
+- Formatage Rust ciblé (rustfmt, skip_children) et Prettier du seul client généré.
+  `make code-quality` réussit dans apps/control-plane (Clippy --all-targets, fmt,
+  parité FGA) et apps/frontend (tsc, Prettier, ESLint). Premier passage Rust corrigé :
+  SQLx 0.9 exige des chaînes SQL statiques ; requête commune paramétrée, puis contrôle
+  complet relancé avec succès. Ce sont des contrôles techniques, pas des requêtes
+  métier exécutées ni une validation du SQL contre une installation.
+- `scripts/check_chart_values.py` avec le Python fred-agents et `helm lint
+  deploy/charts/fred` passent. `openspec validate simplify-weaver-runtime-authorization
+  --strict` et `git diff --check` passent. Aucun conteneur, test ou fournisseur réel
+  lancé. Cas manuels de reprise réseau, confidentialité, association, activité,
+  suppression/désactivation, destination non approuvée et erreurs préparés dans les
+  tâches existantes, non exécutés. M5a coché pour implémentation/qualité, M5 reste ouvert.
+- Prérequis précis avant raccordement du chat : la lecture directe d'historique du
+  pod filtre aujourd'hui seulement par propriétaire ; ajouter son contrôle d'admission
+  et d'espace Weaver, indépendant d'une instance encore exécutable. Puis raccorder
+  les consommateurs existants aux contrats espaces/sessions/préparation et aux offres
+  composites, configurer les vrais ingress/credentials, appliquer les migrations dans
+  un lot autorisé et valider fonctionnellement avec Dimi. Pièces jointes, prompts de
+  contexte et HITL restent leurs raccordements propres, non annoncés disponibles.
+- Mise à jour du contrat produit/runtime, README/source map et OpenSpec ; arc42 non
+  élargi à un parcours non validé. Modifications préexistantes conservées, chantier
+  Knowledge Flow/fred-core/document-access inchangé. Aucun test, migration appliquée,
+  déploiement, commit, push ou autre assistant.
+
+### F25 : M5b consultation privée d'historique dans le pod (2026-10-26)
+
+- Implémentation locale sur `weaver`, avant raccordement du chat. Point commun
+  `fred_runtime/app/history_access.py` pour GET `/agents/sessions`,
+  `/agents/sessions/{id}/messages`, `/agents/checkpoints` et
+  `/agents/checkpoints/{id}`. Authentification/admission existantes conservées,
+  personne propre obligatoire même en mode dev ; user_id navigateur ignoré.
+  Identités service (rôle, marqueur de compte ou rôle de délégation) et personnes
+  seulement assertées refusées ; aucun run créé pour consulter un historique.
+- Lecture seule de `checkpoint_thread_owner.user_id/binding_json`, sans contenu,
+  initialisation ni réparation. Placement dérivé de cette provenance M4. GET M5a
+  `/spaces/{space}/sessions/{session}` avec le vrai `PersonCredentialProvider` et
+  le bearer de la personne vers la destination Control Plane configurée. Client
+  HTTP partagé existant, timeout 10 s, auth héritée/redirects désactivés, aucun
+  retry ni cache d'autorisation entre consultations. Pas de credentials réels
+  configurés ; le contrat délégué du resolver n'est pas inventé pour M5a.
+- M5a vérifie propriétaire privé, admission et Read courant ; comparaison locale
+  de personne, clé de session, espace, instance, template et runtime. Le runtime
+  doit être celui du pod destinataire. M5a ne renvoie pas user_id : sa requête SQL
+  filtrée sur le bearer vérifié est la preuve de propriété côté Control Plane.
+  Aucun prepare-execution, resolver d'exécution, catalogue ou grant supplémentaire.
+- Instance supprimée/désactivée ou template inexécutable : consultation toujours
+  possible si ces contrôles passent. Conversation autorisée et liée sans message :
+  200 + []. Historique ancien, provenance perdue ou session seulement inscrite sans
+  provenance M4 : 404 uniforme, sans rattachement. Même 404 pour inconnu, autre
+  propriétaire, droits retirés ou association incohérente. Les indexes omettent
+  seulement ces refus ; erreurs d'authentification/stockage/Control Plane remontées,
+  jamais transformées en faux historique vide. Réponses de lecture no-store.
+- Checkpoints : garde avant chargement des métadonnées brutes ; index limité aux
+  candidats vérifiés avant ses agrégats. `_stats` ne contient que comptes/tailles,
+  aucun identifiant ni contenu de conversation. Suppression/purge hors périmètre.
+  Une consultation coûte un SELECT de provenance puis un GET M5a avant le contenu ;
+  listes proportionnelles aux sessions propres, traitées en série pour borner la
+  pression du pool. Pas de transaction SQL tenue pendant HTTP. Ce constat est
+  statique, sans campagne ni mesure de performance.
+- Consommateurs relus : CLI PodClient remonte les erreurs HTTP ; useSessionHistory
+  rafraîchit le bearer et marque les non-2xx indisponibles. Aucun raccordement UI ;
+  son cache d'affichage reste un point du futur lot M5. Aucun changement des tours
+  M4 : une résolution par tour, contrôles locaux LLM/retries/descendants, révocation
+  au tour suivant, annulation et fin distinctes.
+- Cas préparés dans `tests/test_weaver_history_access.py`, non exécutés : identité
+  et credentials réels du fournisseur personne, propriétaire/étranger, révocation
+  entre deux lectures, suppression/désactivation, divergence de tous les IDs,
+  provenance absente, vide autorisé, erreurs HTTP/SQL, substitution de requête,
+  détails/indexes et refus des services/délégations. Quatre anciens cas HTTP directs
+  de test_history.py remplacés ; suites d'exécution Swift non migrées/non jouées.
+- Formatage ciblé : Ruff imports/format sur les cinq fichiers Python du lot.
+  `make code-quality` dans libs/fred-runtime et apps/fred-agents : sortie finale 0.
+  Runtime : zéro erreur, cinq avertissements préexistants de code inaccessible ;
+  pod : zéro erreur/avertissement. Une erreur Optional introduite a été corrigée,
+  puis contrôles complets relancés après les dernières modifications pertinentes.
+- `make update-runtime-api` dans apps/frontend et Prettier ciblé réussis : OpenAPI
+  régénéré, client RTK identique au fichier avant M5b ; aucune signature HTTP ni
+  composant frontend modifié. `openspec validate simplify-weaver-runtime-authorization
+  --strict` et `git diff --check` passent. README runtime et change existant mis
+  à jour ; arc42 non étendu au parcours chat non validé. M5b coché pour
+  implémentation/qualité technique uniquement ; M5 global reste ouvert.
+- Aucun test, campagne fonctionnelle, fournisseur réel, migration appliquée,
+  déploiement, commit, push ou autre assistant. Modifications préexistantes et
+  fichiers du chantier documentaire parallèle préservés. Tous les cas de la
+  matrice M5b restent à jouer avec Dimi ; aucune validation fonctionnelle annoncée.
+
+### F25 : M5b correction de l'index des threads Graph (2026-10-26)
+
+- Correction ciblée de GET `/agents/checkpoints` : le filtre exact
+  `thread_id.in_(readable)` excluait les threads dérivés, même pour une session
+  autorisée. Remplacement par l'union des prédicats `session_threads`, avec
+  `graph_thread_prefix`, uniquement pour les sessions ayant passé la garde M5b.
+  Le helper canonique conserve la séparation par `:` et l'échappement des motifs
+  SQL ; ni préfixe voisin ni `_` ne doivent élargir le périmètre. Aucun changement
+  de garde, de contrat de réponse, d'agrégats par thread, de tri, de limite ou d'UX.
+- Cas préparé dans `test_weaver_history_access.py`, **non exécuté** : vrai
+  FredSqlCheckpointer/SQLite, session autorisée `conversation_a` avec uniquement
+  deux checkpoints Graph dérivés, autre session du même propriétaire dans un
+  espace refusé par M5a. Variantes interdites `conversation_a_extra` et
+  `conversationXa` pour couvrir la frontière du préfixe et le caractère `_`.
+  Attendu : seuls les deux threads autorisés sont renvoyés, une ligne chacun,
+  après vérification des deux sessions parentes ; aucun contenu de message chargé.
+- Formatage Ruff ciblé appliqué aux deux fichiers Python modifiés.
+  `make code-quality` dans libs/fred-runtime : sortie finale 0 après la dernière
+  modification du cas préparé, zéro erreur et cinq avertissements préexistants
+  de code inaccessible. `make code-quality` dans apps/fred-agents : sortie 0,
+  zéro erreur/avertissement. `openspec validate simplify-weaver-runtime-authorization
+  --strict` et `git diff --check` passent, revérifiés après cette note. Aucune
+  signature publique modifiée : pas de régénération de contrats nécessaire.
+- Changements préexistants préservés ; aucun test exécuté, raccordement frontend,
+  migration appliquée, déploiement, commit, push ou autre assistant. Validation
+  fonctionnelle toujours à jouer ; M5 global reste ouvert.
+
+### F25 : M5c raccordement du chat existant (2026-10-26)
+
+- **Implémentation locale sur `weaver`** : consommateurs frontend raccordés aux
+  clients générés M5a et aux contrats M4/M5b, sans modification backend ni client
+  généré. Inscription avec UUID frontend conservé et reprise POST idempotente,
+  liste privée de l'espace courant, GET métadonnées/historique, PATCH titre/activité,
+  préparation de l'instance puis SSE directement sur la destination publique du pod.
+  Espaces canoniques issus du contexte Weaver existant, sans déduction depuis une
+  ancienne équipe, un template ou un modèle. Une association incohérente est refusée.
+- Navigation et composants conservés : Discuter, ManagedChatPage, ChatList,
+  SessionTitleEditor, ReasoningChip et rendu SSE existants. Aucune nouvelle UX
+  d'organisation/espace, administration ou refonte du sélecteur. Le shell du chat
+  reprend le chemin Weaver déjà utilisé pour les agents ; appels auxiliaires Swift
+  non raccordés désactivés dans ce parcours. Suppression, documents, pièces jointes,
+  prompts/skills, voix et HITL non activés par ce lot.
+- Historique séparé de l'exécution : l'URL vient des métadonnées, sans préparation
+  lors d'une simple consultation. Suppression/désactivation d'instance et panne de
+  template ne bloquent pas sa lecture autorisée. Le brouillon et l'intention de
+  saisie préparent les contrôles ; chaque envoi refait la préparation après
+  inscription. Refus et panne restent des indisponibilités explicites, distinctes
+  d'un vrai 200 vide. Le droit d'envoyer reste vérifié indépendamment par M5a/M4.
+- Cache et courses : RTK isolé par identité existante, tags par espace/session,
+  réponses courantes en erreur non remplacées par currentData ancien. Historique
+  annulable, no-store, redirects refusés ; clés personne/espace/session et garde
+  de réponse tardive. Pas d'affichage d'un cache avant lecture courante ; refus ou
+  panne effacent contenu affiché et snapshot. Revalidation focus/périodique existante
+  réutilisée, sans nouveau surveillant. Une lecture autorisée en retard ne remplace
+  pas un échange streamé plus récent. Le changement de contexte annule les envois
+  préparatoires et réinitialise la page avant de montrer une autre conversation.
+- Modèles : faits PreparationModels M2/M3 présentés dans le menu existant, clé
+  `(source_id, upstream_model_id)` préservée jusque dans `model_choice`. Les choix
+  explicites ne sont pas effacés lorsqu'ils deviennent indisponibles. Aucun choix
+  automatique du premier modèle ni traduction d'un ancien profil. Recommandation,
+  défaut/fallback et `model_options` restent appliqués par le serveur. Contrôles
+  limités aux capacités annoncées. Politique M4, résolution unique par tour et
+  gardes locales LLM/retries/descendants inchangées.
+- **Contrôles techniques** : Prettier ciblé pendant l'édition, puis
+  `cd apps/frontend && make code-quality` : sortie 0, TypeScript sans émission,
+  Prettier et ESLint. Les premières erreurs introduites (expression de route,
+  références supprimées et fixtures de profils Swift) ont été corrigées ; contrôle
+  complet relancé après les dernières modifications. `openspec validate
+  simplify-weaver-runtime-authorization --strict` et `git diff --check` passent.
+  Aucun contrat modifié, donc aucune génération canonique nécessaire dans M5c.
+- **Validation fonctionnelle non exécutée** : matrice complète dans les tâches
+  existantes (création/reprise, streaming/rechargement, liste/renommage/activité,
+  instance supprimée/désactivée, propriétaire/révocation, vide/panne, réponses
+  tardives, modèles composites/options et UX). Fixtures du menu/composite et du
+  composer adaptées mais non jouées. Les grands harnais Swift chat/SSE/historique
+  gardent des hypothèses d'anciens endpoints/cache/HITL : leur migration/exécution
+  appartient à un lot de tests autorisé, pas au résultat du type-check.
+- **Prérequis et limites** : migrations existantes 0015-0017 non appliquées ;
+  déploiement cohérent M1-M5b, ingress `public_base_url` approuvé, stockage runtime,
+  délégation, credentials sources du pod et politique modèles organisationnelle
+  requis. Premier périmètre sans outils React/Graph, instance activée/autorisée.
+  Historique sans provenance non adopté. Une session uniquement inscrite sans
+  provenance M4 reçoit encore le 404 uniforme M5b ; ce n'est pas un historique vide
+  prouvé, et son éventuel premier envoi reste soumis à M5a/M4.
+- Le runtime persiste après fermeture du flux et n'émet pas d'acquittement durable
+  `turn_persisted`. Un rechargement immédiat peut précéder l'écriture ; aucune
+  garantie lecture-après-final n'est ajoutée. Plus petit arbitrage proposé pour
+  un lot runtime ultérieur : émettre l'événement existant après écriture réussie,
+  ou accepter explicitement ce délai de visibilité. Aucun fallback, polling
+  supplémentaire, moteur de conversation ou synchronisation n'a été créé.
+- Modifications préexistantes préservées, y compris contrats générés et chantier
+  documentaire parallèle. Aucun test, service, fournisseur réel, migration,
+  déploiement, commit, push ou autre assistant lancé. M5c coché pour implémentation
+  et qualité technique seulement ; M5 global, 1.7/1.8 et validation bout en bout
+  restent ouverts. Arc42 n'est pas élargi à un parcours non validé.
 
 ## F26 Fusion Swift et préférences utilisateur
 

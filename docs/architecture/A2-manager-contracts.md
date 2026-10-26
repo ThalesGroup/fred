@@ -172,8 +172,56 @@ Internal catalog storage is defined by
 and [`agents/catalog.rs`](../../apps/control-plane/src/agents/catalog.rs).
 Offerings and template links share the composite runtime/capability key; successful
 replacement and failed observation retain withdrawn or last-known declarations.
-This storage has no discovery/API caller yet and the migration has not been applied
-in this increment. It establishes no validated administration or execution journey.
+[`agents/inventory.rs`](../../apps/control-plane/src/agents/inventory.rs) connects
+configured sources to organization Manage-protected read/refresh. The pod's complete
+registry advertisement lives in
+[`agent_app.py`](../../libs/fred-runtime/fred_runtime/app/agent_app.py).
+Read uses a consistent SQL snapshot; bounded discovery precedes the authorized
+write transaction. Neither API establishes a validated UI or execution journey.
+
+Model storage has a separate platform owner in
+[`model_catalog`](../../apps/control-plane/src/model_catalog/mod.rs) and additive
+[`0015_platform_model_catalog.sql`](../../apps/control-plane/migrations/0015_platform_model_catalog.sql).
+Observations and retained offers use `(source_id, upstream_model_id)` and create no
+grants. [`http.rs`](../../apps/control-plane/src/model_catalog/http.rs) supplies
+organization Manage-protected inventory, refresh and policy read/write.
+[`policy.rs`](../../apps/control-plane/src/model_catalog/policy.rs) and additive
+[`0016_organization_model_policy.sql`](../../apps/control-plane/migrations/0016_organization_model_policy.sql)
+store organization choices with expected revision, attribution and composite foreign
+keys. Source approvals remain platform-only. Publication uses the transaction that
+rechecks admission/Manage and fences authorization after HTTP, preserving the M1
+configuration/token fences. These APIs establish no runtime model enforcement or
+validated execution journey; the [component contract](../../apps/control-plane/README.md#platform-model-inventory-and-organization-administration)
+defines source approval, payloads, eligibility, errors and concurrency.
+
+Instance model settings reuse `agent_instance.tuning` through
+[`agent_instances/http.rs`](../../apps/control-plane/src/agent_instances/http.rs)
+and [`tuning.rs`](../../apps/control-plane/src/agent_instances/tuning.rs).
+[`model_catalog/instance.rs`](../../apps/control-plane/src/model_catalog/instance.rs)
+reuses M2 selection locks and defines the three typed invocation options. The
+[existing resolver](../../apps/control-plane/src/agent_instances/runtime.rs) reads
+policy/catalog/configuration in one snapshot and exposes approved inference
+connections only to trusted delegated workloads. Legacy profiles remain diagnostic
+references. These contracts supply data without selecting or invoking a model;
+[component semantics](../../apps/control-plane/README.md#instance-recommendations-and-resolver-data-m3)
+define omission/null, known limits, candidate diagnostics and connection visibility.
+
+<!-- generated: routes apps/control-plane/src/model_catalog/http.rs /control-plane/v1 -->
+| Method | Path | Handler |
+| --- | --- | --- |
+| GET | `/control-plane/v1/organizations/{organization_id}/model-policy` | `organization_model_policy` |
+| PUT | `/control-plane/v1/organizations/{organization_id}/model-policy` | `replace_organization_model_policy` |
+| POST | `/control-plane/v1/organizations/{organization_id}/model-sources/{source_id}/refresh` | `refresh_model_source` |
+| GET | `/control-plane/v1/organizations/{organization_id}/models` | `organization_models` |
+<!-- end generated -->
+
+<!-- generated: routes apps/control-plane/src/agents/inventory.rs /control-plane/v1 -->
+| Method | Path | Handler |
+| --- | --- | --- |
+| GET | `/control-plane/v1/organizations/{organization_id}/capabilities` | `organization_capabilities` |
+| POST | `/control-plane/v1/organizations/{organization_id}/capabilities/{runtime_id}/refresh` | `refresh_organization_capabilities` |
+<!-- end generated -->
+
 The [administration journey](02.3-agent-administration.md) remains agreed behavior.
 
 The source of truth is the complete ordered SQL migration chain. Key references:

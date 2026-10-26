@@ -264,6 +264,40 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setAgentDefaultOnRequest,
       }),
     }),
+    organizationCapabilities: build.query<OrganizationCapabilitiesApiResponse, OrganizationCapabilitiesApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/capabilities` }),
+    }),
+    refreshOrganizationCapabilities: build.mutation<
+      RefreshOrganizationCapabilitiesApiResponse,
+      RefreshOrganizationCapabilitiesApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/capabilities/${queryArg.runtimeId}/refresh`,
+        method: "POST",
+      }),
+    }),
+    organizationModelPolicy: build.query<OrganizationModelPolicyApiResponse, OrganizationModelPolicyApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/model-policy` }),
+    }),
+    replaceOrganizationModelPolicy: build.mutation<
+      ReplaceOrganizationModelPolicyApiResponse,
+      ReplaceOrganizationModelPolicyApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/model-policy`,
+        method: "PUT",
+        body: queryArg.replaceModelPolicy,
+      }),
+    }),
+    refreshModelSource: build.mutation<RefreshModelSourceApiResponse, RefreshModelSourceApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/model-sources/${queryArg.sourceId}/refresh`,
+        method: "POST",
+      }),
+    }),
+    organizationModels: build.query<OrganizationModelsApiResponse, OrganizationModelsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/models` }),
+    }),
     organizationSupervision: build.query<OrganizationSupervisionApiResponse, OrganizationSupervisionApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/supervision`,
@@ -348,8 +382,48 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.updateAgentInstanceRequest,
       }),
     }),
+    prepareExecution: build.mutation<PrepareExecutionApiResponse, PrepareExecutionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances/${queryArg.agentInstanceId}/prepare-execution`,
+        method: "POST",
+        params: {
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
+    resolveRuntime: build.query<ResolveRuntimeApiResponse, ResolveRuntimeApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances/${queryArg.agentInstanceId}/runtime`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          conversation: queryArg.conversation,
+        },
+      }),
+    }),
     spaceAgentTemplates: build.query<SpaceAgentTemplatesApiResponse, SpaceAgentTemplatesApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-templates` }),
+    }),
+    listSessions: build.query<ListSessionsApiResponse, ListSessionsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions` }),
+    }),
+    createSession: build.mutation<CreateSessionApiResponse, CreateSessionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions`,
+        method: "POST",
+        body: queryArg.createSessionRequest,
+      }),
+    }),
+    getSession: build.query<GetSessionApiResponse, GetSessionApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}` }),
+    }),
+    updateSession: build.mutation<UpdateSessionApiResponse, UpdateSessionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}`,
+        method: "PATCH",
+        body: queryArg.updateSessionRequest,
+      }),
     }),
     getMyPreferences: build.query<GetMyPreferencesApiResponse, GetMyPreferencesApiArg>({
       query: () => ({ url: `/control-plane/v1/users/me/preferences` }),
@@ -572,6 +646,33 @@ export type SetOrganizationAgentDefaultApiArg = {
   agentId: string;
   setAgentDefaultOnRequest: SetAgentDefaultOnRequest;
 };
+export type OrganizationCapabilitiesApiResponse = /** status 200 undefined */ PodCapabilityInventory[];
+export type OrganizationCapabilitiesApiArg = {
+  organizationId: string;
+};
+export type RefreshOrganizationCapabilitiesApiResponse = unknown;
+export type RefreshOrganizationCapabilitiesApiArg = {
+  organizationId: string;
+  runtimeId: string;
+};
+export type OrganizationModelPolicyApiResponse = /** status 200 undefined */ OrganizationModelPolicy;
+export type OrganizationModelPolicyApiArg = {
+  organizationId: string;
+};
+export type ReplaceOrganizationModelPolicyApiResponse = /** status 200 undefined */ OrganizationModelPolicy;
+export type ReplaceOrganizationModelPolicyApiArg = {
+  organizationId: string;
+  replaceModelPolicy: ReplaceModelPolicy;
+};
+export type RefreshModelSourceApiResponse = unknown;
+export type RefreshModelSourceApiArg = {
+  organizationId: string;
+  sourceId: string;
+};
+export type OrganizationModelsApiResponse = /** status 200 undefined */ OrganizationModelInventory;
+export type OrganizationModelsApiArg = {
+  organizationId: string;
+};
 export type OrganizationSupervisionApiResponse = /** status 200 undefined */ OrganizationSupervision;
 export type OrganizationSupervisionApiArg = {
   organizationId: string;
@@ -651,9 +752,51 @@ export type UpdateAgentInstanceApiArg = {
   agentInstanceId: string;
   updateAgentInstanceRequest: UpdateAgentInstanceRequest;
 };
+export type PrepareExecutionApiResponse = /** status 200 undefined */ ExecutionPreparation;
+export type PrepareExecutionApiArg = {
+  spaceId: string;
+  agentInstanceId: string;
+  /** Registered conversation to verify before routing. */
+  sessionId?: string;
+};
+export type ResolveRuntimeApiResponse = /** status 200 undefined */ RuntimeBinding;
+export type ResolveRuntimeApiArg = {
+  spaceId: string;
+  agentInstanceId: string;
+  /** Canonical person; only a trusted delegated call may supply this assertion. */
+  person?: string;
+  /** Run identifier; required together with person and agent. */
+  run?: string;
+  /** Delegated agent instance UUID; must match agent_instance_id. */
+  agent?: string;
+  /** Registered conversation; this resolver checks its private canonical association, then the pod checks checkpoint provenance before loading history. */
+  conversation?: string;
+};
 export type SpaceAgentTemplatesApiResponse = /** status 200 undefined */ AgentTemplateSummary[];
 export type SpaceAgentTemplatesApiArg = {
   spaceId: string;
+};
+export type ListSessionsApiResponse = /** status 200 undefined */ SessionDetails[];
+export type ListSessionsApiArg = {
+  spaceId: string;
+};
+export type CreateSessionApiResponse = /** status 200 undefined */
+  | SessionDetails
+  | /** status 201 undefined */ SessionDetails;
+export type CreateSessionApiArg = {
+  spaceId: string;
+  createSessionRequest: CreateSessionRequest;
+};
+export type GetSessionApiResponse = /** status 200 undefined */ SessionDetails;
+export type GetSessionApiArg = {
+  spaceId: string;
+  sessionId: string;
+};
+export type UpdateSessionApiResponse = /** status 200 undefined */ SessionDetails;
+export type UpdateSessionApiArg = {
+  spaceId: string;
+  sessionId: string;
+  updateSessionRequest: UpdateSessionRequest;
 };
 export type GetMyPreferencesApiResponse = /** status 200 undefined */ UserPreferences;
 export type GetMyPreferencesApiArg = void;
@@ -1103,6 +1246,134 @@ export type AgentDefaultOnResult = {
 export type SetAgentDefaultOnRequest = {
   default_on: boolean;
 };
+export type CapabilityFieldType =
+  | "string"
+  | "text"
+  | "text-multiline"
+  | "number"
+  | "integer"
+  | "boolean"
+  | "select"
+  | "array"
+  | "object"
+  | "prompt"
+  | "secret"
+  | "url";
+export type CapabilityFieldDescription = {
+  description?: string | null;
+  description_by_lang?: {
+    [key: string]: string;
+  };
+  item_type?: CapabilityFieldType | null;
+  key: string;
+  max?: number | null;
+  min?: number | null;
+  required?: boolean;
+  scope_private?: boolean | null;
+  title: string;
+  type: CapabilityFieldType;
+};
+export type CapabilityExecutionModel = "react" | "graph";
+export type PodCapabilityKind = "tool";
+export type PodCapabilityDescriptor = {
+  config_fields?: CapabilityFieldDescription[];
+  description: string;
+  execution_models?: CapabilityExecutionModel[];
+  icon: string;
+  id: string;
+  kind?: PodCapabilityKind;
+  name: string;
+  public_version?: string | null;
+  runtime_id?: string | null;
+  source_id?: string | null;
+  team_settings_fields?: CapabilityFieldDescription[];
+  version: string;
+};
+export type CapabilityInventoryOffer = {
+  /** Present in the last successful snapshot; independent of observation state. */
+  advertised: boolean;
+  capability_id: string;
+  descriptor: PodCapabilityDescriptor;
+  runtime_id: string;
+  version: string;
+};
+export type CatalogObservationState = "not_observed" | "observed" | "unavailable";
+export type PodTemplateCapability = {
+  capability_id: string;
+  default_selected: boolean;
+  source_agent_id: string;
+};
+export type PodCapabilityInventory = {
+  capabilities: CapabilityInventoryOffer[];
+  checked_at?: string | null;
+  enabled: boolean;
+  observation: CatalogObservationState;
+  observed_at?: string | null;
+  runtime_id: string;
+  /** Links from the last successful snapshot, all scoped to this runtime. */
+  template_capabilities: PodTemplateCapability[];
+};
+export type ModelOfferKey = {
+  source_id: string;
+  upstream_model_id: string;
+};
+export type OrganizationModelPolicy = {
+  created_at?: string | null;
+  created_by?: string | null;
+  default?: ModelOfferKey | null;
+  fallback?: ModelOfferKey | null;
+  organization_id: string;
+  permitted: ModelOfferKey[];
+  /** Zero means no saved policy: no permissions or implicit selections. */
+  revision: number;
+  updated_at?: string | null;
+  updated_by?: string | null;
+};
+export type ReplaceModelPolicy = {
+  default: ModelOfferKey | null;
+  expected_revision: number;
+  fallback: ModelOfferKey | null;
+  permitted: ModelOfferKey[];
+};
+export type ModelObservation = {
+  checked_at?: string | null;
+  enabled: boolean;
+  error_code?: string | null;
+  last_success_at?: string | null;
+  snapshot_revision: number;
+  snapshot_source_revision?: number | null;
+  source_id: string;
+  source_revision: number;
+  state: string;
+};
+export type ChatProvenance = "source_guarantee" | "api_metadata";
+export type ModelMetadata = {
+  chat?: boolean | null;
+  chat_provenance?: ChatProvenance | null;
+  context_window_tokens?: number | null;
+  display_name?: string | null;
+  max_input_tokens?: number | null;
+  max_output_tokens?: number | null;
+};
+export type StoredModelOffer = {
+  advertised: boolean;
+  first_seen_at: string;
+  last_seen_at: string;
+  metadata: ModelMetadata;
+  source_id: string;
+  upstream_model_id: string;
+  withdrawn_at?: string | null;
+};
+export type ModelInventory = {
+  observation: ModelObservation;
+  offers: StoredModelOffer[];
+};
+export type OrganizationModelInventory = {
+  /** Only this organization's choices; none is a proof of executability. */
+  policy: OrganizationModelPolicy;
+  /** Shared platform observations. Presence/chat/discovery are independent of permission. */
+  sources: ModelInventory[];
+};
 export type DocumentCounts = {
   /** Logical original bytes recorded in SQL, not physical storage usage. */
   bytes: number;
@@ -1202,6 +1473,11 @@ export type Directory = {
   total: number;
 };
 export type EntryOrder = "name_asc" | "name_desc" | "created_asc" | "created_desc" | "size_asc" | "size_desc";
+export type ModelOptions = {
+  max_tokens?: number | null;
+  temperature?: number | null;
+  top_p?: number | null;
+};
 export type AgentInstanceStatus = "enabled" | "disabled";
 export type ManagedAgentInstanceSummary = {
   agent_instance_id: string;
@@ -1214,7 +1490,10 @@ export type ManagedAgentInstanceSummary = {
   created_by?: string | null;
   description?: string | null;
   display_name: string;
+  model_options?: ModelOptions | null;
+  /** Diagnostic only; requires explicit re-selection if no recommended_model is saved. */
   recommended_chat_profile_id?: string | null;
+  recommended_model?: ModelOfferKey | null;
   role: string;
   selected_capability_ids?: string[] | null;
   source_agent_id: string;
@@ -1254,7 +1533,10 @@ export type CreateAgentInstanceRequest = {
   capability_ids?: string[] | null;
   description?: string | null;
   display_name: string;
+  model_options?: ModelOptions | null;
+  /** Legacy diagnostic reference only; non-null creation is refused. Re-select by offer key. */
   recommended_chat_profile_id?: string | null;
+  recommended_model?: ModelOfferKey | null;
   role?: string | null;
   /** Canonical UUID returned by this space's template catalog. */
   template_id: string;
@@ -1288,8 +1570,10 @@ export type UpdateAgentInstanceRequest = {
   description?: string | null;
   /** Omitted/null metadata leaves the saved value unchanged. */
   display_name?: string | null;
+  model_options?: ModelOptions | null;
   /** Omitted keeps the recommendation; null clears it; other values return 422. */
   recommended_chat_profile_id?: string | null;
+  recommended_model?: ModelOfferKey | null;
   role?: string | null;
   status?: AgentInstanceStatus | null;
   /** Omitted keeps values; null/{} clears them; an object replaces known values. */
@@ -1301,6 +1585,118 @@ export type UpdateAgentInstanceRequest = {
         [key: string]: TuningValue;
       };
   usage_statement?: string | null;
+};
+export type ChatControlDescriptor = {
+  capability_id: string;
+  params?:
+    | {
+        [key: string]: any;
+      }
+    | {
+        [key: string]: any;
+      };
+  widget: string;
+};
+export type ExecutionTransport = "sse";
+export type ModelDiagnostic =
+  | "unknown_offer"
+  | "not_permitted"
+  | "source_disabled"
+  | "source_revision_unobserved"
+  | "discovery_unavailable"
+  | "withdrawn"
+  | "chat_not_established"
+  | "options_exceed_known_limit";
+export type PreparationModelOffer = {
+  candidate: boolean;
+  diagnostics: ModelDiagnostic[];
+  key: ModelOfferKey;
+  metadata: ModelMetadata | null;
+  permitted: boolean;
+  selectable: boolean;
+};
+export type PreparationModels = {
+  default: ModelOfferKey | null;
+  fallback: ModelOfferKey | null;
+  /** A retained diagnostic only, never a selectable profile. */
+  legacy_profile_id: string | null;
+  offers: PreparationModelOffer[];
+  options: ModelOptions;
+  recommendation: ModelOfferKey | null;
+  requires_reselection: boolean;
+};
+export type ExecutionPreparation = {
+  agent_instance_id: string;
+  /** Empty for the supported no-tool slice; no unconnected widget is advertised. */
+  chat_controls: ChatControlDescriptor[];
+  execute_stream_url: string;
+  execute_url: string;
+  execution_transport: ExecutionTransport;
+  max_chat_input_chars: number | null;
+  /** RFC 6570 Level 1 template. Substitute the registered session ID. */
+  messages_url_template: string;
+  models: PreparationModels;
+  runtime_id: string;
+  space_id: string;
+  /** False until the managed Weaver HITL journey is connected. */
+  supports_hitl: boolean;
+  supports_streaming: boolean;
+  supports_ui_parts: boolean;
+};
+export type RuntimeAgent = {
+  /** Saved tuning, excluding the legacy profile reference exposed in models for diagnostics.
+    No refresh from the catalog; fields, values and capability envelopes are preserved. */
+  configuration: any;
+  configuration_updated_at: string;
+  instance_id: string;
+  runtime_id: string;
+  /** Organization-qualified OpenFGA identity, distinct from the registry key. */
+  template_id: string;
+  template_key: string;
+};
+export type ModelConnection = {
+  api_root: string;
+  /** Platform-approved reference to pod-local inference provisioning, never a secret value. */
+  credential_binding: string;
+  provider: string;
+};
+export type RuntimeModelOffer = {
+  /** Necessary known facts only; local support, credentials and connectivity remain unproven. */
+  candidate: boolean;
+  connection?: ModelConnection | null;
+  diagnostics: ModelDiagnostic[];
+  key: ModelOfferKey;
+  metadata?: ModelMetadata | null;
+  observation?: ModelObservation | null;
+  permitted: boolean;
+  /** New selection writes additionally require successful current discovery (M2). */
+  selectable: boolean;
+};
+export type RuntimeModels = {
+  /** Diagnostic only. Never an alternative resolution key. */
+  legacy_profile_id?: string | null;
+  /** Union of permitted keys and retained recommendation/default/fallback references. */
+  offers: RuntimeModelOffer[];
+  options: ModelOptions;
+  policy: OrganizationModelPolicy;
+  recommendation?: ModelOfferKey | null;
+  requires_reselection: boolean;
+};
+export type RuntimeSpace = {
+  id: string;
+  kind: SpaceKind;
+  /** Canonical organization ownership, not inherited document scope for personal spaces. */
+  organization_id: string | null;
+  project_id: string | null;
+  team_id: string | null;
+};
+export type RuntimeBinding = {
+  agent: RuntimeAgent;
+  conversation_id: string | null;
+  models: RuntimeModels;
+  run_id: string | null;
+  space: RuntimeSpace;
+  subject_id: string;
 };
 export type AgentTemplateStatus = "available";
 export type AgentTemplateSummary = {
@@ -1324,6 +1720,8 @@ export type AgentTemplateSummary = {
         [key: string]: string;
       };
   display_name: string;
+  /** Current pod input limit, absent when not advertised. */
+  max_chat_input_chars?: number | null;
   public_version?: string | null;
   source_agent_id: string;
   source_runtime_id: string;
@@ -1332,6 +1730,35 @@ export type AgentTemplateSummary = {
   tags: string[];
   team_instantiable: boolean;
   template_id: string;
+};
+export type SessionDetails = {
+  agent_deleted: boolean;
+  agent_disabled: boolean;
+  /** Current name, or the registration snapshot after instance removal. */
+  agent_display_name: string;
+  agent_instance_id: string;
+  created_at: string;
+  /** Public history destination, independent of instance/template execution state.
+    Null if this runtime has no enabled, platform-approved public route. */
+  messages_url: string | null;
+  runtime_id: string;
+  session_id: string;
+  space_id: string;
+  template_id: string;
+  title: string | null;
+  updated_at: string;
+};
+export type CreateSessionRequest = {
+  agent_instance_id: string;
+  /** Frontend-selected identifier, retained verbatim; ':' is reserved for graph threads. */
+  session_id: string;
+  title?: string | null;
+};
+export type UpdateSessionRequest = {
+  /** Omitted/null keeps the current title; an empty string explicitly clears it. */
+  title?: string | null;
+  /** Last observed activity. Monotonic, capped at server time; omission keeps activity. */
+  updated_at?: string | null;
 };
 export type AgentSort = "name" | "created_at:desc" | "updated_at:desc";
 export type Language = "en" | "fr";
@@ -1421,6 +1848,15 @@ export const {
   useOrganizationAgentsQuery,
   useLazyOrganizationAgentsQuery,
   useSetOrganizationAgentDefaultMutation,
+  useOrganizationCapabilitiesQuery,
+  useLazyOrganizationCapabilitiesQuery,
+  useRefreshOrganizationCapabilitiesMutation,
+  useOrganizationModelPolicyQuery,
+  useLazyOrganizationModelPolicyQuery,
+  useReplaceOrganizationModelPolicyMutation,
+  useRefreshModelSourceMutation,
+  useOrganizationModelsQuery,
+  useLazyOrganizationModelsQuery,
   useOrganizationSupervisionQuery,
   useLazyOrganizationSupervisionQuery,
   useTeamSupervisionQuery,
@@ -1442,8 +1878,17 @@ export const {
   useLazyGetAgentInstanceQuery,
   useDeleteAgentInstanceMutation,
   useUpdateAgentInstanceMutation,
+  usePrepareExecutionMutation,
+  useResolveRuntimeQuery,
+  useLazyResolveRuntimeQuery,
   useSpaceAgentTemplatesQuery,
   useLazySpaceAgentTemplatesQuery,
+  useListSessionsQuery,
+  useLazyListSessionsQuery,
+  useCreateSessionMutation,
+  useGetSessionQuery,
+  useLazyGetSessionQuery,
+  useUpdateSessionMutation,
   useGetMyPreferencesQuery,
   useLazyGetMyPreferencesQuery,
   usePatchMyPreferencesMutation,

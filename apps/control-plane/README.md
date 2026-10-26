@@ -135,6 +135,308 @@ if any source fails, without printing a partial catalog. It does not start the A
 connect to SQL/OpenFGA, persist definitions or enroll instances. `serve` does not
 poll runtimes. This command does not enroll or execute agents.
 
+## Platform model inventory and organization administration
+
+`platform.model_sources` defaults to `[]`. `serve` applies these non-secret
+approvals to SQL after checking migrations; it performs no model discovery.
+Organization APIs expose this inventory and persist explicit choices. There is no
+model CLI, polling or runtime enforcement. The internal `configure_sources`,
+`refresh` and `inventory` operations remain available to trusted Rust callers;
+`refresh(pool, source)` requires the exact persisted platform configuration and
+carries no user authorization. Administrative routes instead own the claim and
+publication transactions and reuse that same M1 discovery adapter.
+
+Example of a **disabled, fictitious** source (no credential value is provided):
+
+```yaml
+platform:
+  model_sources:
+    - source_id: example-gateway
+      revision: 1
+      enabled: false
+      discovery_url: https://catalog.example.invalid/v1/models
+      inference:
+        provider: openai
+        api_root: https://inference.example.invalid/v1
+        credential_binding: example-gateway-inference
+      visibility_scope: example-account-namespace-all-models
+      authentication:
+        mode: bearer
+        secret_env_var: EXAMPLE_MODEL_DISCOVERY_TOKEN
+        provider_scopes: [provider-list-scope]
+        authority: discovery_only
+      qualification: mixed_capabilities_v1
+      complete_inventory_guaranteed: true
+```
+
+The platform must review both destinations, the provider account/namespace,
+visibility, actual credential scopes and egress/TLS policy together. Discovery
+secrets use the existing `ENV_FILE`/process environment; inference credentials
+remain pod-owned references and are never looked up by Rust. `mode: public` is an
+explicit alternative, not a default. A credential that also permits inference
+requires `authority: discovery_and_inference` **and**
+`accept_inference_authority: true`; issuing a distinct key is not proof of scope.
+HTTPS is required unless `allow_insecure_http: true` explicitly approves internal
+HTTP. URLs with credentials, query parameters or fragments are refused. No URL is
+derived from another and no Fred or pod token is implicitly reused.
+
+Increase `revision` for every change, including rotation behind the same secret
+reference. Apply the same configuration across replicas: older revisions and
+different content at the same revision are rejected. A changed discovery URL,
+inference provider/root or visibility scope requires a new source ID. The platform
+must declare account/namespace changes through `visibility_scope`; discovery cannot
+verify them from a bearer token. Disable a source at a higher revision before
+removing its configuration. Disabled SQL rows and offers remain for diagnostics.
+Configuration changes invalidate in-flight refreshes and retain the last success;
+the observation becomes `not_observed` at the new revision.
+
+The single adapter requires HTTP 200 and `{ "data": [{ "id": "exact-id" }] }`.
+IDs are unique, nonblank, without outer whitespace/control characters, at most
+256 UTF-8 bytes, and are never normalized. Requests take at most five seconds,
+read at most one MiB and never follow redirects. The only supported envelope keys
+besides `data` are `object: "list"`, `complete: true`, and
+`has_more`/`partial`/`truncated: false`. Unknown envelope fields, pagination links,
+ranges, truncation and unsupported pagination markers cannot replace a snapshot.
+Non-identity content encodings are refused. A 200 response alone does not prove
+completeness: `complete_inventory_guaranteed: false` always yields `incomplete`.
+Silent provider truncation remains undetectable; platform approval must establish
+the full-list guarantee for that exact visibility scope.
+
+`chat_source` establishes chat from the platform guarantee;
+`mixed_capabilities_v1` trusts only boolean `capabilities.completion_chat`.
+Missing/invalid mixed-source metadata stays unknown, and `false` still retains
+the inventory member. Metadata records chat provenance, optional `name` or
+`display_name`, positive integer `context_length`/`max_model_len`/
+`max_context_length`, `max_input_tokens` and `max_output_tokens`. Invalid optional
+fields become unknown. Labels are bounded to 256 bytes, limits to positive i64;
+these remain source-reported facts. No tools, reasoning, modalities or limits are
+inferred from IDs; unsupported feature metadata remains unknown.
+
+Successful publication is atomic per source, including the observation and empty
+inventories. Withdrawals retain the composite key, first/last-seen dates and last
+metadata; reappearance restores that same row. Failures update only the attempt
+state (`unavailable`, `invalid` or `incomplete`) and sanitized error code. They
+preserve the last success and offers. Discovery creates no permission.
+SQL refresh tokens implement last-started-wins across processes: an older attempt
+cannot publish success or failure after a newer claim or configuration change.
+Cancellation preserves the previous snapshot; the next explicit refresh needs no
+lease recovery. The HTTP phase retains no SQL connection or transaction. Reads use
+one consistent SQL snapshot and expose no URLs or credential references.
+
+The following paths use the usual `/control-plane/v1` prefix. Every operation
+requires `AdmittedUser`, active organization placement and `Manage`, with no
+platform-role exception. Reads recheck admission and Manage after their consistent
+SQL snapshot. No response schema includes destinations, credential references or
+source approval configuration.
+
+| Method/path | Contract |
+| --- | --- |
+| `GET /organizations/{organization_id}/models` | One repeatable-read snapshot of all persisted sources (including disabled ones), observations, retained offers and only this organization's policy. `advertised`, chat qualification/provenance, discovery state/revisions and permission are separate facts. |
+| `POST /organizations/{organization_id}/model-sources/{source_id}/refresh` | No body or destination override. Only an enabled source in this replica's approved configuration can be refreshed, and it must exactly match SQL. 204 on publication; 404 unknown; 409 disabled, obsolete or superseded; 502 invalid/incomplete discovery; 503 unavailable discovery. Failures retain the last success. |
+| `GET /organizations/{organization_id}/model-policy` | Explicit permitted composite keys, optional default/fallback, revision and creation/update attribution. Absent policy is revision 0, empty set, null choices and null attribution. |
+| `PUT /organizations/{organization_id}/model-policy` | Full replacement with `expected_revision`, `permitted`, `default` and `fallback`; all four fields required. Null clears each optional choice. 200 returns the saved policy; 409 on revision conflict or a newly selected unavailable offer; 422 on malformed policy, duplicates, unknown offers or choices outside the permitted set. |
+
+PUT accepts at most 4096 distinct exact offer keys. Revision increments on every
+successful write, including a no-op; callers must reload after a conflict. Default
+and fallback must belong to the submitted permitted set, so revoking a selected
+offer also requires explicitly clearing or replacing that choice. No default,
+fallback, name-based match or permission is inferred.
+
+Only additions to `permitted` and changed non-null default/fallback selections
+need fresh eligibility: known offer, enabled source, `state=ok`,
+`snapshot_source_revision=source_revision`, advertised presence and `chat=true`.
+The affected source/offer rows are share-locked until commit. Retained choices are
+not revalidated as new selections: outage, changed configuration, unknown/non-chat
+metadata and confirmed withdrawal remain diagnosable without blocking permission
+reductions or explicit clearing. Refresh never rewrites policy; reappearance never
+restores a revoked permission. Permission alone establishes no execution readiness.
+
+Refresh checks admission/Manage before claiming a SQL token, commits, then performs
+HTTP without a SQL connection. After HTTP it reacquires the existing platform and
+organization locks, rechecks admission/placement/lifecycle/Manage and fences FGA
+before calling the publication store on that same transaction. Revocation refuses
+publication of both successes and failures. Configuration equality and latest-token
+checks still fence M1 publication; an unauthorized or cancelled attempt leaves its
+token harmlessly supersedable by a later explicit refresh.
+
+Migration `0016_organization_model_policy.sql` adds policy and permission tables;
+0015 and earlier files are unchanged. Composite offer foreign keys retain diagnostic
+references; deferred membership foreign keys ensure atomic default/fallback
+consistency. A trigger restricts the policy owner to an organization. Policy and
+permissions cascade only on physical organization purge, not retirement or a user's
+departure. No model OpenFGA objects are introduced.
+
+Neither migration was applied in these increments. Use the existing migration
+procedure before deploying this binary; startup checks the full sequence. Technical
+quality/generation evidence and **unexecuted** functional cases are in the existing
+OpenSpec [M1-M3 checklist](../../openspec/changes/simplify-weaver-runtime-authorization/tasks.md#platform-model-catalog-accepted-sequence-decision-5e).
+Instance settings and resolver data are described below. Model selection UI/chat and
+invocation enforcement remain separate M4/M5 work.
+
+### Instance recommendations and resolver data (M3)
+
+The existing space-scoped POST/PATCH and GET/list routes now accept/project
+`recommended_model: {source_id, upstream_model_id}` and `model_options` in the
+existing instance tuning JSON. There is no profile entity or new migration.
+The owning organization comes from the authorized space, including personal spaces.
+Creation and changed non-null recommendations reuse M2's `require_selectable`:
+known, permitted, advertised, chat-qualified, enabled source and successful
+observation at its current revision. The existing platform/organization lock
+serializes policy changes; source/offer share locks keep the checked facts stable
+until the instance write commits. SQL parameters never carry browser authority.
+
+| Input | POST | PATCH |
+| --- | --- | --- |
+| `recommended_model` omitted/null | No recommendation | Omitted preserves; null clears |
+| `recommended_model` key | Validate and save | Validate a changed key; an unchanged saved reference remains retained |
+| `model_options` omitted/null | No overrides (`{}`) | Omitted preserves; null resets to `{}` |
+| `model_options` object | Save explicit overrides | Replace the complete options object; omitted/null members remove their override |
+
+Only `temperature` (finite number), `max_tokens` (positive integer) and `top_p`
+(finite number in [0, 1]) are accepted. Booleans, numeric strings, fractional token
+counts and unknown keys are rejected. An empty object supplies no values. There
+are no invented provider defaults or source/template-option merges: resolver
+options are precisely the saved instance overrides, shared across candidate offers.
+No options alter identity or permission. Transport, endpoints, provider, credentials,
+retries, timeouts and reasoning are not instance options.
+When saving a changed recommendation or an options object, known output/context
+limits bound `max_tokens` for the recommendation, otherwise the organization default.
+A legacy-only profile prevents that implicit default resolution. Missing metadata
+adds no inferred capability. Prompt-dependent input/context budgets and actual
+provider support still require pod validation. The resolver separately diagnoses
+option incompatibility for every candidate, including a possible fallback.
+
+Metadata-only edits, unchanged recommendations and explicit clears do not require
+successful discovery. Revocation, withdrawal or outage never rewrite a saved key.
+`recommended_chat_profile_id` remains in ordinary instance reads for diagnosis;
+new non-null writes return 422 `legacy_model_reselection_required`. Omission keeps
+it and explicit null clears it. Selecting a new composite key does not erase that
+history. No name conversion, synthetic profile or automatic migration exists.
+
+The existing authenticated `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime`
+route adds `models` and `agent.configuration_updated_at`. One read-only repeatable-read
+snapshot contains instance configuration, policy, source/offer observations and
+approved connections. Admission, canonical space/template authorization and enabled
+instance checks are retained; admission/space/template rights are checked again
+before returning. No SQL transaction survives a provider call (there is no provider
+call here); the additional authorization checks occur outside the read transaction.
+
+`models.policy` includes revision, permitted keys and explicit default/fallback;
+`recommendation`, `options`, `legacy_profile_id` and `requires_reselection` describe
+saved settings. `offers` is the union of permitted keys and retained references.
+Each entry separates `permitted`, `candidate`, `selectable`, typed diagnostics,
+known metadata and source/snapshot revisions and dates. A candidate requires known
+presence/chat, current source revision, enabled source, permission and compatible
+known option limits. It does not prove pod support, credentials, connectivity or
+upstream authorization. After discovery failure a retained candidate may remain;
+`selectable` is false until successful current discovery. Withdrawn, non-chat,
+disabled, revoked, unknown and obsolete-source references are not candidates.
+
+Only a trusted workload with the existing validated person/run/agent delegation
+receives candidate `connection` objects: approved provider, inference root and
+pod-local inference credential-binding reference. Person calls omit that property.
+No discovery URL/authentication/credential reference or secret value is exposed.
+Organization inventory and ordinary instance responses remain connection-free.
+The legacy profile is removed from the resolver's configuration copy and exposed
+only as `models.legacy_profile_id`; persisted tuning and ordinary reads retain it.
+
+This is data resolution, not model selection or invocation authorization. The
+consumer contract remains explicit choice, then recommendation, then organization
+default; a legacy-only profile requires re-selection. No first-offer default or
+substitution of a forbidden explicit choice is allowed. A fallback reference is
+not an instruction to use it: only confirmed withdrawal of a still-permitted choice,
+with current approved source facts and a permitted/advertised/locally usable fallback,
+can justify it. Discovery failure alone never triggers fallback. M4 must check the
+actual choice before every invocation and compose any invocation overrides there;
+this binding is not an authorization lease. No Python routing or SQL access is added.
+
+
+## Conversation metadata and browser preparation (M5a)
+
+These are backend APIs with generated clients, not a connected or functionally
+validated chat journey. All paths below are relative to the configured CP prefix.
+
+| Method / path | Behavior |
+| --- | --- |
+| `POST /spaces/{space_id}/sessions` | Register `{session_id, agent_instance_id, title?}`; 201 new, 200 identical association replay. The frontend ID is retained. |
+| `GET /spaces/{space_id}/sessions` | Only the authenticated owner's conversations, ordered by `updated_at DESC, session_id`. |
+| `GET /spaces/{space_id}/sessions/{session_id}` | Private metadata, retained instance/template/runtime IDs, current or registration-snapshot agent name, deletion/disabled flags, nullable public `messages_url`. |
+| `PATCH /spaces/{space_id}/sessions/{session_id}` | Only `title` and/or `updated_at`; omitted/null values are unchanged. Empty title clears; activity is monotonic and capped at server time. |
+| `POST /spaces/{space_id}/agent-instances/{agent_instance_id}/prepare-execution?session_id=...` | Admission, space Read, template Use, instance/source state and optional private association checks; public runtime/history routes and browser-safe model facts. |
+
+Admission and current space Read apply to all operations. Session ownership is
+always the authenticated subject; space membership, Write/Manage and platform roles
+grant no access to another person's sessions. A foreign/unknown session is 404;
+an owned incompatible association is 409 `session_association_mismatch`.
+Unknown mutation fields are rejected with 422. Registration replay returns the
+original row without overwriting title/activity, even when its instance is now
+missing or disabled. New registration requires an executable saved association.
+Title/activity edits and history metadata reads do not require template Use.
+
+Migration `0017_session_metadata.sql` is additive and unapplied. This private
+index is distinct from shared instances and contains no messages or checkpoints.
+Its immutable identity columns deliberately have no cascading foreign keys:
+instance/space purge neither removes retained provenance nor cascades into runtime
+history. Missing/retired space authorization still prevents reading that index.
+No purge, deletion endpoint, attachments, prompt library or history migration is
+part of this surface. Agent names fall back to the registration snapshot after
+instance deletion; registration is not a name-synchronization mechanism.
+
+For each external `platform.runtime_catalog_sources` entry, `base_url` remains the
+internal discovery endpoint. Optional `public_base_url` is an independently
+approved same-origin ingress path, e.g. `/fred/agents/v2`. It must have canonical
+nonempty path segments (ASCII letters/digits and `-_.~`, no `.`/`..`, trailing
+slash, encoded characters, authority, query or fragment). No route is inferred.
+Missing/disabled sources return `messages_url=null`; an instance's deletion or
+disabling does not itself remove history routing. Reusing a runtime ID for another
+history store is not a supported migration.
+
+Preparation uses the existing bounded, nonredirecting template discovery, outside
+SQL. Unavailable discovery is 503, denied discovery is 403, absent template is 409.
+Missing public routing is 409 `agent_public_route_unavailable`; disabled instance
+is 409 `agent_instance_disabled`; unavailable runtime is 409
+`agent_runtime_unavailable`. No-tool react/graph families expose the existing SSE
+and UI-part transport and the advertised input limit; HITL is false and
+`chat_controls=[]`. Active capabilities return 422, other execution families 409.
+No unsupported control is replaced with a default or hidden tool selection.
+
+`models` projects M3 `resolve(false)`: recommendation, default/fallback, options,
+legacy diagnostic and composite offers with permission/candidate/selectable facts,
+metadata and diagnostics. The DTO has no inference URL, connection or credential
+binding. It does not select a model or certify provider connectivity. A preparation
+is `Cache-Control: no-store` product data, never a grant or a replacement for M4.
+Session responses are also no-store.
+
+The existing `/runtime?conversation=...` checks the registered owner/space/instance/
+runtime/template association inside its single admission request. Python then
+checks its immutable checkpoint provenance against those canonical identifiers;
+old histories without provenance still fail. No additional resolution or authority
+read is added to model calls, retries or descendants. Revocation remains next-turn.
+The pod's direct history GET currently checks ownership only: its current Weaver
+space/admission check is a prerequisite of the later chat cutover, independent of
+executable-instance state. This increment does not claim that read gate is wired.
+
+Authorization cost follows existing owners. Let R be the number of paginated FGA
+Read requests for `roles_of(user)` (filter `user:user_id, object:space:`, followed
+through every continuation token). A space authorization adds one `can_read`
+Check after that organization-context lookup. List/read use R+1 calls, independent
+of session count. Registration/patch perform two such authorizations plus two
+guard revision Reads under the existing platform/organization lock; new creation
+adds one template `can_use` Check and one fence Write, PATCH one fence Write, and
+an existing-row replay neither. Thus successful calls cost 2R+6, 2R+5 and 2R+4
+respectively when both role reads have R pages. Fence replaces the two revision
+tuples (two deletes/two writes), creating no session FGA tuple. Preparation performs
+two space authorizations and two template Checks (2R+4), with bounded discovery
+between them and outside SQL. Model offers cause no extra FGA checks. Template
+Use has one contextual placement tuple for team spaces, two for personal spaces.
+SQL lock duration for mutations includes guard/recheck/fence calls and short SQL
+reads/writes, never discovery, inference or streaming. Role cardinality drives R;
+session count drives list SQL/serialization only. These are client RPC counts,
+not measurements of server evaluation cost. M4 adds one scoped SQL association
+read within its existing admission, never within an LLM loop. No latency or load
+measurement is claimed; SQL behavior remains functionally unexecuted.
+
+
 ## Background tasks
 
 `control-plane serve` supervises HTTP, storage cleanup, the processing dispatcher

@@ -92,7 +92,7 @@ type AgentFormBodyProps = {
   role: string;
   description: string;
   usageStatement: string;
-  /** Chat profile new conversations start on; null follows the team default. */
+  /** Retained legacy reference for display only; never a model resolution key. */
   recommendedChatProfileId: string | null;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
@@ -326,9 +326,17 @@ export function AgentFormBody({
                 />
                 <TextInput
                   label={t("rework.weaverAgents.modelProfile")}
-                  value={recommendedChatProfileId ?? ""}
+                  value={
+                    editInstance?.recommended_model
+                      ? `${editInstance.recommended_model.source_id} / ${editInstance.recommended_model.upstream_model_id}`
+                      : (recommendedChatProfileId ?? "")
+                  }
                   disabled
-                  explanation={t("rework.weaverAgents.modelUnavailable")}
+                  explanation={t(
+                    recommendedChatProfileId && !editInstance?.recommended_model
+                      ? "rework.weaverAgents.legacyModelReselection"
+                      : "rework.weaverAgents.modelUnavailable",
+                  )}
                 />
                 {renderFieldList(generalFields)}
               </>

@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use anyhow::{Result, ensure};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
-use sqlx::{PgPool, types::Json};
+use sqlx::{PgConnection, types::Json};
 
 pub struct CapabilityOffer {
     pub capability_id: String,
@@ -62,7 +62,7 @@ fn valid_key(value: &str) -> bool {
 }
 
 impl CatalogSnapshot {
-    fn validate(&self, runtime_id: &str) -> Result<()> {
+    pub(super) fn validate(&self, runtime_id: &str) -> Result<()> {
         ensure!(valid_key(runtime_id), "invalid catalog runtime identity");
         let mut ids = HashSet::new();
         for offer in &self.capabilities {
@@ -113,10 +113,13 @@ impl CatalogSnapshot {
 }
 
 /// Persist only a complete successful observation. Fetch and normalize outside SQL.
-/// The runtime row serializes replacements; any failure rolls the whole snapshot back.
-pub async fn replace(pool: &PgPool, runtime_id: &str, snapshot: &CatalogSnapshot) -> Result<()> {
+/// Caller owns the transaction; the runtime row serializes replacements within it.
+pub async fn replace(
+    conn: &mut PgConnection,
+    runtime_id: &str,
+    snapshot: &CatalogSnapshot,
+) -> Result<()> {
     snapshot.validate(runtime_id)?;
-    let mut tx = pool.begin().await?;
     sqlx::query(
         "insert into runtime_catalog (runtime_id, reachable, observed_at)
          values ($1, true, clock_timestamp())
@@ -124,15 +127,15 @@ pub async fn replace(pool: &PgPool, runtime_id: &str, snapshot: &CatalogSnapshot
              checked_at = clock_timestamp(), observed_at = clock_timestamp()",
     )
     .bind(runtime_id)
-    .execute(&mut *tx)
+    .execute(&mut *conn)
     .await?;
     sqlx::query("delete from runtime_template_capability where runtime_id = $1")
         .bind(runtime_id)
-        .execute(&mut *tx)
+        .execute(&mut *conn)
         .await?;
     sqlx::query("update runtime_capability set advertised = false where runtime_id = $1")
         .bind(runtime_id)
-        .execute(&mut *tx)
+        .execute(&mut *conn)
         .await?;
     for offer in &snapshot.capabilities {
         sqlx::query(
@@ -145,7 +148,7 @@ pub async fn replace(pool: &PgPool, runtime_id: &str, snapshot: &CatalogSnapshot
         .bind(&offer.capability_id)
         .bind(&offer.version)
         .bind(Json(&offer.descriptor))
-        .execute(&mut *tx)
+        .execute(&mut *conn)
         .await?;
     }
     for link in &snapshot.template_capabilities {
@@ -158,22 +161,21 @@ pub async fn replace(pool: &PgPool, runtime_id: &str, snapshot: &CatalogSnapshot
         .bind(&link.source_agent_id)
         .bind(&link.capability_id)
         .bind(link.default_selected)
-        .execute(&mut *tx)
+        .execute(&mut *conn)
         .await?;
     }
-    tx.commit().await?;
     Ok(())
 }
 
 /// Retain the last successful inventory on discovery failure, including first contact.
-pub async fn mark_unreachable(pool: &PgPool, runtime_id: &str) -> Result<()> {
+pub async fn mark_unreachable(conn: &mut PgConnection, runtime_id: &str) -> Result<()> {
     ensure!(valid_key(runtime_id), "invalid catalog runtime identity");
     sqlx::query(
         "insert into runtime_catalog (runtime_id, reachable) values ($1, false)
          on conflict (runtime_id) do update set reachable = false, checked_at = clock_timestamp()",
     )
     .bind(runtime_id)
-    .execute(pool)
+    .execute(conn)
     .await?;
     Ok(())
 }

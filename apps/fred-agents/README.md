@@ -57,12 +57,23 @@ Runtime contract:
 - entrypoint: `python -m fred_agents`
 - host / port / log level come from the mounted YAML config
 - `.env` + `configuration.yaml` stay externalized under `/app/config`
-- `models_catalog.yaml` and `mcp_catalog_external.yaml` are mounted by the Fred chart
+- `mcp_catalog_external.yaml` is mounted by the Fred chart when configured.
 
-The production image includes the default `models_catalog.yaml`. Deployments
-outside the Fred chart can use that default, mount another file at
-`/app/config/models_catalog.yaml`, or set `FRED_MODELS_CATALOG_FILE` to their
-catalog path.
+Model offers, defaults and permissions come exclusively from the central Weaver
+resolver, once per external turn. The pod has no model catalog or discovery.
+`inference_credentials` provisions only local access: each entry binds `source_id`,
+`api_root`, `credential_binding` and `api_key_env` (the name of a locally supplied
+secret environment variable). All three public identifiers must exactly match
+the approved resolver connection. This configuration grants no model permission.
+No source or credential is enabled by default. Only OpenAI-compatible inference
+is connected. A missing binding or unsupported adapter refuses execution.
+
+M4 requires a managed instance and canonical `runtime_context.space_id`, plus
+trusted person/workload delegation. Each turn, including a later HITL resume,
+resolves again; retries and children keep the current turn's local authority.
+The existing OpenAI direct-template and creation-assistant execution surfaces
+explicitly refuse execution until they carry that context. See decision 5e and
+F25 for the unvalidated integration boundary.
 
 Fred's internal MCP catalog and its instructions are loaded from the installed package
 [`fred-capability-mcp`](../../libs/capabilities/fred-capability-mcp/README.md).

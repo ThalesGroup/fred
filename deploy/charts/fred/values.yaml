@@ -530,8 +530,6 @@ applications:
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
-      - name: FRED_MODELS_CATALOG_FILE
-        value: "/app/config/models_catalog.yaml"
       - name: FRED_MCP_EXTERNAL_CATALOG_FILE
         value: "/app/config/mcp_catalog_external.yaml"
     ports:
@@ -580,9 +578,6 @@ applications:
       - name: fred-agents-vol
         mountPath: /app/config/configuration.yaml
         subPath: configuration.yaml
-      - name: fred-agents-catalog-vol
-        mountPath: /app/config/models_catalog.yaml
-        subPath: models_catalog.yaml
       - name: fred-agents-catalog-vol
         mountPath: /app/config/mcp_catalog_external.yaml
         subPath: mcp_catalog_external.yaml
@@ -851,154 +846,6 @@ applications:
     # First-party agent templates are code-owned inside apps/fred-agents and
     # are not overridden by a Helm-managed agents_catalog.yaml file.
 
-    # ── models_catalog.yaml — LLM profiles ───────────────────────────────────
-    # CUSTOMIZE: update default_profile_by_capability to select default models.
-    models_catalog:
-      version: v1
-      discovery: null
-      # To discover chat models, replace null with a list (one or more endpoints):
-      # discovery:
-      #   - source_id: primary-gateway
-      #     base_url: https://gateway.example/v1
-      #     include_model_ids: [chat-small, chat-large]
-      # Add another list entry for each additional endpoint. Set OPENAI_API_KEY
-      # in the pod environment and retain a static chat default below.
-      common_model_settings:
-        max_retries: 0
-        timeout:
-          connect: 10.0
-          read: 120.0
-          write: 30.0
-          pool: 5.0
-        http_client_limits:
-          max_connections: 500
-          max_keepalive_connections: 200
-          keepalive_expiry_seconds: 10
-        temperature: 0.0
-      default_profile_by_capability:
-        chat: default.chat.openai.prod
-      profiles:
-        # Select Medium only when OPENAI_API_KEY contains a Mistral API key.
-        - profile_id: chat.mistral.medium
-          capability: chat
-          model_display_name: "Mistral Medium 3.5"
-          supports_thinking: true
-          model:
-            provider: openai
-            name: mistral-medium-latest
-            settings:
-              base_url: https://api.mistral.ai/v1
-              max_retries: 2
-              reasoning_effort: high
-              # Greedy sampling at temperature 0 requires top_p=1 on Mistral Medium.
-              top_p: 1.0
-        - profile_id: default.chat.openai.prod
-          capability: chat
-          model_display_name: "GPT-5.1"
-          description: "Default balanced chat model for production conversations."
-          # Selectable reasoning effort (optional): list the levels the provider
-          # really accepts, e.g. for GPT-5.1 (with supports_thinking: true):
-          #   reasoning_efforts: [low, medium, high]
-          # Absent or one level means on/off only: "on" sends settings.reasoning_effort,
-          # else the single listed level (neither: the assistant cannot reason with it).
-          # Never declare levels Mistral rejects: its models take only `high` (or none).
-          model:
-            provider: openai
-            name: gpt-5.1
-            settings: {}
-        - profile_id: default.chat.local
-          capability: chat
-          model_display_name: "GPT-5.1"
-          description: "Local default chat profile with retries and shorter timeout."
-          model:
-            provider: openai
-            name: gpt-5.1
-            settings:
-              max_retries: 2
-              request_timeout: 90
-              temperature: 0.0
-        - profile_id: chat.openai.gpt52
-          capability: chat
-          model_display_name: "GPT-5.2"
-          description: "Highest-quality GPT-5.2 profile for complex reasoning and synthesis."
-          model:
-            provider: openai
-            name: gpt-5.2
-            settings: {}
-        - profile_id: chat.openai.gpt5
-          capability: chat
-          model_display_name: "GPT-5"
-          description: "Strong general-purpose GPT-5 profile, balanced quality and latency."
-          model:
-            provider: openai
-            name: gpt-5
-            settings: {}
-        - profile_id: chat.openai.gpt5mini
-          capability: chat
-          model_display_name: "GPT-5 mini"
-          description: "Faster and lower-cost GPT-5 Mini profile for everyday chat tasks."
-          model:
-            provider: openai
-            name: gpt-5-mini
-            settings: {}
-        - profile_id: chat.openai.gpt5nano
-          capability: chat
-          model_display_name: "GPT-5 nano"
-          description: "Ultra-fast, budget-oriented GPT-5 Nano profile for simple prompts."
-          model:
-            provider: openai
-            name: gpt-5-nano
-            settings: {}
-        - profile_id: chat.openai.gpt41
-          capability: chat
-          model_display_name: "GPT-4.1"
-          description: "Reliable GPT-4.1 profile for broad compatibility and stable outputs."
-          model:
-            provider: openai
-            name: gpt-4.1
-            settings: {}
-        - profile_id: chat.openai.gpt41mini
-          capability: chat
-          model_display_name: "GPT-4.1 mini"
-          description: "Cost-efficient GPT-4.1 Mini profile for quick conversational responses."
-          model:
-            provider: openai
-            name: gpt-4.1-mini
-            settings: {}
-        - profile_id: chat.azure_apim.gpt4o
-          capability: chat
-          model_display_name: "GPT-4o (Azure)"
-          description: "GPT-4o served via Azure APIM endpoint for enterprise integration."
-          model:
-            provider: azure-apim
-            name: gpt-4o
-            settings:
-              azure_apim_base_url: "https://trustnest.azure-api.net"
-              azure_apim_resource_path: "/genai-aoai-inference/v2"
-              azure_openai_api_version: "2024-06-01"
-              azure_tenant_id: "${AZURE_TENANT_ID}"
-              azure_ad_client_id: "${AZURE_AD_CLIENT_ID}"
-              azure_ad_client_scope: "${AZURE_AD_CLIENT_SCOPE}"
-        - profile_id: chat.ollama.mistral
-          capability: chat
-          model_display_name: "Mistral (Ollama)"
-          description: "Local Ollama Mistral profile for private/offline chat experimentation."
-          model:
-            provider: ollama
-            name: "mistral:latest"
-            settings:
-              base_url: "http://host.docker.internal:11434"
-        # Optional: the deterministic model served inside the fred-agents pod,
-        # for the Test Assistant's `graph check` conformance run. No server, no
-        # cost, never for real conversations. Uncomment to enable it.
-        # - profile_id: default.chat.fred-test-mock
-        #   capability: chat
-        #   model_display_name: "Fred test mock (in-process)"
-        #   model:
-        #     provider: fred-test-mock
-        #     name: fred-test-mock
-        #     settings:
-        #       chunk_delay_s: 0.03
 
     # ── mcp_catalog_external.yaml — additional deployment MCP servers ─────────
     # Add third-party servers here without replacing capability-provided MCPs.
@@ -2024,6 +1871,7 @@ applications:
     configurationFileName: configuration.yaml
     dotenv: &manager-dotenv {}
     configuration: &manager-configuration
+      # platform.model_sources defaults to []; sources require explicit platform approval.
       app:
         gcu_version: v1
         base_url: /control-plane/v1

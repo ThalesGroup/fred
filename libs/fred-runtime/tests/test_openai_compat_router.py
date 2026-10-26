@@ -61,6 +61,7 @@ from fred_core.security.models import AccountStatusError
 from fred_core.security.structure import KeycloakUser
 from fred_runtime.app import AgentPodConfig, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
+from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.common.outbound_credentials import (
     DelegatedCredentialProvider,
     DelegationRuntime,
@@ -556,7 +557,7 @@ def test_chat_completions_enforces_private_session_ownership(
             iterate.assert_not_called()
         assert rebac.check_user_team_permission_or_raise.await_args.args[0].uid == "bob"
         assert asyncio.run(history.get("private-session")) == before
-        container = openai_compat_router_module.get_pod_container_from_app(app)
+        container = get_pod_container_from_app(app)
         events = [
             e
             for e in container.audit_events_buffer

@@ -20,6 +20,7 @@ use crate::{
     domain::{Permission, SpaceKind},
     error::{AppError, AppResult},
     extract::{ApiJson, ApiPath},
+    model_catalog::instance::{self as models, ModelOfferKey, ModelOptions, SavedModelSettings},
     onboarding::AdmittedUser,
     spaces,
 };
@@ -46,7 +47,11 @@ pub struct CreateAgentInstanceRequest {
     pub capability_ids: Option<Vec<String>>,
     /// Values for unselected capabilities are ignored.
     pub capability_config_values: Option<BTreeMap<String, BTreeMap<String, Value>>>,
+    /// Legacy diagnostic reference only; non-null creation is refused. Re-select by offer key.
     pub recommended_chat_profile_id: Option<String>,
+    pub recommended_model: Option<ModelOfferKey>,
+    /// Omitted/null means no invocation overrides; only the three typed fields are accepted.
+    pub model_options: Option<ModelOptions>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -75,6 +80,12 @@ pub struct UpdateAgentInstanceRequest {
     /// Omitted keeps the recommendation; null clears it; other values return 422.
     #[serde(default, deserialize_with = "present")]
     pub recommended_chat_profile_id: Option<Option<String>>,
+    /// Omitted keeps; null clears; a key sets a current M2-admissible recommendation.
+    #[serde(default, deserialize_with = "present")]
+    pub recommended_model: Option<Option<ModelOfferKey>>,
+    /// Omitted keeps; null/{} resets; an object replaces all three overrides.
+    #[serde(default, deserialize_with = "present")]
+    pub model_options: Option<Option<ModelOptions>>,
 }
 
 // Serde calls this only for present keys, so explicit null remains Some(None).
@@ -114,7 +125,11 @@ pub struct ManagedAgentInstanceSummary {
     pub description: Option<String>,
     pub role: String,
     pub usage_statement: String,
+    /// Diagnostic only; requires explicit re-selection if no recommended_model is saved.
     pub recommended_chat_profile_id: Option<String>,
+    pub recommended_model: Option<ModelOfferKey>,
+    /// Absent on pre-M3 records means no overrides, just like {}.
+    pub model_options: Option<ModelOptions>,
     /// Operator state only, not runtime availability.
     pub status: AgentInstanceStatus,
     pub created_at: DateTime<Utc>,
@@ -140,6 +155,8 @@ fn record_to_summary(record: AgentInstance) -> AppResult<ManagedAgentInstanceSum
         #[serde(default)]
         usage_statement: String,
         recommended_chat_profile_id: Option<String>,
+        recommended_model: Option<ModelOfferKey>,
+        model_options: Option<ModelOptions>,
         #[serde(default)]
         values: BTreeMap<String, Value>,
         selected_capability_ids: Option<Vec<String>>,
@@ -159,6 +176,8 @@ fn record_to_summary(record: AgentInstance) -> AppResult<ManagedAgentInstanceSum
         role: tuning.role,
         usage_statement: tuning.usage_statement,
         recommended_chat_profile_id: tuning.recommended_chat_profile_id,
+        recommended_model: tuning.recommended_model,
+        model_options: tuning.model_options,
         status: if record.enabled {
             AgentInstanceStatus::Enabled
         } else {
@@ -174,7 +193,7 @@ fn record_to_summary(record: AgentInstance) -> AppResult<ManagedAgentInstanceSum
     })
 }
 
-pub(super) fn require_instance_space(kind: SpaceKind) -> AppResult<()> {
+pub(crate) fn require_instance_space(kind: SpaceKind) -> AppResult<()> {
     if matches!(kind, SpaceKind::Team | SpaceKind::Personal) {
         Ok(())
     } else {
@@ -192,6 +211,7 @@ pub fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(update_agent_instance))
         .routes(utoipa_axum::routes!(delete_agent_instance))
         .merge(super::runtime::routes())
+        .merge(super::preparation::routes())
 }
 
 #[utoipa::path(
@@ -246,6 +266,7 @@ async fn create_agent_instance(
     if !s.fga.can_use_agent(instance.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
+    models::validate_write(&mut tx, space.organization, &instance.tuning, true).await?;
     s.fga.fence(&mut guard).await?;
     let record = super::create(&mut *tx, &instance)
         .await
@@ -412,7 +433,23 @@ async fn update_agent_instance(
     if !s.fga.can_use_agent(current.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
+    let previous = SavedModelSettings::read(&current.tuning.0)?;
+    let new_recommendation = body
+        .recommended_model
+        .as_ref()
+        .and_then(Option::as_ref)
+        .is_some_and(|key| previous.recommended_model.as_ref() != Some(key));
     tuning::apply_update(&mut current, &body, template.as_ref())?;
+    // Descriptive edits and explicit clears never depend on discovery health.
+    if new_recommendation || matches!(body.model_options, Some(Some(_))) {
+        models::validate_write(
+            &mut tx,
+            space.organization,
+            &current.tuning.0,
+            new_recommendation,
+        )
+        .await?;
+    }
     s.fga.fence(&mut guard).await?;
     let record = super::update(&mut *tx, &current, &user.uid)
         .await

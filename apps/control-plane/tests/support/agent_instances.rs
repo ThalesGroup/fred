@@ -74,8 +74,10 @@ impl Catalog {
             runtime_catalog_sources: vec![RuntimeCatalogSource {
                 runtime_id: "fixture".into(),
                 base_url: self.base.clone(),
+                public_base_url: None,
                 enabled: true,
             }],
+            ..Default::default()
         }
     }
 }

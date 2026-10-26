@@ -132,11 +132,17 @@ clear, robust behavior. Do not weaken controls or compress code to claim savings
 
 - Dimi clarified departure semantics: no reversible suspension or automatic
   restoration of former access/context on return; treat return as newcomer
-  admission. Already-running activity and affected run/delegation cleanup have
-  an accepted maximum of five minutes after effective access revocation.
-  Preserve next-operation checks and bound delegated authority independently of
-  renewable service tokens. Runtime/access cleanup is not implicit authorization
-  to erase shared content, persisted histories or audit evidence.
+  admission. Dimi's 2026-10-26 M4 arbitration supersedes the earlier next-operation
+  rechecks and five-minute revocation bound for agent turns: one complete trusted
+  Control Plane resolution per turn, then local enforcement of that fixed context
+  for every LLM call, retry and descendant. No additional HTTP/SQL/OpenFGA reads to
+  refresh turn authority during the turn; revocation/decommissioning is observed at
+  the next turn. A started turn may finish. Explicit cancellation, terminal-run
+  enforcement, execution limits and resource-specific data checks remain separate.
+  See OpenSpec simplify-weaver-runtime-authorization, design 5e. This is an accepted
+  implementation target, not evidence of a wired runtime. Runtime/access cleanup
+  is not implicit authorization to erase shared content, persisted histories or
+  audit evidence.
 - Preserve JWT validation, the distinction between the authenticated workload
   and the person it acts for, trusted delegation, user/service credential
   renewal, credential confidentiality and run-lifetime enforcement. A service
@@ -147,15 +153,16 @@ clear, robust behavior. Do not weaken controls or compress code to claim savings
   fields are requests to verify, not authority. Bind canonical context on the
   server; model/tool arguments cannot replace or broaden it.
 - Preserve admission, organization/space isolation, conversation ownership/access,
-  revocation and lifecycle controls at the applicable operation boundaries.
-  Initial execution admission is not an unlimited authorization for later data
+  revocation and lifecycle controls at their agreed boundaries. The M4 turn
+  context authorizes only that turn and cannot broaden resource/data scope.
+  Initial execution admission is not unlimited authority for later turns or data
   access. A missing Weaver equivalent is a contract gap to resolve explicitly,
   never permission to disable the Swift guarantee or reproduce a legacy bypass.
 - The agent's exchange with Control Plane to resolve its execution context already
   exists in Swift. Clarify and simplify that contract; do not infer a decision to
   replace all Python authorization with REST calls or to introduce a new signed
-  execution grant. The exact admission response, delegation transport and timing
-  of rechecks remain design decisions until explicitly agreed.
+  execution grant. The accepted M4 freshness boundary is one complete resolution
+  at turn admission; do not reintroduce per-invocation authority reads.
 - Knowledge Flow API disappears from the Weaver target. Knowledge Flow retains
   document processing; vector search and related reads move to local capabilities
   in the agent pod, using shared Python access primitives with OpenSearch/pgvector,

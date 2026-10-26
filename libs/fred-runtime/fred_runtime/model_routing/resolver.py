@@ -1,173 +1,51 @@
 # Copyright Thales 2026
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""
-Deterministic model-selection engine for v2 routing policies.
+# SPDX-License-Identifier: Apache-2.0
+"""One pure router over the complete Weaver turn snapshot."""
 
-What this file does:
-- takes one `ModelSelectionRequest`
-- finds the best matching rule (or default profile)
-- returns one `ModelSelection` (profile + model config + decision metadata)
+from fred_sdk.contracts.weaver import ModelOfferKey, RuntimeModelOffer, RuntimeModels
 
-What this file does NOT do:
-- no model client construction
-- no network calls
-- no runtime side effects
-
-This is the pure decision layer used by `RoutedChatModelFactory`.
-"""
-
-from __future__ import annotations
-
-from .contracts import (
-    ModelCapability,
-    ModelProfile,
-    ModelRoutingPolicy,
-    ModelSelection,
-    ModelSelectionRequest,
-    ModelSelectionSource,
-)
+from .contracts import ModelRoutingError, ModelSelectionSource
 
 
 class ModelRoutingResolver:
-    """
-    Resolve one runtime model-selection query against a static policy.
+    def __init__(self, models: RuntimeModels):
+        self.models = models
+        self.offers = {offer.key: offer for offer in models.offers}
 
-    Practical reading:
-    - Request comes from runtime context (`capability`, `agent_id`)
-    - Resolver chooses one `target_profile_id`: the policy's
-      `agent_profile_overrides[agent_id]` when set and capability-compatible,
-      else the capability default
-    - Provider/factory will later build the actual model client from it
-
-    When is this called (current integration):
-    - ReAct/Deep v2: once per turn, at runtime activation
-    - Graph: once per turn, at runtime activation — same call, same timing
-    """
-
-    def __init__(self, policy: ModelRoutingPolicy):
-        self._policy = policy
-        self._profiles_by_id = {
-            profile.profile_id: profile for profile in policy.profiles
-        }
-        # The static overrides that actually apply, grouped by the capability
-        # they target. Precomputed here rather than filtered per turn: the
-        # policy is immutable for the pod's lifetime, and `select()` runs on
-        # every turn. An override naming a profile of a different capability is
-        # dropped at this point — the same skip `resolve()` has always applied,
-        # moved one level earlier so `agent_overrides_for` can hand callers a
-        # map that is already safe to use without re-checking.
-        overrides_by_capability: dict[ModelCapability, dict[str, str]] = {}
-        for agent_id, profile_id in policy.agent_profile_overrides.items():
-            profile = self._profiles_by_id.get(profile_id)
-            if profile is None:
-                if profile_id in policy.unavailable_discovered_chat_profile_ids:
-                    overrides_by_capability.setdefault(ModelCapability.CHAT, {})[
-                        agent_id
-                    ] = profile_id
-                continue
-            overrides_by_capability.setdefault(profile.capability, {})[agent_id] = (
-                profile_id
+    def resolve(
+        self, choice: ModelOfferKey | None
+    ) -> tuple[RuntimeModelOffer, ModelSelectionSource]:
+        models = self.models
+        if models.requires_reselection and choice is None:
+            raise ModelRoutingError(
+                "Legacy model profile requires explicit offer re-selection"
             )
-        self._agent_overrides_by_capability = overrides_by_capability
-
-    @property
-    def policy(self) -> ModelRoutingPolicy:
-        """Expose the immutable policy used by this resolver."""
-
-        return self._policy
-
-    def agent_overrides_for(self, capability: ModelCapability) -> dict[str, str]:
-        """This pod's static `agent_id -> profile_id` overrides that target
-        `capability`, precomputed at construction.
-
-        Handed to `resolve_effective_chat_profile` as the highest
-        profile-valued precedence level. Already capability-filtered, which is
-        that function's stated precondition.
-        """
-
-        return self._agent_overrides_by_capability.get(capability, {})
-
-    def default_profile_id_for(self, capability: ModelCapability) -> str | None:
-        """This pod's effective default for `capability`, or `None` when none
-        exists. It is the lowest routing precedence level."""
-
-        return self._policy.default_profile_by_capability.get(capability)
-
-    def resolve(self, request: ModelSelectionRequest) -> ModelSelection:
-        """
-        Why this function exists:
-        - implement one deterministic "request -> model profile" decision
-
-        Who calls it:
-        - `RoutedChatModelFactory.select(...)`
-        - any future capability-specific routed factories
-
-        When it is called:
-        - once per turn (runtime-dependent frequency)
-
-        Return / side effects:
-        - returns one `ModelSelection` (agent override or capability default)
-        - no side effects, no external I/O
-
-        Fallback / errors:
-        - no override for `request.agent_id`, or its profile's capability
-          doesn't match -> `_default_selection(...)`
-        - no default profile for capability -> `ValueError`
-        """
-
-        if request.agent_id is not None:
-            profile_id = self._policy.agent_profile_overrides.get(request.agent_id)
-            if profile_id is not None:
-                profile = self._profiles_by_id.get(profile_id)
-                if profile is not None and profile.capability == request.capability:
-                    return ModelSelection(
-                        source=ModelSelectionSource.AGENT_OVERRIDE,
-                        capability=request.capability,
-                        profile_id=profile.profile_id,
-                        model=profile.model.model_copy(deep=True),
-                        capability_id=profile.capability_id,
-                    )
-
-        return self._default_selection(capability=request.capability)
-
-    def _default_selection(self, *, capability: ModelCapability) -> ModelSelection:
-        """Return capability default when no agent override applies."""
-
-        default_profile_id = self._policy.default_profile_by_capability.get(capability)
-        if default_profile_id is None:
-            raise ValueError(
-                f"No default profile configured for capability={capability.value!r}."
-            )
-        profile = self._profile(default_profile_id)
-        return ModelSelection(
-            source=ModelSelectionSource.DEFAULT,
-            capability=capability,
-            profile_id=profile.profile_id,
-            model=profile.model.model_copy(deep=True),
-            capability_id=profile.capability_id,
+        key = choice or models.recommendation or models.policy.default
+        source = (
+            ModelSelectionSource.USER_CHOICE
+            if choice is not None
+            else ModelSelectionSource.INSTANCE_RECOMMENDATION
+            if models.recommendation is not None
+            else ModelSelectionSource.DEFAULT
         )
-
-    def _profile(self, profile_id: str) -> ModelProfile:
-        """Read one profile by id from the pre-indexed catalog."""
-
-        return self._profiles_by_id[profile_id]
-
-    def profile_or_none(self, profile_id: str) -> ModelProfile | None:
-        """Public counterpart to `_profile` for callers outside this class that
-        must not raise `KeyError` on an unknown id — e.g. `RoutedChatModelFactory`
-        resolving a team-policy `target_profile_id` (drift rule), which needs to
-        distinguish "unknown to this deployment" from a Python-internal error
-        and raise its own typed `TeamRoutingProfileDriftError` instead."""
-
-        return self._profiles_by_id.get(profile_id)
+        offer = self.offers.get(key) if key is not None else None
+        if offer is None or not offer.permitted:
+            raise ModelRoutingError(
+                "Selected model is absent or forbidden; no substitution is allowed"
+            )
+        if offer.candidate:
+            return offer, source
+        # A stale discovery failure alone never proves withdrawal. A disabled or
+        # unobserved source, missing metadata or revoked offer cannot trigger fallback.
+        if "withdrawn" not in offer.diagnostics or any(
+            d not in {"withdrawn", "discovery_unavailable"} for d in offer.diagnostics
+        ):
+            raise ModelRoutingError("Selected model is unavailable")
+        fallback = (
+            self.offers.get(models.policy.fallback) if models.policy.fallback else None
+        )
+        if fallback is None or not fallback.permitted or not fallback.candidate:
+            raise ModelRoutingError(
+                "Confirmed withdrawal has no permitted usable fallback"
+            )
+        return fallback, ModelSelectionSource.WITHDRAWAL_FALLBACK

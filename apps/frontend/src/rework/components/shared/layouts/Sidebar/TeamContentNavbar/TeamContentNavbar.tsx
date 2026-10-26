@@ -410,7 +410,7 @@ export default function TeamContentNavbar() {
           <>
             <NavigationMenu items={navigationItems} />
             <Separator margin={"var(--spacing-m)"} />
-            {agentManagement ? <p>{t("rework.weaverAgents.chatUnavailable")}</p> : <ChatList teamId={teamId} />}
+            <ChatList teamId={teamId} spaceId={space?.id} />
           </>
         )}
       </div>

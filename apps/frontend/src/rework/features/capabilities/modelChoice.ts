@@ -14,38 +14,38 @@
 
 import type {
   ChatControlDescriptor,
-  EffectiveChatModel,
-  SelectableChatModel,
-} from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+  ModelOfferKey,
+  PreparationModels,
+  PreparationModelOffer,
+} from "../../../slices/controlPlane/controlPlaneOpenApi";
 
-/** The agent's recommended model among the selectable ones: the row of the resolved model. */
-export function recommendedModelRow(effective: EffectiveChatModel | undefined): SelectableChatModel | undefined {
-  return effective?.selectable_models?.find((row) => row.capability_id === effective.capability_id);
+// A lossless UI key, never a profile or a model name inferred from a label.
+export const modelChoiceKey = (key: ModelOfferKey): string => JSON.stringify([key.source_id, key.upstream_model_id]);
+export function parseModelChoice(value: string): ModelOfferKey {
+  const key: unknown = JSON.parse(value);
+  if (!Array.isArray(key) || key.length !== 2 || key.some((part) => typeof part !== "string" || !part)) {
+    throw new Error("The saved model choice must be selected again");
+  }
+  return { source_id: key[0], upstream_model_id: key[1] };
 }
-
-/** The model the next turn runs on: the conversation's choice when still offered, else the recommended one. */
+export function recommendedModelRow(models: PreparationModels | undefined): PreparationModelOffer | undefined {
+  if (models?.requires_reselection && models.legacy_profile_id) return undefined;
+  const key = models?.recommendation ?? models?.default;
+  return key ? models?.offers.find((row) => modelChoiceKey(row.key) === modelChoiceKey(key)) : undefined;
+}
 export function currentModelRow(
-  effective: EffectiveChatModel | undefined,
-  chatProfileId: string | null,
-): SelectableChatModel | undefined {
-  const chosen = chatProfileId
-    ? effective?.selectable_models?.find((row) => row.profile_id === chatProfileId)
-    : undefined;
-  return chosen ?? recommendedModelRow(effective);
+  models: PreparationModels | undefined,
+  choice: string | null,
+): PreparationModelOffer | undefined {
+  return choice ? models?.offers.find((row) => modelChoiceKey(row.key) === choice) : recommendedModelRow(models);
 }
-
-/**
- * Whether the composer shows the reasoning row: the platform emitted the
- * control and the current model's reasoning is enabled. Without a row (locked
- * choice, older backend) the resolved model decides; unknown keeps the control.
- */
 export function offersReasoning(
-  chatControls: readonly ChatControlDescriptor[],
-  effective: EffectiveChatModel | undefined,
-  chatProfileId: string | null,
+  controls: readonly ChatControlDescriptor[],
+  _models: PreparationModels | undefined,
+  _choice: string | null,
 ): boolean {
-  if (!chatControls.some((control) => control.widget === "reasoning_toggle")) return false;
-  const row = currentModelRow(effective, chatProfileId);
-  if (row) return row.reasoning_enabled ?? false;
-  return effective?.reasoning_enabled !== false;
+  return controls.some((control) => control.widget === "reasoning_toggle");
+}
+export function offerLabel(offer: PreparationModelOffer): string {
+  return `${offer.metadata?.display_name ?? offer.key.upstream_model_id} (${offer.key.source_id})`;
 }

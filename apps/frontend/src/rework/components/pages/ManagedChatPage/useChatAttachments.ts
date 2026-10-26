@@ -136,11 +136,12 @@ export function excludeDeletedAttachments(
 }
 
 interface UseChatAttachmentsParams {
+  enabled?: boolean;
   teamId: string;
   sessionId: string | null;
 }
 
-export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsParams) {
+export function useChatAttachments({ teamId, sessionId, enabled = true }: UseChatAttachmentsParams) {
   const dispatch = useDispatch();
   const { t } = useTranslation();
   const { notifyApiError } = useApiErrorToast();
@@ -154,7 +155,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
   const { data: persistedAttachmentsData = [], isFetching: isHydratingAttachments } =
     useGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery(
       { teamId, sessionId: sessionId ?? "" },
-      { skip: !teamId || !sessionId },
+      { skip: !enabled || !teamId || !sessionId },
     );
 
   const [fastIngestMutation] = useFastIngestKnowledgeFlowV1FastIngestPostMutation();

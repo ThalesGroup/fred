@@ -21,7 +21,10 @@ import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from typing import Final, TypeVar, cast
+from typing import TYPE_CHECKING, Final, TypeVar, cast
+
+if TYPE_CHECKING:
+    from fred_runtime.model_routing.turn import TurnAuthority
 
 import anyio
 from fred_sdk.contracts.runtime import RuntimeErrorEvent, RuntimeStopReason
@@ -108,6 +111,7 @@ class RunScope:
         ] = {}
         self._stop_error: RunStopError | None = None
         self._closed = False
+        self.turn_authority: TurnAuthority | None = None
         self._end_owner_authority: Callable[[], None] | None = None
         self._delegated_credentials = False
 
@@ -157,6 +161,8 @@ class RunScope:
         """End the scope and cancel whatever it still has running."""
 
         self._closed = True
+        if self.turn_authority is not None:
+            self.turn_authority.close()
         self.cancel_children()
 
     @property
@@ -172,6 +178,8 @@ class RunScope:
     def raise_if_stopped(self) -> None:
         """Raise a fresh stop error to avoid accumulating shared tracebacks."""
 
+        if self._closed:
+            raise RunStopError()
         error = self._stop_error
         if error is None:
             return

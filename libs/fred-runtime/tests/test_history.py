@@ -17,8 +17,7 @@ Offline tests for the conversation history store integration in fred-runtime.
 Why this file exists:
 - ``_write_turn_history`` maps RuntimeEvent payloads to ChatMessage rows;
   the mapping must be verified without a running database
-- ``GET /sessions/{session_id}/messages`` must return 503 when the pod has no
-  history store configured, and [] for a session with no rows
+- Weaver HTTP history-read authorization is covered in test_weaver_history_access.py
 - ``PostgresHistoryStore`` must satisfy ``HistoryStorePort`` structurally so
   that runtime injection is valid
 
@@ -913,89 +912,8 @@ def test_postgres_history_store_satisfies_history_store_port() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Test 3: GET /sessions/{id}/messages returns 503 when no store configured
-# ---------------------------------------------------------------------------
-
-
-def test_get_session_messages_returns_503_when_history_store_not_configured(
-    monkeypatch, tmp_path
-) -> None:
-    """
-    GET /agents/sessions/{session_id}/messages must return HTTP 503 when the
-    pod runtime has no history store configured.
-
-    Why this test exists:
-    - a pod without persistent storage must fail loudly rather than silently
-      returning an empty list — 503 signals a configuration gap, not data absence
-
-    How to use it:
-    - offline: the runtime context is monkeypatched inside the live TestClient
-      to present history_store=None to the endpoint handler
-    """
-    app = _make_app(monkeypatch, tmp_path)
-    no_store_ctx = RuntimeContext(
-        RuntimeConfig(knowledge_flow_url="http://localhost:8111/knowledge-flow/v1")
-    )
-
-    with TestClient(app) as client:
-        # Replace the runtime context after lifespan so the endpoint sees
-        # history_store=None.
-        monkeypatch.setattr(
-            agent_app_module, "get_runtime_context", lambda: no_store_ctx
-        )
-        response = client.get("/pod/v1/agents/sessions/session-abc/messages")
-
-    assert response.status_code == 503
-
-
-# ---------------------------------------------------------------------------
-# Test 4: GET /sessions/{id}/messages returns [] for an empty session
-# ---------------------------------------------------------------------------
-
-
-def test_get_session_messages_returns_empty_list_for_unknown_session(
-    monkeypatch, tmp_path
-) -> None:
-    """
-    GET /agents/sessions/{session_id}/messages must return an empty JSON array
-    when the history store contains no rows for the given session.
-
-    Why this test exists:
-    - the UI must handle new or empty sessions without an error response
-    - this verifies the endpoint serializes an empty list correctly (not null,
-      not 404, not 503)
-
-    How to use it:
-    - offline: a mock history store returning [] is injected via a patched
-      runtime context; no DB required
-    """
-    app = _make_app(monkeypatch, tmp_path)
-
-    mock_store = AsyncMock()
-    mock_store.get = AsyncMock(return_value=[])
-
-    mock_ctx = RuntimeContext(
-        RuntimeConfig(
-            knowledge_flow_url="http://localhost:8111/knowledge-flow/v1",
-            history_store=mock_store,
-        )
-    )
-
-    with TestClient(app) as client:
-        monkeypatch.setattr(agent_app_module, "get_runtime_context", lambda: mock_ctx)
-        response = client.get("/pod/v1/agents/sessions/session-new/messages")
-
-    assert response.status_code == 200
-    assert response.json() == []
-    # In dev mode (security disabled) caller_uid is None — user_id=None is passed
-    # so the store returns all rows for the session (no ownership filter applied).
-    mock_store.get.assert_awaited_once_with(session_id="session-new", user_id=None)
-
-
-# ---------------------------------------------------------------------------
-# Test 5 — Session endpoint user isolation (security behaviour)
-# ---------------------------------------------------------------------------
+# HTTP history read cases now live in test_weaver_history_access.py, with
+# current space authorization and persisted provenance rather than dev bypasses.
 
 
 def _make_app_with_user(monkeypatch, tmp_path, user_uid: str):
@@ -1015,72 +933,6 @@ def _make_app_with_user(monkeypatch, tmp_path, user_uid: str):
         lambda _fn, _enabled: lambda: fake_user,
     )
     return _make_app(monkeypatch, tmp_path), fake_user
-
-
-def test_list_sessions_uses_jwt_uid_not_query_param(monkeypatch, tmp_path) -> None:
-    """
-    GET /agents/sessions must use the JWT-extracted uid, ignoring any user_id
-    query parameter supplied by the caller.
-
-    Why this test exists:
-    - the old implementation accepted user_id as a caller-supplied query param,
-      allowing any authenticated user to list another user's sessions
-    - after the fix, the JWT uid is always used when security is enabled
-    - this test verifies that a user_id query param is silently ignored when the
-      caller is authenticated
-
-    How to use it:
-    - offline: _make_user_dependency is monkeypatched to inject a fixed user
-    """
-    app, fake_user = _make_app_with_user(monkeypatch, tmp_path, "alice-uid")
-
-    mock_store = AsyncMock()
-    mock_store.list_sessions = AsyncMock(return_value=["s-alice-1", "s-alice-2"])
-    mock_ctx = RuntimeContext(
-        RuntimeConfig(
-            knowledge_flow_url="http://localhost:8111/knowledge-flow/v1",
-            history_store=mock_store,
-        )
-    )
-
-    with TestClient(app) as client:
-        monkeypatch.setattr(agent_app_module, "get_runtime_context", lambda: mock_ctx)
-        # Pass a different user_id in the query string — must be ignored.
-        response = client.get("/pod/v1/agents/sessions?user_id=liam-uid")
-
-    assert response.status_code == 200
-    # Store must have been called with alice's uid, not liam's.
-    mock_store.list_sessions.assert_awaited_once_with(user_id="alice-uid")
-
-
-def test_get_session_messages_passes_caller_uid_to_store(monkeypatch, tmp_path) -> None:
-    """
-    GET /sessions/{id}/messages must pass the JWT uid as user_id to the history
-    store so only the caller's rows are returned.
-
-    Why this test exists:
-    - verifies that cross-user message history access is blocked at the store call
-      level — a user cannot read another user's conversation by knowing a session_id
-    """
-    app, fake_user = _make_app_with_user(monkeypatch, tmp_path, "alice-uid")
-
-    mock_store = AsyncMock()
-    mock_store.get = AsyncMock(return_value=[])
-    mock_ctx = RuntimeContext(
-        RuntimeConfig(
-            knowledge_flow_url="http://localhost:8111/knowledge-flow/v1",
-            history_store=mock_store,
-        )
-    )
-
-    with TestClient(app) as client:
-        monkeypatch.setattr(agent_app_module, "get_runtime_context", lambda: mock_ctx)
-        response = client.get("/pod/v1/agents/sessions/session-liam/messages")
-
-    assert response.status_code == 200
-    mock_store.get.assert_awaited_once_with(
-        session_id="session-liam", user_id="alice-uid"
-    )
 
 
 def test_delete_session_passes_caller_uid_to_store(monkeypatch, tmp_path) -> None:

@@ -436,9 +436,7 @@ def test_runtime_context_has_no_platform_model_bindings_field() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _bound_context(
-    *, platform_chat_model_binding: ModelBinding | None = None
-) -> BoundRuntimeContext:
+def _bound_context() -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(),
         portable_context=PortableContext(
@@ -448,33 +446,19 @@ def _bound_context(
             tenant="default",
             environment=PortableEnvironment.DEV,
         ),
-        platform_chat_model_binding=platform_chat_model_binding,
     )
 
 
-def test_bound_runtime_context_platform_chat_model_binding_defaults_to_none() -> None:
-    bound = _bound_context()
-    assert bound.platform_chat_model_binding is None
+def test_bound_context_has_no_platform_model_authority() -> None:
+    assert "platform_chat_model_binding" not in _bound_context().model_fields
 
 
-def test_bound_runtime_context_platform_chat_model_binding_round_trips() -> None:
-    bound = _bound_context(
-        platform_chat_model_binding=ModelBinding.model_validate(
-            {
-                "provider": "openai",
-                "name": "gpt-4o-mini",
-                "settings": {"temperature": 0.2},
-            }
-        )
+def test_bound_context_serialization_has_no_turn_authority() -> None:
+    restored = BoundRuntimeContext.model_validate(
+        _bound_context().model_dump(mode="json")
     )
-    dumped = bound.model_dump(mode="json")
-    restored = BoundRuntimeContext.model_validate(dumped)
-    assert restored.platform_chat_model_binding is not None
-    assert restored.platform_chat_model_binding.provider == "openai"
-    assert restored.platform_chat_model_binding.name == "gpt-4o-mini"
-    assert restored.platform_chat_model_binding.settings == ModelBindingSettings(
-        temperature=0.2
-    )
+    assert "turn_authority" not in restored.model_dump()
+    assert "usable_model_ids" not in restored.model_dump()
 
 
 # ---------------------------------------------------------------------------

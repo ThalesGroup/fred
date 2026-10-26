@@ -79,7 +79,6 @@ from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     BoundRuntimeContext,
     InvocationScope,
-    ModelBinding,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
@@ -156,45 +155,10 @@ async def _demo_context_prompt(ctx: ToolContext) -> str:
     return f"ctxprompt:{ctx.binding.runtime_context.context_prompt_text or 'none'}"
 
 
-@tool("demo.team_routing", description="Return the bound team routing policy snapshot.")
+@tool("demo.team_routing", description="Return the requested Weaver selection.")
 async def _demo_team_routing(ctx: ToolContext) -> str:
-    """
-    Return the team routing policy fields bound to the current runtime context.
-
-    Why this exists:
-    - the team default and the user's per-conversation choice are forwarded by
-      the frontend, and the runtime rebuilds RuntimeContext field by field: a
-      field nobody names is silently dropped before model selection
-    - the team-disabled set and the instance recommendation are TRUSTED
-      binding fields: echoed so tests prove a request body cannot set them
-    - the platform-operator `chat` model binding is different: it is NOT
-      read from `runtime_context` at all — a request
-      body must never be able to set it. It is TRUSTED, resolved by
-      control-plane on the same per-turn `ManagedAgentRuntimeBinding` lookup
-      as the reasoning snapshot, and lands on
-      `ctx.binding.platform_chat_model_binding` — never client-forwarded, so
-      never `none` for a managed turn where the admin has one set and never
-      forgeable via the request body.
-
-    How to use it:
-    - invoked by the team-routing regression agent through the runtime
-    """
-
     rc = ctx.binding.runtime_context
-    disabled = ",".join(ctx.binding.team_disabled_model_ids)
-    platform_binding = ctx.binding.platform_chat_model_binding
-    bindings = (
-        f"chat={platform_binding.provider}/{platform_binding.name}"
-        if platform_binding is not None
-        else "none"
-    )
-    return (
-        f"profile:{rc.chat_default_profile_id or 'none'}"
-        f"|choice:{rc.chat_profile_id or 'none'}"
-        f"|disabled:{disabled or 'none'}"
-        f"|recommended:{ctx.binding.recommended_chat_profile_id or 'none'}"
-        f"|bindings:{bindings}"
-    )
+    return f"space:{rc.space_id}|choice:{rc.model_choice}"
 
 
 @tool("demo.reasoning", description="Return the bound reasoning activation snapshot.")
@@ -1828,95 +1792,13 @@ def test_managed_execution_uses_trusted_platform_chat_binding_not_forged_request
     assert "forged-model" not in echoed
 
 
-def test_managed_hitl_resume_uses_current_trusted_platform_chat_binding(
-    monkeypatch, tmp_path
-) -> None:
-    """
-    Regression / security: HITL resume must resolve the SAME
-    fresh, trusted per-turn platform chat binding as a normal managed turn —
-    there is no session-open snapshot to go stale, because `_authorize_and_resolve`
-    (and therefore the control-plane runtime-binding call) runs identically
-    for `execution_action="resume"` as for a normal execute/stream call. This
-    test calls the resolution helper directly against a fake control-plane
-    response with `execution_action="resume"` set, rather than re-driving a
-    full HITL interrupt/resume cycle (covered elsewhere), to isolate exactly
-    the claim slice 1 makes: resume is not a special or weaker path for this
-    binding.
+def test_managed_resume_cannot_deserialize_turn_authority() -> None:
+    from fred_runtime.app.agent_app import _AgentExecuteRequest
 
-    How to use it:
-    - run via the default offline `make test` suite in `fred-runtime`
-    """
-
-    class _FakeResponse:
-        def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
-            self._payload = payload
-            self.status_code = status_code
-            self.text = json.dumps(payload)
-            self.reason_phrase = "OK"
-
-        def json(self) -> dict[str, object]:
-            return self._payload
-
-    class _FakeAsyncClient:
-        def __init__(self, *args, **kwargs) -> None:
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        async def aclose(self) -> None:
-            return None
-
-        async def get(self, url: str, headers: dict[str, str] | None = None):
-            return _FakeResponse(
-                {
-                    "agent_instance_id": "instance-platform-binding-resume",
-                    "template_agent_id": "rags.sample.team_routing",
-                    "owner_scope": "team",
-                    "owner_team_id": "fredlab",
-                    "enabled": True,
-                    "tuning": {
-                        "role": "Team routing probe",
-                        "description": "Reports the team routing policy snapshot it received.",
-                        "tags": [],
-                        "fields": [],
-                    },
-                    "platform_chat_model_binding": {
-                        "provider": "openai",
-                        "name": "resume-model",
-                        "settings": {},
-                    },
-                }
-            )
-
-    monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
-
-    definition = _TeamRoutingAgent()
-    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-
-    async def _resolve() -> agent_app_module._ResolvedExecutionTarget:
-        request = agent_app_module._AgentExecuteRequest(
-            agent_instance_id="instance-platform-binding-resume",
-            context={"execution_action": "resume"},
-            resume_payload={"approved": True, "exchange_id": "ex-resume-1"},
-        )
-        async with agent_app_module.httpx.AsyncClient() as http_client:
-            return await agent_app_module._resolve_agent_instance(
-                request=request,
-                registry=registry,
-                access_token="test-token",
-                control_plane_url="http://control-plane:8222/control-plane/v1",
-                http_client=http_client,
-                team_id="fredlab",
-            )
-
-    target = asyncio.run(_resolve())
-    assert target.platform_chat_model_binding is not None
-    assert target.platform_chat_model_binding.provider == "openai"
-    assert target.platform_chat_model_binding.name == "resume-model"
+    request = _AgentExecuteRequest.model_validate(
+        {"agent_instance_id": "instance", "message": "resume", "_turn_authority": {}}
+    )
+    assert request._turn_authority is None
 
 
 def test_managed_execution_never_calls_llm_when_runtime_binding_resolution_fails(
@@ -3300,170 +3182,26 @@ def test_nested_invocation_preserves_actor_when_user_id_is_none(monkeypatch) -> 
     assert context["user_id"] is None
 
 
-def test_local_registry_invoker_forwards_platform_binding_to_nested_iterate_call(
-    monkeypatch,
-) -> None:
-    """
-    Merge blocker (Slice 1 review): `LocalRegistryAgentInvoker` used to be
-    constructed with only `registry`/`access_token`, so its nested
-    `_iterate_runtime_event_payloads` call always fell back to that
-    parameter's `platform_chat_model_binding=None` default — silently
-    dropping the parent turn's trusted platform chat binding for every
-    `context.invoke_agent(...)` child, even inside a fully managed
-    execution. This proves the exact kwarg reaches the nested call.
+@pytest.mark.asyncio
+async def test_local_registry_invoker_requires_active_parent_authority() -> None:
+    from typing import cast
 
-    How to use it:
-    - run in the default offline `fred-runtime` test suite
-    """
+    from fred_runtime.app.agent_app import LocalRegistryAgentInvoker
+    from fred_runtime.runtime_support.authority import AuthorityLostError
+    from fred_sdk.contracts.context import AgentInvocationRequest
 
-    seen: dict[str, object] = {}
-
-    async def _fake_iterate_runtime_event_payloads(
-        definition,
-        request,
-        access_token=None,
-        *,
-        team_id=None,
-        registry=None,
-        exchange_id=None,
-        platform_chat_model_binding=None,
-        **_kwargs,
-    ):
-        _ = (definition, access_token, team_id, registry, exchange_id)
-        seen["platform_chat_model_binding"] = platform_chat_model_binding
-        yield {"kind": "final", "sequence": 0, "content": "ok"}
-
-    monkeypatch.setattr(
-        agent_app_module,
-        "_iterate_runtime_event_payloads",
-        _fake_iterate_runtime_event_payloads,
-    )
-
-    definition = _EchoAgent()
-    trusted_binding = ModelBinding(provider="openai", name="gpt-4o-mini")
-    invoker = agent_app_module.LocalRegistryAgentInvoker(
-        registry={definition.agent_id: definition},
-        access_token="token-1",
-        platform_chat_model_binding=trusted_binding,
-    )
-
-    asyncio.run(
-        invoker.invoke(
-            AgentInvocationRequest(
-                agent_id=definition.agent_id,
-                message="hello",
-                context=PortableContext(
-                    request_id="req-1",
-                    correlation_id="corr-1",
-                    actor="alice",
-                    tenant="tenant-a",
-                    environment=PortableEnvironment.DEV,
-                    session_id="session-1",
-                    user_id="alice",
-                    team_id="fredlab",
-                ),
-            )
-        )
-    )
-
-    assert seen["platform_chat_model_binding"] == trusted_binding
-
-    # An invoker built for a direct/unmanaged turn (no trusted binding) must
-    # forward None, not silently reuse some other invoker's value.
-    seen.clear()
-    unmanaged_invoker = agent_app_module.LocalRegistryAgentInvoker(
-        registry={definition.agent_id: definition},
-        access_token="token-1",
-    )
-    asyncio.run(
-        unmanaged_invoker.invoke(
-            AgentInvocationRequest(
-                agent_id=definition.agent_id,
-                message="hello",
-                context=PortableContext(
-                    request_id="req-2",
-                    correlation_id="corr-2",
-                    actor="alice",
-                    tenant="tenant-a",
-                    environment=PortableEnvironment.DEV,
-                    session_id="session-1",
-                    user_id="alice",
-                    team_id="fredlab",
-                ),
-            )
-        )
-    )
-    assert seen["platform_chat_model_binding"] is None
-
-
-def test_build_runtime_services_wires_the_current_turns_binding_onto_the_invoker(
-    monkeypatch, tmp_path
-) -> None:
-    """
-    `_build_runtime_services` is the only place a `LocalRegistryAgentInvoker`
-    is constructed in production code; this pins that it always passes THIS
-    turn's own `BoundRuntimeContext.platform_chat_model_binding` — not a
-    stale or foreign one — onto the invoker it builds. A narrow constructor-
-    level check, deliberately paired with
-    `test_local_registry_invoker_propagates_trusted_platform_binding_through_a_real_nested_turn`
-    below, which proves the binding actually reaches a REAL nested agent
-    turn rather than just this assignment.
-
-    How to use it:
-    - run in the default offline `fred-runtime` test suite
-    """
-
-    definition = _EchoAgent()
-    registry = {definition.agent_id: definition}
-    trusted_binding = ModelBinding(provider="openai", name="gpt-4o-mini")
-    binding = BoundRuntimeContext(
-        runtime_context=RuntimeContext(
-            session_id="s", user_id="alice", team_id="fredlab"
-        ),
-        portable_context=PortableContext(
-            request_id="r",
-            correlation_id="c",
-            actor="alice",
-            tenant="fredlab",
-            environment=PortableEnvironment.DEV,
-            session_id="s",
-            user_id="alice",
-            team_id="fredlab",
-        ),
-        platform_chat_model_binding=trusted_binding,
-    )
-
-    monkeypatch.setattr(
-        agent_app_module,
-        "_build_chat_model_factory",
-        lambda config: StaticChatModelFactory(
-            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
-        ),
-    )
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
-    with TestClient(app):
-        services = agent_app_module._build_runtime_services(
-            definition,
-            binding,
-            team_id="fredlab",
-            registry=registry,
-            access_token="token-1",
+    invoker = LocalRegistryAgentInvoker(registry={}, access_token=None)
+    with pytest.raises(AuthorityLostError):
+        await invoker.invoke(
+            cast(AgentInvocationRequest, SimpleNamespace(agent_id="child"))
         )
 
-        assert isinstance(
-            services.agent_invoker, agent_app_module.LocalRegistryAgentInvoker
-        )
-        assert (
-            services.agent_invoker._platform_chat_model_binding  # noqa: SLF001 — pinning the private wiring itself
-            == trusted_binding
-        )
 
-        # No registry → no in-process agent invoker at all (unrelated
-        # existing invariant); confirms this wiring didn't change that gate.
-        services_no_registry = agent_app_module._build_runtime_services(
-            definition, binding, team_id="fredlab", access_token="token-1"
-        )
-        assert services_no_registry.agent_invoker is None
+def test_bound_context_cannot_supply_inference_permission() -> None:
+    from fred_sdk.contracts.context import BoundRuntimeContext
+
+    assert "platform_chat_model_binding" not in BoundRuntimeContext.model_fields
+    assert "usable_model_ids" not in BoundRuntimeContext.model_fields
 
 
 def test_build_runtime_services_uses_persisted_document_source_settings(
@@ -3620,121 +3358,13 @@ async def test_build_runtime_services_binds_scratchpad_to_trusted_conversation_i
     }
 
 
-def test_local_registry_invoker_propagates_trusted_platform_binding_through_a_real_nested_turn(
-    monkeypatch, tmp_path
-) -> None:
-    """
-    Merge blocker (Slice 1 review): proves the trusted platform chat binding
-    reaches a nested `context.invoke_agent(...)` child through REAL nested
-    execution, not merely a constructor assertion.
+@pytest.mark.asyncio
+async def test_nested_turn_cannot_run_without_parent_scope() -> None:
+    from fred_runtime.model_routing.turn import current_turn
+    from fred_runtime.runtime_support.authority import AuthorityLostError
 
-    `NodeContext.invoke_agent` (fred-runtime graph runtime) does
-    nothing more than call `services.agent_invoker.invoke(request)` — this
-    test calls that identical seam directly, so it exercises the same code a
-    real TeamAgent "route" node runs, all the way through
-    `LocalRegistryAgentInvoker.invoke` -> a REAL (non-mocked)
-    `_iterate_runtime_event_payloads` call -> `_build_runtime_services` ->
-    the child's own capability/tool context. The child's tool reads
-    `ctx.binding.platform_chat_model_binding` — the exact field
-    `RoutedChatModelFactory.select` reads unconditionally for the `chat`
-    capability (`fred_runtime/model_routing/provider.py`) — so capturing it
-    here is capturing precisely the input that would drive the child's own
-    chat-model selection, not a proxy for it.
-
-    How to use it:
-    - run via the default offline `make test` suite in `fred-runtime`
-    """
-    captured: list[ModelBinding | None] = []
-
-    @tool(
-        "test.capture_platform_binding",
-        description="Capture the bound platform chat model binding.",
-    )
-    async def _capture_platform_binding(ctx: ToolContext) -> str:
-        captured.append(ctx.binding.platform_chat_model_binding)
-        return "captured"
-
-    class _CaptureBindingAgent(ReActAgent):
-        agent_id: str = "test.capture_platform_binding_child"
-        role: str = "Binding capture probe"
-        description: str = "Captures the bound platform chat model binding via a tool."
-        system_prompt_template: str = (
-            "Use the capture_platform_binding tool, then answer."
-        )
-        tools = (_capture_platform_binding,)
-
-    model = ToolFriendlyFakeChatModel(
-        responses=[
-            AIMessage(
-                content="",
-                tool_calls=[
-                    {
-                        "id": "call-nested-binding-1",
-                        "name": "capture_platform_binding",
-                        "args": {},
-                    }
-                ],
-            ),
-            AIMessage(content="Done."),
-        ]
-    )
-    monkeypatch.setattr(
-        agent_app_module,
-        "_build_chat_model_factory",
-        lambda config: StaticChatModelFactory(model),
-    )
-
-    child = _CaptureBindingAgent()
-    registry: dict[str, ReActAgentDefinition] = {child.agent_id: child}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
-
-    with TestClient(app):
-        # As if resolved by control-plane for THIS managed parent turn —
-        # never read from any client-controlled field.
-        trusted_binding = ModelBinding.model_validate(
-            {
-                "provider": "openai",
-                "name": "gpt-4o-mini",
-                "settings": {"temperature": 0.2},
-            }
-        )
-        parent_binding = BoundRuntimeContext(
-            runtime_context=RuntimeContext(
-                session_id="s", user_id="alice", team_id="fredlab"
-            ),
-            portable_context=PortableContext(
-                request_id="req-parent",
-                correlation_id="corr-parent",
-                actor="alice",
-                tenant="fredlab",
-                environment=PortableEnvironment.DEV,
-                session_id="s",
-                user_id="alice",
-                team_id="fredlab",
-            ),
-            platform_chat_model_binding=trusted_binding,
-        )
-        services = agent_app_module._build_runtime_services(
-            child,
-            parent_binding,
-            team_id="fredlab",
-            registry=registry,
-            access_token="token-parent",
-        )
-        assert services.agent_invoker is not None
-
-        result = asyncio.run(
-            services.agent_invoker.invoke(
-                AgentInvocationRequest(
-                    agent_id=child.agent_id,
-                    message="hello",
-                    context=parent_binding.portable_context,
-                )
-            )
-        )
-
-    assert result.is_error is False
-    assert captured == [trusted_binding]
+    with pytest.raises(AuthorityLostError):
+        current_turn()
 
 
 def test_local_registry_invoker_child_cannot_replace_binding_via_portable_context() -> (

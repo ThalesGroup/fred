@@ -282,7 +282,7 @@ import { clearSessionHistoryCache, getCachedSessionHistory } from "./sessionHist
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
 function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useManagedChat>) => void }) {
-  const hook = useManagedChat({ teamId: "team-1", agentInstanceId: "agent-1", effectiveChatModel: hostEffectiveModel });
+  const hook = useManagedChat({ teamId: "team-1", agentInstanceId: "agent-1", spaceId: "space-1" });
   onRender(hook);
   return null;
 }

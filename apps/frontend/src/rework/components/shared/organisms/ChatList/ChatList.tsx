@@ -12,30 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties";
-import { useNavigate } from "react-router-dom";
-import {
-  useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation,
-  useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
-  useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { useListSessionsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { SessionDetails as Session } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { ChatListItem } from "./ChatListItem/ChatListItem.tsx";
-import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import styles from "./ChatList.module.scss";
-import { KeyCloakService } from "../../../../../security/KeycloakService";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
-import { clearToolApprovalGrants } from "@core/utils/toolApprovalGrants";
-
-type Session = NonNullable<
-  ReturnType<typeof useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery>["data"]
->[number];
 
 interface ChatListProps {
   teamId?: string;
+  spaceId?: string;
 }
 
 // "12/03/26 - 13:03" — fixed DD/MM/YY - HH:mm, not locale-dependent
@@ -51,69 +41,27 @@ function formatSessionDate(dateStr: string | undefined): string {
   return `${day}/${month}/${year} - ${hours}:${minutes}`;
 }
 
-export default function ChatList({ teamId }: ChatListProps) {
+export default function ChatList({ teamId, spaceId }: ChatListProps) {
   const { t } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
-  const navigate = useNavigate();
-  const { showConfirmationDialog } = useConfirmationDialog();
   const [groupByAgent, setGroupByAgent] = useState(false);
 
-  const { data: sessions, isLoading } = useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery(
-    { teamId: teamId! },
-    { skip: !teamId, pollingInterval: 30_000 },
-  );
   const {
-    currentData: agentInstances,
-    isSuccess: agentsResolved,
-    isError: agentsError,
-    refetch: refetchAgents,
-  } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
-    { teamId: teamId! },
-    crossSessionRefreshOptions(!teamId),
+    currentData,
+    isFetching: isLoading,
+    isError,
+    refetch,
+  } = useListSessionsQuery(
+    { spaceId: spaceId ?? "" },
+    { ...crossSessionRefreshOptions(!spaceId), refetchOnMountOrArgChange: true },
   );
-  useRefetchOnWindowFocus(refetchAgents, !teamId);
-  const agentNameByInstanceId = new Map(
-    agentInstances?.map((instance) => [instance.agent_instance_id, instance.display_name]),
-  );
-
+  useRefetchOnWindowFocus(refetch, !spaceId);
+  const managedSessions = !spaceId || isError ? [] : (currentData ?? []);
   const agentName = (session: Session) =>
-    agentNameByInstanceId.get(session.agent_instance_id!) ??
-    session.agent_display_name ??
-    t("rework.sidebar.chatList.unknownAgent", { agentsNicknameSingular });
+    session.agent_display_name || t("rework.sidebar.chatList.unknownAgent", { agentsNicknameSingular });
   const agentDeleted = (id: string) =>
-    Boolean(agentsResolved && !agentsError && agentInstances && !agentNameByInstanceId.has(id));
-
-  const [deleteSession] = useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation();
-
-  const managedSessions = (sessions ?? []).filter((session): session is Session & { agent_instance_id: string } =>
-    Boolean(session.agent_instance_id),
-  );
-  const isEmpty = !isLoading && managedSessions.length === 0;
-
-  const handleDelete =
-    (sessionId: string, agentInstanceId: string, href: string, label: string) => (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      showConfirmationDialog({
-        criticalAction: true,
-        title: t("rework.sidebar.chatList.deleteDialog.title"),
-        message: t("rework.sidebar.chatList.deleteDialog.message", { name: label }),
-        confirmButtonLabel: t("rework.sidebar.chatList.deleteDialog.confirm"),
-        cancelButtonLabel: t("rework.sidebar.chatList.deleteDialog.cancel"),
-        onConfirm: async () => {
-          try {
-            await deleteSession({ teamId: teamId!, sessionId }).unwrap();
-            clearToolApprovalGrants({ userId: KeyCloakService.GetUserId(), agentInstanceId, sessionId });
-          } catch {
-            // Keep grants if deletion failed and the conversation still exists.
-          }
-          const sessionPath = href.split("?")[0];
-          if (window.location.pathname === sessionPath) {
-            navigate(`/team/${teamId}/agents`);
-          }
-        },
-      });
-    };
+    managedSessions.some((session) => session.agent_instance_id === id && session.agent_deleted);
+  const isEmpty = !isLoading && !isError && managedSessions.length === 0;
 
   const renderItem = (session: Session & { agent_instance_id: string }, showAgentName: boolean) => {
     const href = `/team/${teamId}/managed-chat/${session.agent_instance_id}?session=${session.session_id}`;
@@ -128,7 +76,7 @@ export default function ChatList({ teamId }: ChatListProps) {
         agentTooltipName={agentName(session)}
         agentDeleted={agentDeleted(session.agent_instance_id)}
         dateLabel={formatSessionDate(session.updated_at)}
-        onDelete={handleDelete(session.session_id, session.agent_instance_id, href, label)}
+        deleteUnavailableReason={t("rework.weaverAgents.notConnected")}
       />
     );
   };
@@ -163,6 +111,7 @@ export default function ChatList({ teamId }: ChatListProps) {
       </div>
       <div className={styles.chatListItems}>
         {isLoading && <div className={styles.chatListPlaceholder}>{t("rework.sidebar.chatList.loading")}</div>}
+        {isError && <div className={styles.chatListPlaceholder}>{t("chatbot.historyUnavailable")}</div>}
         {isEmpty && (
           <div className={styles.chatListPlaceholder}>
             {t("rework.sidebar.chatList.emptyManaged", { agentsNicknameSingular })}

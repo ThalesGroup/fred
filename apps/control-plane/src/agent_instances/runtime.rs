@@ -23,6 +23,7 @@ use crate::{
     domain::{Permission, SpaceKind, valid_subject},
     error::{AppError, AppResult},
     extract::{ApiPath, ApiQuery},
+    model_catalog::instance::{self as models, RuntimeModels},
     onboarding, spaces,
 };
 
@@ -51,6 +52,7 @@ struct RuntimeQuery {
     person: Option<String>,
     run: Option<String>,
     agent: Option<String>,
+    conversation: Option<String>,
 }
 
 impl RuntimeQuery {
@@ -123,8 +125,13 @@ fn invalid_grant() -> AppError {
 #[derive(Serialize, ToSchema)]
 pub struct RuntimeBinding {
     pub subject_id: String,
+    #[schema(required = true)]
+    pub run_id: Option<String>,
+    #[schema(required = true)]
+    pub conversation_id: Option<String>,
     pub space: RuntimeSpace,
     pub agent: RuntimeAgent,
+    pub models: RuntimeModels,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -147,8 +154,9 @@ pub struct RuntimeAgent {
     /// Organization-qualified OpenFGA identity, distinct from the registry key.
     pub template_id: Uuid,
     pub template_key: String,
-    /// Complete saved AgentTuning JSON: fields, values, selections and envelopes.
-    /// No projection, refresh from the catalog or second configuration vocabulary.
+    pub configuration_updated_at: chrono::DateTime<chrono::Utc>,
+    /// Saved tuning, excluding the legacy profile reference exposed in models for diagnostics.
+    /// No refresh from the catalog; fields, values and capability envelopes are preserved.
     pub configuration: Value,
 }
 
@@ -163,7 +171,8 @@ pub(super) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
         ("agent_instance_id" = Uuid, Path),
         ("person" = Option<String>, Query, description = "Canonical person; only a trusted delegated call may supply this assertion."),
         ("run" = Option<String>, Query, description = "Run identifier; required together with person and agent."),
-        ("agent" = Option<String>, Query, description = "Delegated agent instance UUID; must match agent_instance_id.")
+        ("agent" = Option<String>, Query, description = "Delegated agent instance UUID; must match agent_instance_id."),
+        ("conversation" = Option<String>, Query, description = "Registered conversation; this resolver checks its private canonical association, then the pod checks checkpoint provenance before loading history.")
     ),
     responses(
         (status = 200, body = RuntimeBinding),
@@ -184,6 +193,13 @@ async fn resolve_runtime(
     ApiQuery(query): ApiQuery<RuntimeQuery>,
 ) -> AppResult<impl IntoResponse> {
     let subject = query.subject(&state, &caller, instance_id)?;
+    if query
+        .conversation
+        .as_deref()
+        .is_some_and(|id| !valid_grant_identifier(id))
+    {
+        return Err(invalid_grant());
+    }
     tracing::Span::current().record("user_id", subject);
     onboarding::require_accepted(
         &state.pool,
@@ -194,35 +210,56 @@ async fn resolve_runtime(
     let space =
         spaces::authorize(&state.pool, &state.fga, subject, space_id, Permission::Read).await?;
     super::http::require_instance_space(space.kind)?;
-    let record = super::get_for_space(&state.pool, space_id, instance_id)
+    let initial = super::get_for_space(&state.pool, space_id, instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if record.template_id
-        != agents::template_id(
-            space.organization,
-            &record.source_runtime_id,
-            &record.source_agent_id,
-        )
-    {
-        return Err(anyhow::anyhow!("inconsistent saved agent template provenance").into());
-    }
-    if !state.fga.can_use_agent(record.template_id, &space).await? {
+    if !state.fga.can_use_agent(initial.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
-    if !record.enabled {
-        return Err(AppError::problem(
-            StatusCode::CONFLICT,
-            "agent_instance_disabled",
-            "The agent instance is disabled.",
-        ));
+    let mut tx = state.pool.begin().await?;
+    sqlx::query("set transaction isolation level repeatable read, read only")
+        .execute(&mut *tx)
+        .await?;
+    let mut record = super::get_for_space(&mut *tx, space_id, instance_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    require_executable(&state, &space, &record)?;
+    if let Some(conversation) = &query.conversation {
+        crate::sessions::require_association(&mut *tx, subject, conversation, &record).await?;
     }
     record
         .tuning
         .0
         .as_object()
         .context("invalid saved agent tuning")?;
+    let models = models::resolve(
+        &mut tx,
+        space.organization,
+        &record.tuning.0,
+        query.person.is_some() && state.auth.accepts_runtime_delegation(&caller),
+    )
+    .await?;
+    tx.commit().await?;
+    // Recheck authority after reading; the response still grants no continuing lease.
+    onboarding::require_accepted(
+        &state.pool,
+        state.onboarding.gcu_version.as_deref(),
+        subject,
+    )
+    .await?;
+    let space =
+        spaces::authorize(&state.pool, &state.fga, subject, space_id, Permission::Read).await?;
+    if !state.fga.can_use_agent(record.template_id, &space).await? {
+        return Err(AppError::NotFound);
+    }
+    if let Some(configuration) = record.tuning.0.as_object_mut() {
+        configuration.remove("recommended_chat_profile_id");
+    }
     let binding = RuntimeBinding {
+        models,
         subject_id: subject.to_owned(),
+        run_id: query.run.clone(),
+        conversation_id: query.conversation.clone(),
         space: RuntimeSpace {
             id: space.id,
             kind: space.kind,
@@ -235,9 +272,50 @@ async fn resolve_runtime(
             runtime_id: record.source_runtime_id,
             template_id: record.template_id,
             template_key: record.source_agent_id,
+            configuration_updated_at: record.updated_at,
             configuration: record.tuning.0,
         },
     };
     // Current configuration and rights only; this response is no authorization lease.
     Ok(([(header::CACHE_CONTROL, "no-store")], Json(binding)))
+}
+
+/// Shared saved-instance admission facts; no network calls or alternate policy.
+pub(crate) fn require_executable(
+    state: &AppState,
+    space: &crate::domain::Space,
+    record: &super::AgentInstance,
+) -> AppResult<()> {
+    if record.template_id
+        != agents::template_id(
+            space.organization,
+            &record.source_runtime_id,
+            &record.source_agent_id,
+        )
+    {
+        return Err(anyhow::anyhow!("inconsistent saved agent template provenance").into());
+    }
+
+    if record.source_runtime_id != fred_rust_agent::DEFINITION.provider
+        && !state
+            .agent_catalog
+            .runtime_catalog_sources
+            .iter()
+            .any(|source| source.runtime_id == record.source_runtime_id && source.enabled)
+    {
+        return Err(AppError::problem(
+            StatusCode::CONFLICT,
+            "agent_runtime_unavailable",
+            "The configured agent runtime is unavailable.",
+        ));
+    }
+
+    if !record.enabled {
+        return Err(AppError::problem(
+            StatusCode::CONFLICT,
+            "agent_instance_disabled",
+            "The agent instance is disabled.",
+        ));
+    }
+    Ok(())
 }

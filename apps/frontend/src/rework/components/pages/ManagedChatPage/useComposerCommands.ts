@@ -158,6 +158,7 @@ export interface ComposerCommandsMenu {
 }
 
 export function useComposerCommands(params: {
+  enabled?: boolean;
   teamId: string;
   agentInstanceId?: string;
   /** The caller's personal space, whose prompt commands join the team's. */
@@ -191,7 +192,7 @@ export function useComposerCommands(params: {
   composerValue: string;
   onComposerChange: (value: string) => void;
 } {
-  const { teamId, agentInstanceId, personalTeamId } = params;
+  const { teamId, agentInstanceId, personalTeamId, enabled = true } = params;
   const scopeKey = JSON.stringify([teamId, agentInstanceId, personalTeamId]);
   const scopeRef = useRef({ key: scopeKey, version: 0 });
   if (scopeRef.current.key !== scopeKey) scopeRef.current = { key: scopeKey, version: scopeRef.current.version + 1 };
@@ -205,7 +206,7 @@ export function useComposerCommands(params: {
   const pendingEditsRef = useRef<readonly DraftEdit[] | null>(null);
   const lastEditRef = useRef<{ old: string; value: string; edits: readonly DraftEdit[] } | null>(null);
   const restoredChoicesRef = useRef<readonly Choice[] | null>(null);
-  const skillsQueried = Boolean(teamId && agentInstanceId);
+  const skillsQueried = Boolean(enabled && teamId && agentInstanceId);
   const {
     currentData: catalog,
     isFetching: skillsFetching,
@@ -240,10 +241,13 @@ export function useComposerCommands(params: {
     isFetching: teamCommandsFetching,
     isError: teamCommandsFailed,
     refetch: refetchTeamCommands,
-  } = useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery({ teamId }, { skip: !teamId });
+  } = useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery(
+    { teamId },
+    { skip: !enabled || !teamId },
+  );
   const teamCommandsReadyRef = useRef(false);
   teamCommandsReadyRef.current = prompts !== undefined;
-  const personalQueried = Boolean(personalTeamId) && personalTeamId !== teamId;
+  const personalQueried = enabled && Boolean(personalTeamId) && personalTeamId !== teamId;
   const {
     currentData: personalPrompts,
     isFetching: personalCommandsFetching,
@@ -264,7 +268,7 @@ export function useComposerCommands(params: {
   const catalogSources = {
     team: {
       data: prompts,
-      missing: Boolean(teamId) && prompts === undefined,
+      missing: enabled && Boolean(teamId) && prompts === undefined,
       failed: teamCommandsFailed,
       refetch: refetchTeamCommands,
     },
@@ -748,6 +752,10 @@ export function useComposerCommands(params: {
   // more, and the message is held back only if it still does not answer.
   const waitingRef = useRef(false);
   const submit = useCallback(() => {
+    if (paramsRef.current.enabled === false) {
+      paramsRef.current.onSend();
+      return;
+    }
     const draft = paramsRef.current.input;
     const choices = choicesRef.current;
     const sources = catalogSourcesRef.current;
@@ -873,8 +881,8 @@ export function useComposerCommands(params: {
     onKeyDown,
     onFocusChange,
     listboxId,
-    open: panelOpen,
-    activeDescendantId: panelOpen && hasEntries ? optionId(safeIndex) : null,
+    open: enabled && panelOpen,
+    activeDescendantId: enabled && panelOpen && hasEntries ? optionId(safeIndex) : null,
   };
 
   // A catalog that failed is asked again each time a command is started, not
@@ -901,7 +909,7 @@ export function useComposerCommands(params: {
 
   return {
     trigger,
-    menu,
+    menu: enabled ? menu : null,
     submit,
     dismiss,
     selectedSkills,

@@ -12,40 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Model-routing contracts used by Fred v2 runtimes.
-
-This file is intentionally "product-first": read it as a data contract for
-"which model do we use for this call?".
-
-Minimal mental model:
-
-1. A `ModelProfile` is a named model configuration.
-2. A `ModelRoutingPolicy` has a default profile per capability, plus an
-   optional per-agent override.
-
-Concrete scenario:
-
-- Team-wide chat default: `default_profile_by_capability["chat"]` ->
-  `chat.ollama.mistral`
-- One agent needs a stronger model: `agent_profile_overrides["mindmap"]` ->
-  `chat.azure_apim.gpt4o`
-"""
+"""Local selection results for the central Weaver policy snapshot."""
 
 from __future__ import annotations
 
 from enum import Enum
 
 from fred_core.common import ModelConfiguration
-from fred_sdk.contracts.capability.manifest import (
-    REASONING_EFFORT_LEVELS,
-    ReasoningEffortLevel,
-    model_capability_id,
-)
 from fred_sdk.contracts.context import FrozenModel, ModelCapability
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field
 
-from ..execution_errors import UserFacingExecutionError, sanitize_identifier
+from ..execution_errors import UserFacingExecutionError
 
 # `FrozenModel` and `ModelCapability` are canonically defined in
 # `fred_sdk.contracts.context` (relocated there so control-plane, which
@@ -55,359 +32,17 @@ from ..execution_errors import UserFacingExecutionError, sanitize_identifier
 # import ModelCapability` caller keeps working without modification.
 
 
-class ModelNotUsableError(UserFacingExecutionError):
-    """Raised when a resolved profile's model is not `can_use`-authorized for
-    the requesting team (OBSERV-02 v3, AGENT-CAPABILITY-RFC.md §8.7) — the
-    fail-closed gate `RoutedChatModelFactory.build_for_chat` enforces against
-    `BoundRuntimeContext.usable_model_ids`. Deliberately never substitutes a
-    different model — an agent turn silently routed to a model the team never
-    agreed to use would violate the whole point of admin-gated enablement.
-
-    Propagates like any other resolver/provider exception from
-    `build_for_chat` (see that method's docstring) — the runtime's generic
-    turn-level exception handling surfaces it as an `execution_error` event,
-    never a raw crash. Its sentence reaches the user (`UserFacingExecutionError`):
-    the fix is an admin action, which a bare support reference never names.
-    """
-
-    def __init__(self, *, capability_id: str, provider: str, name: str) -> None:
-        self.capability_id = capability_id
-        self.provider = provider
-        self.name = name
-        super().__init__(
-            f"The model '{sanitize_identifier(name or capability_id)}' used by this "
-            "agent is not enabled for your team. Ask a platform administrator to "
-            "enable it for the team.",
-            f"Model {provider}/{name} ({capability_id!r}) is not enabled for this team.",
-        )
-
-
-class TeamRoutingProfileDriftError(RuntimeError):
-    """Raised when a team policy profile is absent or has the wrong capability.
-
-    Deliberately never falls back to another profile: control-plane and this
-    pod's catalog have drifted, and silently picking a different model would
-    hide the invalid stored policy.
-    """
-
-    def __init__(
-        self,
-        *,
-        profile_id: str,
-        expected_capability: ModelCapability | None = None,
-        actual_capability: ModelCapability | None = None,
-    ) -> None:
-        self.profile_id = profile_id
-        self.expected_capability = expected_capability
-        self.actual_capability = actual_capability
-        if expected_capability is not None and actual_capability is not None:
-            super().__init__(
-                f"Team routing policy references profile {profile_id!r} with "
-                f"capability {actual_capability.value!r}; expected "
-                f"{expected_capability.value!r}."
-            )
-            return
-        super().__init__(
-            f"Team routing policy references profile {profile_id!r}, which is not "
-            "in this runtime deployment's model catalog."
-        )
-
-
-# Provider-passthrough keys inside `ModelConfiguration.settings` that turn
-# reasoning ON at the client (`MODEL-REASONING-ENABLEMENT-RFC.md` REASON-01).
-# One list, two consumers that must never disagree: `ModelProfile`'s boot
-# validator (§4.3 — declaring one of these without `supports_thinking` is an
-# authoring mistake) and `without_reasoning_settings` below, which removes
-# them when the platform toggle is off (§5.6.2). Adding a provider's key here
-# extends both at once; there is deliberately no second place to update.
-REASONING_SETTING_KEYS: frozenset[str] = frozenset({"reasoning_effort"})
-
-
-def without_reasoning_settings(model: ModelConfiguration) -> ModelConfiguration:
-    """Return `model` with every `REASONING_SETTING_KEYS` entry removed from
-    `settings` (`MODEL-REASONING-ENABLEMENT-RFC.md` §5.6.2).
-
-    Why removal and not "decline to add": `reasoning_effort` is already in the
-    YAML-authored settings by the time anything sees it, so a toggle that only
-    skips *adding* it would be decorative — the model would reason with the
-    toggle off. That exact failure is on record in-tree for `allow_parallel_calls`
-    (`AGENT-THINKING-API-RFC.md` §C.8, "Never reaches the model").
-
-    Returns the SAME object when there is nothing to strip. This runs on the
-    model-build path, and the overwhelmingly common case is a profile with no
-    reasoning setting at all — no copy, no allocation for it.
-    """
-
-    settings = model.settings
-    if not settings or REASONING_SETTING_KEYS.isdisjoint(settings):
-        return model
-    return model.model_copy(
-        update={
-            "settings": {
-                key: value
-                for key, value in settings.items()
-                if key not in REASONING_SETTING_KEYS
-            }
-        }
-    )
-
-
-def clamp_reasoning_effort(
-    choice: str, levels: tuple[ReasoningEffortLevel, ...]
-) -> ReasoningEffortLevel | None:
-    """The offered level nearest `choice` (ties go to the stronger one); None
-    for "off". `levels` must be non-empty and in `REASONING_EFFORT_LEVELS`."""
-
-    if choice not in REASONING_EFFORT_LEVELS:
-        return None
-    if choice in levels:
-        return choice  # type: ignore[return-value]
-    wanted = REASONING_EFFORT_LEVELS.index(choice)  # type: ignore[arg-type]
-    return min(
-        levels,
-        key=lambda level: (
-            abs(REASONING_EFFORT_LEVELS.index(level) - wanted),
-            -REASONING_EFFORT_LEVELS.index(level),
-        ),
-    )
-
-
-class ModelProfile(FrozenModel):
-    """
-    Named model configuration.
-
-    `profile_id` is the stable identifier referenced by rules and UI payloads.
-
-    Think of a profile as "one deployable model setup", for example:
-    - `chat.ollama.mistral`
-    - `default.chat.openai.prod`
-    - `chat.azure_apim.gpt4o`
-    """
-
-    profile_id: str = Field(..., min_length=1)
-    capability: ModelCapability
-    model: ModelConfiguration
-    description: str | None = None
-    model_id: str | None = Field(
-        default=None,
-        min_length=1,
-        description=(
-            "Explicit model IDENTITY, replacing `model.name` in the capability "
-            "id (`model__{provider}__{model_id}`). Exists for OpenAI-compatible "
-            "gateways that serve several models on distinct `base_url`s while "
-            "expecting the same wire `model` value: without it those profiles "
-            "collapse into one model, so they share a display name, one "
-            "reasoning toggle and one `can_use` decision. `model.name` stays "
-            "what is sent to the provider. Absent means the identity is "
-            "`model.name`, exactly as before."
-        ),
-    )
-    model_display_name: str | None = Field(
-        default=None,
-        min_length=1,
-        description=(
-            "Human-readable model name for the UI. Absent means the frontend "
-            "derives one by splitting `model.name` — a heuristic that cannot "
-            "tell a version separator from a variant one ('claude-sonnet-4-6' "
-            "renders 'Claude Sonnet 4 6'). Display only. Declared per profile, "
-            "but describes the model: siblings sharing one model identity "
-            "should agree, and the catalog projection takes the first declared."
-        ),
-    )
-    context_window_tokens: int | None = Field(default=None, gt=0)
-    max_input_tokens: int | None = Field(default=None, gt=0)
-    max_output_tokens: int | None = Field(default=None, gt=0)
-    supports_thinking: bool = Field(
-        default=False,
-        description=(
-            "Declared APTITUDE — does this profile's model support Thinking "
-            "(`MODEL-REASONING-ENABLEMENT-RFC.md` §4, level 1)? Not activation: "
-            "`supports_thinking: true` with no reasoning setting is legal and "
-            "means 'capable, shipped off'. Declared per profile, not per model, "
-            "because that is where the behaviour actually differs — the same "
-            "(provider, name) can be declared twice, reasoning in one profile "
-            "and not the other. Whether reasoning actually RUNS is level 2's "
-            "platform toggle (§5), delivered per model on "
-            "`RuntimeContext.reasoning_enabled_model_ids`."
-        ),
-    )
-
-    reasoning_efforts: tuple[ReasoningEffortLevel, ...] | None = Field(
-        default=None,
-        min_length=1,
-        description=(
-            "Reasoning effort levels the provider accepts for this profile, "
-            "declared explicitly (never inferred: Mistral rejects low/medium). "
-            "Two or more make the effort selectable by the platform helpers "
-            "that offer it; absent or a single value means on/off only, on "
-            "being the profile's own `reasoning_effort`, else the single "
-            "declared level. Requires `supports_thinking`."
-        ),
-    )
-
-    @field_validator("reasoning_efforts")
-    @classmethod
-    def _order_levels(
-        cls, value: tuple[ReasoningEffortLevel, ...] | None
-    ) -> tuple[ReasoningEffortLevel, ...] | None:
-        if value is None:
-            return None
-        return tuple(level for level in REASONING_EFFORT_LEVELS if level in value)
-
-    @property
-    def reasoning_levels(self) -> tuple[ReasoningEffortLevel, ...]:
-        """The selectable levels: the declared ones when two or more, else ()."""
-        levels = self.reasoning_efforts or ()
-        return levels if len(levels) >= 2 else ()
-
-    @property
-    def reasoning_on_effort(self) -> str | None:
-        """What "on" sends for an on/off thinking profile: its own
-        `reasoning_effort`, else its single declared level; None when it has
-        neither, so a platform helper cannot make it reason."""
-        if not self.supports_thinking:
-            return None
-        own = (self.model.settings or {}).get("reasoning_effort")
-        if isinstance(own, str):
-            return own
-        return self.reasoning_efforts[0] if self.reasoning_efforts else None
-
-    @property
-    def capability_id(self) -> str:
-        """This profile's model identity as a capability id — the ONE derivation
-        every site must use, so the catalog projection, the `can_use` gate and
-        the reasoning toggle can never disagree about which model this is."""
-
-        return model_capability_id(
-            self.model.provider or "", self.model_id or self.model.name or ""
-        )
-
-    @model_validator(mode="after")
-    def validate_model(self) -> "ModelProfile":
-        if self.model_id is not None and not self.model_id.strip():
-            raise ValueError(
-                f"ModelProfile {self.profile_id!r} declares a blank model_id; omit "
-                "it to keep model.name as the model identity."
-            )
-        if not self.model.provider or not self.model.provider.strip():
-            raise ValueError(
-                f"ModelProfile {self.profile_id!r} must define model.provider."
-            )
-        if not self.model.name or not self.model.name.strip():
-            raise ValueError(
-                f"ModelProfile {self.profile_id!r} must define model.name."
-            )
-        # §4.3 — fail loud at pod boot rather than tolerate the inconsistency.
-        # A profile that ships a reasoning setting while denying the aptitude
-        # is always an authoring mistake, and silently tolerating it is exactly
-        # how the current untyped-passthrough situation arose: nothing in Fred
-        # would know the profile reasons, so the admin toggle (§5.3) would
-        # never appear for it and its reasoning could never be turned off.
-        declared = sorted(REASONING_SETTING_KEYS & set(self.model.settings or {}))
-        if declared and not self.supports_thinking:
-            raise ValueError(
-                f"ModelProfile {self.profile_id!r} declares reasoning setting(s) "
-                f"{declared} but supports_thinking is false. Set "
-                "'supports_thinking: true' on the profile (it declares the model's "
-                "aptitude), or remove the setting."
-            )
-        if self.reasoning_efforts is not None:
-            if not self.supports_thinking:
-                raise ValueError(
-                    f"ModelProfile {self.profile_id!r} declares reasoning_efforts "
-                    "but supports_thinking is false."
-                )
-            own = (self.model.settings or {}).get("reasoning_effort")
-            if own is not None and own not in self.reasoning_efforts:
-                raise ValueError(
-                    f"ModelProfile {self.profile_id!r} sets reasoning_effort "
-                    f"{own!r}, which is not one of its reasoning_efforts "
-                    f"{list(self.reasoning_efforts)}."
-                )
-        return self
-
-
-class ModelRoutingPolicy(FrozenModel):
-    """
-    Complete routing policy.
-
-    Contains:
-    - `default_profile_by_capability`: fallback profile per capability
-    - `profiles`: known profile definitions
-    - `agent_profile_overrides`: optional `agent_id -> profile_id` override,
-      the ops-level escape hatch that outranks every team and user level.
-      An override only applies
-      when it exists for the requested `agent_id` and the referenced
-      profile's capability matches the request; otherwise resolution falls
-      through to the capability default.
-    """
-
-    default_profile_by_capability: dict[ModelCapability, str]
-    profiles: tuple[ModelProfile, ...]
-    agent_profile_overrides: dict[str, str] = Field(default_factory=dict)
-    unavailable_discovered_chat_profile_ids: frozenset[str] = frozenset()
-
-    @model_validator(mode="after")
-    def validate_references(self) -> "ModelRoutingPolicy":
-        profile_ids = [profile.profile_id for profile in self.profiles]
-        if len(set(profile_ids)) != len(profile_ids):
-            raise ValueError("ModelRoutingPolicy.profiles must have unique profile_id.")
-        known = set(profile_ids)
-        for capability, profile_id in self.default_profile_by_capability.items():
-            if profile_id not in known:
-                raise ValueError(
-                    f"default profile for capability={capability.value!r} points to unknown profile_id={profile_id!r}."
-                )
-            profile = next(
-                profile for profile in self.profiles if profile.profile_id == profile_id
-            )
-            if profile.capability != capability:
-                raise ValueError(
-                    f"default profile {profile_id!r} has capability={profile.capability.value!r}, "
-                    f"expected capability={capability.value!r}."
-                )
-        for agent_id, profile_id in self.agent_profile_overrides.items():
-            if not agent_id.strip():
-                raise ValueError(
-                    "ModelRoutingPolicy.agent_profile_overrides keys must be "
-                    "non-empty agent ids."
-                )
-            if (
-                profile_id not in known
-                and profile_id not in self.unavailable_discovered_chat_profile_ids
-            ):
-                raise ValueError(
-                    f"agent_profile_overrides[{agent_id!r}] targets unknown "
-                    f"profile_id={profile_id!r}."
-                )
-        return self
-
-
-class ModelSelectionRequest(FrozenModel):
-    """
-    Runtime input passed to the resolver for one model call.
-
-    This is emitted by runtimes per invocation with contextual dimensions:
-    `capability`, `agent_id`. `team_id` is deliberately not a matching
-    dimension here — the static `agent_profile_overrides` policy is
-    deployment-wide, not per-team; team and user levels are applied by
-    `RoutedChatModelFactory.select`.
-    """
-
-    capability: ModelCapability
-    agent_id: str | None = None
+class ModelRoutingError(UserFacingExecutionError):
+    """Only fixed, non-secret routing failure sentences reach the user."""
 
 
 class ModelSelectionSource(str, Enum):
     """Where the final selection came from."""
 
     DEFAULT = "default"
-    AGENT_OVERRIDE = "agent_override"
-    TEAM_POLICY = "team_policy"
     USER_CHOICE = "user_choice"
     INSTANCE_RECOMMENDATION = "instance_recommendation"
-    PLATFORM_BINDING = "platform_binding"
-    POD_FALLBACK = "pod_fallback"
+    WITHDRAWAL_FALLBACK = "withdrawal_fallback"
 
 
 class ModelSelection(FrozenModel):
@@ -421,10 +56,8 @@ class ModelSelection(FrozenModel):
         ...,
         min_length=1,
         description=(
-            "Model identity of the winning profile (`ModelProfile.capability_id`), "
-            "carried on the decision so downstream gates never re-derive it from "
-            "`model.name` — which is the wire value, not the identity. For a "
-            "platform binding there is no profile and it is "
-            "`model_capability_id(provider, name)`."
+            "Canonical (source_id, upstream_model_id) encoded as a JSON pair. "
+            "The retained profile_id field carries the same audit identity; "
+            "it does not reference a pod profile or confer permissions."
         ),
     )

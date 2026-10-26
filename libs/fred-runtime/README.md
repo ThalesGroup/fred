@@ -62,6 +62,54 @@ the SQL checkpointer. The session ID is the LangGraph `thread_id`.
 
 ---
 
+### Private Weaver history reads
+
+The HTTP readers for messages, session IDs and checkpoint details/index share
+`app/history_access.py`. After the existing JWT/admission dependency, only a
+person with their own bearer may read: anonymous/dev access, service accounts,
+service roles and asserted delegation are refused. The actual
+`PersonCredentialProvider` forwards that bearer only to the configured Control
+Plane destination, with the shared bounded HTTP client, no inherited auth,
+redirects or retry. No run or delegated credential is created for a read.
+
+The pod reads M4's `checkpoint_thread_owner.binding_json` and its owner without
+loading checkpoints or messages. That persisted space selects M5a's
+`GET /spaces/{space}/sessions/{session}`. M5a checks current admission, space Read
+and private ownership. Its response must match the pod's session key, space,
+instance, template and runtime; the local owner must match the authenticated
+person and the runtime must match this pod. Request query IDs confer no authority.
+The metadata response omits the person ID: its owner-scoped query is the
+Control Plane proof of that same bearer person's ownership.
+
+No executable instance, template discovery, preparation or M4 resolver is involved.
+An instance's removal/disablement or an unusable template therefore does not deny
+otherwise authorized history. Success responses use `Cache-Control: no-store`;
+every independent consultation makes fresh checks. One content read costs one
+local provenance SELECT and one M5a GET before the content query. Indexes process
+local owner-filtered candidates serially to bound pressure on the shared client;
+cost grows with that person's stored sessions, with no cross-request decision cache.
+No SQL connection is retained while waiting for Control Plane.
+
+Unknown, foreign, revoked, mismatched and unbound conversations return the same
+404 `Conversation unavailable`. Authorized conversations with persisted provenance
+and zero messages return `[]`. Metadata-only registrations that have never acquired
+M4 provenance are unavailable through these pod readers; reading never creates a
+binding. Old history, including history retained after checkpoint/provenance erasure,
+is not adopted or repaired. Indexes omit refused candidates; 401 and infrastructure
+failures abort the request instead of returning partial success or empty history.
+SQL failures propagate as technical errors; provenance storage/Control Plane
+unavailability returns 503. No content is loaded before the shared guard.
+
+Covered routes: GET `/agents/sessions`, `/agents/sessions/{id}/messages`,
+`/agents/checkpoints` and `/agents/checkpoints/{id}`. Aggregate `_stats` contains no
+session IDs or conversation content; erasure endpoints are outside this read lot.
+The CLI already raises HTTP failures, and the existing frontend history hook treats
+non-2xx as unavailable. Neither consumer is rewired here; frontend cache behavior
+and full chat integration remain separate work. Turn admission, invocation, retry,
+descendant, cancellation and terminal authority are unchanged.
+
+---
+
 ### `fred_runtime.runtime_support` — Infrastructure adapters
 
 | Module                    | What it provides                                                           |

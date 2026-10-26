@@ -56,11 +56,9 @@ logger = logging.getLogger(__name__)
 
 MCP_CATALOG_ENV = "FRED_MCP_CATALOG_FILE"
 MCP_EXTERNAL_CATALOG_ENV = "FRED_MCP_EXTERNAL_CATALOG_FILE"
-MODELS_CATALOG_ENV = "FRED_MODELS_CATALOG_FILE"
 PLATFORM_PROMPT_ENV = "FRED_PLATFORM_PROMPT_FILE"
 MCP_CATALOG_DEFAULT_PATH = "./config/mcp_catalog.yaml"
 MCP_EXTERNAL_CATALOG_DEFAULT_PATH = "./config/mcp_catalog_external.yaml"
-MODELS_CATALOG_DEFAULT_PATH = "./config/models_catalog.yaml"
 PLATFORM_PROMPT_DEFAULT_PATH = "./config/platform_prompt.json"
 
 
@@ -85,29 +83,6 @@ def load_installed_mcp_catalogs(services: ServiceEndpointsPort) -> McpCatalog:
             ) from exc
         servers.extend(catalog.servers)
     return McpCatalog(servers=servers)
-
-
-def resolve_models_catalog_path() -> Path:
-    """
-    Resolve the canonical models catalog path for one pod startup.
-
-    Why this exists:
-    - pod startup should expose one canonical model-catalog override while
-      keeping `AgentPodConfig` as the public structured config model
-
-    How to use it:
-    - call during config bootstrap; the returned path should be attached to the
-      resolved pod config as internal runtime data
-
-    Example:
-    - `config.set_models_catalog_path(str(resolve_models_catalog_path()))`
-    """
-
-    explicit = os.getenv(MODELS_CATALOG_ENV)
-    if explicit:
-        return Path(explicit)
-
-    return Path(MODELS_CATALOG_DEFAULT_PATH)
 
 
 class PlatformPromptFile(BaseModel):
@@ -219,17 +194,6 @@ def apply_external_catalog_overrides(config: AgentPodConfig) -> AgentPodConfig:
     - `return apply_external_catalog_overrides(AgentPodConfig.model_validate(raw))`
     """
 
-    models_catalog_path = resolve_models_catalog_path()
-    if not models_catalog_path.exists():
-        raise FileNotFoundError(
-            f"Mandatory models catalog file was not found: {models_catalog_path}"
-        )
-    config.set_models_catalog_path(str(models_catalog_path))
-    logger.info(
-        "[fred-runtime][config] models catalog path resolved to %s",
-        models_catalog_path,
-    )
-
     platform_prompt_path = resolve_platform_prompt_path()
     if platform_prompt_path.exists():
         config.set_platform_prompt_file(load_platform_prompt_file(platform_prompt_path))
@@ -238,7 +202,7 @@ def apply_external_catalog_overrides(config: AgentPodConfig) -> AgentPodConfig:
             platform_prompt_path,
         )
     else:
-        # Optional, unlike models_catalog.yaml: a pod with no file contributes
+        # Optional: a pod with no file contributes
         # neither head block, and an admin-saved platform prompt (which arrives
         # per turn, not from here) still applies. Logged at WARNING, not INFO:
         # a pod running without the platform instructions has lost the tool

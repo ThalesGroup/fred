@@ -39,7 +39,7 @@ export function createAgentRequest(payload: AgentFormPayload): CreateAgentInstan
     tuning_field_values: payload.tuningFieldValues as CreateAgentInstanceRequest["tuning_field_values"],
     capability_ids: payload.selectedCapabilityIds,
     capability_config_values: payload.capabilityConfigValues,
-    recommended_chat_profile_id: payload.recommendedChatProfileId,
+    // Model settings are preserved by omission until the existing control is connected.
   };
 }
 

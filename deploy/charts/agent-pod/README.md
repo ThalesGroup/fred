@@ -108,7 +108,7 @@ Secrets the platform already owns (`valueFrom.secretKeyRef`), under other key na
 
 | Value | Default | Meaning |
 | --- | --- | --- |
-| `extraConfigFiles` | `{}` | other files under `/app/config/` (`models_catalog.yaml`...); a file left out stays the image's |
+| `extraConfigFiles` | `{}` | other files under `/app/config/` (`mcp_catalog_external.yaml`...); a file left out stays the image's |
 | `configuration.observability.kpi.prometheus` | not exposed | with `enabled: true` and `address: 0.0.0.0`, the chart opens `port` (9000 by default) and annotates the pod for scraping; it refuses a loopback address, the library's default |
 | `ingress` | off | browser route on `base_url` through an Ingress |
 | `httpRoute` | off | browser route on `base_url` through a Gateway API HTTPRoute |

@@ -15,6 +15,9 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getPodCapabilityInventory: build.query<GetPodCapabilityInventoryApiResponse, GetPodCapabilityInventoryApiArg>({
+      query: () => ({ url: `/pod/v1/agents/capabilities` }),
+    }),
     evaluateChatControlsPodV1AgentsCapabilitiesChatControlsPost: build.mutation<
       EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiResponse,
       EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiArg
@@ -146,34 +149,6 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/pod/v1/agents/mcp-catalog` }),
     }),
-    getModelsCatalogPodV1AgentsModelsCatalogGet: build.query<
-      GetModelsCatalogPodV1AgentsModelsCatalogGetApiResponse,
-      GetModelsCatalogPodV1AgentsModelsCatalogGetApiArg
-    >({
-      query: () => ({ url: `/pod/v1/agents/models-catalog` }),
-    }),
-    getDiscoveredModelDetailPodV1AgentsModelsCatalogDetailGet: build.query<
-      GetDiscoveredModelDetailPodV1AgentsModelsCatalogDetailGetApiResponse,
-      GetDiscoveredModelDetailPodV1AgentsModelsCatalogDetailGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/pod/v1/agents/models-catalog/detail`,
-        params: {
-          source_id: queryArg.sourceId,
-          model_id: queryArg.modelId,
-        },
-      }),
-    }),
-    refreshModelsCatalogPodV1AgentsModelsCatalogRefreshPost: build.mutation<
-      RefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostApiResponse,
-      RefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/pod/v1/agents/models-catalog/refresh`,
-        method: "POST",
-        body: queryArg.modelCatalogRefreshRequest,
-      }),
-    }),
     getPlatformPromptFilePodV1AgentsPlatformPromptGet: build.query<
       GetPlatformPromptFilePodV1AgentsPlatformPromptGetApiResponse,
       GetPlatformPromptFilePodV1AgentsPlatformPromptGetApiArg
@@ -215,6 +190,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           agent_instance_id: queryArg.agentInstanceId,
           team_id: queryArg.teamId,
+          space_id: queryArg.spaceId,
         },
       }),
     }),
@@ -227,6 +203,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           agent_instance_id: queryArg.agentInstanceId,
           team_id: queryArg.teamId,
+          space_id: queryArg.spaceId,
         },
       }),
     }),
@@ -270,6 +247,8 @@ export type GetAuditEventsPodV1AgentsAuditEventsGetApiResponse =
 export type GetAuditEventsPodV1AgentsAuditEventsGetApiArg = {
   limit?: number;
 };
+export type GetPodCapabilityInventoryApiResponse = /** status 200 Successful Response */ PodCapabilityInventory;
+export type GetPodCapabilityInventoryApiArg = void;
 export type EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiResponse =
   /** status 200 Successful Response */ ChatControlsResponse;
 export type EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiArg = {
@@ -386,22 +365,6 @@ export type GetKpiTurnsPodV1AgentsKpiTurnsGetApiArg = {
 };
 export type GetMcpCatalogPodV1AgentsMcpCatalogGetApiResponse = /** status 200 Successful Response */ McpCatalogResponse;
 export type GetMcpCatalogPodV1AgentsMcpCatalogGetApiArg = void;
-export type GetModelsCatalogPodV1AgentsModelsCatalogGetApiResponse =
-  /** status 200 Successful Response */ ModelCatalogResponse;
-export type GetModelsCatalogPodV1AgentsModelsCatalogGetApiArg = void;
-export type GetDiscoveredModelDetailPodV1AgentsModelsCatalogDetailGetApiResponse =
-  /** status 200 Successful Response */ {
-    [key: string]: any;
-  };
-export type GetDiscoveredModelDetailPodV1AgentsModelsCatalogDetailGetApiArg = {
-  sourceId: string;
-  modelId: string;
-};
-export type RefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostApiResponse =
-  /** status 200 Successful Response */ ModelCatalogResponse;
-export type RefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostApiArg = {
-  modelCatalogRefreshRequest: ModelCatalogRefreshRequest;
-};
 export type GetPlatformPromptFilePodV1AgentsPlatformPromptGetApiResponse =
   /** status 200 Successful Response */ PlatformPromptFileResponse;
 export type GetPlatformPromptFilePodV1AgentsPlatformPromptGetApiArg = void;
@@ -429,12 +392,14 @@ export type GetRuntimeInstanceSkillsApiResponse = /** status 200 Successful Resp
 export type GetRuntimeInstanceSkillsApiArg = {
   agentInstanceId: string;
   teamId: string;
+  spaceId?: string | null;
 };
 export type GetRuntimeInstanceSkillDetailApiResponse = /** status 200 Successful Response */ SkillDetail;
 export type GetRuntimeInstanceSkillDetailApiArg = {
   skillName: string;
   agentInstanceId: string;
   teamId: string;
+  spaceId?: string | null;
 };
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
@@ -471,6 +436,157 @@ export type ValidationError = {
 };
 export type HttpValidationError = {
   detail?: ValidationError[];
+};
+export type AssetSlot = {
+  accepted_types: string[];
+  key: string;
+  max_count?: number | null;
+  min_count?: number;
+};
+export type UiHints = {
+  /** Renders the field inside the form's collapsed 'Advanced settings' disclosure instead of the main section. Display-only. */
+  advanced?: boolean;
+  group?: string | null;
+  hide?: boolean;
+  markdown?: boolean;
+  max_lines?: number;
+  multiline?: boolean;
+  placeholder?: string | null;
+  textarea?: boolean;
+  /** Key of a sibling field in the same form: this field is only shown while that sibling's effective value (current input or its declared default) is truthy. Display-only — the value is kept, and backends must not rely on the field being hidden. */
+  visible_when?: string | null;
+  /** Names a frontend form widget to render this field instead of the type-derived default input. Resolved first against the owning capability plugin's `configWidgets` (custom widgets, AGENT-CAPABILITY-RFC §9 item 4, #1903), then against stock widgets — known stock ids: 'document_libraries' (library/document tree picker for an array of library tag ids). Unknown ids fall back to the default input, so older frontends degrade gracefully. */
+  widget?: string | null;
+};
+export type FieldSpec = {
+  default?:
+    | string
+    | number
+    | number
+    | boolean
+    | (string | number | number | boolean)[]
+    | {
+        [key: string]: string | number | number | boolean;
+      }
+    | null;
+  default_by_lang?: {
+    [key: string]: string;
+  } | null;
+  description?: string | null;
+  description_by_lang?: {
+    [key: string]: string;
+  } | null;
+  enum?: string[] | null;
+  item_type?:
+    | (
+        | "string"
+        | "text"
+        | "text-multiline"
+        | "number"
+        | "integer"
+        | "boolean"
+        | "select"
+        | "array"
+        | "object"
+        | "prompt"
+        | "secret"
+        | "url"
+      )
+    | null;
+  key: string;
+  max?: number | null;
+  min?: number | null;
+  pattern?: string | null;
+  required?: boolean;
+  scope_private?: boolean | null;
+  title: string;
+  type:
+    | "string"
+    | "text"
+    | "text-multiline"
+    | "number"
+    | "integer"
+    | "boolean"
+    | "select"
+    | "array"
+    | "object"
+    | "prompt"
+    | "secret"
+    | "url";
+  ui?: UiHints;
+};
+export type ModelBindingSettings = {
+  azure_ad_client_id?: string | null;
+  azure_ad_client_scope?: string | null;
+  azure_apim_base_url?: string | null;
+  azure_apim_resource_path?: string | null;
+  azure_endpoint?: string | null;
+  azure_openai_api_version?: string | null;
+  azure_tenant_id?: string | null;
+  base_url?: string | null;
+  location?: string | null;
+  max_retries?: number | null;
+  max_tokens?: number | null;
+  model_family?: ("mistral" | "llama" | "anthropic" | "claude") | null;
+  project?: string | null;
+  reasoning_effort?: string | null;
+  request_timeout?: number | null;
+  stream_usage?: boolean | null;
+  streaming?: boolean | null;
+  temperature?: number | null;
+  top_p?: number | null;
+};
+export type ModelBinding = {
+  name: string;
+  provider: "anthropic" | "azure-apim" | "azure-openai" | "ollama" | "openai" | "vertex-ai" | "vertex-ai-model-garden";
+  settings?: ModelBindingSettings;
+};
+export type TeamScopePolicy = "default_on" | "admin_gated";
+export type CapabilityCatalogEntry = {
+  assets?: AssetSlot[];
+  config_fields?: FieldSpec[];
+  default_capability_ids?: string[];
+  /** i18n key */
+  description: string;
+  execution_models?: ("react" | "graph")[];
+  /** Material Symbols name; see CapabilityManifest.icon */
+  icon: string;
+  id: string;
+  kind?: "tool" | "agent" | "model" | "app" | "knowledge_base";
+  model_capabilities?: string[];
+  model_chat_capability_verified?: boolean;
+  model_chat_profile_ids?: string[];
+  model_context_window_tokens?: number | null;
+  model_discovery_source_id?: string | null;
+  model_display_name?: string | null;
+  model_max_input_tokens?: number | null;
+  model_max_output_tokens?: number | null;
+  model_platform_binding?: ModelBinding | null;
+  model_profile_ids?: string[];
+  model_reasoning_efforts?: {
+    [key: string]: ("low" | "medium" | "high")[];
+  };
+  model_runtime_ids?: string[];
+  model_thinking_profile_ids?: string[];
+  /** i18n key */
+  name: string;
+  public_version?: string | null;
+  route_base_url?: string | null;
+  runtime_id?: string | null;
+  source_id?: string | null;
+  team_scope?: TeamScopePolicy;
+  team_settings_fields?: FieldSpec[];
+  version: string;
+};
+export type PodTemplateCapability = {
+  capability_id: string;
+  default_selected: boolean;
+  source_agent_id: string;
+};
+export type PodCapabilityInventory = {
+  capabilities: CapabilityCatalogEntry[];
+  complete: true;
+  template_capabilities: PodTemplateCapability[];
 };
 export type ChatControlItem = {
   params?: {
@@ -642,6 +758,10 @@ export type TurnCommand = {
   prompt_name?: string | null;
   prompts?: TurnCommandPrompt[] | null;
 };
+export type ModelOfferKey = {
+  source_id: string;
+  upstream_model_id: string;
+};
 export type SkillInvocation = {
   name: string;
 };
@@ -665,6 +785,8 @@ export type RuntimeContext = {
   include_corpus_scope?: boolean | null;
   include_session_scope?: boolean | null;
   language?: string | null;
+  /** Requested source/upstream offer; never an authority. */
+  model_choice?: ModelOfferKey | null;
   /** The user's per-question reasoning choice (REASON-01 level 4, `MODEL-REASONING-ENABLEMENT-RFC.md` §7), set by the composer toggle. Travels per turn on this context exactly like `search_policy`/`search_rag_scope` — reasoning is a property of the model call, not a tool, so it is a platform chat option and NOT a capability's `turn_options` slice.
     
     Only `True` reasons, and only on a model within `reasoning_enabled_model_ids` (a ceiling this cannot raise). `False` and `None` both mean no reasoning: callers that send nothing (OpenAI-compatible, evaluation) never reason by accident. Kept `bool | None` for wire compatibility. */
@@ -684,6 +806,8 @@ export type RuntimeContext = {
   session_id?: string | null;
   skill?: SkillInvocation | null;
   skills?: SkillInvocation[] | null;
+  /** Requested canonical Weaver space UUID; verified at admission. */
+  space_id?: string | null;
   team_id?: string | null;
   template_agent_id?: string | null;
   trace_id?: string | null;
@@ -1029,79 +1153,6 @@ export type McpCatalogEntry = {
 export type McpCatalogResponse = {
   servers: McpCatalogEntry[];
 };
-export type ModelDiscoveryAdvertisement = {
-  discovered_model_ids?: string[];
-  effective_url: string;
-  source_id: string;
-  yaml_url: string;
-};
-export type ModelBindingSettings = {
-  azure_ad_client_id?: string | null;
-  azure_ad_client_scope?: string | null;
-  azure_apim_base_url?: string | null;
-  azure_apim_resource_path?: string | null;
-  azure_endpoint?: string | null;
-  azure_openai_api_version?: string | null;
-  azure_tenant_id?: string | null;
-  base_url?: string | null;
-  location?: string | null;
-  max_retries?: number | null;
-  max_tokens?: number | null;
-  model_family?: ("mistral" | "llama" | "anthropic" | "claude") | null;
-  project?: string | null;
-  reasoning_effort?: string | null;
-  request_timeout?: number | null;
-  stream_usage?: boolean | null;
-  streaming?: boolean | null;
-  temperature?: number | null;
-  top_p?: number | null;
-};
-export type ModelBinding = {
-  name: string;
-  provider: "anthropic" | "azure-apim" | "azure-openai" | "ollama" | "openai" | "vertex-ai" | "vertex-ai-model-garden";
-  settings?: ModelBindingSettings;
-};
-export type ModelCatalogEntry = {
-  capabilities?: string[];
-  chat_capability_verified?: boolean;
-  chat_profile_ids?: string[];
-  context_window_tokens?: number | null;
-  description?: string | null;
-  display_name?: string | null;
-  id: string;
-  max_input_tokens?: number | null;
-  max_output_tokens?: number | null;
-  name: string;
-  platform_binding?: ModelBinding | null;
-  profile_ids?: string[];
-  provider: string;
-  reasoning_efforts?: {
-    [key: string]: ("low" | "medium" | "high")[];
-  };
-  thinking_profile_ids?: string[];
-};
-export type ModelCatalogResponse = {
-  active_revision?: number;
-  agent_chat_profile_overrides?: {
-    [key: string]: string;
-  };
-  default_chat_profile_id?: string | null;
-  discovered_model_ids?: string[];
-  discovery_effective_url?: string | null;
-  discovery_source_id?: string | null;
-  discovery_sources?: ModelDiscoveryAdvertisement[];
-  discovery_yaml_url?: string | null;
-  models: ModelCatalogEntry[];
-  preparation_token?: string | null;
-};
-export type ModelCatalogRefreshRequest = {
-  models_url?: string | null;
-  preparation_token?: string | null;
-  prepare?: boolean;
-  revision?: number | null;
-  rollback_token?: string | null;
-  source_id?: string | null;
-};
 export type PlatformPromptFileResponse = {
   creation_assistant_prompt: string;
   creation_assistant_prompt_revised_at: string;
@@ -1267,121 +1318,6 @@ export type SkillDetail = {
   revision: string;
   skill: SkillSummary;
 };
-export type AssetSlot = {
-  accepted_types: string[];
-  key: string;
-  max_count?: number | null;
-  min_count?: number;
-};
-export type UiHints = {
-  /** Renders the field inside the form's collapsed 'Advanced settings' disclosure instead of the main section. Display-only. */
-  advanced?: boolean;
-  group?: string | null;
-  hide?: boolean;
-  markdown?: boolean;
-  max_lines?: number;
-  multiline?: boolean;
-  placeholder?: string | null;
-  textarea?: boolean;
-  /** Key of a sibling field in the same form: this field is only shown while that sibling's effective value (current input or its declared default) is truthy. Display-only — the value is kept, and backends must not rely on the field being hidden. */
-  visible_when?: string | null;
-  /** Names a frontend form widget to render this field instead of the type-derived default input. Resolved first against the owning capability plugin's `configWidgets` (custom widgets, AGENT-CAPABILITY-RFC §9 item 4, #1903), then against stock widgets — known stock ids: 'document_libraries' (library/document tree picker for an array of library tag ids). Unknown ids fall back to the default input, so older frontends degrade gracefully. */
-  widget?: string | null;
-};
-export type FieldSpec = {
-  default?:
-    | string
-    | number
-    | number
-    | boolean
-    | (string | number | number | boolean)[]
-    | {
-        [key: string]: string | number | number | boolean;
-      }
-    | null;
-  default_by_lang?: {
-    [key: string]: string;
-  } | null;
-  description?: string | null;
-  description_by_lang?: {
-    [key: string]: string;
-  } | null;
-  enum?: string[] | null;
-  item_type?:
-    | (
-        | "string"
-        | "text"
-        | "text-multiline"
-        | "number"
-        | "integer"
-        | "boolean"
-        | "select"
-        | "array"
-        | "object"
-        | "prompt"
-        | "secret"
-        | "url"
-      )
-    | null;
-  key: string;
-  max?: number | null;
-  min?: number | null;
-  pattern?: string | null;
-  required?: boolean;
-  scope_private?: boolean | null;
-  title: string;
-  type:
-    | "string"
-    | "text"
-    | "text-multiline"
-    | "number"
-    | "integer"
-    | "boolean"
-    | "select"
-    | "array"
-    | "object"
-    | "prompt"
-    | "secret"
-    | "url";
-  ui?: UiHints;
-};
-export type TeamScopePolicy = "default_on" | "admin_gated";
-export type CapabilityCatalogEntry = {
-  assets?: AssetSlot[];
-  config_fields?: FieldSpec[];
-  default_capability_ids?: string[];
-  /** i18n key */
-  description: string;
-  execution_models?: ("react" | "graph")[];
-  /** Material Symbols name; see CapabilityManifest.icon */
-  icon: string;
-  id: string;
-  kind?: "tool" | "agent" | "model" | "app" | "knowledge_base";
-  model_capabilities?: string[];
-  model_chat_capability_verified?: boolean;
-  model_chat_profile_ids?: string[];
-  model_context_window_tokens?: number | null;
-  model_discovery_source_id?: string | null;
-  model_display_name?: string | null;
-  model_max_input_tokens?: number | null;
-  model_max_output_tokens?: number | null;
-  model_platform_binding?: ModelBinding | null;
-  model_profile_ids?: string[];
-  model_reasoning_efforts?: {
-    [key: string]: ("low" | "medium" | "high")[];
-  };
-  model_runtime_ids?: string[];
-  model_thinking_profile_ids?: string[];
-  /** i18n key */
-  name: string;
-  public_version?: string | null;
-  route_base_url?: string | null;
-  runtime_id?: string | null;
-  source_id?: string | null;
-  team_scope?: TeamScopePolicy;
-  team_settings_fields?: FieldSpec[];
-  version: string;
-};
 export type ClientAuthMode = "user_token" | "no_token" | "delegated";
 export type McpServerConfiguration = {
   /** Non-negotiable behavioral instructions enforced whenever this server is active. The runtime appends them to the effective system prompt after any operator override. */
@@ -1483,6 +1419,8 @@ export const {
   useLazyListAgentsPodV1AgentsGetQuery,
   useGetAuditEventsPodV1AgentsAuditEventsGetQuery,
   useLazyGetAuditEventsPodV1AgentsAuditEventsGetQuery,
+  useGetPodCapabilityInventoryQuery,
+  useLazyGetPodCapabilityInventoryQuery,
   useEvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostMutation,
   useCopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostMutation,
   useExportCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdExportConfigPostMutation,
@@ -1502,11 +1440,6 @@ export const {
   useLazyGetKpiTurnsPodV1AgentsKpiTurnsGetQuery,
   useGetMcpCatalogPodV1AgentsMcpCatalogGetQuery,
   useLazyGetMcpCatalogPodV1AgentsMcpCatalogGetQuery,
-  useGetModelsCatalogPodV1AgentsModelsCatalogGetQuery,
-  useLazyGetModelsCatalogPodV1AgentsModelsCatalogGetQuery,
-  useGetDiscoveredModelDetailPodV1AgentsModelsCatalogDetailGetQuery,
-  useLazyGetDiscoveredModelDetailPodV1AgentsModelsCatalogDetailGetQuery,
-  useRefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostMutation,
   useGetPlatformPromptFilePodV1AgentsPlatformPromptGetQuery,
   useLazyGetPlatformPromptFilePodV1AgentsPlatformPromptGetQuery,
   useListSessionsPodV1AgentsSessionsGetQuery,

@@ -158,6 +158,7 @@ async fn fga(config: &Config) -> Result<Fga> {
 
 async fn serve(config: Config) -> Result<()> {
     let pool = pool(&config).await?;
+    control_plane::model_catalog::configure_sources(&pool, &config.platform.model_sources).await?;
     let fga = if config.security.rebac.sync_schema_on_init {
         fga(&config).await?.initialize(&pool).await?
     } else {

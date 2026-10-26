@@ -72,9 +72,11 @@ from sqlalchemy import (
     case,
     delete,
     desc,
+    inspect,
     literal_column,
     or_,
     select,
+    text,
     update,
 )
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -244,6 +246,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             Column("thread_id", String, primary_key=True),
             Column("user_id", String, nullable=True),
             Column("team_id", String, nullable=True),
+            Column("binding_json", json_type, nullable=True),
             Column(
                 "created_at",
                 DateTime(timezone=True),
@@ -346,6 +349,17 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
 
     def _create_tables(self, connection: Connection) -> None:
         self._metadata.create_all(connection)
+        # This index already owns its DDL (like the LangGraph tables). Existing
+        # unbound rows remain unbound; never infer provenance from a checkpoint.
+        table = self.thread_owner_table
+        if "binding_json" not in {
+            c["name"] for c in inspect(connection).get_columns(table.name)
+        }:
+            quoted = connection.dialect.identifier_preparer.quote(table.name)
+            column_type = table.c.binding_json.type.compile(dialect=connection.dialect)
+            connection.execute(
+                text(f"ALTER TABLE {quoted} ADD COLUMN binding_json {column_type}")
+            )
         if connection.dialect.name == "postgresql":
             # create_all skips indexes on tables that already exist.
             for index in self._session_indexes:
@@ -1162,6 +1176,80 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             )
             for thread in threads
         }
+
+    async def aget_conversation_binding(self, session_id: str) -> dict[str, str] | None:
+        """Read M4 provenance only; never initialize, repair or adopt old history."""
+        owner = self.thread_owner_table
+        async with self.store.begin() as conn:
+            row = (
+                await conn.execute(
+                    select(owner.c.user_id, owner.c.binding_json).where(
+                        owner.c.thread_id == session_id
+                    )
+                )
+            ).first()
+        if row is None or not isinstance(row.binding_json, dict):
+            return None
+        binding = row.binding_json
+        if row.user_id != binding.get("subject_id"):
+            return None
+        return binding
+
+    async def abind_conversation(
+        self,
+        session_id: str,
+        association: dict[str, str],
+        *,
+        allow_create: bool,
+    ) -> bool:
+        """Atomically pin provenance, never authority, before loading a conversation.
+
+        Old histories/checkpoints without a binding are refused. This row is not a
+        model permission cache and is never consulted to authorize inference.
+        """
+        await self._ensure_tables()
+        owner = self.thread_owner_table
+        async with self.store.begin() as conn:
+            existing = (
+                await conn.execute(
+                    select(owner.c.binding_json).where(owner.c.thread_id == session_id)
+                )
+            ).first()
+            if existing is not None:
+                return existing.binding_json == association
+            if not allow_create:
+                return False
+            orphan = (
+                await conn.execute(
+                    select(self.checkpoints_table.c.thread_id)
+                    .where(
+                        self.session_threads(
+                            self.checkpoints_table.c.thread_id,
+                            session_id,
+                            f"{session_id}:",
+                        )
+                    )
+                    .limit(1)
+                )
+            ).first()
+            if orphan is not None:
+                return False
+            insert = pg_insert if conn.dialect.name == "postgresql" else sqlite_insert
+            await conn.execute(
+                insert(owner)
+                .values(
+                    thread_id=session_id,
+                    user_id=association["subject_id"],
+                    binding_json=association,
+                )
+                .on_conflict_do_nothing(index_elements=[owner.c.thread_id])
+            )
+            bound = (
+                await conn.execute(
+                    select(owner.c.binding_json).where(owner.c.thread_id == session_id)
+                )
+            ).scalar_one()
+            return bound == association
 
     async def adelete_session_threads(
         self, session_id: str, *, derived_prefix: str

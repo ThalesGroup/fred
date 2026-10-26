@@ -16,129 +16,109 @@ import { useEffect, useRef, useState } from "react";
 import { handlePlatformAccessResponse } from "../../../../common/platformAccess";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
-import { getCachedSessionHistory, setCachedSessionHistory } from "./sessionHistoryCache";
+import { deleteCachedSessionHistory, setCachedSessionHistory } from "./sessionHistoryCache";
 
 interface UseSessionHistoryArgs {
   sessionId: string | null;
+  spaceId?: string;
   messagesUrl: string | null | undefined;
+  revision?: number;
   onLoaded: (messages: ChatMessage[]) => void;
-  // True while a streamed turn is in progress. A history response — cached or
-  // fetched — must never replace a live turn: history necessarily lacks the
-  // in-flight exchange, so applying it would visibly eat the user's message.
   isTurnActive: () => boolean;
+  getCurrentMessages?: () => ChatMessage[];
 }
 
-export function useSessionHistory({ sessionId, messagesUrl, onLoaded, isTurnActive }: UseSessionHistoryArgs) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [unavailableFor, setUnavailableFor] = useState<string | null>(null);
-  const requestVersionRef = useRef(0);
-  // The session this hook has finished answering for — "nothing more is
-  // coming", which `isLoading` cannot say (it is also false before a load
-  // starts). Callers sequencing work behind the thread need that difference.
-  const [settledFor, setSettledFor] = useState<string | null>(null);
-  // Session whose fetch this mount has already started — keeps an effect
-  // re-fire (a dep identity change, not a genuine switch) from re-fetching.
-  const startedForRef = useRef<string | null>(null);
-  // Always the CURRENTLY active session id, refreshed every render. A fetch
-  // that resolves after the user switched away must neither render its
-  // messages under the new session nor overwrite the new session's cache
-  // entry — the async closure's own `sessionId` is frozen at call time, so
-  // staleness can only be detected against a ref.
-  const activeSessionIdRef = useRef(sessionId);
-  activeSessionIdRef.current = sessionId;
-
-  // The conversation this effect last saw. `startedForRef` suppresses a re-fire
-  // WITHIN a visit; leaving and coming back is a NEW visit and must load again,
-  // or a conversation left mid-load never revalidates and never settles.
-  const visitingRef = useRef<string | null>(null);
+export function useSessionHistory({
+  sessionId,
+  spaceId = "",
+  messagesUrl,
+  revision,
+  onLoaded,
+  isTurnActive,
+  getCurrentMessages,
+}: UseSessionHistoryArgs) {
+  const actor = KeyCloakService.GetSessionIdentity();
+  const key = JSON.stringify([actor, spaceId, sessionId]);
+  const loadedKey = useRef<string | null>(null);
+  const activeKey = useRef(key);
+  activeKey.current = key;
+  const [result, setResult] = useState<{ key: string; status: "loading" | "ready" | "unavailable"; errorKey?: string }>(
+    {
+      key,
+      status: "loading",
+    },
+  );
 
   useEffect(() => {
-    if (visitingRef.current !== sessionId) {
-      visitingRef.current = sessionId;
-      startedForRef.current = null;
-      requestVersionRef.current += 1;
-      setUnavailableFor(null);
-      setSettledFor(null);
-    }
-    if (!sessionId) {
-      setIsLoading(false);
-      return;
-    }
-
-    // Cached history remains readable while session routing is resolved.
-    const cached = getCachedSessionHistory(sessionId);
-    if (cached !== undefined && cached.length > 0 && !isTurnActive()) onLoaded(cached);
-
-    if (messagesUrl === undefined) {
-      requestVersionRef.current += 1;
-      startedForRef.current = null;
-      setIsLoading(cached === undefined);
-      return;
-    }
+    if (!sessionId) return;
+    const controller = new AbortController();
+    const current = () =>
+      !controller.signal.aborted && activeKey.current === key && KeyCloakService.GetSessionIdentity() === actor;
+    const unavailable = (errorKey = "rework.weaverAgents.errors.server") => {
+      loadedKey.current = null;
+      deleteCachedSessionHistory(key);
+      onLoaded([]);
+      setResult({ key, status: "unavailable", errorKey });
+    };
+    // Local content is never evidence of current history access.
     if (messagesUrl === null) {
-      requestVersionRef.current += 1;
-      startedForRef.current = null;
-      setIsLoading(false);
-      setUnavailableFor(sessionId);
-      setSettledFor(sessionId);
+      unavailable();
       return;
     }
-    const requestKey = JSON.stringify([sessionId, messagesUrl]);
-    if (startedForRef.current === requestKey) return;
-    startedForRef.current = requestKey;
-    const requestVersion = ++requestVersionRef.current;
-    const isCurrent = () => activeSessionIdRef.current === sessionId && requestVersionRef.current === requestVersion;
-    setUnavailableFor(null);
-    // This session's own load is what settles it. Without clearing, an A→B→A
-    // round trip where B never settled comes back to A still flagged settled
-    // from its first visit, while the load that would say so is in flight.
-    setSettledFor(null);
-
+    if (messagesUrl === undefined) {
+      if (!isTurnActive()) onLoaded([]);
+      setResult({ key, status: "loading" });
+      return;
+    }
+    if (loadedKey.current !== key && !isTurnActive()) {
+      onLoaded([]);
+      setResult({ key, status: "loading" });
+    }
     const load = async () => {
-      // A cache hit downgrades the fetch to a silent background revalidation:
-      // isLoading stays false so the UI never regresses to a spinner over an
-      // already-rendered thread.
-      if (cached === undefined) setIsLoading(true);
       try {
         await KeyCloakService.ensureFreshToken(30);
-        const token = KeyCloakService.GetToken() ?? "";
-        if (!isCurrent()) return;
-        const url = new URL(messagesUrl, window.location.origin);
-        const resp = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
-        await handlePlatformAccessResponse(resp);
-        if (!resp.ok) throw new Error("History unavailable");
-        const msgs: ChatMessage[] = await resp.json();
-        // Guards, in order:
-        // - stale response: the user switched sessions while this fetch was
-        //   in flight — applying would render session A's history under
-        //   session B and poison the cache;
-        // - live turn: see `isTurnActive` above;
-        // - empty history: a brand-new session bound at send time has no
-        //   persisted history yet — applying [] would wipe the optimistic
-        //   first message.
-        if (!isCurrent()) return;
-        if (isTurnActive()) return;
-        if (msgs.length === 0) return;
-        setCachedSessionHistory(sessionId, msgs);
-        onLoaded(msgs);
-      } catch {
-        if (isCurrent()) setUnavailableFor(sessionId);
-      } finally {
-        if (isCurrent()) {
-          setIsLoading(false);
-          setSettledFor(sessionId);
+        if (!current()) return;
+        const response = await fetch(new URL(messagesUrl, window.location.origin), {
+          headers: { Authorization: `Bearer ${KeyCloakService.GetToken() ?? ""}` },
+          signal: controller.signal,
+          cache: "no-store",
+          redirect: "error",
+        });
+        await handlePlatformAccessResponse(response);
+        if (!response.ok) {
+          if (current())
+            unavailable(
+              [401, 403, 404].includes(response.status)
+                ? "rework.weaverAgents.scopeUnavailable"
+                : "rework.weaverAgents.errors.server",
+            );
+          return;
         }
+        const messages: ChatMessage[] = await response.json();
+        if (!current()) return;
+        const displayed = getCurrentMessages?.() ?? [];
+        const lastExchange = displayed[displayed.length - 1]?.exchange_id;
+        // Persistence follows stream close. An authorized but older snapshot
+        // must not erase the live exchange already rendered in this visit.
+        if (!isTurnActive() && (!lastExchange || messages.some((message) => message.exchange_id === lastExchange))) {
+          setCachedSessionHistory(key, messages);
+          onLoaded(messages);
+        }
+        loadedKey.current = key;
+        setResult({ key, status: "ready" });
+      } catch {
+        if (current()) unavailable();
       }
     };
-
     void load();
-  }, [sessionId, messagesUrl, onLoaded, isTurnActive]);
+    return () => controller.abort();
+  }, [actor, key, sessionId, messagesUrl, revision, onLoaded, isTurnActive, getCurrentMessages]);
 
-  // No session is not "waiting": a fresh chat has no history to resolve, and
-  // the marker left by the conversation just left says nothing about it.
+  const status = result.key === key ? result.status : "loading";
   return {
-    isLoading,
-    isSettled: sessionId === null || settledFor === sessionId,
-    isUnavailable: sessionId !== null && unavailableFor === sessionId,
+    isLoading: sessionId !== null && status === "loading",
+    isSettled: sessionId === null || status !== "loading",
+    errorKey: result.key === key ? result.errorKey : undefined,
+    isUnavailable: sessionId !== null && status === "unavailable",
   };
 }

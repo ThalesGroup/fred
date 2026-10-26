@@ -1,488 +1,95 @@
 # Copyright Thales 2026
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-"""
-kind="model" runtime enforcement (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7):
-
-- `RoutedChatModelFactory.build_for_chat`'s fail-closed gate against
-  `BoundRuntimeContext.usable_model_ids`.
-- `usable_model_capability_ids` — the pod-side ReBAC query computed once per
-  turn, mirroring control-plane's `usable_capability_ids`.
-
-Also covers the team and user levels of `RoutedChatModelFactory.select`: the
-user's choice (`RuntimeContext.chat_profile_id`), the trusted instance
-recommendation and team-disabled set, the team default, and the
-drift/fail-closed rules on top of them.
-"""
-
-# pyright: reportArgumentType=false
-# ^ `definition` is a plain SimpleNamespace exposing only `.agent_id` — the
-#   one attribute `RoutedChatModelFactory.select()` actually reads — not a
-#   real (abstract) AgentDefinition. Same convention as the control-plane
-#   suite's lightweight-fake-in-place-of-real-protocol tests.
-from __future__ import annotations
-
-import logging
-from types import SimpleNamespace
-from typing import Any
+# SPDX-License-Identifier: Apache-2.0
+"""Prepared Weaver selection cases. Replaces Swift's profile/bypass assertions."""
 
 import pytest
-from conftest import ToolFriendlyFakeChatModel
-from fred_core.common import ModelConfiguration
-from fred_runtime.app.execution_diagnostics import report_execution_error
-from fred_runtime.model_routing.authz import usable_model_capability_ids
-from fred_runtime.model_routing.contracts import (
-    ModelCapability,
-    ModelNotUsableError,
-    ModelProfile,
-    ModelRoutingPolicy,
-    ModelSelectionSource,
-    TeamRoutingProfileDriftError,
-)
-from fred_runtime.model_routing.provider import ModelProvider, RoutedChatModelFactory
+from fred_runtime.model_routing.contracts import ModelRoutingError, ModelSelectionSource
 from fred_runtime.model_routing.resolver import ModelRoutingResolver
-from fred_sdk.contracts.capability.manifest import model_capability_id
-from fred_sdk.contracts.context import (
-    BoundRuntimeContext,
-    PortableContext,
-    PortableEnvironment,
-    RuntimeContext,
+from fred_sdk.contracts.weaver import ModelOfferKey
+from weaver_fixtures import resolved_binding
+
+
+def test_explicit_choice_wins_over_recommendation_and_default():
+    models = resolved_binding().models
+    offer, source = ModelRoutingResolver(models).resolve(models.policy.fallback)
+    assert offer.key == models.policy.fallback
+    assert source == ModelSelectionSource.USER_CHOICE
+
+
+def test_recommendation_then_organization_default():
+    models = resolved_binding(default="second").models
+    assert ModelRoutingResolver(models).resolve(None)[0].key == models.recommendation
+    models = models.model_copy(update={"recommendation": None})
+    assert ModelRoutingResolver(models).resolve(None)[0].key == models.policy.default
+
+
+def test_forbidden_explicit_choice_never_substitutes():
+    models = resolved_binding(
+        permitted=False, candidate=False, diagnostics=("not_permitted",)
+    ).models
+    with pytest.raises(ModelRoutingError):
+        ModelRoutingResolver(models).resolve(models.recommendation)
+
+
+def test_unknown_choice_never_substitutes():
+    with pytest.raises(ModelRoutingError):
+        ModelRoutingResolver(resolved_binding().models).resolve(
+            ModelOfferKey(source_id="foreign", upstream_model_id="first")
+        )
+
+
+def test_no_arbitrary_first_default():
+    models = resolved_binding().models
+    models = models.model_copy(
+        update={
+            "recommendation": None,
+            "policy": models.policy.model_copy(update={"default": None}),
+        }
+    )
+    with pytest.raises(ModelRoutingError):
+        ModelRoutingResolver(models).resolve(None)
+
+
+def test_confirmed_withdrawal_uses_only_authorized_fallback():
+    models = resolved_binding(candidate=False, diagnostics=("withdrawn",)).models
+    offer, source = ModelRoutingResolver(models).resolve(None)
+    assert offer.key == models.policy.fallback
+    assert source == ModelSelectionSource.WITHDRAWAL_FALLBACK
+    denied = models.offers[1].model_copy(
+        update={"candidate": False, "permitted": False}
+    )
+    models = models.model_copy(update={"offers": (models.offers[0], denied)})
+    with pytest.raises(ModelRoutingError):
+        ModelRoutingResolver(models).resolve(None)
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "source_disabled",
+        "source_revision_unobserved",
+        "discovery_unavailable",
+        "not_permitted",
+        "unknown_offer",
+    ],
 )
-
-# ---------------------------------------------------------------------------
-# 1. RoutedChatModelFactory.build_for_chat — fail-closed gate
-# ---------------------------------------------------------------------------
-
-
-class _FakeProvider(ModelProvider):
-    def build_model(
-        self, model_config: ModelConfiguration, *, capability: ModelCapability
-    ) -> Any:
-        return ToolFriendlyFakeChatModel(responses=[])
+def test_unavailability_is_not_withdrawal(reason):
+    models = resolved_binding(candidate=False, diagnostics=(reason,)).models
+    with pytest.raises(ModelRoutingError):
+        ModelRoutingResolver(models).resolve(None)
 
 
-def _factory(
-    *, agent_profile_overrides: dict[str, str] | None = None
-) -> RoutedChatModelFactory:
-    policy = ModelRoutingPolicy(
-        default_profile_by_capability={ModelCapability.CHAT: "p1"},
-        profiles=(
-            ModelProfile(
-                profile_id="p1",
-                capability=ModelCapability.CHAT,
-                model=ModelConfiguration(provider="openai", name="gpt-5.1"),
-            ),
-            ModelProfile(
-                profile_id="team.preferred",
-                capability=ModelCapability.CHAT,
-                model=ModelConfiguration(provider="openai", name="gpt-5.2"),
-            ),
-            ModelProfile(
-                profile_id="team.planning",
-                capability=ModelCapability.CHAT,
-                model=ModelConfiguration(provider="openai", name="gpt-5.3"),
-            ),
-            ModelProfile(
-                profile_id="team.language-only",
-                capability=ModelCapability.LANGUAGE,
-                model=ModelConfiguration(provider="openai", name="gpt-5.4"),
-            ),
-        ),
-        agent_profile_overrides=agent_profile_overrides or {},
+def test_legacy_profile_requires_reselection():
+    models = resolved_binding().models.model_copy(
+        update={
+            "legacy_profile_id": "old",
+            "requires_reselection": True,
+            "recommendation": None,
+        }
     )
-    return RoutedChatModelFactory(
-        resolver=ModelRoutingResolver(policy), provider=_FakeProvider()
+    with pytest.raises(ModelRoutingError):
+        ModelRoutingResolver(models).resolve(None)
+    assert (
+        ModelRoutingResolver(models).resolve(models.policy.default)[0].key
+        == models.policy.default
     )
-
-
-def _binding(
-    usable_model_ids: tuple[str, ...] | None = None,
-    *,
-    chat_default_profile_id: str | None = None,
-    chat_profile_id: str | None = None,
-    recommended_chat_profile_id: str | None = None,
-    team_disabled_model_ids: tuple[str, ...] = (),
-) -> BoundRuntimeContext:
-    return BoundRuntimeContext(
-        runtime_context=RuntimeContext(
-            team_id="team-a",
-            user_id="u1",
-            chat_default_profile_id=chat_default_profile_id,
-            chat_profile_id=chat_profile_id,
-        ),
-        recommended_chat_profile_id=recommended_chat_profile_id,
-        team_disabled_model_ids=team_disabled_model_ids,
-        portable_context=PortableContext(
-            request_id="r1",
-            correlation_id="r1",
-            actor="u1",
-            tenant="default",
-            environment=PortableEnvironment.DEV,
-            team_id="team-a",
-            user_id="u1",
-        ),
-        usable_model_ids=usable_model_ids,
-    )
-
-
-_DEFINITION = SimpleNamespace(agent_id="test-agent")
-
-
-def test_usable_model_ids_none_means_no_restriction() -> None:
-    # ReBAC disabled/not computed — same dev-permissive posture as every
-    # other pod-side check.
-    model, selection = _factory().build_for_chat(
-        definition=_DEFINITION,
-        binding=_binding(None),
-    )
-    assert model is not None
-    assert selection.model.provider == "openai"
-
-
-def test_allowed_model_resolves_normally() -> None:
-    allowed_id = model_capability_id("openai", "gpt-5.1")
-    model, _ = _factory().build_for_chat(
-        definition=_DEFINITION,
-        binding=_binding((allowed_id,)),
-    )
-    assert model is not None
-
-
-def test_disallowed_model_fails_closed() -> None:
-    # The team's usable set does not contain this profile's model at all.
-    with pytest.raises(ModelNotUsableError) as exc_info:
-        _factory().build_for_chat(
-            definition=_DEFINITION,
-            binding=_binding(("model__azure__gpt-4o",)),
-        )
-    assert exc_info.value.capability_id == model_capability_id("openai", "gpt-5.1")
-
-
-def test_disallowed_model_tells_the_user_to_ask_an_admin(caplog) -> None:
-    # The turn fails at runtime setup; the user must read why and who can fix
-    # it, not only "could not initialize its execution" and a reference.
-    with pytest.raises(ModelNotUsableError) as exc_info:
-        _factory().build_for_chat(
-            definition=_DEFINITION,
-            binding=_binding(()),
-        )
-    message = report_execution_error(
-        logging.getLogger(__name__), exc_info.value, "runtime_setup"
-    )
-    assert message.startswith(
-        "The model 'gpt-5.1' used by this agent is not enabled for your team. "
-        "Ask a platform administrator to enable it for the team. "
-    )
-    assert "could not initialize its execution" not in message
-    assert "Contact support with reference " in message
-
-
-def test_empty_usable_set_denies_everything() -> None:
-    # Distinguishes "ReBAC active, zero models granted" from "not computed".
-    with pytest.raises(ModelNotUsableError):
-        _factory().build_for_chat(
-            definition=_DEFINITION,
-            binding=_binding(()),
-        )
-
-
-def _gateway_factory() -> RoutedChatModelFactory:
-    """Two models behind one OpenAI-compatible gateway: distinct `base_url`s,
-    the same wire `model` value, told apart by `model_id`."""
-
-    def profile(profile_id: str, model_id: str, path: str) -> ModelProfile:
-        return ModelProfile(
-            profile_id=profile_id,
-            capability=ModelCapability.CHAT,
-            model=ModelConfiguration(
-                provider="openai", name="mistral", settings={"base_url": path}
-            ),
-            model_id=model_id,
-        )
-
-    policy = ModelRoutingPolicy(
-        default_profile_by_capability={ModelCapability.CHAT: "chat.gw.medium"},
-        profiles=(
-            profile("chat.gw.medium", "mistral-medium", "https://gw/medium/v1"),
-            profile("chat.gw.small", "mistral-small", "https://gw/small/v1"),
-        ),
-        agent_profile_overrides={"small-agent": "chat.gw.small"},
-    )
-    return RoutedChatModelFactory(
-        resolver=ModelRoutingResolver(policy), provider=_FakeProvider()
-    )
-
-
-def test_gateway_siblings_are_authorized_by_their_own_identity() -> None:
-    # Enabling the small model must not enable the medium one just because
-    # both send `model: mistral` on the wire.
-    with pytest.raises(ModelNotUsableError) as exc_info:
-        _gateway_factory().build_for_chat(
-            definition=_DEFINITION,
-            binding=_binding((model_capability_id("openai", "mistral-small"),)),
-        )
-    assert exc_info.value.capability_id == model_capability_id(
-        "openai", "mistral-medium"
-    )
-
-
-def test_gateway_sibling_allowed_by_its_own_identity_builds() -> None:
-    model, selection = _gateway_factory().build_for_chat(
-        definition=SimpleNamespace(agent_id="small-agent"),
-        binding=_binding((model_capability_id("openai", "mistral-small"),)),
-    )
-    assert model is not None
-    assert selection.profile_id == "chat.gw.small"
-    assert selection.capability_id == model_capability_id("openai", "mistral-small")
-
-
-def test_build_also_enforces_via_build_for_chat() -> None:
-    # build() funnels through build_for_chat — confirming the gate isn't
-    # bypassable via the public entry point runtimes actually call.
-    with pytest.raises(ModelNotUsableError):
-        _factory().build(definition=_DEFINITION, binding=_binding(()))
-
-
-# ---------------------------------------------------------------------------
-# 1b. RoutedChatModelFactory.select — team-routing-policy fallback layer
-# ---------------------------------------------------------------------------
-
-
-def test_team_default_applies_when_no_static_override_matches() -> None:
-    _, selection = _factory().build_for_chat(
-        definition=_DEFINITION,
-        binding=_binding(chat_default_profile_id="team.preferred"),
-    )
-    assert selection.source == ModelSelectionSource.TEAM_POLICY
-    assert selection.profile_id == "team.preferred"
-
-
-def test_static_override_wins_over_team_default() -> None:
-    _, selection = _factory(
-        agent_profile_overrides={"test-agent": "p1"}
-    ).build_for_chat(
-        definition=_DEFINITION,
-        binding=_binding(chat_default_profile_id="team.preferred"),
-    )
-    assert selection.source == ModelSelectionSource.AGENT_OVERRIDE
-    assert selection.profile_id == "p1"
-
-
-_GPT51 = model_capability_id("openai", "gpt-5.1")
-_GPT52 = model_capability_id("openai", "gpt-5.2")
-_GPT53 = model_capability_id("openai", "gpt-5.3")
-
-
-def test_user_choice_beats_recommendation_and_team_default() -> None:
-    _, selection = _factory().build_for_chat(
-        definition=_DEFINITION,
-        binding=_binding(
-            chat_default_profile_id="team.preferred",
-            recommended_chat_profile_id="p1",
-            chat_profile_id="team.planning",
-        ),
-    )
-    assert selection.source == ModelSelectionSource.USER_CHOICE
-    assert selection.profile_id == "team.planning"
-
-
-def test_recommendation_beats_team_default() -> None:
-    _, selection = _factory().build_for_chat(
-        definition=_DEFINITION,
-        binding=_binding(
-            chat_default_profile_id="team.preferred",
-            recommended_chat_profile_id="team.planning",
-        ),
-    )
-    assert selection.source == ModelSelectionSource.INSTANCE_RECOMMENDATION
-    assert selection.profile_id == "team.planning"
-
-
-def test_static_override_beats_user_choice() -> None:
-    _, selection = _factory(
-        agent_profile_overrides={"test-agent": "p1"}
-    ).build_for_chat(
-        definition=_DEFINITION,
-        binding=_binding(chat_profile_id="team.planning"),
-    )
-    assert selection.source == ModelSelectionSource.AGENT_OVERRIDE
-    assert selection.profile_id == "p1"
-
-
-def test_spoofed_choice_of_a_model_the_team_cannot_use_is_ignored() -> None:
-    _, selection = _factory().build_for_chat(
-        definition=_DEFINITION,
-        binding=_binding(
-            (_GPT52,),
-            chat_default_profile_id="team.preferred",
-            chat_profile_id="team.planning",
-        ),
-    )
-    assert selection.profile_id == "team.preferred"
-    assert selection.capability_id != _GPT53
-
-
-@pytest.mark.parametrize("profile_id", ["ghost.profile", "team.language-only"])
-def test_unknown_or_non_chat_choice_is_ignored(profile_id: str) -> None:
-    _, selection = _factory().build_for_chat(
-        definition=_DEFINITION,
-        binding=_binding(
-            chat_default_profile_id="team.preferred", chat_profile_id=profile_id
-        ),
-    )
-    assert selection.source == ModelSelectionSource.TEAM_POLICY
-    assert selection.profile_id == "team.preferred"
-
-
-def test_team_disabled_choice_is_ignored() -> None:
-    _, selection = _factory().build_for_chat(
-        definition=_DEFINITION,
-        binding=_binding(
-            chat_default_profile_id="team.preferred",
-            chat_profile_id="team.planning",
-            team_disabled_model_ids=(_GPT53,),
-        ),
-    )
-    assert selection.profile_id == "team.preferred"
-
-
-def test_team_disabled_recommendation_falls_to_team_default() -> None:
-    _, selection = _factory().build_for_chat(
-        definition=_DEFINITION,
-        binding=_binding(
-            chat_default_profile_id="team.preferred",
-            recommended_chat_profile_id="team.planning",
-            team_disabled_model_ids=(_GPT53,),
-        ),
-    )
-    assert selection.source == ModelSelectionSource.TEAM_POLICY
-    assert selection.profile_id == "team.preferred"
-
-
-def test_revoked_recommendation_falls_to_team_default() -> None:
-    _, selection = _factory().build_for_chat(
-        definition=_DEFINITION,
-        binding=_binding(
-            (_GPT52,),
-            chat_default_profile_id="team.preferred",
-            recommended_chat_profile_id="team.planning",
-        ),
-    )
-    assert selection.profile_id == "team.preferred"
-
-
-def test_team_disabled_default_fails_closed() -> None:
-    with pytest.raises(ModelNotUsableError) as exc_info:
-        _factory().build_for_chat(
-            definition=_DEFINITION,
-            binding=_binding(
-                chat_default_profile_id="team.preferred",
-                team_disabled_model_ids=(_GPT52,),
-            ),
-        )
-    assert exc_info.value.capability_id == _GPT52
-
-
-def test_team_disabled_set_does_not_touch_the_pod_default() -> None:
-    # The pod default is ops-authored; the team-disabled set narrows team and
-    # user choices only. `can_use` still gates it in `build_for_chat`.
-    _, selection = _factory().build_for_chat(
-        definition=_DEFINITION,
-        binding=_binding(team_disabled_model_ids=(_GPT51,)),
-    )
-    assert selection.source == ModelSelectionSource.DEFAULT
-
-
-def test_unknown_team_profile_raises_drift_error() -> None:
-    with pytest.raises(TeamRoutingProfileDriftError) as exc_info:
-        _factory().build_for_chat(
-            definition=_DEFINITION,
-            binding=_binding(chat_default_profile_id="ghost.profile"),
-        )
-    assert exc_info.value.profile_id == "ghost.profile"
-
-
-def test_team_policy_selection_still_enforces_usable_model_ids() -> None:
-    # Defense in depth: a team policy that names a profile the team's
-    # capability enablement no longer allows must still fail closed, exactly
-    # like a static-override or default selection would.
-    with pytest.raises(ModelNotUsableError):
-        _factory().build_for_chat(
-            definition=_DEFINITION,
-            binding=_binding(
-                usable_model_ids=("model__azure__gpt-4o",),
-                chat_default_profile_id="team.preferred",
-            ),
-        )
-
-
-def test_no_team_policy_set_keeps_static_default() -> None:
-    _, selection = _factory().build_for_chat(
-        definition=_DEFINITION,
-        binding=_binding(),
-    )
-    assert selection.source == ModelSelectionSource.DEFAULT
-    assert selection.profile_id == "p1"
-
-
-# ---------------------------------------------------------------------------
-# 2. usable_model_capability_ids — pod-side ReBAC query
-# ---------------------------------------------------------------------------
-
-
-class _FakeRef:
-    def __init__(self, id_: str) -> None:
-        self.id = id_
-
-
-class _FakeRebac:
-    def __init__(self, *, enabled: bool, ids: list[str]) -> None:
-        self.enabled = enabled
-        self._ids = ids
-        self.calls: list[tuple[Any, ...]] = []
-
-    async def lookup_resources(
-        self, subject: Any, permission: Any, resource_type: Any, **kwargs: Any
-    ) -> list[_FakeRef]:
-        self.calls.append((subject, permission, resource_type))
-        return [_FakeRef(i) for i in self._ids]
-
-
-@pytest.mark.asyncio
-async def test_returns_none_when_rebac_is_none() -> None:
-    assert await usable_model_capability_ids(None, "team-a") is None
-
-
-@pytest.mark.asyncio
-async def test_returns_none_when_rebac_disabled() -> None:
-    rebac = _FakeRebac(enabled=False, ids=[])
-    assert await usable_model_capability_ids(rebac, "team-a") is None  # type: ignore[arg-type]
-
-
-@pytest.mark.asyncio
-async def test_filters_to_model_prefixed_ids_only() -> None:
-    rebac = _FakeRebac(
-        enabled=True,
-        ids=["model__openai__gpt-5.1", "doc_access", "agent__runtime-a__sentinel"],
-    )
-    result = await usable_model_capability_ids(rebac, "team-a")  # type: ignore[arg-type]
-    assert result == frozenset({"model__openai__gpt-5.1"})
-
-
-@pytest.mark.asyncio
-async def test_empty_result_is_a_real_empty_frozenset_not_none() -> None:
-    rebac = _FakeRebac(enabled=True, ids=[])
-    result = await usable_model_capability_ids(rebac, "team-a")  # type: ignore[arg-type]
-    assert result == frozenset()
-    assert result is not None

@@ -6,8 +6,39 @@ import { controlPlaneApi } from "./controlPlaneOpenApi";
 // The generator types binary fields as Blob, but sends the enclosing object as
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
 export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
-  addTagTypes: ["Folders", "Documents", "DocumentUploads", "OrganizationAgents", "AgentInstances", "AgentTemplates"],
+  addTagTypes: [
+    "Folders",
+    "Documents",
+    "DocumentUploads",
+    "OrganizationAgents",
+    "AgentInstances",
+    "AgentTemplates",
+    "Sessions",
+  ],
   endpoints: {
+    listSessions: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { spaceId }) => [{ type: "Sessions", id: spaceId }],
+    },
+    getSession: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { spaceId, sessionId }) => [{ type: "Sessions", id: `${spaceId}:${sessionId}` }],
+    },
+    createSession: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { spaceId }) => (error ? [] : [{ type: "Sessions", id: spaceId }]),
+    },
+    updateSession: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { spaceId, sessionId }) =>
+        error
+          ? []
+          : [
+              { type: "Sessions", id: spaceId },
+              { type: "Sessions", id: `${spaceId}:${sessionId}` },
+            ],
+    },
+
     listAgentInstances: {
       providesTags: (_result, _error, { spaceId }) => [{ type: "AgentInstances", id: spaceId }],
     },
@@ -111,6 +142,11 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
 });
 
 export const {
+  useListSessionsQuery,
+  useGetSessionQuery,
+  useCreateSessionMutation,
+  useUpdateSessionMutation,
+  usePrepareExecutionMutation,
   useListAgentInstancesQuery,
   useGetAgentInstanceQuery,
   useCreateAgentInstanceMutation,

@@ -15,6 +15,7 @@
 //! Embedded and live runtime template discovery, with pod-scoped catalog storage.
 
 pub mod catalog;
+mod inventory;
 
 use std::{collections::BTreeMap, time::Duration};
 
@@ -36,6 +37,8 @@ const NATIVE_RUNTIME_ID: &str = fred_rust_agent::DEFINITION.provider;
 #[serde(deny_unknown_fields)]
 pub struct PlatformConfig {
     #[serde(default)]
+    pub model_sources: Vec<crate::model_catalog::config::ModelSource>,
+    #[serde(default)]
     pub runtime_catalog_sources: Vec<RuntimeCatalogSource>,
 }
 
@@ -44,12 +47,17 @@ pub struct PlatformConfig {
 pub struct RuntimeCatalogSource {
     pub runtime_id: String,
     pub base_url: String,
+    /// Platform-approved browser ingress path; never inferred from the internal URL.
+    /// Omit to leave browser execution/history routing unavailable.
+    #[serde(default)]
+    pub public_base_url: Option<String>,
     #[serde(default = "crate::config::yes")]
     pub enabled: bool,
 }
 
 impl PlatformConfig {
     pub fn validate(&self) -> Result<()> {
+        crate::model_catalog::config::validate_sources(&self.model_sources)?;
         let mut ids = std::collections::HashSet::new();
         for source in &self.runtime_catalog_sources {
             let id = &source.runtime_id;
@@ -62,6 +70,20 @@ impl PlatformConfig {
                 "runtime_id {id} is reserved for the embedded agent; external sources cannot use it"
             );
             ensure!(ids.insert(id), "runtime_id {id} is duplicated");
+            if let Some(base) = &source.public_base_url {
+                // Only canonical same-origin paths: no authority, encoded traversal,
+                // query, fragment or browser URL-parser normalization ambiguity.
+                ensure!(
+                    base.starts_with('/')
+                        && base.len() > 1
+                        && base.split('/').skip(1).all(|part| !part.is_empty()
+                            && part != "."
+                            && part != ".."
+                            && part.bytes().all(|c| c.is_ascii_alphanumeric()
+                                || matches!(c, b'-' | b'_' | b'.' | b'~'))),
+                    "runtime {id} public_base_url must be a canonical ingress-relative path"
+                );
+            }
             // Messages name the source, never base_url, which may carry credentials.
             let url = reqwest::Url::parse(&source.base_url)
                 .with_context(|| format!("runtime {id} base_url must be an HTTP(S) URL"))?;
@@ -169,6 +191,8 @@ pub struct AgentTemplateSummary {
     pub public_version: Option<String>,
     /// Pod-owned FieldSpecs, including localized defaults and UI hints, unchanged.
     pub default_tuning_fields: Vec<BTreeMap<String, serde_json::Value>>,
+    /// Current pod input limit, absent when not advertised.
+    pub max_chat_input_chars: Option<u64>,
     /// Pod-owned descriptors, including config fields, schemas and routing metadata.
     pub available_capabilities: Vec<BTreeMap<String, serde_json::Value>>,
     pub supports_capabilities: bool,
@@ -194,6 +218,7 @@ struct TemplateFormMetadata {
     description_by_lang: Option<BTreeMap<String, String>>,
     #[serde(default)]
     default_tuning: TemplateTuning,
+    max_chat_input_chars: Option<u64>,
     #[serde(default)]
     available_capabilities: Vec<BTreeMap<String, serde_json::Value>>,
     #[serde(default = "crate::config::yes")]
@@ -253,6 +278,7 @@ fn template_summary(
         status: AgentTemplateStatus::Available,
         public_version: template.public_version.clone(),
         default_tuning_fields: metadata.default_tuning.fields,
+        max_chat_input_chars: metadata.max_chat_input_chars.filter(|limit| *limit > 0),
         available_capabilities: metadata.available_capabilities,
         supports_capabilities: metadata.supports_capabilities,
         default_capability_ids: metadata.default_capability_ids,
@@ -346,6 +372,7 @@ fn project(organization: Uuid, catalogs: Vec<RuntimeCatalog>) -> AppResult<Vec<A
 
 pub fn routes() -> utoipa_axum::router::OpenApiRouter<crate::api::AppState> {
     utoipa_axum::router::OpenApiRouter::new()
+        .merge(inventory::routes())
         .routes(utoipa_axum::routes!(space_agent_templates))
         .routes(utoipa_axum::routes!(organization_agents))
         .routes(utoipa_axum::routes!(set_organization_agent_default))
@@ -623,6 +650,7 @@ mod tests {
         RuntimeCatalogSource {
             runtime_id: runtime_id.into(),
             base_url: base_url.into(),
+            public_base_url: None,
             enabled: true,
         }
     }
@@ -630,6 +658,7 @@ mod tests {
     fn platform(runtime_catalog_sources: Vec<RuntimeCatalogSource>) -> PlatformConfig {
         PlatformConfig {
             runtime_catalog_sources,
+            ..Default::default()
         }
     }
 

@@ -198,7 +198,7 @@ fn default_pg_port() -> u16 {
     5432
 }
 
-fn opt_env(name: &str) -> Option<String> {
+pub(crate) fn opt_env(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.is_empty())
 }
 

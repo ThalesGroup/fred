@@ -269,11 +269,11 @@ class PodChartTests(unittest.TestCase):
         result = self.render(
             "agent-pod",
             merged(
-                AGENT, {"extraConfigFiles": {"models_catalog.yaml": {"version": "v1"}}}
+                AGENT, {"extraConfigFiles": {"mcp_catalog_external.yaml": {"version": "v1"}}}
             ),
         )
-        self.assertIn('mountPath: "/app/config/models_catalog.yaml"', result.stdout)
-        self.assertIn("models_catalog.yaml: |", result.stdout)
+        self.assertIn('mountPath: "/app/config/mcp_catalog_external.yaml"', result.stdout)
+        self.assertIn("mcp_catalog_external.yaml: |", result.stdout)
 
     def test_metrics_exposed_only_on_a_reachable_address(self):
         loopback = {"observability": {"kpi": {"prometheus": {"enabled": True}}}}

@@ -41,7 +41,7 @@ configuration:
     port: 8000
 
 # Other files the pod reads, mounted under /app/config/ next to
-# configuration.yaml (e.g. models_catalog.yaml). A mapping is written as YAML.
+# configuration.yaml (e.g. mcp_catalog_external.yaml). A mapping is written as YAML.
 extraConfigFiles: {}
 
 # Credentials, as environment variables. `existingSecret` is mounted whole

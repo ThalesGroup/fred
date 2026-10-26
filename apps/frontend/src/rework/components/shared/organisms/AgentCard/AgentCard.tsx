@@ -70,6 +70,7 @@ export interface AgentCardProps {
   canManageAgents: boolean;
   offline?: boolean;
   unavailableActionsReason?: string;
+  chatAvailable?: boolean;
   managementBusy?: boolean;
   /** Resolved audit users for `created_by`/`updated_by`, batched once for the
    *  whole list by the caller rather than one query per card. */
@@ -102,6 +103,7 @@ export default function AgentCard({
   canManageAgents,
   offline = false,
   unavailableActionsReason,
+  chatAvailable = false,
   managementBusy = false,
   auditUserById,
   onEdit,
@@ -178,8 +180,8 @@ export default function AgentCard({
       size="medium"
       icon={{ category: "outlined", type: "reviews" }}
       className={styles.chatButton}
-      disabled={!isEnabled || !!unavailableActionsReason}
-      title={unavailableActionsReason}
+      disabled={!isEnabled || (!!unavailableActionsReason && !chatAvailable)}
+      title={chatAvailable ? undefined : unavailableActionsReason}
     >
       {t("rework.agentCard.chat")}
     </Button>
@@ -309,7 +311,7 @@ export default function AgentCard({
               <Icon category="outlined" type="info" accessibleName={t("rework.agentCard.tooltip.label")} />
             </span>
           </Tooltip>
-          {isEnabled && teamId && !unavailableActionsReason ? (
+          {isEnabled && teamId && (!unavailableActionsReason || chatAvailable) ? (
             <Link to={`/team/${teamId}/managed-chat/${instance.agent_instance_id}`} className={styles.chatLink}>
               {chatButton}
             </Link>

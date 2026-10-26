@@ -29,7 +29,11 @@ pub(super) fn validate_request(body: &mut CreateAgentInstanceRequest) -> AppResu
         body.description.as_deref(),
         body.role.as_deref(),
         Some(&body.usage_statement),
-    )
+    )?;
+    if let Some(options) = &body.model_options {
+        options.validate()?;
+    }
+    Ok(())
 }
 
 pub(super) fn validate_update_request(body: &mut UpdateAgentInstanceRequest) -> AppResult<()> {
@@ -39,11 +43,14 @@ pub(super) fn validate_update_request(body: &mut UpdateAgentInstanceRequest) -> 
         body.role.as_deref(),
         body.usage_statement.as_deref(),
     )?;
+    if let Some(Some(options)) = &body.model_options {
+        options.validate()?;
+    }
     if matches!(&body.recommended_chat_profile_id, Some(Some(_))) {
         return Err(AppError::problem(
             StatusCode::UNPROCESSABLE_ENTITY,
-            "agent_chat_profile_not_connected",
-            "Chat profile recommendations are not connected for agent instance editing yet.",
+            "legacy_model_reselection_required",
+            "Legacy profiles are diagnostic references only; re-select using recommended_model.",
         ));
     }
     Ok(())
@@ -109,8 +116,8 @@ pub(super) fn enroll(
     if body.recommended_chat_profile_id.is_some() {
         return Err(AppError::problem(
             StatusCode::UNPROCESSABLE_ENTITY,
-            "agent_chat_profile_not_connected",
-            "Chat profile recommendations are not connected for agent instance creation yet.",
+            "legacy_model_reselection_required",
+            "Legacy profiles cannot be selected; use recommended_model with an offer key.",
         ));
     }
     let object = tuning
@@ -131,6 +138,11 @@ pub(super) fn enroll(
     );
     object.insert("usage_statement".into(), json!(body.usage_statement));
     object.insert("recommended_chat_profile_id".into(), Value::Null);
+    object.insert("recommended_model".into(), json!(body.recommended_model));
+    object.insert(
+        "model_options".into(),
+        json!(body.model_options.clone().unwrap_or_default()),
+    );
     if let Some(values) = body.tuning_field_values.as_ref().filter(|v| !v.is_empty()) {
         let fields: Vec<FieldSpec> =
             serde_json::from_value(object.get("fields").cloned().unwrap_or_else(|| json!([])))
@@ -209,6 +221,15 @@ pub(super) fn apply_update(
     }
     if matches!(&body.recommended_chat_profile_id, Some(None)) {
         object.insert("recommended_chat_profile_id".into(), Value::Null);
+    }
+    if let Some(recommendation) = &body.recommended_model {
+        object.insert("recommended_model".into(), json!(recommendation));
+    }
+    if let Some(options) = &body.model_options {
+        object.insert(
+            "model_options".into(),
+            json!(options.clone().unwrap_or_default()),
+        );
     }
     if let Some(name) = &body.display_name {
         record.display_name.clone_from(name);

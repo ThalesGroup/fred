@@ -1123,8 +1123,9 @@
       "notConnected": "Pas encore raccordé à Weaver.",
       "chatUnavailable": "Le chat et l’historique des conversations ne sont pas encore raccordés à Weaver.",
       "scopeUnavailable": "Cet espace équipe ou personnel est indisponible ou vous n’y avez pas accès.",
-      "modelProfile": "Profil de modèle recommandé",
-      "modelUnavailable": "La sélection de profils de modèle n’est pas encore raccordée. La recommandation enregistrée est conservée.",
+      "modelProfile": "Modèle recommandé",
+      "modelUnavailable": "La sélection de modèles n'est pas encore raccordée dans ce formulaire. Les réglages enregistrés sont conservés.",
+      "legacyModelReselection": "Cet ancien profil est conservé pour diagnostic uniquement. Une re-sélection explicite d'un modèle plateforme est nécessaire ; ce formulaire conserve la référence.",
       "capabilitiesUnavailable": "Les capacités et l’envoi de fichiers ne sont pas encore raccordés. Les sélections et la configuration enregistrées sont conservées. Le serveur refusera la création d’un agent dont le template impose des capacités actives.",
       "errors": {
         "unauthorized": "Votre session a expiré. Veuillez vous reconnecter.",

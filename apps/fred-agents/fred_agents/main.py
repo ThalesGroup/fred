@@ -30,7 +30,6 @@ from fastapi import FastAPI
 from fred_runtime.app import AgentPodConfig, create_agent_app, load_agent_pod_config
 
 from fred_agents.registry import REGISTRY
-from fred_agents.test_assistant.mock_llm import MockAwareModelProvider
 
 
 def create_app(config: AgentPodConfig | None = None) -> FastAPI:
@@ -53,8 +52,6 @@ def create_app(config: AgentPodConfig | None = None) -> FastAPI:
     return create_agent_app(
         registry=REGISTRY,
         config=resolved_config,
-        # Serves the in-process `fred-test-mock` catalog profile.
-        model_provider=MockAwareModelProvider(),
     )
 
 

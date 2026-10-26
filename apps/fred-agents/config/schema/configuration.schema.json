@@ -147,6 +147,40 @@
       "type": "object",
       "additionalProperties": false
     },
+    "InferenceCredentialBinding": {
+      "additionalProperties": false,
+      "description": "Pod-local provisioning. A resolver cannot redirect an existing secret.",
+      "properties": {
+        "source_id": {
+          "minLength": 1,
+          "title": "Source Id",
+          "type": "string"
+        },
+        "api_root": {
+          "minLength": 1,
+          "title": "Api Root",
+          "type": "string"
+        },
+        "credential_binding": {
+          "minLength": 1,
+          "title": "Credential Binding",
+          "type": "string"
+        },
+        "api_key_env": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Api Key Env",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "api_root",
+        "credential_binding",
+        "api_key_env"
+      ],
+      "title": "InferenceCredentialBinding",
+      "type": "object"
+    },
     "KpiLogSinkConfig": {
       "properties": {
         "enabled": {
@@ -1530,10 +1564,18 @@
       "type": "object"
     }
   },
-  "description": "Complete structured configuration for a Fred agent pod.\n\nMirrors agentic-backend's `Configuration` model, scoped to what an agent\npod actually needs. All field types are reused from fred-core and fred-sdk\n\u2014 no new types invented here.\n\nHow to use it:\n- write a `config/configuration.yaml` alongside `config/models_catalog.yaml`\n  and, optionally, `config/mcp_catalog_external.yaml`\n- call `load_agent_pod_config()` at startup\n- pass the result to `create_agent_app(config=...)`\n\nThe `security` field is a `SecurityConfiguration` from fred-core, the same\ntype used in agentic-backend. When `security.user.enabled` is True,\n`create_agent_app` enforces Keycloak JWT validation on every endpoint.",
+  "description": "Complete structured configuration for a Fred agent pod.\n\nMirrors agentic-backend's `Configuration` model, scoped to what an agent\npod actually needs. All field types are reused from fred-core and fred-sdk\n\u2014 no new types invented here.\n\nHow to use it:\n- write a `config/configuration.yaml` and, optionally, `config/mcp_catalog_external.yaml`\n- call `load_agent_pod_config()` at startup\n- pass the result to `create_agent_app(config=...)`\n\nThe `security` field is a `SecurityConfiguration` from fred-core, the same\ntype used in agentic-backend. When `security.user.enabled` is True,\n`create_agent_app` enforces Keycloak JWT validation on every endpoint.",
   "properties": {
     "app": {
       "$ref": "#/$defs/PodAppConfig"
+    },
+    "inference_credentials": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/InferenceCredentialBinding"
+      },
+      "title": "Inference Credentials",
+      "type": "array"
     },
     "security": {
       "$ref": "#/$defs/SecurityConfiguration"

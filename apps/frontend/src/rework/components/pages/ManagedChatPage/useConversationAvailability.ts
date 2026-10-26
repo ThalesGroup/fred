@@ -12,39 +12,50 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { useGetSessionQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 
 export function useConversationAvailability(
-  teamId: string,
+  spaceId: string,
   agentInstanceId: string,
   sessionId: string | null,
   locallyCreated: boolean,
 ) {
-  const skip = !teamId || !sessionId;
-  const {
-    currentData: sessionData,
-    isError,
-    refetch,
-  } = useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery(
-    { teamId, sessionId: sessionId ?? "" },
-    crossSessionRefreshOptions(skip),
+  const skip = !spaceId || !sessionId || locallyCreated;
+  const query = useGetSessionQuery(
+    { spaceId, sessionId: sessionId ?? "" },
+    { ...crossSessionRefreshOptions(skip), refetchOnMountOrArgChange: true },
   );
-  useRefetchOnWindowFocus(refetch, skip);
+  useRefetchOnWindowFocus(query.refetch, skip);
+  // RTK retains currentData after errors. A current refusal must hide that snapshot.
+  const mismatch =
+    !!query.currentData &&
+    (query.currentData.space_id !== spaceId || query.currentData.agent_instance_id !== agentInstanceId);
+  const sessionData = !skip && !query.isError && !mismatch ? query.currentData : undefined;
   const isReadOnly = sessionData?.agent_deleted === true;
   const executionDisabled =
+    !spaceId ||
     isReadOnly ||
-    Boolean(
-      sessionId &&
-        ((!sessionData && !locallyCreated) || (sessionData && sessionData.agent_instance_id !== agentInstanceId)),
-    );
+    sessionData?.agent_disabled === true ||
+    Boolean(sessionId && !locallyCreated && (!sessionData || sessionData.agent_instance_id !== agentInstanceId));
   return {
     sessionData,
     isReadOnly,
     executionDisabled,
-    sessionUnavailable: Boolean(sessionId && isError && !sessionData && !locallyCreated),
+    sessionUnavailable: Boolean(sessionId && (query.isError || mismatch) && !locallyCreated),
+    sessionErrorKey: mismatch
+      ? "rework.weaverAgents.scopeUnavailable"
+      : query.isError
+        ? typeof query.error === "object" &&
+          query.error &&
+          "status" in query.error &&
+          [401, 403, 404].includes(Number(query.error.status))
+          ? "rework.weaverAgents.scopeUnavailable"
+          : "rework.weaverAgents.errors.server"
+        : undefined,
+    historyRevision: query.fulfilledTimeStamp,
     refetchSession: () => {
-      if (!skip) void refetch();
+      if (!skip) void query.refetch();
     },
   };
 }

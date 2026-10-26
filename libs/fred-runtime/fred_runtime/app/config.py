@@ -83,7 +83,7 @@ from fred_core.security.structure import SecurityConfiguration
 from fred_pod.common import RUNTIME_ID_PATTERN, PodAppIdentity
 from fred_pod.common.structures import LogOutputFormat
 from fred_sdk.contracts.web_research import WebResearchDeploymentConfig
-from pydantic import BaseModel, Field, PrivateAttr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 from ..runtime_context import RuntimeTimeouts
 
@@ -436,6 +436,34 @@ class PodSkillsConfig(BaseModel):
     directory: str = Field(min_length=1)
 
 
+class InferenceCredentialBinding(BaseModel):
+    """Pod-local provisioning. A resolver cannot redirect an existing secret."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    source_id: str = Field(min_length=1)
+    api_root: str = Field(min_length=1)
+    credential_binding: str = Field(min_length=1)
+    api_key_env: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+    @model_validator(mode="after")
+    def approved_root(self) -> InferenceCredentialBinding:
+        from urllib.parse import urlsplit
+
+        url = urlsplit(self.api_root)
+        if (
+            url.scheme not in {"http", "https"}
+            or not url.hostname
+            or url.username
+            or url.password
+            or url.query
+            or url.fragment
+        ):
+            raise ValueError(
+                "Inference API root must be an explicit HTTP(S) destination without credentials or query"
+            )
+        return self
+
+
 class AgentPodConfig(BaseModel):
     """
     Complete structured configuration for a Fred agent pod.
@@ -445,8 +473,7 @@ class AgentPodConfig(BaseModel):
     — no new types invented here.
 
     How to use it:
-    - write a `config/configuration.yaml` alongside `config/models_catalog.yaml`
-      and, optionally, `config/mcp_catalog_external.yaml`
+    - write a `config/configuration.yaml` and, optionally, `config/mcp_catalog_external.yaml`
     - call `load_agent_pod_config()` at startup
     - pass the result to `create_agent_app(config=...)`
 
@@ -455,13 +482,13 @@ class AgentPodConfig(BaseModel):
     `create_agent_app` enforces Keycloak JWT validation on every endpoint.
     """
 
-    _models_catalog_path: str | None = PrivateAttr(default=None)
     _mcp_configuration: McpConfigurationLike | None = PrivateAttr(default=None)
     _platform_prompt_file: Any | None = PrivateAttr(default=None)
 
     # Required, unlike every other section: `app.runtime_id` has no default, so
     # an omitted `app:` block would leave the pod unable to name itself.
     app: PodAppConfig
+    inference_credentials: tuple[InferenceCredentialBinding, ...] = ()
     security: SecurityConfiguration
     ai: PodAIConfig = Field(default_factory=PodAIConfig)
     observability: PodObservabilityConfig = Field(
@@ -513,41 +540,6 @@ class AgentPodConfig(BaseModel):
         """
 
         return self._platform_prompt_file
-
-    def set_models_catalog_path(self, path: str) -> None:
-        """
-        Attach the resolved models catalog path as internal runtime data.
-
-        Why this exists:
-        - pod startup should treat `models_catalog.yaml` as mandatory without
-          exposing its path as a public config field in `configuration.yaml`
-
-        How to use it:
-        - call only from internal config bootstrap helpers after resolving the
-          canonical catalog path
-
-        Example:
-        - `config.set_models_catalog_path("./config/models_catalog.yaml")`
-        """
-
-        self._models_catalog_path = path
-
-    def get_models_catalog_path(self) -> str | None:
-        """
-        Return the resolved models catalog path attached during pod bootstrap.
-
-        Why this exists:
-        - runtime model-routing wiring must know the resolved catalog path while
-          keeping that path out of the public Pydantic schema
-
-        How to use it:
-        - call from internal runtime wiring only
-
-        Example:
-        - `catalog_path = config.get_models_catalog_path()`
-        """
-
-        return self._models_catalog_path
 
     def set_mcp_configuration(self, configuration: McpConfigurationLike | None) -> None:
         """

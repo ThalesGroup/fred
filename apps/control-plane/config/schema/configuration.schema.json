@@ -241,6 +241,13 @@
       },
       "type": "object"
     },
+    "CredentialAuthority": {
+      "enum": [
+        "discovery_only",
+        "discovery_and_inference"
+      ],
+      "type": "string"
+    },
     "DirectoryDelegation": {
       "additionalProperties": false,
       "description": "Shared identity classification and runtime-resolver delegation settings.\nNames and defaults match Python security.delegation; acceptance is route-scoped.",
@@ -290,6 +297,79 @@
         "local"
       ],
       "type": "string"
+    },
+    "DiscoveryAuthentication": {
+      "oneOf": [
+        {
+          "properties": {
+            "mode": {
+              "enum": [
+                "public"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "accept_inference_authority": {
+              "type": "boolean"
+            },
+            "authority": {
+              "$ref": "#/$defs/CredentialAuthority"
+            },
+            "mode": {
+              "enum": [
+                "bearer"
+              ],
+              "type": "string"
+            },
+            "provider_scopes": {
+              "description": "Actual provider scopes, reviewed by the platform; a separate key proves nothing.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "secret_env_var": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "secret_env_var",
+            "provider_scopes",
+            "authority",
+            "mode"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "InferenceDestination": {
+      "additionalProperties": false,
+      "properties": {
+        "api_root": {
+          "description": "Separately approved root; never derived from discovery_url.",
+          "type": "string"
+        },
+        "credential_binding": {
+          "description": "Source-bound pod provisioning reference. Rust never resolves this credential.",
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "api_root",
+        "credential_binding"
+      ],
+      "type": "object"
     },
     "LifecycleConfig": {
       "additionalProperties": false,
@@ -358,9 +438,67 @@
       ],
       "type": "object"
     },
+    "ModelSource": {
+      "additionalProperties": false,
+      "description": "Platform approval of one source. Contains references only, never secret values.",
+      "properties": {
+        "allow_insecure_http": {
+          "description": "Explicit platform approval for internal HTTP routes; HTTPS is the default.",
+          "type": "boolean"
+        },
+        "authentication": {
+          "$ref": "#/$defs/DiscoveryAuthentication"
+        },
+        "complete_inventory_guaranteed": {
+          "description": "Platform attests that an unpaginated response lists the entire visibility scope.\nWithout this guarantee, discovery cannot publish an authoritative inventory.",
+          "type": "boolean"
+        },
+        "discovery_url": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "inference": {
+          "$ref": "#/$defs/InferenceDestination"
+        },
+        "qualification": {
+          "$ref": "#/$defs/Qualification"
+        },
+        "revision": {
+          "description": "Strictly increase for every configuration change, including secret rotation.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "visibility_scope": {
+          "description": "Stable provider account, model namespace and list visibility contract.\nA changed account/namespace/scope needs a new source_id, even with the same URL.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "revision",
+        "discovery_url",
+        "inference",
+        "visibility_scope",
+        "authentication",
+        "qualification",
+        "complete_inventory_guaranteed"
+      ],
+      "type": "object"
+    },
     "PlatformConfig": {
       "additionalProperties": false,
       "properties": {
+        "model_sources": {
+          "items": {
+            "$ref": "#/$defs/ModelSource"
+          },
+          "type": "array"
+        },
         "runtime_catalog_sources": {
           "items": {
             "$ref": "#/$defs/RuntimeCatalogSource"
@@ -503,6 +641,13 @@
       },
       "type": "object"
     },
+    "Qualification": {
+      "enum": [
+        "chat_source",
+        "mixed_capabilities_v1"
+      ],
+      "type": "string"
+    },
     "RebacConfig": {
       "additionalProperties": false,
       "properties": {
@@ -544,6 +689,13 @@
         },
         "enabled": {
           "type": "boolean"
+        },
+        "public_base_url": {
+          "description": "Platform-approved browser ingress path; never inferred from the internal URL.\nOmit to leave browser execution/history routing unavailable.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "runtime_id": {
           "type": "string"

@@ -29,6 +29,240 @@ or establish execution readiness.
 - **WHEN** a snapshot repeats an identity or links to an undeclared local capability
 - **THEN** the whole replacement is refused without partially updating the inventory
 
+### Requirement: Complete pod capability inventory is organization-administered
+
+Configured Agent Pods SHALL advertise all installed tool capabilities, independently
+of template pickers, and registered template consumer/default links. The response SHALL
+explicitly declare completeness. No agent, model, Application or Knowledge Base
+projection SHALL enter this inventory. Configuration descriptions SHALL exclude
+values, private connection configuration and credentials.
+
+The Control Plane SHALL expose organization-scoped read and single-pod refresh,
+using AdmittedUser, Manage, canonical organization placement and active lifecycle.
+It SHALL resolve the pod identity/URL from platform configuration, reject disabled
+refresh sources, and grant no implicit access from a platform role. A read SHALL
+combine observations/offers/links in a consistent SQL snapshot. A refresh SHALL
+perform bounded network discovery outside SQL, recheck authority under the existing
+lock/fence, and atomically persist only a complete valid snapshot for that pod.
+
+Observation state and timestamps SHALL remain independent of advertised/withdrawn
+status and execution availability. Failed or invalid discovery SHALL preserve the
+last inventory and report an explicit failure, including on first contact. Public
+contracts SHALL be generated from their backend sources. Catalog refresh SHALL
+NOT change instance settings, histories, agent/model permissions or destinations.
+
+#### Scenario: Installed capability without a declared consumer
+- **WHEN** the registry has an installed tool capability not exposed by any registered template
+- **THEN** the complete inventory contains the offer with no consumer link
+- **AND** it is not inferred from the union of template pickers
+
+#### Scenario: Retraction, failure and recovery
+- **WHEN** A successfully withdraws an offer, later fails or sends invalid JSON, then recovers
+- **THEN** withdrawal is retained separately from the failed observation
+- **AND** only a complete valid recovery replaces A's inventory; B and saved instances stay unchanged
+
+#### Scenario: Contradictory inventory
+- **WHEN** an inventory repeats an offer/link, names a foreign runtime, has incomplete fields or a dangling link
+- **THEN** refresh returns 502 and records unavailability without a partial replacement
+
+#### Scenario: Administrative access
+- **WHEN** an admitted active organization manager reads or refreshes
+- **THEN** access follows Manage; a member without Manage is refused
+- **AND** an unrelated organization, wrong space kind or unknown runtime is not found
+- **AND** platform role alone never grants access, and authority lost during discovery prevents writing
+
+### Requirement: Agent model inventory belongs to the platform
+
+The Control Plane SHALL own the agent model inventory, populated only through
+compatible discovery APIs at platform-approved sources. Each offer SHALL be
+identified by `(source_id, upstream_model_id)`, independently of runtime pods.
+Platform authority SHALL own approved destinations and credentials. Discovery
+SHALL NOT grant organization permission or prove execution availability in a pod.
+Sources without compatible discovery and per-pod manual agent model catalogs
+SHALL NOT form part of this target. Knowledge Flow embedding configuration and
+document processing SHALL remain outside this model-catalog change.
+
+#### Scenario: Two sources return the same model name
+- **WHEN** sources A and B both discover the same upstream model ID
+- **THEN** they remain distinct offers and changes to A do not reassign B's saved choices
+- **AND** no pod identity or display name replaces the source-qualified key
+
+#### Scenario: Discovery succeeds but inference is unavailable
+- **WHEN** the Control Plane discovers a model and a pod lacks the necessary inference access
+- **THEN** discovery does not establish permission or readiness to execute that model
+
+#### Scenario: An organization attempts to redirect credentials
+- **WHEN** an organization administrator or invocation supplies an unapproved destination
+- **THEN** it cannot change the platform-approved catalog/inference association or receive provider credentials
+
+### Requirement: Organization model administration is atomic and authorized
+
+Organization inventory, source refresh and policy read/write SHALL require admission,
+active canonical organization placement and Manage through the existing Weaver gate.
+Platform roles alone SHALL NOT grant access. Inventory SHALL combine safe platform
+observations/offers and only the requesting organization's policy in one consistent
+snapshot, followed by admission/authorization recheck. No public projection SHALL
+expose credential values/references or internal destination configuration.
+
+Refresh SHALL authorize before discovery, release every SQL connection/transaction
+during HTTP, then recheck admission and Manage under the existing locks and FGA fence
+before publication in that same transaction. Exact source configuration and latest
+refresh token SHALL still constrain publication. A denied completion SHALL NOT
+publish either success or failure. Discovery SHALL NOT mutate organization policy.
+
+Policy replacement SHALL use expected revision and atomically persist the permitted
+composite keys, explicit nullable default/fallback and audit attribution. Missing
+policy SHALL mean revision zero with no permitted offers or implicit choices.
+Default/fallback SHALL belong to the same organization's permitted set. New permissions
+and changed non-null choices SHALL require known, advertised, chat-qualified offers
+from enabled sources with successful observations at their current configuration
+revision. Retained unavailable choices SHALL NOT prevent reductions or clearing.
+Withdrawal, discovery failure and configuration change SHALL retain diagnostic
+references without substitution or automatic reauthorization.
+
+#### Scenario: Admission or Manage is lost during source discovery
+- **WHEN** an authorized manager starts discovery and loses admission or Manage before HTTP completes
+- **THEN** publication is refused before any observation or offer update, including on discovery failure
+- **AND** the last successful snapshot remains intact
+
+#### Scenario: Source refreshes or configurations race
+- **WHEN** two refreshes overlap or platform configuration changes during discovery
+- **THEN** only the latest claimed token for the exact current configuration can publish
+- **AND** other sources and every organization policy remain unchanged
+
+#### Scenario: Organization policy replacements race
+- **WHEN** two authorized writes use the same expected policy revision
+- **THEN** exactly one commits the next revision and the other conflicts
+- **AND** no permitted-set/default/fallback mixture is visible or committed
+
+#### Scenario: A new selection is unknown or no longer eligible
+- **WHEN** a policy adds an unknown, withdrawn, non-chat or unknown-chat offer, or changes a choice during failed discovery
+- **THEN** the whole replacement is refused and the saved policy remains unchanged
+- **AND** an old snapshot from another source revision cannot validate the selection
+
+#### Scenario: A manager reduces permission during an outage
+- **GIVEN** a policy retains unavailable X and Y and default X
+- **WHEN** the manager removes Y while retaining X, or revokes X and explicitly clears its default
+- **THEN** the atomic replacement succeeds without requiring new discovery for the retained choices
+- **AND** no automatic fallback or substitute is selected
+
+#### Scenario: Organizations share discovered offers but not decisions
+- **WHEN** organization A permits an offer or the platform discovers another offer
+- **THEN** organization B's policy is unchanged and new offers remain unpermitted
+- **AND** an admitted A manager cannot read or modify B's policy
+
+#### Scenario: An administrator attempts to change source approval
+- **WHEN** a caller supplies a destination, credential, qualification or completeness override
+- **THEN** it cannot change the platform approval or the discovery destination
+- **AND** public model schemas contain only identities, normalized metadata, observations and organization choices
+
+### Requirement: Organization model restrictions cover every selected model
+
+Organization model restrictions SHALL apply to the actual model used for each
+invocation, including explicit choices, recommendations, defaults, overrides and
+fallbacks. Agent authorization SHALL NOT expand that set. Control Plane
+administrative validation SHALL NOT be presented as runtime enforcement; the pod
+SHALL enforce the restriction locally at invocation against the complete trusted
+context resolved once for that turn. It SHALL NOT refresh turn authority through
+additional HTTP/SQL/OpenFGA calls on each invocation, retry or descendant. Rust SHALL NOT proxy inference or implement a second model router.
+
+#### Scenario: A forbidden fallback is selected
+- **WHEN** an authorized agent selects a fallback forbidden by its owning organization
+- **THEN** the pod refuses that model invocation, regardless of the fallback's routing priority
+
+#### Scenario: Organizations choose different permitted sets
+- **WHEN** one organization changes its model restrictions
+- **THEN** the other organization's choices are unchanged
+- **AND** execution evaluates the canonical owning organization's restrictions
+
+### Requirement: Discovery preserves qualification and authority boundaries
+
+Discovery credentials SHALL be provisioned explicitly for the approved source.
+Read-only discovery rights SHOULD be preferred. A credential also granting inference
+SHALL require explicit platform acceptance for that source; a distinct secret SHALL
+NOT be treated as proof of read-only rights. Pod inference secrets SHALL NOT be
+implicitly transferred to Rust.
+
+Mixed inventories SHALL be supported when reliable supported metadata identifies
+chat eligibility. Inventory membership SHALL remain separate from eligibility;
+missing modality metadata SHALL NOT establish chat capability or withdrawal.
+Only a complete successful inventory for the approved visibility scope SHALL
+confirm absence. Failed discovery SHALL preserve the last successful inventory
+and SHALL NOT trigger disappearance fallback.
+
+Existing permitted selections MAY continue during discovery outage under the
+authority resolved at turn admission; new selection writes SHALL wait for successful
+refresh. Resolver authorization-read failure SHALL prevent admission of that turn;
+the runtime SHALL NOT reuse a previous turn's context. User choices, recommendations, organization defaults
+and removal fallback SHALL reference discovered offers, without a separately
+administered profile or platform/fallback authorization exemption.
+
+#### Scenario: A mixed inventory changes a model's metadata
+- **WHEN** an offer remains listed but no longer establishes chat compatibility
+- **THEN** its inventory membership is retained separately from its chat eligibility
+- **AND** the change is not treated as confirmed withdrawal
+
+#### Scenario: Discovery rights cannot be isolated
+- **WHEN** a provider's discovery credential also permits inference
+- **THEN** using it in Rust requires explicit platform acceptance for that source
+- **AND** merely creating another credential does not satisfy that decision
+
+Design 5e records the accepted direction and tasks M1-M5 separate delivery scopes.
+The accepted M4 arbitration requires local invocation checks against one complete
+turn-start resolution. The earlier narrow SQL authority access proposal and
+per-invocation authority refreshes are superseded. No runtime enforcement is claimed.
+
+
+### Requirement: Instance model settings and resolver data use platform offers
+
+Instance APIs SHALL store `recommended_model` as a composite offer key and only
+`temperature`, `max_tokens`, `top_p` in `model_options`, within existing tuning JSON.
+PATCH omission SHALL preserve; null recommendation SHALL clear; null options SHALL
+reset; an options object SHALL replace its three overrides. Structural validation
+SHALL reject non-finite numbers, non-positive/non-integer tokens, top_p outside
+[0, 1] and unknown options. Known output/context bounds SHALL constrain token
+options without implying provider compatibility or inferring absent capabilities.
+Changed recommendations SHALL reuse M2 selection validation in the existing locked
+write transaction, against canonical space ownership and current policy/catalog.
+
+The existing resolver SHALL preserve authentication, trusted delegation, admission,
+space/template authorization and enabled-instance checks. It SHALL read configuration,
+policy, sources, offers and connections consistently, exposing revisions, safe facts,
+explicit references, permissions, candidate status and diagnostics separately.
+Only trusted delegated workloads SHALL receive approved candidate connections;
+ordinary instance and administrative projections SHALL contain none. The resolver
+SHALL NOT select a model or grant authority reusable across turns. M3 exposes
+data only; M4 SHALL bind the trusted response to one admitted turn.
+
+#### Scenario: Options and partial edits
+- **WHEN** an editor changes metadata, omits options, clears a recommendation or resets options
+- **THEN** unrelated settings and legacy references remain intact
+- **AND** descriptive edits and explicit clears remain possible during discovery failure
+- **AND** invalid options or an ineligible changed recommendation refuse the complete write
+
+#### Scenario: Source or policy changes race with a recommendation
+- **WHEN** a recommendation write competes with policy revocation, publication or source revision change
+- **THEN** shared M2 selection validation and existing locks decide against current facts at write time
+- **AND** a source snapshot from an older configuration revision cannot admit a new selection
+
+#### Scenario: A personal instance resolves its model context
+- **WHEN** a trusted workload resolves an enabled personal-space instance for an admitted person
+- **THEN** model policy belongs to the canonical owning organization, not a browser organization parameter
+- **AND** all candidate connections come from the same SQL snapshot of platform approvals
+
+#### Scenario: A recommendation becomes unavailable or withdrawn
+- **WHEN** discovery fails, an offer is withdrawn, permission is revoked or chat is no longer established
+- **THEN** the retained reference and distinct diagnostics remain available
+- **AND** discovery failure alone neither changes selection nor triggers fallback
+- **AND** permission alone is not proof of local executability; invocation checks remain M4 work
+
+#### Scenario: Legacy profile and existing form
+- **WHEN** a pre-M3 instance contains only a legacy profile reference
+- **THEN** ordinary reads retain it and the resolver marks explicit re-selection required
+- **AND** no name conversion or profile-based resolution occurs
+- **AND** the existing form retains its controls and preserves model settings on descriptive saves
+
+
 ### Requirement: Custom Assistant retains its managed-instance behavior
 
 Weaver SHALL support creating, listing, reading, editing, enabling/disabling and deleting configured Custom Assistant instances through the existing product flow. A template SHALL remain a runtime-supplied definition; an instance SHALL retain a stable identifier, canonical owning space, source template/runtime and saved configuration. ReBAC changes SHALL NOT require replacing the Custom's agent definition or execution engine. Editing SHALL require the applicable space write permission; use SHALL require the canonical space/template execution conditions. No separate instance permission object SHALL be required.
@@ -135,7 +369,7 @@ mutation SHALL be added beyond the existing fence's technical revision updates.
 
 ### Requirement: Existing configuration semantics survive the ReBAC replacement
 
-Weaver SHALL preserve the existing agent field/tuning, capability selection, validated capability-configuration envelope and model-selection/routing contracts. It SHALL preserve display metadata, intended-use statement and supported profile recommendations instead of reducing the configuration to a new prompt-only schema. Save-time validation and partial-update semantics SHALL remain effective. Configuration supplied to an edit API SHALL be validated under editing authority; caller-supplied execution fields SHALL NOT replace the trusted saved configuration. Unsupported dependencies SHALL be reported explicitly, not silently removed or replaced by defaults.
+Weaver SHALL preserve the existing agent field/tuning, capability selection, validated capability-configuration envelope and model-selection/routing contracts. It SHALL preserve display metadata, intended-use statement and offer recommendations (with legacy profile strings retained for diagnosis) instead of reducing the configuration to a new prompt-only schema. Save-time validation and partial-update semantics SHALL remain effective. Configuration supplied to an edit API SHALL be validated under editing authority; caller-supplied execution fields SHALL NOT replace the trusted saved configuration. Unsupported dependencies SHALL be reported explicitly, not silently removed or replaced by defaults.
 
 #### Scenario: Capability selection distinguishes inheritance and no tools
 - **WHEN** an update omits capability selection, sets it to null, or supplies an empty list
@@ -156,7 +390,7 @@ Weaver SHALL preserve the existing agent field/tuning, capability selection, val
 - **WHEN** an admitted user with space write and canonical template use creates an instance with empty effective capabilities and no profile recommendation
 - **THEN** Weaver saves the full pod tuning snapshot with Swift enrollment overrides and returns the saved projection
 - **AND** an authorized space-scoped read returns those saved values and enabled/disabled state without rediscovering the template
-- **AND** active capability or non-null profile selections return explicit 422 errors until connected
+- **AND** active capability selections remain explicit 422 errors until connected; legacy profiles are diagnostic-only and new model recommendations use M3 offer keys
 
 #### Scenario: The space is retired during template discovery
 - **WHEN** creation has started discovery but the space is retired before insertion
@@ -199,6 +433,70 @@ Control Plane SHALL supply the session index/metadata and execution preparation 
 - **WHEN** a request substitutes a session belonging to another person, space or instance
 - **THEN** preparation and runtime access refuse before exposing history or resuming a checkpoint
 
+#### Scenario: M5a registration is retried after a lost response
+- **WHEN** an admitted owner repeats registration of the same session ID and instance
+- **THEN** the original metadata is returned without a duplicate, changed title/activity or reassignment
+- **AND** an ID owned by someone else is hidden as 404, while an incompatible owned association returns 409
+- **AND** a successful prior registration can still be recovered after the instance is disabled or removed
+
+#### Scenario: M5a private metadata remains readable after instance removal
+- **WHEN** the authenticated owner retains admission and space Read but the instance is removed or disabled
+- **THEN** list/read/rename/activity still operate on that owner's metadata and retain its original provenance
+- **AND** removal is exposed as agent_deleted and the public history destination remains available while its source route is approved
+- **AND** execution preparation refuses the removed/disabled instance; neither messages nor checkpoints are deleted
+
+#### Scenario: M5a metadata mutations cannot change authority
+- **WHEN** PATCH supplies owner, space, instance, template or runtime fields
+- **THEN** the request is rejected as invalid fields without changing any metadata
+- **AND** accepted activity timestamps never regress or exceed the server's current time; title-only edits retain activity order
+
+#### Scenario: M5a public routing is missing or unapproved
+- **WHEN** preparation has no enabled configured runtime with an explicit canonical ingress-relative public base
+- **THEN** it refuses with a typed unavailable-route/runtime error and never derives a public URL from an internal URL or browser input
+- **AND** a failed template discovery returns an explicit error without falling back to another pod or a stale execution preparation
+
+#### Scenario: M5a preparation is product data, not execution authority
+- **WHEN** an admitted owner prepares an enabled instance and optionally supplies a registered matching conversation
+- **THEN** the response contains public execution/history routes and M2/M3 composite model facts, with no inference connection or credential reference
+- **AND** unsupported capability/HITL controls are not advertised; no local profile or additional model policy is constructed
+- **AND** every subsequent turn still performs the existing authenticated M4 resolution, including the registered conversation association check
+- **AND** runtime retains its local provenance comparison and refuses an old unbound history rather than adopting it
+
+### Requirement: Private history reads use current space rights independently of execution
+
+Runtime history readers SHALL retain authenticated-person admission and use M5a
+session metadata with that person's own credential to verify private ownership and
+current space Read. They SHALL derive space placement from persisted M4 provenance
+and compare session, person, space, instance, template and receiving runtime before
+loading conversation content. Browser identifiers SHALL NOT establish authority.
+History reads SHALL NOT prepare execution, call the turn resolver, reuse prior-turn
+authority, create a run or cache authorization between independent consultations.
+
+#### Scenario: Owner reads after instance removal or disablement
+- **WHEN** the owner retains admission and space Read, with matching persisted provenance
+- **THEN** messages and checkpoint details remain readable even if the instance is deleted, disabled or its template unusable
+- **AND** a bound session with no messages returns an empty list
+
+#### Scenario: Another person or a revoked owner reads history
+- **WHEN** a caller names another person's session or no longer has space Read
+- **THEN** no content is loaded and the same unavailable response hides the conversation
+- **AND** history indexes omit refused candidates through the same shared guard
+
+#### Scenario: Provenance is absent or inconsistent
+- **WHEN** local provenance is missing or disagrees with the Control Plane session or receiving runtime
+- **THEN** consultation refuses without adopting, rewriting or repairing the history
+- **AND** a substituted request identifier cannot broaden access
+
+#### Scenario: History authority or storage fails
+- **WHEN** credentials, Control Plane or storage cannot complete the check or read
+- **THEN** an explicit error returns no content, never a successful empty or partial history
+- **AND** an independent retry performs fresh authorization
+
+#### Scenario: Workload attempts a private history read
+- **WHEN** a service identity or an asserted person without their own credential requests history
+- **THEN** access is refused without creating a run or inventing delegated M5a credentials
+- **AND** the existing M4 invocation, retry and descendant authority rules remain unchanged
+
 ### Requirement: Weaver has one authorization path
 
 Weaver SHALL replace the scoped Swift execution and document-access path without backward-compatible modes, legacy authorization fallback or data migration. Replacement SHALL preserve authentication, admission, isolation, delegation, credential renewal and run-lifetime guarantees. Missing equivalents SHALL block the affected functionality rather than disable its protection.
@@ -230,7 +528,7 @@ Control Plane and runtime SHALL bind execution to the authenticated person or tr
 
 ### Requirement: Execution requires space read and template use
 
-Admission and protected operations SHALL require `can_read(user, execution_space)` and `can_use(execution_space, canonical_template)` together with applicable admission, lifecycle and operation-specific conditions. Service identity or platform governance roles SHALL NOT substitute for the person's content rights. Templates with unavailable dependencies SHALL remain unavailable.
+Turn admission SHALL require `can_read(user, execution_space)` and `can_use(execution_space, canonical_template)` together with applicable admission and lifecycle conditions. Subsequent operations SHALL enforce the resolved turn context locally and retain their resource-specific conditions. Service identity or platform governance roles SHALL NOT substitute for the person's content rights. Templates with unavailable dependencies SHALL remain unavailable.
 
 #### Scenario: Bob reads fredlab but the template is disabled
 - **WHEN** Bob requests execution in fredlab
@@ -240,25 +538,50 @@ Admission and protected operations SHALL require `can_read(user, execution_space
 - **WHEN** activation or execution is requested for that template
 - **THEN** the system refuses rather than bypassing dependency enforcement
 
-### Requirement: Revocation is enforced at operation boundaries
+### Requirement: Turn authority is resolved once and enforced locally
 
-Runtime SHALL recheck authorization before each protected operation, including each model invocation and capability access, with no authorization-result cache across operations. Duplicate checks within an operation SHALL be reusable. A refusal SHALL prevent the operation and terminate the run's authority; dependency failures SHALL block access with a distinct technical failure. Neither SHALL become an ordinary tool result that allows the model to bypass the gate. Already authorized operations may finish within the accepted lifetime bound; immediate interruption of previously authorized SSE generation is not promised.
+Runtime SHALL obtain one complete authorized context through the existing Control
+Plane resolver call at the start of each turn. All model invocations, retries,
+structured calls, reused clients and descendants SHALL enforce that context locally
+without additional HTTP, SQL or OpenFGA requests to refresh turn authority. They
+SHALL NOT broaden its scope or treat a child/retry as a fresh authorization.
+Missing or refused admission SHALL prevent the turn; no previous-turn context
+SHALL substitute. M4 SHALL NOT introduce the previously proposed SQL authority
+view, role or connection. Initial inference support SHALL be OpenAI-compatible;
+unconnected providers SHALL fail explicitly.
+
+Revocation, person/instance/template/source decommissioning and model withdrawal
+after admission SHALL be observed at the next turn. An admitted turn MAY finish.
+No five-minute revocation deadline or periodic authority refresh SHALL be imposed
+for these changes. Explicit cancellation, terminal-run checks, execution limits
+and resource-specific storage/service checks SHALL remain effective. A local
+refusal SHALL NOT become a bypassable model/tool result.
 
 #### Scenario: A tool-free Custom loses access before its next model call
-- **WHEN** its next model invocation is requested after effective access revocation
-- **THEN** the invocation is refused and the run's delegated authority ends
+- **WHEN** access is revoked after turn admission and another model call or retry occurs in that turn
+- **THEN** it may proceed within the original resolved context without an additional authority read
+- **AND** the next turn resolves current rights and refuses access as applicable
 
-#### Scenario: Bob loses access between two searches
-- **WHEN** the second search is requested after revocation
-- **THEN** it performs no protected storage access and the run's delegated authority ends
+#### Scenario: One turn performs many model calls
+- **WHEN** ten LLM calls, retries or descendant steps execute in one admitted turn
+- **THEN** they share one complete turn-start resolution and make no extra authority-refresh requests
+- **AND** a model or child target outside that context is refused locally
+
+#### Scenario: Admission fails for the next turn
+- **WHEN** the resolver refuses or cannot establish the next turn's complete authority
+- **THEN** no inference starts and the previous turn's context is not reused
+
+#### Scenario: A resource check refuses access during a turn
+- **WHEN** a document or receiving service's own check refuses an operation
+- **THEN** the turn context does not override that refusal or expand resource scope
 
 ### Requirement: JWT renewal does not renew authorization
 
-Existing person/service credential renewal and trusted delegation SHALL remain supported independently of permission decisions. Renewing a token SHALL NOT restore revoked rights, extend a terminal run, or trigger retries to bypass authorization refusal. No authorization check per SSE token or per JWT refresh SHALL be required.
+Existing person/service credential renewal and trusted delegation SHALL remain supported independently of permission decisions. Renewing a token SHALL NOT broaden the admitted turn context, authorize a later turn, extend a terminal run, or trigger retries to bypass a refusal. No authorization check per SSE token or per JWT refresh SHALL be required.
 
 #### Scenario: Credentials expire while Bob remains authorized
 - **WHEN** an active run needs fresh outgoing credentials
-- **THEN** its existing renewal mechanism can obtain them and protected operations still undergo authorization
+- **THEN** its existing renewal mechanism can obtain them without refreshing or broadening the admitted turn context; local and resource-specific checks still apply
 
 #### Scenario: Fresh credentials exist after a run terminates
 - **WHEN** an outgoing operation is attempted using that run
@@ -291,21 +614,21 @@ Local capabilities SHALL enforce scope in storage queries and verify candidate p
 
 #### Scenario: Bob follows an earlier citation after revocation
 - **WHEN** a new read operation attempts to retrieve the cited document
-- **THEN** it rechecks the current run and document-access conditions before exposing content
+- **THEN** it enforces the admitted turn scope and current document-access facts before exposing content; a new turn requires fresh resolution
 
 ### Requirement: Departure has no automatic restoration
 
-Revocation SHALL remove effective access in the applicable scope and end affected
-run/delegation authority within five minutes after effective access revocation.
-Already-running activity within this bound is acceptable; instantaneous
-interruption is not required. The implementation SHALL retain the next-protected-operation checks.
-Renewable service credentials SHALL NOT extend authority beyond that bound.
+Revocation SHALL remove effective access in the applicable scope for subsequent
+turn admissions. An already admitted turn MAY finish using its fixed context under
+the accepted next-turn detection policy. The former five-minute active-run
+revocation guarantee is superseded for these changes. Token renewal SHALL NOT
+broaden that context, authorize a later turn or revive terminal authority.
 A returning person SHALL undergo ordinary newcomer admission without automatic
 restoration of previous access or runs, including when the identity subject is
 reused. No reversible suspension feature SHALL be required for this journey.
-Runtime/access cleanup SHALL NOT imply unspecified deletion of shared content,
-persisted histories or audit evidence. The five-minute bound SHALL be enforced independently of JWT expiration or
-service-token renewal.
+Explicit cancellation, terminal cleanup and execution limits SHALL remain distinct.
+Runtime/access cleanup SHALL NOT imply deletion of shared content, persisted
+histories or audit evidence.
 
 #### Scenario: Bob returns after departure
 - **WHEN** Bob is admitted again after his access was revoked
@@ -313,8 +636,8 @@ service-token renewal.
 
 #### Scenario: A run has no further protected operations
 - **WHEN** revocation occurs during an already-authorized generation
-- **THEN** existing activity can finish within the agreed delay
-- **AND** the run and its delegated authority cannot remain active beyond that bound
+- **THEN** the admitted turn may finish subject to explicit cancellation and ordinary execution limits
+- **AND** its context cannot authorize a later turn; no five-minute revocation guarantee is claimed
 
 ### Requirement: Canonical context enriches logs and product KPIs
 
@@ -344,8 +667,9 @@ Telemetry enrichment SHALL NOT expose credentials or change access boundaries.
 ### Requirement: Template authorization covers configured dependencies
 
 Authorization to execute an activated template SHALL cover use of its capabilities
-and models attached through trusted effective configuration. Weaver SHALL reuse
-the existing capability registry, configuration and model-selection/routing
+and models attached through trusted effective configuration, subject to the owning
+organization's model restrictions. It SHALL NOT independently permit a model.
+Weaver SHALL reuse the existing capability registry, configuration and model-selection/routing
 mechanisms for this journey and SHALL NOT require a separate capability/model
 OpenFGA permission catalogue. Activation SHALL check support/configuration of the
 declared dependencies; resolution/execution SHALL reject unavailable dependencies.

@@ -11,71 +11,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-OpenAI-compatible /v1 router for Fred agent pods.
-
-Why this module exists:
-- lets any OpenAI-protocol frontend (Open WebUI, openai-python SDK, etc.)
-  talk directly to a Fred agent pod without a proxy layer
-- mounted only when `app.openai_compat: true` in configuration.yaml
-- zero impact on existing /agents/execute* endpoints
-
-How to use:
-- this module is called automatically from `create_agent_app()` when the flag
-  is set; pod authors do not need to touch it directly
-- the router exposes two endpoints:
-    GET  /v1/models                — list registered agents as OpenAI models
-    POST /v1/chat/completions      — streaming chat completions (SSE)
-
-Fred extensions over the OpenAI protocol:
-- X-Fred-Session-Id request header: optional session_id for multi-turn
-  continuity via the LangGraph SQL checkpointer
-- X-Fred-Team-Id request header: optional team_id for scoped tool/knowledge
-  access
-- `fred` top-level key on each SSE chunk: carries sources, citations, HITL
-  prompts, and error context (silently ignored by standard OpenAI clients)
-
-Example curl:
-    curl -N -X POST http://localhost:8000/v1/chat/completions \\
-      -H "Content-Type: application/json" \\
-      -d '{"model":"my-agent","messages":[{"role":"user","content":"hello"}],"stream":true}'
-"""
+"""OpenAI metadata surface. Execution is closed until it carries Weaver authority."""
 
 from __future__ import annotations
 
 import logging
 import time
-from collections.abc import AsyncGenerator, Mapping
-from typing import Any, Callable, cast
-from uuid import uuid4
+from collections.abc import Mapping
+from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse
-from fred_core import AssertedUser, KeycloakUser, TeamPermission
-from fred_sdk.contracts.execution import check_session_id
+from fred_core import AssertedUser, KeycloakUser
 from fred_sdk.contracts.models import GraphAgentDefinition, ReActAgentDefinition
 from fred_sdk.contracts.openai_compat import (
     OpenAIChatRequest,
     OpenAIModelCard,
     OpenAIModelList,
-    fred_event_to_openai_chunk,
 )
-
-from fred_runtime.runtime_context import get_runtime_context
-from fred_runtime.runtime_support.authority import AuthorityLostError, RunStopError
-
-from .agent_app import (
-    _admit_run_credentials,
-    _AgentExecuteRequest,
-    _discard_run_record,
-    _enforce_session_ownership,
-    _iterate_runtime_event_payloads,
-    _resolve_agent_instance,
-    _RunStreamingResponse,
-    _stream_finisher,
-)
-from .chat_input_limit import validate_chat_text
-from .dependencies import get_pod_container_from_app
 
 logger = logging.getLogger(__name__)
 
@@ -86,23 +38,7 @@ def create_openai_compat_router(
     max_chat_input_chars: int,
     authenticated_user_dep: Callable[..., Any] | None = None,
 ) -> APIRouter:
-    """
-    Build the FastAPI router that exposes the OpenAI chat completions protocol.
-
-    Why this is a factory function:
-    - the agent registry is only available at app-creation time, not import time
-    - mirrors the pattern used by `_build_agent_router()` in agent_app.py
-
-    Security (RUNTIME-07 rev. 2, finding F-A): the chat route is gated by the same
-    Keycloak JWT + pod-side OpenFGA check as `/agents/execute`. `authenticated_user_dep`
-    is the dependency that yields the validated `KeycloakUser` (or None when security
-    is disabled); when omitted it is derived from `security_enabled`. This surface is
-    OFF by default and fails closed under the c3 profile (it executes by agent_id).
-
-    How to use:
-    - called from `create_agent_app()` and included with prefix="/v1"
-    - do not call directly from pod code
-    """
+    """Expose metadata and authenticate the explicitly unsupported execution route."""
     from fred_core.security.oidc import get_current_user
 
     def _user_with_auth(
@@ -158,201 +94,10 @@ def create_openai_compat_router(
         http_request: Request,
         authenticated_user: KeycloakUser | None = Depends(user_dep),
     ) -> Response:
-        """
-        Execute one agent turn over the OpenAI chat completions SSE protocol.
-
-        POST /v1/chat/completions
-        Authorization: Bearer <user JWT> (when security is enabled)
-        Body: {"model": "<agent_id>", "messages": [...], "stream": true}
-        Response: text/event-stream of chat.completion.chunk JSON objects
-
-        The last user message in `messages` is forwarded to the agent as the
-        turn input.  System messages in the request are currently ignored —
-        the agent prompt is defined by its pod registration.
-
-        Fred extensions via request headers:
-        - X-Fred-Session-Id: session_id for multi-turn continuity
-        - X-Fred-Team-Id: team_id for scoped tool and knowledge access
-
-        Fred-specific metadata on each SSE chunk:
-        - `fred.sources`: knowledge citations
-        - `fred.awaiting_human`: HITL pause payload (finish_reason="stop")
-        - `fred.node_error`: graph node error message (finish_reason="stop")
-        - `fred.token_usage`: input/output token counts (on the final chunk)
-        """
-        user_messages = [m for m in request.messages if m.role == "user"]
-        if not user_messages:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Request must contain at least one user message.",
-            )
-        message = user_messages[-1].content
-        violation = validate_chat_text(message, max_chat_input_chars)
-        if violation is not None:
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={"error": violation.openai_error()},
-            )
-
-        if request.model not in registry:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=(
-                    f"Unknown model/agent_id: {request.model!r}. "
-                    f"Known: {list(registry.keys())}"
-                ),
-            )
-
-        session_id = http_request.headers.get("X-Fred-Session-Id") or uuid4().hex
-        try:
-            check_session_id(session_id)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
-            ) from exc
-        team_id = http_request.headers.get("X-Fred-Team-Id")
-        auth = http_request.headers.get("Authorization", "")
-        access_token = auth.removeprefix("Bearer ").strip() or None
-
-        # F-A: gate this surface with the same pod-side OpenFGA check as
-        # /agents/execute. When ReBAC is active, the caller must present a team
-        # (X-Fred-Team-Id) and hold CAN_USE_TEAM_AGENTS on it (team_member-only,
-        # unlike CAN_READ which also admits the public marketplace-discovery
-        # relation — this is real execution, not discovery); identity is the
-        # validated JWT.
-        rebac = get_runtime_context().config.rebac_engine
-        if authenticated_user is not None and rebac is not None and rebac.enabled:
-            if not team_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="X-Fred-Team-Id header is required for authorized execution.",
-                )
-            await rebac.check_user_team_permission_or_raise(
-                authenticated_user, TeamPermission.CAN_USE_TEAM_AGENTS, team_id
-            )
-
-        # Identity from the validated JWT, never the body (F-B parity).
-        effective_user_id = authenticated_user.uid if authenticated_user else None
-
-        container = get_pod_container_from_app(http_request.app)
-        await _enforce_session_ownership(
-            session_id, authenticated_user, container, agent_instance_id=None
-        )
-        # The same admission every other execution surface goes through: under
-        # delegation this writes the run record and gives the turn a provider,
-        # so no call made for a chat completion carries the person's bearer.
-        credentials = _admit_run_credentials(
-            container,
-            authenticated_user,
-            agent_id=request.model,
-            agent_instance_id=None,
-            team_id=team_id,
-        )
-
-        context: dict[str, Any] = {"session_id": session_id}
-        if team_id:
-            context["team_id"] = team_id
-        if effective_user_id:
-            context["user_id"] = effective_user_id
-
-        fred_request = _AgentExecuteRequest(
-            agent_id=request.model,
-            message=message,
-            context=context or None,
-            # This wire cannot carry a continue choice; a lost run restarts.
-            interrupted_action="restart",
-        )
-
-        try:
-            target = await _resolve_agent_instance(
-                request=fred_request,
-                registry=registry,
-                access_token=access_token,
-                control_plane_url=get_runtime_context().config.control_plane_url,
-                http_client=container.get_control_plane_http_client(),
-                team_id=team_id,
-                credentials=credentials,
-            )
-        except BaseException as exc:
-            _discard_run_record(credentials)
-            if isinstance(exc, RunStopError):
-                raise HTTPException(
-                    status_code=403 if isinstance(exc, AuthorityLostError) else 503,
-                    detail=exc.reason,
-                ) from None
-            raise
-        target.credential_provider = credentials
-
-        completion_id = f"chatcmpl-{uuid4().hex}"
-        created = int(time.time())
-        model = request.model
-
-        async def openai_stream() -> AsyncGenerator[str, None]:
-            iterator = cast(
-                AsyncGenerator[dict[str, Any], None],
-                _iterate_runtime_event_payloads(
-                    target.definition,
-                    fred_request,
-                    access_token=(
-                        None
-                        if credentials is not None and credentials.delegated
-                        else access_token
-                    ),
-                    team_id=target.team_id,
-                    registry=registry,
-                    tuning=target.tuning,
-                    team_settings=target.team_settings,
-                    reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
-                    team_disabled_model_ids=target.team_disabled_model_ids,
-                    platform_chat_model_binding=target.platform_chat_model_binding,
-                    platform_prompt=target.platform_prompt,
-                    credential_provider=target.credential_provider,
-                    owns_run_record=True,
-                ),
-            )
-            answer_streamed = False
-            try:
-                async for event in iterator:
-                    chunk = fred_event_to_openai_chunk(
-                        event, completion_id, model, created
-                    )
-                    kind = event.get("kind")
-                    if kind == "assistant_delta":
-                        answer_streamed = True
-                    elif kind == "tool_call":
-                        answer_streamed = False
-                    elif kind == "final" and chunk is not None and not answer_streamed:
-                        # Some answers exist only in the final event (a surfaced
-                        # tool error, a graph that never streams): deliver them.
-                        chunk.choices[0].delta.content = event.get("content") or None
-                    if chunk is not None:
-                        yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
-            except Exception:
-                if credentials is not None and credentials.delegated:
-                    logger.error(
-                        "event=delegated_stream outcome=failed reason=execution_failed"
-                    )
-                else:
-                    logger.exception(
-                        "[openai-compat] streaming error for model=%s", model
-                    )
-            finally:
-                try:
-                    await iterator.aclose()
-                except Exception:
-                    if credentials is not None and credentials.delegated:
-                        logger.error(
-                            "event=delegated_stream outcome=failed reason=cleanup_failed"
-                        )
-                        raise RuntimeError("Delegated stream cleanup failed.") from None
-                    raise
-            yield "data: [DONE]\n\n"
-
-        stream = openai_stream()
-        return _RunStreamingResponse(
-            stream,
-            media_type="text/event-stream",
-            background=_stream_finisher(stream, credentials),
+        """This direct-template surface has no instance-scoped Weaver context."""
+        raise HTTPException(
+            status_code=503,
+            detail="Direct-template OpenAI execution is not connected to Weaver authorization",
         )
 
     return router

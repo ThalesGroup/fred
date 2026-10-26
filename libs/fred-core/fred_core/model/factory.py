@@ -21,7 +21,7 @@ import asyncio
 import logging
 import os
 import threading
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Callable, Generator
 from contextlib import suppress
 from typing import Any, Dict, Iterable, Optional, Protocol, Sequence, Type, cast
 
@@ -41,7 +41,7 @@ from langchain_openai import (
     ChatOpenAI,
     OpenAIEmbeddings,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 logger = logging.getLogger(__name__)
 
@@ -265,11 +265,21 @@ def _apply_openai_stream_usage_default(settings: Dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
+def get_model(
+    cfg: Optional[ModelConfiguration],
+    *,
+    inference_api_key: SecretStr | None = None,
+    wrap_clients: Callable[
+        [httpx.Client, httpx.AsyncClient], tuple[httpx.Client, httpx.AsyncClient]
+    ]
+    | None = None,
+) -> BaseChatModel:
     from fred_core.model.tool_call_chunks import install_tool_fragment_guard
 
     install_tool_fragment_guard()
-    model = _create_model(cfg)
+    model = _create_model(
+        cfg, inference_api_key=inference_api_key, wrap_clients=wrap_clients
+    )
     with suppress(Exception):
         log_model_settings(
             str(cfg.provider) if cfg else "unknown",
@@ -279,7 +289,15 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
     return model
 
 
-def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
+def _create_model(
+    cfg: Optional[ModelConfiguration],
+    *,
+    inference_api_key: SecretStr | None = None,
+    wrap_clients: Callable[
+        [httpx.Client, httpx.AsyncClient], tuple[httpx.Client, httpx.AsyncClient]
+    ]
+    | None = None,
+) -> BaseChatModel:
     if cfg is None:
         raise ValueError("Model configuration is None")
     if not cfg.provider:
@@ -314,6 +332,12 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
     # IMPORTANT: strip transport keys before forwarding to LangChain wrappers.
     tuning, h_client, a_client = get_shared_stack(cfg, settings=settings)
     strip_transport_settings(settings)
+    if wrap_clients is not None:
+        if provider != ModelProvider.OPENAI.value:
+            raise ValueError(
+                "Source-bound inference only supports OpenAI-compatible clients"
+            )
+        h_client, a_client = wrap_clients(h_client, a_client)
 
     # Determine effective timeout to pass to the SDK wrapper.
     # If request_timeout is explicit, use it. Otherwise, enforce the transport timeout.
@@ -333,7 +357,10 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
 
     # --- Provider: OpenAI ---
     if provider == ModelProvider.OPENAI.value:
-        _require_env("OPENAI_API_KEY")
+        if inference_api_key is None:
+            _require_env("OPENAI_API_KEY")
+        else:
+            settings["api_key"] = inference_api_key
         if not cfg.name:
             raise ValueError(
                 "OpenAI chat requires 'name' (model id, e.g., gpt-4o-mini)."

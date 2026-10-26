@@ -10,7 +10,9 @@ use sqlx::types::Json;
 use uuid::Uuid;
 
 pub mod http;
+pub(crate) mod preparation;
 mod runtime;
+pub(crate) use runtime::require_executable;
 mod tuning;
 
 pub struct NewAgentInstance {

@@ -99,41 +99,6 @@ def _write_configuration_yaml(
     )
 
 
-def _write_models_catalog(path: Path, *, chat_name: str = "gpt-5") -> None:
-    """
-    Write one minimal valid `models_catalog.yaml` fixture.
-
-    Why this exists:
-    - the config loader should resolve real catalog files, not synthetic
-      placeholders that would fail later during runtime startup
-
-    How to use it:
-    - pass the destination file path and an optional chat model name so tests
-      can distinguish default and env-override catalogs
-
-    Example:
-    - `_write_models_catalog(config_dir / "models_catalog.yaml")`
-    """
-
-    path.write_text(
-        dedent(
-            f"""
-            version: v1
-            default_profile_by_capability:
-              chat: default.chat
-            profiles:
-              - profile_id: default.chat
-                capability: chat
-                model:
-                  provider: openai
-                  name: {chat_name}
-                  settings: {{}}
-            """
-        ).strip(),
-        encoding="utf-8",
-    )
-
-
 def _write_mcp_catalog(path: Path, *, server_id: str) -> None:
     """
     Write one minimal valid `mcp_catalog.yaml` fixture.
@@ -171,7 +136,7 @@ def test_load_agent_pod_config_loads_default_external_catalogs(
     tmp_path, monkeypatch
 ) -> None:
     """
-    Ensure pod startup loads default `models_catalog.yaml` and `mcp_catalog.yaml`.
+    Ensure pod startup loads the MCP catalog without a local model catalog.
 
     Why this exists:
     - pods now rely on `load_agent_pod_config()` to reproduce the same external
@@ -187,21 +152,16 @@ def test_load_agent_pod_config_loads_default_external_catalogs(
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     _write_configuration_yaml(config_dir)
-    _write_models_catalog(config_dir / "models_catalog.yaml")
     _write_mcp_catalog(config_dir / "mcp_catalog.yaml", server_id="mcp-default")
     (config_dir / ".env").write_text("", encoding="utf-8")
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CONFIG_FILE", str(config_dir / "configuration.yaml"))
     monkeypatch.setenv("ENV_FILE", str(config_dir / ".env"))
-    monkeypatch.delenv("FRED_MODELS_CATALOG_FILE", raising=False)
     monkeypatch.delenv("FRED_MCP_CATALOG_FILE", raising=False)
 
     config = load_agent_pod_config()
 
-    assert Path(config.get_models_catalog_path() or "") == Path(
-        "config/models_catalog.yaml"
-    )
     assert config.app.limit_concurrency is None
     assert config.app.max_chat_input_chars == 5_000
     assert config.ai.timeout.connect == 5.0
@@ -231,13 +191,10 @@ def test_load_agent_pod_config_honors_catalog_env_overrides(
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     _write_configuration_yaml(config_dir)
-    _write_models_catalog(config_dir / "models_catalog.yaml", chat_name="gpt-5")
     _write_mcp_catalog(config_dir / "mcp_catalog.yaml", server_id="mcp-default")
     (config_dir / ".env").write_text("", encoding="utf-8")
 
-    override_models_catalog = tmp_path / "override-models.yaml"
     override_mcp_catalog = tmp_path / "override-mcp.yaml"
-    _write_models_catalog(override_models_catalog, chat_name="gpt-5-mini")
     _write_mcp_catalog(override_mcp_catalog, server_id="mcp-override")
 
     instructions = "# Search instructions\n\nUse the retrieved sources.\n"
@@ -248,28 +205,24 @@ def test_load_agent_pod_config_honors_catalog_env_overrides(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CONFIG_FILE", str(config_dir / "configuration.yaml"))
     monkeypatch.setenv("ENV_FILE", str(config_dir / ".env"))
-    monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(override_models_catalog))
     monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(override_mcp_catalog))
 
     config = load_agent_pod_config()
 
-    assert Path(config.get_models_catalog_path() or "") == override_models_catalog
     mcp_configuration = config.get_mcp_configuration()
     assert mcp_configuration is not None
     assert [server.id for server in mcp_configuration.servers] == ["mcp-override"]
     assert mcp_configuration.servers[0].agent_instructions == instructions
 
 
-def test_load_agent_pod_config_requires_models_catalog_file(
+def test_load_agent_pod_config_needs_no_local_models_catalog(
     tmp_path, monkeypatch
 ) -> None:
     """
-    Ensure pod startup fails fast when the mandatory models catalog is missing.
+    Ensure pod startup needs no local model catalog.
 
     Why this exists:
-    - `models_catalog.yaml` is now a required part of the pod bootstrap
-      contract, so startup should not silently fall back to another model
-      configuration path
+    - model offers and permissions come only from the Weaver resolver
 
     How to use it:
     - run as part of the default offline regression suite
@@ -286,11 +239,10 @@ def test_load_agent_pod_config_requires_models_catalog_file(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CONFIG_FILE", str(config_dir / "configuration.yaml"))
     monkeypatch.setenv("ENV_FILE", str(config_dir / ".env"))
-    monkeypatch.delenv("FRED_MODELS_CATALOG_FILE", raising=False)
     monkeypatch.delenv("FRED_MCP_CATALOG_FILE", raising=False)
 
-    with pytest.raises(FileNotFoundError, match="Mandatory models catalog file"):
-        load_agent_pod_config()
+    config = load_agent_pod_config()
+    assert config.inference_credentials == ()
 
 
 def test_load_agent_pod_config_keeps_mcp_out_of_public_model(
@@ -313,7 +265,6 @@ def test_load_agent_pod_config_keeps_mcp_out_of_public_model(
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     _write_configuration_yaml(config_dir)
-    _write_models_catalog(config_dir / "models_catalog.yaml")
     (config_dir / ".env").write_text("", encoding="utf-8")
 
     override_mcp_catalog = tmp_path / "override-mcp.yaml"
@@ -323,7 +274,6 @@ def test_load_agent_pod_config_keeps_mcp_out_of_public_model(
     monkeypatch.setenv("CONFIG_FILE", str(config_dir / "configuration.yaml"))
     monkeypatch.setenv("ENV_FILE", str(config_dir / ".env"))
     monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(override_mcp_catalog))
-    monkeypatch.delenv("FRED_MODELS_CATALOG_FILE", raising=False)
 
     config = load_agent_pod_config()
 
@@ -356,7 +306,6 @@ def test_load_agent_pod_config_loads_app_limit_concurrency(
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     _write_configuration_yaml(config_dir, limit_concurrency=37)
-    _write_models_catalog(config_dir / "models_catalog.yaml")
     _write_mcp_catalog(config_dir / "mcp_catalog.yaml", server_id="mcp-default")
     (config_dir / ".env").write_text("", encoding="utf-8")
 
@@ -389,7 +338,6 @@ def test_load_agent_pod_config_defaults_app_limit_concurrency_when_omitted(
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     _write_configuration_yaml(config_dir, limit_concurrency=_MISSING)
-    _write_models_catalog(config_dir / "models_catalog.yaml")
     _write_mcp_catalog(config_dir / "mcp_catalog.yaml", server_id="mcp-default")
     (config_dir / ".env").write_text("", encoding="utf-8")
 
@@ -408,7 +356,6 @@ def test_load_agent_pod_config_loads_chat_input_limit(tmp_path, monkeypatch) -> 
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     _write_configuration_yaml(config_dir, max_chat_input_chars=37)
-    _write_models_catalog(config_dir / "models_catalog.yaml")
     _write_mcp_catalog(config_dir / "mcp_catalog.yaml", server_id="mcp-default")
     (config_dir / ".env").write_text("", encoding="utf-8")
 
@@ -430,7 +377,6 @@ def test_load_agent_pod_config_rejects_non_positive_chat_input_limit(
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     _write_configuration_yaml(config_dir, max_chat_input_chars=invalid_limit)
-    _write_models_catalog(config_dir / "models_catalog.yaml")
     _write_mcp_catalog(config_dir / "mcp_catalog.yaml", server_id="mcp-default")
     (config_dir / ".env").write_text("", encoding="utf-8")
 
@@ -447,7 +393,6 @@ def _write_pod_bootstrap(config_dir: Path, **kwargs) -> None:
     """Write the full config/ layout `load_agent_pod_config()` expects."""
 
     _write_configuration_yaml(config_dir, **kwargs)
-    _write_models_catalog(config_dir / "models_catalog.yaml")
     _write_mcp_catalog(config_dir / "mcp_catalog.yaml", server_id="mcp-default")
     (config_dir / ".env").write_text("", encoding="utf-8")
 
@@ -526,16 +471,12 @@ def test_skill_directory_configuration_is_optional_and_relative_to_config(
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     _write_configuration_yaml(config_dir)
-    _write_models_catalog(config_dir / "models_catalog.yaml")
     _write_mcp_catalog(config_dir / "mcp_catalog.yaml", server_id="test")
     configuration = config_dir / "configuration.yaml"
     if directory is not None:
         configuration.write_text(
             configuration.read_text() + f"\nskills:\n  directory: {directory}\n"
         )
-    monkeypatch.setenv(
-        "FRED_MODELS_CATALOG_FILE", str(config_dir / "models_catalog.yaml")
-    )
     monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(config_dir / "mcp_catalog.yaml"))
     config = _parse_agent_pod_config(str(configuration))
     if directory is None:

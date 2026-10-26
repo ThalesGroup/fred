@@ -114,8 +114,6 @@ def test_catalog_precedence(
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("FRED_MCP_CATALOG_FILE", raising=False)
     monkeypatch.delenv("FRED_MCP_EXTERNAL_CATALOG_FILE", raising=False)
-    (tmp_path / "models.yaml").write_text("models: []", encoding="utf-8")
-    monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(tmp_path / "models.yaml"))
     calls: list[str] = []
 
     def packaged(services: ServiceEndpointsPort) -> McpCatalog:
@@ -167,8 +165,6 @@ def test_external_file_adds_to_installed_catalog(
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("FRED_MCP_CATALOG_FILE", raising=False)
     monkeypatch.delenv("FRED_MCP_EXTERNAL_CATALOG_FILE", raising=False)
-    (tmp_path / "models.yaml").write_text("models: []", encoding="utf-8")
-    monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(tmp_path / "models.yaml"))
     (tmp_path / "config").mkdir()
     (tmp_path / "config/mcp_catalog_external.yaml").write_text(
         "servers: [{id: third-party, name: Third Party, url: https://example.com/mcp}]",
@@ -203,8 +199,6 @@ def test_empty_external_file_keeps_installed_catalog(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("FRED_MCP_CATALOG_FILE", raising=False)
-    (tmp_path / "models.yaml").write_text("models: []", encoding="utf-8")
-    monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(tmp_path / "models.yaml"))
     (tmp_path / "external.yaml").write_text("servers: []", encoding="utf-8")
     monkeypatch.setenv(
         "FRED_MCP_EXTERNAL_CATALOG_FILE", str(tmp_path / "external.yaml")
@@ -234,8 +228,6 @@ def test_external_file_works_without_installed_provider(
     providers: Callable[..., None],
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "models.yaml").write_text("models: []", encoding="utf-8")
-    monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(tmp_path / "models.yaml"))
     monkeypatch.delenv("FRED_MCP_CATALOG_FILE", raising=False)
     (tmp_path / "external.yaml").write_text(
         "servers: [{id: third-party, name: Third Party}]", encoding="utf-8"
@@ -260,8 +252,6 @@ def test_external_file_rejects_duplicate_installed_id(
     providers: Callable[..., None],
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "models.yaml").write_text("models: []", encoding="utf-8")
-    monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(tmp_path / "models.yaml"))
     monkeypatch.delenv("FRED_MCP_CATALOG_FILE", raising=False)
     (tmp_path / "external.yaml").write_text(
         "servers: [{id: duplicate, name: External}]", encoding="utf-8"
@@ -290,8 +280,6 @@ def test_missing_explicit_external_file_fails_startup(
     providers: Callable[..., None],
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "models.yaml").write_text("models: []", encoding="utf-8")
-    monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(tmp_path / "models.yaml"))
     monkeypatch.delenv("FRED_MCP_CATALOG_FILE", raising=False)
     monkeypatch.setenv("FRED_MCP_EXTERNAL_CATALOG_FILE", str(tmp_path / "missing.yaml"))
     providers()
@@ -307,8 +295,6 @@ def test_legacy_replacement_ignores_additive_file(
     providers: Callable[..., None],
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "models.yaml").write_text("models: []", encoding="utf-8")
-    monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(tmp_path / "models.yaml"))
     (tmp_path / "replacement.yaml").write_text(
         "servers: [{id: replacement, name: Replacement}]", encoding="utf-8"
     )
@@ -341,8 +327,6 @@ def test_external_catalog_resolves_runtime_service(
     providers: Callable[..., None],
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "models.yaml").write_text("models: []", encoding="utf-8")
-    monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(tmp_path / "models.yaml"))
     (tmp_path / "mcp.yaml").write_text(
         "servers: [{id: cp-mcp, name: CP, service: control_plane, path: mcp}]",
         encoding="utf-8",
