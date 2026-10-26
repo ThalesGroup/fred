@@ -18,7 +18,7 @@ Fred has no limit on one person's LLM usage: a single user (or a Deep agent
 fanning out sub-agents) can exhaust the provider budget for everyone. Token
 counts are best-effort telemetry and incomplete. ReAct already sums every
 agent-loop call into `final.token_usage` (`react_runtime.py:~495`, contract
-§8.41), but `_parse_turn_outcome` (`fred_runtime/app/agent_app.py:3469`)
+§8.41), but `_parse_turn_outcome` (`fred_runtime/app/agent_app.py:3669`)
 keeps one `model_name` per turn and drops `cache_creation_tokens`; errored,
 stopped or disconnected turns emit no `final` event; `ctx.extract_structured`
 (`fred_sdk/authoring/api.py:256`) uses `with_structured_output(...).ainvoke`
@@ -160,7 +160,7 @@ child tasks), not in `TracingKpiMiddleware`, which only sees ReAct/Deep loop
 calls. Every call is seen: the agent loop, tool-internal calls
 (`ctx.extract_structured`, document access) and sub-agents. #2528 targets a
 custom `run_subagent` capability not on swift; sub-agents today are native
-Deep `task` children and `LocalRegistryAgentInvoker` (`agent_app.py:738`),
+Deep `task` children and `LocalRegistryAgentInvoker` (`agent_app.py:754`),
 in-process, so they are covered. It splits usage per model, feeds the
 per-turn ceiling, and is reported on every exit path (success, error,
 Stop/cancel, abort, via `finally` / cancel handlers).
@@ -174,9 +174,9 @@ segment: `user_id`, `space_kind` (`team` | `personal`), `space_id`,
 (`chat`, `creation_assistant`, `evaluation`, `openai_compat`, `service`,
 `scheduled`, `m2m`; server-set), `user_anonymised` (bool), `created_at`.
 - Unique `(session_id, exchange_id, run_id, model_name)`. `run_id` is
-  the delegated run's own (`AssertedUser.run_id`, `agent_app.py:~2289`)
+  the delegated run's own (`AssertedUser.run_id`, `agent_app.py:~2484`)
   when present, else minted per request: a HITL resume reuses the exchange_id
-  (`_resolve_exchange_id`, `agent_app.py:3687`): each resume is its own
+  (`_resolve_exchange_id`, `agent_app.py:3887`): each resume is its own
   segment, retries of one report never double count.
 - No-person rows: `source` `service`/`scheduled`/`m2m`, `user_id` null. A
   deleted user's rows get `user_id` null, `user_anonymised = true`.
@@ -209,7 +209,7 @@ team-admin weekly limit is a count on these rows across all teams, and a
 grant where `granted_by == user_id` by a team admin is refused.
 
 **Admission on every entry point.** The `/runtime` binding call is not
-enough: `_resolve_agent_instance` (`agent_app.py:1777`) returns early for a
+enough: `_resolve_agent_instance` (`agent_app.py:1943`) returns early for a
 direct `request.agent_id`. A dedicated control-plane admission call
 (`POST /usage/admission` recommended; one primary-key read, #3031), not a
 field on the binding response, runs alongside the `/runtime` binding call on
@@ -329,6 +329,6 @@ Blocking stays behind the release gate (§2).
 - Frontend: composer error handling for the 409 `code`.
 - `REBAC.md`: no new relation expected; confirm the boost scope in (b).
 - `OBSERVABILITY-AND-AUDIT.md`: new audit events, metrics, alerts.
-- `KPI-ANALYTICS-RFC.md` §2.7 / `model_impact_factors.yaml`: cost fields
+- `model_impact_factors.yaml`: cost fields
   removed; prices come from the control-plane table.
 - Regenerated `controlPlaneOpenApi.ts` in every slice touching the API.
