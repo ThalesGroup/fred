@@ -35,7 +35,7 @@ export async function runIframeSdkHostIntegration({
   sdkEntry: suppliedSdkEntry,
 } = {}) {
   const contract = selectedContract ?? (await loadReleaseContract());
-  const vitest = path.join(frontendRoot, "node_modules/.bin/vitest");
+  const vitest = path.join(frontendRoot, "node_modules/vitest/vitest.mjs");
   try {
     await access(vitest);
   } catch {
@@ -76,7 +76,7 @@ export async function runIframeSdkHostIntegration({
       await run("tar", ["-xzf", archivePath, "-C", temporary]);
       sdkEntry = path.join(temporary, "package/dist/index.js");
     }
-    const result = await run(vitest, ["run", integrationTest], {
+    const result = await run("node", [vitest, "run", integrationTest], {
       cwd: frontendRoot,
       env: {
         ...process.env,

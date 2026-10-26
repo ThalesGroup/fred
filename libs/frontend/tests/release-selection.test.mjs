@@ -77,38 +77,63 @@ test("omitted selection sorts a dependent registered before its prerequisite", (
   ]);
 });
 
-test("Make preserves an explicitly empty selection and provisioned browser path", () => {
+test("Make exposes one-package release operations and publication dry run", () => {
   const cwd = path.resolve(import.meta.dirname, "..");
-  const omittedEnv = { ...process.env };
-  delete omittedEnv.RELEASE_SELECTION;
-  const selectedEnv = {
-    ...omittedEnv,
-    RELEASE_SELECTION: "designTokens,ui,iframeSdk",
-  };
-  const omitted = execFileSync("make", ["-n", "release-transfer-create"], {
-    cwd,
-    encoding: "utf8",
-    env: omittedEnv,
-  });
-  const empty = execFileSync(
+  const prepare = execFileSync(
     "make",
-    ["-n", "RELEASE_SELECTION=", "release-transfer-create"],
-    { cwd, encoding: "utf8", env: selectedEnv },
+    ["-n", "-B", "prepare-release", "PACKAGE=iframe-sdk"],
+    { cwd, encoding: "utf8" },
   );
-  const selected = execFileSync("make", ["-n", "release-transfer-create"], {
-    cwd,
-    encoding: "utf8",
-    env: selectedEnv,
-  });
-  const candidate = execFileSync("make", ["-n", "release-candidate"], {
-    cwd,
-    encoding: "utf8",
-    env: omittedEnv,
-  });
-  assert(!omitted.includes("--select"));
-  assert.match(empty, /--select ""/);
-  assert.match(selected, /--select "designTokens,ui,iframeSdk"/);
-  assert.match(candidate, /PLAYWRIGHT_BROWSERS_PATH=target\/playwright/);
+  const publish = execFileSync(
+    "make",
+    [
+      "-n",
+      "publish",
+      "PACKAGE=iframe-sdk",
+      "RELEASE_DIR=/tmp/portable-release",
+      "DRY_RUN=1",
+    ],
+    { cwd, encoding: "utf8" },
+  );
+  const verify = execFileSync(
+    "make",
+    ["-n", "verify-release", "PACKAGE=iframe-sdk"],
+    { cwd, encoding: "utf8" },
+  );
+  const promote = execFileSync(
+    "make",
+    [
+      "-n",
+      "promote",
+      "PACKAGE=iframe-sdk",
+      "VERSION=0.1.1-alpha.1",
+      "CHANNEL=latest",
+      "DRY_RUN=1",
+    ],
+    { cwd, encoding: "utf8" },
+  );
+  assert.match(prepare, /node scripts\/release-preflight\.mjs prepare/);
+  assert.match(prepare, /node scripts\/npm-release\.mjs prepare/);
+  assert.match(prepare, /PLAYWRIGHT_BROWSERS_PATH=target\/playwright/);
+  assert(
+    prepare.indexOf("node scripts/release-preflight.mjs prepare") <
+      prepare.indexOf("npm ci"),
+  );
+  assert(
+    prepare.indexOf("npm ci") <
+      prepare.indexOf("node scripts/npm-release.mjs prepare"),
+  );
+  assert.doesNotMatch(
+    publish,
+    /portable-release|--release-dir|--auth-mode|--dry-run/,
+  );
+  assert.match(verify, /node scripts\/release-preflight\.mjs verify/);
+  assert.match(verify, /node scripts\/npm-release\.mjs verify/);
+  for (const command of [prepare, publish, verify, promote])
+    assert.doesNotMatch(
+      command,
+      /--package|--release-dir|--registry|--auth-mode|--dry-run|--version|--channel/,
+    );
 });
 
 test("explicit invalid selections fail before packing", () => {
