@@ -12,7 +12,7 @@ import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx"
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useOrganizationModelsQuery,
@@ -20,6 +20,7 @@ import {
   useReplaceOrganizationModelPolicyMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type {
+  ModelInventory,
   ModelOfferKey,
   ReplaceModelPolicy,
   StoredModelOffer,
@@ -49,13 +50,16 @@ export function OrganizationModels({
     isError,
     refetch,
   } = useOrganizationModelsQuery({ organizationId }, { refetchOnMountOrArgChange: true });
-  const [refreshSource, refreshing] = useRefreshModelSourceMutation();
+  const [refreshSource] = useRefreshModelSourceMutation();
+  const [isRefreshingModels, setIsRefreshingModels] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const initialRefreshStarted = useRef(false);
   const [replacePolicy, saving] = useReplaceOrganizationModelPolicyMutation();
   const [filter, setFilter] = useState("");
   const [pendingRevoke, setPendingRevoke] = useState<StoredModelOffer | null>(null);
   const policy = inventory?.policy;
   const offers = inventory?.sources.flatMap((source) => source.offers) ?? [];
-  const busy = isFetching || isError || refreshing.isLoading || saving.isLoading;
+  const busy = isFetching || isError || isRefreshingModels || saving.isLoading;
   const permitted = (offer: ModelOfferKey) => policy?.permitted.some((key) => sameOffer(key, offer)) ?? false;
   const selectable = (offer: StoredModelOffer) => {
     const observation = inventory?.sources.find(
@@ -98,16 +102,40 @@ export function OrganizationModels({
       fallback: sameOffer(policy.fallback, offer) ? null : (policy.fallback ?? null),
     });
   };
-  const refresh = async (sourceId: string) => {
-    try {
-      await refreshSource({ organizationId, sourceId }).unwrap();
-    } catch (error) {
-      showError({
-        summary: t("rework.admin.capabilities.discovery.refreshFailed"),
-        detail: normalizeApiError(error).detail,
-      });
-    }
-  };
+  const refreshModels = useCallback(
+    async (knownSources?: ModelInventory[]) => {
+      setIsRefreshingModels(true);
+      setRefreshError(null);
+      try {
+        const sources = (knownSources ?? (await refetch().unwrap()).sources).filter(
+          ({ observation }) => observation.enabled,
+        );
+        const results = await Promise.allSettled(
+          sources.map(({ observation }) => refreshSource({ organizationId, sourceId: observation.source_id }).unwrap()),
+        );
+        const errors = results.flatMap((result, index) =>
+          result.status === "rejected"
+            ? [
+                `${sources[index].observation.source_id}: ${normalizeApiError(result.reason).detail ?? t("rework.admin.capabilities.discovery.refreshFailed")}`,
+              ]
+            : [],
+        );
+        if (errors.length) setRefreshError(errors.join("; "));
+        if (sources.length) await refetch().unwrap();
+      } catch (error) {
+        setRefreshError(normalizeApiError(error).detail ?? t("rework.admin.capabilities.discovery.refreshFailed"));
+      } finally {
+        setIsRefreshingModels(false);
+      }
+    },
+    [organizationId, refreshSource, refetch, t],
+  );
+  useEffect(() => {
+    if (!inventory || isFetching || isError || initialRefreshStarted.current) return;
+    // Swift refreshes discovery on entry; keep known rows visible during the request.
+    initialRefreshStarted.current = true;
+    void refreshModels(inventory.sources);
+  }, [inventory, isFetching, isError, refreshModels]);
   const columns: DataTableColumn<StoredModelOffer>[] = [
     {
       label: t("rework.admin.capabilities.organizationModels.permitted"),
@@ -222,16 +250,16 @@ export function OrganizationModels({
   ];
   return (
     <>
-      <div className={styles.modelToolbar}>
+      <div className={styles.modelListToolbar}>
         <Button
           color="on-surface"
           variant="outlined"
           size="small"
           icon={{ category: "outlined", type: "refresh" }}
-          disabled={isFetching || saving.isLoading || refreshing.isLoading}
-          onClick={() => void refetch()}
+          disabled={isFetching || saving.isLoading || isRefreshingModels}
+          onClick={() => void refreshModels()}
         >
-          {t("rework.admin.capabilities.organizationModels.reload")}
+          {t("rework.admin.capabilities.discovery.refresh")}
         </Button>
         <div className={styles.modelFilter}>
           <SearchInput
@@ -244,7 +272,16 @@ export function OrganizationModels({
           />
         </div>
       </div>
-      {isFetching && <p className={styles.status}>{t("rework.admin.capabilities.loading")}</p>}
+      {(isFetching || isRefreshingModels) && (
+        <p className={styles.status}>
+          {t(inventory ? "rework.admin.capabilities.discovery.refreshing" : "rework.admin.capabilities.loading")}
+        </p>
+      )}
+      {refreshError && (
+        <p className={styles.statusWarning} role="alert" title={refreshError}>
+          {t("rework.admin.capabilities.discovery.refreshFailed")} {refreshError}
+        </p>
+      )}
       {isError && (
         <p className={styles.statusError} role="alert">
           {t("rework.admin.capabilities.loadError")}
@@ -252,50 +289,22 @@ export function OrganizationModels({
       )}
       {!isError && inventory && (
         <>
-          <div className={styles.discoveryStatus}>
-            {inventory.sources.map(({ observation }) => (
-              <div className={styles.discoverySource} key={observation.source_id}>
-                <strong className={styles.discoveryReadOnlyUrl}>{observation.source_id}</strong>
-                <span className={observation.state === "ok" ? styles.status : styles.statusWarning}>
-                  {t("rework.admin.capabilities.organizationModels.sourceState", {
-                    state: t(`rework.admin.capabilities.organizationModels.states.${observation.state}`, {
-                      defaultValue: observation.state,
-                    }),
-                  })}
-                  {!observation.enabled && ` - ${t("rework.admin.capabilities.organizationModels.disabled")}`}
-                  {observation.snapshot_source_revision !== observation.source_revision &&
-                    ` - ${t("rework.admin.capabilities.organizationModels.stale")}`}
-                </span>
-                {observation.last_success_at && (
-                  <span className={styles.status}>
-                    {t("rework.admin.capabilities.organizationModels.lastSuccess", {
-                      date: new Date(observation.last_success_at).toLocaleString(),
-                    })}
-                  </span>
-                )}
-                {observation.error_code && <span className={styles.statusError}>{observation.error_code}</span>}
-                <Button
-                  color="on-surface"
-                  variant="outlined"
-                  size="small"
-                  icon={{ category: "outlined", type: "refresh" }}
-                  disabled={busy || !observation.enabled}
-                  onClick={() => void refresh(observation.source_id)}
-                >
-                  {t("rework.admin.capabilities.organizationModels.refreshSource", { source: observation.source_id })}
-                </Button>
-              </div>
-            ))}
-          </div>
           {visible.length ? (
             <DataTable columns={columns} data={visible} rowKey={offerId} size="medium" />
           ) : (
-            <PageEmptyState
-              icon="tune"
-              message={t(
-                filter ? "rework.admin.capabilities.discovery.noMatches" : "rework.admin.capabilities.emptyModels",
-              )}
-            />
+            !isFetching &&
+            !isRefreshingModels && (
+              <PageEmptyState
+                icon="tune"
+                message={t(
+                  filter
+                    ? "rework.admin.capabilities.discovery.noMatches"
+                    : inventory.sources.length === 0
+                      ? "rework.admin.capabilities.organizationModels.noSources"
+                      : "rework.admin.capabilities.organizationModels.noModels",
+                )}
+              />
+            )
           )}
         </>
       )}

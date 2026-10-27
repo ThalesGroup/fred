@@ -137,7 +137,10 @@ poll runtimes. This command does not enroll or execute agents.
 
 ## Platform model inventory and organization administration
 
-`platform.model_sources` defaults to `[]`. `serve` applies these non-secret
+`platform.model_sources` defaults to `[]` in the schema. The host development
+configuration and checkout-owned k3d overlay opt into the Mistral test source;
+see [the local model setup](../../deploy/k3d/README.md#models-for-local-testing).
+`serve` applies these non-secret
 approvals to SQL after checking migrations; it performs no model discovery.
 Organization APIs expose this inventory and persist explicit choices. There is no
 model CLI, polling or runtime enforcement. The internal `configure_sources`,

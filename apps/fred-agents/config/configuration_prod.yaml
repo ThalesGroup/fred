@@ -124,6 +124,13 @@ storage:
 scheduler:
   enabled: false
 
+# Execution still runs in the pod; match the control-plane source exactly.
+inference_credentials:
+  - source_id: mistral
+    api_root: https://api.mistral.ai/v1
+    credential_binding: mistral
+    api_key_env: OPENAI_API_KEY # pragma: allowlist secret (env var name only)
+
 platform:
   control_plane_url: "http://localhost:8222/control-plane/v1"
 

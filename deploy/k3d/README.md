@@ -51,7 +51,7 @@ The inherited factory settings are retained:
 | OpenFGA | `http://openfga:9080`, token from `fred-secrets/OPENFGA_API_TOKEN`; Rust must have published the binding. |
 | Keycloak | Secondary issuer/origins, user and M2M authentication; workload client `agentic` and secret `fred-secrets/KEYCLOAK_AGENTIC_CLIENT_SECRET`. Existing outgoing delegation is retained. |
 | Storage / observability | SeaweedFS runtime object store, OpenSearch logs/KPI, Prometheus and node CA mount; their inherited credential references are retained. |
-| Models | Existing mounted Mistral and mock profiles; `fred-model-credentials/OPENAI_API_KEY` remains required by preparation. Catalog discovery invokes no model. Web research stays disabled. |
+| Models | The control plane discovers the Mistral source; the pod retains only its inference credential binding. Both explicitly use `fred-model-credentials/OPENAI_API_KEY`. Discovery invokes no model. Web research stays disabled. |
 | Control Plane | Pod URL `http://control-plane-backend:8222/control-plane/v1` comes from the chart. The Rust resolver is implemented, but the Python execution consumer still requires adaptation. |
 
 After deploying, use organization administration -> Agents to find and activate
@@ -134,6 +134,33 @@ Preparation reads that same rendered value to grant index permissions. It also
 reads the configured KPI index when its OpenSearch sink is enabled. Wildcards and
 invalid index names are rejected before provisioning; no index name is embedded
 in the preparation script.
+
+## Models for local testing
+
+The checkout declares the `mistral` source in the control plane, using
+`https://api.mistral.ai/v1/models` for discovery and
+`https://api.mistral.ai/v1` for inference. This local profile explicitly reuses
+the existing `fred-model-credentials/OPENAI_API_KEY` for both operations; no
+secret value is stored in the configuration. The control plane uses the same
+node CA bundle as the pod for outgoing TLS.
+
+After deploying this configuration, open Models. The known inventory is shown
+and discovery refreshes automatically, as in Swift. Then permit
+`mistral-small-latest` and `mistral-medium-latest` for the organization. Choose
+Small as default in Models by default if that is the desired test setup.
+Discovery lists the provider's complete visible inventory and grants no access.
+The provider may expose additional models; this is not a static three-row catalog.
+The old factory `models_catalog` is excluded from this Weaver overlay.
+
+The host equivalent is `apps/control-plane/config/configuration.yaml`, with the
+existing Mistral key supplied through the control plane's environment or local
+`.env`. The pod's `configuration.yaml` and `configuration_prod.yaml` retain only
+the matching inference credential binding.
+
+`fred-test-mock` is a separate follow-up: retain the embedded pod model used by
+the graph Test agent, and wire it through Weaver's catalog and authorization.
+Do not replace it with the separate HTTP benchmark mock. This increment does
+not expose or activate the embedded mock.
 
 ## Read the storage and authority model
 

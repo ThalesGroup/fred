@@ -1413,12 +1413,6 @@
           "policyHint": "These choices apply to your organization. Choose from permitted models. Per-pod settings are unavailable in this catalog.",
           "revokeTitle": "Remove permission?",
           "revokeMessage": "Remove {{name}} from permitted models? If it is selected as default or fallback, that choice will also be cleared.",
-          "reload": "Reload catalog",
-          "refreshSource": "Refresh {{source}}",
-          "sourceState": "Discovery: {{state}}",
-          "lastSuccess": "Last successful discovery: {{date}}",
-          "disabled": "Source disabled",
-          "stale": "Outdated observation",
           "withdrawn": "Withdrawn from source",
           "chat": "Chat confirmed",
           "notChat": "Not chat capable",
@@ -1429,13 +1423,8 @@
           "context_window_tokens": "Context: {{count}} tokens",
           "max_input_tokens": "Input: {{count}} tokens",
           "max_output_tokens": "Output: {{count}} tokens",
-          "states": {
-            "ok": "successful",
-            "not_observed": "not performed",
-            "unavailable": "source unavailable",
-            "invalid": "invalid response",
-            "incomplete": "incomplete response"
-          }
+          "noSources": "No model source is configured in the control plane.",
+          "noModels": "No models in the catalog."
         }
       },
       "platformModelBindings": {

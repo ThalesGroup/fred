@@ -2,6 +2,7 @@
 Helm deep-merges maps: changing type alone would keep incompatible MinIO fields.
 The control-plane configuration is owned by values.yaml.gotmpl, not the factory. */ -}}
 {{- $base := readFile (printf "%s/k3d-apps/fred/values.yaml" (requiredEnv "K3D_FACTORY_ROOT")) | fromYaml -}}
+{{- $_ := unset (index $base.applications "fred-agents") "models_catalog" -}}
 {{- $worker := index $base.applications "knowledge-flow-worker" -}}
 {{- $_ := unset $worker.configuration "content_storage" -}}
 {{- $_ := unset $worker.configuration "filesystem" -}}

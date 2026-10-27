@@ -197,7 +197,9 @@ defines source approval, payloads, eligibility, errors and concurrency.
 The organization Models tab is bound through
 [`OrganizationModels.tsx`](../../apps/frontend/src/rework/components/pages/admin/FeaturesPage/OrganizationModels.tsx)
 and the generated Control Plane client. It reads inventory and policy together,
-refreshes individual sources, and replaces policy with its expected revision.
+refreshes discovery on entry as in Swift, and replaces policy with its expected
+revision. Known rows remain visible while discovery runs; the existing Refresh
+action performs the same update without exposing per-source controls.
 Source observations remain distinct from model permission; failed refreshes retain
 existing choices. This UI binding still requires functional validation.
 

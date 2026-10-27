@@ -3319,6 +3319,56 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
   actualisation d'une source, autorisation, défaut/secours et rechargement.
 
 
+### F25 : report des modèles de test Mistral et mock différé (2026-10-27)
+
+- Demande de Dimi : reprendre Small, Medium et le mock de la configuration Swift.
+  Référence retrouvée : factory `k3d-apps/fred/values.yaml`, trois profils
+  `mistral-small-latest`, `mistral-medium-latest`, `fred-test-mock` embarqué.
+- Report Mistral dans la configuration hôte du control plane et l'overlay k3d :
+  source approuvée `mistral`, découverte `/v1/models`, qualification par métadonnées
+  chat. Clé de test existante explicitement partagée pour découverte/inférence,
+  référence au Secret k3d et CA du nœud conservées ; aucune valeur secrète copiée.
+  Les configurations locales du pod et k3d déclarent la liaison d'inférence
+  correspondante. Le catalogue Swift hérité est exclu de l'overlay Weaver.
+- Découverte complète fournisseur, sans liste statique ni autorisation implicite.
+  Après déploiement : ouvrir Modèles, autoriser Small/Medium, choisir le défaut
+  dans l'UI. Aucune politique organisationnelle ou donnée en base modifiée ici.
+- Message vide corrigé : aucune source configurée / catalogue sans modèle,
+  sans référence à la publication par un pod runtime.
+- Décision explicite de Dimi : conserver `fred-test-mock` dans le pod comme modèle
+  embarqué pour simuler l'agent de test graphe. Son raccordement Weaver est un
+  **lot suivant et séparé**. Le mock HTTP séparé sert aux benchmarks et ne doit
+  pas le remplacer. Code du mock inchangé ; aucun modèle mock ajouté au catalogue.
+- Vérifications : Prettier ciblé ; `make code-quality` réussi dans frontend,
+  control-plane et fred-agents (deux noms de variable d'environnement annotés
+  comme faux positifs du détecteur de secrets). Schémas des configurations locales
+  valides ; `helmfile write-values --skip-deps`, puis validation des sections
+  control-plane/pod fusionnées avec les valeurs du chart réussies.
+  La validation globale du même rendu reste en échec dans les sections Knowledge
+  Flow non modifiées (anciens stockages hors lot). `git diff --check` réussi.
+  Aucun fournisseur appelé, test fonctionnel, déploiement, migration, commit ou push.
+
+
+### F25 : rétablissement du chargement Swift des modèles (2026-10-27)
+
+- Dimi rappelle sa contrainte : préserver l'UI et le comportement Swift, sans
+  inventer de nouvelle étape. Le raccordement initial avait introduit à tort un
+  panneau de sources, un bouton de relecture et une découverte manuelle par source.
+- Comparaison au code `swift` : l'ouverture de Modèles déclenchait déjà la
+  découverte automatiquement. Ce comportement est rétabli avec les routes Weaver :
+  lecture du catalogue connu, actualisation des sources activées et relecture.
+  Les lignes connues restent affichées pendant l'actualisation.
+- Suppression du panneau/boutons par source et des traductions devenues inutiles.
+  Retour au bouton existant « Actualiser » ; plus d'étape de découverte à demander
+  à l'utilisateur. Erreurs visibles, dernier inventaire conservé côté serveur,
+  sans boucle de polling ou rejeu automatique après échec.
+- Périmètre : composant Modèles, traductions FR/EN, guide k3d et référence A2.
+  Configuration Mistral conservée ; lot du mock embarqué toujours séparé.
+- Contrôles : Prettier ciblé, `make code-quality` frontend (TypeScript,
+  Prettier, ESLint) et `git diff --check` réussis. Aucun test fonctionnel,
+  déploiement ou commit ; aucune validation navigateur revendiquée.
+
+
 ## F26 Fusion Swift et préférences utilisateur
 
 - 2026-10-25 : résolution de `git merge swift` à la demande de Dimi. Le commit

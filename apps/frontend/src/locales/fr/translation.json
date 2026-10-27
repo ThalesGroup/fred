@@ -1413,12 +1413,6 @@
           "policyHint": "Ces choix s'appliquent à votre organisation. Choisissez parmi les modèles autorisés. Les réglages par pod ne sont pas disponibles dans ce catalogue.",
           "revokeTitle": "Retirer l'autorisation ?",
           "revokeMessage": "Retirer {{name}} des modèles autorisés ? S'il est sélectionné par défaut ou en secours, ce choix sera aussi effacé.",
-          "reload": "Recharger le catalogue",
-          "refreshSource": "Actualiser {{source}}",
-          "sourceState": "Découverte : {{state}}",
-          "lastSuccess": "Dernière découverte réussie : {{date}}",
-          "disabled": "Source désactivée",
-          "stale": "Observation non actualisée",
           "withdrawn": "Retiré de la source",
           "chat": "Chat confirmé",
           "notChat": "Sans aptitude chat",
@@ -1429,13 +1423,8 @@
           "context_window_tokens": "Contexte : {{count}} tokens",
           "max_input_tokens": "Entrée : {{count}} tokens",
           "max_output_tokens": "Sortie : {{count}} tokens",
-          "states": {
-            "ok": "réussie",
-            "not_observed": "non effectuée",
-            "unavailable": "source inaccessible",
-            "invalid": "réponse invalide",
-            "incomplete": "réponse incomplète"
-          }
+          "noSources": "Aucune source de modèles n'est configurée dans le control plane.",
+          "noModels": "Aucun modèle dans le catalogue."
         }
       },
       "platformModelBindings": {
