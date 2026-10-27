@@ -39,7 +39,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import shutil
+import signal
 import subprocess  # nosec: controlled command arguments, shell=False
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -83,6 +85,34 @@ def _export_filter_for(suffix: str) -> str:
     return f"pdf:{app_filter}:{_PDF_EXPORT_OPTIONS}" if app_filter else "pdf"
 
 
+def _run_soffice(command: list[str], *, timeout: float) -> None:
+    """``subprocess.run(check=True)`` in a process group of its own: on a timeout
+    the whole group is killed (soffice.bin and its helpers), then reaped."""
+    # Its own group but the caller's session: Knowledge Flow's extraction child
+    # sweeps its session on cancellation, and a new session would escape it.
+    process = subprocess.Popen(  # nosec: controlled command arguments, shell=False
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        process_group=0,
+    )
+    try:
+        _, stderr = process.communicate(timeout=timeout)
+    except BaseException:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass  # the whole group already exited, which is the outcome we wanted
+        # Not communicate(): a helper that left the group could hold the pipes open.
+        process.wait()
+        for pipe in (process.stdout, process.stderr):
+            if pipe is not None:
+                pipe.close()
+        raise
+    if process.returncode:
+        raise subprocess.CalledProcessError(process.returncode, command, stderr=stderr)
+
+
 def convert_office_file_to_pdf(
     source_path: Path,
     timeout_seconds: float = DEFAULT_OFFICE_PDF_TIMEOUT_SECONDS,
@@ -112,7 +142,7 @@ def convert_office_file_to_pdf(
         with tempfile.TemporaryDirectory(
             prefix="soffice-profile-", ignore_cleanup_errors=True
         ) as profile_dir:
-            subprocess.run(  # nosec: controlled command arguments, shell=False
+            _run_soffice(
                 [
                     soffice_path,
                     f"-env:UserInstallation={Path(profile_dir).as_uri()}",
@@ -125,9 +155,6 @@ def convert_office_file_to_pdf(
                     str(source_path.parent),
                     str(source_path),
                 ],
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
                 timeout=timeout_seconds,
             )
     except subprocess.TimeoutExpired:
