@@ -1401,7 +1401,42 @@
           "depNeedsSettings": "{{dep}} needs its own settings for this team — enable it from its own row first.",
           "thenSettingsForm": "You will then be asked to fill in {{agent}}'s settings before it is enabled."
         },
-        "emptyKnowledgeBases": "No Knowledge Base definition has been published into this deployment yet."
+        "emptyKnowledgeBases": "No Knowledge Base definition has been published into this deployment yet.",
+        "organizationModels": {
+          "permitted": "Permitted",
+          "permitAria": "Permit {{name}}",
+          "saved": "Model policy saved.",
+          "saveError": "Could not update the model policy. Reload the catalog before trying again.",
+          "default": "Default model",
+          "fallback": "Fallback model",
+          "none": "None",
+          "policyHint": "These choices apply to your organization. Choose from permitted models. Per-pod settings are unavailable in this catalog.",
+          "revokeTitle": "Remove permission?",
+          "revokeMessage": "Remove {{name}} from permitted models? If it is selected as default or fallback, that choice will also be cleared.",
+          "reload": "Reload catalog",
+          "refreshSource": "Refresh {{source}}",
+          "sourceState": "Discovery: {{state}}",
+          "lastSuccess": "Last successful discovery: {{date}}",
+          "disabled": "Source disabled",
+          "stale": "Outdated observation",
+          "withdrawn": "Withdrawn from source",
+          "chat": "Chat confirmed",
+          "notChat": "Not chat capable",
+          "unknownChat": "Chat capability unknown",
+          "unavailable": "Unavailable",
+          "reasoningUnavailable": "The catalog does not provide a global reasoning setting.",
+          "teamsUnavailable": "Models are permitted for the organization; per-team management is unavailable.",
+          "context_window_tokens": "Context: {{count}} tokens",
+          "max_input_tokens": "Input: {{count}} tokens",
+          "max_output_tokens": "Output: {{count}} tokens",
+          "states": {
+            "ok": "successful",
+            "not_observed": "not performed",
+            "unavailable": "source unavailable",
+            "invalid": "invalid response",
+            "incomplete": "incomplete response"
+          }
+        }
       },
       "platformModelBindings": {
         "openButton": "Model defaults",

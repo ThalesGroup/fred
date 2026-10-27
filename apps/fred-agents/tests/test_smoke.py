@@ -208,7 +208,7 @@ def _runtime_binding(request: httpx.Request, template_id: str) -> WeaverRuntimeB
 
 
 def _build_offline_agents_app(
-    monkeypatch, tmp_path, factory, *, template_id="fred.github.sentinel"
+    monkeypatch, tmp_path, factory, *, template_id="fred.github.assistant"
 ) -> FastAPI:
     """Boot the shipped pod with fake identity, resolver HTTP, MCP and model I/O."""
     user = KeycloakUser(uid="smoke-user", username="smoke-user", roles=[])
@@ -274,9 +274,6 @@ def _build_offline_agents_app(
         "servers:\n"
         '  - id: "mcp-knowledge-flow-mcp-tabular"\n'
         '    name: "mcp.servers.tabular.name"\n'
-        "    enabled: false\n"
-        '  - id: "mcp-knowledge-flow-opensearch-ops"\n'
-        '    name: "mcp.servers.search_opensearch.name"\n'
         "    enabled: false\n"
         '  - id: "mcp-knowledge-flow-prometheus-ops"\n'
         '    name: "mcp.servers.prometheus.name"\n'
@@ -344,11 +341,11 @@ def _parse_sse_payloads(stream_text: str) -> list[dict[str, object]]:
     ]
 
 
-def test_fred_agents_pod_registers_and_streams_sentinel_offline(
+def test_fred_agents_pod_registers_and_streams_custom_assistant_offline(
     monkeypatch, tmp_path
 ) -> None:
     """
-    Verify the standalone pod exposes Sentinel through the reusable app factory.
+    Verify the standalone pod exposes Custom assistant through the reusable app factory.
 
     Why this test exists:
     - it validates that a plain exported `ReActAgentDefinition` is enough for
@@ -364,7 +361,7 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
     """
 
     model = ToolFriendlyFakeChatModel(
-        responses=[AIMessage(content="Sentinel is ready.")]
+        responses=[AIMessage(content="Custom assistant is ready.")]
     )
     app = _build_offline_agents_app(
         monkeypatch,
@@ -378,7 +375,7 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
         list_response = client.get("/fred/agents/v2/agents")
         assert list_response.status_code == 200
         registered = list_response.json()
-        assert "fred.github.sentinel" in registered
+        assert "fred.github.assistant" in registered
         assert "fred.github.rag_expert" in registered
         assert "fred.dt.mindmap.graph" in registered
 
@@ -388,7 +385,7 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
             template["template_agent_id"] for template in templates_response.json()
         }
         assert "fred.dt.mindmap.graph" in template_ids
-        assert "fred.github.sentinel" in template_ids
+        assert "fred.github.assistant" in template_ids
         assert "fred.github.rag_expert" in template_ids
         assert "fred.github.test_assistant" in template_ids
 
@@ -454,8 +451,8 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
             "/fred/agents/v2/agents/execute/stream",
             json={
                 "agent_instance_id": INSTANCE_ID,
-                "input": "Give me a short health summary.",
-                "session_id": "sentinel-session",
+                "input": "Say hello.",
+                "session_id": "custom-assistant-session",
                 "runtime_context": {"space_id": SPACE_ID, "team_id": SPACE_ID},
             },
         )
@@ -466,7 +463,7 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
     assert payloads
     assert not any("error" in payload for payload in payloads)
     assert payloads[-1]["kind"] == "final"
-    assert payloads[-1]["content"] == "Sentinel is ready."
+    assert payloads[-1]["content"] == "Custom assistant is ready."
 
 
 def test_fred_agents_pod_streams_deep_assistant_offline(monkeypatch, tmp_path) -> None:

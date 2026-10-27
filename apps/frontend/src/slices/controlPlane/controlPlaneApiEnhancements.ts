@@ -11,6 +11,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "Documents",
     "DocumentUploads",
     "OrganizationAgents",
+    "OrganizationModels",
     "AgentInstances",
     "AgentTemplates",
     "Sessions",
@@ -73,6 +74,21 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
               { type: "AgentInstances", id: spaceId },
               { type: "AgentInstances", id: `${spaceId}:${agentInstanceId}` },
             ],
+    },
+    organizationModels: {
+      providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    organizationModelPolicy: {
+      providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    replaceOrganizationModelPolicy: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    refreshModelSource: {
+      extraOptions: { retryUnauthorized: false },
+      // A failed discovery also updates its observation; inventories share sources.
+      invalidatesTags: ["OrganizationModels"],
     },
     organizationAgents: {
       providesTags: (_result, _error, arg) => [{ type: "OrganizationAgents", id: arg.organizationId }],
@@ -156,6 +172,10 @@ export const {
   useAuthorizeSpaceMutation,
   useOrganizationSupervisionQuery,
   useTeamSupervisionQuery,
+  useOrganizationModelsQuery,
+  useOrganizationModelPolicyQuery,
+  useReplaceOrganizationModelPolicyMutation,
+  useRefreshModelSourceMutation,
   useOrganizationAgentsQuery,
   useSetOrganizationAgentDefaultMutation,
   useStartMutation,

@@ -194,6 +194,13 @@ configuration/token fences. These APIs establish no runtime model enforcement or
 validated execution journey; the [component contract](../../apps/control-plane/README.md#platform-model-inventory-and-organization-administration)
 defines source approval, payloads, eligibility, errors and concurrency.
 
+The organization Models tab is bound through
+[`OrganizationModels.tsx`](../../apps/frontend/src/rework/components/pages/admin/FeaturesPage/OrganizationModels.tsx)
+and the generated Control Plane client. It reads inventory and policy together,
+refreshes individual sources, and replaces policy with its expected revision.
+Source observations remain distinct from model permission; failed refreshes retain
+existing choices. This UI binding still requires functional validation.
+
 Instance model settings reuse `agent_instance.tuning` through
 [`agent_instances/http.rs`](../../apps/control-plane/src/agent_instances/http.rs)
 and [`tuning.rs`](../../apps/control-plane/src/agent_instances/tuning.rs).

@@ -3295,6 +3295,30 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
   et qualité technique seulement ; M5 global, 1.7/1.8 et validation bout en bout
   restent ouverts. Arc42 n'est pas élargi à un parcours non validé.
 
+### F25 : raccordement de l'onglet Modèles (2026-10-27)
+
+- Problème signalé par Dimi : catalogue impossible à charger et 404 lors de
+  l'ouverture de Modèles. Le code réactivait les requêtes admin Swift et leur
+  POST automatique, contrairement à l'onglet Agents déjà organisationnel.
+- Correction frontend ciblée : `FeaturesPage` monte `OrganizationModels` avec
+  l'organisation courante ; inventaire/politique via le client généré, refresh
+  explicite par source, autorisations et défaut/secours via remplacement avec
+  révision attendue. Identité source/modèle préservée ; retrait confirmé avant
+  suppression d'un choix par défaut/secours. Aucun appel admin Swift dans cet onglet.
+- Observations de source, retrait et aptitude chat distincts ; les choix existants
+  restent visibles en panne. Une mutation ou un refresh, y compris échoué,
+  invalide la lecture concernée ; aucun rejeu automatique d'écriture.
+- Contrôles partagés et traductions FR/EN ; réglages par pod, par équipe et
+  raisonnement global explicitement indisponibles dans ce contrat. Les autres
+  onglets non portés restent hors lot. Aucun changement backend ni client généré.
+- Contrôles : Prettier ciblé, puis `make code-quality` frontend réussi après
+  le dernier ajustement (TypeScript, Prettier, ESLint) ; `git diff --check` réussi.
+  Aucun test, build, déploiement, commit ou push. Validation navigateur à faire.
+- Annexe A2 actualisée pour le branchement ; aucune nouvelle validation
+  fonctionnelle revendiquée. À vérifier par Dimi : ouverture de Modèles,
+  actualisation d'une source, autorisation, défaut/secours et rechargement.
+
+
 ## F26 Fusion Swift et préférences utilisateur
 
 - 2026-10-25 : résolution de `git merge swift` à la demande de Dimi. Le commit

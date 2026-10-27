@@ -54,6 +54,7 @@ import {
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { AgentEnablement } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./FeaturesPage.module.css";
+import { OrganizationModels } from "./OrganizationModels";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
 import { PlatformModelBindingsPanel } from "./PlatformModelBindingsPanel/PlatformModelBindingsPanel.tsx";
 import { SuspendedInstancesDrawer } from "./SuspendedInstancesDrawer.tsx";
@@ -90,18 +91,24 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   const readOnly = organizationId !== undefined;
   const [kindFilter, setKindFilter] = useState<CapabilityKind>(readOnly ? "agent" : "tool");
   const discoveringAgents = readOnly && kindFilter === "agent";
+  const discoveringModels = readOnly && kindFilter === "model";
+  const organizationCatalog = discoveringAgents || discoveringModels;
   const discovery = useOrganizationAgentsQuery(discoveringAgents && organizationId ? { organizationId } : skipToken, {
     refetchOnMountOrArgChange: true,
   });
   const { t } = useTranslation();
   const { showSuccess, showError, showWarn } = useToast();
-  const { canAdmin } = useUserCapabilities(discoveringAgents);
-  const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications", discoveringAgents);
+  const { canAdmin } = useUserCapabilities(organizationCatalog);
+  const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications", organizationCatalog);
   const kindFilters: CapabilityKind[] = applicationsEnabled ? [...CORE_KIND_FILTERS, "app"] : CORE_KIND_FILTERS;
 
-  const legacy = useAdminCapabilitiesQuery(undefined, { skip: discoveringAgents });
+  const legacy = useAdminCapabilitiesQuery(undefined, { skip: organizationCatalog });
   const { data, refetch: refetchCapabilities } = legacy;
-  const { isLoading, isError } = discoveringAgents ? discovery : legacy;
+  const { isLoading, isError } = discoveringModels
+    ? { isLoading: false, isError: false }
+    : discoveringAgents
+      ? discovery
+      : legacy;
   // The full registry (`can_list_all_teams`), not the caller-scoped `/teams`: an admin
   // must see teams they don't belong to. The drawer only needs ids and names, so the
   // per-team membership reads are skipped.
@@ -140,20 +147,21 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   const [modelDefaultsInitialTab, setModelDefaultsInitialTab] = useState<"platform" | "pods">("pods");
   const [modelFilter, setModelFilter] = useState("");
   const activeKindFilter: CapabilityKind = !applicationsEnabled && kindFilter === "app" ? "tool" : kindFilter;
+  const legacyModels = activeKindFilter === "model" && !discoveringModels;
   const { data: discoveryStatus, refetch: refetchDiscoveryStatus } = useModelDiscoveryQuery(undefined, {
-    skip: activeKindFilter !== "model",
+    skip: !legacyModels,
   });
   const {
     data: podDefaults,
     isFetching: podDefaultsFetching,
     isError: podDefaultsError,
-  } = usePodChatDefaultsQuery(undefined, { skip: activeKindFilter !== "model" });
+  } = usePodChatDefaultsQuery(undefined, { skip: !legacyModels });
   const {
     data: platformModelBinding,
     isLoading: platformModelBindingLoading,
     isError: platformModelBindingError,
   } = usePlatformModelBindingQuery(undefined, {
-    skip: activeKindFilter !== "model",
+    skip: !legacyModels,
   });
   const [refreshDiscovery, discoveryRefresh] = useRefreshModelDiscoveryMutation();
   const [modelInventoryReady, setModelInventoryReady] = useState(false);
@@ -180,7 +188,7 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
     await Promise.all([refetchCapabilities(), refetchDiscoveryStatus()]);
   }, [refreshDiscovery, refetchCapabilities, refetchDiscoveryStatus, t]);
   useEffect(() => {
-    if (activeKindFilter !== "model") return;
+    if (!legacyModels) return;
     let mounted = true;
     setModelInventoryReady(false);
     setModelSourceCheckReady(false);
@@ -203,7 +211,7 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
     return () => {
       mounted = false;
     };
-  }, [activeKindFilter, refetchDiscoveryStatus, refreshModels]);
+  }, [legacyModels, refetchDiscoveryStatus, refreshModels]);
   const currentVerifiedSourceIds =
     verifiedModelSourceIds ?? (modelSourceCheckReady ? (discoveryStatus?.verified_source_ids ?? null) : null);
   const currentUnverifiedRuntimes =
@@ -275,7 +283,7 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   useEffect(() => {
     if (
       !noDefaultModalPending ||
-      activeKindFilter !== "model" ||
+      !legacyModels ||
       isLoading ||
       platformModelBindingLoading ||
       podDefaultsFetching ||
@@ -296,7 +304,7 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
       setNoDefaultModalOpen(true);
     }
   }, [
-    activeKindFilter,
+    legacyModels,
     canAdmin,
     isError,
     isLoading,
@@ -817,15 +825,15 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
         subtitle={t("rework.admin.capabilities.subtitle")}
         actions={
           activeKindFilter === "model" &&
-          canAdmin && (
+          (canAdmin || discoveringModels) && (
             <Button
               color="on-surface"
               variant="outlined"
               size="small"
               icon={{ category: "outlined", type: "tune" }}
-              disabled={readOnly}
+              disabled={readOnly && !discoveringModels}
               onClick={() => {
-                if (readOnly) return;
+                if (readOnly && !discoveringModels) return;
                 setModelDefaultsInitialTab("pods");
                 setPlatformBindingsPanelOpen(true);
               }}
@@ -850,7 +858,7 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
                 setUnverifiedModelRuntimes([]);
               }
               setKindFilter(next);
-              setNoDefaultModalPending(next === "model");
+              setNoDefaultModalPending(!readOnly && next === "model");
             }}
             items={kindFilters.map((kind) => ({
               label: t(`rework.admin.capabilities.kindFilter.${kind}`),
@@ -859,13 +867,22 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
         }
       />
 
+      {discoveringModels && organizationId && (
+        <OrganizationModels
+          key={organizationId}
+          organizationId={organizationId}
+          defaultsOpen={platformBindingsPanelOpen}
+          onCloseDefaults={() => setPlatformBindingsPanelOpen(false)}
+        />
+      )}
+
       {isLoading && <p className={styles.status}>{t("rework.admin.capabilities.loading")}</p>}
       {isError && <p className={styles.statusError}>{t("rework.admin.capabilities.loadError")}</p>}
-      {activeKindFilter === "model" && !discoveryConfigurationReady && !isLoading && !isError && (
+      {legacyModels && !discoveryConfigurationReady && !isLoading && !isError && (
         <p className={styles.status}>{t("rework.admin.capabilities.discovery.refreshing")}</p>
       )}
 
-      {activeKindFilter === "model" && hasDiscovery && (
+      {legacyModels && hasDiscovery && (
         <div className={styles.modelToolbar}>
           <ButtonGroup
             size="2xs"
@@ -882,7 +899,7 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
         </div>
       )}
 
-      {activeKindFilter === "model" && hasDiscovery && modelTab === "discovered" && (
+      {legacyModels && hasDiscovery && modelTab === "discovered" && (
         <ModelDiscoveryStatus
           data={discoveryStatus ? { ...discoveryStatus, sources: discoverySources } : undefined}
           discoveredSourceIds={discoveredModels.flatMap((model) =>
@@ -896,15 +913,16 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
         />
       )}
 
-      {activeKindFilter === "model" && discoveryConfigurationReady && !hasDiscovery && (
+      {legacyModels && discoveryConfigurationReady && !hasDiscovery && (
         <UnverifiedRuntimeWarning runtimes={currentUnverifiedRuntimes} />
       )}
 
-      {!isLoading &&
+      {!discoveringModels &&
+        !isLoading &&
         !isError &&
         (activeKindFilter !== "model" || discoveryConfigurationReady) &&
         rowCount === 0 &&
-        !(activeKindFilter === "model" && hasDiscovery) && (
+        !(legacyModels && hasDiscovery) && (
           <PageEmptyState
             icon="tune"
             message={t(
@@ -921,13 +939,14 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
           />
         )}
 
-      {!isLoading &&
+      {!discoveringModels &&
+        !isLoading &&
         !isError &&
         (activeKindFilter !== "model" || discoveryConfigurationReady) &&
-        (rowCount > 0 || (activeKindFilter === "model" && hasDiscovery)) &&
+        (rowCount > 0 || (legacyModels && hasDiscovery)) &&
         (discoveringAgents ? (
           <DataTable columns={discoveryColumns} data={agents} size="medium" />
-        ) : activeKindFilter === "model" && hasDiscovery ? (
+        ) : legacyModels && hasDiscovery ? (
           <section
             className={styles.modelSection}
             aria-label={t(`rework.admin.capabilities.discovery.${modelTab}Section`)}

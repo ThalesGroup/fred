@@ -1401,7 +1401,42 @@
           "depNeedsSettings": "{{dep}} nécessite ses propres paramètres pour cette équipe — activez-la d'abord depuis sa propre ligne.",
           "thenSettingsForm": "Il vous sera ensuite demandé de renseigner les paramètres de {{agent}} avant son activation."
         },
-        "emptyKnowledgeBases": "Aucune définition de base de connaissances n'a encore été publiée dans ce déploiement."
+        "emptyKnowledgeBases": "Aucune définition de base de connaissances n'a encore été publiée dans ce déploiement.",
+        "organizationModels": {
+          "permitted": "Autorisé",
+          "permitAria": "Autoriser {{name}}",
+          "saved": "Politique des modèles enregistrée.",
+          "saveError": "Impossible de modifier la politique des modèles. Rechargez le catalogue avant de réessayer.",
+          "default": "Modèle par défaut",
+          "fallback": "Modèle de secours",
+          "none": "Aucun",
+          "policyHint": "Ces choix s'appliquent à votre organisation. Choisissez parmi les modèles autorisés. Les réglages par pod ne sont pas disponibles dans ce catalogue.",
+          "revokeTitle": "Retirer l'autorisation ?",
+          "revokeMessage": "Retirer {{name}} des modèles autorisés ? S'il est sélectionné par défaut ou en secours, ce choix sera aussi effacé.",
+          "reload": "Recharger le catalogue",
+          "refreshSource": "Actualiser {{source}}",
+          "sourceState": "Découverte : {{state}}",
+          "lastSuccess": "Dernière découverte réussie : {{date}}",
+          "disabled": "Source désactivée",
+          "stale": "Observation non actualisée",
+          "withdrawn": "Retiré de la source",
+          "chat": "Chat confirmé",
+          "notChat": "Sans aptitude chat",
+          "unknownChat": "Aptitude chat inconnue",
+          "unavailable": "Indisponible",
+          "reasoningUnavailable": "Le catalogue ne fournit pas de réglage global du raisonnement.",
+          "teamsUnavailable": "Les modèles sont autorisés pour l'organisation ; la gestion par équipe n'est pas disponible.",
+          "context_window_tokens": "Contexte : {{count}} tokens",
+          "max_input_tokens": "Entrée : {{count}} tokens",
+          "max_output_tokens": "Sortie : {{count}} tokens",
+          "states": {
+            "ok": "réussie",
+            "not_observed": "non effectuée",
+            "unavailable": "source inaccessible",
+            "invalid": "réponse invalide",
+            "incomplete": "réponse incomplète"
+          }
+        }
       },
       "platformModelBindings": {
         "openButton": "Modèles par défaut",
