@@ -39,6 +39,10 @@ configuration:
     host: "0.0.0.0"
     # The port the image serves on.
     port: 8000
+  # Packaged platform skills are enabled by default. Set skills: null to disable,
+  # or configure an existing read-only mounted directory relative to this file.
+  # skills:
+  #   directory: package
 
 # Other files the pod reads, mounted under /app/config/ next to
 # configuration.yaml (e.g. models_catalog.yaml). A mapping is written as YAML.

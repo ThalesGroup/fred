@@ -787,10 +787,10 @@ applications:
         max_chat_input_chars: 5000
         openai_compat: true
 
-      # Optional platform skill activation. Set to {directory: package} for the
-      # fred_runtime resources, or to an existing read-only volume mount path.
-      # No folder is read and no skill tools are added when omitted/null.
-      skills: null
+      # Packaged platform skills are enabled by default. Set skills: null to
+      # disable, or configure an existing read-only mounted directory.
+      # skills:
+      #   directory: package
 
       security:
         # ── Classification posture (RUNTIME-07 rev. 2) ──────────────────────────
