@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   data: undefined as PlatformSkillInventory | undefined,
   isLoading: false,
   isError: false,
+  isFetching: false,
   mutate: vi.fn(),
   refetch: vi.fn(),
 }));
@@ -31,6 +32,7 @@ beforeEach(() => {
   state.data = { skills: [], unavailable_runtime_ids: [], unsupported_runtime_ids: [], disabled_skill_names: [] };
   state.isLoading = false;
   state.isError = false;
+  state.isFetching = false;
   state.mutate
     .mockReset()
     .mockImplementation(() => ({ unwrap: async () => ({ name: "meeting-minutes", enabled: false }) }));
@@ -81,29 +83,38 @@ it("separates loading, failed and empty catalogs", () => {
   expect(render()).not.toContain("rework.admin.skills.empty");
 });
 
-it("waits for the shared policy write and refreshed inventory before showing a changed switch", async () => {
+it("retains the active switch focus through saving and refresh while guarding rapid activation", async () => {
   state.data.skills = [
     {
       skill: { name: "meeting-minutes", description: "Prepare minutes", builtin: true },
       enabled: true,
       runtime_ids: ["pod-a"],
     },
+    { skill: { name: "mermaid", description: "Diagrams", builtin: true }, enabled: true, runtime_ids: ["pod-a"] },
   ];
   let complete: () => void;
+  let completeRefresh: () => void;
   state.mutate.mockImplementation(() => ({
     unwrap: () =>
       new Promise<void>((resolve) => {
         complete = resolve;
       }),
   }));
-  state.refetch.mockImplementation(async () => {
-    state.data = {
-      ...state.data,
-      skills: state.data.skills.map((entry) => ({ ...entry, enabled: false })),
-      disabled_skill_names: ["meeting-minutes"],
-    };
-    return { data: state.data };
-  });
+  state.refetch.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        state.isFetching = true;
+        completeRefresh = () => {
+          state.isFetching = false;
+          state.data = {
+            ...state.data,
+            skills: state.data.skills.map((entry) => ({ ...entry, enabled: entry.skill.name !== "meeting-minutes" })),
+            disabled_skill_names: ["meeting-minutes"],
+          };
+          resolve({ data: state.data });
+        };
+      }),
+  );
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -111,15 +122,30 @@ it("waits for the shared policy write and refreshed inventory before showing a c
     await act(async () => root.render(<PlatformSkillsPanel />));
     const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
     expect(checkbox.checked).toBe(true);
-    await act(async () => checkbox.click());
-    expect(checkbox.disabled).toBe(true);
+    await act(async () => {
+      checkbox.focus();
+      checkbox.click();
+      checkbox.click();
+    });
+    expect(checkbox.disabled).toBe(false);
+    expect(checkbox.getAttribute("aria-disabled")).toBe("true");
+    expect(document.activeElement).toBe(checkbox);
     expect(checkbox.checked).toBe(true);
+    expect(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')[1].disabled).toBe(true);
+    expect(state.mutate).toHaveBeenCalledOnce();
     expect(state.mutate).toHaveBeenCalledWith({
       skillName: "meeting-minutes",
       setPlatformSkillEnabledRequest: { enabled: false },
     });
     await act(async () => complete());
+    await act(async () => root.render(<PlatformSkillsPanel />));
+    expect(checkbox.disabled).toBe(false);
+    expect(document.activeElement).toBe(checkbox);
+    await act(async () => checkbox.click());
+    expect(state.mutate).toHaveBeenCalledOnce();
+    await act(async () => completeRefresh());
     expect(container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false);
+    expect(document.activeElement).toBe(checkbox);
   } finally {
     act(() => root.unmount());
     container.remove();

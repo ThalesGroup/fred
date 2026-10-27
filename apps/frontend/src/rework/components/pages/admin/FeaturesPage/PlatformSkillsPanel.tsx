@@ -20,7 +20,9 @@ export function PlatformSkillsPanel() {
     refetchOnMountOrArgChange: true,
   });
   const [setEnabled] = useSetPlatformSkillEnabledMutation();
-  const [saving, setSaving] = useState(false);
+  const [savingSkillName, setSavingSkillName] = useState<string | null>(null);
+  const [focusedSkillName, setFocusedSkillName] = useState<string | null>(null);
+  const saving = savingSkillName !== null;
   const inFlight = useRef(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const sourceUnverified = Boolean(data?.unavailable_runtime_ids.length || data?.unsupported_runtime_ids.length);
@@ -28,9 +30,9 @@ export function PlatformSkillsPanel() {
     (name) => !data.skills.some((entry) => entry.skill.name === name),
   );
   const applyEnabled = async (name: string, enabled: boolean) => {
-    if (inFlight.current) return;
+    if (inFlight.current || isFetching || (!enabled && sourceUnverified)) return;
     inFlight.current = true;
-    setSaving(true);
+    setSavingSkillName(name);
     setSaveError(null);
     try {
       await setEnabled({ skillName: name, setPlatformSkillEnabledRequest: { enabled } }).unwrap();
@@ -48,7 +50,7 @@ export function PlatformSkillsPanel() {
       await refetch();
     } finally {
       inFlight.current = false;
-      setSaving(false);
+      setSavingSkillName(null);
     }
   };
   const columns: DataTableColumn<PlatformSkillEntry>[] = [
@@ -90,7 +92,14 @@ export function PlatformSkillsPanel() {
         <Switch
           size="small"
           checked={entry.enabled}
-          disabled={saving || isFetching || (entry.enabled && sourceUnverified)}
+          disabled={
+            (saving || isFetching || (entry.enabled && sourceUnverified)) &&
+            savingSkillName !== entry.skill.name &&
+            focusedSkillName !== entry.skill.name
+          }
+          aria-disabled={saving || isFetching || (entry.enabled && sourceUnverified) || undefined}
+          onFocus={() => setFocusedSkillName(entry.skill.name)}
+          onBlur={() => setFocusedSkillName(null)}
           aria-label={t("rework.admin.skills.toggle", { name: skillPresentation(t, entry.skill).title })}
           title={entry.enabled && sourceUnverified ? t("rework.admin.skills.disableBlocked") : undefined}
           onChange={() => void applyEnabled(entry.skill.name, !entry.enabled)}

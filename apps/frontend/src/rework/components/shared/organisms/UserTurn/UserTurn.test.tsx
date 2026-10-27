@@ -25,6 +25,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assemblePromptTurn, selectedSkillText } from "@rework/utils/skillInvocation";
 import { useAssistantCopyInterception } from "@hooks/useAssistantCopyInterception";
 import { UserTurn } from "./UserTurn";
+import { SkillBadge } from "@shared/molecules/SkillBadge/SkillBadge";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -33,7 +34,12 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, options?: { defaultValue?: string }) =>
+      key === "chatbot.skills.catalog.meeting-minutes.title"
+        ? "Compte rendu de réunion"
+        : (options?.defaultValue ?? key),
+  }),
 }));
 
 const writeText = vi.fn<(text: string) => Promise<void>>();
@@ -98,6 +104,72 @@ afterEach(() => {
 });
 
 describe("UserTurn copy affordance (#2359)", () => {
+  it.each(["forward", "backward"])(
+    "copies a %s selection across user and assistant messages with native separators and canonical skills",
+    (direction) => {
+      render(
+        <>
+          <UserTurn
+            text="Before /meeting-minutes after"
+            skillName="meeting-minutes"
+            builtinSkillNames={["meeting-minutes"]}
+          />
+          <div data-copyable-content>
+            <p>Compte rendu de réunion is a heading</p>
+          </div>
+          <div data-skill-message>
+            <SkillBadge name="meeting-minutes" builtin /> More
+          </div>
+        </>,
+      );
+      const bodies = container.querySelectorAll("[data-skill-message]");
+      const selection = document.getSelection()!;
+      const range = document.createRange();
+      range.setStart(bodies[0].firstChild!, 0);
+      range.setEnd(bodies[1].lastChild!, 5);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      if (direction === "backward")
+        selection.setBaseAndExtent(range.endContainer, range.endOffset, range.startContainer, range.startOffset);
+      const { anchorNode, anchorOffset, focusNode, focusOffset } = selection;
+      const nativeText = new Map([
+        [
+          "Before Compte rendu de réunion afterCompte rendu de réunion is a headingCompte rendu de réunion More",
+          "Before Compte rendu de réunion after\n\nCompte rendu de réunion is a heading\n\nCompte rendu de réunion More",
+        ],
+        ["Before ", "Before "],
+        ["Compte rendu de réunion", "Compte rendu de réunion"],
+        [
+          "Before Compte rendu de réunion afterCompte rendu de réunion is a heading",
+          "Before Compte rendu de réunion after\n\nCompte rendu de réunion is a heading\n\n",
+        ],
+      ]);
+      const serialize = vi.spyOn(selection, "toString").mockImplementation(() => {
+        const raw = selection.getRangeAt(0).toString();
+        const native = nativeText.get(raw);
+        if (native === undefined) throw new Error(`Unexpected native selection: ${raw}`);
+        return native;
+      });
+      try {
+        const setData = vi.fn();
+        const copy = new Event("copy", { bubbles: true, cancelable: true });
+        Object.defineProperty(copy, "clipboardData", { value: { setData } });
+        bodies[0].dispatchEvent(copy);
+        expect(copy.defaultPrevented).toBe(true);
+        expect(setData).toHaveBeenCalledWith(
+          "text/plain",
+          "Before /meeting-minutes after\n\nCompte rendu de réunion is a heading\n\n/meeting-minutes More",
+        );
+        expect(selection.anchorNode).toBe(anchorNode);
+        expect(selection.anchorOffset).toBe(anchorOffset);
+        expect(selection.focusNode).toBe(focusNode);
+        expect(selection.focusOffset).toBe(focusOffset);
+      } finally {
+        serialize.mockRestore();
+        selection.removeAllRanges();
+      }
+    },
+  );
   it.each(["summary", "mermaid"])(
     "restores mixed legacy /%s history without exposing the expanded prompt",
     async (command) => {
