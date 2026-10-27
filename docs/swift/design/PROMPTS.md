@@ -367,26 +367,31 @@ for the improvement proposal.
 
 ## 8. System Prompt Assembly (PROMPT-10)
 
-When enabled, ReAct receives platform skill names/descriptions, advisory argument
+Packaged skills are enabled by default unless `skills: null` is configured.
+ReAct receives eligible platform skill names/descriptions, advisory argument
 hints and loading guidance inside the existing `<tools>` block. Its snapshot
 adapter and confined loading tools remain unchanged.
 
 Deep parents and native children receive the skill index from DeepAgents through
 `create_deep_agent(skills=["/skills/"])` and the explicit child's `skills` field.
 The native middleware appends its own skill section; Fred does not render a
-second catalog or build skills middleware. Full instructions and relative
+second catalog or replacement loading middleware. Full instructions and relative
 references load progressively with native `read_file` from the physical
 `/skills/` FilesystemBackend mount. Upstream owns metadata caching/formatting;
-existing Fred platform rules and disabled execution still apply.
+Fred refreshes eligible metadata and filesystem permissions each turn/resume;
+existing platform rules and global opt-outs still apply. Native metadata comes
+from the validated startup discovery; physical body/reference edits remain live.
 Associated resources are discovered from Markdown links/instructions in SKILL.md;
 for example, meeting-minutes links references/meeting-minutes-template.md. Resolve a
 relative link from the directory containing that SKILL.md and use native
 read_file on its absolute mounted path. No extra references catalog is injected.
 
 The web composer and previews retain their validated startup service. Explicit
-preload applies only to ReAct. Deep preserves the canonical user invocation text
-without snapshot body validation or an injected skill body; upstream
-discovery and model-driven read_file calls load its skills. Returned native instruction/reference text escapes reserved Fred
+Fred preload applies only to ReAct. Deep preserves the canonical user invocation
+text and passes explicit selections as native `pinned_skills`. Upstream loads
+those bodies before inference; Fred does not inject a replacement body. Autonomous
+loads still use native read_file. Returned native instruction/reference text and
+retained pins escape reserved Fred
 tags at the existing tool boundary. Native file edits are visible on subsequent
 reads; web/ReAct snapshot refresh still requires restart. Resource and checkpoint
 semantics are defined in the runtime execution contract.
@@ -399,11 +404,15 @@ compliance remains probabilistic.
 The shipped platform instructions recognize a matching `/name` or `/skill name`
 as a request to apply that catalog procedure. They direct instruction and required
 reference reads before drafting or using task tools, while reusing complete
-instructions already loaded. Native Deep still performs these reads itself;
+instructions already loaded. Native Deep owns pin and filesystem reads;
 selection metadata and a visible badge do not imply that a read happened.
 The existing per-turn system context lists the current typed skill names as an
 explicit user request, without paths, bodies or another catalog. It disappears
 on a fresh turn without selections; same-exchange resumes retain that request.
+Resumes do not pin again. `user-invocable: false` hides a procedure from human
+selection; `disable-model-invocation: true` excludes new autonomous loads unless
+the current request explicitly selects it. Display-only French/English labels
+never change these English instructions, model descriptions or canonical slugs.
 
 Mermaid diagram rules live in the packaged `mermaid` skill. The composer advertises
 its metadata when that skill is configured; the full rules reach the model only

@@ -76,6 +76,12 @@ diagnostics. Switches wait for the saved policy and refreshed inventory;
 unverified sources prevent new disables while absent disabled skills remain
 available for reactivation. Changes affect new loads from the next turn.
 
+Native Chromium checks cover cross-message copy in both selection directions
+with real block separators. The actual panel, Switch and CSS also preserve
+focus/scroll through save and refresh, prevent duplicate requests and retain
+the active input's accessible pending state (API boundary simulated). This is
+functional browser verification; product/design visual review remains pending.
+
 ### Admin self-test authorization controls
 
 **Location:** `src/rework/components/pages/admin/SelfTestPage/AuthorizationExtras.tsx`

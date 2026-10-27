@@ -9,8 +9,8 @@ Revises: f28c3e9ab641
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "d7b24ef08361"
-down_revision: str = "f28c3e9ab641"
+revision: str = "d7b24ef08361"  # pragma: allowlist secret - public Alembic revision
+down_revision: str = "f28c3e9ab641"  # pragma: allowlist secret - public Alembic parent
 branch_labels: None = None
 depends_on: None = None
 

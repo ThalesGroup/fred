@@ -8,7 +8,7 @@ Let users and agents apply platform-owned Markdown workflows through one shared,
 
 ### Requirement: Platform skills are published from a startup snapshot
 
-Platform-distributed skills and their reference files SHALL reside under `fred_runtime/skills/` in the `fred-runtime` package and SHALL be included in its wheel and source distribution. The deployment SHALL configure an optional skill directory whose immediate skill subdirectories contain `SKILL.md` with a valid unique `name`, a `description` and Markdown instructions. The packaged directory SHALL be resolvable from an installed runtime outside the repository. Packaging alone SHALL NOT enable skills without configuration. Skill contents and references SHALL be read-only to agents. The pod SHALL publish a validated snapshot at startup for the web catalog, ReAct explicit preload, preview and ReAct reads until restart. Deep native reads SHALL use the physical configured directory through upstream FilesystemBackend. Invalid, duplicate, oversized or unreadable skills SHALL be excluded from the web/ReAct snapshot with bounded diagnostics without preventing other skills or the pod from working. The supported first-version catalog size SHALL be a few dozen skills; it SHALL NOT require a separate search service.
+Platform-distributed skills and their reference files SHALL reside under `fred_runtime/skills/` in the `fred-runtime` package and SHALL be included in its wheel and source distribution. The deployment SHALL configure an optional skill directory whose immediate skill subdirectories contain `SKILL.md` with a valid unique `name`, a `description` and Markdown instructions. The packaged directory SHALL be resolvable from an installed runtime outside the repository. Omitting skill configuration SHALL enable the packaged directory. Explicit null SHALL disable skills. A configured custom directory SHALL retain its existing behavior. Skill contents and references SHALL be read-only to agents. The pod SHALL publish a validated snapshot at startup for the web catalog, ReAct explicit preload, preview and ReAct reads until restart. Deep native reads SHALL use the physical configured directory through upstream FilesystemBackend. Invalid, duplicate, oversized or unreadable skills SHALL be excluded from the web/ReAct snapshot with bounded diagnostics without preventing other skills or the pod from working. The supported first-version catalog size SHALL be a few dozen skills; it SHALL NOT require a separate search service.
 
 #### Scenario: Skills available from an installed runtime distribution
 
@@ -20,8 +20,8 @@ Platform-distributed skills and their reference files SHALL reside under `fred_r
 #### Scenario: No directory configured
 
 - **WHEN** a pod starts without skill configuration
-- **THEN** it exposes no skills or skill-loading tools
-- **AND** no skill catalog or body is injected, including the former automatic Mermaid rules
+- **THEN** it exposes the packaged catalog with progressive loading
+- **AND** explicitly setting skills to null instead exposes no skills, loading tools, catalog or body
 
 #### Scenario: Invalid skill beside valid skills
 
@@ -38,7 +38,7 @@ Platform-distributed skills and their reference files SHALL reside under `fred_r
 
 ### Requirement: The system prompt advertises the skill catalog
 
-Every ReAct agent with skills configured SHALL receive validated catalog names, descriptions and optional advisory argument hints inside the existing system prompt `<tools>` block. Deep parents and native children SHALL receive the upstream native catalog through create_deep_agent skills configuration, without a duplicate Fred catalog or custom skills middleware. Both catalogs SHALL explain progressive instruction/reference loading without injecting all skill bodies. ReAct catalog content SHALL escape reserved prompt-layer tags and render no section when empty. Deep SHALL use upstream formatting and its native empty-source section; its trusted source files SHALL follow the platform instruction hierarchy.
+Every ReAct agent with skills configured SHALL receive validated catalog names, descriptions and optional advisory argument hints inside the existing system prompt `<tools>` block. Deep parents and native children SHALL receive the upstream native catalog through create_deep_agent skills configuration, without a duplicate Fred catalog or replacement loading middleware; Fred policy hooks SHALL filter eligibility without replacing upstream loading. Both catalogs SHALL explain progressive instruction/reference loading without injecting all skill bodies. ReAct catalog content SHALL escape reserved prompt-layer tags and render no section when empty. Deep SHALL use upstream formatting and its native empty-source section; its trusted source files SHALL follow the platform instruction hierarchy.
 
 #### Scenario: Catalog placement and progressive loading
 
@@ -97,7 +97,7 @@ Supported agents SHALL be able to choose a skill by its catalog name, obtain its
 
 ### Requirement: Skill file access stays within the declared skill
 
-Web selections and ReAct loading SHALL resolve a catalog name on the server. ReAct reference reads SHALL resolve a relative file path within that skill's published directory, support bounded UTF-8 text and reject traversal, absolute host paths, escaping symlinks, unsupported content and writes. Deep native access SHALL follow the separate physical-filesystem requirement: current files remain confined to the configured root, without per-skill snapshot filtering. Skill access SHALL NOT expose arbitrary host or conversation files, execute scripts, install tools or grant permissions. A frontmatter tool hint SHALL NOT be treated as a permission grant or an enforced restriction.
+Web selections and ReAct loading SHALL resolve a catalog name on the server. ReAct reference reads SHALL resolve a relative file path within that skill's published directory, support bounded UTF-8 text and reject traversal, absolute host paths, escaping symlinks, unsupported content and writes. Deep native access SHALL follow the separate physical-filesystem requirement: current files remain confined to the configured root, without replacing physical body bytes with snapshot content; per-skill eligibility SHALL still derive from validated metadata and current policy. Skill access SHALL NOT expose arbitrary host or conversation files, execute scripts, install tools or grant permissions. A frontmatter tool hint SHALL NOT be treated as a permission grant or an enforced restriction.
 
 #### Scenario: Read an associated template
 
@@ -111,7 +111,7 @@ Web selections and ReAct loading SHALL resolve a catalog name on the server. ReA
 
 ### Requirement: Deep agents can read the published skills filesystem
 
-Deep parents and native children SHALL mount the configured physical skill directory at `/skills/` with unmodified upstream `FilesystemBackend(root_dir=directory, virtual_mode=True)` in their existing composite backend. Fred SHALL configure skills through `create_deep_agent(skills=["/skills/"])` and the explicit child's `skills` field, without constructing skills middleware, synthetic metadata files, a custom snapshot filesystem backend or an additional native catalog prompt. Upstream SHALL own discovery, metadata caching, instruction/reference reads, listing, search and pagination. Matching physical folder/frontmatter names SHALL identify well-formed native skills. Agent and capability writes to `/skills` and its descendants SHALL be denied, and production resources SHALL be read-only on disk. Existing conversation workspace/artifact behavior SHALL remain intact. ReAct SHALL retain its current snapshot and confined tools; Deep SHALL register neither Fred skill tool. Web previews and ReAct preload SHALL retain their existing validated startup service and trusted attribution. Deep SHALL NOT preload selected skills, validate their bodies against the startup snapshot, or prepend Fred skill-instruction messages; the canonical user request SHALL reach native discovery and model-driven reads unchanged.
+Deep parents and native children SHALL mount the configured physical skill directory at `/skills/` with unmodified upstream `FilesystemBackend(root_dir=directory, virtual_mode=True)` in their existing composite backend. Fred SHALL configure skills through `create_deep_agent(skills=["/skills/"])` and the explicit child's `skills` field, without a replacement instruction loader, synthetic files or a duplicate native catalog prompt. Fred SHALL enforce per-turn eligibility using filtered native metadata and filesystem permissions while preserving the native loading implementation. Upstream SHALL own discovery, metadata caching, instruction/reference reads, listing, search and pagination. Matching physical folder/frontmatter names SHALL identify well-formed native skills. Agent and capability writes to `/skills` and its descendants SHALL be denied, and production resources SHALL be read-only on disk. Existing conversation workspace/artifact behavior SHALL remain intact. ReAct SHALL retain its current snapshot and confined tools; Deep SHALL register neither Fred skill tool. Web previews and ReAct preload SHALL retain their existing validated startup service and trusted attribution. Explicit Deep selections SHALL use native pinned_skills and load before the next model call. Fred SHALL NOT implement a replacement preload or validate physical bodies against its snapshot; the canonical user request SHALL remain unchanged.
 
 #### Scenario: Native instruction and reference reads
 
@@ -145,7 +145,7 @@ Deep parents and native children SHALL mount the configured physical skill direc
 
 - **GIVEN** the current user turn selects `meeting-minutes` through the typed slash invocation
 - **WHEN** the Deep parent or child successfully reads that skill's SKILL.md at offset zero
-- **THEN** its actual load event and KPI use user origin without adding a preload or changing the native tool result
+- **THEN** its actual load event and KPI use user origin without adding a Fred preload or changing the native tool result
 - **AND** other skills read in the same turn use agent origin
 - **AND** same-exchange web HITL resumes retain the original typed selection and user-origin reads; new turns do not inherit it
 - **AND** a later turn without a current selection uses agent origin, even if prior user text mentioned that slash
@@ -162,11 +162,11 @@ Deep parents and native children SHALL mount the configured physical skill direc
 - **WHEN** a configured Deep parent or native child binds its model tools
 - **THEN** `load_skill` and `read_skill_file` are absent from Fred's tool registrations and current loading guidance
 - **AND** native filesystem reads retain reference previews and selection-aware KPI attribution
-- **AND** explicit Deep selection remains user text without preload or snapshot body validation; actual native reads use user origin for the currently selected skill and agent origin for other skills, while ReAct retains both confined Fred tools and user-origin preload
+- **AND** explicit Deep selection reaches native pinned_skills without Fred preload or snapshot body validation; native successful pins use user origin, while independent native reads retain selection-aware origin and ReAct retains both confined tools
 
 ### Requirement: Web users can require a skill for their request
 
-Managed web chat SHALL accept `/<name> [request]` at the invocation position and retain `/skill <name> [request]` compatibility and offer skill-name autocompletion from the selected agent's actual runtime catalog. Submission SHALL transmit typed name-only skill selections and the complete canonical user text including every invocation at its original position; for ReAct, the server SHALL validate and load the selected skill before the first model call from its snapshot rather than client instructions. Deep SHALL use the canonical request as ordinary user text, without Fred preload or snapshot body validation; native model choice SHALL determine instruction/reference reads. A named invocation SHALL remain valid without arguments, even if the skill requires information to finish. Argument hints SHALL be optional descriptive text, never submission requirements. A bare `/skill` SHALL offer selection guidance without launching an empty agent turn. An unknown, invalid or unavailable explicit ReAct selection SHALL fail clearly before any model call, with no fallback to another skill or a prompt command.
+Managed web chat SHALL accept `/<name> [request]` at the invocation position and retain `/skill <name> [request]` compatibility and offer skill-name autocompletion from the selected agent's actual runtime catalog. Submission SHALL transmit typed name-only skill selections and the complete canonical user text including every invocation at its original position; for ReAct, the server SHALL validate and load the selected skill before the first model call from its snapshot rather than client instructions. Deep SHALL preserve canonical user text and pass eligible names through native pinned_skills before inference, without Fred preload or snapshot body validation; native filesystem reads SHALL load further references. A named invocation SHALL remain valid without arguments, even if the skill requires information to finish. Argument hints SHALL be optional descriptive text, never submission requirements. A bare `/skill` SHALL offer selection guidance without launching an empty agent turn. An unknown, invalid or unavailable explicit ReAct or Deep selection SHALL fail clearly before any model call, with no fallback to another skill or a prompt command.
 
 #### Scenario: Explicit load precedes inference
 
@@ -177,10 +177,10 @@ Managed web chat SHALL accept `/<name> [request]` at the invocation position and
 #### Scenario: Explicit Deep selection follows native loading
 
 - **WHEN** an authorized user submits `/meeting-minutes prepare the minutes from these notes` to Deep
-- **THEN** the first inference receives the canonical user message and upstream skill metadata, without a Fred-loaded instruction message or user-origin load event
+- **THEN** the first inference receives canonical user text, eligible upstream metadata and the instructions loaded by native pinned_skills, with one user-origin event per successful pin
 - **AND** the model can read `/skills/meeting-minutes/SKILL.md` and its references with native `read_file`, with actual reads retaining user-origin events/KPI for the selected name and agent origin otherwise
 - **AND** invoke, streaming, checkpoint follow-up and HITL resume use the same native behavior
-- **AND** platform guidance identifies a matching slash command as the user's request to apply the procedure and directs instruction and required reference reads before drafting or using task tools, without adding a preload or forced tool call
+- **AND** platform guidance identifies a matching slash command as the user's request to apply the procedure and directs instruction and required reference reads before drafting or using task tools, without a Fred preload or an extra model/tool call
 - **AND** the current name-only selections appear as a user-request reminder in the existing per-turn system context, without paths, skill bodies or another catalog; fresh turns without selections remove it and same-exchange resumes retain it
 
 #### Scenario: Discover skills directly from the slash menu
@@ -196,7 +196,7 @@ Managed web chat SHALL accept `/<name> [request]` at the invocation position and
 #### Scenario: Named invocation without arguments
 
 - **WHEN** a user submits `/meeting-minutes` without meeting notes in context
-- **THEN** the turn starts; ReAct preloads instructions before inference, while Deep uses native metadata and model-driven instruction reads
+- **THEN** the turn starts; ReAct preloads instructions before inference, while Deep pins the selected instructions natively
 - **AND** the agent is guided to ask for notes rather than invent meeting content
 - **AND** a supplied `argument-hint` does not prevent submission
 
@@ -238,10 +238,10 @@ Managed web chat SHALL accept `/<name> [request]` at the invocation position and
 #### Scenario: Skill badge in the composer and user message
 
 - **WHEN** a user completes a known `/<name>` selection or types a whitespace-delimited known name
-- **THEN** the composer shows an icon/name token inline with the editable request, as a small filled container with the complete name visible after its leading slash and no separate row or removal button, allowing submission without extra text
+- **THEN** the composer shows an icon/name token inline with the editable request, as a small filled container with the complete display title visible, its canonical name retained for execution/copy, and no separate row or removal button, allowing submission without extra text
 - **AND** the token is edited as one block: it cannot be entered with the keyboard, and removing it removes the whole invocation while preserving surrounding text; deleting surrounding request text does not remove the skill
 - **AND** persisted name-only selection metadata lets the sent user bubble display the same skill badge alongside its request, including after reopening history without the current catalog
-- **AND** Deep selection metadata preserves the badge/preview without a preload event, instruction injection or load count; native agent-origin reads do not select ordinary user mentions
+- **AND** Deep selection metadata preserves the badge/preview independently of actual native pin/read events; selection alone and ordinary user mentions do not count as loads
 - **AND** automatic agent/child loads and ordinary messages merely mentioning `/skill` do not label the user turn as explicitly selected
 - **AND** copying a selected user turn includes the skill invocation and request
 
@@ -254,7 +254,7 @@ Managed web chat SHALL accept `/<name> [request]` at the invocation position and
 
 #### Scenario: Stale menu or forged selection
 
-- **WHEN** a submitted ReAct name is unavailable in the serving pod's validated snapshot
+- **WHEN** a submitted ReAct or Deep name is unavailable in the serving pod's validated snapshot
 - **THEN** the runtime reports an explicit selection error and does not call the model
 
 #### Scenario: Keyboard and agent switching
@@ -265,14 +265,14 @@ Managed web chat SHALL accept `/<name> [request]` at the invocation position and
 
 ### Requirement: Explicit skill selections compose within one turn
 
-Managed web chat SHALL retain and render all explicit platform skill invocations in the same draft, including after another selection. Submission SHALL carry all distinct selected names in first-occurrence order, preserving canonical request text and every invocation occurrence. ReAct SHALL validate all selections and load their instructions before first inference through its existing loading boundary. Deep SHALL preserve native upstream loading without Fred preload; actual reads matching any current selection SHALL use user origin. Legacy single-selection requests and history SHALL remain supported. Duplicate invocation occurrences SHALL NOT cause duplicate explicit preloads.
+Managed web chat SHALL retain and render all explicit platform skill invocations in the same draft, including after another selection. Submission SHALL carry all distinct selected names in first-occurrence order, preserving canonical request text and every invocation occurrence. ReAct SHALL validate all selections and load their instructions before first inference through its existing loading boundary. Deep SHALL validate all selected names and load their instructions using native pinned_skills before inference, without Fred preload; actual reads matching any current selection SHALL retain user origin. Legacy single-selection requests and history SHALL remain supported. Duplicate invocation occurrences SHALL NOT cause duplicate explicit preloads or native pins.
 
 #### Scenario: Select two platform skills
 
 - **WHEN** a user completes `/meeting-minutes`, then `/verify-answer`, and submits the request
 - **THEN** both inline selections and surrounding text remain intact
 - **AND** both distinct names reach the same execution turn
-- **AND** ReAct receives both procedures before inference; Deep receives the canonical user text and uses native reads
+- **AND** ReAct receives both procedures before inference; Deep receives canonical user text and both native pins before inference
 
 #### Scenario: Independent editing and duplicate occurrences
 
@@ -283,7 +283,7 @@ Managed web chat SHALL retain and render all explicit platform skill invocations
 
 #### Scenario: All-or-error ReAct validation
 
-- **GIVEN** one selected ReAct skill is unavailable in the serving snapshot
+- **GIVEN** one selected ReAct or Deep skill is unavailable in the serving snapshot
 - **WHEN** the request is submitted
 - **THEN** it fails clearly before any model call without silently running only the remaining skills
 
@@ -291,7 +291,7 @@ Managed web chat SHALL retain and render all explicit platform skill invocations
 
 - **WHEN** a multi-skill turn is optimistically rendered, reopened, copied, edited, restarted or resumed through HITL
 - **THEN** all explicitly selected names remain represented independently of actual load events
-- **AND** same-exchange resume does not duplicate ReAct preload and preserves matching native user-origin attribution
+- **AND** same-exchange resume does not duplicate ReAct preload or native pinning and preserves matching native user-origin attribution
 - **AND** a fresh follow-up does not inherit those selections
 
 #### Scenario: Combine an inline prompt with platform skills in either order
@@ -353,7 +353,7 @@ The runtime SHALL retain loaded instructions and reference outputs in the conver
 
 ### Requirement: Skill loads have truthful compact attribution
 
-Web chat SHALL show a compact load step for actual loads containing the skill name and whether it was preloaded for ReAct by the user or read by an agent. Deep selection alone SHALL NOT emit a load step or user-origin attribution; its canonical invocation text and name-only selection metadata SHALL remain in history, independently of loading. Runtime history SHALL preserve this attribution without requiring the current skill file to exist. Each actual load SHALL be represented once, including Deep-child loads; human-requested preloading SHALL NOT be represented as a model-issued tool call that never happened. Full instruction inspection in the web UI SHALL NOT be required.
+Web chat SHALL show a compact load step for actual loads containing the skill name and whether it was user-required or autonomously read by an agent. Deep selection alone SHALL NOT emit a load step or user-origin attribution; a successful native pin SHALL emit one user-origin load, without a fictional model tool call; its canonical invocation text and name-only selection metadata SHALL remain in history, independently of loading. Runtime history SHALL preserve this attribution without requiring the current skill file to exist. Each actual load SHALL be represented once, including Deep-child loads; human-requested preloading SHALL NOT be represented as a model-issued tool call that never happened. Full instruction inspection in the web UI SHALL NOT be required.
 
 #### Scenario: Explicit and automatic loads are distinguishable
 
@@ -481,7 +481,7 @@ Managed web chat SHALL localize the platform skill reference-reading tool label 
 
 ### Requirement: Successful skill loads have origin-aware usage KPIs
 
-The platform SHALL emit one skill-usage counter per actual successful skill load, with the validated skill name, trusted user-or-model origin and existing bound team/session/exchange/managed-instance attribution when available. Explicit user preloads SHALL have user origin; automatic agent and Deep-child loads SHALL have model origin. Failed loads, preview reads, reference-file reads, history/status replay and resumes without a new load SHALL NOT increment this counter. An actual subsequent successful reload SHALL count again; continuing to use instructions already retained in context SHALL NOT imply a newly observed invocation. KPI events SHALL NOT contain skill bodies, reference text or user requests. Collection SHALL use the existing fail-open KPI mechanism and SHALL NOT add direct blocking storage calls to loading.
+The platform SHALL emit one skill-usage counter per actual successful skill load, with the validated skill name, trusted user-or-model origin and existing bound team/session/exchange/managed-instance attribution when available. User-required loads, including native Deep pins and matching selected native reads, SHALL have user origin; autonomous agent and Deep-child loads SHALL have model origin. Failed loads, preview reads, reference-file reads, history/status replay and resumes without a new load SHALL NOT increment this counter. An actual subsequent successful reload SHALL count again; continuing to use instructions already retained in context SHALL NOT imply a newly observed invocation. KPI events SHALL NOT contain skill bodies, reference text or user requests. Collection SHALL use the existing fail-open KPI mechanism and SHALL NOT add direct blocking storage calls to loading.
 
 #### Scenario: User, model and child choices remain distinguishable
 
@@ -1188,3 +1188,79 @@ Sending a message with one or several prompt commands SHALL NOT change a prompt'
 - **GIVEN** two prompts with known use counters
 - **WHEN** the user sends a message that runs both through their commands
 - **THEN** neither counter changes
+
+### Requirement: Skill invocation controls distinguish user and agent requests
+
+Skills SHALL accept boolean user-invocable (default true) and disable-model-invocation (default false) frontmatter controls. Invalid values SHALL exclude the affected skill with bounded diagnostics. User-ineligible skills SHALL be unavailable for direct user selections but remain eligible for autonomous use unless disabled for model invocation. Explicit-only skills SHALL load only for a current eligible selection. These controls SHALL apply to catalogs, loaders, references, native file searches and children without granting permissions or erasing already-loaded context.
+
+#### Scenario: Agent-only skill
+- **WHEN** a skill has user-invocable false and model invocation enabled
+- **THEN** it is absent from user commands and direct selections are rejected
+- **AND** agents can discover and load it with truthful attribution
+
+#### Scenario: Explicit-only and unavailable skills
+- **WHEN** an explicit-only skill is selected by a user
+- **THEN** it loads for that request but is unavailable for new autonomous loads on later turns
+- **AND** disabling both invocation routes leaves neither route eligible
+
+### Requirement: Deep native pins preserve truthful load visibility
+
+Explicit Deep selections SHALL be deduplicated in request order and passed as pinned_skills. Successful native instruction loads SHALL emit user-origin activity and usage exactly once per actual load. Unknown, ineligible and globally disabled names SHALL be rejected. Failed native pins SHALL not be reported as successes. Resume and replay SHALL not reload selections. Parent selections SHALL not blindly pin every child.
+
+#### Scenario: Multiple selected skills and resume
+- **WHEN** a Deep turn selects two skills and subsequently resumes a human approval
+- **THEN** both load natively before inference in selection order
+- **AND** the resume does not repeat their loads or usage counts
+
+### Requirement: Packaged skill presentation follows the interface language
+
+The frontend SHALL display French or English titles and descriptions for packaged skills using i18n, with English or authored fallback. Runtime catalog and load provenance SHALL distinguish packaged skills from custom homonyms. Canonical names, commands, copied text, stored selection identity, English model metadata, bodies and argument hints SHALL remain unchanged.
+
+#### Scenario: Localized invocation and historical activity
+- **WHEN** the interface language changes between French and English
+- **THEN** menus, composer/history badges, detail metadata, load activity and administration use the corresponding title and description
+- **AND** commands and selection payloads retain their canonical names
+
+#### Scenario: Custom homonym or missing translation
+- **WHEN** a custom source uses a packaged name or reliable packaged provenance is absent
+- **THEN** the frontend retains authored metadata rather than applying an unrelated translation
+
+### Requirement: Feature managers administer packaged skills globally
+
+Administration SHALL provide a global Skills tab under Features with packaged inventory, invocation modes, source availability and one enabled control per skill. Only feature-management permission SHALL allow administration. No exception SHALL mean enabled, including newly shipped skills. Shared persistent overrides SHALL have audit identity/time and atomic idempotent updates. Custom directories SHALL retain their existing behavior.
+
+#### Scenario: Global opt-out across replicas
+- **WHEN** an authorized manager disables a packaged skill
+- **THEN** new loads from the next turn, including existing conversations and resumes on another replica, are denied in discovery, selections, pins, native reads/searches, loaders, children and capability access
+- **AND** in-flight work and already-read history are preserved
+
+#### Scenario: Concurrent independent updates
+- **WHEN** two managers change different skills through separate instances
+- **THEN** both changes remain persisted and affect the next server-resolved execution policy
+
+#### Scenario: Mixed or unavailable runtime sources
+- **WHEN** a source is unreachable or cannot enforce enablement
+- **THEN** administration reports its status and does not claim effective global disablement
+- **AND** legacy runtimes cannot resolve managed execution while active restrictions require unsupported enforcement
+
+### Requirement: Common skills include an explicit interview and grounded data workflows
+
+The packaged catalog SHALL include an explicit-only grill-me procedure adapted for general users, a user-facing analyze-data procedure and an agent-only data-visualization procedure. Instructions SHALL be English and UI titles/descriptions SHALL have French/English presentation. New skills SHALL be enabled by default and respect current invocation and administrative policy. They SHALL use available tools without installing dependencies, inventing values or duplicating capability-specific access rules.
+
+#### Scenario: Explicit interview
+- **WHEN** the user invokes grill-me
+- **THEN** the agent asks adaptive decision questions and investigates accessible facts
+- **AND** its method works without an executable Skill tool or mandatory repository/subagent access
+
+#### Scenario: Evidence and missing tools
+- **WHEN** a user asks for analysis with incomplete data or unavailable computation
+- **THEN** the procedure makes limits explicit and uses supported tools and representations
+- **AND** it never claims fabricated computations
+
+### Requirement: Distributed imported skills preserve licensing and provenance
+
+Imported material SHALL record its exact upstream revision and retain required license and copyright notices in distributed packages. Restricted resources SHALL not be copied without rights.
+
+#### Scenario: Packaged interview license
+- **WHEN** the runtime distribution includes the adapted Matt Pocock interview
+- **THEN** the MIT notice and upstream revision accompany the procedure

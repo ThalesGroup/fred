@@ -488,14 +488,12 @@ Convergence rule for future work:
 The optional `runtime_context.skills: list[SkillInvocation]` carries name-only
 selections, deduplicated in request order. Legacy `skill` remains accepted; sending
 both non-null forms is rejected, as are extra fields such as client instruction
-bodies. ReAct admission validates every selected name before inference. All
-procedures enter ordinary checkpoint messages through the common tool boundary;
-resume does not repeat the preload.
-Deep preserves canonical user invocation text and delegates loading to native
-DeepAgents discovery and filesystem reads. It does not validate selected bodies
-against the snapshot, preload instructions, or count a selection as a load.
-Successful native parent/child instruction reads use user origin when their name
-matches any current selection, and agent origin otherwise.
+bodies. ReAct and Deep admission validate selected names and invocation eligibility
+before inference. ReAct preloads through the common loader; Deep passes names in
+native `pinned_skills`. DeepAgents reads bodies into checkpointed messages and
+clears pins. Successful pins use user origin; native reads, including child reads,
+use user origin for a current typed selection and agent origin otherwise. Resume
+preserves selection intent but does not repeat preloading or pinning.
 Selections persist in `metadata.extras.skill_invocations`; readers retain legacy
 `skill_invocation` compatibility. Same-exchange resumes restore the collection;
 fresh turns do not inherit selection intent. Graph agents and deployments with
@@ -564,6 +562,10 @@ Managed execution invariant:
 caller, team-use authorization and managed-instance resolution as execution.
 It returns `SkillCatalog`: `supported`, a snapshot `revision` and skill
 `name`, `description`, optional nullable `argument_hint` (1–256 characters).
+`metadata_version=1` opts into `builtin`, `user_invocable`,
+`disable_model_invocation` and catalog `policy_supported`. Default version 0
+preserves the earlier JSON shape for strict older control planes. Both versions
+omit agent-only and globally disabled packaged skills from user discovery and previews.
 The hint comes from `argument-hint` frontmatter; non-string, blank or oversized
 hints are ignored with bounded diagnostics. It is advisory, never mandatory-input
 validation or argument substitution. No bodies, filesystem paths or cross-source
@@ -638,9 +640,9 @@ Runtime events emitted during agent execution (both native SSE and OpenAI compat
 
 `StatusRuntimeEvent.skill_load` optionally carries `SkillLoadAttribution`:
 `name`, `origin` (`user` or `agent`), `revision`, `load_id`, `agent_id`, `child`
-and optional `child_id`. ReAct preloads use user origin. Native Deep instruction
-reads matching the current typed selection use user origin; other model-selected
-skills use agent origin. Native child loads use a namespace-derived opaque child identity.
+and optional `child_id`, plus trusted `builtin` provenance. ReAct preloads and
+successful native Deep pins use user origin; model-directed native reads retain
+selection-aware origin. Native child loads use a namespace-derived opaque child identity.
 The event projects to `system/system_note` history with the same typed object in
 `metadata.extras.skill_load`. The UI renders a compact step and deduplicates by
 exchange/load identity; successful load bodies are not exposed in a trace inspector.
@@ -767,9 +769,18 @@ contracts.
 
 ### Platform skill resources and continuity
 
-Optional pod `skills.directory` enables platform skills. `package` resolves
+Absent pod `skills` or `skills: {}` enables packaged skills. `skills: null`
+explicitly disables them. `skills.directory: package` resolves
 `fred_runtime/skills` from the installed package; other paths resolve against
-the configuration file parent. Absence disables the feature.
+the configuration file parent. Helm preserves absent, null and custom values.
+
+Standard frontmatter `user-invocable` defaults to true and
+`disable-model-invocation` defaults to false. Non-boolean values exclude only
+the malformed skill. Agent-only skills cannot be selected by typed user input;
+explicit-only skills are available for new model loads only when selected for
+this request. Global policy applies to packaged provenance, never a custom
+directory with matching names. Metadata, reads, references and native searches
+use the same immutable per-execution view. Already-read context is retained.
 
 ReAct and the web catalog, ReAct explicit preload and instruction previews retain
 the validated, bounded startup snapshot. ReAct uses
@@ -782,14 +793,16 @@ catalog and its bodies by restarting pods.
 
 Deep parents and explicit native children use
 `create_deep_agent(skills=["/skills/"])` and the child's `skills` field. Fred does
-not construct skills middleware or generate a second native catalog prompt.
+not construct a second SkillsMiddleware or generate a second native catalog prompt.
 The existing composite backend routes `/skills/` to upstream
 `FilesystemBackend(root_dir=directory, virtual_mode=True)`, preserving
 scratchpad, `/.deep/`, artifacts and quotas. This native backend is constructed
-once during offloaded bootstrap and reused by request composites. Discovery, metadata validation,
-per-conversation metadata caching, reference reads, listing/search and pagination
-belong to DeepAgents. Native reads see the physical files, including edits made
-before restart; they are not filtered or rebased through Fred's snapshot. Native
+once during offloaded bootstrap and reused by request composites. Upstream startup
+discovery and metadata validation feed Fred's bounded catalog. A policy middleware
+refreshes native metadata on each turn/resume, preventing checkpoint metadata from
+restoring disabled entries. Body/reference reads and pagination belong to DeepAgents.
+Native reads see physical files, including edits made before restart; metadata and
+ordered filesystem permissions restrict them to the current eligible names. Native
 skills should use matching directory/frontmatter names and a trusted resource
 folder. The packaged directory is the normal source; custom configured folders
 remain supported. Disabled activation adds no route; an enabled empty folder is
@@ -801,8 +814,8 @@ production skill files/volumes must remain read-only. The upstream filesystem
 backend is not wrapped or subclassed. Virtual paths confine reads to the mounted
 root, and script execution stays unavailable. Route collisions fail activation.
 Deep registers neither Fred loading tool. Only ReAct uses explicit preload.
-Deep selections remain canonical user text without snapshot body validation or
-Fred skill-body injection. A name-only reminder of the current selected procedures
+Deep selections remain canonical user text alongside native `pinned_skills`,
+without Fred skill-body injection. A name-only reminder of the current selected procedures
 appears in the existing per-turn system context, without duplicating the catalog.
 Native successful
 reads retain the existing attribution/KPI and stored reference previews; reserved
@@ -818,16 +831,16 @@ requests to apply catalog procedures and direct instruction/reference reads
 before drafting or calling task tools. Catalog-loaded procedures and runtime
 ReAct preloads remain subordinate to platform rules; arbitrary content cannot
 claim this procedural exception through a skill name, path or tag. This guidance
-does not inject skill bodies or force native model calls.
+uses native pins for explicit Deep selections without an extra model call.
 
 Successful shared skill loads emit `agent.skill_loaded_total` once per actual
 read of the procedure, with `skill_name`, trusted `skill_origin` (`user` or
 `agent`) and bound team/session/exchange/user/instance dimensions (2026-10-07).
 Successful native `read_file` windows starting at normalized offset zero on a
-mounted `SKILL.md` emit a load through the existing tool boundary, attributed to
-the user for the current selected name and to the agent for other skills;
+mounted `SKILL.md` emit a selection-aware load through the existing tool boundary;
 zero-length windows and failed reads do not. Further pages and reference reads
-do not count. Native child reads use the same selection-aware origin rule.
+do not count. Native pins emit user-origin loads only after the native message
+exists, with a checkpoint marker preventing duplicate attribution on resume.
 Reusing context, replaying history/status,
 resuming HITL, reading references and opening previews do not emit this counter;
 a new actual reload does. Existing best-effort queued KPI handling remains in
@@ -6793,6 +6806,9 @@ Acceptance: `openspec/specs/platform-agent-skills/spec.md`, native directory loa
 
 ### 8.108 Native Deep skills without Fred preload (2026-10-09)
 
+Historical behavior, superseded by native pinning in the current "Platform skill
+resources and continuity" contract above.
+
 Deep invoke and streaming now pass canonical user messages directly to the
 compiled agent even when a typed skill selection is supplied. Admission no longer
 reads a selected Deep skill from the startup snapshot. Upstream `skills=`
@@ -6803,6 +6819,9 @@ messages already stored in a conversation are not deleted by this change.
 
 
 ### 8.109 User-requested native Deep skill attribution (2026-10-09)
+
+Extended by user-origin native pins in the current contract above; native
+filesystem reads retain this selection-aware origin rule.
 
 A successful native parent/child SKILL.md read uses user origin when its mounted
 skill name matches the current typed user selection, and agent origin otherwise.
