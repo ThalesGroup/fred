@@ -1142,6 +1142,9 @@ class ManagedAgentRuntimeBinding(BaseModel):
     # above, so adding this list costs one extra cheap store read, not a new
     # round trip.
     reasoning_enabled_model_ids: list[str] = Field(default_factory=list)
+    # Fresh shared packaged-skill opt-outs. Only server resolution can supply
+    # this restriction set; browsers never choose execution policy.
+    disabled_platform_skills: list[str] = Field(default_factory=list)
     # Model capability ids the team disabled, resolved on this same per-turn
     # call: the pod ignores a user choice or recommendation naming one.
     team_disabled_model_ids: list[str] = Field(default_factory=list)

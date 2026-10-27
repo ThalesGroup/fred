@@ -3486,6 +3486,9 @@ def _build_erasure_deps(
         get_platform_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_creation_assistant_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_ui_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_platform_skill_policy_store=lambda: SimpleNamespace(  # type: ignore[arg-type,return-value]
+            list_disabled_skill_names=AsyncMock(return_value=set())
+        ),
         get_announcement_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_model_reasoning_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_model_display_name_override_store=lambda: None,  # type: ignore[arg-type,return-value]
