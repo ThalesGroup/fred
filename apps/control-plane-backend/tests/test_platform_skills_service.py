@@ -272,10 +272,19 @@ async def test_administrator_disables_then_recovers_stored_skill_during_outage(
         assert enabled.enabled is True
         assert len(requests) == before
         assert (await get_platform_skill_policy(deps)).disabled_skill_names == []
+        retried = await set_platform_skill_enabled(
+            user=_user(), name="mermaid", enabled=True, deps=deps
+        )
+        assert retried.enabled is True
+        assert len(requests) == before
     assert audits == [
         (
             "platform.skill.activation_updated",
             {"actor_uid": "manager", "skill_name": "mermaid", "enabled": False},
+        ),
+        (
+            "platform.skill.activation_updated",
+            {"actor_uid": "manager", "skill_name": "mermaid", "enabled": True},
         ),
         (
             "platform.skill.activation_updated",

@@ -34,6 +34,17 @@ class PlatformSkillPolicyStore:
             )
             return set(names)
 
+    async def get_enabled(
+        self, name: str, *, session: AsyncSession | None = None
+    ) -> bool | None:
+        """Read one stored state by primary key; None distinguishes an unknown name."""
+        async with use_session(self._sessions, session) as s:
+            return await s.scalar(
+                select(PlatformSkillPolicyRow.enabled).where(
+                    PlatformSkillPolicyRow.skill_name == name
+                )
+            )
+
     async def set_enabled(
         self,
         *,

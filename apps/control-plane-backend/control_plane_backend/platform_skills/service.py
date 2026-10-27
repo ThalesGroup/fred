@@ -133,8 +133,10 @@ async def set_platform_skill_enabled(
     except ValidationError:
         raise HTTPException(status_code=422, detail="Invalid skill name") from None
     store = deps.get_platform_skill_policy_store()
-    disabled = await store.list_disabled_skill_names()
-    if not (enabled and name in disabled):
+    # An already enabled row is known too: retrying a lost recovery response
+    # must keep succeeding even when every runtime source is unavailable.
+    known_recovery = enabled and await store.get_enabled(name) is not None
+    if not known_recovery:
         inventory = await _get_inventory(deps, authorization)
         if not enabled:
             if inventory.unsupported_runtime_ids:
