@@ -8,6 +8,7 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
   "fred-core>=5.0.0,<6",
+  "fred-capability-document-access>=5.0.0,<6",
   "fred-sdk[agents]>=5.0.0,<6",
   "alembic>=1.18.4",
   "deepagents>=0.7.19",
@@ -102,6 +103,7 @@ exclude_lines = [
 ]
 
 [tool.uv.sources]
+fred-capability-document-access = { path = "../capabilities/fred-capability-document-access", editable = true }
 fred-pod = { path = "../fred-pod", editable = true }
 # Local path overrides for mono-repo development only.
 # These are ignored when the package is built and published — the published

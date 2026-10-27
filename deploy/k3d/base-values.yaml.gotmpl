@@ -2,7 +2,14 @@
 Helm deep-merges maps: changing type alone would keep incompatible MinIO fields.
 The control-plane configuration is owned by values.yaml.gotmpl, not the factory. */ -}}
 {{- $base := readFile (printf "%s/k3d-apps/fred/values.yaml" (requiredEnv "K3D_FACTORY_ROOT")) | fromYaml -}}
-{{- $_ := unset (index $base.applications "fred-agents") "models_catalog" -}}
+{{- $agents := index $base.applications "fred-agents" -}}
+{{- $_ := unset $agents "models_catalog" -}}
+{{- /* Keep every inherited dependency; replace only the OpenSearch credential. */ -}}
+{{- range $agents.extraEnvVars -}}
+  {{- if eq .name "OPENSEARCH_PASSWORD" -}}
+    {{- $_ := set . "valueFrom" (dict "secretKeyRef" (dict "name" "fred-ingestion" "key" "agents-opensearch-password")) -}}
+  {{- end -}}
+{{- end -}}
 {{- $worker := index $base.applications "knowledge-flow-worker" -}}
 {{- $_ := unset $worker.configuration "content_storage" -}}
 {{- $_ := unset $worker.configuration "filesystem" -}}

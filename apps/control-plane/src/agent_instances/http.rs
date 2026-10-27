@@ -6,7 +6,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Context;
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{
+    Json,
+    extract::State,
+    http::{HeaderMap, StatusCode, header},
+};
 use chrono::{DateTime, Utc};
 use futures::{StreamExt, TryStreamExt};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -234,6 +238,7 @@ async fn create_agent_instance(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiPath(space_id): ApiPath<Uuid>,
+    headers: HeaderMap,
     ApiJson(mut body): ApiJson<CreateAgentInstanceRequest>,
 ) -> AppResult<(StatusCode, Json<ManagedAgentInstanceSummary>)> {
     let space = spaces::authorize(&s.pool, &s.fga, &user.uid, space_id, Permission::Write).await?;
@@ -242,10 +247,17 @@ async fn create_agent_instance(
         return Err(AppError::NotFound);
     }
     tuning::validate_request(&mut body)?;
-    // Discovery and field validation never retain a SQL connection or transaction.
+    // Discovery and pod validation never retain a SQL connection or transaction.
     let (template, default_tuning) =
         agents::enrollable_template(&s.agent_catalog, space.organization, body.template_id).await?;
-    let tuning = tuning::enroll(default_tuning, &template, &body)?;
+    let tuning = tuning::enroll(
+        &s.agent_catalog,
+        headers.get(header::AUTHORIZATION),
+        default_tuning,
+        &template,
+        &body,
+    )
+    .await?;
     let instance = NewAgentInstance {
         agent_instance_id: Uuid::new_v4(),
         space_id,

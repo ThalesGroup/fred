@@ -98,9 +98,9 @@ function sectionOfField(field: ManagedAgentFieldSpec): SectionKey {
   return g === "prompts" ? "prompts" : "general";
 }
 
-/** Keep declared defaults intact; the server explains unsupported dependencies. */
+/** Selectable capabilities require explicit activation; fixed dependencies stay visible. */
 export function defaultCapabilitySelection(template: AgentTemplateSummary | undefined): string[] {
-  return template?.default_capability_ids ?? [];
+  return template?.supports_capabilities ? [] : (template?.default_capability_ids ?? []);
 }
 
 /** Tuning values a NEW instance of `template` starts with, in the UI language. */

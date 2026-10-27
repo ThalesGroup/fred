@@ -44,6 +44,7 @@ from typing import Any, Protocol, TypedDict, cast
 from urllib.parse import quote
 
 import httpx
+from fred_capability_document_access.search import CorpusSearch
 from fred_core.common import OwnerFilter
 from fred_core.common.fastapi_handlers import (
     ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
@@ -130,6 +131,7 @@ from fred_runtime.common.outbound_credentials import (
 )
 from fred_runtime.common.structures import AgentSettingsLike
 from fred_runtime.common.table_hits import repair_table_hits
+from fred_runtime.model_routing.turn import current_turn
 from fred_runtime.react.react_tracing import RUNTIME_TOOL_SPAN_NAME
 from fred_runtime.runtime_context import get_runtime_context
 from fred_runtime.runtime_support import (
@@ -1389,46 +1391,19 @@ def _ensure_uid_in_turn_scope(
 
 
 class DocumentSearchAdapter(DocumentSearchPort):
-    """
-    Runtime adapter behind `RuntimeServices.document_search` (CAPAB-01 #1906).
-
-    Mirrors `FredKnowledgeSearchToolInvoker`: it captures the per-turn binding
-    PRIVATELY (through `_VectorSearchAgentShim` + `VectorSearchClient`, which own
-    the access token and its refresh) and exposes ONLY the capability-safe
-    `search(...)` surface. The raw token and the binding NEVER cross into
-    `CapabilityContext` — the capability reaches this port through
-    `ctx.services.document_search` and passes scope PARAMETERS, never identity.
-
-    Scope enforcement (session-binding seam): the caller-supplied
-    `library_tag_ids` / `document_uids` are the capability's already-narrowed
-    scope (`turn_option ⊆ capability_config`); this adapter intersects them with
-    the session binding's own scope so the effective set is
-    `⊆ session_binding` — completing `turn_option ⊆ capability_config ⊆
-    session_binding`. General-only mode short-circuits to no hits, matching the
-    builtin `knowledge.search` path.
-    """
+    """Bind corpus access to the canonical authority and local lifetime of this turn."""
 
     def __init__(
         self,
         *,
         binding: BoundRuntimeContext,
-        settings: AgentSettingsLike,
-        credentials: OutboundCredentialProvider | None = None,
+        corpus: CorpusSearch | None,
     ) -> None:
-        self._credentials = credentials
-        self._settings = settings
-        self.rebind(binding)
+        self._binding = binding
+        self._corpus = corpus
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
-        # Hold the binding privately; the shim owns token access + refresh.
         self._binding = binding
-        self._search_client = VectorSearchClient(
-            agent=_VectorSearchAgentShim(
-                binding=binding,
-                settings=self._settings,
-                credentials=self._credentials,
-            )
-        )
 
     async def search(
         self,
@@ -1441,57 +1416,49 @@ class DocumentSearchAdapter(DocumentSearchPort):
         include_attachments: bool = True,
         include_team_documents: bool = True,
     ) -> DocumentSearchResult:
-        runtime_context = self._binding.runtime_context
-        if get_rag_knowledge_scope(runtime_context) == "general_only":
+        authority = current_turn()
+        context = self._binding.runtime_context
+        authority.check_context(context, authority.binding.agent.template_key)
+        if get_rag_knowledge_scope(context) == "general_only":
             return DocumentSearchResult(hits=())
-        # The agent's sources are ceilings: the per-turn scope only narrows them.
-        turn_session, turn_corpus = get_vector_search_scopes(runtime_context)
-        include_session_scope = turn_session and include_attachments
-        include_corpus_scope = turn_corpus and include_team_documents
-        if not (include_session_scope or include_corpus_scope):
+        _, turn_corpus = get_vector_search_scopes(context)
+        if not (turn_corpus and include_team_documents):
             return DocumentSearchResult(hits=())
-
-        top_k = top_k if isinstance(top_k, int) and top_k > 0 else 8
-
-        # Session-binding seam: bound the capability's params by the session's
-        # own scope so the effective set stays `⊆ session_binding`.
-        effective_libs = _narrow_port_scope_ids(
-            get_document_library_tags_ids(runtime_context), library_tag_ids
-        )
-        effective_uids = _narrow_port_scope_ids(
-            get_document_uids(runtime_context), document_uids
-        )
-        if _matches_nothing(effective_libs, effective_uids):
+        if include_attachments:
+            raise DocumentScopeRefusedError(
+                "Corpus search does not support attachments"
+            )
+        # Swift tag/document selections cannot be silently interpreted as all corpus.
+        if (
+            library_tag_ids
+            or document_uids
+            or get_document_library_tags_ids(context)
+            or get_document_uids(context)
+        ):
+            raise DocumentScopeRefusedError(
+                "Library and document selections are not supported by Weaver corpus search"
+            )
+        if _matches_nothing(library_tag_ids, document_uids):
             return DocumentSearchResult(hits=())
-        policy = search_policy or get_search_policy(runtime_context)
-
-        team_id = self._settings.team_id
-        scoped_team = bool(team_id) and not is_personal_team_id(team_id)
-
+        if self._corpus is None:
+            raise DocumentPortCallError("Weaver corpus search is not configured")
         try:
-            hits = await self._search_client.search(
-                question=query,
-                top_k=top_k,
-                document_library_tags_ids=effective_libs,
-                document_uids=effective_uids,
-                search_policy=policy,
-                owner_filter=OwnerFilter.TEAM if scoped_team else OwnerFilter.PERSONAL,
-                team_id=team_id if scoped_team else None,
-                session_id=runtime_context.session_id,
-                include_session_scope=include_session_scope,
-                include_corpus_scope=include_corpus_scope,
+            result = await self._corpus.search(
+                query,
+                space_id=authority.binding.space.id,
+                top_k=top_k if isinstance(top_k, int) and top_k > 0 else 8,
+                policy=search_policy or get_search_policy(context),
+                check_active=authority.check,
             )
         except Exception as exc:
-            # Same SDK-typed mapping the tree/summarize adapters already apply:
-            # without it a raw httpx error reaches the capability, which reads
-            # `status_code`/`timed_out` off the exception to build its message —
-            # so a 401 degraded to "the service call failed" instead of naming
-            # the status. The capability never imports the HTTP stack itself.
-            raise _wrap_document_port_error(exc) from exc
-        hits = await repair_table_hits(
-            list(hits), self._search_client.get_document_chunks
-        )
-        return DocumentSearchResult(hits=tuple(hits))
+            run_stop = unwrap_run_stop_error(exc)
+            if run_stop is not None:
+                raise run_stop from None
+            raise DocumentPortCallError(
+                "Weaver corpus search failed", timed_out=isinstance(exc, TimeoutError)
+            ) from exc
+        authority.check()
+        return result
 
 
 class DocumentSimilarityAdapter(DocumentSimilarityPort):

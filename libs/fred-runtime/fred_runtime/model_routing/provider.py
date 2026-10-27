@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from fred_core.common import ModelConfiguration
 from fred_core.model.factory import get_embeddings, get_model
@@ -18,13 +18,15 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
-from fred_runtime.app.config import InferenceCredentialBinding
 from fred_runtime.support.reasoning_replay import with_mistral_reasoning_replay
 
 from .contracts import ModelCapability, ModelRoutingError, ModelSelection
 from .guard import checked_clients, guarded_model
 from .resolver import ModelRoutingResolver
 from .turn import current_turn
+
+if TYPE_CHECKING:
+    from fred_runtime.app.config import InferenceCredentialBinding
 
 logger = logging.getLogger(__name__)
 

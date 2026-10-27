@@ -3,16 +3,16 @@
 
 //! Swift enrollment and partial edits over the complete saved tuning snapshot.
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::OnceLock, time::Duration};
 
 use anyhow::Context;
-use axum::http::StatusCode;
+use axum::http::{HeaderValue, StatusCode, header};
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::{
-    agents::AgentTemplateSummary,
+    agents::{AgentTemplateSummary, PlatformConfig},
     error::{AppError, AppResult},
 };
 
@@ -88,7 +88,9 @@ fn validate_metadata(
     Ok(())
 }
 
-pub(super) fn enroll(
+pub(super) async fn enroll(
+    platform: &PlatformConfig,
+    authorization: Option<&HeaderValue>,
     mut tuning: Value,
     template: &AgentTemplateSummary,
     body: &CreateAgentInstanceRequest,
@@ -101,17 +103,43 @@ pub(super) fn enroll(
     } else {
         &template.default_capability_ids
     };
-    if !selected.is_empty()
-        || body
-            .capability_ids
-            .as_ref()
-            .is_some_and(|ids| !ids.is_empty())
+    if !template.supports_capabilities
+        && (!selected.is_empty()
+            || body
+                .capability_ids
+                .as_ref()
+                .is_some_and(|ids| !ids.is_empty()))
     {
         return Err(AppError::problem(
             StatusCode::UNPROCESSABLE_ENTITY,
             "agent_capabilities_not_connected",
-            "Active capabilities are not connected for agent instance creation yet.",
+            "Fixed-template capabilities are not connected for agent instance creation yet.",
         ));
+    }
+    for (index, id) in selected.iter().enumerate() {
+        if selected[..index].contains(id) {
+            return Err(AppError::Unprocessable(
+                "Duplicate capability selection.".into(),
+            ));
+        }
+        if !template
+            .available_capabilities
+            .iter()
+            .any(|entry| entry.get("id").and_then(Value::as_str) == Some(id.as_str()))
+        {
+            return Err(AppError::problem(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "agent_capability_unavailable",
+                "Selected capability is unknown or unavailable for this template.",
+            ));
+        }
+        if id != "document_access" {
+            return Err(AppError::problem(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "agent_capabilities_not_connected",
+                "Only document_access is connected for agent instance creation.",
+            ));
+        }
     }
     if body.recommended_chat_profile_id.is_some() {
         return Err(AppError::problem(
@@ -150,9 +178,110 @@ pub(super) fn enroll(
         object.insert("values".into(), json!(validate_values(fields, values)?));
     }
     // Swift materializes the effective selection and discards unselected config.
-    object.insert("selected_capability_ids".into(), json!([]));
-    object.insert("capability_config".into(), json!({}));
+    let mut capability_config = serde_json::Map::new();
+    if !selected.is_empty() {
+        let config = body
+            .capability_config_values
+            .as_ref()
+            .and_then(|values| values.get("document_access"))
+            .map_or_else(|| json!({}), |values| json!(values));
+        let stored = validate_document_access(platform, template, authorization, &config).await?;
+        capability_config.insert("document_access".into(), stored);
+    }
+    object.insert("selected_capability_ids".into(), json!(selected));
+    object.insert("capability_config".into(), Value::Object(capability_config));
     Ok(tuning)
+}
+
+async fn validate_document_access(
+    platform: &PlatformConfig,
+    template: &AgentTemplateSummary,
+    authorization: Option<&HeaderValue>,
+    config: &Value,
+) -> AppResult<Value> {
+    let unavailable = || AppError::Unavailable("Pod capability validation unavailable.".into());
+    let source = platform
+        .runtime_catalog_sources
+        .iter()
+        .find(|source| source.enabled && source.runtime_id == template.source_runtime_id)
+        .ok_or_else(unavailable)?;
+    static CLIENT: OnceLock<Result<reqwest::Client, reqwest::Error>> = OnceLock::new();
+    let client = CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .timeout(Duration::from_secs(10))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+        })
+        .as_ref()
+        .map_err(|_| unavailable())?;
+    // No assets or team_id alias: document_access validation only normalizes config.
+    let mut request = client
+        .post(format!(
+            "{}/agents/capabilities/document_access/validate-config",
+            source.base_url.trim_end_matches('/')
+        ))
+        .form(&[("config", config.to_string())]);
+    if let Some(authorization) = authorization {
+        let mut authorization = authorization.clone();
+        authorization.set_sensitive(true);
+        request = request.header(header::AUTHORIZATION, authorization);
+    }
+    let mut response = request.send().await.map_err(|_| unavailable())?;
+    match response.status() {
+        StatusCode::OK => {}
+        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => return Err(AppError::Forbidden),
+        StatusCode::NOT_FOUND => {
+            return Err(AppError::problem(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "agent_capability_unavailable",
+                "document_access is unavailable on the template's pod.",
+            ));
+        }
+        StatusCode::UNPROCESSABLE_ENTITY => {
+            return Err(AppError::problem(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "agent_capability_config_invalid",
+                "The pod rejected the document_access configuration.",
+            ));
+        }
+        _ => return Err(unavailable()),
+    }
+    // Bound the response and validate only the envelope; Python owns its config schema.
+    const MAX_BYTES: usize = 2 * 1024 * 1024;
+    if response
+        .content_length()
+        .is_some_and(|size| size > MAX_BYTES as u64)
+    {
+        return Err(unavailable());
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|_| unavailable())? {
+        if bytes.len() + chunk.len() > MAX_BYTES {
+            return Err(unavailable());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    let stored: Value = serde_json::from_slice(&bytes).map_err(|_| unavailable())?;
+    if !stored
+        .get("schema_version")
+        .and_then(Value::as_str)
+        .is_some_and(|v| !v.is_empty())
+        || !stored.get("config").is_some_and(Value::is_object)
+    {
+        return Err(unavailable());
+    }
+    let config = &stored["config"];
+    if config.get("attachments").and_then(Value::as_bool) != Some(false)
+        || config.get("team_documents").and_then(Value::as_bool) != Some(true)
+    {
+        return Err(AppError::problem(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "document_access_corpus_only",
+            "document_access creation requires team_documents=true and attachments=false.",
+        ));
+    }
+    Ok(stored)
 }
 
 pub(super) fn apply_update(

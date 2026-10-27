@@ -189,6 +189,7 @@ def execute_request(**overrides) -> RuntimeExecuteRequest:
             RuntimeContext(
                 user_id="alice",
                 team_id="team-1",
+                space_id=SPACE_ID,
                 access_token=PERSON_TOKEN,
                 refresh_token="person-refresh-token",
             ),
@@ -615,7 +616,9 @@ async def test_a_service_identity_runs_on_its_own_bearer_under_delegation(
     runtime = install_delegation()
     container = Container()
     request = execute_request(
-        runtime_context=RuntimeContext(team_id="team-1", access_token=EVALUATOR_TOKEN)
+        runtime_context=RuntimeContext(
+            team_id="team-1", space_id=SPACE_ID, access_token=EVALUATOR_TOKEN
+        )
     )
 
     class _Adapter:
@@ -776,7 +779,8 @@ def unattended_request() -> RuntimeExecuteRequest:
     """What a calling workload sends: a target and a team, and nothing of the
     person's — no session to continue and no credential to spend."""
     return execute_request(
-        session_id=None, runtime_context=RuntimeContext(team_id="team-1")
+        session_id=None,
+        runtime_context=RuntimeContext(team_id="team-1", space_id=SPACE_ID),
     )
 
 
@@ -1962,7 +1966,10 @@ def test_missing_canonical_space_is_refused_before_permission_resolution(
     )
 
     assert response.status_code == 422
-    assert "space_id" in response.json()["detail"]
+    errors = response.json()["detail"]
+    assert len(errors) == 1
+    assert errors[0]["type"] == "value_error"
+    assert "runtime_context.space_id is required" in errors[0]["msg"]
     engine.check_user_team_permission_or_raise.assert_not_awaited()
     assert not [r for r in records if getattr(r, "audit_event", None) == "rebac_denied"]
     assert not [e for e in pod_view if e["audit_event"] == "rebac_denied"]

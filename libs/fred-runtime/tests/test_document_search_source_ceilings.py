@@ -1,152 +1,163 @@
 # Copyright Thales 2026
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""The agent's document sources bound the per-turn RAG scope, never widen it."""
+# SPDX-License-Identifier: Apache-2.0
+"""Corpus access uses canonical turn authority and refuses unsupported sources."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from typing import Any, cast
 
-import fred_runtime.integrations.v2_runtime.adapters as adapters_module
 import pytest
-from fred_core.store.vector_search import VectorSearchHit
+from fred_capability_document_access.search import CorpusSearch
+from fred_runtime.integrations.v2_runtime.adapters import DocumentSearchAdapter
+from fred_runtime.model_routing.turn import TurnAuthority
+from fred_runtime.runtime_support.authority import AuthorityLostError
+from fred_runtime.runtime_support.run_scope import RunScope
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
 )
-from fred_sdk.contracts.models import AgentTuning, MCPServerRef, RagScopeName
+from fred_sdk.contracts.runtime import (
+    DocumentPortCallError,
+    DocumentScopeRefusedError,
+    DocumentSearchResult,
+)
+from weaver_fixtures import resolved_binding
 
 
-class _FakeSettings:
-    id: str = "agent-1"
-    team_id: str | None = "team-1"
-    tuning: AgentTuning | None = None
-    active_mcp_servers: Sequence[MCPServerRef] = ()
-
-
-class _FakeClient:
-    def __init__(self, *, agent: Any) -> None:
+class _Corpus:
+    def __init__(self, error: Exception | None = None) -> None:
         self.calls: list[dict[str, Any]] = []
+        self.error = error
 
-    async def search(self, **kwargs: Any) -> list[VectorSearchHit]:
+    async def search(self, query: str, **kwargs: Any) -> DocumentSearchResult:
         self.calls.append(kwargs)
-        return []
-
-    async def get_document_chunks(self, *args: Any, **kwargs: Any) -> list[Any]:
-        return []
+        kwargs["check_active"]()
+        if self.error:
+            raise self.error
+        return DocumentSearchResult()
 
 
 def _adapter(
-    monkeypatch: pytest.MonkeyPatch, rag_scope: str
-) -> tuple[adapters_module.DocumentSearchAdapter, list[_FakeClient]]:
-    clients: list[_FakeClient] = []
-
-    def _factory(*, agent: Any) -> _FakeClient:
-        client = _FakeClient(agent=agent)
-        clients.append(client)
-        return client
-
-    monkeypatch.setattr(adapters_module, "VectorSearchClient", _factory)
-    binding = BoundRuntimeContext(
-        runtime_context=RuntimeContext(
-            session_id="s-1",
-            team_id="team-1",
-            search_rag_scope=cast(RagScopeName, rag_scope),
-        ),
+    corpus: _Corpus | None, **fields: Any
+) -> tuple[DocumentSearchAdapter, TurnAuthority]:
+    binding = resolved_binding()
+    authority = TurnAuthority(binding, None)
+    context = RuntimeContext(
+        user_id=binding.subject_id,
+        session_id=binding.conversation_id,
+        space_id=str(binding.space.id),
+        agent_instance_id=str(binding.agent.instance_id),
+        **fields,
+    )
+    bound = BoundRuntimeContext(
+        runtime_context=context,
         portable_context=PortableContext(
-            request_id="request-1",
-            correlation_id="correlation-1",
-            actor="u-1",
-            tenant="team-1",
+            request_id="request",
+            correlation_id="correlation",
+            actor=binding.subject_id,
+            tenant=str(binding.space.id),
             environment=PortableEnvironment.DEV,
         ),
     )
-    adapter = adapters_module.DocumentSearchAdapter(
-        binding=binding,
-        settings=_FakeSettings(),  # type: ignore[arg-type]
-    )
-    return adapter, clients
-
-
-# (rag_scope, include_attachments, include_team_documents) -> flags sent, or
-# None when Knowledge Flow must not be called at all.
-CASES = [
-    ("hybrid", True, True, (True, True)),
-    ("hybrid", True, False, (True, False)),
-    ("hybrid", False, True, (False, True)),
-    ("corpus_only", True, True, (True, True)),
-    ("corpus_only", False, True, (False, True)),
-    ("corpus_only", True, False, (True, False)),
-    ("general_only", True, True, None),
-    ("general_only", True, False, None),
-    ("general_only", False, True, None),
-    ("hybrid", False, False, None),
-    ("corpus_only", False, False, None),
-    ("general_only", False, False, None),
-]
+    return DocumentSearchAdapter(
+        binding=bound, corpus=cast(CorpusSearch | None, corpus)
+    ), authority
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("rag_scope,attachments,team_documents,expected", CASES)
+@pytest.mark.parametrize("rag_scope", ["hybrid", "corpus_only", "general_only"])
+@pytest.mark.parametrize("corpus_enabled", [True, False])
 async def test_sources_bound_the_turn_scope(
-    monkeypatch: pytest.MonkeyPatch,
-    rag_scope: str,
-    attachments: bool,
-    team_documents: bool,
-    expected: tuple[bool, bool] | None,
+    rag_scope: str, corpus_enabled: bool
 ) -> None:
-    adapter, clients = _adapter(monkeypatch, rag_scope)
-
-    result = await adapter.search(
-        "q",
-        include_attachments=attachments,
-        include_team_documents=team_documents,
-    )
-
-    calls = clients[0].calls
-    if expected is None:
-        assert result.hits == ()
-        assert calls == []
-        return
-    assert (calls[0]["include_session_scope"], calls[0]["include_corpus_scope"]) == (
-        expected
-    )
+    corpus = _Corpus()
+    adapter, authority = _adapter(corpus, search_rag_scope=rag_scope)
+    with RunScope.open() as scope:
+        scope.turn_authority = authority
+        authority.start(scope)
+        result = await adapter.search(
+            "q", include_attachments=False, include_team_documents=corpus_enabled
+        )
+    assert result.hits == ()
+    if rag_scope == "general_only" or not corpus_enabled:
+        assert corpus.calls == []
+    else:
+        assert corpus.calls[0]["space_id"] == authority.binding.space.id
 
 
 @pytest.mark.asyncio
-async def test_removed_attachments_only_keyword_is_rejected(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    adapter, clients = _adapter(monkeypatch, "hybrid")
-    legacy_kwargs: dict[str, Any] = {"attachments_only": True}
-    with pytest.raises(TypeError, match="attachments_only"):
-        await adapter.search("q", **legacy_kwargs)
-    assert clients[0].calls == []
-
-
-@pytest.mark.parametrize("scope", ["corpus_only", "hybrid"])
-@pytest.mark.parametrize(
-    "session,corpus", [(True, False), (False, True), (False, False)]
-)
-def test_explicit_turn_scope_still_narrows_document_sources(
-    scope: str, session: bool, corpus: bool
-) -> None:
-    context = RuntimeContext(
-        search_rag_scope=cast(RagScopeName, scope),
-        include_session_scope=session,
-        include_corpus_scope=corpus,
+async def test_general_only_overrides_explicit_corpus_scope() -> None:
+    corpus = _Corpus()
+    adapter, authority = _adapter(
+        corpus, search_rag_scope="general_only", include_corpus_scope=True
     )
-    assert adapters_module.get_vector_search_scopes(context) == (session, corpus)
+    with RunScope.open() as scope:
+        scope.turn_authority = authority
+        authority.start(scope)
+        result = await adapter.search(
+            "q", include_team_documents=True, include_attachments=False
+        )
+    assert result.hits == ()
+    assert corpus.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "restriction",
+    [
+        {"include_attachments": True},
+        {"library_tag_ids": ["library"]},
+        {"document_uids": ["document"]},
+    ],
+)
+async def test_unsupported_scope_is_refused(restriction: dict[str, Any]) -> None:
+    corpus = _Corpus()
+    adapter, authority = _adapter(corpus)
+    with RunScope.open() as scope:
+        scope.turn_authority = authority
+        authority.start(scope)
+        with pytest.raises(DocumentScopeRefusedError):
+            await adapter.search("q", **{"include_attachments": False, **restriction})
+    assert corpus.calls == []
+
+
+@pytest.mark.asyncio
+async def test_empty_scope_does_not_read_corpus() -> None:
+    corpus = _Corpus()
+    adapter, authority = _adapter(corpus)
+    with RunScope.open() as scope:
+        scope.turn_authority = authority
+        authority.start(scope)
+        assert (
+            await adapter.search("q", include_attachments=False, document_uids=[])
+        ).hits == ()
+    assert corpus.calls == []
+
+
+@pytest.mark.asyncio
+async def test_closed_or_missing_turn_cannot_read_corpus() -> None:
+    corpus = _Corpus()
+    adapter, authority = _adapter(corpus)
+    with pytest.raises(AuthorityLostError):
+        await adapter.search("q", include_attachments=False)
+    with RunScope.open() as scope:
+        scope.turn_authority = authority
+        authority.start(scope)
+        authority.close()
+        with pytest.raises(AuthorityLostError):
+            await adapter.search("q", include_attachments=False)
+    assert corpus.calls == []
+
+
+@pytest.mark.asyncio
+async def test_failure_is_not_an_empty_result() -> None:
+    adapter, authority = _adapter(_Corpus(TimeoutError("private transport details")))
+    with RunScope.open() as scope:
+        scope.turn_authority = authority
+        authority.start(scope)
+        with pytest.raises(DocumentPortCallError) as exc:
+            await adapter.search("q", include_attachments=False)
+    assert exc.value.timed_out
+    assert "private transport" not in str(exc.value)

@@ -24,8 +24,8 @@ Why this module exists:
 What this capability ships (and deliberately does NOT):
 - `search_documents_using_vectorization`, the vector-search tool, wired live
   through `ctx.services.document_search`
-- `list_document_tree`: wired live through `ctx.services.document_tree`,
-  backed by Knowledge Flow's document tree endpoint. Failures surface as
+- `list_document_tree`: exposed only when `ctx.services.document_tree` exists.
+  Weaver corpus search does not supply that port. Failures surface as
   `is_error` tool results with actionable detail (timeout/HTTP status), never
   raised exceptions.
 - NOT `summarize_document` — that tool is its own capability,
@@ -36,7 +36,7 @@ What this capability ships (and deliberately does NOT):
 - still deferred: the tree's trailing "Session attachments" section — a
   pod-reachable session-attachment enumeration does not exist yet
   (attachments are only a *search* scope today). The tree tool therefore lists
-  the corpus only, and is registered only while `team_documents` is on.
+  the corpus only, and requires both `team_documents` and a tree port.
 
 Identifier hygiene (hard rule): document uids and tag ids are internal working
 identifiers for the agent's own tool calls (scope filters, cross-capability
@@ -144,6 +144,7 @@ def _document_tool_failure(
     exc: Exception,
     elapsed_s: float,
     document_uid: str | None = None,
+    service: str = _KF_SERVICE,
 ) -> tuple[str, ToolInvocationResult]:
     """Turn any document tool-call failure into a non-empty, actionable error
     message plus an ``is_error=True`` artifact.
@@ -191,11 +192,11 @@ def _document_tool_failure(
     structured = timed_out or status_code is not None
 
     if timed_out:
-        cause = f"the {_KF_SERVICE} service timed out after {elapsed_s:.0f}s"
+        cause = f"the {service} service timed out after {elapsed_s:.0f}s"
     elif status_code is not None:
-        cause = f"the {_KF_SERVICE} service returned HTTP {status_code}"
+        cause = f"the {service} service returned HTTP {status_code}"
     else:
-        cause = f"the {_KF_SERVICE} service call failed after {elapsed_s:.0f}s"
+        cause = f"the {service} service call failed after {elapsed_s:.0f}s"
 
     target = f" (document_uid={document_uid})" if document_uid else ""
     if structured:
@@ -669,6 +670,7 @@ class DocumentAccessCapability(
                 return _document_tool_failure(
                     tool_ref=DOCUMENT_ACCESS_TOOL_REF,
                     action="search documents",
+                    service="document corpus",
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
                 )
@@ -772,6 +774,6 @@ class DocumentAccessCapability(
         tools: list[BaseTool] = [search_documents_using_vectorization]
         # The tree lists the corpus only (no session-attachment enumeration yet,
         # see module docstring), so it is dropped rather than registered-but-empty.
-        if config.team_documents:
+        if config.team_documents and services.document_tree is not None:
             tools.append(list_document_tree)
         return tools

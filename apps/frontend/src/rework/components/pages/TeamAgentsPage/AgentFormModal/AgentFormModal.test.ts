@@ -1,7 +1,11 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
-import { buildAgentFormSubmitPayload, defaultCapabilitySelection } from "./AgentFormModal";
+import {
+  buildAgentFormSubmitPayload,
+  defaultCapabilitySelection,
+  extractCapabilityConfigValues,
+} from "./AgentFormModal";
 import { createAgentRequest, updateAgentRequest, resolveAgentSpace } from "../weaverAgents";
 import { INSTANCE, SPACES, TEMPLATE } from "../weaverAgentFixtures";
 
@@ -40,12 +44,17 @@ describe("Weaver form fidelity", () => {
     const payload = buildAgentFormSubmitPayload({ ...form(), tuningValues: {} }, TEMPLATE);
     expect(updateAgentRequest(payload, INSTANCE)).toEqual({ tuning_field_values: {} });
   });
-  it("does not drop defaults absent from the catalog to make creation succeed", () => {
-    expect(defaultCapabilitySelection({ ...TEMPLATE, default_capability_ids: ["unconnected"] })).toEqual([
-      "unconnected",
-    ]);
+  it("starts selectable templates empty and retains fixed dependencies", () => {
+    expect(defaultCapabilitySelection({ ...TEMPLATE, default_capability_ids: ["unconnected"] })).toEqual([]);
+    expect(
+      defaultCapabilitySelection({
+        ...TEMPLATE,
+        supports_capabilities: false,
+        default_capability_ids: ["unconnected"],
+      }),
+    ).toEqual(["unconnected"]);
   });
-  it("retains selection, configuration and profile even if the catalog no longer advertises them", () => {
+  it("retains selection and configuration even if the catalog no longer advertises them", () => {
     const payload = buildAgentFormSubmitPayload(
       { ...form(), selectedCapabilityIds: ["unknown"], capabilityConfigValues: { unknown: { retained: true } } },
       TEMPLATE,
@@ -53,8 +62,30 @@ describe("Weaver form fidelity", () => {
     expect(createAgentRequest(payload)).toMatchObject({
       capability_ids: ["unknown"],
       capability_config_values: { unknown: { retained: true } },
-      recommended_chat_profile_id: "saved-profile",
     });
+  });
+  it("reads saved corpus values and omits capabilities from a metadata edit", () => {
+    const config = { team_documents: true, attachments: false, document_uids: [], bind_libraries: false };
+    const saved = {
+      ...INSTANCE,
+      selected_capability_ids: ["document_access"],
+      capability_config: {
+        document_access: { schema_version: "0.2.0", config },
+      },
+    };
+    const values = extractCapabilityConfigValues(saved.capability_config);
+    expect(values.document_access).toEqual(config);
+    const payload = buildAgentFormSubmitPayload(
+      {
+        ...form(),
+        displayName: "Renamed",
+        selectedCapabilityIds: saved.selected_capability_ids,
+        capabilityConfigValues: values,
+      },
+      TEMPLATE,
+    );
+    expect(updateAgentRequest(payload, saved)).toEqual({ display_name: "Renamed" });
+    expect(saved.capability_config.document_access.config).toEqual(config);
   });
   it("does not resolve organization or project spaces, unknown ids, or personal-shaped legacy ids", () => {
     for (const kind of ["organization", "project"] as const)

@@ -20,8 +20,7 @@ Covers the runtime half of the pilot:
   and the double-registration boot invariant;
 - the computed `document_scope` chat control;
 - scoping precedence `turn_option ⊆ capability_config ⊆ session_binding`, split
-  across the two seams and proven end-to-end through the REAL
-  `DocumentSearchAdapter`;
+  across the capability and adapter seams;
 - the port/adapter privacy contract (token + binding stay private, scope params
   only);
 - "multiple tools from one capability" via assembly (a fake capability — no
@@ -36,7 +35,6 @@ from importlib.metadata import EntryPoint
 from types import SimpleNamespace
 from typing import Any
 
-import httpx
 import pytest
 from fred_capability_document_access import (
     DOCUMENT_ACCESS_TOOL_REF,
@@ -138,18 +136,6 @@ class _FakePort(DocumentSearchPort):
         if self._error is not None:
             raise self._error
         return DocumentSearchResult(hits=self._hits)
-
-
-class _FakeVectorSearchClient:
-    """Stand-in for `VectorSearchClient`, capturing the private shim + call."""
-
-    def __init__(self, *, agent: Any) -> None:
-        self.agent = agent
-        self.calls: list[dict[str, Any]] = []
-
-    async def search(self, **kwargs: Any) -> list[VectorSearchHit]:
-        self.calls.append(kwargs)
-        return [_hit("d1")]
 
 
 def _settings(team_id: str | None = None) -> Any:
@@ -589,132 +575,45 @@ async def test_min_source_score_ratio_is_configurable_per_instance() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Scope precedence — full chain through the REAL adapter
-# (turn_option ⊆ capability_config ⊆ session_binding)
+# Capability scope narrowing and local-search failure contract
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_search_adapter_wraps_httpx_error_with_status_code(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The search adapter must stamp `status_code`, like tree/summarize do.
-
-    The capability builds its user-facing message from `status_code`/`timed_out`
-    on the exception and never imports httpx. Unwrapped, the expired-token 401
-    of #2073 Item 3 degraded to "the service call failed" with no status named.
-    """
-
-    def _factory(*, agent: Any) -> Any:
-        class _Failing:
-            async def search(self, **kwargs: Any) -> list[VectorSearchHit]:
-                request = httpx.Request("POST", "http://kf/vector/search")
-                raise httpx.HTTPStatusError(
-                    "401 Unauthorized",
-                    request=request,
-                    response=httpx.Response(401, request=request),
-                )
-
-        return _Failing()
-
-    monkeypatch.setattr(adapters_module, "VectorSearchClient", _factory)
-    adapter = DocumentSearchAdapter(binding=_binding(), settings=_settings())
-
-    with pytest.raises(DocumentPortCallError) as exc_info:
-        await adapter.search("q")
-
-    assert exc_info.value.status_code == 401
-
-    # …and the capability turns that into a message naming the status.
+async def test_search_failure_is_an_error_artifact() -> None:
+    port = _FakePort(error=DocumentPortCallError("Weaver corpus search failed"))
     cap = DocumentAccessCapability()
     ctx = build_capability_context(
         cap,
         identity=_identity(),
-        services=_full_services(search=adapter),
-        config={},
+        services=RuntimeServices(document_search=port),
+        config={"attachments": False},
     )
-    message = await _invoke_named_tool(
-        cap, ctx, "search_documents_using_vectorization", {"question": "q"}
-    )
+    message = await _invoke_tool(cap, ctx)
     assert message.artifact.is_error is True
-    assert "HTTP 401" in message.content
+    assert "document corpus" in message.content
+    assert message.artifact.sources == ()
 
 
 @pytest.mark.asyncio
-async def test_scoping_precedence_end_to_end(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: dict[str, _FakeVectorSearchClient] = {}
-
-    def _factory(*, agent: Any) -> _FakeVectorSearchClient:
-        client = _FakeVectorSearchClient(agent=agent)
-        captured["client"] = client
-        return client
-
-    monkeypatch.setattr(adapters_module, "VectorSearchClient", _factory)
-
-    binding = _binding(
-        session_id="s-1",
-        access_token="secret-token",  # nosec B106 - test fixture
-        selected_document_libraries_ids=["A", "B", "C"],
-        selected_document_uids=["u1", "u2"],
-        search_rag_scope="hybrid",
-    )
-    adapter = DocumentSearchAdapter(binding=binding, settings=_settings())
-
+async def test_capability_narrows_scope_before_calling_the_port() -> None:
+    port = _FakePort()
     cap = DocumentAccessCapability()
     ctx = build_capability_context(
         cap,
         identity=_identity(),
-        services=RuntimeServices(document_search=adapter),
+        services=RuntimeServices(document_search=port),
         config={
+            "attachments": False,
+            "bind_libraries": True,
             "library_tag_ids": ["A", "B", "X"],
-            "document_uids": ["u1", "u2", "u3"],
+            "document_uids": ["u1", "u2"],
         },
         turn_options={"library_tag_ids": ["A", "X"]},
     )
-
     await _invoke_tool(cap, ctx)
-
-    call = captured["client"].calls[0]
-    # libraries: turn∩config = [A,X]; then ∩session[A,B,C] = [A].
-    assert call["document_library_tags_ids"] == ["A"]
-    # documents: turn omits → config[u1,u2,u3]; then ∩session[u1,u2] = [u1,u2].
-    assert call["document_uids"] == ["u1", "u2"]
-
-
-@pytest.mark.asyncio
-async def test_team_documents_off_pins_search_to_the_session_scope(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Team documents off: the adapter searches the session scope only
-    (attached files), never the corpus, and no scope picker is offered."""
-
-    captured: dict[str, Any] = {}
-
-    def _factory(*, agent: Any) -> _FakeVectorSearchClient:
-        client = _FakeVectorSearchClient(agent=agent)
-        captured["client"] = client
-        return client
-
-    monkeypatch.setattr(adapters_module, "VectorSearchClient", _factory)
-    binding = _binding(session_id="s-1", search_rag_scope="hybrid")
-    adapter = DocumentSearchAdapter(binding=binding, settings=_settings())
-
-    cap = DocumentAccessCapability()
-    ctx = build_capability_context(
-        cap,
-        identity=_identity(),
-        services=RuntimeServices(document_search=adapter),
-        config={"team_documents": False},
-    )
-    await _invoke_tool(cap, ctx)
-
-    call = captured["client"].calls[0]
-    assert call["include_session_scope"] is True
-    assert call["include_corpus_scope"] is False
-
-    widgets = _widgets(cap.chat_controls(DocumentAccessConfig(team_documents=False)))
-    assert "document_scope" not in widgets
-    assert "attach_files" in widgets
+    assert port.calls[0]["library_tag_ids"] == ["A", "X"]
+    assert port.calls[0]["document_uids"] == ["u1", "u2"]
 
 
 @pytest.mark.asyncio
@@ -785,47 +684,20 @@ def test_rag_scope_offers_document_only_with_attachments(default: str) -> None:
     assert params["default"] == default
 
 
-@pytest.mark.asyncio
-async def test_general_only_scope_short_circuits(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[Any] = []
-
-    def _factory(*, agent: Any) -> _FakeVectorSearchClient:
-        client = _FakeVectorSearchClient(agent=agent)
-        calls.append(client)
-        return client
-
-    monkeypatch.setattr(adapters_module, "VectorSearchClient", _factory)
-    binding = _binding(search_rag_scope="general_only")
-    adapter = DocumentSearchAdapter(binding=binding, settings=_settings())
-
-    result = await adapter.search("q", library_tag_ids=["A"])
-    assert result.hits == ()
-    assert calls[0].calls == []  # no backend call in general-only mode
-
-
 # ---------------------------------------------------------------------------
 # Privacy contract — token + binding never reach the capability
 # ---------------------------------------------------------------------------
 
 
-def test_adapter_keeps_binding_and_token_private(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def _factory(*, agent: Any) -> _FakeVectorSearchClient:
-        return _FakeVectorSearchClient(agent=agent)
-
-    monkeypatch.setattr(adapters_module, "VectorSearchClient", _factory)
+def test_adapter_keeps_binding_and_token_private() -> None:
     binding = _binding(access_token="secret-token")  # nosec B106 - test fixture
-    adapter = DocumentSearchAdapter(binding=binding, settings=_settings())
+    adapter = DocumentSearchAdapter(binding=binding, corpus=None)
 
     # No PUBLIC attribute exposes the binding/token/client — all private.
     public = [name for name in vars(adapter) if not name.startswith("_")]
     assert public == []
 
-    # The token reaches Knowledge Flow ONLY through the private shim, never a
-    # port parameter (the shim carries the runtime_context that holds it).
+    # The capability receives neither the private binding nor infrastructure clients.
     services = RuntimeServices(document_search=adapter)
     ctx = build_capability_context(
         DocumentAccessCapability(),
@@ -854,6 +726,17 @@ def _full_services(
         document_search=search or _FakePort(hits=(_hit("d1"),)),
         document_tree=tree or _FakeTreePort(),
     )
+
+
+def test_missing_tree_port_omits_tree_tool() -> None:
+    cap = DocumentAccessCapability()
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=RuntimeServices(document_search=_FakePort()),
+        config={"attachments": False},
+    )
+    assert list(_capability_tools(cap, ctx)) == ["search_documents_using_vectorization"]
 
 
 def test_both_tools_registered_by_default() -> None:
@@ -1058,22 +941,6 @@ async def test_search_authority_loss_escapes_instead_of_becoming_an_artifact(
         await _invoke_named_tool(
             cap, ctx, "search_documents_using_vectorization", {"question": "q"}
         )
-
-
-@pytest.mark.asyncio
-async def test_missing_document_tree_port_fails_loud() -> None:
-    """A missing platform port is a wiring bug, not an empty result."""
-
-    cap = DocumentAccessCapability()
-    ctx = build_capability_context(
-        cap,
-        identity=_identity(),
-        services=RuntimeServices(document_search=_FakePort()),
-        config={},
-    )
-
-    with pytest.raises(RuntimeError, match="document_tree"):
-        await _invoke_named_tool(cap, ctx, "list_document_tree", {})
 
 
 @pytest.mark.asyncio

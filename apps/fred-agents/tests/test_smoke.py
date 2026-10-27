@@ -158,6 +158,7 @@ def _runtime_binding(request: httpx.Request, template_id: str) -> WeaverRuntimeB
                     "organization_id": org,
                     "revision": 1,
                     "permitted": [key],
+                    "reasoning_enabled": [],
                     "default": key,
                     "fallback": None,
                     "created_by": None,

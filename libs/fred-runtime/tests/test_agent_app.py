@@ -89,6 +89,7 @@ from fred_sdk.contracts.runtime import (
 )
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.base import empty_checkpoint
+from pydantic import ValidationError
 from weaver_fixtures import (
     INSTANCE_ID,
     SPACE_ID,
@@ -5303,24 +5304,16 @@ async def test_direct_template_execution_has_no_weaver_authority(
     assert "Direct template" in error.value.detail
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "team", ["fredlab", "personal", "personal:alice", "personal:bob"]
 )
-async def test_a_team_or_personal_alias_cannot_replace_a_canonical_space(
-    minimal_config, team
-):
-    request = RuntimeExecuteRequest(
-        agent_instance_id=INSTANCE_ID,
-        input="hi",
-        runtime_context=RuntimeContext(team_id=team),
-    )
-    with pytest.raises(agent_app_module.HTTPException) as error:
-        await agent_app_module._authorize_execution_or_raise(
-            request, _ALICE, PodApplicationContext(minimal_config)
+def test_a_team_or_personal_alias_cannot_replace_a_canonical_space(team):
+    with pytest.raises(ValidationError, match="runtime_context.space_id is required"):
+        RuntimeExecuteRequest(
+            agent_instance_id=INSTANCE_ID,
+            input="hi",
+            runtime_context=RuntimeContext(team_id=team),
         )
-    assert error.value.status_code == 422
-    assert "space_id" in error.value.detail
 
 
 class _FakeHistoryStore:
@@ -5566,6 +5559,7 @@ async def test_identity_is_stamped_from_jwt_and_body_tokens_neutralized(
             "runtime_context": {
                 "user_id": "attacker",
                 "team_id": "fredlab",
+                "space_id": SPACE_ID,
                 "access_token": "body-token",
                 "refresh_token": "body-refresh",
             },
@@ -5642,7 +5636,11 @@ async def test_authorize_and_resolve_times_pod_authz_and_runtime_binding_phases(
         {
             "input": "hi",
             "agent_instance_id": "inst-1",
-            "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
+            "runtime_context": {
+                "user_id": "alice",
+                "team_id": "fredlab",
+                "space_id": SPACE_ID,
+            },
         }
     )
     container = PodApplicationContext(minimal_config)

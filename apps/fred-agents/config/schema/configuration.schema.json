@@ -420,6 +420,52 @@
       "type": "object",
       "additionalProperties": false
     },
+    "ModelConfiguration": {
+      "properties": {
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Provider of the AI model, e.g., openai, ollama, azure.",
+          "title": "Provider"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Model name, e.g., gpt-4o, llama2.",
+          "title": "Name"
+        },
+        "settings": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
+          "title": "Settings"
+        }
+      },
+      "title": "ModelConfiguration",
+      "type": "object",
+      "additionalProperties": false
+    },
     "OpenFgaRebacConfig": {
       "description": "Configuration for an OpenFGA-backed relationship engine.",
       "properties": {
@@ -585,6 +631,28 @@
     "PodAIConfig": {
       "description": "AI model and knowledge-flow settings for an agent pod.\n\nWhy this section exists separately from AgentAppSettings:\n- pods only need the outbound Knowledge Flow base URL plus runtime HTTP\n  timeout tuning shared by KF and MCP adapters\n- gateway-only concerns such as attachment/session limits should not leak\n  into the pod config contract\n\nExample:\n- `PodAIConfig(knowledge_flow_url=\"http://localhost:8111/knowledge-flow/v1\", timeout=RuntimeTimeouts(connect=20, read=60))`",
       "properties": {
+        "embedding_model": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "document_vector_store": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OpenSearchIndexConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "knowledge_flow_url": {
           "default": "http://localhost:8111/knowledge-flow/v1",
           "title": "Knowledge Flow Url",

@@ -19,10 +19,13 @@ def test_weaver_instance_options_refuse_reasoning_settings() -> None:
         ModelOptions.model_validate({"reasoning_effort": "high"})
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize("capable", [True, False, None])
 @pytest.mark.parametrize("enabled", [True, False])
 @pytest.mark.parametrize("requested", [True, False])
-def test_reasoning_transport_requires_all_three_facts(capable, enabled, requested):
+async def test_reasoning_transport_requires_all_three_facts(
+    capable, enabled, requested
+):
     data = resolved_binding().model_dump(mode="json")
     key = data["models"]["offers"][0]["key"]
     data["models"]["policy"]["reasoning_enabled"] = [key] if enabled else []

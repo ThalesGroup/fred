@@ -36,6 +36,7 @@ from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMes
 from fred_sdk.contracts.runtime import ExecutionConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
+from weaver_fixtures import SPACE_ID
 
 
 class _FakePortable:
@@ -162,7 +163,7 @@ def test_resume_probes_the_graph_thread_then_the_session_thread() -> None:
 
     request = RuntimeExecuteRequest(
         agent_instance_id="instance-123",
-        runtime_context=RuntimeContext(team_id="synthetic-team"),
+        runtime_context=RuntimeContext(team_id="synthetic-team", space_id=SPACE_ID),
         session_id="session-1",
         interrupt_id="interrupt-a",
         resume_payload={"choice_id": "proceed"},

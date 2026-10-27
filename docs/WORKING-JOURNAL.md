@@ -3532,6 +3532,42 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
 
 
 
+
+### F25 : création et relecture de document_access, corpus seul (2026-10-27)
+
+- Départ `426bb9813e684f79a44ed75fa1a494bcd2034dbc`, branche `weaver`, arbre
+  propre. Lot limité à `agent_instances/tuning.rs`, son appelant de création dans
+  `http.rs` et cette entrée. Raccordement au contrat existant, sans nouveau modèle
+  de configuration Rust ni changement des types API ou clients générés.
+- La sélection effective doit être disponible dans le catalogue du template ;
+  inconnue/indisponible, doublon, autre capacité ou template à capacités fixes
+  actives sont refusés explicitement. Sans capacité, [] et {} restent sauvegardés
+  sans nouvel appel pod ; les valeurs des capacités non sélectionnées sont ignorées.
+- Réutilisation de `POST /agents/capabilities/document_access/validate-config`
+  du pod configuré : formulaire `config` JSON sans fichier, bearer de la requête
+  admise, sans identité utilisateur fournie dans le corps ni alias `team_id`.
+  Client partagé, délai de 10 secondes, aucune redirection, réponse bornée à 2 MiB.
+  Python applique `DocumentAccessConfig`, puis `validate_config` et renvoie
+  l'enveloppe `StoredCapabilityConfig`. Rust conserve intégralement cette enveloppe
+  versionnée dans `capability_config.document_access`, avec la sélection dans
+  `selected_capability_ids`. La configuration normalisée doit avoir
+  `team_documents=true` et `attachments=false` ; aucune option n'est forcée.
+- Refus 422 explicites pour capacité/configuration non admise, 403 sur refus
+  d'authentification/autorisation du pod, 503 sur indisponibilité ou réponse
+  inutilisable. Pas de corps d'erreur pod ni de credential dans le diagnostic.
+  Validation hors transaction, puis contrôles existants d'espace, accès template,
+  recommandation modèle, verrou et fence avant écriture conservés. Les GET et la
+  réponse de création projettent déjà les valeurs effectivement sauvegardées.
+- Formatage ciblé : `rustfmt --edition 2024` sur les deux fichiers Rust.
+  `make code-quality` dans `apps/control-plane` réussi (Clippy tous targets sans
+  exécution de tests, `cargo fmt --check`, `tools/model.py --check`) ;
+  `git diff --check` réussi. Aucun test, déploiement, commit ou push exécuté.
+- Création/relecture avec capacité à valider par Dimi sur une instance neuve.
+  Le refus des capacités actives dans execution preparation est conservé ;
+  PATCH, frontend, ports Python de recherche, modèles de chat et sessions inchangés.
+  Ce lot ne rend pas la recherche opérationnelle et ne la valide pas fonctionnellement.
+
+
 ## F26 Fusion Swift et préférences utilisateur
 
 - 2026-10-25 : résolution de `git merge swift` à la demande de Dimi. Le commit

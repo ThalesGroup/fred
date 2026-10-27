@@ -266,7 +266,6 @@ from ..integrations.v2_runtime.adapters import (
     DocumentSearchAdapter,
     DocumentSimilarityAdapter,
     DocumentSummarizeAdapter,
-    DocumentTreeAdapter,
     FredKnowledgeSearchToolInvoker,
     FredMcpToolProvider,
     FredWorkspaceFs,
@@ -942,22 +941,11 @@ def _build_runtime_services(
         credentials=credential_provider,
         bound_library_ids=bound_library_ids,
     )
-    # Capability-safe scoped vector search (CAPAB-01 #1906). Wraps the same
-    # per-turn binding as the builtin invoker but exposes ONLY the parameterized
-    # `DocumentSearchPort.search` surface; the binding/token stay private and
-    # never enter `CapabilityContext`.
     document_search = DocumentSearchAdapter(
         binding=binding,
-        settings=settings,
-        credentials=credential_provider,
+        corpus=runtime_config.document_search,
     )
-    # Companion document-access ports: tree listing + on-demand summarization,
-    # same private-binding doctrine as the search adapter.
-    document_tree = DocumentTreeAdapter(
-        binding=binding,
-        settings=settings,
-        credentials=credential_provider,
-    )
+    # No local tree port is wired yet; document_access omits its tree tool.
     document_summarize = DocumentSummarizeAdapter(
         binding=binding,
         settings=settings,
@@ -1073,7 +1061,7 @@ def _build_runtime_services(
         document_folders=DocumentFolderAdapter(
             binding=binding, settings=settings, credentials=credential_provider
         ),
-        document_tree=document_tree,
+        document_tree=None,
         document_summarize=document_summarize,
         document_markdown=document_markdown,
         document_extraction=document_extraction,
@@ -6258,6 +6246,7 @@ def create_agent_app(
             await container.initialize_filesystem()
             await container.initialize_web_research()
             container.initialize_platform_sql()
+            container.initialize_document_search()
             container.start_metrics_exporter()
             await container.start_kpi_tasks()
             checkpointer = container.get_checkpointer()
@@ -6304,6 +6293,7 @@ def create_agent_app(
                         ),
                         kpi_writer=container.get_kpi_writer(),
                         platform_sql=container.get_platform_sql(),
+                        document_search=container.document_search,
                         web_research_factory=(
                             container.web_research.bind
                             if container.web_research

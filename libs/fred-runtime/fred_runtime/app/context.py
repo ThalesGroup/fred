@@ -24,10 +24,12 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, TypedDict
 
 import httpx
+from fred_capability_document_access.search import CorpusSearch
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_factory import build_kpi_writer
 from fred_core.kpi.kpi_process import emit_process_kpis, emit_sql_pool_kpis
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
+from fred_core.model.http_clients import async_shutdown_shared_clients
 from fred_sdk.contracts.runtime import HistoryStorePort
 from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -129,6 +131,7 @@ class PodApplicationContext:
         self._filesystem: BaseFilesystem | None = None
         self._kpi_writer: BaseKPIWriter | None = None
         self._platform_sql: PlatformSqlAdapter | None = None
+        self.document_search: CorpusSearch | None = None
         self.web_research: WebResearchService | None = None
         self.web_research_activity: WebResearchActivityStore | None = None
         self._control_plane_http_client: httpx.AsyncClient | None = None
@@ -252,6 +255,26 @@ class PodApplicationContext:
                 "[fred-runtime] platform SQL adapter ready (dedicated pool, "
                 "read-only enforced server-side)"
             )
+
+    def initialize_document_search(self) -> None:
+        config = self.configuration
+        embedding = config.ai.embedding_model
+        index = config.ai.document_vector_store
+        if embedding is None and index is None:
+            return
+        if embedding is None or index is None or config.storage.opensearch is None:
+            raise ValueError(
+                "Corpus search requires embedding_model, document_vector_store and storage.opensearch"
+            )
+        if self._sql_engine is None or self._sql_engine.dialect.name != "postgresql":
+            raise ValueError("Corpus search requires the pod's Weaver PostgreSQL pool")
+        self.document_search = CorpusSearch(
+            engine=self._sql_engine,
+            opensearch=config.storage.opensearch,
+            index=index,
+            embedding=embedding,
+            timeout=config.ai.timeout.read,
+        )
 
     async def initialize_web_research(self) -> None:
         from fred_runtime.app.web_research import WebResearchService
@@ -387,6 +410,11 @@ class PodApplicationContext:
         # Each independent resource is attempted even if another close fails.
         try:
             for label, close in (
+                (
+                    "document search",
+                    self.document_search.close if self.document_search else None,
+                ),
+                ("model HTTP clients", async_shutdown_shared_clients),
                 ("SQL engine", self._sql_engine.dispose if self._sql_engine else None),
                 (
                     "platform SQL",

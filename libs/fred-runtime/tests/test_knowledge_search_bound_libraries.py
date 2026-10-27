@@ -17,8 +17,8 @@ Server-side library binding of the builtin `knowledge.search` tool.
 An agent instance bound to libraries (a capability's `document_scope` chat
 control carrying `bound_library_ids`) keeps that scope whatever the client
 sends: the turn's selection may only narrow it, and a selection wholly outside
-it finds nothing rather than searching unfiltered. The document search and tree
-ports apply the same "empty scope finds nothing" rule.
+it finds nothing rather than searching unfiltered. The legacy tree
+port applies the same "empty scope finds nothing" rule.
 """
 
 from __future__ import annotations
@@ -216,7 +216,7 @@ class _RecordingTreeClient:
         (None, []),
     ],
 )
-async def test_document_ports_find_nothing_for_an_empty_scope(
+async def test_legacy_tree_finds_nothing_for_an_empty_scope(
     monkeypatch: pytest.MonkeyPatch,
     session_libraries: list[str] | None,
     capability_libraries: list[str],
@@ -226,19 +226,14 @@ async def test_document_ports_find_nothing_for_an_empty_scope(
     monkeypatch.setattr(adapters_module, "VectorSearchClient", _RecordingSearchClient)
     monkeypatch.setattr(adapters_module, "KfDocumentClient", _RecordingTreeClient)
     binding = _binding(session_libraries)
-    search = adapters_module.DocumentSearchAdapter(
-        binding=binding, settings=_FakeSettings()
-    )
     tree = adapters_module.DocumentTreeAdapter(
         binding=binding, settings=_FakeSettings()
     )
 
-    result = await search.search("alpha", library_tag_ids=capability_libraries)
     listing = await tree.tree(library_tag_ids=capability_libraries)
 
     # An empty filter would reach Knowledge Flow as no filter at all.
     assert _RecordingSearchClient.calls == []
-    assert result.hits == ()
     assert _RecordingTreeClient.calls == []
     assert listing.tree == ""
 
@@ -254,7 +249,7 @@ async def test_document_ports_find_nothing_for_an_empty_scope(
         (["lib-x"], []),
     ],
 )
-async def test_document_ports_keep_picked_documents_for_an_empty_library_scope(
+async def test_legacy_tree_keeps_picked_documents_for_an_empty_library_scope(
     monkeypatch: pytest.MonkeyPatch,
     session_libraries: list[str],
     capability_libraries: list[str],
@@ -264,22 +259,15 @@ async def test_document_ports_keep_picked_documents_for_an_empty_library_scope(
     monkeypatch.setattr(adapters_module, "VectorSearchClient", _RecordingSearchClient)
     monkeypatch.setattr(adapters_module, "KfDocumentClient", _RecordingTreeClient)
     binding = _binding(session_libraries, ["doc-d"])
-    search = adapters_module.DocumentSearchAdapter(
-        binding=binding, settings=_FakeSettings()
-    )
     tree = adapters_module.DocumentTreeAdapter(
         binding=binding, settings=_FakeSettings()
     )
 
-    await search.search("alpha", library_tag_ids=capability_libraries)
     await tree.tree(library_tag_ids=capability_libraries)
 
     # Libraries and documents union in Knowledge Flow: the picked document
     # is still searched and listed, and no library is.
-    assert [
-        (call["document_library_tags_ids"], call["document_uids"])
-        for call in _RecordingSearchClient.calls
-    ] == [([], ["doc-d"])]
+    assert _RecordingSearchClient.calls == []
     assert [
         (call["tag_ids"], call["document_uids"]) for call in _RecordingTreeClient.calls
     ] == [([], ["doc-d"])]

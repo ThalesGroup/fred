@@ -23,7 +23,7 @@ import {
   isPackSelectable,
   type CapabilitySelectionState,
 } from "../toolPackLogic.ts";
-import { TOOL_PACK_SECTIONS, type ToolPack } from "../toolPacks.ts";
+import { TOOL_PACK_SECTIONS, type ToolPack, type ToolPackSection } from "../toolPacks.ts";
 import styles from "./SimpleCapabilitiesView.module.css";
 
 interface SimpleCapabilitiesViewProps {
@@ -38,6 +38,9 @@ interface SimpleCapabilitiesViewProps {
   renderIncludedOptions?: (capability: CapabilityCatalogEntry) => ReactNode;
   selection: CapabilitySelectionState;
   disabled: boolean;
+  /** Journey-specific packs and activation restrictions, separate from catalog availability. */
+  sections?: readonly ToolPackSection[];
+  isPackDisabled?: (pack: ToolPack) => boolean;
   onSelectionChange: (next: CapabilitySelectionState) => void;
   /** Optional per-pack options UI (e.g. the PowerPoint template upload), shown
    *  inside the card while the pack is active. Returns `undefined` for packs
@@ -61,6 +64,8 @@ export function SimpleCapabilitiesView({
   renderIncludedOptions,
   selection,
   disabled,
+  sections = TOOL_PACK_SECTIONS,
+  isPackDisabled,
   onSelectionChange,
   renderPackOptions,
 }: SimpleCapabilitiesViewProps) {
@@ -69,7 +74,7 @@ export function SimpleCapabilitiesView({
 
   return (
     <div className={styles.view}>
-      {TOOL_PACK_SECTIONS.map((section) => {
+      {sections.map((section) => {
         if (section.packs.length > 0 && !supportsCapabilities) return null;
         // A pack the admin has opened nothing for is a dead switch; drop it,
         // and drop a section left with none rather than print a bare heading.
@@ -87,7 +92,7 @@ export function SimpleCapabilitiesView({
                   key={pack.id}
                   pack={pack}
                   checked={derivePackChecked(pack, selection, availableIds)}
-                  disabled={disabled}
+                  disabled={disabled || isPackDisabled?.(pack) === true}
                   availableIds={availableIds}
                   activeIds={activeIds}
                   onToggle={(nextOn) => onSelectionChange(applyPackToggle(pack, nextOn, selection, availableIds))}
