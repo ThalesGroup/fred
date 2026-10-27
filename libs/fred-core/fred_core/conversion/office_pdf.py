@@ -91,13 +91,15 @@ def _export_filter_for(suffix: str) -> str:
 
 
 def _run_soffice(command: list[str], *, timeout: float) -> None:
-    """``subprocess.run(check=True)`` in a session of its own: on a timeout the
-    whole process group is killed (soffice.bin and its helpers), then reaped."""
+    """``subprocess.run(check=True)`` in a process group of its own: on a timeout
+    the whole group is killed (soffice.bin and its helpers), then reaped."""
+    # Its own group but the caller's session: Knowledge Flow's extraction child
+    # sweeps its session on cancellation, and a new session would escape it.
     process = subprocess.Popen(  # nosec: controlled command arguments, shell=False
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        start_new_session=True,
+        process_group=0,
     )
     try:
         _, stderr = process.communicate(timeout=timeout)
@@ -105,7 +107,7 @@ def _run_soffice(command: list[str], *, timeout: float) -> None:
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
-            pass
+            pass  # the whole group already exited, which is the outcome we wanted
         # Not communicate(): a helper that left the group could hold the pipes open.
         process.wait()
         for pipe in (process.stdout, process.stderr):

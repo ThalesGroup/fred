@@ -234,13 +234,24 @@ def test_a_timeout_kills_the_whole_process_group(tmp_path) -> None:
     )
     started = time.monotonic()
     with pytest.raises(subprocess.TimeoutExpired):
-        _run_soffice([sys.executable, "-c", script], timeout=5)
-    assert time.monotonic() - started < 30
+        _run_soffice([sys.executable, "-c", script], timeout=1.5)
+    assert time.monotonic() - started < 10
     grandchild = int(pid_file.read_text())
     deadline = time.monotonic() + 5
     while not _gone(grandchild) and time.monotonic() < deadline:
         time.sleep(0.05)
     assert _gone(grandchild)
+
+
+@pytest.mark.skipif(not hasattr(os, "getsid"), reason="needs POSIX sessions")
+def test_soffice_leads_its_own_group_inside_the_callers_session(tmp_path) -> None:
+    """A new session would escape Knowledge Flow's extraction sweep."""
+    ids_file = tmp_path / "ids"
+    script = f"import os; open({str(ids_file)!r}, 'w').write(f'{{os.getpid()}} {{os.getpgrp()}} {{os.getsid(0)}}')"
+    _run_soffice([sys.executable, "-c", script], timeout=10)
+    pid, pgid, sid = map(int, ids_file.read_text().split())
+    assert pgid == pid
+    assert sid == os.getsid(0)
 
 
 def test_a_failing_command_raises_like_a_checked_run() -> None:

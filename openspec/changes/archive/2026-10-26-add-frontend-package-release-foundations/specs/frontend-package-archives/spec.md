@@ -918,10 +918,10 @@ NOT depend on another job's filesystem or introduce network fallback into valida
 - **THEN** CI selects the frontend-package release-readiness and applicable existing
   archive regression jobs
 
-#### Scenario: First-release workflow input changes
+#### Scenario: Shared release workflow input changes
 
-- **WHEN** a pull request changes the guarded publication workflow, bootstrap helper, release
-  transfer/evidence logic, selected manifest metadata, or its workflow-contract tests
+- **WHEN** a pull request changes a shared release command, the thin publication workflow,
+  selected manifest metadata, or their workflow-contract tests
 - **THEN** CI selects release readiness and the existing archive, consumer, and compatibility
   regressions without exposing a publication credential to those jobs
 
