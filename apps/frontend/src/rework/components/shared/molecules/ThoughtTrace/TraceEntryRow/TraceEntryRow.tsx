@@ -27,6 +27,7 @@ import { useTraceDrawer } from "../traceDrawerContext";
 import { HitlAnswerSummary } from "../../HitlAnswerSummary/HitlAnswerSummary";
 import type { HitlAnswerSummary as Summary } from "@rework/utils/hitlAnswerSummary";
 import styles from "./TraceEntryRow.module.css";
+import { skillPresentation } from "@rework/utils/skillPresentation";
 
 interface TraceEntryRowProps {
   entry: TraceEntry;
@@ -49,12 +50,14 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
   const primary = primaryTextForEntry(entry);
   const secondary = secondaryTextForEntry(entry);
   const skill = entry.kind === "solo" ? skillLoadOf(entry.message) : null;
+  const skillDisplay = skill ? skillPresentation(t, skill) : null;
   if (skill)
     return (
       <button
         type="button"
         className={`${styles.row} ${styles.skillRow}`}
-        aria-label={`${index !== null ? `${index}. ` : ""}${t("chatbot.skills.loaded")}: ${skill.name}`}
+        aria-label={`${index !== null ? `${index}. ` : ""}${t("chatbot.skills.loaded")}: ${skillDisplay.title}`}
+        title={skillDisplay.description || skill.name}
         onClick={() => openTrace(entry)}
       >
         <span className={styles.marker}>
@@ -64,7 +67,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
           </span>
         </span>
         <span className={styles.label}>{t("chatbot.skills.loaded")}</span>
-        <span className={styles.primary}>{skill.name}</span>
+        <span className={styles.primary}>{skillDisplay.title}</span>
         <span className={styles.secondary}>
           {t(
             skill.origin === "user"

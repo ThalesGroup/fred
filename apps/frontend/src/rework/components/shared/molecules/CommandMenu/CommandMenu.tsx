@@ -150,7 +150,11 @@ export const CommandMenu = memo(function CommandMenu({
                 )}
               </span>
               <span className={styles.rowText}>
-                <span className={styles.rowLabel}>/{entry.kind === "skill" ? entry.name : entry.command}</span>
+                <span className={styles.rowLabel}>
+                  {entry.kind === "skill" && entry.name !== entry.command
+                    ? `${entry.name} (/${entry.command})`
+                    : `/${entry.command}`}
+                </span>
                 <em className={styles.rowDescription}>{entry.description?.trim() || entry.name}</em>
               </span>
             </div>

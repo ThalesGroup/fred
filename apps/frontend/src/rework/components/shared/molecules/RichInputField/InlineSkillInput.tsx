@@ -7,6 +7,7 @@ import { Annotation, Compartment, EditorState, StateEffect, StateField, Transact
 import { defaultKeymap, history, historyKeymap, invertedEffects } from "@codemirror/commands";
 import { Decoration, EditorView, keymap, WidgetType } from "@codemirror/view";
 import type { CommandChoice, CommandKeyEvent, CommandTriggerBinding, DraftEdit } from "./RichInputField";
+import { skillPresentation } from "@rework/utils/skillPresentation";
 import badgeStyles from "../SkillBadge/SkillBadge.module.css";
 import iconStyles from "../../atoms/Icon/Icon.module.scss";
 import styles from "./InlineSkillInput.module.css";
@@ -33,6 +34,7 @@ export interface InlineSkillToken {
   to: number;
   name: string;
   description?: string;
+  builtin?: boolean;
   onOpen: (name: string) => void;
 }
 
@@ -41,6 +43,7 @@ class SkillWidget extends WidgetType {
     readonly token: InlineSkillToken,
     readonly hint: string,
     readonly label: string,
+    readonly title: string,
   ) {
     super();
   }
@@ -49,6 +52,7 @@ class SkillWidget extends WidgetType {
       this.token.name === other.token.name &&
       this.hint === other.hint &&
       this.label === other.label &&
+      this.title === other.title &&
       this.token.onOpen === other.token.onOpen
     );
   }
@@ -66,7 +70,7 @@ class SkillWidget extends WidgetType {
     icon.setAttribute("aria-hidden", "true");
     const name = document.createElement("span");
     name.className = badgeStyles.name;
-    name.textContent = `/${this.token.name}`;
+    name.textContent = this.title === this.token.name ? `/${this.token.name}` : this.title;
     button.append(icon, name);
     button.onclick = () => this.token.onOpen(this.token.name);
     return button;
@@ -268,7 +272,7 @@ export function InlineSkillInput(props: Props) {
 
   const choicesKey = JSON.stringify(props.commandTrigger?.choices ?? []);
   const tokenKey = JSON.stringify(
-    props.tokens.map(({ from, to, name, description }) => ({ from, to, name, description })),
+    props.tokens.map(({ from, to, name, description, builtin }) => ({ from, to, name, description, builtin })),
   );
   const callbacksRef = useRef<InlineSkillToken["onOpen"][]>([]);
   if (
@@ -345,8 +349,15 @@ export function InlineSkillInput(props: Props) {
           Decoration.replace({
             widget: new SkillWidget(
               token,
-              [t("chatbot.skills.platformProvided"), token.description?.trim()].filter(Boolean).join("\n"),
-              t("chatbot.skills.open", { name: token.name }),
+              [
+                t("chatbot.skills.platformProvided"),
+                token.builtin ? `/${token.name}` : null,
+                skillPresentation(t, token).description.trim(),
+              ]
+                .filter(Boolean)
+                .join("\n"),
+              t("chatbot.skills.open", { name: skillPresentation(t, token).title }),
+              skillPresentation(t, token).title,
             ),
           }).range(token.from, token.to),
           ...(props.tokens.length === 1 && props.value.trim() === `/${token.name}` && props.placeholder

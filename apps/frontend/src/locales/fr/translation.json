@@ -661,7 +661,45 @@
       "loading": "Chargement du skill…",
       "retry": "Réessayer",
       "description": "Description :",
-      "arguments": "Arguments :"
+      "arguments": "Arguments :",
+      "catalog": {
+        "summarize-document": {
+          "title": "Résumer un document",
+          "description": "Résumer fidèlement des documents en préservant les conditions essentielles, les chiffres et les incertitudes."
+        },
+        "grounded-research": {
+          "title": "Recherche sourcée",
+          "description": "Étudier une question à partir de sources vérifiables et expliquer leurs contradictions ou leurs lacunes."
+        },
+        "meeting-minutes": {
+          "title": "Compte rendu de réunion",
+          "description": "Préparer un compte rendu avec les décisions confirmées, les actions et les informations manquantes."
+        },
+        "compare-options": {
+          "title": "Comparer des options",
+          "description": "Comparer des alternatives selon des critères explicites, des éléments vérifiables et leurs compromis."
+        },
+        "verify-answer": {
+          "title": "Vérifier une réponse",
+          "description": "Vérifier une réponse à partir des sources disponibles, corriger les affirmations non étayées et expliquer les limites de la vérification."
+        },
+        "mermaid": {
+          "title": "Diagrammes Mermaid",
+          "description": "Créer ou corriger des diagrammes de processus et d'architecture avec une syntaxe Mermaid fiable."
+        },
+        "grill-me": {
+          "title": "Mettre mon idée à l'épreuve",
+          "description": "Clarifier une idée ou une décision par un entretien guidé, une question à la fois."
+        },
+        "analyze-data": {
+          "title": "Analyser des données",
+          "description": "Analyser les données accessibles, vérifier les calculs et expliquer les hypothèses et les limites."
+        },
+        "data-visualization": {
+          "title": "Visualiser des données",
+          "description": "Choisir une représentation utile des données et la produire avec les outils disponibles."
+        }
+      }
     }
   },
   "mermaid": {
@@ -1146,7 +1184,8 @@
           "model": "Modèles",
           "app": "Apps",
           "knowledge_base": "Bases de connaissances",
-          "aria": "Filtrer par type de fonctionnalité"
+          "aria": "Filtrer par type de fonctionnalité",
+          "skill": "Skills"
         },
         "emptyAgents": "Aucun template d'agent n'est encore enregistré par un pod runtime.",
         "emptyModels": "Aucun modèle n'est encore publié par un pod runtime.",
@@ -1476,6 +1515,35 @@
           "confirm": "Désactiver",
           "cancel": "Annuler"
         }
+      },
+      "skills": {
+        "title": "Skills plateforme",
+        "scope": "Skills fournis par Fred, communs à tous les utilisateurs et agents.",
+        "skill": "Skill",
+        "description": "Description",
+        "invocation": "Invocation",
+        "sources": "Sources",
+        "enabled": "Activé",
+        "on": "Activé",
+        "off": "Désactivé",
+        "userInvocable": "Utilisateur",
+        "modelInvocable": "Agent",
+        "noInvocation": "Aucune invocation directe",
+        "refresh": "Actualiser",
+        "loading": "Chargement des skills plateforme...",
+        "loadError": "Impossible de charger les skills plateforme.",
+        "empty": "Aucun skill fourni avec Fred n'est actuellement annoncé.",
+        "unavailableSources": "Sources indisponibles : {{runtimes}}. L'application de la politique globale ne peut pas être vérifiée sur ces sources.",
+        "unsupportedSources": "Sources à mettre à jour : {{runtimes}}. Ces sources ne prennent pas en charge les contrôles globaux des skills.",
+        "toggle": "Activer {{name}} pour tous",
+        "disableBlocked": "Rétablissez les sources et mettez à jour les anciens runtimes avant de désactiver un skill.",
+        "effect": "Les changements s'appliquent aux nouveaux chargements dès le prochain tour, y compris dans les conversations existantes. Les instructions déjà chargées restent dans la conversation.",
+        "saveUnsupported": "Ce skill n'a pas pu être désactivé car une source ne prend pas en charge les contrôles globaux. Actualisez et mettez à jour la source concernée.",
+        "saveUnavailable": "Ce skill n'a pas pu être désactivé car une source est indisponible. Rétablissez la source puis actualisez.",
+        "saveError": "Impossible d'enregistrer le réglage global du skill. Actualisez puis réessayez.",
+        "refreshAfterSaveError": "Le réglage a été enregistré mais le catalogue n'a pas pu être actualisé. Actualisez pour confirmer son état actuel.",
+        "absentDisabled": "Ces skills désactivés globalement ne sont plus annoncés par une source disponible. Vous pouvez rétablir leur disponibilité pour les prochains chargements.",
+        "restore": "Réactiver {{name}}"
       }
     },
     "agentCard": {

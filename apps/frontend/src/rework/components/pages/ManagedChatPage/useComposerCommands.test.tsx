@@ -34,8 +34,13 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+const presentationTranslations = vi.hoisted(() => ({}) as Record<string, string>);
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+  useTranslation: () => ({
+    t: (key: string, options?: { defaultValue?: string }) =>
+      presentationTranslations[key] ?? options?.defaultValue ?? key,
+    i18n: { language: "en" },
+  }),
 }));
 
 // The shape of `GET /teams/{id}/prompt-commands`: only invocable prompts, and
@@ -88,7 +93,10 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
 }));
 
 let skillCatalog:
-  | { supported: boolean; skills: { name: string; description: string; argument_hint?: string | null }[] }
+  | {
+      supported: boolean;
+      skills: { name: string; description: string; builtin?: boolean; argument_hint?: string | null }[];
+    }
   | undefined;
 const onRunSkill = vi.fn();
 const onSkillError = vi.fn();
@@ -136,7 +144,11 @@ function Host({
         inlineEditor
           ? {
               promptTokens: commands.selectedPrompts,
-              tokens: commands.selectedSkills.map((token) => ({ ...token, onOpen: () => {} })),
+              tokens: commands.selectedSkills.map((token) => ({
+                ...token,
+                ...commands.skillSummaries.get(token.name),
+                onOpen: () => {},
+              })),
             }
           : undefined
       }
@@ -154,6 +166,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  for (const key of Object.keys(presentationTranslations)) delete presentationTranslations[key];
   skillCatalog = undefined;
   listResult = { data: PROMPTS };
   personalResult = { data: [] };
@@ -2563,4 +2576,42 @@ describe("several prompt commands in one message", () => {
       ]);
     });
   });
+});
+
+it("shows a translated packaged skill while completing and sending its canonical command", async () => {
+  presentationTranslations["chatbot.skills.catalog.meeting-minutes.title"] = "Compte rendu de réunion";
+  presentationTranslations["chatbot.skills.catalog.meeting-minutes.description"] = "Préparer un compte rendu.";
+  skillCatalog = {
+    supported: true,
+    skills: [{ name: "meeting-minutes", description: "English model metadata", builtin: true }],
+  };
+  act(() => root.render(<Host />));
+  type("/meeting");
+  expect(labels()).toEqual(["Compte rendu de réunion (/meeting-minutes)"]);
+  expect(options()[0].textContent).toContain("Préparer un compte rendu.");
+  press("Tab");
+  expect(textarea().value).toBe("/meeting-minutes ");
+  await pressAsync("Enter");
+  expect(onRunSkill).toHaveBeenCalledWith({ skills: [{ name: "meeting-minutes" }], text: "/meeting-minutes " });
+});
+
+it("renders a translated composer token while keeping its editor text and invocation canonical", async () => {
+  presentationTranslations["chatbot.skills.catalog.meeting-minutes.title"] = "Compte rendu de réunion";
+  skillCatalog = {
+    supported: true,
+    skills: [{ name: "meeting-minutes", description: "English model metadata", builtin: true }],
+  };
+  act(() => root.render(<Host inlineEditor />));
+  const editor = EditorView.findFromDOM(container.querySelector(".cm-content")!)!;
+  act(() => {
+    editor.focus();
+    editor.dispatch({ changes: { from: 0, insert: "/meet" }, selection: { anchor: 5 } });
+  });
+  act(() =>
+    editor.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })),
+  );
+  expect(editor.state.doc.toString()).toBe("/meeting-minutes ");
+  expect(container.querySelector('[data-kind="skill"]')?.textContent).toBe("Compte rendu de réunion");
+  await act(async () => renders[renders.length - 1].submit());
+  expect(onRunSkill).toHaveBeenCalledWith({ skills: [{ name: "meeting-minutes" }], text: "/meeting-minutes " });
 });

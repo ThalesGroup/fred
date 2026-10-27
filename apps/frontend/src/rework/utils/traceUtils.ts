@@ -26,7 +26,7 @@ import { parseWebResearchResult, webResearchTarget, webResearchToolKind } from "
 
 export function skillLoadOf(
   message: ChatMessage,
-): { name: string; origin: "user" | "agent"; load_id: string; child: boolean } | null {
+): { name: string; origin: "user" | "agent"; load_id: string; child: boolean; builtin: boolean } | null {
   const extras = message.metadata?.extras as Record<string, unknown> | undefined;
   const value = extras?.skill_load;
   if (!value || typeof value !== "object") return null;
@@ -34,7 +34,13 @@ export function skillLoadOf(
   return typeof load.name === "string" &&
     typeof load.load_id === "string" &&
     (load.origin === "user" || load.origin === "agent")
-    ? { name: load.name, origin: load.origin, load_id: load.load_id, child: load.child === true }
+    ? {
+        name: load.name,
+        origin: load.origin,
+        load_id: load.load_id,
+        child: load.child === true,
+        builtin: load.builtin === true,
+      }
     : null;
 }
 

@@ -168,8 +168,16 @@ export function selectedSkillText(range: Range, container: HTMLElement): string 
   const region = regionOf(range.startContainer);
   // Cross-turn selections keep the browser's block-boundary serialisation.
   if (!region || region !== regionOf(range.endContainer)) return null;
-  const fragment = range.cloneContents();
+  const copiedRange = range.cloneRange();
+  for (const label of Array.from(region.querySelectorAll("[data-skill-name]"))) {
+    if (label.contains(copiedRange.startContainer)) copiedRange.setStartBefore(label);
+    if (label.contains(copiedRange.endContainer)) copiedRange.setEndAfter(label);
+  }
+  const fragment = copiedRange.cloneContents();
   fragment.querySelectorAll('.material-symbols-outlined[aria-hidden="true"]').forEach((icon) => icon.remove());
+  fragment.querySelectorAll<HTMLElement>("[data-skill-name]").forEach((label) => {
+    label.textContent = `/${label.dataset.skillName}`;
+  });
   const text = fragment.textContent ?? "";
   const touchesBadge = Array.from(region.querySelectorAll("[data-skill-name]")).some((label) =>
     range.intersectsNode(label),

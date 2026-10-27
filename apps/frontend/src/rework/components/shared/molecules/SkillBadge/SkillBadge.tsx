@@ -5,22 +5,31 @@
 
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
+import { skillPresentation } from "@rework/utils/skillPresentation";
 import styles from "./SkillBadge.module.css";
 
 interface SkillBadgeProps {
   name: string;
   description?: string | null;
+  builtin?: boolean;
   onOpen?: (name: string) => void;
 }
 
-export function SkillBadge({ name, description, onOpen }: SkillBadgeProps) {
+export function SkillBadge({ name, description, builtin, onOpen }: SkillBadgeProps) {
   const { t } = useTranslation();
-  const hint = [t("chatbot.skills.platformProvided"), description?.trim()].filter(Boolean).join("\n");
+  const display = skillPresentation(t, { name, description, builtin });
+  const hint = [
+    t("chatbot.skills.platformProvided"),
+    display.title !== name ? `/${name}` : null,
+    display.description.trim(),
+  ]
+    .filter(Boolean)
+    .join("\n");
   const content = (
     <>
       <Icon category="outlined" type="customPlatformSkill" />
       <span className={styles.name} data-skill-name={name}>
-        /{name}
+        {display.title === name ? `/${name}` : display.title}
       </span>
     </>
   );
@@ -32,7 +41,7 @@ export function SkillBadge({ name, description, onOpen }: SkillBadgeProps) {
         data-kind="skill"
         data-surface="bubble"
         onClick={() => onOpen(name)}
-        aria-label={t("chatbot.skills.open", { name })}
+        aria-label={t("chatbot.skills.open", { name: display.title })}
         title={hint}
       >
         {content}
@@ -45,7 +54,7 @@ export function SkillBadge({ name, description, onOpen }: SkillBadgeProps) {
       data-kind="skill"
       data-surface="bubble"
       role="group"
-      aria-label={t("chatbot.skills.badge", { name })}
+      aria-label={t("chatbot.skills.badge", { name: display.title })}
       title={hint}
     >
       {content}

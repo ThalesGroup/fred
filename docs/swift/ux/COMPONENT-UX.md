@@ -61,6 +61,21 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ## Components
 
+### Platform skills presentation and administration
+
+**Locations:** `src/rework/utils/skillPresentation.ts` and
+`src/rework/components/pages/admin/FeaturesPage/PlatformSkillsPanel.tsx`.
+**Status:** Functional; visual review pending.
+
+Packaged skills use French or English titles and descriptions in the command
+menu, composer, conversation history, previews and successful-load activity.
+Canonical commands and copied text stay stable; custom skills and old history
+without packaged provenance retain authored presentation. Administration >
+Features > Skills lists the global inventory, invocation modes and source
+diagnostics. Switches wait for the saved policy and refreshed inventory;
+unverified sources prevent new disables while absent disabled skills remain
+available for reactivation. Changes affect new loads from the next turn.
+
 ### Admin self-test authorization controls
 
 **Location:** `src/rework/components/pages/admin/SelfTestPage/AuthorizationExtras.tsx`

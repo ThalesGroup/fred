@@ -7,6 +7,7 @@ import ChatSidePanel from "@shared/molecules/ChatSidePanel/ChatSidePanel";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import Button from "@shared/atoms/Button/Button";
 import type { skillFileReadOf } from "@rework/utils/traceUtils";
+import { skillPresentation } from "@rework/utils/skillPresentation";
 import styles from "./SkillDetailPanel.module.css";
 
 interface SkillDetailPanelProps {
@@ -32,6 +33,7 @@ export default function SkillDetailPanel({
 }: SkillDetailPanelProps) {
   const { t } = useTranslation();
   const available = !error && detail?.skill.name === name;
+  const display = skillPresentation(t, available ? detail.skill : { name });
   const instructions =
     detail?.content.replace(/^---[ \t]*\r?\n[\s\S]*?\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/, "").trim() ?? "";
   return (
@@ -43,7 +45,7 @@ export default function SkillDetailPanel({
           ? t(file?.excerpt ? "chatbot.skills.fileExcerptTitle" : "chatbot.skills.fileTitle", {
               path: file?.path ?? "",
             })
-          : t("chatbot.skills.panelTitle", { name })
+          : t("chatbot.skills.panelTitle", { name: display.title })
       }
       titleSize="large"
       persistKey="skill-detail-panel"
@@ -75,7 +77,7 @@ export default function SkillDetailPanel({
               )}
               <p className={styles.description}>
                 <span className={styles.metadataLabel}>{t("chatbot.skills.description")}</span>{" "}
-                <em>{detail.skill.description}</em>
+                <em>{display.description}</em>
               </p>
               <div className={styles.instructions}>
                 <MarkdownRenderer text={instructions} fullWidth localLinksAsText />

@@ -1499,6 +1499,19 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/admin/platform/creation-assistant`, method: "DELETE" }),
     }),
+    getPlatformSkills: build.query<GetPlatformSkillsApiResponse, GetPlatformSkillsApiArg>({
+      query: () => ({ url: `/control-plane/v1/platform/skills` }),
+    }),
+    getPlatformSkillPolicy: build.query<GetPlatformSkillPolicyApiResponse, GetPlatformSkillPolicyApiArg>({
+      query: () => ({ url: `/control-plane/v1/platform/skills/policy` }),
+    }),
+    setPlatformSkillEnabled: build.mutation<SetPlatformSkillEnabledApiResponse, SetPlatformSkillEnabledApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/platform/skills/${queryArg.skillName}`,
+        method: "PUT",
+        body: queryArg.setPlatformSkillEnabledRequest,
+      }),
+    }),
     getPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGet: build.query<
       GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse,
       GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiArg
@@ -3210,6 +3223,15 @@ export type PutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssis
 export type DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiResponse =
   /** status 200 Successful Response */ CreationAssistantSettings;
 export type DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiArg = void;
+export type GetPlatformSkillsApiResponse = /** status 200 Successful Response */ PlatformSkillInventory;
+export type GetPlatformSkillsApiArg = void;
+export type GetPlatformSkillPolicyApiResponse = /** status 200 Successful Response */ PlatformSkillPolicy;
+export type GetPlatformSkillPolicyApiArg = void;
+export type SetPlatformSkillEnabledApiResponse = /** status 200 Successful Response */ PlatformSkillEnabled;
+export type SetPlatformSkillEnabledApiArg = {
+  skillName: string;
+  setPlatformSkillEnabledRequest: SetPlatformSkillEnabledRequest;
+};
 export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse =
   /** status 200 Successful Response */ PlatformUiSettings;
 export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiArg = void;
@@ -4882,6 +4904,7 @@ export type ManagedAgentRuntimeBinding = {
     };
   };
   reasoning_enabled_model_ids?: string[];
+  disabled_platform_skills?: string[];
   team_disabled_model_ids?: string[];
   platform_chat_model_binding?: ModelBinding | null;
   pod_chat_default_profile_id?: string | null;
@@ -4991,11 +5014,15 @@ export type SkillSummary = {
   name: string;
   description: string;
   argument_hint?: string | null;
+  builtin?: boolean;
+  user_invocable?: boolean;
+  disable_model_invocation?: boolean;
 };
 export type SkillCatalog = {
   supported?: boolean;
   revision?: string;
   skills?: SkillSummary[];
+  policy_supported?: boolean;
 };
 export type SkillDetail = {
   skill: SkillSummary;
@@ -5565,6 +5592,27 @@ export type SetCreationAssistantSettingsRequest = {
   model_profile_id?: string | null;
   /** Reasoning of the assistant's call; clamped to the model by the pod. */
   reasoning_effort?: "off" | "low" | "medium" | "high";
+};
+export type PlatformSkillEntry = {
+  skill: SkillSummary;
+  enabled?: boolean;
+  runtime_ids?: string[];
+};
+export type PlatformSkillInventory = {
+  skills?: PlatformSkillEntry[];
+  disabled_skill_names?: string[];
+  unavailable_runtime_ids?: string[];
+  unsupported_runtime_ids?: string[];
+};
+export type PlatformSkillPolicy = {
+  disabled_skill_names?: string[];
+};
+export type PlatformSkillEnabled = {
+  name: string;
+  enabled: boolean;
+};
+export type SetPlatformSkillEnabledRequest = {
+  enabled: boolean;
 };
 export type PlatformUiSettings = {
   /** Theme new users get, or null to use the frontend's own default. */
@@ -6420,6 +6468,11 @@ export const {
   useLazyGetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetQuery,
   usePutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutMutation,
   useDeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteMutation,
+  useGetPlatformSkillsQuery,
+  useLazyGetPlatformSkillsQuery,
+  useGetPlatformSkillPolicyQuery,
+  useLazyGetPlatformSkillPolicyQuery,
+  useSetPlatformSkillEnabledMutation,
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   useLazyGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation,
