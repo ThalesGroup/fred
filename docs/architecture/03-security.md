@@ -74,8 +74,9 @@ provides exact permissions, conditions and implementation references.
 
 Alice can authorize a model for Acme without being allowed to read Bob's Research
 conversation. Bob needs access to the space and permission to use its assistant;
-Carol's Support membership does not open his conversation. Selecting the same
-model never merges their rights or conversations.
+Carol's membership in the same Research team lets her read its shared documents,
+but does not open Bob's conversation. Selecting the same model never merges their
+rights or conversations.
 
 The browser's choice is a request, not authority. Fred verifies it on the server.
 Each new turn acquires its authorized context; an admitted turn may finish with

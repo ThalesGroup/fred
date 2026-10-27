@@ -19,10 +19,10 @@ Bob's authenticated subject, current CGU acceptance, unique Acme attachment and
 Research `can_write` permission are prerequisites. Admin alone does not grant
 content write access. The repository's
 [demo provisioning fixture](../../apps/control-plane/tests/fixtures/import_export/demo_provisioning/organizations.json)
-uses different names: Priya belongs to Demo, as does its fredlab team. These
-fixture labels are not the dossier's fictional people or spaces. Confirm actual
-identity and placement before reproducing the journey; do not give a person a
-second organization to match an example. See
+assigns Bob `member` on Acme and `editor` on Research, matching this journey.
+Confirm actual identity and placement before reproducing it on an existing
+installation: import is additive and does not move a person from another
+organization. See
 [one person, one organization](04-organizations.md#one-person-one-organization).
 
 Record the API/worker revisions, effective configuration, PDF byte count and

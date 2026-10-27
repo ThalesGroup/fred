@@ -42,6 +42,7 @@ from contextlib import contextmanager
 from functools import partial
 from typing import Any, Protocol, TypedDict, cast
 from urllib.parse import quote
+from uuid import uuid4
 
 import httpx
 from fred_capability_document_access.search import CorpusSearch
@@ -53,6 +54,7 @@ from fred_core.common.fastapi_handlers import (
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.logs.context import operation_log_scope
 from fred_core.logs.propagation import outbound_context_headers
 from fred_core.portable import LoggingTracer, MetricsProvider, Tracer, get_tracer
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
@@ -1416,49 +1418,118 @@ class DocumentSearchAdapter(DocumentSearchPort):
         include_attachments: bool = True,
         include_team_documents: bool = True,
     ) -> DocumentSearchResult:
-        authority = current_turn()
-        context = self._binding.runtime_context
-        authority.check_context(context, authority.binding.agent.template_key)
-        if get_rag_knowledge_scope(context) == "general_only":
-            return DocumentSearchResult(hits=())
-        _, turn_corpus = get_vector_search_scopes(context)
-        if not (turn_corpus and include_team_documents):
-            return DocumentSearchResult(hits=())
-        if include_attachments:
-            raise DocumentScopeRefusedError(
-                "Corpus search does not support attachments"
+        with operation_log_scope(completion=False, search_id=uuid4().hex):
+            authority = current_turn()
+            context = self._binding.runtime_context
+            authority.check_context(context, authority.binding.agent.template_key)
+            logger.info(
+                "[VECTOR][ADAPTER] started",
+                extra={
+                    "event_name": "vector_adapter_started",
+                    "space_id": str(authority.binding.space.id),
+                    "top_k": top_k,
+                    "include_attachments": include_attachments,
+                    "include_team_documents": include_team_documents,
+                },
             )
-        # Swift tag/document selections cannot be silently interpreted as all corpus.
-        if (
-            library_tag_ids
-            or document_uids
-            or get_document_library_tags_ids(context)
-            or get_document_uids(context)
-        ):
-            raise DocumentScopeRefusedError(
-                "Library and document selections are not supported by Weaver corpus search"
-            )
-        if _matches_nothing(library_tag_ids, document_uids):
-            return DocumentSearchResult(hits=())
-        if self._corpus is None:
-            raise DocumentPortCallError("Weaver corpus search is not configured")
-        try:
-            result = await self._corpus.search(
-                query,
-                space_id=authority.binding.space.id,
-                top_k=top_k if isinstance(top_k, int) and top_k > 0 else 8,
-                policy=search_policy or get_search_policy(context),
-                check_active=authority.check,
-            )
-        except Exception as exc:
-            run_stop = unwrap_run_stop_error(exc)
-            if run_stop is not None:
-                raise run_stop from None
-            raise DocumentPortCallError(
-                "Weaver corpus search failed", timed_out=isinstance(exc, TimeoutError)
-            ) from exc
-        authority.check()
-        return result
+            if get_rag_knowledge_scope(context) == "general_only":
+                logger.info(
+                    "[VECTOR][ADAPTER] skipped",
+                    extra={
+                        "event_name": "vector_search_skipped",
+                        "reason": "general_only",
+                        "outcome": "skipped",
+                    },
+                )
+                return DocumentSearchResult(hits=())
+            _, turn_corpus = get_vector_search_scopes(context)
+            if not (turn_corpus and include_team_documents):
+                logger.info(
+                    "[VECTOR][ADAPTER] skipped",
+                    extra={
+                        "event_name": "vector_search_skipped",
+                        "reason": "corpus_disabled",
+                        "outcome": "skipped",
+                    },
+                )
+                return DocumentSearchResult(hits=())
+            if include_attachments:
+                logger.warning(
+                    "[VECTOR][ADAPTER] refused",
+                    extra={
+                        "event_name": "vector_search_refused",
+                        "outcome": "refused",
+                        "reason": "attachments_unsupported",
+                    },
+                )
+                raise DocumentScopeRefusedError(
+                    "Corpus search does not support attachments"
+                )
+            # Swift tag/document selections cannot be silently interpreted as all corpus.
+            if (
+                library_tag_ids
+                or document_uids
+                or get_document_library_tags_ids(context)
+                or get_document_uids(context)
+            ):
+                logger.warning(
+                    "[VECTOR][ADAPTER] refused",
+                    extra={
+                        "event_name": "vector_search_refused",
+                        "outcome": "refused",
+                        "reason": "selections_unsupported",
+                    },
+                )
+                raise DocumentScopeRefusedError(
+                    "Library and document selections are not supported by Weaver corpus search"
+                )
+            if _matches_nothing(library_tag_ids, document_uids):
+                logger.info(
+                    "[VECTOR][ADAPTER] skipped",
+                    extra={
+                        "event_name": "vector_search_skipped",
+                        "reason": "empty_selection",
+                        "outcome": "skipped",
+                    },
+                )
+                return DocumentSearchResult(hits=())
+            if self._corpus is None:
+                logger.warning(
+                    "[VECTOR][ADAPTER] refused",
+                    extra={
+                        "event_name": "vector_search_refused",
+                        "outcome": "refused",
+                        "reason": "corpus_not_configured",
+                    },
+                )
+                raise DocumentPortCallError("Weaver corpus search is not configured")
+            try:
+                result = await self._corpus.search(
+                    query,
+                    space_id=authority.binding.space.id,
+                    top_k=top_k if isinstance(top_k, int) and top_k > 0 else 8,
+                    policy=search_policy or get_search_policy(context),
+                    check_active=authority.check,
+                )
+            except Exception as exc:
+                run_stop = unwrap_run_stop_error(exc)
+                if run_stop is not None:
+                    raise run_stop from None
+                logger.error(
+                    "[VECTOR][ADAPTER] failed",
+                    extra={
+                        "event_name": "vector_adapter_failed",
+                        "error_type": type(exc).__name__,
+                        "timed_out": isinstance(exc, TimeoutError),
+                        "outcome": "failed",
+                    },
+                )
+                raise DocumentPortCallError(
+                    "Weaver corpus search failed",
+                    timed_out=isinstance(exc, TimeoutError),
+                ) from exc
+            authority.check()
+            return result
 
 
 class DocumentSimilarityAdapter(DocumentSimilarityPort):

@@ -1,13 +1,42 @@
 [
   {
-    "ref": "demo",
-    "name": "Demo",
+    "ref": "acme",
+    "name": "Acme",
     "roles": {
+      "oscar": [
+        "organization_owner"
+      ],
       "alice": [
-        "admin",
+        "admin"
+      ],
+      "carl": [
+        "member"
+      ],
+      "elena": [
+        "member"
+      ],
+      "carol": [
         "member"
       ],
       "bob": [
+        "member"
+      ]
+    }
+  },
+  {
+    "ref": "globex",
+    "name": "Globex",
+    "roles": {
+      "olivia": [
+        "organization_owner"
+      ],
+      "grace": [
+        "admin"
+      ],
+      "marc": [
+        "member"
+      ],
+      "nadia": [
         "member"
       ],
       "phil": [
@@ -15,31 +44,6 @@
       ],
       "zoe": [
         "member"
-      ],
-      "liam": [
-        "member"
-      ],
-      "sophia": [
-        "member"
-      ],
-      "marc": [
-        "member"
-      ],
-      "elena": [
-        "member"
-      ],
-      "nadia": [
-        "member"
-      ],
-      "derek": [
-        "member"
-      ],
-      "priya": [
-        "member",
-        "personal_space_creator"
-      ],
-      "oscar": [
-        "organization_owner"
       ]
     }
   }

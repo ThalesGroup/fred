@@ -23,20 +23,17 @@ from collections.abc import Awaitable, Callable
 from contextlib import nullcontext
 from typing import Optional, TypeVar
 
-from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.context import operation_log_scope
-from fred_core.security.models import AuthorizationError, Resource
-from fred_core.security.rebac.rebac_engine import RebacReference, TeamPermission
 from fred_sdk.contracts.context import BoundRuntimeContext, ToolInvocationResult
 from fred_sdk.contracts.runtime import SpanPort
 from langchain_core.messages.tool import ToolMessage
 from langgraph.errors import GraphBubbleUp
 
 from fred_runtime.common.outbound_credentials import delegation_enabled
-from fred_runtime.runtime_context import get_runtime_context
-from fred_runtime.runtime_support.authority import AuthorityLostError, RunStopError
+from fred_runtime.model_routing.turn import current_turn
+from fred_runtime.runtime_support.authority import RunStopError
 from fred_runtime.runtime_support.run_scope import RunScope
 
 logger = logging.getLogger(__name__)
@@ -72,35 +69,6 @@ class ToolExecution:
         if portable.trace_id:
             dims["trace_id"] = portable.trace_id
         return dims
-
-    @staticmethod
-    async def _reverify_team_authorization(
-        *, user_id: Optional[str], team_id: Optional[str], is_service_agent: bool
-    ) -> None:
-        try:
-            rebac = get_runtime_context().config.rebac_engine
-        except RuntimeError:
-            # Standalone runtimes have no pod-wide authorization engine.
-            return
-        if rebac is None or not rebac.enabled:
-            return  # dev/local (identity-only) or Noop engine — mirrors turn start
-        # The service-agent flag is stamped by trusted admission, never tool args.
-        if not user_id or is_service_agent:
-            return
-        scope = RunScope.current()
-        delegated = scope is not None and scope.delegated_credentials
-        try:
-            if not team_id or is_personal_team_id(team_id):
-                return
-            await rebac.check_permission_or_raise(
-                RebacReference(Resource.USER, user_id),
-                TeamPermission.CAN_USE_TEAM_AGENTS,
-                RebacReference(Resource.TEAM, team_id),
-            )
-        except AuthorizationError:
-            if delegated:
-                raise AuthorityLostError() from None
-            raise
 
     async def run(
         self,
@@ -186,14 +154,11 @@ class ToolExecution:
             emit_audit_log("agent.tool.invocation.started", **base_dims)
         with timer_ctx as kpi_dims:
             try:
-                await self._reverify_team_authorization(
-                    user_id=base_dims.get("user_id"),
-                    team_id=base_dims.get("team_id"),
-                    is_service_agent=self._binding.portable_context.baggage.get(
-                        "is_service_agent"
-                    )
-                    == "true",
-                )
+                # M4 resolves authority once per turn; tool calls enforce it locally.
+                authority = current_turn()
+                template_id = self._binding.portable_context.agent_id or ""
+                authority.check_context(self._binding.portable_context, template_id)
+                authority.check_context(self._binding.runtime_context, template_id)
                 result = await invoke()
             except GraphBubbleUp:
                 if kpi_dims is not None:

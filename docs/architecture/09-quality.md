@@ -458,11 +458,13 @@ page size stays unset; all continuation pages are read with higher consistency.
 The two-open race is concurrency 2, not a throughput measurement. Document count
 does not affect lookup. The UI waits for one membership refresh after success.
 
-The actual Make demo artifact (15 users, one new organization, three teams,
-28 space grants, four platform grants, four batches, `C=3`, `H=J=Z=E=0`)
-exercises HTTP with 28 Checks, 44 Reads and 24 Writes: 91 tuple operations.
-Two pre-existing IAM users and 12 space-assigned subjects produce `X=2+12+12=26`
-on a fresh Fred store; IAM identity reuse does not attach a person to another Fred instance. The
+The Make demo artifact (12 users, two new organizations, two teams,
+20 space grants, no platform grants, four batches, `C=2`, `H=J=Z=E=0`)
+has a source-derived HTTP budget of 22 Checks, 42 Reads and 18 Writes:
+66 tuple operations. The real-import regression asserts these counts; they are
+not a new execution measurement. Two pre-existing IAM users and 12 space-assigned
+subjects produce `X=2+12+12=26` on a fresh Fred store; IAM identity reuse does not
+attach a person to another Fred instance. The
 batch-boundary fixture (105 users, 107 organization grants, 210 team grants, one new
 organization and team, no platform grants, `H=J=Z=E=0`) checks 114 Checks, 422 Reads
 (`X=3*105=315`, known identities, initially empty roles) and 111 Writes: 550 tuple operations and at most 100 per Write. The demo project variant

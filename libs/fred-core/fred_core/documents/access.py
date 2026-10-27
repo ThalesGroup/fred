@@ -20,6 +20,8 @@ person's read permission on that space. Index metadata is never trusted here.
 
 from __future__ import annotations
 
+import logging
+from collections import Counter
 from collections.abc import Container, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -27,6 +29,8 @@ from uuid import UUID, uuid5
 
 from sqlalchemy import ARRAY, Uuid, bindparam, text
 from sqlalchemy.ext.asyncio import AsyncConnection
+
+logger = logging.getLogger(__name__)
 
 _SPACE = text(
     "SELECT id, parent_id, organization_id, deletion_id FROM space WHERE id = :space_id"
@@ -131,12 +135,28 @@ def filter_candidates(
         for document_id, chunks in wanted.items()
     }
     kept: list[Candidate] = []
+    dropped: Counter[str] = Counter()
     for candidate in candidates:
         document_id = _document_id(candidate)
         if document_id is not None and candidate.chunk_uid in published.get(
             document_id, ()
         ):
             kept.append(candidate)
+        elif document_id is None:
+            dropped["invalid_document_uid"] += 1
+        elif document_id not in visible:
+            dropped["document_missing_or_not_visible"] += 1
+        else:
+            dropped["chunk_not_published"] += 1
+    logger.info(
+        "[VECTOR][PUBLICATION] checked",
+        extra={
+            "event_name": "vector_publication_checked",
+            "candidates": len(candidates),
+            "kept_hits": len(kept),
+            "drop_reasons": dict(dropped),
+        },
+    )
     return kept
 
 
@@ -157,6 +177,44 @@ async def verify_candidates(
         )
     )
     if not document_ids:
+        logger.info(
+            "[VECTOR][SQL] skipped",
+            extra={
+                "event_name": "vector_visibility_skipped",
+                "candidates": len(candidates),
+                "kept_hits": 0,
+                "reason": "no_valid_document_ids",
+            },
+        )
         return []
     result = await conn.execute(_DOCUMENTS, {"document_ids": document_ids})
-    return filter_candidates(scope, candidates, result.mappings().all())
+    documents = result.mappings().all()
+    kept = filter_candidates(scope, candidates, documents)
+    # Aggregate facts only; no document content or additional database reads.
+    rejected: Counter[str] = Counter()
+    for row in documents:
+        if row["space_id"] not in scope.space_ids:
+            rejected["out_of_scope"] += 1
+        if row["deletion_id"] is not None:
+            rejected["document_deleted"] += 1
+        if row["space_deletion_id"] is not None:
+            rejected["space_deleted"] += 1
+        if not row["retrievable"]:
+            rejected["not_retrievable"] += 1
+        if row["retrievable_pending"] is not False:
+            rejected["retrievable_pending"] += 1
+        if row["manifest"] is None:
+            rejected["no_published_manifest"] += 1
+    logger.info(
+        "[VECTOR][SQL] checked",
+        extra={
+            "event_name": "vector_visibility_checked",
+            "candidates": len(candidates),
+            "requested_documents": len(document_ids),
+            "found_documents": len(documents),
+            "kept_hits": len(kept),
+            "rejected_hits": len(candidates) - len(kept),
+            "document_rejection_facts": dict(rejected),
+        },
+    )
+    return kept

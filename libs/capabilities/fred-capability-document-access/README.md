@@ -44,6 +44,41 @@ explicitly refused; they are never interpreted as unrestricted corpus. Empty
 selections match nothing. General-only mode or a disabled corpus returns no hits
 without accessing storage. No composer or user setting is added here.
 
+## Search diagnostics
+
+Search uses the existing `fred_core.logs` pipeline and `app.log_format` (`text`
+or `json`), not a separate formatter or sink. JSON stdout carries structured
+fields at the top level; the application log store carries them under `extra`.
+Text output renders the same fields as `key=value`.
+
+After turn admission, all runtime logs inherit `organization_id`, `team_id`,
+`project_id`, `space_id` and `space_kind` from the trusted resolver binding.
+Absent team/project identifiers are explicitly null, never inherited from a
+previous scope or inferred from tool arguments. Existing request, correlation,
+session, run and tool fields remain in use. Each document-search adapter call
+has a task-local `search_id`, restored on exit and not retained in HTTP completion.
+
+INFO records carry stable `event_name` fields: `vector_search_started`,
+`vector_scope_resolved`, `vector_embedding_completed`,
+`vector_opensearch_completed`, `vector_response_parsed`,
+`vector_visibility_checked`, `vector_verification_completed` and
+`vector_search_completed`. Short circuits emit `vector_search_skipped` with
+`reason`; unsupported sources or missing configuration emit
+`vector_search_refused`. A search completion distinguishes `succeeded` (including
+zero hits), `failed`, `cancelled` and `stopped`, with duration and failing `phase`.
+Process termination can leave a start without a completion.
+
+Filter text logs with `rg '\[VECTOR\]'`, or query JSON fields by `search_id`
+and the organization/team/project IDs. Compare `raw_hits`, `candidates`,
+`kept_hits`, `verified_hits` and `final_hits`; an empty success has `empty_reason`.
+Parsing/publication `drop_reasons` count chunks. SQL `document_rejection_facts`
+count documents and can overlap. `chunk_not_published` means the candidate is
+absent from the live document's published generation.
+
+Logs contain no query text, document content or embedding values and add no
+storage calls. Existing bounded/background log delivery is retained. These
+diagnostics add no KPI metrics and do not establish full Swift feature parity.
+
 ## Deployment connection
 
 No deployment is changed or provisioned by this increment. Supply these two

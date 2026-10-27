@@ -23,7 +23,7 @@ flowchart TB
     class alice,bob,agent,data neutral
 ```
 
-Bob's Research role grants no access to Support documents. Personal spaces
+Bob's Research role in Acme grants no access to Globex's Support documents. Personal spaces
 inherit no content rights from the organization. Explicit role combinations and
 inheritance are explained in the [security chapter](03-security.md).
 
@@ -68,19 +68,36 @@ being discovered, permitted and selected.
 
 ## Conventions used throughout this dossier
 
-The following fictional people and spaces keep examples consistent. Names are
-labels for the reader, never credentials or permission rules.
+The following fictional people and spaces keep examples consistent. Acme contains
+Research; Globex contains Support. Each person belongs to only one organization.
+Names identify the examples; permissions come from explicit role grants.
 
-| Name | Role in the examples |
-| --- | --- |
-| **Acme** | The example organization, containing the Research and Support teams. |
-| **Dana** | Platform operator; configures approved model services and their credentials, without acquiring business content rights. |
-| **Alice** | Acme's organization administrator; no content role unless stated. |
-| **Bob** | An editor in Research; he contributes documents and configures agent instances when authorized. |
-| **Carol** | A member of Support; she reads its content and has no Research role. |
+The platform account **`owner`** is created through the registration form and
+activates platform ownership with the bootstrap token. It governs organizations
+and appoints their owners and administrators, without automatic content access.
+**Dana** is the infrastructure operator in the model-service examples: she
+configures approved connections and credentials. This operational responsibility
+does not introduce another demo account or grant business content rights.
 
-Alice's administrator role is distinct from organization ownership. A platform
-owner creates organizations and appoints their owners and administrators; that
-role also grants no automatic document access. Examples introduce additional
-roles or personal-space eligibility explicitly. Repository fixtures may use other
-names; technical annexes identify them without changing these conventions.
+| Function | Acme | Globex | Direct role at that scope |
+| --- | --- | --- | --- |
+| Organization owner | **Oscar** (`oscar`) | **Olivia** (`olivia`) | `organization_owner` on the organization |
+| Organization administrator | **Alice** (`alice`) | **Grace** (`grace`) | `admin` on the organization |
+| Team | **Research** | **Support** | - |
+| Team administrator | **Carl** (`carl`) | **Marc** (`marc`) | `admin` on the team |
+| Team analyst | **Elena** (`elena`) | **Nadia** (`nadia`) | `analyst` on the team |
+| Team member | **Carol** (`carol`) | **Phil** (`phil`) | `member` on the team |
+| Team editor | **Bob** (`bob`) | **Zoe** (`zoe`) | `editor` on the team |
+
+Each of the four team personas also holds `member` directly on their organization,
+the prerequisite for a team role. This parent role grants organization-level read
+access but does not descend into teams. Owners and organization administrators
+hold only their listed governance role; none of these twelve people holds a
+platform role. Carl can administer Research without reading its documents; Bob
+can read and contribute; Carol and Elena can read. Member stays local, whereas
+analyst also reaches descendant projects when a scenario introduces one.
+
+The demo bundle supplies these twelve organization accounts and two teams. The
+platform account is bootstrapped separately. Additional projects, role combinations
+and personal-space eligibility are stated explicitly in the relevant examples;
+the basic demo does not create projects or grant personal-space eligibility.

@@ -1,60 +1,39 @@
 [
   {
-    "ref": "fredlab",
-    "name": "fredlab",
-    "organization": "demo",
+    "ref": "research",
+    "name": "Research",
+    "organization": "acme",
     "roles": {
-      "bob": [
-        "editor"
-      ],
-      "zoe": [
-        "member"
-      ],
-      "marc": [
+      "carl": [
         "admin"
       ],
       "elena": [
         "analyst"
       ],
-      "priya": [
-        "admin",
-        "editor",
-        "analyst"
-      ]
-    }
-  },
-  {
-    "ref": "northbridge",
-    "name": "northbridge",
-    "organization": "demo",
-    "roles": {
+      "carol": [
+        "member"
+      ],
       "bob": [
         "editor"
-      ],
-      "phil": [
-        "member"
-      ],
-      "sophia": [
-        "admin"
-      ],
-      "derek": [
-        "editor"
       ]
     }
   },
   {
-    "ref": "swiftpost",
-    "name": "swiftpost",
-    "organization": "demo",
+    "ref": "support",
+    "name": "Support",
+    "organization": "globex",
     "roles": {
+      "marc": [
+        "admin"
+      ],
+      "nadia": [
+        "analyst"
+      ],
       "phil": [
         "member"
       ],
-      "liam": [
-        "member"
-      ],
-      "nadia": [
-        "admin"
+      "zoe": [
+        "editor"
       ]
     }
   }

@@ -83,9 +83,9 @@ nothing; its organization can revoke its owner's access, and the owner leaves th
 organization only after leaving the personal space and removing creation eligibility. Every non-personal space
 retains an administrator.
 
-Personal-space creation is an explicit organization entitlement. The demo declares
-it for Priya in the organization's roles. First activation creates one private
-workspace; further activations reuse it under current read authority. A personal
+Personal-space creation is an explicit organization entitlement. The basic demo
+grants none. First activation creates one private workspace; further activations
+reuse it under current read authority. A personal
 space whose organization link is missing is refused (409) rather than duplicated. Import and
 organization creation grant no implicit entitlement and create no personal space.
 See the [Bob journey](02.1-user-journeys.md#bob-opens-his-personal-space).

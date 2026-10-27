@@ -401,8 +401,19 @@ make import-provisioning BUNDLE=target/demo-provisioning-bundle.zip TOKEN_FILE=/
 `build-demo-bundle` packages the five checked-in JSON files with Python's standard
 ZIP library and atomically replaces its output. `DEMO_PROVISIONING_FIXTURE_DIR`
 and `DEMO_BUNDLE_FILE` override source/output paths, including paths with spaces;
-no running service is needed. HTTP clients submit the same ZIP as multipart `file`
-to `/control-plane/v1/import-export/import` on the running server.
+no running service is needed. `make bundle-demo-zip` invokes the same builder.
+The ZIP contains the twelve accounts from the [example roster](00-introduction.md#conventions-used-throughout-this-dossier),
+Acme/Research and Globex/Support, with no projects, platform grants or personal-space
+eligibility. Usernames are the lowercase first names; the demo password is
+`Azerty123_`. The `owner` account is created and bootstrapped separately and is
+absent from the bundle. The manifest retains `source_platform: "swift"`, the value
+required by the current version-2 import format.
+
+HTTP clients submit the same ZIP as multipart `file` to
+`/control-plane/v1/import-export/import` on the running server. Replay is additive:
+it preserves existing identities and grants, and does not rename old organizations
+or remove their memberships. Use a fresh demo installation for this roster; an
+existing account attached elsewhere must be handled explicitly before import.
 
 The bearer must identify a current platform owner, who may declare any platform role
 and organization owners.

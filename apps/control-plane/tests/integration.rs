@@ -2189,14 +2189,14 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     });
     let (status, report) = http_import(&app, &token, &bytes).await;
     assert_eq!(status, 200, "{report}");
-    assert_eq!(report["identities_created"], 13); // Alice and Bob already exist.
+    assert_eq!(report["identities_created"], 10); // Alice and Bob already exist.
     assert_eq!(report["spaces_reconciled"], 4);
     {
         let fault = proxy.fault.lock().await;
-        // Actual Make artifact: U=15, O=1, B=4, G=4, C=3; HTTP adds one owner Check.
-        assert_eq!(fault.calls.get("check"), Some(&28));
-        assert_eq!(fault.calls.get("read"), Some(&44));
-        assert_eq!(fault.calls.get("write"), Some(&24));
+        // Actual Make artifact: U=12, O=2, B=4, G=0, C=2; HTTP adds one owner Check.
+        assert_eq!(fault.calls.get("check"), Some(&22));
+        assert_eq!(fault.calls.get("read"), Some(&42));
+        assert_eq!(fault.calls.get("write"), Some(&18));
         let operations: usize = fault
             .written
             .iter()
@@ -2205,63 +2205,67 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
                     + body["deletes"]["tuple_keys"].as_array().map_or(0, Vec::len)
             })
             .sum();
-        assert_eq!(operations, 91);
+        assert_eq!(operations, 66);
     }
-    let demo = named_space(&e.pool, &e.fga, None, "Demo")
+    let acme = named_space(&e.pool, &e.fga, None, "Acme")
         .await
         .unwrap()
         .unwrap();
-    let north = named_space(&e.pool, &e.fga, Some(demo.id), "northbridge")
+    let research = named_space(&e.pool, &e.fga, Some(acme.id), "Research")
         .await
         .unwrap()
         .unwrap();
-    let sophia = directory.find_username("sophia").await.unwrap().unwrap();
+    let carl = directory.find_username("carl").await.unwrap().unwrap();
     assert!(
         !e.fga
-            .check(&sophia.id, Permission::Read, north.id)
+            .check(&carl.id, Permission::Read, research.id)
             .await
             .unwrap()
     );
     assert!(
         e.fga
-            .check(&sophia.id, Permission::Manage, north.id)
+            .check(&carl.id, Permission::Manage, research.id)
             .await
             .unwrap()
     );
     assert!(
         e.fga
-            .check(&sophia.id, Permission::Read, demo.id)
+            .check(&carl.id, Permission::Read, acme.id)
             .await
             .unwrap()
     );
-    for (username, role) in [
-        ("alice", control_plane::roles::PlatformRole::PlatformOwner),
-        (
-            "gabriel",
-            control_plane::roles::PlatformRole::PlatformObserver,
-        ),
-        ("nina", control_plane::roles::PlatformRole::FeatureManager),
-        ("quinn", control_plane::roles::PlatformRole::PromptEditor),
-    ] {
-        let subject = directory.find_username(username).await.unwrap().unwrap();
-        assert!(
-            e.fga
-                .platform_grants()
-                .await
-                .unwrap()
-                .contains(&(subject.id, role))
-        );
-    }
+    // Demo provisioning does not add platform authority to any persona.
+    assert_eq!(
+        e.fga.platform_grants().await.unwrap(),
+        vec![(
+            root.uid.clone(),
+            control_plane::roles::PlatformRole::PlatformOwner
+        )]
+    );
+    let globex = named_space(&e.pool, &e.fga, None, "Globex")
+        .await
+        .unwrap()
+        .unwrap();
+    let support = named_space(&e.pool, &e.fga, Some(globex.id), "Support")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !e.fga
+            .check(&bob.id, Permission::Read, support.id)
+            .await
+            .unwrap()
+    );
     let (status, report) = http_import(&app, &token, &bytes).await;
     assert_eq!(status, 200, "{report}");
     assert_eq!(report["identities_created"], 0);
     assert_eq!(
-        named_space(&e.pool, &e.fga, None, "Demo")
+        named_space(&e.pool, &e.fga, None, "Acme")
             .await
             .unwrap()
             .unwrap()
             .id,
-        demo.id
+        acme.id
     );
     assert_eq!(
         directory.find_username("alice").await.unwrap().unwrap().id,
@@ -2300,10 +2304,10 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|s| s["id"] == demo.id.to_string())
+            .any(|s| s["id"] == acme.id.to_string())
     );
     // Variant declares a project and uses the same HTTP path and real directory.
-    let variant = fixture_zip(br#"{"users":[{"username":"alice"},{"username":"bob"}],"organizations":[{"ref":"demo","name":"Demo","roles":{}}],"teams":[{"ref":"north","name":"northbridge","organization":"demo","roles":{"alice":["member"]}}],"projects":[{"ref":"project","name":"Project","team":"north","roles":{"alice":["admin"],"bob":["member","editor","analyst"]}}]}"#);
+    let variant = fixture_zip(br#"{"users":[{"username":"carl"},{"username":"bob"}],"organizations":[{"ref":"acme","name":"Acme","roles":{}}],"teams":[{"ref":"research","name":"Research","organization":"acme","roles":{"carl":["member"]}}],"projects":[{"ref":"project","name":"Project","team":"research","roles":{"carl":["admin"],"bob":["member","editor","analyst"]}}]}"#);
     {
         let mut fault = proxy.fault.lock().await;
         fault.calls.clear();
@@ -2320,20 +2324,20 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
         assert_eq!(fault.calls.get("read"), Some(&20));
         assert_eq!(fault.calls.get("write"), Some(&4));
     }
-    let project = named_space(&e.pool, &e.fga, Some(north.id), "Project")
+    let project = named_space(&e.pool, &e.fga, Some(research.id), "Project")
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(project.path, vec![demo.id, north.id, project.id]);
+    assert_eq!(project.path, vec![acme.id, research.id, project.id]);
     assert!(
         !e.fga
-            .check(&alice.id, Permission::Read, project.id)
+            .check(&carl.id, Permission::Read, project.id)
             .await
             .unwrap()
     );
     assert!(
         e.fga
-            .check(&alice.id, Permission::Manage, project.id)
+            .check(&carl.id, Permission::Manage, project.id)
             .await
             .unwrap()
     );

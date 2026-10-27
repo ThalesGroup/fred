@@ -21,6 +21,8 @@ any hit reaches the LLM.
 
 from __future__ import annotations
 
+import logging
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import Any
 from uuid import UUID
@@ -28,6 +30,8 @@ from uuid import UUID
 from fred_core.documents.access import Candidate
 from fred_core.store.vector_search import VectorSearchHit
 from fred_sdk.contracts.models import SearchPolicyName
+
+logger = logging.getLogger(__name__)
 
 # Created by the Knowledge Flow vector store at startup; search only references it.
 HYBRID_SEARCH_PIPELINE = "hybrid-search-pipeline"
@@ -156,9 +160,10 @@ def _hit(
 def read_response(
     response: Mapping[str, Any],
 ) -> list[tuple[Candidate, VectorSearchHit]]:
-    """Keep hit order; silently drop hits without verifiable provenance or text."""
+    """Keep hit order; count and drop hits without verifiable provenance or text."""
     hits = response.get("hits", {}).get("hits", [])
     results: list[tuple[Candidate, VectorSearchHit]] = []
+    dropped: Counter[str] = Counter()
     for raw in hits:
         chunk_uid = raw.get("_id")
         source = raw.get("_source")
@@ -167,17 +172,21 @@ def read_response(
             or not chunk_uid
             or not isinstance(source, Mapping)
         ):
+            dropped["missing_chunk_id_or_source"] += 1
             continue
         md = source.get("metadata")
         text = source.get("text")
         if not isinstance(md, Mapping) or not isinstance(text, str) or not text:
+            dropped["missing_metadata_or_text"] += 1
             continue
         document_uid = md.get("document_uid")
         if not isinstance(document_uid, str) or not document_uid:
+            dropped["missing_document_uid"] += 1
             continue
         # The worker writes the same id in both places; a mismatch is not trusted.
         stored_uid = md.get("chunk_uid")
         if stored_uid is not None and stored_uid != chunk_uid:
+            dropped["chunk_uid_mismatch"] += 1
             continue
         score = raw.get("_score")
         hit = _hit(
@@ -188,4 +197,13 @@ def read_response(
             len(results) + 1,
         )
         results.append((Candidate(document_uid=document_uid, chunk_uid=chunk_uid), hit))
+    logger.info(
+        "[VECTOR][PARSE] completed",
+        extra={
+            "event_name": "vector_response_parsed",
+            "raw_hits": len(hits),
+            "candidates": len(results),
+            "drop_reasons": dict(dropped),
+        },
+    )
     return results

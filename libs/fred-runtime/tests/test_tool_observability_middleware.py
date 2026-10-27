@@ -33,6 +33,7 @@ from collections.abc import Sequence
 from typing import Any, List, cast
 
 import pytest
+import pytest_asyncio
 from conftest import (
     RecordingSpan as _RecordingSpan,
 )
@@ -48,11 +49,6 @@ from fred_core.kpi.kpi_writer_structures import KPIEvent
 from fred_core.logs.log_setup import AUDIT_LOGGER_NAME
 from fred_core.portable import Span
 from fred_core.security.delegation import DelegationConfig
-from fred_core.security.models import (
-    AccountStatusError,
-    AuthorizationError,
-    Resource,
-)
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.common.outbound_credentials import (
     DelegationRuntime,
@@ -62,6 +58,7 @@ from fred_runtime.deep.deep_runtime import (
     _build_deepagent_runtime_middleware,
     _create_compiled_deep_agent,
 )
+from fred_runtime.model_routing.turn import TurnAuthority
 from fred_runtime.react.middleware.tool_call_recovery import (
     ToolCallTextRecoveryMiddleware,
 )
@@ -76,9 +73,8 @@ from fred_runtime.runtime_context import (
     get_runtime_context,
     set_runtime_context,
 )
-from fred_runtime.runtime_support.authority import AuthorityLostError
+from fred_runtime.runtime_support.authority import AuthorityLostError, RunStopError
 from fred_runtime.runtime_support.run_scope import RunScope
-from fred_runtime.runtime_support.tool_execution import ToolExecution
 from fred_sdk.contracts.capability import ToolCarrierMiddleware
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -97,6 +93,7 @@ from langchain_core.messages.tool import ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool, tool
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
+from weaver_fixtures import INSTANCE_ID, SPACE_ID, turn_binding
 
 
 @pytest.fixture(autouse=True)
@@ -108,6 +105,17 @@ def _delegated_logging_context():
         yield
     finally:
         set_delegation_runtime(None)
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def tool_authority():
+    authority = TurnAuthority(
+        turn_binding("template", user="user-1", session="session-1"), None
+    )
+    with RunScope.open() as scope:
+        authority.start(scope)
+        scope.turn_authority = authority
+        yield authority
 
 
 # ---------------------------------------------------------------------------
@@ -200,7 +208,12 @@ class _AuditEvents:
 
 def _binding(*, baggage: dict[str, str] | None = None) -> BoundRuntimeContext:
     return BoundRuntimeContext(
-        runtime_context=PortableRuntimeContext(),
+        runtime_context=PortableRuntimeContext(
+            user_id="user-1",
+            session_id="session-1",
+            space_id=SPACE_ID,
+            agent_instance_id=INSTANCE_ID,
+        ),
         portable_context=PortableContext(
             request_id="request-1",
             correlation_id="correlation-1",
@@ -210,7 +223,13 @@ def _binding(*, baggage: dict[str, str] | None = None) -> BoundRuntimeContext:
             session_id="session-1",
             user_id="user-1",
             team_id="team-1",
-            baggage=baggage or {},
+            agent_id="template",
+            baggage={
+                "space_id": SPACE_ID,
+                "agent_instance_id": INSTANCE_ID,
+                "template_agent_id": "template",
+                **(baggage or {}),
+            },
         ),
     )
 
@@ -709,40 +728,20 @@ async def test_native_capability_tool_gets_kpi_and_audit_coverage() -> None:
 
 
 class _FakeRebacEngine:
-    """Minimal duck-typed stand-in for `RebacEngine` — only the members
-    `_reverify_team_authorization` actually calls: the account status check, recorded
-    in `account_status_checks`, and the team permission check, recorded in `calls`."""
+    """Reject any attempt to reintroduce Swift authority reads during a turn."""
 
-    def __init__(
-        self,
-        *,
-        enabled: bool,
-        deny: bool = False,
-        error: Exception | None = None,
-        account_status_error: Exception | None = None,
-    ) -> None:
-        self.enabled = enabled
-        self._deny = deny
-        self._error = error
-        self._account_status_error = account_status_error
-        self.calls: List[tuple[str, str]] = []
-        self.account_status_checks: List[str] = []
+    enabled = True
 
-    async def require_active_account(self, user_id: str) -> None:
-        self.account_status_checks.append(user_id)
-        if self._account_status_error is not None:
-            raise self._account_status_error
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
 
     async def check_permission_or_raise(
         self, subject: Any, permission: Any, resource: Any, **_: Any
     ) -> None:
         self.calls.append((subject.id, resource.id))
-        if self._error is not None:
-            raise self._error
-        if self._deny:
-            raise AuthorizationError(
-                subject.id, str(permission), Resource.TEAM, "denied by test double"
-            )
+        raise AssertionError(
+            "Tool execution must use the admitted Weaver turn, not Swift ReBAC"
+        )
 
 
 def _with_rebac_engine(engine: _FakeRebacEngine | None):
@@ -772,97 +771,84 @@ def _with_rebac_engine(engine: _FakeRebacEngine | None):
 
 
 @pytest.mark.asyncio
-async def test_reverify_team_authorization_blocks_denied_tool_call() -> None:
-    """The gap this closes: `_authorize_execution_or_raise` only checks
-    CAN_READ on the turn's team once, at turn start. This is the per-tool-call
-    re-check at the shared chokepoint — a denial here must block the handler
-    from ever running, exactly like any other tool-execution failure."""
-    engine = _FakeRebacEngine(enabled=True, deny=True)
+async def test_tools_share_admitted_authority_without_swift_rechecks() -> None:
+    engine = _FakeRebacEngine()
     middleware = ToolObservabilityMiddleware(kpi=None, binding=_binding())
-    request = _request(name="fake.search", tool_obj=None)
-    handler_called = False
+    calls = 0
 
-    async def handler(req: ToolCallRequest) -> ToolMessage:
-        nonlocal handler_called
-        handler_called = True
-        return ToolMessage(content="ok", name="fake.search", tool_call_id="call-1")
+    async def handler(request: ToolCallRequest) -> ToolMessage:
+        nonlocal calls
+        calls += 1
+        return ToolMessage(content="ok", tool_call_id="call-1")
 
     with _with_rebac_engine(engine):
-        with _AuditEvents() as audit:
-            with pytest.raises(AuthorizationError):
-                await middleware.awrap_tool_call(request, handler)
+        for _ in range(2):
+            await middleware.awrap_tool_call(
+                _request(name="search", tool_obj=None), handler
+            )
+        await asyncio.create_task(
+            middleware.awrap_tool_call(_request(name="search", tool_obj=None), handler)
+        )
+    assert calls == 3
+    assert engine.calls == []
 
-    assert handler_called is False
-    assert engine.calls == [("user-1", "team-1")]
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "surface,field",
+    [
+        ("portable", "user_id"),
+        ("portable", "session_id"),
+        ("portable", "agent_id"),
+        ("portable", "space_id"),
+        ("portable", "agent_instance_id"),
+        ("runtime", "user_id"),
+        ("runtime", "session_id"),
+        ("runtime", "space_id"),
+        ("runtime", "agent_instance_id"),
+    ],
+)
+async def test_tool_refuses_context_outside_admitted_turn(
+    surface: str, field: str
+) -> None:
+    binding = _binding()
+    if surface == "portable":
+        portable = binding.portable_context
+        update = (
+            {"baggage": {**portable.baggage, field: "another"}}
+            if field in {"space_id", "agent_instance_id"}
+            else {field: "another"}
+        )
+        binding = BoundRuntimeContext(
+            runtime_context=binding.runtime_context,
+            portable_context=portable.model_copy(update=update),
+        )
+    else:
+        binding = BoundRuntimeContext(
+            runtime_context=binding.runtime_context.model_copy(
+                update={field: "another"}
+            ),
+            portable_context=binding.portable_context,
+        )
+    middleware = ToolObservabilityMiddleware(kpi=None, binding=binding)
+
+    async def handler(request: ToolCallRequest) -> ToolMessage:
+        raise AssertionError("Mismatched tool context must not execute")
+
+    with _AuditEvents() as audit, pytest.raises(AuthorityLostError):
+        await middleware.awrap_tool_call(
+            _request(name="search", tool_obj=None), handler
+        )
     assert audit.event_names() == [
         "agent.tool.invocation.started",
         "agent.tool.invocation.completed",
     ]
-    assert audit.records[1].outcome == "failed"  # type: ignore[attr-defined]
-    assert audit.records[1].reason == "AuthorizationError"  # type: ignore[attr-defined]
+    assert getattr(audit.records[-1], "outcome") == "failed"
 
 
 @pytest.mark.asyncio
-async def test_delegated_local_recheck_stops_before_tool_execution() -> None:
-    engine = _FakeRebacEngine(
-        enabled=True,
-        error=AuthorizationError("synthetic-person", "can_use", Resource.TEAM),
-    )
-    middleware = ToolObservabilityMiddleware(kpi=None, binding=_binding())
-    called = False
-
-    async def handler(request: ToolCallRequest) -> ToolMessage:
-        nonlocal called
-        called = True
-        return ToolMessage(content="ok", name="fake.search", tool_call_id="call-1")
-
-    with _with_rebac_engine(engine), RunScope.open() as scope:
-        scope.set_delegated_credentials(True)
-        with pytest.raises(AuthorityLostError) as stopped:
-            await middleware.awrap_tool_call(
-                _request(name="fake.search", tool_obj=None), handler
-            )
-    assert not called
-    assert stopped.value.__cause__ is None
-
-
-@pytest.mark.asyncio
-async def test_unrelated_local_recheck_outage_keeps_its_error() -> None:
-    engine = _FakeRebacEngine(enabled=True, error=RuntimeError("synthetic outage"))
-    middleware = ToolObservabilityMiddleware(kpi=None, binding=_binding())
-
-    async def handler(request: ToolCallRequest) -> ToolMessage:
-        raise AssertionError("tool must not run")
-
-    with _with_rebac_engine(engine), RunScope.open() as scope:
-        scope.set_delegated_credentials(True)
-        with pytest.raises(RuntimeError, match="synthetic outage"):
-            await middleware.awrap_tool_call(
-                _request(name="fake.search", tool_obj=None), handler
-            )
-
-
-@pytest.mark.asyncio
-async def test_reverify_team_authorization_allows_when_rebac_grants() -> None:
-    engine = _FakeRebacEngine(enabled=True, deny=False)
-    middleware = ToolObservabilityMiddleware(kpi=None, binding=_binding())
-    request = _request(name="fake.search", tool_obj=None)
-
-    async def handler(req: ToolCallRequest) -> ToolMessage:
-        return ToolMessage(content="ok", name="fake.search", tool_call_id="call-1")
-
-    with _with_rebac_engine(engine):
-        result = await middleware.awrap_tool_call(request, handler)
-
-    assert isinstance(result, ToolMessage)
-    assert result.content == "ok"
-    assert engine.calls == [("user-1", "team-1")]
-    assert engine.account_status_checks == []
-
-
-@pytest.mark.asyncio
-async def test_recovered_call_reaches_rebac_before_fake_tool_invocation() -> None:
-    engine = _FakeRebacEngine(enabled=True, deny=False)
+async def test_recovered_call_uses_admitted_turn_before_fake_tool_invocation() -> None:
+    engine = _FakeRebacEngine()
     recovery = ToolCallTextRecoveryMiddleware()
     model_response = ModelResponse(
         result=[
@@ -900,7 +886,7 @@ async def test_recovered_call_reaches_rebac_before_fake_tool_invocation() -> Non
 
     async def handler(req: ToolCallRequest) -> ToolMessage:
         nonlocal handler_called
-        assert engine.calls == [("user-1", "team-1")]
+        assert engine.calls == []
         handler_called = True
         return ToolMessage(
             content="fake result",
@@ -913,90 +899,8 @@ async def test_recovered_call_reaches_rebac_before_fake_tool_invocation() -> Non
 
     assert isinstance(result, ToolMessage)
     assert handler_called is True
-    assert engine.calls == [("user-1", "team-1")]
+    assert engine.calls == []
     assert result.tool_call_id == call["id"]
-
-
-@pytest.mark.asyncio
-async def test_reverify_team_authorization_skips_when_rebac_disabled() -> None:
-    """A Noop/disabled engine (identity-only dev posture) must not block
-    anything — mirrors the same skip `_authorize_execution_or_raise` applies
-    at turn start."""
-    engine = _FakeRebacEngine(enabled=False, deny=True)
-    middleware = ToolObservabilityMiddleware(kpi=None, binding=_binding())
-    request = _request(name="fake.search", tool_obj=None)
-
-    async def handler(req: ToolCallRequest) -> ToolMessage:
-        return ToolMessage(content="ok", name="fake.search", tool_call_id="call-1")
-
-    with _with_rebac_engine(engine):
-        result = await middleware.awrap_tool_call(request, handler)
-
-    assert isinstance(result, ToolMessage)
-    assert engine.calls == []
-    assert engine.account_status_checks == []
-
-
-@pytest.mark.asyncio
-async def test_reverify_team_authorization_skips_for_personal_team() -> None:
-    """Personal spaces are never injected as a `team_id` into tool calls
-    (`ContextAwareTool._inject_context_if_needed`) — nothing to recheck, even
-    against a would-deny-everything engine."""
-    engine = _FakeRebacEngine(enabled=True, deny=True)
-    middleware = ToolObservabilityMiddleware(
-        kpi=None,
-        binding=BoundRuntimeContext(
-            runtime_context=PortableRuntimeContext(),
-            portable_context=PortableContext(
-                request_id="request-1",
-                correlation_id="correlation-1",
-                actor="user-1",
-                tenant="team-1",
-                environment=PortableEnvironment.DEV,
-                session_id="session-1",
-                user_id="user-1",
-                team_id="personal-user-1",
-            ),
-        ),
-    )
-    request = _request(name="fake.search", tool_obj=None)
-
-    async def handler(req: ToolCallRequest) -> ToolMessage:
-        return ToolMessage(content="ok", name="fake.search", tool_call_id="call-1")
-
-    with _with_rebac_engine(engine):
-        result = await middleware.awrap_tool_call(request, handler)
-
-    assert isinstance(result, ToolMessage)
-    assert engine.calls == []
-    assert engine.account_status_checks == []
-
-
-@pytest.mark.asyncio
-async def test_reverify_team_authorization_skips_for_service_agent() -> None:
-    """Regression test for the EVAL-03 fix (PR #2060): the evaluation
-    worker's service identity is authorized once at turn start without any
-    OpenFGA tuple (`_authorize_execution_or_raise`, RFC EVAL-AUTH Solution
-    A) — the trusted verdict is stamped into `PortableContext.baggage` as
-    `is_service_agent`. The reverify must mirror that bypass instead of
-    re-running a ReBAC check this identity was never meant to satisfy, even
-    against a would-deny-everything engine."""
-    engine = _FakeRebacEngine(enabled=True, deny=True)
-    middleware = ToolObservabilityMiddleware(
-        kpi=None, binding=_binding(baggage={"is_service_agent": "true"})
-    )
-    request = _request(name="fake.search", tool_obj=None)
-
-    async def handler(req: ToolCallRequest) -> ToolMessage:
-        return ToolMessage(content="ok", name="fake.search", tool_call_id="call-1")
-
-    with _with_rebac_engine(engine):
-        result = await middleware.awrap_tool_call(request, handler)
-
-    assert isinstance(result, ToolMessage)
-    assert result.content == "ok"
-    assert engine.calls == []
-    assert engine.account_status_checks == []
 
 
 def test_base_dims_includes_identifiers_from_portable_context_and_baggage() -> None:
@@ -1336,46 +1240,33 @@ async def test_command_trace_captures_only_matching_tool_result(capture: bool) -
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("team_id", "permission_checks"),
-    [("team-1", [("user-1", "team-1")]), ("personal-user-1", []), (None, [])],
-    ids=["collaborative", "personal", "no-team"],
-)
-@pytest.mark.parametrize("delegated", [False, True])
-async def test_tool_recheck_uses_permissions_without_swift_account_status(
-    team_id: str | None,
-    permission_checks: list[tuple[str, str]],
-    delegated: bool,
+@pytest.mark.parametrize("state", ["missing", "ended", "closed", "stopped"])
+@pytest.mark.parametrize("service_agent", [False, True])
+async def test_tool_requires_live_authority_even_for_service_agents(
+    state: str, service_agent: bool, tool_authority: TurnAuthority
 ) -> None:
-    engine = _FakeRebacEngine(
-        enabled=True, account_status_error=AssertionError("Swift check must not run")
+    scope = RunScope.current()
+    assert scope is not None
+    if state == "missing":
+        scope.turn_authority = None
+    elif state == "ended":
+        tool_authority.close()
+    elif state == "closed":
+        scope.close()
+    else:
+        scope.record_stop(AuthorityLostError())
+    middleware = ToolObservabilityMiddleware(
+        kpi=None,
+        binding=_binding(baggage={"is_service_agent": str(service_agent).lower()}),
     )
-    with _with_rebac_engine(engine), RunScope.open() as scope:
-        scope.set_delegated_credentials(delegated)
-        await ToolExecution._reverify_team_authorization(
-            user_id="user-1", team_id=team_id, is_service_agent=False
+
+    async def handler(request: ToolCallRequest) -> ToolMessage:
+        raise AssertionError("Tool must not run without active authority")
+
+    with pytest.raises(RunStopError):
+        await middleware.awrap_tool_call(
+            _request(name="search", tool_obj=None), handler
         )
-    assert engine.account_status_checks == []
-    assert engine.calls == permission_checks
-
-
-@pytest.mark.asyncio
-async def test_delegated_permission_outage_is_not_masked_by_swift_account_status() -> (
-    None
-):
-    engine = _FakeRebacEngine(
-        enabled=True,
-        error=RuntimeError("synthetic outage"),
-        account_status_error=AccountStatusError(),
-    )
-    with _with_rebac_engine(engine), RunScope.open() as scope:
-        scope.set_delegated_credentials(True)
-        with pytest.raises(RuntimeError, match="synthetic outage"):
-            await ToolExecution._reverify_team_authorization(
-                user_id="user-1", team_id="team-1", is_service_agent=False
-            )
-    assert engine.account_status_checks == []
-    assert engine.calls == [("user-1", "team-1")]
 
 
 @pytest.mark.asyncio
@@ -1385,7 +1276,9 @@ async def test_delegated_permission_outage_is_not_masked_by_swift_account_status
 @pytest.mark.parametrize(
     "outcome", ["success", "reported_error", "raised", "cancelled", "denied"]
 )
-async def test_runtime_tool_guarantees_match(path: str, outcome: str) -> None:
+async def test_runtime_tool_guarantees_match(
+    path: str, outcome: str, tool_authority: TurnAuthority
+) -> None:
     """The real adapters authorize once, execute at most once and record one outcome."""
     from fred_core.portable import InMemoryMetricsProvider
     from fred_runtime.graph.node_context import NodeContext
@@ -1394,13 +1287,15 @@ async def test_runtime_tool_guarantees_match(path: str, outcome: str) -> None:
     from fred_sdk.contracts.runtime import RuntimeServices
 
     store, kpi = _install_recording_kpi_writer()
-    engine = _FakeRebacEngine(enabled=True, deny=outcome == "denied")
+    engine = _FakeRebacEngine()
+    if outcome == "denied":
+        tool_authority.close()
     executions = 0
 
     async def execute() -> ToolInvocationResult:
         nonlocal executions
         executions += 1
-        assert engine.calls == [("user-1", "team-1")]
+        assert engine.calls == []
         if outcome == "raised":
             raise ValueError("private failure detail")
         if outcome == "cancelled":
@@ -1477,7 +1372,7 @@ async def test_runtime_tool_guarantees_match(path: str, outcome: str) -> None:
             )
 
     expected_exception = {
-        "denied": AuthorizationError,
+        "denied": AuthorityLostError,
         "raised": ValueError,
         "cancelled": asyncio.CancelledError,
     }.get(outcome)
@@ -1488,7 +1383,7 @@ async def test_runtime_tool_guarantees_match(path: str, outcome: str) -> None:
         else:
             await invoke()
     assert executions == (0 if outcome == "denied" else 1)
-    assert engine.calls == [("user-1", "team-1")]
+    assert engine.calls == []
     assert audit.event_names() == [
         "agent.tool.invocation.started",
         "agent.tool.invocation.completed",
@@ -1555,7 +1450,7 @@ async def test_graph_mcp_keeps_handled_failure_for_audit_kpi_and_event(
         tuning_values={},
         sink=events.append,
     )
-    with _with_rebac_engine(_FakeRebacEngine(enabled=True)), _AuditEvents() as audit:
+    with _with_rebac_engine(_FakeRebacEngine()), _AuditEvents() as audit:
         await ctx.invoke_runtime_tool(wrapped.name, {})
     assert calls == 1
     assert _latency_event(store).dims["source"] == "mcp"

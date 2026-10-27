@@ -685,7 +685,13 @@ mod tests {
         assert!(status.success());
         let bytes = std::fs::read(&output).unwrap();
         let b = Bundle::parse(&bytes).unwrap();
-        assert_eq!(b.users.len(), 15);
+        assert_eq!(b.users.len(), 12);
+        assert!(b.users.iter().all(|entry| entry.platform.is_empty()));
+        assert!(
+            b.users
+                .iter()
+                .all(|entry| entry.identity.username != "owner")
+        );
         assert_eq!(b.spaces.len(), 4);
         let archive = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
         assert_eq!(archive.len(), 5);

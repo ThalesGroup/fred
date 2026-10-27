@@ -645,6 +645,34 @@ commits suivants et valider les parcours jusqu'à satisfaction de Dimi.
 
 ## F-005 Import du bundle de démonstration
 
+- 2026-10-27 : à la demande de Dimi, fixture publique remplacée par les douze
+  personnages Acme/Research et Globex/Support décrits en arc42. Aucun compte
+  `owner`, rôle plateforme, projet ou droit de création d'espace personnel.
+  `bundle-demo-zip` et `build-demo-bundle` partagent la recette existante.
+  Assertions du bundle et de l'import réel adaptées. Dimi demande de laisser
+  tous les tests navigateur inchangés pour un lot séparé ; ils dépendent encore
+  de l'ancienne fixture et doivent être revus avant leur prochaine exécution.
+  Annexes A3/A4/A8 et budget source de 09 alignés. L'import reste additif : ce lot
+  ne modifie aucune installation et ne retire aucun grant existant.
+  `make bundle-demo-zip` exécuté : ZIP avec cinq JSON, douze comptes, quatre
+  espaces, aucun projet ni rôle plateforme ; intégrité ZIP vérifiée.
+  `make code-quality` Control Plane réussi (Clippy tous targets, rustfmt,
+  modèle OpenFGA), ainsi que `python3 docs/architecture/tools/docs.py check`
+  et `git diff --check`. Tests unitaires, intégration et navigateur non exécutés ;
+  import et validation fonctionnelle laissés à Dimi. Aucun commit ni push.
+
+- 2026-10-27 : Dimi accepte les personnages Acme/Research et Globex/Support,
+  puis demande de commencer par arc42 uniquement. Table de référence dans 00 :
+  Oscar/Olivia owners, Alice/Grace admins d'organisation ; Carl/Marc admins,
+  Elena/Nadia analysts, Carol/Phil members et Bob/Zoe editors d'équipe.
+  Les quatre profils d'équipe ont aussi member sur leur organisation.
+  `owner` reste le compte plateforme créé par formulaire puis activé par bootstrap ;
+  Dana décrit l'exploitation d'infrastructure, sans compte de démo supplémentaire.
+  Parcours 02.1/02.3 et sécurité 03 alignés : Carol lit les documents de Research,
+  sans accès à la conversation de Bob. Les annexes conservent le constat sur
+  la fixture actuelle. Prochaine étape : adapter le bundle et ses consommateurs ;
+  aucun changement de provisioning ni validation fonctionnelle dans ce lot.
+
 - 2026-10-21 : prochaine étape choisie par Dimi après validation du bootstrap/CGU.
 - État : à parcourir. Attendre ses observations avant de proposer un petit lot.
 - Consigner le résultat de l'import, les objets effectivement créés et les

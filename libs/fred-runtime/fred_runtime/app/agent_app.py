@@ -3995,6 +3995,11 @@ async def _iterate_runtime_event_payloads(
                 "agent_instance_id",
                 "template_agent_id",
                 "exchange_id",
+                "organization_id",
+                "team_id",
+                "project_id",
+                "space_id",
+                "space_kind",
             ),
         ),
         RunScope.open() as scope,
@@ -4008,6 +4013,16 @@ async def _iterate_runtime_event_payloads(
                 scope.turn_authority = request._turn_authority
             authority = current_turn()
             authority.check(agent_id=definition.agent_id)
+            space = authority.binding.space
+            bind_operation_context(
+                organization_id=str(space.organization_id),
+                team_id=str(space.team_id) if space.team_id is not None else None,
+                project_id=str(space.project_id)
+                if space.project_id is not None
+                else None,
+                space_id=str(space.id),
+                space_kind=space.kind,
+            )
             if owns_run_record:
                 scope.set_delegated_credentials(
                     credential_provider is not None and credential_provider.delegated
@@ -4134,7 +4149,6 @@ async def _iterate_runtime_event_payloads_inner(
                 if ctx.get("is_service_agent") == "true"
                 else ctx.get("user_id"),
                 "session_id": ctx.get("session_id"),
-                "team_id": resolved_team_id,
                 "exchange_id": exchange_id,
                 "agent_instance_id": request.agent_instance_id,
                 "template_agent_id": definition.agent_id,
