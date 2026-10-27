@@ -29,6 +29,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import replace
+from pathlib import PurePosixPath
 from typing import cast
 
 from deepagents.backends import CompositeBackend, FilesystemBackend
@@ -98,6 +99,7 @@ from fred_runtime.react.react_tool_resolution import ReActRuntimeToolResolver
 from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
 from fred_runtime.runtime_support.turn_steering import TurnSteeringMiddleware
 from fred_runtime.skills.catalog import PlatformSkills
+from fred_runtime.skills.native import NativeSkillPolicyMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +171,7 @@ class DeepAgentRuntime(ReActRuntime):
     async def build_executor(
         self, binding: BoundRuntimeContext
     ) -> Executor[ReActInput, ReActOutput]:
+        self._scope_skills(binding)
         if self._model is None:
             raise RuntimeError("DeepAgentRuntime model is not initialized.")
 
@@ -278,7 +281,9 @@ class DeepAgentRuntime(ReActRuntime):
             else permissions
         )
         if self.services.skills is not None:
-            child_permissions = skills_permissions(child_permissions)
+            child_permissions = skills_permissions(
+                child_permissions, self.services.skills
+            )
         child_filesystem = DeepConversationFilesystemPort(backend, child_permissions)
         compiled_agent = _create_compiled_deep_agent(
             model=self._model,
@@ -355,9 +360,20 @@ def _create_compiled_deep_agent(
     )
 
     parent_permissions = permissions
+    policy = next(
+        (m for m in middleware if isinstance(m, NativeSkillPolicyMiddleware)), None
+    )
+    if policy is not None:
+        parent_permissions = skills_permissions(parent_permissions, policy.skills)
     child_permissions = (
         subagent_permissions if subagent_permissions is not None else parent_permissions
     )
+    child_policy = next(
+        (m for m in subagent_middleware if isinstance(m, NativeSkillPolicyMiddleware)),
+        None,
+    )
+    if child_policy is not None:
+        child_permissions = skills_permissions(child_permissions, child_policy.skills)
     # Explicitly replace the library's general-purpose child, which otherwise
     # has neither Fred's composed prompt nor its middleware frame.
     subagent: SubAgent = {
@@ -420,7 +436,7 @@ def build_conversation_filesystem(
     )
     permissions = _conversation_permissions()
     if skills is not None:
-        permissions = skills_permissions(permissions)
+        permissions = skills_permissions(permissions, skills)
     return backend, permissions
 
 
@@ -441,7 +457,7 @@ def mount_skills(
     routes = dict(backend.routes) if isinstance(backend, CompositeBackend) else {}
     mounted = routes.get("/skills/")
     if mounted is _native_skills_backend(skills):
-        return backend, skills_permissions(permissions)
+        return backend, skills_permissions(permissions, skills)
     if any(
         route.rstrip("/") == "/skills"
         or route.startswith("/skills/")
@@ -456,15 +472,38 @@ def mount_skills(
         artifacts_root=backend.artifacts_root
         if isinstance(backend, CompositeBackend)
         else "/",
-    ), skills_permissions(permissions)
+    ), skills_permissions(permissions, skills)
 
 
 def skills_permissions(
     permissions: list[FilesystemPermission],
+    skills: SkillsPort | None = None,
 ) -> list[FilesystemPermission]:
+    roots = (
+        [str(PurePosixPath(m["path"]).parent) for m in skills.native_metadata]
+        if isinstance(skills, PlatformSkills)
+        else [f"/skills/{s.name}" for s in skills.catalog.skills]
+        if skills is not None
+        else []
+    )
     return [
         FilesystemPermission(
             operations=["write"], paths=["/skills", "/skills/**"], mode="deny"
+        ),
+        *(
+            [
+                FilesystemPermission(
+                    operations=["read"],
+                    paths=["/skills", "/skills/"]
+                    + [path for root in roots for path in (root, root + "/**")],
+                    mode="allow",
+                ),
+                FilesystemPermission(
+                    operations=["read"], paths=["/skills/**"], mode="deny"
+                ),
+            ]
+            if skills is not None
+            else []
         ),
         *permissions,
     ]
@@ -535,6 +574,11 @@ def _build_deepagent_runtime_middleware(
         capability_block.hitl if capability_block is not None else None
     )
     middleware: list[AgentMiddleware] = [
+        *(
+            (cast(AgentMiddleware, NativeSkillPolicyMiddleware(skills, binding, kpi)),)
+            if isinstance(skills, PlatformSkills)
+            else ()
+        ),
         CheckpointHygieneMiddleware(
             max_history_messages=None,
             binding=binding,

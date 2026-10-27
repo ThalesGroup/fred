@@ -101,7 +101,10 @@ def binding(selection: str | None = None) -> BoundRuntimeContext:
 def test_package_discovery_and_read_only_reference() -> None:
     catalog = PlatformSkills.from_directory("package")
     assert [entry.name for entry in catalog.catalog.skills] == [
+        "analyze-data",
         "compare-options",
+        "data-visualization",
+        "grill-me",
         "grounded-research",
         "meeting-minutes",
         "mermaid",
@@ -180,7 +183,7 @@ async def test_deep_delegates_skills_discovery_to_native_constructor(
     )
     state = await agent.aget_state({"configurable": {"thread_id": "native-discovery"}})
     assert {item["name"] for item in state.values["skills_metadata"]} == {
-        entry.name for entry in skills.catalog.skills
+        entry.name for entry in skills.for_execution().catalog.skills
     }
     for messages in model.calls:
         prompt = str(messages[0].content)
@@ -689,7 +692,7 @@ async def test_multiple_selections_load_before_inference_in_order(stream: bool) 
 
 
 @pytest.mark.asyncio
-async def test_deep_multiple_native_reads_keep_user_origin_without_preload() -> None:
+async def test_deep_pins_user_selections_and_attributes_actual_native_reads() -> None:
     skills = PlatformSkills.from_directory("package")
     bound = binding().model_copy(
         update={
@@ -740,6 +743,8 @@ async def test_deep_multiple_native_reads_keep_user_origin_without_preload() -> 
     assert [(load.name, load.origin) for load in loads] == [
         ("meeting-minutes", "user"),
         ("mermaid", "user"),
+        ("meeting-minutes", "user"),
+        ("mermaid", "user"),
         ("compare-options", "agent"),
     ]
     assert "Loaded platform skill:" not in str(model.calls[0])
@@ -747,7 +752,18 @@ async def test_deep_multiple_native_reads_keep_user_origin_without_preload() -> 
         message.content
         for message in model.calls[0]
         if isinstance(message, HumanMessage)
+        and message.additional_kwargs.get("lc_source") != "pinned_skill"
     ] == ["Before /meeting-minutes /mermaid after"]
+    assert (
+        len(
+            [
+                m
+                for m in model.calls[0]
+                if m.additional_kwargs.get("lc_source") == "pinned_skill"
+            ]
+        )
+        == 2
+    )
 
 
 @pytest.mark.asyncio
@@ -760,7 +776,7 @@ async def test_packaged_mermaid_loads_through_shared_paths(
     bound = binding("mermaid" if origin == "user" else None)
     model = Model(
         script=[]
-        if origin == "user" and not deep
+        if origin == "user"
         else [
             load_call("mermaid", "mermaid-load", deep),
             AIMessage(content="done"),
@@ -799,9 +815,11 @@ async def test_packaged_mermaid_loads_through_shared_paths(
     assert loads[0].name == "mermaid"
     assert "mermaid" not in model.bound_tool_names
     body = skills.read("mermaid")
+    if deep and origin == "user":
+        body = body.split("---", 2)[2].strip()
     returned = "\n".join(str(message.content) for message in model.calls[-1])
     assert all(line in returned for line in body.splitlines() if line.strip())
-    if deep or expected_origin == "agent":
+    if expected_origin == "agent":
         assert all(body not in str(message.content) for message in model.calls[0])
     counts = [
         c
@@ -1007,7 +1025,7 @@ async def test_trimmed_skill_can_reload_and_restart_refreshes_existing_checkpoin
     if not deep:
         assert state.values["skills_metadata"][0]["description"] == "Changed"
     if deep:
-        assert "- **example**: Test skill" in str(restarted.calls[0][0].content)
+        assert "- **example**: Changed" in str(restarted.calls[0][0].content)
     else:
         assert "Skill `example` (not a tool): Changed" in str(
             restarted.calls[0][0].content
@@ -1248,7 +1266,9 @@ async def test_runtime_catalog_reuses_admission_gate_and_selected_instance(
     definition = _PingAgent()
     gate = AsyncMock(side_effect=HTTPException(status_code=403) if denied else None)
     resolve = AsyncMock(
-        return_value=SimpleNamespace(definition=definition, team_id="team")
+        return_value=SimpleNamespace(
+            definition=definition, team_id="team", disabled_platform_skills=()
+        )
     )
     monkeypatch.setattr(agent_app, "_authorize_execution_or_raise", gate)
     monkeypatch.setattr(agent_app, "_resolve_agent_instance", resolve)
@@ -1284,7 +1304,11 @@ async def test_runtime_catalog_reuses_admission_gate_and_selected_instance(
             container,
             {definition.agent_id: definition},
         )
-        assert result == catalog.catalog
+        assert result == catalog.catalog.model_copy(
+            update={
+                "skills": tuple(s for s in catalog.catalog.skills if s.user_invocable)
+            }
+        )
         assert resolve.await_args is not None
         assert resolve.await_args.kwargs["team_id"] == "team"
         assert resolve.await_args.kwargs["access_token"] == "verified"
@@ -1314,7 +1338,9 @@ async def test_skill_preview_reuses_catalog_authorization_and_snapshot(
     definition = _PingAgent()
     gate = AsyncMock(side_effect=HTTPException(status_code=403) if denied else None)
     resolve = AsyncMock(
-        return_value=SimpleNamespace(definition=definition, team_id="team")
+        return_value=SimpleNamespace(
+            definition=definition, team_id="team", disabled_platform_skills=()
+        )
     )
     monkeypatch.setattr(agent_app, "_authorize_execution_or_raise", gate)
     monkeypatch.setattr(agent_app, "_resolve_agent_instance", resolve)
@@ -1737,6 +1763,11 @@ async def test_real_deep_runtime_exposes_only_native_skill_tools(
         ),
     )
     runtime._model = model
+    if selection == "missing":
+        with pytest.raises(ValueError, match="unavailable"):
+            await runtime.build_executor(binding(selection))
+        assert model.calls == []
+        return
     executor = await runtime.build_executor(binding(selection))
     user_text = f"/{selection} Prepare minutes" if selection else "Prepare minutes"
     input_model = ReActInput(
@@ -1754,9 +1785,17 @@ async def test_real_deep_runtime_exposes_only_native_skill_tools(
         message.content
         for message in first_messages
         if isinstance(message, HumanMessage)
+        and message.additional_kwargs.get("lc_source") != "pinned_skill"
     ] == [user_text]
     assert "Loaded platform skill:" not in str(first_messages)
     assert skills.read("meeting-minutes") not in str(first_messages)
+    assert bool(
+        [
+            m
+            for m in first_messages
+            if m.additional_kwargs.get("lc_source") == "pinned_skill"
+        ]
+    ) == bool(selection)
     assert "/skills/meeting-minutes/SKILL.md" in str(first_messages[0].content)
     assert not {"load_skill", "read_skill_file"} & set(model.bound_tool_names)
     assert "read_file" in model.bound_tool_names
@@ -1772,7 +1811,9 @@ async def test_real_deep_runtime_exposes_only_native_skill_tools(
         if isinstance(event, StatusRuntimeEvent) and event.skill_load
     ]
     if stream:
-        assert len(loads) == 2
-        expected_origin = "user" if selection == "meeting-minutes" else "agent"
+        assert len(loads) == (3 if selection else 2)
+        expected_origin = "user" if selection else "agent"
         assert any(load.child and load.origin == expected_origin for load in loads)
+        if selection:
+            assert loads[0].origin == "user" and not loads[0].child
         assert any(not load.child and load.origin == expected_origin for load in loads)

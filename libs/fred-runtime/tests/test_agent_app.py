@@ -2434,10 +2434,12 @@ async def test_resolve_agent_instance_does_not_leak_headers_between_calls(
 
     first, second = calls
     assert first["headers"] == {
+        "X-Fred-Skill-Policy": "1",
         "Authorization": "Bearer token-alice",
         "X-Request-Id": "req-alice",
     }
     assert second["headers"] == {
+        "X-Fred-Skill-Policy": "1",
         "Authorization": "Bearer token-bob",
         "X-Request-Id": "req-bob",
     }

@@ -14,7 +14,7 @@ from fred_sdk.contracts.runtime import ExecutionConfig, RuntimeServices
 from langchain_core.messages import AIMessage, ToolMessage
 from test_platform_skills import Model, binding, call, compiled
 
-UPSTREAM_REVISION = "59db609eb1e18aaf59b63284d0e52255aff0c63c"
+UPSTREAM_REVISION = "59db609eb1e18aaf59b63284d0e52255aff0c63c"  # pragma: allowlist secret - public source commit
 
 
 def test_packaged_interview_preserves_explicit_invocation_and_mit_provenance() -> None:
@@ -29,8 +29,11 @@ def test_packaged_interview_preserves_explicit_invocation_and_mit_provenance() -
     license_text = selected.read("grill-me", "LICENSE.txt")
     license_bytes = license_text.encode()
     git_blob = f"blob {len(license_bytes)}\0".encode() + license_bytes
-    assert hashlib.sha1(git_blob, usedforsecurity=False).hexdigest() == (
-        "f1dd2c09108dde1a5f56097cee8461b3ea834499"
+    assert (
+        hashlib.sha1(git_blob, usedforsecurity=False).hexdigest()
+        == (
+            "f1dd2c09108dde1a5f56097cee8461b3ea834499"  # pragma: allowlist secret - public license blob
+        )
     )
     assert UPSTREAM_REVISION in selected.read("grill-me", "NOTICE.md")
     with pytest.raises(ValueError):

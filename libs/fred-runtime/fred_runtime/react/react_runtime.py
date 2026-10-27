@@ -37,6 +37,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator, Collection, Sequence
 from contextlib import nullcontext
+from dataclasses import replace
 from typing import cast
 
 from fred_core.kpi import BaseKPIWriter
@@ -82,7 +83,7 @@ from langchain_core.messages import (
 )
 from langchain_core.messages.tool import ToolMessage
 from langchain_core.tools import BaseTool
-from langgraph.types import Checkpointer
+from langgraph.types import Checkpointer, Command, Overwrite
 
 from fred_runtime.capabilities.assembly import (
     CapabilityAgentBlock,
@@ -96,7 +97,7 @@ from fred_runtime.runtime_support.run_scope import (
     terminal_stop_event,
 )
 from fred_runtime.runtime_support.trace_payloads import to_langfuse_usage
-from fred_runtime.skills.catalog import build_skills_middleware
+from fred_runtime.skills.catalog import PlatformSkills, build_skills_middleware
 from fred_runtime.support.thinking import content_to_text
 
 from .middleware.tool_call_recovery import (
@@ -377,7 +378,17 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         self, input_model: ReActInput, config: ExecutionConfig
     ) -> tuple[object, tuple[StatusRuntimeEvent, ...]]:
         if not self._preload_selected_skill:
-            return _graph_input(input_model, config), ()
+            base = _graph_input(input_model, config)
+            selections = self._binding.runtime_context.selected_skills
+            names = (
+                [s.name for s in selections] if config.resume_payload is None else []
+            )
+            if isinstance(base, Command):
+                return replace(
+                    base,
+                    update={**(base.update or {}), "pinned_skills": Overwrite(names)},
+                ), ()
+            return {**cast(dict, base), "pinned_skills": Overwrite(names)}, ()
         from fred_runtime.skills.preload import preload_skills
 
         return await preload_skills(
@@ -424,6 +435,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 )
                 for message in result["messages"]
                 if isinstance(message, BaseMessage)
+                and message.additional_kwargs.get("lc_source") != "pinned_skill"
             )
             final_message = _final_assistant_message_adapter(
                 result["messages"],
@@ -1190,6 +1202,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         capability_block: CapabilityAgentBlock | None = None,
     ):
         super().__init__(definition=definition, services=services)
+        self._skill_source = services.skills
         self._model: BaseChatModel | None = None
         # Selected capabilities, pre-assembled into the frame block (#1974):
         # id-sorted middleware stacks + HitlSpec bindings for the single
@@ -1197,10 +1210,23 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         self._capability_block = capability_block
 
     def on_bind(self, binding: BoundRuntimeContext) -> None:
+        self._scope_skills(binding)
         if self.services.tool_provider is not None:
             self.services.tool_provider.bind(binding)
         if self.services.workspace_fs is not None:
             self.services.workspace_fs.bind(binding)
+
+    def _scope_skills(self, binding: BoundRuntimeContext) -> None:
+        if isinstance(self._skill_source, PlatformSkills):
+            self._services = replace(
+                self.services,
+                skills=self._skill_source.for_execution(
+                    ()
+                    if binding.is_resuming
+                    else tuple(s.name for s in binding.runtime_context.selected_skills),
+                    binding.disabled_platform_skills,
+                ),
+            )
 
     async def on_activate(self, binding: BoundRuntimeContext) -> None:
         if self.services.chat_model_factory is None:
@@ -1233,6 +1259,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
     async def build_executor(
         self, binding: BoundRuntimeContext
     ) -> Executor[ReActInput, ReActOutput]:
+        self._scope_skills(binding)
         if self._model is None:
             raise RuntimeError("ReActRuntime model is not initialized.")
 

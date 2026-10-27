@@ -51,12 +51,11 @@ def observe_skill_read(
             load_id, agent_id, child, child_id = model_skill_context(
                 binding, message.tool_call_id
             )
-            selections = binding.runtime_context.selected_skills
             attribution = record_skill_load(
                 skills,
                 name,
                 origin="user"
-                if any(selection.name == name for selection in selections)
+                if any(s.name == name for s in binding.runtime_context.selected_skills)
                 else "agent",
                 load_id=load_id,
                 agent_id=agent_id,

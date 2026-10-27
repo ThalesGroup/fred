@@ -26,7 +26,13 @@ from conftest import StaticWorkloadTokens
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fred_core.security import oidc as oidc_module
-from fred_core.security.delegation import DelegationConfig, initialize_delegation
+from fred_core.security.delegation import (
+    GRANT_PARAM_AGENT,
+    GRANT_PARAM_PERSON,
+    GRANT_PARAM_RUN,
+    DelegationConfig,
+    initialize_delegation,
+)
 from fred_core.security.models import AccountStatusError
 from fred_core.security.structure import KeycloakUser
 from fred_runtime.app.agent_app import _write_turn_history, create_agent_app
@@ -81,13 +87,33 @@ async def _install_control_plane_transport(
 ) -> None:
     container = get_pod_container_from_app(app)
     old_client = container.get_control_plane_http_client()
-    client = httpx.AsyncClient(transport=transport)
+    client = httpx.AsyncClient(transport=transport, follow_redirects=True)
+    get = client.get
+
+    async def _policy_get(url, **kwargs):
+        assert kwargs["timeout"] == 10.0
+        assert kwargs["follow_redirects"] is False
+        return await get(url, **kwargs)
+
+    setattr(client, "get", _policy_get)
     container._control_plane_http_client = client
     runtime_context = get_runtime_context()
     runtime_context._config = replace(
         runtime_context.config, control_plane_http_client=client
     )
     await old_client.aclose()
+
+
+def _policy_reply(request: httpx.Request) -> httpx.Response:
+    """Allow the delegated global policy read; every binding lookup remains unexpected."""
+    assert request.method == "GET"
+    assert request.url.path == "/control-plane/v1/platform/skills/policy"
+    assert request.headers["Authorization"] == "Bearer workload-token"
+    assert request.url.params[GRANT_PARAM_PERSON] == "owner-a"
+    assert request.url.params[GRANT_PARAM_RUN]
+    assert request.url.params[GRANT_PARAM_AGENT] == "rags.sample.echo"
+    assert request.extensions["timeout"]["read"] == 10.0
+    return httpx.Response(200, json={"disabled_skill_names": []})
 
 
 def _person_pod(
@@ -268,6 +294,9 @@ class _Connection:
 @asynccontextmanager
 async def _serving(connection: _Connection):
     async with connection.app.router.lifespan_context(connection.app):
+        await _install_control_plane_transport(
+            connection.app, httpx.MockTransport(_policy_reply)
+        )
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=connection),
             base_url="http://runtime.test",
@@ -407,7 +436,7 @@ async def test_a_delegated_stream_runs_once_and_carries_no_run_handle(
 
     def control_plane(request: httpx.Request) -> httpx.Response:
         control_plane_requests.append(request)
-        return httpx.Response(500)
+        return _policy_reply(request)
 
     connection = _Connection(app)
     async with _serving(connection) as client:
@@ -424,8 +453,8 @@ async def test_a_delegated_stream_runs_once_and_carries_no_run_handle(
     assert not any(line.startswith("id:") for line in response.text.splitlines())
     assert _payloads(response.text)[-1]["kind"] == expected_kind
     assert model.i == model_index
-    # A direct run resolves locally: nothing reaches the control plane.
-    assert control_plane_requests == []
+    # Direct resolution remains local; only the shared skill policy is read.
+    assert len(control_plane_requests) == 1
     assert len(run_ids) == 1
     assert len(runtime.records) == 0
     delegated_logs = "\n".join(
@@ -768,7 +797,7 @@ def test_a_human_resume_is_a_fresh_admission_with_the_current_token(
 
     def control_plane(request: httpx.Request) -> httpx.Response:
         control_plane_requests.append(request)
-        return httpx.Response(500)
+        return _policy_reply(request)
 
     with TestClient(app) as client:
         runtime = _install_delegation()
@@ -803,4 +832,8 @@ def test_a_human_resume_is_a_fresh_admission_with_the_current_token(
     assert len(streamed_run_ids) == 2
     assert streamed_run_ids[0] != streamed_run_ids[1]
     assert len(runtime.records) == 0
-    assert control_plane_requests == []
+    assert len(control_plane_requests) == 2
+    assert (
+        control_plane_requests[0].url.params[GRANT_PARAM_RUN]
+        != control_plane_requests[1].url.params[GRANT_PARAM_RUN]
+    )

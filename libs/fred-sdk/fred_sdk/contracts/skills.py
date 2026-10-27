@@ -13,6 +13,9 @@ class SkillSummary(BaseModel):
     name: str
     description: str
     argument_hint: str | None = Field(default=None, min_length=1, max_length=256)
+    builtin: bool = False
+    user_invocable: bool = True
+    disable_model_invocation: bool = False
 
 
 class SkillCatalog(BaseModel):
@@ -21,6 +24,7 @@ class SkillCatalog(BaseModel):
     supported: bool = True
     revision: str = ""
     skills: tuple[SkillSummary, ...] = ()
+    policy_supported: bool = False
 
 
 class SkillInvocation(BaseModel):
@@ -51,6 +55,7 @@ class SkillLoadAttribution(BaseModel):
     agent_id: str
     child: bool = False
     child_id: str | None = None
+    builtin: bool = False
 
 
 class SkillsPort(Protocol):

@@ -879,7 +879,7 @@ def test_a_grant_admission_audit_names_neither_the_person_nor_the_caller(
 
 
 # ---------------------------------------------------------------------------
-# Resolving the target: the binding lookup is the only control-plane call
+# Target resolution reads a managed binding or direct execution's shared policy
 # ---------------------------------------------------------------------------
 
 
@@ -939,7 +939,9 @@ async def test_a_delegated_managed_run_resolves_its_binding_with_one_grant_get()
 
 
 @pytest.mark.asyncio
-async def test_a_delegated_direct_run_makes_no_control_plane_call():
+async def test_a_delegated_direct_run_reads_policy_without_a_managed_binding(
+    monkeypatch,
+):
     runtime = install_delegation()
     definition = _Definition()
     provider = delegated_provider(
@@ -950,11 +952,20 @@ async def test_a_delegated_direct_run_makes_no_control_plane_call():
 
     def _control_plane(request: httpx.Request) -> httpx.Response:
         sent.append(request)
-        return httpx.Response(503)
+        assert request.url.path == "/control-plane/v1/platform/skills/policy"
+        assert request.extensions["timeout"]["read"] == 10.0
+        return httpx.Response(200, json={"disabled_skill_names": []})
 
     async with httpx.AsyncClient(
-        transport=httpx.MockTransport(_control_plane)
+        transport=httpx.MockTransport(_control_plane), follow_redirects=True
     ) as client:
+        get = client.get
+
+        async def _policy_get(url, **kwargs):
+            assert kwargs["follow_redirects"] is False
+            return await get(url, **kwargs)
+
+        monkeypatch.setattr(client, "get", _policy_get)
         target = await agent_app_module._resolve_agent_instance(
             request=agent_app_module._AgentExecuteRequest(
                 agent_id=definition.agent_id, message="hello"
@@ -966,7 +977,13 @@ async def test_a_delegated_direct_run_makes_no_control_plane_call():
             credentials=provider,
         )
 
-    assert sent == []
+    assert len(sent) == 1
+    assert dict(sent[0].url.params) == {
+        GRANT_PARAM_PERSON: "alice",
+        GRANT_PARAM_RUN: "run-9",
+        GRANT_PARAM_AGENT: definition.agent_id,
+    }
+    assert sent[0].headers["Authorization"] == "Bearer workload-token"
     assert target.effective_agent_id == definition.agent_id
 
 

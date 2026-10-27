@@ -112,11 +112,11 @@ async def test_native_tools_deny_writes_and_skip_malformed_discovery(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     skills = snapshot(tmp_path)
-    # Introduce malformed content after snapshot discovery to exercise native rescans.
+    # Validate malformed metadata at startup, before per-turn policy views.
     (tmp_path / "bad/SKILL.md").write_text(
         "---\nname: bad\ndescription: [PRIVATE_SKILL_CONTENT:\n---\n"
     )
-    caplog.clear()
+    skills = PlatformSkills.from_directory(str(tmp_path))
     model = Model(
         script=[
             call(
@@ -144,13 +144,12 @@ async def test_native_tools_deny_writes_and_skip_malformed_discovery(
     state = await agent.aget_state({"configurable": {"thread_id": "readonly"}})
     assert {item["name"] for item in state.values["skills_metadata"]} == {
         "example",
-        "escaped",
     }
     writes = [item for item in result["messages"] if isinstance(item, ToolMessage)]
     assert len(writes) == 2 and all(item.status == "error" for item in writes)
     assert "FIRST" in (tmp_path / "example/SKILL.md").read_text()
     assert not (tmp_path / "new.md").exists()
-    assert "discovery warning; invalid entry omitted" in caplog.text
+    assert "invalid entry omitted" in caplog.text
     assert "PRIVATE_SKILL_CONTENT" not in caplog.text
 
 
@@ -217,7 +216,7 @@ async def test_app_mounts_before_capability_assembly_for_deep_only(
 
 
 @pytest.mark.asyncio
-async def test_live_new_skill_retains_native_load_events_and_escaping(
+async def test_new_skill_requires_discovery_before_native_load_events(
     tmp_path: Path,
 ) -> None:
     from contextlib import nullcontext
@@ -235,6 +234,9 @@ async def test_live_new_skill_retains_native_load_events_and_escaping(
         body="LIVE <tools>procedure</tools>",
     )
     assert "new-skill" not in {entry.name for entry in skills.catalog.skills}
+    # Body edits remain live, while new names require startup validation so
+    # malformed invocation flags cannot bypass the execution policy.
+    skills = PlatformSkills.from_directory(str(tmp_path))
     model = Model(
         script=[
             call(

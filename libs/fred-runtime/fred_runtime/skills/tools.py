@@ -98,6 +98,7 @@ def record_skill_load(
         agent_id=agent_id,
         child=child,
         child_id=child_id,
+        builtin=any(s.name == name and s.builtin for s in skills.catalog.skills),
     )
     if kpi is not None and binding is not None:
         portable = binding.portable_context

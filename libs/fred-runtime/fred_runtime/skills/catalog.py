@@ -3,7 +3,7 @@
 """Bounded startup discovery through DeepAgents' public SkillsMiddleware hook.
 
 ReAct and web loaders use immutable bytes; Deep mounts the physical directory.
-Installing resources does not activate them: configuration opts in.
+Packaged resources are the default; explicit null configuration opts out.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import os
 import re
 import stat
 from collections import Counter
+from copy import copy
 from importlib.resources import as_file, files
 from itertools import islice
 from pathlib import Path, PurePosixPath
@@ -299,7 +300,7 @@ def _snapshot(root: Path) -> dict[str, bytes]:
 class PlatformSkills:
     """Pod-owned catalogue and bytes. Rebuilding at restart changes revision."""
 
-    def __init__(self, contents: dict[str, bytes]) -> None:
+    def __init__(self, contents: dict[str, bytes], *, builtin: bool = False) -> None:
         self._filesystem_backend: FilesystemBackend | None = None
         backend = SnapshotBackend(contents)
         metadata: list[SkillMetadata] = []
@@ -334,6 +335,7 @@ class PlatformSkills:
                 )
         counts = Counter(item["name"] for item in metadata)
         accepted: list[SkillMetadata] = []
+        controls: dict[str, tuple[bool, bool]] = {}
         for item in metadata:
             name = item["name"]
             if counts[name] != 1 or len(name) > 64 or not _NAME.fullmatch(name):
@@ -342,7 +344,28 @@ class PlatformSkills:
                     PurePosixPath(item["path"]).parent.name,
                 )
                 continue
+            try:
+                frontmatter = next(
+                    yaml.safe_load_all(contents[item["path"]].decode("utf-8"))
+                )
+                user = frontmatter.get("user-invocable", True)
+                model = frontmatter.get("disable-model-invocation", False)
+                if not isinstance(user, bool) or not isinstance(model, bool):
+                    raise ValueError("Invalid invocation controls")
+            except (
+                yaml.YAMLError,
+                RecursionError,
+                ValueError,
+                TypeError,
+                AttributeError,
+            ):
+                logger.warning(
+                    "Platform skill %s skipped: invalid invocation controls", name
+                )
+                continue
+            controls[name] = (user, model)
             accepted.append(item)
+        self._native_metadata = tuple(accepted)
         self._paths = MappingProxyType(
             {item["name"]: str(PurePosixPath(item["path"]).parent) for item in accepted}
         )
@@ -355,10 +378,14 @@ class PlatformSkills:
             digest.update(b"\0")
         self._catalog = SkillCatalog(
             revision=digest.hexdigest(),
+            policy_supported=True,
             skills=tuple(
                 SkillSummary(
                     name=item["name"],
                     description=item["description"],
+                    builtin=builtin,
+                    user_invocable=controls[item["name"]][0],
+                    disable_model_invocation=controls[item["name"]][1],
                     argument_hint=_argument_hint(
                         contents[item["path"]],
                         PurePosixPath(item["path"]).parent.name,
@@ -370,12 +397,12 @@ class PlatformSkills:
         self._prompt = render_skills_prompt(self._catalog)
 
     @classmethod
-    def from_directory(cls, directory: str) -> PlatformSkills:
+    def from_directory(cls, directory: str, *, builtin: bool = False) -> PlatformSkills:
         if directory == "package":
             with as_file(files("fred_runtime.skills")) as root:
-                return cls.from_directory(str(root))
+                return cls.from_directory(str(root), builtin=True)
         root = Path(directory)
-        skills = cls(_snapshot(root))
+        skills = cls(_snapshot(root), builtin=builtin)
         try:
             # Bootstrap already runs off-thread; native constructor resolves disk paths.
             skills._filesystem_backend = FilesystemBackend(
@@ -384,6 +411,60 @@ class PlatformSkills:
         except (OSError, RuntimeError, ValueError):
             logger.warning("Native skills source directory unavailable")
         return skills
+
+    def for_catalog(self, disabled_names: tuple[str, ...] = ()) -> PlatformSkills:
+        """Immutable request view; packaged policy never shadows custom skills."""
+        disabled = frozenset(disabled_names)
+        allowed = tuple(
+            s for s in self.catalog.skills if not (s.builtin and s.name in disabled)
+        )
+        view = copy(self)
+        view._catalog = self.catalog.model_copy(update={"skills": allowed})
+        names = {s.name for s in allowed}
+        view._paths = MappingProxyType(
+            {n: p for n, p in self._paths.items() if n in names}
+        )
+        view._native_metadata = tuple(
+            m for m in self._native_metadata if m["name"] in names
+        )
+        view._prompt = render_skills_prompt(view.catalog)
+        return view
+
+    def for_execution(
+        self,
+        selected_names: tuple[str, ...] = (),
+        disabled_names: tuple[str, ...] = (),
+    ) -> PlatformSkills:
+        view = self.for_catalog(disabled_names)
+        by_name = {s.name: s for s in view.catalog.skills}
+        for name in selected_names:
+            summary = by_name.get(name)
+            if summary is None:
+                raise ValueError("Skill unavailable in this runtime catalog")
+            if not summary.user_invocable:
+                raise ValueError("Skill is not user-invocable")
+        names = tuple(
+            s.name
+            for s in view.catalog.skills
+            if not s.disable_model_invocation or s.name in selected_names
+        )
+        excluded = tuple(s.name for s in view.catalog.skills if s.name not in names)
+        # Eligibility applies to custom skills too; global overrides remain packaged-only.
+        view._catalog = view.catalog.model_copy(
+            update={"skills": tuple(s for s in view.catalog.skills if s.name in names)}
+        )
+        view._paths = MappingProxyType(
+            {n: p for n, p in view._paths.items() if n not in excluded}
+        )
+        view._native_metadata = tuple(
+            m for m in view._native_metadata if m["name"] in names
+        )
+        view._prompt = render_skills_prompt(view.catalog)
+        return view
+
+    @property
+    def native_metadata(self) -> list[SkillMetadata]:
+        return [cast(SkillMetadata, dict(item)) for item in self._native_metadata]
 
     @property
     def filesystem_backend(self) -> FilesystemBackend:

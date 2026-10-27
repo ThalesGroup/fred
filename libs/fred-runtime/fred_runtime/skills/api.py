@@ -53,7 +53,17 @@ async def get_instance_skills(
     if isinstance(target.definition, GraphAgentDefinition):
         return SkillCatalog(supported=False)
     skills = get_runtime_context().config.skills
-    return skills.catalog if skills is not None else SkillCatalog()
+    if skills is None:
+        return SkillCatalog(policy_supported=True)
+    from fred_runtime.skills.catalog import PlatformSkills
+
+    if isinstance(skills, PlatformSkills):
+        catalog = skills.for_catalog(target.disabled_platform_skills).catalog
+    else:
+        catalog = skills.catalog
+    return catalog.model_copy(
+        update={"skills": tuple(s for s in catalog.skills if s.user_invocable)}
+    )
 
 
 async def get_instance_skill_detail(
