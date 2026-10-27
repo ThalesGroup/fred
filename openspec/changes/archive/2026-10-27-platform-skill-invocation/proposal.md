@@ -27,4 +27,3 @@ SDK skill metadata, runtime configuration/loaders/execution, Helm and generated 
 ## Non-goals
 
 No push/PR, skill editing UI, per-team/agent enablement, new tools or execution permissions.
-

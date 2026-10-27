@@ -27,4 +27,3 @@ Packaged skill resources and licenses, frontend translations, catalog/behavior t
 ## Non-goals
 
 No push/PR, skill editing UI, per-team/agent enablement, new tools or execution permissions.
-

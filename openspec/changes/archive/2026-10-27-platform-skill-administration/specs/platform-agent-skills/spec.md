@@ -17,4 +17,3 @@ Administration SHALL provide a global Skills tab under Features with packaged in
 - **WHEN** a source is unreachable or cannot enforce enablement
 - **THEN** administration reports its status and does not claim effective global disablement
 - **AND** legacy runtimes cannot resolve managed execution while active restrictions require unsupported enforcement
-

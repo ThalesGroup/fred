@@ -26,4 +26,3 @@ SDK provenance metadata, runtime catalog/activity and frontend i18n/presentation
 ## Non-goals
 
 No push/PR, skill editing UI, per-team/agent enablement, new tools or execution permissions.
-

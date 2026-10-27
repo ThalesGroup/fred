@@ -27,4 +27,3 @@ Control-plane administrative API/store/migration/binding; runtime catalog/filter
 ## Non-goals
 
 No push/PR, skill editing UI, per-team/agent enablement, new tools or execution permissions.
-

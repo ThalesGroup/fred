@@ -12,4 +12,3 @@ The frontend SHALL display French or English titles and descriptions for package
 #### Scenario: Custom homonym or missing translation
 - **WHEN** a custom source uses a packaged name or reliable packaged provenance is absent
 - **THEN** the frontend retains authored metadata rather than applying an unrelated translation
-

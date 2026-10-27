@@ -21,4 +21,3 @@ Imported material SHALL record its exact upstream revision and retain required l
 #### Scenario: Packaged interview license
 - **WHEN** the runtime distribution includes the adapted Matt Pocock interview
 - **THEN** the MIT notice and upstream revision accompany the procedure
-

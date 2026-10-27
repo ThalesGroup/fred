@@ -19,4 +19,3 @@ Use focused control-plane administrative API/store with the existing feature-man
 ## Verification and migration
 
 Use the approved public configuration, catalog/execution, admin and UI seams. Run focused checks during slices, root quality and offline suites near completion, then independent standards/spec and performance review. Record evidence in tasks.md. Deploy schema/control plane/runtimes/frontend together with supported negotiation; rollback removes administrative restrictions before old runtimes resume.
-
