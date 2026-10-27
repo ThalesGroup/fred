@@ -71,7 +71,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from fred_core.store.vector_search import (
     DEFAULT_MIN_SOURCE_SCORE_RATIO,
@@ -82,8 +82,10 @@ from fred_sdk.contracts.capability import (
     CapabilityContext,
     CapabilityManifest,
     ChatControlSpec,
+    SaveContext,
     ScopePrivate,
     TeamScopePolicy,
+    UploadedFile,
 )
 from fred_sdk.contracts.context import (
     ToolContentBlock,
@@ -486,6 +488,23 @@ class DocumentAccessCapability(
     )
     ConfigModel = DocumentAccessConfig
     TurnOptionsModel = DocumentAccessTurnOptions
+
+    async def validate_config(
+        self,
+        config: DocumentAccessConfig,
+        uploads: Mapping[str, list[UploadedFile]],
+        ctx: SaveContext,
+    ) -> DocumentAccessConfig:
+        """Refuse sources and scopes the Weaver document ports cannot serve yet."""
+
+        del uploads, ctx
+        if config.attachments:
+            raise ValueError("Session attachments are not available on this platform.")
+        if config.bind_libraries or config.library_tag_ids or config.document_uids:
+            raise ValueError(
+                "Library or document selections are not available on this platform."
+            )
+        return config
 
     def chat_controls(self, config: DocumentAccessConfig) -> list[ChatControlSpec]:
         """

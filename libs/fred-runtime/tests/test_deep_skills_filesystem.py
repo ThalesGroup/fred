@@ -14,6 +14,7 @@ from fred_runtime.skills.catalog import PlatformSkills
 from fred_sdk.contracts.runtime import ConversationFilesystemPermissionError
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from test_platform_skills import Model, binding, call, compiled, skill
+from weaver_fixtures import active_turn, in_turn
 
 
 def snapshot(tmp_path: Path) -> PlatformSkills:
@@ -137,9 +138,12 @@ async def test_native_tools_deny_writes_and_skip_malformed_discovery(
         ]
     )
     agent = compiled(model, skills, binding(), True)
-    result = await agent.ainvoke(
-        {"messages": [HumanMessage(content="inspect skills")]},
-        {"configurable": {"thread_id": "readonly"}},
+    result = await in_turn(
+        binding(),
+        agent.ainvoke(
+            {"messages": [HumanMessage(content="inspect skills")]},
+            {"configurable": {"thread_id": "readonly"}},
+        ),
     )
     state = await agent.aget_state({"configurable": {"thread_id": "readonly"}})
     assert {item["name"] for item in state.values["skills_metadata"]} == {
@@ -248,14 +252,15 @@ async def test_live_new_skill_retains_native_load_events_and_escaping(
     metrics = Mock(spec=BaseKPIWriter)
     metrics.timer.return_value = nullcontext({})
     agent = compiled(model, skills, binding(), True, kpi=metrics)
-    events = [
-        event
-        async for event in agent.astream(
-            {"messages": [HumanMessage(content="use new skill")]},
-            {"configurable": {"thread_id": "live-new"}},
-            stream_mode=["updates", "custom"],
-        )
-    ]
+    with active_turn(binding()):
+        events = [
+            event
+            async for event in agent.astream(
+                {"messages": [HumanMessage(content="use new skill")]},
+                {"configurable": {"thread_id": "live-new"}},
+                stream_mode=["updates", "custom"],
+            )
+        ]
     loads = [
         payload.skill_load
         for mode, payload in events
@@ -321,14 +326,15 @@ async def test_native_origin_tracks_current_selection_not_previous_user_text(
     metrics = Mock(spec=BaseKPIWriter)
     graph = compiled(model, skills, bound, True, kpi=metrics)
     config = {"configurable": {"thread_id": "selection-origin"}}
-    events = [
-        event
-        async for event in graph.astream(
-            {"messages": [HumanMessage(content="/example /other")]},
-            config,
-            stream_mode=["updates", "custom"],
-        )
-    ]
+    with active_turn(binding()):
+        events = [
+            event
+            async for event in graph.astream(
+                {"messages": [HumanMessage(content="/example /other")]},
+                config,
+                stream_mode=["updates", "custom"],
+            )
+        ]
     loads = [
         event.skill_load
         for mode, event in events
@@ -354,14 +360,15 @@ async def test_native_origin_tracks_current_selection_not_previous_user_text(
             AIMessage(content="done"),
         ]
     )
-    follow = [
-        event
-        async for event in graph.astream(
-            {"messages": [HumanMessage(content="follow up")]},
-            config,
-            stream_mode=["updates", "custom"],
-        )
-    ]
+    with active_turn(binding()):
+        follow = [
+            event
+            async for event in graph.astream(
+                {"messages": [HumanMessage(content="follow up")]},
+                config,
+                stream_mode=["updates", "custom"],
+            )
+        ]
     follow_loads = [
         event.skill_load
         for mode, event in follow

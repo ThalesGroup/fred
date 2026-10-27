@@ -40,6 +40,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Checkpointer, Command, Interrupt
 from pydantic import Field
+from weaver_fixtures import active_turn, local_binding
 
 
 class _Model(BaseChatModel):
@@ -69,8 +70,9 @@ class _Definition:
     agent_id = "question-test"
 
 
-def _compile(kind: str, model: _Model, language: str | None = None) -> Any:
-    binding = BoundRuntimeContext(
+def question_binding(language: str | None = None) -> BoundRuntimeContext:
+    return local_binding(
+        "question-test",
         runtime_context=RuntimeContext(ask_user=True, language=language),
         portable_context=PortableContext(
             request_id="request-1",
@@ -80,6 +82,10 @@ def _compile(kind: str, model: _Model, language: str | None = None) -> Any:
             environment=PortableEnvironment.DEV,
         ),
     )
+
+
+def _compile(kind: str, model: _Model, language: str | None = None) -> Any:
+    binding = question_binding(language)
     specs = ReActRuntimeToolResolver(
         declared_tool_refs=(),
         toolset_key=None,
@@ -135,14 +141,19 @@ def _compile(kind: str, model: _Model, language: str | None = None) -> Any:
 
 async def _drive(agent: Any, payload: object, thread: str) -> list[Interrupt]:
     pending: list[Interrupt] = []
-    async for mode, update in agent.astream(
-        payload,
-        config={"configurable": {"thread_id": thread}},
-        stream_mode=["messages", "updates"],
-    ):
-        if mode == "updates" and isinstance(update, dict) and "__interrupt__" in update:
-            value = update["__interrupt__"]
-            pending.extend(value if isinstance(value, (list, tuple)) else (value,))
+    with active_turn(question_binding()):
+        async for mode, update in agent.astream(
+            payload,
+            config={"configurable": {"thread_id": thread}},
+            stream_mode=["messages", "updates"],
+        ):
+            if (
+                mode == "updates"
+                and isinstance(update, dict)
+                and "__interrupt__" in update
+            ):
+                value = update["__interrupt__"]
+                pending.extend(value if isinstance(value, (list, tuple)) else (value,))
     return pending
 
 

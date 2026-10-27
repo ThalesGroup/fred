@@ -41,6 +41,7 @@ from fred_sdk.graph.runtime import GraphNodeContext
 from langchain_core.tools import tool
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import create_async_engine
+from weaver_fixtures import active_turn, local_binding
 
 
 class Input(BaseModel):
@@ -53,7 +54,8 @@ class State(BaseModel):
 
 
 def binding() -> BoundRuntimeContext:
-    return BoundRuntimeContext(
+    return local_binding(
+        "test.graph.hitl",
         runtime_context=RuntimeContext(language="fr"),
         portable_context=PortableContext(
             request_id="r",
@@ -163,7 +165,8 @@ async def test_capability_gate_survives_rebuild_without_replaying_prior_tools(
             )
             executor = await runtime.build_executor(binding())
             assert isinstance(executor, GraphExecutor)
-            events = [event async for event in executor.stream(Input(), config)]
+            with active_turn(binding()):
+                events = [event async for event in executor.stream(Input(), config)]
             if isinstance(events[-1], AwaitingHumanRuntimeEvent):
                 checkpoint = await saver.aget_tuple(
                     {"configurable": {"thread_id": executor.thread_id(config)}}

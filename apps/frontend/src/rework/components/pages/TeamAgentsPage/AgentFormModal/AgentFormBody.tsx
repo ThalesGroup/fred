@@ -19,7 +19,9 @@ import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { IconType } from "@shared/utils/Type.ts";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useDispatch } from "react-redux";
 import { Link } from "react-router-dom";
+import { setCapabilityBaseUrls } from "../../../../../common/capabilityRoutingSlice.ts";
 import type {
   AgentTemplateSummary,
   ManagedAgentInstanceSummary,
@@ -31,29 +33,22 @@ import type {
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
-import { CapabilityCard } from "./CapabilityCard/CapabilityCard.tsx";
+import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard/CapabilityCard.tsx";
 import { SimpleCapabilitiesView } from "./SimpleCapabilitiesView/SimpleCapabilitiesView.tsx";
 import type { CapabilitySelectionState } from "./toolPackLogic.ts";
-import { CAP_DOCUMENT_ACCESS, DOC_ACCESS_TEAM_DOCUMENTS, TOOL_PACK_SECTIONS } from "./toolPacks.ts";
+import {
+  CAP_DOCUMENT_ACCESS,
+  CAP_PPT_FILLER,
+  CAP_TEAM_WIKI,
+  DOC_ACCESS_TEAM_DOCUMENTS,
+  type ToolPack,
+} from "./toolPacks.ts";
+import { PptFillerPackOptions } from "../../../../features/capabilities/ppt_filler/PptFillerPackOptions.tsx";
+import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions/DocumentAccessPackOptions.tsx";
 
 import { helpPagePath } from "@rework/features/helpCenter/content";
 import { isHelpLang } from "@rework/features/helpCenter/manifest";
 import styles from "./AgentFormBody.module.css";
-
-// This creation journey connects corpus search only; the shared packs retain their full definition.
-const CORPUS_PACK_SECTIONS = TOOL_PACK_SECTIONS.map((section) => ({
-  ...section,
-  packs: section.packs.map((pack) =>
-    pack.id === DOC_ACCESS_TEAM_DOCUMENTS
-      ? {
-          ...pack,
-          descriptionKey: "rework.weaverAgents.corpusSearchDescription",
-          enablesCapabilityIds: [CAP_DOCUMENT_ACCESS],
-          includes: pack.includes.filter((entry) => entry.capabilityId === CAP_DOCUMENT_ACCESS),
-        }
-      : pack,
-  ),
-}));
 
 export type SectionKey = "general" | "prompts" | "tools" | "commitments";
 
@@ -156,6 +151,7 @@ export function AgentFormBody({
   tuningFieldValues,
   selectedCapabilityIds,
   capabilityConfigValues,
+  capabilityAssetFiles,
   isSubmitting,
   submitAttempted,
   activeSection,
@@ -170,10 +166,15 @@ export function AgentFormBody({
   onDescriptionChange,
   onUsageStatementChange,
   onTuningChange,
+  onCapabilitySelectionChange,
   onCapabilitySelectionReplace,
+  onCapabilityConfigChange,
+  onCapabilityAssetFileChange,
+  onCapabilityBlockingErrorChange,
   draftRevision = 0,
 }: AgentFormBodyProps) {
   const { t, i18n } = useTranslation();
+  const dispatch = useDispatch();
   const uiLang = i18n.language.split("-")[0];
   const helpLang = isHelpLang(uiLang) ? uiLang : "fr";
   // Simple = new "capability packs" view (default); Advanced = the flat
@@ -193,25 +194,14 @@ export function AgentFormBody({
   const capabilities = (selectedTemplate?.available_capabilities ?? []) as CapabilityCatalogEntry[];
   // False: `capabilities` are included with the agent, always on, only configured.
   const availableCapabilityIds = new Set(capabilities.map((item) => item.id));
-  const supportsCapabilities = selectedTemplate?.supports_capabilities ?? false;
-  const canSelectCorpus =
-    mode === "create" && !isSubmitting && supportsCapabilities && availableCapabilityIds.has(CAP_DOCUMENT_ACCESS);
-  const selectCorpus = (enabled: boolean) => {
-    if (!canSelectCorpus) return;
-    onCapabilitySelectionReplace({
-      selectedCapabilityIds: enabled ? [CAP_DOCUMENT_ACCESS] : [],
-      capabilityConfigValues: enabled ? { [CAP_DOCUMENT_ACCESS]: { team_documents: true, attachments: false } } : {},
-    });
-  };
-  const documentConfig = capabilityConfigValues[CAP_DOCUMENT_ACCESS];
-  const sourceValue = (key: string) =>
-    t(
-      documentConfig?.[key] === true
-        ? "rework.weaverAgents.sourceEnabled"
-        : documentConfig?.[key] === false
-          ? "rework.weaverAgents.sourceDisabled"
-          : "rework.weaverAgents.sourceUnspecified",
-    );
+  const supportsCapabilities = selectedTemplate?.supports_capabilities ?? true;
+
+  // Config widgets may call their capability's own pod routes before any
+  // session exists, so the base URLs come straight from the template catalog.
+  useEffect(() => {
+    if (capabilities.length === 0) return;
+    dispatch(setCapabilityBaseUrls(Object.fromEntries(capabilities.map((entry) => [entry.id, entry.route_base_url]))));
+  }, [dispatch, capabilities]);
 
   const visibleFields = ((selectedTemplate?.default_tuning_fields ?? []) as ManagedAgentFieldSpec[]).filter(
     (f) => !f.ui?.hide,
@@ -273,6 +263,87 @@ export function AgentFormBody({
         error={fieldError(field)}
       />
     ));
+
+  // One capability's `config_fields` form, shared by the Advanced cards and the
+  // Simple view's included capabilities.
+  const renderConfigForm = (capability: CapabilityCatalogEntry) =>
+    (capability.config_fields ?? []).length > 0 && (
+      <CapabilityConfigForm
+        capability={capability}
+        configFields={capability.config_fields ?? []}
+        configValues={capabilityConfigValues[capability.id] ?? {}}
+        disabled={isSubmitting}
+        teamId={teamId}
+        agentInstanceId={editInstance?.agent_instance_id}
+        agentDisplayName={editInstance?.display_name}
+        assetFiles={capabilityAssetFiles[capability.id] ?? {}}
+        onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
+        onAssetFileChange={(slotKey, file) => onCapabilityAssetFileChange(capability.id, slotKey, file)}
+        onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(capability.id, message)}
+      />
+    );
+
+  // Simple view of an included capability: document access keeps the same
+  // library-binding control as the Team documents pack.
+  const renderIncludedOptions = (capability: CapabilityCatalogEntry) =>
+    capability.id === CAP_DOCUMENT_ACCESS ? (
+      <DocumentAccessPackOptions
+        configValues={capabilityConfigValues[CAP_DOCUMENT_ACCESS] ?? {}}
+        onConfigChange={(key, value) => onCapabilityConfigChange(CAP_DOCUMENT_ACCESS, key, value)}
+        teamId={teamId}
+        disabled={isSubmitting}
+      />
+    ) : (
+      renderConfigForm(capability)
+    );
+
+  // Per-pack options for the Simple view, wired to the same capability state
+  // as the Advanced view and offered only when the backing capability is available.
+  const renderPackOptions = (pack: ToolPack) => {
+    // Library binding only narrows the team documents, so only that pack offers it.
+    if (pack.documentSource === DOC_ACCESS_TEAM_DOCUMENTS && availableCapabilityIds.has(CAP_DOCUMENT_ACCESS)) {
+      return (
+        <DocumentAccessPackOptions
+          configValues={capabilityConfigValues[CAP_DOCUMENT_ACCESS] ?? {}}
+          onConfigChange={(key, value) => onCapabilityConfigChange(CAP_DOCUMENT_ACCESS, key, value)}
+          teamId={teamId}
+          disabled={isSubmitting}
+        />
+      );
+    }
+    // Team wiki: the capability's own `mode` field, read from the live manifest.
+    if (pack.enablesCapabilityIds.includes(CAP_TEAM_WIKI) && availableCapabilityIds.has(CAP_TEAM_WIKI)) {
+      const modeField = capabilities
+        .find((capability) => capability.id === CAP_TEAM_WIKI)
+        ?.config_fields?.find((field) => field.key === "mode");
+      if (!modeField) return undefined;
+      return (
+        <TuningFieldRenderer
+          field={modeField}
+          value={capabilityConfigValues[CAP_TEAM_WIKI]?.[modeField.key]}
+          onChange={(key, value) => onCapabilityConfigChange(CAP_TEAM_WIKI, key, value)}
+          disabled={isSubmitting}
+          teamId={teamId}
+        />
+      );
+    }
+    // PowerPoint: the same mandatory-template upload as the Advanced card, so Save is gated identically.
+    if (pack.enablesCapabilityIds.includes(CAP_PPT_FILLER) && availableCapabilityIds.has(CAP_PPT_FILLER)) {
+      return (
+        <PptFillerPackOptions
+          disabled={isSubmitting}
+          teamId={teamId}
+          agentInstanceId={editInstance?.agent_instance_id}
+          agentDisplayName={editInstance?.display_name}
+          configValues={capabilityConfigValues[CAP_PPT_FILLER] ?? {}}
+          assetFiles={capabilityAssetFiles[CAP_PPT_FILLER] ?? {}}
+          onAssetFileChange={(slotKey, file) => onCapabilityAssetFileChange(CAP_PPT_FILLER, slotKey, file)}
+          onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(CAP_PPT_FILLER, message)}
+        />
+      );
+    }
+    return undefined;
+  };
 
   return (
     <div className={styles.body}>
@@ -400,37 +471,22 @@ export function AgentFormBody({
                     />
                   </label>
                 </div>
-                <p>{t(`rework.weaverAgents.${mode === "edit" ? "capabilitiesReadOnly" : "corpusSearchOnly"}`)}</p>
-                {selectedCapabilityIds.length > 0 && <p>{selectedCapabilityIds.join(", ")}</p>}
-                {selectedCapabilityIds.includes(CAP_DOCUMENT_ACCESS) && (
-                  <p>
-                    {t("rework.weaverAgents.documentSources", {
-                      corpus: sourceValue("team_documents"),
-                      attachments: sourceValue("attachments"),
-                    })}
-                  </p>
-                )}
                 {capabilityView === "simple" ? (
                   <SimpleCapabilitiesView
                     availableIds={availableCapabilityIds}
                     supportsCapabilities={supportsCapabilities}
                     includedCapabilities={capabilities}
-                    renderIncludedOptions={() => null}
+                    renderIncludedOptions={renderIncludedOptions}
                     selection={{ selectedCapabilityIds, capabilityConfigValues }}
-                    sections={CORPUS_PACK_SECTIONS}
-                    disabled={!canSelectCorpus}
-                    isPackDisabled={(pack) => pack.id !== DOC_ACCESS_TEAM_DOCUMENTS}
-                    onSelectionChange={() => selectCorpus(!selectedCapabilityIds.includes(CAP_DOCUMENT_ACCESS))}
-                    renderPackOptions={() => null}
+                    disabled={isSubmitting}
+                    onSelectionChange={onCapabilitySelectionReplace}
+                    renderPackOptions={renderPackOptions}
                   />
                 ) : (
                   <ul className={styles.toolsList}>
                     {capabilities.map((capability) => {
                       const name = t(capability.name, { defaultValue: capability.name });
-                      const description =
-                        capability.id === CAP_DOCUMENT_ACCESS
-                          ? t("rework.weaverAgents.corpusSearchDescription")
-                          : t(capability.description, { defaultValue: capability.description });
+                      const description = t(capability.description, { defaultValue: capability.description });
                       if (!supportsCapabilities) {
                         return (
                           <CapabilityCard
@@ -438,20 +494,26 @@ export function AgentFormBody({
                             name={name}
                             description={description}
                             included
-                            subForm={undefined}
+                            subForm={renderConfigForm(capability)}
                           />
                         );
                       }
                       const checked = selectedCapabilityIds.includes(capability.id);
+                      const toggle = () => {
+                        const next = checked
+                          ? selectedCapabilityIds.filter((id) => id !== capability.id)
+                          : [...selectedCapabilityIds, capability.id];
+                        onCapabilitySelectionChange(next);
+                      };
                       return (
                         <CapabilityCard
                           key={capability.id}
                           name={name}
                           description={description}
                           checked={checked}
-                          disabled={!canSelectCorpus || capability.id !== CAP_DOCUMENT_ACCESS}
-                          onToggle={() => selectCorpus(!checked)}
-                          subForm={undefined}
+                          disabled={isSubmitting}
+                          onToggle={toggle}
+                          subForm={checked && renderConfigForm(capability)}
                         />
                       );
                     })}

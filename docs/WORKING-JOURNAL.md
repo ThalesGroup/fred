@@ -3596,6 +3596,24 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
   Ce lot ne rend pas la recherche opérationnelle et ne la valide pas fonctionnellement.
 
 
+### F25 : recherche documentaire validée et documentée, lot CAP L0 (2026-10-27)
+
+- Validation rapportée par Dimi, test du commit `6e4b49e`, Bob dans Research :
+  création d'un Custom assistant avec « Documents de l'équipe », réponse fondée
+  sur un document de l'équipe, sources visibles dans le chat. Non observés :
+  rechargement de la conversation avec ses sources, refus et exclusions (autre
+  équipe, document non publié ou supprimé, document de l'organisation).
+- Arc42 : section fonctionnelle dans 02.3, vue technique 1.5 dans 01, règle 3.6
+  dans 03, sous-section « Document search within a turn » dans A6, ligne de
+  matrice dans A7, entrée dans la carte de README et question de 02. Les exclusions
+  y sont décrites comme mécanismes du code, pas comme cas validés.
+- Constat de sécurité, vérifié dans le code : l'admission du tour exige `Read` sur
+  l'espace (`runtime.rs`), donc un administrateur sans rôle de contenu (Carl) ne
+  peut pas utiliser l'assistant. La portée inclut les ancêtres, couverts par
+  l'invariant rôle de contenu sur le parent.
+- Documentation seulement ; aucun code, test, commit ni push.
+
+
 ## F26 Fusion Swift et préférences utilisateur
 
 - 2026-10-25 : résolution de `git merge swift` à la demande de Dimi. Le commit
@@ -3715,3 +3733,104 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
 - Limites : un nom contenant `/` n'est pas adressable par `working_directory` ;
   document sans espace étiqueté = `ValueError` (invariant de F29). Aucune
   validation fonctionnelle, aucun commit.
+
+## CAP Raccordement des capacités Weaver
+
+- 2026-10-27 : objectif fixé par Dimi : toutes les capacités du pod natif
+  activables, sélectionnables et fonctionnelles depuis l'UI existante, par lots
+  ciblés lancés dans des assistants neufs. Pas d'OpenSpec ; pas d'invention :
+  recâblage des fonctions Swift, adapté à la frontière ReBAC. Règles dans
+  `AGENTS.md`, section « Weaver: capability lots ».
+- Patron issu de `document_access` : verrou de capacités connectées dans le Control
+  Plane (création `tuning.rs::enroll`, édition `apply_update`, préparation
+  `preparation.rs::require_connected_capabilities`), validation par le pod
+  propriétaire, port `RuntimeServices` local, activation du pack dans
+  `AgentFormBody.tsx`.
+- Lots. Jalon A, sans décision préalable : L0 clôture de la recherche documentaire
+  (journal et arc42) ; L1 verrou générique (liste unique, validation pod générique,
+  édition des capacités, templates fixes dont toutes les capacités sont connectées) ;
+  L2 `html_artifact` ; L3 outil arbre de `document_access` (F29/F30) ;
+  L4 `web_research` ; L5 `writable_document`. Jalon B : L6 `document_verbatim` et
+  `document_similarity` ; L7 `document_summarize` et `document_extract`.
+  Jalon C : L8 pièces jointes du chat ; L9 `ppt_filler` ; L10 `team_wiki`
+  (reconstruction Rust) ; L11 MCP tabulaire ; L12 `platform_ops`. Lot final :
+  retrait des verrous et des clients KF devenus orphelins.
+- Décisions ouvertes : D1 lecture de `output.md` par le pod (stockage objet direct
+  ou prévisualisation Control Plane) ; D2 lieu et droits des pièces jointes ;
+  D3 assets d'agent et fichiers produits sans KF `/fs` ; D4 hébergement du
+  tabulaire sans KF API ; D5 utilisateurs autorisés de `platform_postgres` et
+  Prometheus ; `document_label_search` abandonné ou adapté aux dossiers.
+- Consignes alignées dans ce lot : `AGENTS.md` (section capability lots, état du
+  pod), renvoi dans `CLAUDE.md`, frontière documentaire du skill fred-architecture.
+  Constat : `libs/fred-capability-*` à la racine sont des copies non suivies
+  (venv, couverture), doublons de `libs/capabilities/` ; non supprimées.
+  Documentation seulement ; aucun code, test, commit ni push.
+- 2026-10-27, décision D0 de Dimi : une capacité est une librairie publique
+  embarquée dans un pod ; un modèle est un service joignable par tous les pods.
+  Alice autorise les capacités de chaque pod pour son organisation (pas par
+  équipe). Une capacité nouvellement annoncée est interdite par défaut. Politique
+  SQL par organisation, sur le modèle de la politique de modèles, sans tuple
+  OpenFGA par capacité. Remplace « inspecte » dans 00 et précise la décision 5b.
+- Accord de Dimi : L1 revu en simplification. Le pod n'embarque que les
+  librairies câblées ; le Control Plane, passerelle et gestionnaire de
+  configuration, ne nomme aucune capacité ; la liste « connectées » (Rust et UI)
+  est supprimée. Branche neuve : aucune donnée ni compatibilité à préserver.
+  L1b : autorisation par Alice (D0). L1c : relai générique Swift des contrôles
+  de chat (`POST /agents/capabilities/chat-controls`). Règle ajoutée dans
+  `AGENTS.md` (Responsibilities, Branch-new code).
+- 2026-10-27, décision de Dimi (revient sur DOC-5 et sur la cible du matin) :
+  Knowledge Flow API est conservée et centralise les endpoints de connaissance,
+  recherche documentaire comprise. Le travail se limite à adapter les capacités
+  au modèle ReBAC Weaver. Formule : Knowledge Flow détient et sert les
+  connaissances, les pods raisonnent, le Control Plane gouverne. `AGENTS.md`
+  aligné (rôles des composants, tableau, capability lots, section sécurité).
+- Constat : les endpoints KF utilisent encore le catalogue Swift, `team_id` et
+  les permissions par tag/document (`vector_search_controller.py`,
+  `vector_search_service.py`). L'adaptation porte sur deux points par endpoint :
+  lire les documents Weaver (SQL, manifest, index `document-vectors`) et vérifier
+  la lecture de l'espace par la personne, puis `fred_core.documents.access`.
+- Conservé : L0 (validé), L1 (passerelle Control Plane, inventaire du pod),
+  L1b, L1c, `fred_core.documents.access` et `tree.py` (réutilisés par KF).
+  A retirer au lot K2 : `search.py`, `opensearch_queries.py`, le câblage
+  `CorpusSearch` et la configuration OpenSearch/embedding du pod. Arc42 01 §1.5,
+  03 §3.6 et A6 décrivent le code actuel ; mis à jour à K2 après validation.
+- Décisions ouvertes : K1, comment KF établit la lecture de l'espace pour la
+  personne ; K3, modèle utilisé par KF pour summarize/extract au regard de la
+  politique de modèles. D1, D3 et D4 tombent (KF sert ces fonctions).
+- 2026-10-27, K1 tranchée par Dimi, option a : KF valide l'identité (déléguée)
+  de la personne comme dans Swift, puis un seul contrôle OpenFGA `can_read` sur
+  l'espace demandé, modèle Weaver publié ; ni appel au Control Plane, ni
+  confiance dans l'espace affirmé par le pod. Règle reportée dans `AGENTS.md`.
+- 2026-10-27, mesure `swift` -> `weaver` : le code de KF API (vector_search,
+  summarize, content, filesystem, tabular, corpus_tree) est identique à Swift ;
+  seuls l'ingestion Weaver et le MCP OpenSearch ops ont changé. Les capacités
+  autres que `document_access` sont identiques à Swift ; fred-agents aussi, sauf
+  Sentinel et le catalogue de modèles du pod. Seul écart : la recherche locale
+  (commits `cd235a2a0`, `6e4b49e`, F27-F30).
+- Proposition, en attente de Dimi : le pod natif garde les librairies Swift ; l'étape « retirer
+  les librairies et templates » de L1 est abandonnée. La porte d'usage est
+  l'autorisation d'Alice (L1b, interdite par défaut). Une capacité dont les
+  endpoints KF ne sont pas adaptés échoue fermée : les documents Weaver sont
+  absents du catalogue KF Swift. K2 devient surtout un retour à Swift des
+  fichiers de recherche, puis l'adaptation de l'endpoint KF.
+
+### CAP L1 : Control Plane passerelle de configuration (2026-10-27)
+
+- Control Plane (`agent_instances/tuning.rs`, `http.rs`, `preparation.rs`) :
+  validation générique de toute capacité sélectionnée par
+  `POST /agents/capabilities/{id}/validate-config` du pod propriétaire, en
+  création et en modification ; enveloppe conservée telle quelle ; valeurs par
+  défaut des templates fixes validées comme une sélection. Modification validée
+  hors transaction, refus 409 `agent_capabilities_changed` si la sélection a
+  changé avant le verrou. La préparation ne vérifie que l'appartenance à
+  l'inventaire. Plus aucune occurrence de `document_access` dans `src/`.
+- Librairie `document_access` : `validate_config` refuse `attachments`,
+  `bind_libraries`, `library_tag_ids` et `document_uids` non vides.
+- Frontend : formulaire Swift strict (packs, formulaires de configuration,
+  création et modification), clés i18n Weaver de la recherche corpus retirées.
+- Etape « retirer librairies et templates du pod » exécutée puis annulée à la
+  demande de Dimi : `apps/fred-agents` remis à l'état du commit `6e4b49e`.
+- Contrôles : `make code-quality` réussi dans `apps/control-plane`,
+  `apps/frontend` et la librairie `document_access`. Aucun test, commit ni push.
+- Constat pour K2 : KF API est désactivée dans `deploy/k3d/values.yaml.gotmpl`
+  (`knowledge-flow-backend.enabled: false`) ; K2 inclut sa réactivation.

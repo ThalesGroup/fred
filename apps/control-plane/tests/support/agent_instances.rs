@@ -602,7 +602,7 @@ async fn instances_capabilities_and_profiles_fail_explicitly() {
         json!({"recommended_chat_profile_id":"profile"}),
     ] {
         let code = if patch.get("capability_ids").is_some() {
-            "agent_capabilities_not_connected"
+            "agent_capability_unavailable"
         } else {
             "agent_chat_profile_not_connected"
         };

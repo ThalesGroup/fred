@@ -59,10 +59,15 @@ export function updateAgentRequest(
   if (payload.role !== saved.role) request.role = payload.role;
   if (payload.description !== (saved.description ?? "")) request.description = payload.description;
   if (payload.usageStatement !== saved.usage_statement) request.usage_statement = payload.usageStatement;
-  // The form retains the saved objects until edited. Omission preserves opaque values,
-  // null selections, envelopes and settings the current backend cannot yet change.
+  // The form retains the saved objects until edited. Omission preserves opaque values
+  // and settings the current backend cannot yet change.
   if (hasTuningChanges(payload.tuningFieldValues, saved.tuning_field_values)) {
     request.tuning_field_values = payload.tuningFieldValues as UpdateAgentInstanceRequest["tuning_field_values"];
+  }
+  // As in Swift, a template with an inventory resubmits its selection for pod validation.
+  if (payload.templateHasCapabilities) {
+    request.capability_ids = payload.selectedCapabilityIds;
+    request.capability_config_values = payload.capabilityConfigValues;
   }
   return request;
 }

@@ -75,10 +75,12 @@ from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import SecretStr
+from weaver_fixtures import in_turn, local_binding
 
 
 def _binding() -> BoundRuntimeContext:
-    return BoundRuntimeContext(
+    return local_binding(
+        "deep-middleware",
         runtime_context=RuntimeContext(),
         portable_context=PortableContext(
             request_id="request-1",
@@ -729,9 +731,12 @@ async def test_compiled_deep_parent_executes_write_todos() -> None:
         ),
     )
 
-    state = await graph.ainvoke(
-        {"messages": [HumanMessage(content="Inspect these documents")]},
-        {"configurable": {"thread_id": "todo-deep"}},
+    state = await in_turn(
+        _binding(),
+        graph.ainvoke(
+            {"messages": [HumanMessage(content="Inspect these documents")]},
+            {"configurable": {"thread_id": "todo-deep"}},
+        ),
     )
 
     assert state["todos"] == todos
@@ -789,9 +794,12 @@ async def test_compiled_deep_parent_executes_mixed_mistral_calls() -> None:
         ),
     )
 
-    state = await graph.ainvoke(
-        {"messages": [HumanMessage(content="count the fleet")]},
-        {"configurable": {"thread_id": "mixed-mistral-deep"}},
+    state = await in_turn(
+        _binding(),
+        graph.ainvoke(
+            {"messages": [HumanMessage(content="count the fleet")]},
+            {"configurable": {"thread_id": "mixed-mistral-deep"}},
+        ),
     )
 
     assert sorted(executed) == [
@@ -881,7 +889,7 @@ async def test_compiled_deep_parent_sanitizes_payload_without_rewriting_checkpoi
         ),
     )
     config = {"configurable": {"thread_id": "hygiene-parent"}}
-    await graph.ainvoke({"messages": messages}, config)
+    await in_turn(_binding(), graph.ainvoke({"messages": messages}, config))
     wire = payloads[0]["messages"]
     assistants = [message for message in wire if message["role"] == "assistant"]
     assert all("name" not in message for message in assistants)

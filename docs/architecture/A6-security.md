@@ -295,5 +295,29 @@ Cancellation and closed-run checks remain effective within the turn.
 | Local lifetime and context checks | [`model_routing/turn.py`](../../libs/fred-runtime/fred_runtime/model_routing/turn.py), `TurnAuthority` |
 | Selection and preparation diagnostics | [Model contract](A2-manager-contracts.md#chat-model-preparation-and-turn-admission) |
 
-This describes the simple managed chat boundary. It does not establish document
-search, external-tool authorization or a connected HITL journey.
+This describes the managed chat boundary. External-tool authorization and HITL
+are not connected under it.
+
+## Document search within a turn
+
+Companion to [documents used by an assistant](03-security.md#36-documents-used-by-an-assistant)
+and the [component view](01-system-overview.md#15-document-search-during-a-conversation).
+Control Plane accepts only `document_access` with corpus search. Other
+capabilities, attachments, library or document selections and capability edits
+after creation are refused explicitly; the pod registers no document tree tool.
+
+| Step | Rule | Implementation reference |
+| --- | --- | --- |
+| Creation | The owning pod validates and normalizes the configuration; Control Plane stores its versioned envelope only if `team_documents=true` and `attachments=false`. | [`tuning.rs`](../../apps/control-plane/src/agent_instances/tuning.rs), `enroll`, `validate_document_access`; pod `POST /agents/capabilities/document_access/validate-config` |
+| Preparation | The saved selection and configuration are rechecked before each chat; unsupported selections or defaults refuse preparation. | [`preparation.rs`](../../apps/control-plane/src/agent_instances/preparation.rs), `require_connected_capabilities` |
+| Tool call | The adapter checks that its context matches the admitted turn and takes the space from the turn binding, never from tool arguments. | [`adapters.py`](../../libs/fred-runtime/fred_runtime/integrations/v2_runtime/adapters.py), `DocumentSearchAdapter`; [`capability.py`](../../libs/capabilities/fred-capability-document-access/fred_capability_document_access/capability.py), `search_documents_using_vectorization` |
+| Scope | The space and its ancestors, never children or siblings; a space being deleted is refused. | [`access.py`](../../libs/fred-core/fred_core/documents/access.py), `resolve_scope`, `scope_from_space` |
+| Index query | Every semantic, strict or hybrid sub-query carries the `metadata.space_id` and `metadata.retrievable` prefilters. They narrow candidates and prove nothing. | [`opensearch_queries.py`](../../libs/capabilities/fred-capability-document-access/fred_capability_document_access/opensearch_queries.py), `build_search`, `mandatory_filters` |
+| Verification | One grouped SQL read keeps a chunk only if its document is in scope, live, in a live space, retrievable without pending inclusion, and in the published generation's manifest. Table completion chunks pass the same check. | `access.py`, `verify_candidates`; [`search.py`](../../libs/capabilities/fred-capability-document-access/fred_capability_document_access/search.py), `CorpusSearch` |
+
+No SQL connection is held during embedding or OpenSearch calls. Technical
+failures fail the tool; there is no Knowledge Flow fallback. Pod configuration
+(`ai.embedding_model`, `ai.document_vector_store`) is loaded by
+[`context.py`](../../libs/fred-runtime/fred_runtime/app/context.py),
+`initialize_document_search`. Search diagnostics are described in the
+[capability README](../../libs/capabilities/fred-capability-document-access/README.md#search-diagnostics).

@@ -38,6 +38,7 @@ the annexes. Validation records and remaining work stay in the working journal.
 | API endpoints and frontend bindings | [Generated routes](A2-manager-contracts.md#control-plane-http-surface) | Source map section contracts/generated code |
 | Startup, SQL migration or local deployment | [Operations](08-operations.md), [SQLx procedure](A3-manager-operations.md#sqlx-schema-evolution) | Source map rows startup/migrations and local profile |
 | Upload/process a PDF | [Document journey](02.2-document-journey.md), [Documents](05-documents.md) | Source map section beyond folder creation |
+| Assistant answering from a space's documents | [Journey](02.3-agent-administration.md#bobs-assistant-answers-from-researchs-documents), [Security](03-security.md#36-documents-used-by-an-assistant) | [Document search annex](A6-security.md#document-search-within-a-turn) |
 
 Follow this map before searching historical OpenSpec changes or Swift documentation.
 For an audit, trace the named UI consumer through the handler, authorization and

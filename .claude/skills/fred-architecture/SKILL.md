@@ -18,14 +18,15 @@ behavior, read `docs/WORKING-JOURNAL.md` and the current user instructions. Code
 presence, isolated CLI discovery and runtime documentation do not prove that the
 feature is wired into Weaver or validated end to end.
 
-The current working boundary ends at Fred's native knowledge-base document
-ingestion, which Dimi is finishing. Dimi explicitly authorizes keeping the
-documentation through this ingestion scope while validation is being completed;
-this editorial acceptance is not evidence of end-to-end functional validation. Agent wiring, conversations, additional
-Knowledge Bases and application extensions are outside the documented scope until
-explicitly integrated and validated. This boundary changes only with new evidence
-and Dimi's direction. Do not expand an overview or fill empty chapters from SDK
-features. Keep the same boundary in annexes; moving a claim there does not validate it.
+The documented scope is the set of journeys whose validation by Dimi is recorded
+in the journal: native knowledge-base document ingestion, the first agent
+conversation with explicit model selection, and each capability journey closed by
+a validated capability lot (AGENTS.md, "Weaver: capability lots"). At the end of
+such a lot, document its journey in the existing chapters; an implemented but
+unvalidated capability stays out. Additional Knowledge Bases and application
+extensions remain outside until integrated and validated. Do not expand an
+overview or fill empty chapters from SDK features. Keep the same boundary in
+annexes; moving a claim there does not validate it.
 
 When the journal and the current instruction differ on validation, clarify the
 specific boundary. Do not infer completed validation from "we are finishing".

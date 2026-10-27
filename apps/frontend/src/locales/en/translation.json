@@ -1123,13 +1123,6 @@
       "modelProfile": "Recommended model",
       "modelUnavailable": "Model selection is not yet connected in this form. Saved model settings are preserved.",
       "legacyModelReselection": "This saved profile is a diagnostic reference only. Explicit re-selection of a platform model is required; this form preserves the reference.",
-      "corpusSearchOnly": "At creation, only corpus search can be enabled when the template allows it. Other capabilities remain disabled.",
-      "capabilitiesReadOnly": "Saved selection and configuration are read-only.",
-      "corpusSearchDescription": "Search the corpus accessible to this agent, without attachments or library or document selection.",
-      "documentSources": "Corpus: {{corpus}}. Attachments: {{attachments}}.",
-      "sourceEnabled": "enabled",
-      "sourceDisabled": "disabled",
-      "sourceUnspecified": "unspecified",
       "errors": {
         "unauthorized": "Your session has expired. Please sign in again.",
         "forbidden": "You do not have permission for this operation.",

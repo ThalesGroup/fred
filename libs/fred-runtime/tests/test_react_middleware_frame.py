@@ -72,6 +72,7 @@ from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Checkpointer, Command
 from pydantic import Field
+from weaver_fixtures import in_turn, local_binding
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -122,7 +123,8 @@ class ScriptedModel(BaseChatModel):
 
 
 def _binding(language: str | None = None) -> BoundRuntimeContext:
-    return BoundRuntimeContext(
+    return local_binding(
+        "agent-frame",
         runtime_context=RuntimeContext(language=language),
         portable_context=PortableContext(
             request_id="request-1",
@@ -203,7 +205,9 @@ async def test_hygiene_transforms_model_input_without_rewriting_state() -> None:
         ),
         HumanMessage("q-new"),
     ]
-    res = await agent.ainvoke({"messages": history}, _cfg("t-scoped"))
+    res = await in_turn(
+        _binding(), agent.ainvoke({"messages": history}, _cfg("t-scoped"))
+    )
 
     # Model input is hygienic…
     model_input = model.calls[0]
@@ -248,7 +252,7 @@ async def test_hygiene_replays_the_open_turn_reasoning_to_the_model() -> None:
             ]
         ),
     ]
-    await agent.ainvoke({"messages": history}, _cfg("t-open-turn"))
+    await in_turn(_binding(), agent.ainvoke({"messages": history}, _cfg("t-open-turn")))
 
     replayed = [
         m
@@ -282,9 +286,11 @@ async def test_hitl_cancel_accepts_plain_string_decision() -> None:
     agent = _build_agent(model, always_require_tools=("send_email",))
     cfg = _cfg("t-cancel-str")
 
-    res = await agent.ainvoke({"messages": [HumanMessage("send an email")]}, cfg)
+    res = await in_turn(
+        _binding(), agent.ainvoke({"messages": [HumanMessage("send an email")]}, cfg)
+    )
     assert "__interrupt__" in res
-    res = await agent.ainvoke(Command(resume="cancel"), cfg)
+    res = await in_turn(_binding(), agent.ainvoke(Command(resume="cancel"), cfg))
 
     assert EXECUTED_TOOLS == []
     assert str(res["messages"][-1].content) == "okay, cancelled"
@@ -302,8 +308,11 @@ async def test_hitl_disabled_policy_gates_nothing() -> None:
     )
     agent = _build_agent(model, approval_enabled=False)
 
-    res = await agent.ainvoke(
-        {"messages": [HumanMessage("send an email")]}, _cfg("t-disabled")
+    res = await in_turn(
+        _binding(),
+        agent.ainvoke(
+            {"messages": [HumanMessage("send an email")]}, _cfg("t-disabled")
+        ),
     )
 
     assert "__interrupt__" not in res
@@ -347,7 +356,10 @@ async def test_max_tool_calls_per_turn_is_enforced() -> None:
         max_tool_calls_per_turn=1,
     )
 
-    res = await agent.ainvoke({"messages": [HumanMessage("loop!")]}, _cfg("t-limit"))
+    res = await in_turn(
+        _binding(),
+        agent.ainvoke({"messages": [HumanMessage("loop!")]}, _cfg("t-limit")),
+    )
 
     # Exactly one real execution; the second request was blocked by
     # ToolCallLimitMiddleware, and the run still terminated cleanly.

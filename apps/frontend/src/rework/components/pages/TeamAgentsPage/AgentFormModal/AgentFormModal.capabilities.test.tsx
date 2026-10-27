@@ -14,10 +14,10 @@ import type {
 import AgentFormModal, { type AgentFormPayload } from "./AgentFormModal";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+vi.mock("react-redux", () => ({ useDispatch: () => () => {} }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, values?: Record<string, unknown>) =>
-      key === "rework.weaverAgents.documentSources" ? `${values?.corpus}/${values?.attachments}` : key,
+    t: (key: string) => key,
     i18n: { language: "en" },
   }),
 }));
@@ -44,17 +44,13 @@ const template: AgentTemplateSummary = {
   ...TEMPLATE,
   default_tuning_fields: [],
   available_capabilities: [
-    "document_access",
-    "document_summarize",
-    "document_similarity",
-    "team_wiki",
-    "writable_document",
-  ].map((id) => ({
-    id,
-    version: "0.2.0",
-    name: `capability.${id}.name`,
-    description: `capability.${id}.description`,
-  })),
+    {
+      id: "document_access",
+      version: "0.2.0",
+      name: "capability.document_access.name",
+      description: "capability.document_access.description",
+    },
+  ],
 };
 const corpus = { team_documents: true, attachments: false };
 const submitted = vi.fn<(payload: AgentFormPayload) => Promise<void>>(async () => {});
@@ -123,87 +119,50 @@ async function submit() {
   return createAgentRequest(submitted.mock.calls[0][0]);
 }
 const teamPack = () => button("packs.teamDocuments.title");
+const attachmentsPack = () => button("packs.attachments.title");
 
-it("creates corpus-only from the existing pack and reflects it in Advanced", async () => {
+it("offers both document packs from the inventory and creates team documents", async () => {
   createForm();
-  for (const pack of container.querySelectorAll<HTMLButtonElement>('button[role="switch"]')) {
-    expect(pack.disabled).toBe(pack !== teamPack());
-  }
+  expect(attachmentsPack().disabled).toBe(false);
+  expect(teamPack().disabled).toBe(false);
   click(teamPack());
   expect(teamPack().getAttribute("aria-checked")).toBe("true");
   advanced();
   expect(capability("document_access").checked).toBe(true);
-  for (const id of ["document_summarize", "document_similarity", "team_wiki", "writable_document"]) {
-    expect(capability(id).disabled).toBe(true);
-    expect(capability(id).checked).toBe(false);
-  }
-  expect(container.querySelector('input[type="file"]')).toBeNull();
-  expect(await submit()).toEqual({
-    template_id: TEMPLATE.template_id,
-    display_name: "Custom",
-    role: undefined,
-    description: "Template description",
-    usage_statement: "Internal use",
-    tuning_field_values: {},
+  expect(await submit()).toMatchObject({
     capability_ids: ["document_access"],
     capability_config_values: { document_access: corpus },
   });
-});
-it("activates in Advanced and removes document_access in Simple before creation", async () => {
-  createForm();
-  advanced();
-  click(capability("document_access"));
-  advanced();
-  expect(teamPack().getAttribute("aria-checked")).toBe("true");
-  click(teamPack());
-  expect(teamPack().getAttribute("aria-checked")).toBe("false");
-  expect(await submit()).toMatchObject({ capability_ids: [], capability_config_values: {} });
 });
 it("removes the Simple selection in Advanced", async () => {
   createForm();
   click(teamPack());
   advanced();
   click(capability("document_access"));
-  expect(await submit()).toMatchObject({ capability_ids: [], capability_config_values: {} });
+  expect(await submit()).toMatchObject({ capability_ids: [] });
 });
-it("retains creation without capabilities and does not activate template defaults", async () => {
-  createForm({ ...template, default_capability_ids: ["document_access", "team_wiki"] });
-  expect(await submit()).toMatchObject({ capability_ids: [], capability_config_values: {} });
-});
-it("cannot activate corpus search when absent from the catalog", () => {
-  createForm({
-    ...template,
-    available_capabilities: template.available_capabilities.filter((c) => c.id !== "document_access"),
-  });
+it("hides document packs when the inventory lacks document_access", () => {
+  createForm({ ...template, available_capabilities: [] });
   expect(container.textContent).not.toContain("packs.teamDocuments.title");
   advanced();
   expect(capability("document_access")).toBeNull();
-  expect(capability("team_wiki").disabled).toBe(true);
 });
-it("does not open fixed-capability templates", () => {
+it("keeps the defaults of a fixed template without switches", async () => {
   createForm({ ...template, supports_capabilities: false, default_capability_ids: ["document_access"] });
   expect(container.querySelector('button[role="switch"]')).toBeNull();
-  advanced();
-  expect(capability("document_access")).toBeNull();
+  expect(await submit()).toMatchObject({ capability_ids: ["document_access"] });
 });
-it("reads saved sources, keeps both views locked and omits capabilities from metadata PATCH", async () => {
+it("edits the saved selection and resubmits it for validation", async () => {
   const saved = {
     ...INSTANCE,
     selected_capability_ids: ["document_access"],
-    capability_config: {
-      document_access: { schema_version: "0.2.0", config: corpus },
-    },
+    capability_config: { document_access: { schema_version: "0.2.0", config: corpus } },
   };
   render(template, saved);
   section("tools");
-  expect(teamPack().disabled).toBe(true);
+  expect(teamPack().disabled).toBe(false);
   expect(teamPack().getAttribute("aria-checked")).toBe("true");
-  expect(container.textContent).toContain("rework.weaverAgents.sourceEnabled/rework.weaverAgents.sourceDisabled");
-  advanced();
-  expect(capability("document_access").checked).toBe(true);
-  expect(capability("document_access").disabled).toBe(true);
+  click(teamPack());
   await act(async () => button("rework.save").click());
-  const payload = submitted.mock.calls[0][0];
-  expect(payload.capabilityConfigValues).toEqual({ document_access: corpus });
-  expect(updateAgentRequest({ ...payload, displayName: "Renamed" }, saved)).toEqual({ display_name: "Renamed" });
+  expect(updateAgentRequest(submitted.mock.calls[0][0], saved)).toMatchObject({ capability_ids: [] });
 });

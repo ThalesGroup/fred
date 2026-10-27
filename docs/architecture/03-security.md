@@ -83,3 +83,16 @@ Each new turn acquires its authorized context; an admitted turn may finish with
 that context after a policy change. Cancellation and run termination remain
 separate controls. The [technical boundary](A6-security.md#managed-agent-turn-authority)
 explains how the person's rights stay distinct from the pod's service identity.
+
+## 3.6. Documents used by an assistant
+
+An assistant reads documents on behalf of the person in the conversation, never
+with broader rights. Using it requires a content role in its space. Its search
+is limited to that space and its parents. Bob can read them because any content
+role on a space requires a content role on its parent.
+
+The vector index is not an authorization source. Each result is checked against
+the document's current placement and publication before the model sees it.
+Search rights follow the turn context; a role removed during a turn applies from
+the next message. The [technical annex](A6-security.md#document-search-within-a-turn)
+lists the checks and their implementation.

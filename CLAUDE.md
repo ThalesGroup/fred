@@ -21,6 +21,9 @@ On branch `weaver` (Fred 5.x), read
 [AGENTS.md - Weaver current state versus target](AGENTS.md#weaver-fred-5x-current-state-versus-target)
 before any audit or task. The Python control-plane and Alembic guidance below
 describes Swift (4.x); it is comparison material there, not Weaver's state or target.
+Capability lots on `weaver` follow
+[AGENTS.md - Weaver: capability lots](AGENTS.md#weaver-capability-lots), not the
+OpenSpec gate, GitHub issue and close-out lifecycle below.
 
 ---
 

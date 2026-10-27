@@ -78,6 +78,7 @@ from langchain_core.tools import StructuredTool, tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Checkpointer, Command
 from pydantic import Field
+from weaver_fixtures import active_turn, in_turn, local_binding
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -128,7 +129,8 @@ class _FakeDefinition:
 
 
 def _binding(language: str | None = None) -> BoundRuntimeContext:
-    return BoundRuntimeContext(
+    return local_binding(
+        "agent-1972",
         runtime_context=RuntimeContext(language=language),
         portable_context=PortableContext(
             request_id="request-1",
@@ -175,12 +177,13 @@ async def _drive(agent: Any, payload: object, thread: str) -> list[object]:
 
     config = {"configurable": {"thread_id": thread}}
     updates: list[object] = []
-    async for raw_event in agent.astream(
-        payload, config=config, stream_mode=["messages", "updates"]
-    ):
-        mode, update = raw_event
-        if mode == "updates":
-            updates.append(update)
+    with active_turn(_binding()):
+        async for raw_event in agent.astream(
+            payload, config=config, stream_mode=["messages", "updates"]
+        ):
+            mode, update = raw_event
+            if mode == "updates":
+                updates.append(update)
     return updates
 
 
@@ -993,8 +996,9 @@ async def test_latest_tool_outputs_attached_to_response_metadata() -> None:
     agent = _compile_agent(model, approval_enabled=False)
 
     config = {"configurable": {"thread_id": "t-metadata"}}
-    result = await agent.ainvoke(
-        {"messages": [HumanMessage("what about fred?")]}, config=config
+    result = await in_turn(
+        _binding(),
+        agent.ainvoke({"messages": [HumanMessage("what about fred?")]}, config=config),
     )
 
     final = result["messages"][-1]

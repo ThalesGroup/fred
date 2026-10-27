@@ -95,52 +95,6 @@ pub(super) async fn enroll(
     template: &AgentTemplateSummary,
     body: &CreateAgentInstanceRequest,
 ) -> AppResult<Value> {
-    // Fixed-capability templates always require their defaults, even with [].
-    let selected = if template.supports_capabilities {
-        body.capability_ids
-            .as_deref()
-            .unwrap_or(&template.default_capability_ids)
-    } else {
-        &template.default_capability_ids
-    };
-    if !template.supports_capabilities
-        && (!selected.is_empty()
-            || body
-                .capability_ids
-                .as_ref()
-                .is_some_and(|ids| !ids.is_empty()))
-    {
-        return Err(AppError::problem(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "agent_capabilities_not_connected",
-            "Fixed-template capabilities are not connected for agent instance creation yet.",
-        ));
-    }
-    for (index, id) in selected.iter().enumerate() {
-        if selected[..index].contains(id) {
-            return Err(AppError::Unprocessable(
-                "Duplicate capability selection.".into(),
-            ));
-        }
-        if !template
-            .available_capabilities
-            .iter()
-            .any(|entry| entry.get("id").and_then(Value::as_str) == Some(id.as_str()))
-        {
-            return Err(AppError::problem(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "agent_capability_unavailable",
-                "Selected capability is unknown or unavailable for this template.",
-            ));
-        }
-        if id != "document_access" {
-            return Err(AppError::problem(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "agent_capabilities_not_connected",
-                "Only document_access is connected for agent instance creation.",
-            ));
-        }
-    }
     if body.recommended_chat_profile_id.is_some() {
         return Err(AppError::problem(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -177,27 +131,137 @@ pub(super) async fn enroll(
                 .context("invalid runtime tuning fields")?;
         object.insert("values".into(), json!(validate_values(fields, values)?));
     }
-    // Swift materializes the effective selection and discards unselected config.
-    let mut capability_config = serde_json::Map::new();
-    if !selected.is_empty() {
-        let config = body
-            .capability_config_values
-            .as_ref()
-            .and_then(|values| values.get("document_access"))
-            .map_or_else(|| json!({}), |values| json!(values));
-        let stored = validate_document_access(platform, template, authorization, &config).await?;
-        capability_config.insert("document_access".into(), stored);
-    }
+    let (selected, capability_config) = select_capabilities(
+        platform,
+        authorization,
+        template,
+        body.capability_ids.as_deref(),
+        |id| {
+            body.capability_config_values
+                .as_ref()
+                .and_then(|values| values.get(id))
+                .map_or_else(|| json!({}), |values| json!(values))
+        },
+    )
+    .await?;
     object.insert("selected_capability_ids".into(), json!(selected));
     object.insert("capability_config".into(), Value::Object(capability_config));
     Ok(tuning)
 }
 
-async fn validate_document_access(
+/// A capability edit validated by the pod before the lock, with the saved
+/// selection and config it was derived from.
+pub(super) struct CapabilityUpdate {
+    basis: [Option<Value>; 2],
+    selected: Vec<String>,
+    config: serde_json::Map<String, Value>,
+}
+
+fn capability_basis(tuning: &Value) -> [Option<Value>; 2] {
+    ["selected_capability_ids", "capability_config"].map(|key| tuning.get(key).cloned())
+}
+
+pub(super) async fn validate_capability_update(
+    platform: &PlatformConfig,
+    authorization: Option<&HeaderValue>,
+    template: &AgentTemplateSummary,
+    saved: &Value,
+    body: &UpdateAgentInstanceRequest,
+) -> AppResult<CapabilityUpdate> {
+    let saved_ids: Option<Vec<String>> = serde_json::from_value(
+        saved
+            .get("selected_capability_ids")
+            .cloned()
+            .unwrap_or(Value::Null),
+    )
+    .context("invalid saved capability selection")?;
+    let requested = match &body.capability_ids {
+        Some(ids) => ids.as_deref(),
+        None => saved_ids.as_deref(),
+    };
+    // Swift: submitted values, else defaults on reset, else the saved config.
+    let (selected, config) = select_capabilities(
+        platform,
+        authorization,
+        template,
+        requested,
+        |id| match &body.capability_config_values {
+            Some(Some(values)) if values.contains_key(id) => json!(values[id]),
+            Some(None) => json!({}),
+            _ => saved["capability_config"][id]
+                .get("config")
+                .cloned()
+                .unwrap_or_else(|| json!({})),
+        },
+    )
+    .await?;
+    Ok(CapabilityUpdate {
+        basis: capability_basis(saved),
+        selected,
+        config,
+    })
+}
+
+/// Swift materializes the effective selection, stores each pod-returned
+/// envelope and discards configuration of unselected capabilities.
+async fn select_capabilities(
+    platform: &PlatformConfig,
+    authorization: Option<&HeaderValue>,
+    template: &AgentTemplateSummary,
+    requested: Option<&[String]>,
+    config_for: impl Fn(&str) -> Value,
+) -> AppResult<(Vec<String>, serde_json::Map<String, Value>)> {
+    // A fixed template ignores the submitted selection; its defaults are validated alike.
+    let selected = match requested {
+        Some(ids) if template.supports_capabilities => ids,
+        _ => &template.default_capability_ids,
+    };
+    for (index, id) in selected.iter().enumerate() {
+        if selected[..index].contains(id) {
+            return Err(AppError::Unprocessable(
+                "Duplicate capability selection.".into(),
+            ));
+        }
+    }
+    require_inventory(template, selected)?;
+    let envelopes = futures::future::try_join_all(selected.iter().map(|id| {
+        let config = config_for(id);
+        validate_capability(platform, template, authorization, id, config)
+    }))
+    .await?;
+    Ok((
+        selected.to_vec(),
+        selected.iter().cloned().zip(envelopes).collect(),
+    ))
+}
+
+/// Every selected capability must belong to the template's pod inventory.
+pub(super) fn require_inventory(
+    template: &AgentTemplateSummary,
+    selected: &[String],
+) -> AppResult<()> {
+    for id in selected {
+        if !template
+            .available_capabilities
+            .iter()
+            .any(|entry| entry.get("id").and_then(Value::as_str) == Some(id.as_str()))
+        {
+            return Err(AppError::problem(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "agent_capability_unavailable",
+                "Selected capability is unknown or unavailable for this template.",
+            ));
+        }
+    }
+    Ok(())
+}
+
+async fn validate_capability(
     platform: &PlatformConfig,
     template: &AgentTemplateSummary,
     authorization: Option<&HeaderValue>,
-    config: &Value,
+    id: &str,
+    config: Value,
 ) -> AppResult<Value> {
     let unavailable = || AppError::Unavailable("Pod capability validation unavailable.".into());
     let source = platform
@@ -215,10 +279,10 @@ async fn validate_document_access(
         })
         .as_ref()
         .map_err(|_| unavailable())?;
-    // No assets or team_id alias: document_access validation only normalizes config.
+    // Weaver sends neither assets nor a team_id alias: the pod validates config alone.
     let mut request = client
         .post(format!(
-            "{}/agents/capabilities/document_access/validate-config",
+            "{}/agents/capabilities/{id}/validate-config",
             source.base_url.trim_end_matches('/')
         ))
         .form(&[("config", config.to_string())]);
@@ -235,19 +299,19 @@ async fn validate_document_access(
             return Err(AppError::problem(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "agent_capability_unavailable",
-                "document_access is unavailable on the template's pod.",
+                "The capability is unavailable on the template's pod.",
             ));
         }
         StatusCode::UNPROCESSABLE_ENTITY => {
             return Err(AppError::problem(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "agent_capability_config_invalid",
-                "The pod rejected the document_access configuration.",
+                "The pod rejected the capability configuration.",
             ));
         }
         _ => return Err(unavailable()),
     }
-    // Bound the response and validate only the envelope; Python owns its config schema.
+    // Bound the response and validate only the envelope; the pod owns the config schema.
     const MAX_BYTES: usize = 2 * 1024 * 1024;
     if response
         .content_length()
@@ -271,16 +335,6 @@ async fn validate_document_access(
     {
         return Err(unavailable());
     }
-    let config = &stored["config"];
-    if config.get("attachments").and_then(Value::as_bool) != Some(false)
-        || config.get("team_documents").and_then(Value::as_bool) != Some(true)
-    {
-        return Err(AppError::problem(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "document_access_corpus_only",
-            "document_access creation requires team_documents=true and attachments=false.",
-        ));
-    }
     Ok(stored)
 }
 
@@ -288,7 +342,19 @@ pub(super) fn apply_update(
     record: &mut AgentInstance,
     body: &UpdateAgentInstanceRequest,
     template: Option<&AgentTemplateSummary>,
+    capabilities: Option<CapabilityUpdate>,
 ) -> AppResult<()> {
+    // Envelopes validated for another selection must not replace a concurrent edit.
+    if capabilities
+        .as_ref()
+        .is_some_and(|update| capability_basis(&record.tuning.0) != update.basis)
+    {
+        return Err(AppError::problem(
+            StatusCode::CONFLICT,
+            "agent_capabilities_changed",
+            "Capability settings changed concurrently; reload and retry.",
+        ));
+    }
     let object = record
         .tuning
         .0
@@ -310,37 +376,9 @@ pub(super) fn apply_update(
         };
         object.insert("values".into(), json!(values));
     }
-    if body.capability_ids.is_some() || body.capability_config_values.is_some() {
-        let template = template.context("capability edit requires current template")?;
-        let saved_selection = object
-            .get("selected_capability_ids")
-            .cloned()
-            .unwrap_or(Value::Null);
-        let saved_ids: Option<Vec<String>> = serde_json::from_value(saved_selection.clone())
-            .context("invalid saved capability selection")?;
-        let requested_ids = body.capability_ids.as_ref().unwrap_or(&saved_ids);
-        let selected = if template.supports_capabilities {
-            requested_ids
-                .as_deref()
-                .unwrap_or(&template.default_capability_ids)
-        } else {
-            &template.default_capability_ids
-        };
-        if !selected.is_empty() || requested_ids.as_ref().is_some_and(|ids| !ids.is_empty()) {
-            return Err(AppError::problem(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "agent_capabilities_not_connected",
-                "Active capabilities are not connected for agent instance editing yet.",
-            ));
-        }
-        let selection_changed = body.capability_ids.is_some() && saved_selection != json!([]);
-        if body.capability_ids.is_some() {
-            object.insert("selected_capability_ids".into(), json!([]));
-        }
-        if selection_changed || body.capability_config_values.is_some() {
-            // No active capabilities: ignore submitted values for unselected IDs.
-            object.insert("capability_config".into(), json!({}));
-        }
+    if let Some(update) = capabilities {
+        object.insert("selected_capability_ids".into(), json!(update.selected));
+        object.insert("capability_config".into(), Value::Object(update.config));
     }
     if let Some(role) = &body.role {
         object.insert("role".into(), json!(role));

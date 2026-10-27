@@ -40,6 +40,7 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
 )
 from langchain.agents.middleware.types import ModelRequest
+from weaver_fixtures import in_turn, local_binding
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -82,7 +83,8 @@ class _RecordingKPI:
 
 
 def _binding() -> BoundRuntimeContext:
-    return BoundRuntimeContext(
+    return local_binding(
+        "retry-test",
         runtime_context=RuntimeContext(language=None),
         portable_context=PortableContext(
             request_id="request-1",
@@ -543,9 +545,12 @@ async def test_compiled_parent_retries_only_model_and_traces_each_attempt(
             backend=StateBackend(),
             permissions=[],
         )
-    result = await agent.ainvoke(
-        {"messages": [HumanMessage(content="go")]},
-        config={"configurable": {"thread_id": kind}},
+    result = await in_turn(
+        _binding(),
+        agent.ainvoke(
+            {"messages": [HumanMessage(content="go")]},
+            config={"configurable": {"thread_id": kind}},
+        ),
     )
     assert result["messages"][-1].content == "done"
     assert model.calls == 3

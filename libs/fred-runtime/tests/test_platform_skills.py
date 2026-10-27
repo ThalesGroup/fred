@@ -64,6 +64,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.runtime import Runtime
 from pydantic import BaseModel, Field, ValidationError
+from weaver_fixtures import INSTANCE_ID, active_turn, in_turn, local_binding
 
 
 def skill(
@@ -81,7 +82,8 @@ def skill(
 
 
 def binding(selection: str | None = None) -> BoundRuntimeContext:
-    return BoundRuntimeContext(
+    return local_binding(
+        "test",
         runtime_context=RuntimeContext(
             session_id="session",
             exchange_id="exchange",
@@ -174,9 +176,12 @@ async def test_deep_delegates_skills_discovery_to_native_constructor(
         )
     )
     agent = compiled(model, skills, binding(), True)
-    await agent.ainvoke(
-        {"messages": [HumanMessage(content="inspect skills")]},
-        {"configurable": {"thread_id": "native-discovery"}},
+    await in_turn(
+        binding(),
+        agent.ainvoke(
+            {"messages": [HumanMessage(content="inspect skills")]},
+            {"configurable": {"thread_id": "native-discovery"}},
+        ),
     )
     state = await agent.aget_state({"configurable": {"thread_id": "native-discovery"}})
     assert {item["name"] for item in state.values["skills_metadata"]} == {
@@ -217,9 +222,12 @@ async def test_deep_discovery_reads_original_frontmatter_from_filesystem(
     skills = PlatformSkills.from_directory(str(tmp_path))
     model = Model()
     agent = compiled(model, skills, binding(), True)
-    await agent.ainvoke(
-        {"messages": [HumanMessage(content="inspect skills")]},
-        {"configurable": {"thread_id": "native-frontmatter"}},
+    await in_turn(
+        binding(),
+        agent.ainvoke(
+            {"messages": [HumanMessage(content="inspect skills")]},
+            {"configurable": {"thread_id": "native-frontmatter"}},
+        ),
     )
     state = await agent.aget_state(
         {"configurable": {"thread_id": "native-frontmatter"}}
@@ -483,14 +491,15 @@ async def test_compiled_load_reference_and_follow_up(deep: bool) -> None:
     )
     metrics = Mock(spec=BaseKPIWriter)
     agent = compiled(model, skills, binding(), deep, kpi=metrics)
-    events = [
-        event
-        async for event in agent.astream(
-            {"messages": [HumanMessage(content="notes")]},
-            {"configurable": {"thread_id": "session"}},
-            stream_mode=["updates", "custom"],
-        )
-    ]
+    with active_turn(binding()):
+        events = [
+            event
+            async for event in agent.astream(
+                {"messages": [HumanMessage(content="notes")]},
+                {"configurable": {"thread_id": "session"}},
+                stream_mode=["updates", "custom"],
+            )
+        ]
     loads = [
         payload
         for mode, payload in events
@@ -529,9 +538,12 @@ async def test_compiled_load_reference_and_follow_up(deep: bool) -> None:
     assert not {skill.name for skill in skills.catalog.skills} & set(
         model.bound_tool_names
     )
-    await agent.ainvoke(
-        {"messages": [HumanMessage(content="follow up")]},
-        {"configurable": {"thread_id": "session"}},
+    await in_turn(
+        binding(),
+        agent.ainvoke(
+            {"messages": [HumanMessage(content="follow up")]},
+            {"configurable": {"thread_id": "session"}},
+        ),
     )
     assert "Not specified" in str(model.calls[-1])
     counts = [
@@ -562,7 +574,8 @@ async def test_manual_preload_before_first_inference_and_missing_selection(
         messages=(ReActMessage(role=ReActMessageRole.USER, content=user_text),)
     )
     config = ExecutionConfig(session_id="session")
-    events = [event async for event in executor.stream(input_model, config)]
+    with active_turn(bound):
+        events = [event async for event in executor.stream(input_model, config)]
     assert isinstance(events[0], StatusRuntimeEvent)
     assert events[0].skill_load is not None and events[0].skill_load.origin == "user"
     assert any(
@@ -604,7 +617,7 @@ async def test_manual_preload_before_first_inference_and_missing_selection(
     bound.runtime_context.skill = SkillInvocation(name="missing")
     before = len(model.calls)
     with pytest.raises(ValueError):
-        await executor.invoke(input_model, config)
+        await in_turn(bound, executor.invoke(input_model, config))
     assert len(model.calls) == before
 
 
@@ -614,14 +627,15 @@ async def test_multiple_selections_load_before_inference_in_order(stream: bool) 
     skills = PlatformSkills.from_directory("package")
     bound = binding().model_copy(
         update={
-            "runtime_context": RuntimeContext(
-                session_id="session",
-                exchange_id="exchange",
-                skills=[
-                    SkillInvocation(name="meeting-minutes"),
-                    SkillInvocation(name="mermaid"),
-                    SkillInvocation(name="meeting-minutes"),
-                ],
+            "runtime_context": RuntimeContext.model_validate(
+                {
+                    **binding().runtime_context.model_dump(),
+                    "skills": [
+                        SkillInvocation(name="meeting-minutes"),
+                        SkillInvocation(name="mermaid"),
+                        SkillInvocation(name="meeting-minutes"),
+                    ],
+                }
             )
         }
     )
@@ -639,7 +653,8 @@ async def test_multiple_selections_load_before_inference_in_order(stream: bool) 
     )
     config = ExecutionConfig(session_id="session")
     if stream:
-        events = [event async for event in executor.stream(input_model, config)]
+        with active_turn(bound):
+            events = [event async for event in executor.stream(input_model, config)]
         loads = [
             event.skill_load
             for event in events
@@ -648,7 +663,7 @@ async def test_multiple_selections_load_before_inference_in_order(stream: bool) 
         assert [load.name for load in loads] == ["meeting-minutes", "mermaid"]
         assert all(load.origin == "user" for load in loads)
     else:
-        await executor.invoke(input_model, config)
+        await in_turn(bound, executor.invoke(input_model, config))
     messages = model.calls[0]
     assert [
         message.id for message in messages if str(message.id).startswith("skill:")
@@ -674,7 +689,7 @@ async def test_multiple_selections_load_before_inference_in_order(stream: bool) 
         SkillInvocation(name="missing"),
     ]
     with pytest.raises(ValueError):
-        await executor.invoke(input_model, config)
+        await in_turn(bound, executor.invoke(input_model, config))
     assert len(model.calls) == before
     assert (
         len(
@@ -693,13 +708,14 @@ async def test_deep_multiple_native_reads_keep_user_origin_without_preload() -> 
     skills = PlatformSkills.from_directory("package")
     bound = binding().model_copy(
         update={
-            "runtime_context": RuntimeContext(
-                session_id="session",
-                exchange_id="exchange",
-                skills=[
-                    SkillInvocation(name="meeting-minutes"),
-                    SkillInvocation(name="mermaid"),
-                ],
+            "runtime_context": RuntimeContext.model_validate(
+                {
+                    **binding().runtime_context.model_dump(),
+                    "skills": [
+                        SkillInvocation(name="meeting-minutes"),
+                        SkillInvocation(name="mermaid"),
+                    ],
+                }
             )
         }
     )
@@ -718,20 +734,21 @@ async def test_deep_multiple_native_reads_keep_user_origin_without_preload() -> 
         runtime_class_name="DeepRuntime",
         preload_selected_skill=False,
     )
-    events = [
-        event
-        async for event in executor.stream(
-            ReActInput(
-                messages=(
-                    ReActMessage(
-                        role=ReActMessageRole.USER,
-                        content="Before /meeting-minutes /mermaid after",
-                    ),
-                )
-            ),
-            ExecutionConfig(session_id="session"),
-        )
-    ]
+    with active_turn(bound):
+        events = [
+            event
+            async for event in executor.stream(
+                ReActInput(
+                    messages=(
+                        ReActMessage(
+                            role=ReActMessageRole.USER,
+                            content="Before /meeting-minutes /mermaid after",
+                        ),
+                    )
+                ),
+                ExecutionConfig(session_id="session"),
+            )
+        ]
     loads = [
         event.skill_load
         for event in events
@@ -775,20 +792,23 @@ async def test_packaged_mermaid_loads_through_shared_paths(
         runtime_class_name="DeepAgentRuntime" if deep else "ReActRuntime",
         preload_selected_skill=not deep,
     )
-    events = [
-        event
-        async for event in executor.stream(
-            ReActInput(
-                messages=(
-                    ReActMessage(
-                        role=ReActMessageRole.USER,
-                        content="/mermaid" if origin == "user" else "Draw the workflow",
-                    ),
-                )
-            ),
-            ExecutionConfig(session_id="session"),
-        )
-    ]
+    with active_turn(bound):
+        events = [
+            event
+            async for event in executor.stream(
+                ReActInput(
+                    messages=(
+                        ReActMessage(
+                            role=ReActMessageRole.USER,
+                            content="/mermaid"
+                            if origin == "user"
+                            else "Draw the workflow",
+                        ),
+                    )
+                ),
+                ExecutionConfig(session_id="session"),
+            )
+        ]
     loads = [
         event.skill_load
         for event in events
@@ -830,15 +850,16 @@ async def test_native_child_load_has_attribution() -> None:
     )
     metrics = Mock(spec=BaseKPIWriter)
     agent = compiled(model, skills, binding(), True, kpi=metrics)
-    events = [
-        event
-        async for event in agent.astream(
-            {"messages": [HumanMessage(content="notes")]},
-            {"configurable": {"thread_id": "session"}},
-            stream_mode=["updates", "custom"],
-            subgraphs=True,
-        )
-    ]
+    with active_turn(binding()):
+        events = [
+            event
+            async for event in agent.astream(
+                {"messages": [HumanMessage(content="notes")]},
+                {"configurable": {"thread_id": "session"}},
+                stream_mode=["updates", "custom"],
+                subgraphs=True,
+            )
+        ]
     loads = [
         payload.skill_load
         for _, mode, payload in events
@@ -948,9 +969,12 @@ async def test_two_skills_and_task_tool_are_composable(
         ]
     )
     agent = compiled(model, skills, binding(), deep, (task_spec,))
-    result = await agent.ainvoke(
-        {"messages": [HumanMessage(content="request")]},
-        {"configurable": {"thread_id": "multiple"}},
+    result = await in_turn(
+        binding(),
+        agent.ainvoke(
+            {"messages": [HumanMessage(content="request")]},
+            {"configurable": {"thread_id": "multiple"}},
+        ),
     )
     assert result["messages"][-1].content == "done"
     assert invoked == [{}]
@@ -983,7 +1007,9 @@ async def test_trimmed_skill_can_reload_and_restart_refreshes_existing_checkpoin
         deep,
         checkpointer=saver,
     )
-    await agent.ainvoke({"messages": [HumanMessage(content="start")]}, config)
+    await in_turn(
+        binding(), agent.ainvoke({"messages": [HumanMessage(content="start")]}, config)
+    )
     (location / "SKILL.md").write_text(
         "---\nname: example\ndescription: Changed\n---\nNEW PROCEDURE"
     )
@@ -1000,7 +1026,9 @@ async def test_trimmed_skill_can_reload_and_restart_refreshes_existing_checkpoin
         deep,
         checkpointer=saver,
     )
-    await agent.ainvoke({"messages": [HumanMessage(content="next")]}, config)
+    await in_turn(
+        binding(), agent.ainvoke({"messages": [HumanMessage(content="next")]}, config)
+    )
     assert "PROCEDURE" in str(restarted.calls[0])
     assert "NEW PROCEDURE" in str(restarted.calls[-1])
     state = await agent.aget_state(config)
@@ -1028,7 +1056,9 @@ async def test_trimmed_skill_can_reload_and_restart_refreshes_existing_checkpoin
         deep,
         checkpointer=saver,
     )
-    await agent.ainvoke({"messages": [HumanMessage(content="reload")]}, config)
+    await in_turn(
+        binding(), agent.ainvoke({"messages": [HumanMessage(content="reload")]}, config)
+    )
     assert "NEW PROCEDURE" not in str(reloaded.calls[0])
     assert "NEW PROCEDURE" in str(reloaded.calls[-1])
     empty_root = tmp_path / "empty"
@@ -1036,7 +1066,10 @@ async def test_trimmed_skill_can_reload_and_restart_refreshes_existing_checkpoin
     empty = PlatformSkills.from_directory(str(empty_root))
     empty_model = Model()
     agent = compiled(empty_model, empty, binding(), deep, checkpointer=saver)
-    await agent.ainvoke({"messages": [HumanMessage(content="ordinary")]}, config)
+    await in_turn(
+        binding(),
+        agent.ainvoke({"messages": [HumanMessage(content="ordinary")]}, config),
+    )
     if not deep:
         assert (await agent.aget_state(config)).values["skills_metadata"] == []
     assert "# Available platform skills" not in str(empty_model.calls[0][0].content)
@@ -1132,14 +1165,15 @@ async def test_skill_context_survives_hitl_without_duplicate_load(deep: bool) ->
     )
     agent = compiled(model, PlatformSkills.from_directory("package"), bound, deep)
     config = {"configurable": {"thread_id": "hitl-skills"}}
-    events = [
-        event
-        async for event in agent.astream(
-            {"messages": [HumanMessage(content="notes")]},
-            config,
-            stream_mode=["updates", "custom"],
-        )
-    ]
+    with active_turn(bound):
+        events = [
+            event
+            async for event in agent.astream(
+                {"messages": [HumanMessage(content="notes")]},
+                config,
+                stream_mode=["updates", "custom"],
+            )
+        ]
     assert (
         len(
             [
@@ -1153,14 +1187,17 @@ async def test_skill_context_survives_hitl_without_duplicate_load(deep: bool) ->
     snapshot = await agent.aget_state(config)
     interrupts = [interrupt for task in snapshot.tasks for interrupt in task.interrupts]
     assert len(interrupts) == 1
-    resumed = [
-        event
-        async for event in agent.astream(
-            Command(resume={interrupts[0].id: {"answer": "yes", "choice_id": "yes"}}),
-            config,
-            stream_mode=["updates", "custom"],
-        )
-    ]
+    with active_turn(bound):
+        resumed = [
+            event
+            async for event in agent.astream(
+                Command(
+                    resume={interrupts[0].id: {"answer": "yes", "choice_id": "yes"}}
+                ),
+                config,
+                stream_mode=["updates", "custom"],
+            )
+        ]
     assert not [
         payload
         for mode, payload in resumed
@@ -1389,22 +1426,34 @@ async def test_skill_metrics_use_trusted_context_count_only_success_and_skip_res
     bound = binding("meeting-minutes")
     bound = bound.model_copy(
         update={
+            "runtime_context": bound.runtime_context.model_copy(
+                update={
+                    "session_id": "trusted-session",
+                    "user_id": "trusted-user",
+                }
+            ),
             "portable_context": bound.portable_context.model_copy(
                 update={
                     "team_id": "trusted-team",
                     "session_id": "trusted-session",
                     "user_id": "trusted-user",
-                    "baggage": {"agent_instance_id": "instance"},
+                    "baggage": {
+                        **bound.portable_context.baggage,
+                        "agent_instance_id": INSTANCE_ID,
+                    },
                 }
-            )
+            ),
         }
     )
     services = RuntimeServices(skills=skills, kpi_writer=writer)
-    _, events = await preload_skills(
-        {"messages": [HumanMessage(content="notes")]},
+    _, events = await in_turn(
         bound,
-        services,
-        ExecutionConfig(),
+        preload_skills(
+            {"messages": [HumanMessage(content="notes")]},
+            bound,
+            services,
+            ExecutionConfig(),
+        ),
     )
     assert events
     loads = [e for e in store.events if e.metric.name == "agent.skill_loaded_total"]
@@ -1417,12 +1466,15 @@ async def test_skill_metrics_use_trusted_context_count_only_success_and_skip_res
         "session_id": "trusted-session",
         "exchange_id": "exchange",
         "user_id": "trusted-user",
-        "agent_instance_id": "instance",
+        "agent_instance_id": INSTANCE_ID,
         "template_agent_id": "test",
     }
     marker = object()
-    await preload_skills(
-        marker, bound, services, ExecutionConfig(resume_payload={"answer": "yes"})
+    await in_turn(
+        bound,
+        preload_skills(
+            marker, bound, services, ExecutionConfig(resume_payload={"answer": "yes"})
+        ),
     )
     skills.read("meeting-minutes", "references/meeting-minutes-template.md")
     with pytest.raises(ValueError):
@@ -1510,14 +1562,15 @@ async def test_native_deep_read_attribution_windows_and_reference_context(
     )
     metrics = Mock(spec=BaseKPIWriter)
     agent = compiled(model, skills, binding(), True, kpi=metrics)
-    events = [
-        event
-        async for event in agent.astream(
-            {"messages": [HumanMessage(content="use example")]},
-            {"configurable": {"thread_id": "native"}},
-            stream_mode=["updates", "custom"],
-        )
-    ]
+    with active_turn(binding()):
+        events = [
+            event
+            async for event in agent.astream(
+                {"messages": [HumanMessage(content="use example")]},
+                {"configurable": {"thread_id": "native"}},
+                stream_mode=["updates", "custom"],
+            )
+        ]
     loads = [
         payload.skill_load
         for mode, payload in events
@@ -1554,14 +1607,15 @@ async def test_native_deep_read_attribution_windows_and_reference_context(
     assert messages["missing"].status == "error"
     assert skills.read("example").endswith("<tools>sample</tools>\nSECOND\n")
     metrics.reset_mock()
-    follow = [
-        event
-        async for event in agent.astream(
-            {"messages": [HumanMessage(content="follow up")]},
-            {"configurable": {"thread_id": "native"}},
-            stream_mode=["updates", "custom"],
-        )
-    ]
+    with active_turn(binding()):
+        follow = [
+            event
+            async for event in agent.astream(
+                {"messages": [HumanMessage(content="follow up")]},
+                {"configurable": {"thread_id": "native"}},
+                stream_mode=["updates", "custom"],
+            )
+        ]
     assert not any(
         isinstance(payload, StatusRuntimeEvent) and payload.skill_load
         for mode, payload in follow
@@ -1606,15 +1660,16 @@ async def test_native_child_reads_share_mount_and_trusted_attribution() -> None:
         ]
     )
     agent = compiled(model, skills, binding(), True, kpi=metrics)
-    events = [
-        event
-        async for event in agent.astream(
-            {"messages": [HumanMessage(content="delegate")]},
-            {"configurable": {"thread_id": "native-child"}},
-            stream_mode=["updates", "custom"],
-            subgraphs=True,
-        )
-    ]
+    with active_turn(binding()):
+        events = [
+            event
+            async for event in agent.astream(
+                {"messages": [HumanMessage(content="delegate")]},
+                {"configurable": {"thread_id": "native-child"}},
+                stream_mode=["updates", "custom"],
+                subgraphs=True,
+            )
+        ]
     loads = [
         payload.skill_load
         for _, mode, payload in events
@@ -1655,15 +1710,21 @@ async def test_native_read_uses_existing_best_effort_kpi_writer(fail: bool) -> N
     )
     bound = binding().model_copy(
         update={
+            "runtime_context": binding().runtime_context.model_copy(
+                update={"user_id": "trusted-user"}
+            ),
             "portable_context": binding().portable_context.model_copy(
                 update={"team_id": "trusted-team", "user_id": "trusted-user"}
-            )
+            ),
         }
     )
     agent = compiled(model, skills, bound, True, kpi=writer)
-    result = await agent.ainvoke(
-        {"messages": [HumanMessage(content="minutes")]},
-        {"configurable": {"thread_id": "outage"}},
+    result = await in_turn(
+        bound,
+        agent.ainvoke(
+            {"messages": [HumanMessage(content="minutes")]},
+            {"configurable": {"thread_id": "outage"}},
+        ),
     )
     assert result["messages"][-1].content == "done"
     loads = [
@@ -1740,9 +1801,10 @@ async def test_real_deep_runtime_exposes_only_native_skill_tools(
     )
     config = ExecutionConfig(session_id="session")
     if stream:
-        events = [event async for event in executor.stream(input_model, config)]
+        with active_turn(binding()):
+            events = [event async for event in executor.stream(input_model, config)]
     else:
-        result = await executor.invoke(input_model, config)
+        result = await in_turn(binding(), executor.invoke(input_model, config))
         assert result.final_message.content == "done"
         events = []
     first_messages = model.calls[0]

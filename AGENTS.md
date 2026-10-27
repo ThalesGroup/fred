@@ -74,17 +74,19 @@ review and close-out requirements below and in legacy guidance or skills.
 Branch `weaver` carries Fred 5.x. It changes Fred's architecture, not what Fred
 does: one Control Plane concentrates permissions, documents and user/organization
 administration, which Swift (Fred 4.x, branch `swift`) spread across Python
-services. Rust is an implementation detail of that Control Plane. The target
-keeps exactly two Python components, because they rely on Python libraries:
-the agent pod (LangChain/LangGraph) and Knowledge Flow processing (Docling,
-PDF libraries, LangChain embeddings).
+services. Rust is an implementation detail of that Control Plane. Python keeps
+the components that rely on Python libraries: the agent pod (LangChain/LangGraph)
+and Knowledge Flow (Docling, PDF libraries, LangChain embeddings), which both
+processes documents and serves knowledge to capabilities through its API.
+In one sentence: Knowledge Flow holds and serves knowledge, pods reason,
+Control Plane governs.
 
 | Component | Target role | On `weaver` today |
 | --- | --- | --- |
 | Control Plane (`apps/control-plane`, Rust) | Identity and admission, OpenFGA permissions, organizations, teams, spaces, users, document drive, ingestion through Temporal, agent instances | Replaces the deleted Python `apps/control-plane-backend`; covers part of the product. Unported screens still call `slices/legacyControlPlane` and fail. |
-| Agent pod (`apps/fred-agents`, `libs/fred-runtime`, `fred-sdk`, capability libraries) | Runs agents; reaches knowledge only through capabilities, search included | Wiring into Weaver in progress; search still calls Knowledge Flow over HTTP (`kf_vectorsearch_client.py`). |
+| Agent pod (`apps/fred-agents`, `libs/fred-runtime`, `fred-sdk`, capability libraries) | Runs agents; reaches knowledge only through capabilities, which call Knowledge Flow API | Custom assistant wired. `document_access` search temporarily runs locally in the pod (to be returned to Knowledge Flow API); other capabilities call Knowledge Flow over HTTP and are not yet adapted (see capability lots below). |
 | Knowledge Flow worker (`main_worker.py`) | Temporal worker for document processing | Native ingestion path being finished. |
-| Knowledge Flow API (`main.py`) | Removed; search moves into a capability library (constraints in the next section) | Still in the code and the chart. |
+| Knowledge Flow API (`main.py`) | Serves knowledge to capabilities (search, markdown, tree, content, files, tabular) under the space-based model | Endpoints still use the Swift catalog and per-document ReBAC; adaptation to Weaver documents and space permissions is the capability lots' work. |
 | Frontend | Same business UI, rebound to the Control Plane | Partially rebound. |
 
 Keep the two columns apart in every audit, review, plan and report:
@@ -96,9 +98,9 @@ Keep the two columns apart in every audit, review, plan and report:
   `docs/WORKING-JOURNAL.md` makes a journey validated.
 - A gap between current and target is migration distance, not a defect, unless
   the lot under review claims to close it. Report it as such, briefly.
-- Do not invest in what the target removes (Knowledge Flow API routes, the
-  legacy control-plane client) beyond what the requested lot needs, and add no
-  new consumer of them. Do not implement target pieces outside the agreed lot.
+- Do not invest in what the target removes (the legacy control-plane client,
+  Knowledge Flow API routes no capability uses) beyond what the requested lot
+  needs, and add no new consumer of them. Do not implement target pieces outside the agreed lot.
 - On this branch, `docs/swift/` and the Swift-specific parts of `CLAUDE.md`
   (Python control plane, Alembic) describe 4.x. `docs/architecture/` describes
   only the current validated state, per the fred-architecture skill.
@@ -112,6 +114,51 @@ Codex and Claude both work on this branch, in separate lots:
 - Re-check shared sequences just before creating an entry: next SQL migration
   number, OpenFGA model, generated clients. In the journal, edit only your
   lot's record.
+
+## Weaver: capability lots
+
+Dimi's direction (2026-10-27): every capability installed on the native agent
+pod becomes enableable, selectable and working from the existing UI, one
+targeted lot at a time. Dimi leads; each lot runs in a fresh assistant from a
+lot brief. The plan and lot list are in the journal record `CAP`.
+
+- **No OpenSpec** for these lots unless Dimi asks: the brief and its journal
+  record are the agreement. For lots Dimi launches, this supersedes the
+  capability exclusions of OpenSpec `simplify-weaver-runtime-authorization`
+  (decision 5a, task 2.2). Its security decisions (M4 turn boundary, pod-owned
+  offers 5b-5d, document visibility 5) and the security section below still apply.
+- **No invention.** A lot rewires an existing Swift feature: same capability
+  package, manifest, tools, UI packs and panels. Adapt only what Weaver's ReBAC
+  boundary requires: canonical space context instead of `team_id`, Rust Control
+  Plane owners instead of the Python control plane, Knowledge Flow API endpoints
+  reading Weaver documents under space permissions instead of the Swift catalog
+  and per-document tuples. Do not move Knowledge Flow functions into the pod.
+  A new contract, endpoint or store needs Dimi's decision, recorded in the
+  brief, before code.
+- **Responsibilities.** A capability is a public library linked into one agent
+  pod; its offer is (pod, capability). A model is a network service reachable by
+  any pod. Control Plane is a gateway and configuration manager: it checks
+  inventory membership, the organization's authorization and the person's
+  rights, forwards configuration to the owning pod's `validate-config` and
+  stores the returned envelope. It never names a capability, reads a capability
+  configuration field or encodes a capability rule. Those live in the library
+  (`validate_config`, tools, ports). The native pod links the same libraries as
+  Swift; its inventory is the single truth, with no allowlist elsewhere. The
+  organization's authorization (deny by default) is the only usage gate.
+- **Branch-new code.** No installation or saved data to preserve: no migration
+  path, compatibility shim or legacy branch for earlier `weaver` states.
+- **Brief, required before editing:** goal; Swift reference (behavior, files);
+  Weaver adaptation and the guarantee it preserves; in-scope files; out of
+  scope; decisions already taken; manual cases Dimi will play; arc42 chapters
+  expected to change. If the brief is ambiguous or the work exceeds it, stop and ask.
+- **Cycle:** implement in incremental mode (formatter and `make code-quality`,
+  no test campaign, no commit) -> Dimi validates in the UI -> journal record with
+  that validation -> arc42 update of the validated journey (functional view,
+  then technical view, code references in annexes) -> Dimi commits. Until Dimi
+  validates, a lot updates the journal only, never arc42.
+- Not applicable to these lots: CLAUDE.md lifecycle steps 1-6, GitHub issue and
+  close-out statement; the per-step tests, independent review and commit of
+  the control-plane section below. Run them only when Dimi asks.
 
 ## Weaver: preserve Swift's security model while simplifying ReBAC
 
@@ -163,13 +210,18 @@ clear, robust behavior. Do not weaken controls or compress code to claim savings
   replace all Python authorization with REST calls or to introduce a new signed
   execution grant. The accepted M4 freshness boundary is one complete resolution
   at turn admission; do not reintroduce per-invocation authority reads.
-- Knowledge Flow API disappears from the Weaver target. Knowledge Flow retains
-  document processing; vector search and related reads move to local capabilities
-  in the agent pod, using shared Python access primitives with OpenSearch/pgvector,
-  PostgreSQL and OpenFGA. Do not plan a replacement Knowledge Flow HTTP dependency.
-  Storage credentials authenticate infrastructure access, not Bob's entitlement;
-  capabilities must enforce his verified context before exposing data to the LLM
-  or caller. This target is not evidence that those paths already work.
+- Knowledge Flow API stays (Dimi, 2026-10-27, reversing the morning's removal
+  decision). Capabilities reach knowledge through its endpoints; only Knowledge
+  Flow holds storage credentials. Each endpoint must establish, for the person
+  the call acts for, read access to the requested space before exposing data,
+  then apply the shared visibility primitive (`fred_core.documents.access`).
+  Decision K1 (Dimi, 2026-10-27): Knowledge Flow validates the person's
+  (delegated) identity as in Swift, then makes one OpenFGA `can_read` check on
+  the requested space against the published Weaver model. It neither asks
+  Control Plane nor trusts a pod-asserted space. The pod sends the space from
+  its turn binding, never from model arguments. This per-request check is a
+  resource-specific data check, not a turn-authority refresh.
+  Storage credentials authenticate infrastructure access, not Bob's entitlement.
 - Document permissions derive from their containing Weaver space (organization,
   team, project or personal space); do not recreate per-document authorization
   tuples. PostgreSQL placement/publication/lifecycle facts and OpenFGA permissions

@@ -1123,13 +1123,6 @@
       "modelProfile": "Modèle recommandé",
       "modelUnavailable": "La sélection de modèles n'est pas encore raccordée dans ce formulaire. Les réglages enregistrés sont conservés.",
       "legacyModelReselection": "Cet ancien profil est conservé pour diagnostic uniquement. Une re-sélection explicite d'un modèle plateforme est nécessaire ; ce formulaire conserve la référence.",
-      "corpusSearchOnly": "À la création, seule la recherche corpus est activable si le template le permet. Les autres capacités restent désactivées.",
-      "capabilitiesReadOnly": "Sélection et configuration sauvegardées, en lecture seule.",
-      "corpusSearchDescription": "Recherche dans le corpus accessible à cet agent, sans pièces jointes ni sélection de bibliothèques ou de documents.",
-      "documentSources": "Corpus : {{corpus}}. Pièces jointes : {{attachments}}.",
-      "sourceEnabled": "activé",
-      "sourceDisabled": "désactivé",
-      "sourceUnspecified": "non spécifié",
       "errors": {
         "unauthorized": "Votre session a expiré. Veuillez vous reconnecter.",
         "forbidden": "Vous n’avez pas les droits nécessaires pour cette opération.",

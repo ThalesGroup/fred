@@ -82,6 +82,7 @@ from langchain_core.tools import InjectedToolCallId, tool
 from langgraph.types import Checkpointer, Command, Interrupt, interrupt
 from pydantic import Field
 from sqlalchemy.ext.asyncio import create_async_engine
+from weaver_fixtures import active_turn, local_binding
 
 
 class _RecordingModel(BaseChatModel):
@@ -118,7 +119,8 @@ def _tool_call(name: str, args: dict[str, Any], call_id: str) -> dict[str, Any]:
 
 
 def _binding() -> BoundRuntimeContext:
-    return BoundRuntimeContext(
+    return local_binding(
+        "agent-2216-integration",
         runtime_context=RuntimeContext(),
         portable_context=PortableContext(
             request_id="request-2216",
@@ -136,11 +138,12 @@ async def _drive(agent: Any, payload: object, thread: str) -> list[dict[str, Any
 
     config = {"configurable": {"thread_id": thread}}
     updates: list[dict[str, Any]] = []
-    async for mode, update in agent.astream(
-        payload, config=config, stream_mode=["messages", "updates"]
-    ):
-        if mode == "updates" and isinstance(update, dict):
-            updates.append(update)
+    with active_turn(_binding()):
+        async for mode, update in agent.astream(
+            payload, config=config, stream_mode=["messages", "updates"]
+        ):
+            if mode == "updates" and isinstance(update, dict):
+                updates.append(update)
     return updates
 
 
@@ -499,15 +502,16 @@ async def test_paused_checkpoint_is_stored_unnamespaced_whatever_the_config_asks
         agent_ns = "instance-namespace-integration"
 
         updates: list[dict[str, Any]] = []
-        async for mode, update in agent.astream(
-            {"messages": [HumanMessage(content="update INC-1")]},
-            config={
-                "configurable": {"thread_id": thread_id, "checkpoint_ns": agent_ns}
-            },
-            stream_mode=["messages", "updates"],
-        ):
-            if mode == "updates" and isinstance(update, dict):
-                updates.append(update)
+        with active_turn(_binding()):
+            async for mode, update in agent.astream(
+                {"messages": [HumanMessage(content="update INC-1")]},
+                config={
+                    "configurable": {"thread_id": thread_id, "checkpoint_ns": agent_ns}
+                },
+                stream_mode=["messages", "updates"],
+            ):
+                if mode == "updates" and isinstance(update, dict):
+                    updates.append(update)
 
         interrupt = _interrupt_object(_find_interrupt_update(updates))
 

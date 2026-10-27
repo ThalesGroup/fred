@@ -49,6 +49,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import create_async_engine
 from weaver_fixtures import (
     INSTANCE_ID,
+    SPACE_ID,
+    active_turn,
     conversation_provenance,
     create_managed_app,
     managed_payload,
@@ -150,11 +152,16 @@ async def checkpointer(tmp_path):
 
 
 def _binding(
-    session_id: str = "s1", instance: str | None = "inst-1"
+    session_id: str = "s1", instance: str | None = INSTANCE_ID
 ) -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(
-            session_id=session_id, user_id="alice", team_id="t1"
+            session_id=session_id,
+            user_id="alice",
+            team_id="t1",
+            space_id=SPACE_ID,
+            agent_instance_id=instance,
+            template_agent_id="fred.tests.interrupted",
         ),
         portable_context=PortableContext(
             request_id="r1",
@@ -165,7 +172,11 @@ def _binding(
             session_id=session_id,
             user_id="alice",
             team_id="t1",
-            baggage={"agent_instance_id": instance} if instance else {},
+            agent_id="fred.tests.interrupted",
+            baggage={
+                "space_id": SPACE_ID,
+                **({"agent_instance_id": instance} if instance else {}),
+            },
         ),
     )
 
@@ -181,12 +192,14 @@ async def _executor(checkpointer: Any, **binding: Any) -> GraphExecutor:
 async def _turn(executor: GraphExecutor, **config: Any) -> list[Any]:
     message = config.pop("message", "migrate")
     session_id = config.pop("session_id", "s1")
-    return [
-        event
-        async for event in executor.stream(
-            _Input(message=message), ExecutionConfig(session_id=session_id, **config)
-        )
-    ]
+    with active_turn(executor._binding):
+        return [
+            event
+            async for event in executor.stream(
+                _Input(message=message),
+                ExecutionConfig(session_id=session_id, **config),
+            )
+        ]
 
 
 async def _lose_run_while_publishing(checkpointer: Any, **binding: Any) -> None:

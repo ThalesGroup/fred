@@ -2,8 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 """M4 fixtures. No network, credential provisioning or deployment."""
 
+from collections.abc import Awaitable
 from contextlib import contextmanager
+from typing import TypeVar
 
+from fred_sdk.contracts.context import (
+    BoundRuntimeContext,
+    PortableContext,
+    RuntimeContext,
+)
 from fred_sdk.contracts.weaver import WeaverRuntimeBinding
 
 
@@ -209,6 +216,10 @@ def active_turn(template, *, user="alice", session=None):
     from fred_runtime.model_routing.turn import TurnAuthority
     from fred_runtime.runtime_support.run_scope import RunScope
 
+    if isinstance(template, BoundRuntimeContext):
+        context = template.portable_context
+        assert context.agent_id is not None and context.user_id is not None
+        template, user, session = context.agent_id, context.user_id, context.session_id
     with RunScope.open() as scope:
         authority = TurnAuthority(
             turn_binding(template, user=user, session=session), None
@@ -235,3 +246,48 @@ def conversation_provenance(template="rags.sample.echo"):
         template_id=str(b.agent.template_id),
         runtime_id=b.agent.runtime_id,
     )
+
+
+def local_binding(
+    template: str, *, runtime_context: RuntimeContext, portable_context: PortableContext
+) -> BoundRuntimeContext:
+    """Bind local-engine fixtures as the trusted admission layer would.
+
+    HTTP/admission tests must use create_managed_app instead.
+    """
+    runtime, portable = runtime_context, portable_context
+    identity = {
+        "user_id": runtime.user_id or portable.user_id or "alice",
+        "session_id": runtime.session_id or portable.session_id,
+    }
+    return BoundRuntimeContext(
+        runtime_context=runtime.model_copy(
+            update={
+                **identity,
+                "space_id": SPACE_ID,
+                "agent_instance_id": INSTANCE_ID,
+                "template_agent_id": template,
+            }
+        ),
+        portable_context=portable.model_copy(
+            update={
+                **identity,
+                "agent_id": template,
+                "baggage": {
+                    **portable.baggage,
+                    "space_id": SPACE_ID,
+                    "agent_instance_id": INSTANCE_ID,
+                    "template_agent_id": template,
+                },
+            }
+        ),
+    )
+
+
+_Result = TypeVar("_Result")
+
+
+async def in_turn(binding: BoundRuntimeContext, work: Awaitable[_Result]) -> _Result:
+    """Run a local invocation in a fresh scope, including every HITL resume."""
+    with active_turn(binding):
+        return await work

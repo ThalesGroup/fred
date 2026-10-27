@@ -91,3 +91,36 @@ than a separate pod-owned model catalog. An early preparation result is not an
 execution grant. See the [Acme journey](02.3-agent-administration.md) for the user
 view and [admission details](A2-manager-contracts.md#chat-model-preparation-and-turn-admission)
 for the technical boundary.
+
+## 1.5. Document search during a conversation
+
+**Which components answer the assistant's document search?** Agent Pod performs
+it within the turn. Knowledge Flow only builds the index at ingestion; it is not
+called during a conversation.
+
+```mermaid
+flowchart TB
+    pod["Agent Pod<br/>Document search"]
+    cp["Control Plane"]
+    embed["Embedding model"]
+    os[("OpenSearch<br/>Vector index")]
+    pg[("PostgreSQL<br/>Placement and publication")]
+    kf["Knowledge Flow<br/>Worker"]
+    cp -->|"1. Supplies Bob's<br/>turn context"| pod
+    pod -->|"2. Embed<br/>the question"| embed
+    pod -->|"3. Candidates<br/>in scope"| os
+    pod -->|"4. Keep live,<br/>published"| pg
+    kf -.->|"Indexes at<br/>ingestion"| os
+
+    classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
+    classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
+    class pod,cp,kf fred
+    class embed,os,pg cots
+```
+
+The space comes from the turn context resolved by Control Plane, never from the
+model's tool arguments. The scope is that space and its parents. The index only
+proposes candidates; PostgreSQL decides. A passage reaches the model only if its
+document is in scope, not deleted, retrievable, and part of the published
+processing result. The pod reads these stores with its infrastructure
+credentials; they authenticate the pod, not Bob's rights.

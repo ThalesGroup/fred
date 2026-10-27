@@ -48,6 +48,7 @@ from fred_sdk.contracts.runtime import (
     ToolResultRuntimeEvent,
 )
 from langchain_core.tools import tool as lc_tool
+from weaver_fixtures import in_turn, local_binding
 
 
 @lc_tool("corpus_search", response_format="content_and_artifact")
@@ -83,7 +84,8 @@ def _sourced_capability_tool():
 
 
 def _binding() -> BoundRuntimeContext:
-    return BoundRuntimeContext(
+    return local_binding(
+        "graph-agent",
         runtime_context=RuntimeContext(session_id="s", user_id="u", team_id="t"),
         portable_context=PortableContext(
             request_id="r",
@@ -127,7 +129,10 @@ def test_capability_tool_sources_survive_invoke_runtime_tool() -> None:
     ctx = _node_context({source_tool.name: source_tool})
 
     result = asyncio.run(
-        ctx.invoke_runtime_tool("corpus_search", {"question": "what is fred?"})
+        in_turn(
+            _binding(),
+            ctx.invoke_runtime_tool("corpus_search", {"question": "what is fred?"}),
+        )
     )
 
     # `_normalize_runtime_tool_output` model_dumps the bare ToolInvocationResult
@@ -159,7 +164,9 @@ def test_capability_tool_answer_survives_invoke_runtime_tool() -> None:
     (source_tool,) = cap.tools(ctx_cap)
     ctx = _node_context({source_tool.name: source_tool})
 
-    result = asyncio.run(ctx.invoke_runtime_tool("tracer_echo", {"text": "hello"}))
+    result = asyncio.run(
+        in_turn(_binding(), ctx.invoke_runtime_tool("tracer_echo", {"text": "hello"}))
+    )
 
     assert isinstance(result, dict)
     assert result["blocks"][0]["text"] == "HELLO"
@@ -182,8 +189,11 @@ def test_native_preserves_bare_tool_invocation_result_tools_unchanged() -> None:
 
     native_tool = _bare_tool
     result = asyncio.run(
-        _node_context({native_tool.name: native_tool}).invoke_runtime_tool(
-            native_tool.name, {"x": "hello"}
+        in_turn(
+            _binding(),
+            _node_context({native_tool.name: native_tool}).invoke_runtime_tool(
+                native_tool.name, {"x": "hello"}
+            ),
         )
     )
 
@@ -200,8 +210,11 @@ def test_native_folds_content_into_blocks_when_artifact_carries_none() -> None:
 
     native_tool = _tracer_echo_shaped
     result = asyncio.run(
-        _node_context({native_tool.name: native_tool}).invoke_runtime_tool(
-            native_tool.name, {"text": "hello"}
+        in_turn(
+            _binding(),
+            _node_context({native_tool.name: native_tool}).invoke_runtime_tool(
+                native_tool.name, {"text": "hello"}
+            ),
         )
     )
 
@@ -221,8 +234,11 @@ def test_native_does_not_override_artifact_blocks_already_present() -> None:
 
     native_tool = _has_blocks_tool
     result = asyncio.run(
-        _node_context({native_tool.name: native_tool}).invoke_runtime_tool(
-            native_tool.name, {"x": "y"}
+        in_turn(
+            _binding(),
+            _node_context({native_tool.name: native_tool}).invoke_runtime_tool(
+                native_tool.name, {"x": "y"}
+            ),
         )
     )
 
@@ -239,8 +255,11 @@ def test_native_only_unwraps_tuples_declared_content_and_artifact() -> None:
 
     native_tool = _plain_pair_tool
     result = asyncio.run(
-        _node_context({native_tool.name: native_tool}).invoke_runtime_tool(
-            native_tool.name, {"x": "hello"}
+        in_turn(
+            _binding(),
+            _node_context({native_tool.name: native_tool}).invoke_runtime_tool(
+                native_tool.name, {"x": "hello"}
+            ),
         )
     )
 
@@ -254,9 +273,12 @@ def test_native_invocation_supports_sync_tool_with_content_and_artifact() -> Non
         return x, ToolInvocationResult(tool_ref="sync_artifact_tool")
 
     result = asyncio.run(
-        _node_context(
-            {_sync_artifact_tool.name: _sync_artifact_tool}
-        ).invoke_runtime_tool(_sync_artifact_tool.name, {"x": "hello"})
+        in_turn(
+            _binding(),
+            _node_context(
+                {_sync_artifact_tool.name: _sync_artifact_tool}
+            ).invoke_runtime_tool(_sync_artifact_tool.name, {"x": "hello"}),
+        )
     )
     assert isinstance(result, dict)
     assert result["blocks"][0]["text"] == "hello"
@@ -280,7 +302,9 @@ def test_invoke_runtime_tool_event_reflects_tool_reported_is_error() -> None:
     events: list[RuntimeEvent] = []
     ctx = _node_context({native_tool.name: native_tool}, events=events)
 
-    result = asyncio.run(ctx.invoke_runtime_tool("failing_probe", {"x": "y"}))
+    result = asyncio.run(
+        in_turn(_binding(), ctx.invoke_runtime_tool("failing_probe", {"x": "y"}))
+    )
 
     assert isinstance(result, dict)
     assert result["is_error"] is True
@@ -306,8 +330,11 @@ def test_native_handled_error_status_requires_artifact_format(
     events: list[RuntimeEvent] = []
     context = _node_context({probe.name: probe}, events=events)
     result = asyncio.run(
-        context.invoke_runtime_tool(
-            probe.name, {"count": "invalid" if failure == "validation" else 1}
+        in_turn(
+            _binding(),
+            context.invoke_runtime_tool(
+                probe.name, {"count": "invalid" if failure == "validation" else 1}
+            ),
         )
     )
     assert isinstance(result, str)
@@ -323,11 +350,15 @@ def test_native_tool_validates_and_supplies_defaults_before_execution() -> None:
         return {"count": count, "type": type(count).__name__}
 
     context = _node_context({probe.name: probe})
-    assert asyncio.run(context.invoke_runtime_tool(probe.name, {})) == {
+    assert asyncio.run(
+        in_turn(_binding(), context.invoke_runtime_tool(probe.name, {}))
+    ) == {
         "count": 7,
         "type": "int",
     }
-    assert asyncio.run(context.invoke_runtime_tool(probe.name, {"count": "3"})) == {
+    assert asyncio.run(
+        in_turn(_binding(), context.invoke_runtime_tool(probe.name, {"count": "3"}))
+    ) == {
         "count": 3,
         "type": "int",
     }
@@ -341,7 +372,10 @@ def test_native_tool_preserves_non_fred_artifacts(artifact) -> None:
         return "summary", artifact
 
     result = asyncio.run(
-        _node_context({probe.name: probe}).invoke_runtime_tool(probe.name, {})
+        in_turn(
+            _binding(),
+            _node_context({probe.name: probe}).invoke_runtime_tool(probe.name, {}),
+        )
     )
     assert result == artifact
 
@@ -373,7 +407,7 @@ def test_invoke_runtime_tool_populates_latency_ms_on_success_and_error() -> None
         {"slow_probe": _slow_probe, "raising_probe": _raising_probe}, events=events
     )
 
-    asyncio.run(ctx.invoke_runtime_tool("slow_probe", {"x": "y"}))
+    asyncio.run(in_turn(_binding(), ctx.invoke_runtime_tool("slow_probe", {"x": "y"})))
     (success_event,) = [
         e
         for e in events
@@ -383,7 +417,9 @@ def test_invoke_runtime_tool_populates_latency_ms_on_success_and_error() -> None
     assert success_event.latency_ms >= 0
 
     with pytest.raises(RuntimeError):
-        asyncio.run(ctx.invoke_runtime_tool("raising_probe", {"x": "y"}))
+        asyncio.run(
+            in_turn(_binding(), ctx.invoke_runtime_tool("raising_probe", {"x": "y"}))
+        )
     (error_event,) = [
         e
         for e in events
@@ -412,7 +448,9 @@ def test_invoke_runtime_tool_reads_sources_and_ui_parts_from_typed_result() -> N
     events: list[RuntimeEvent] = []
     ctx = _node_context({native_tool.name: native_tool}, events=events)
 
-    asyncio.run(ctx.invoke_runtime_tool("sourced_probe", {"x": "y"}))
+    asyncio.run(
+        in_turn(_binding(), ctx.invoke_runtime_tool("sourced_probe", {"x": "y"}))
+    )
 
     (event,) = [e for e in events if isinstance(e, ToolResultRuntimeEvent)]
     assert event.sources[0].uid == "d1"
@@ -436,7 +474,9 @@ def test_invoke_runtime_tool_does_not_misread_an_unrelated_dict_is_error_key() -
     events: list[RuntimeEvent] = []
     ctx = _node_context({"mcp_like_probe": _mcp_like_probe}, events=events)
 
-    result = asyncio.run(ctx.invoke_runtime_tool("mcp_like_probe", {"x": "y"}))
+    result = asyncio.run(
+        in_turn(_binding(), ctx.invoke_runtime_tool("mcp_like_probe", {"x": "y"}))
+    )
 
     assert result == {"is_error": "not-a-bool-business-value", "answer": 42}
     (event,) = [e for e in events if isinstance(e, ToolResultRuntimeEvent)]

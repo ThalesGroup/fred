@@ -71,6 +71,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Checkpointer, Command
 from pydantic import Field, SecretStr
+from weaver_fixtures import active_turn, in_turn, local_binding
 
 
 @tool
@@ -110,7 +111,8 @@ def _tool_call(name: str, args: dict[str, Any], call_id: str) -> dict[str, Any]:
 
 
 def _binding() -> BoundRuntimeContext:
-    return BoundRuntimeContext(
+    return local_binding(
+        "deep-hitl",
         runtime_context=RuntimeContext(),
         portable_context=PortableContext(
             request_id="request-deep-hitl",
@@ -171,11 +173,12 @@ async def _drive(agent: Any, payload: object, thread: str) -> list[dict[str, Any
 
     config = {"configurable": {"thread_id": thread}}
     updates: list[dict[str, Any]] = []
-    async for mode, update in agent.astream(
-        payload, config=config, stream_mode=["messages", "updates"]
-    ):
-        if mode == "updates" and isinstance(update, dict):
-            updates.append(update)
+    with active_turn(_binding()):
+        async for mode, update in agent.astream(
+            payload, config=config, stream_mode=["messages", "updates"]
+        ):
+            if mode == "updates" and isinstance(update, dict):
+                updates.append(update)
     return updates
 
 
@@ -512,7 +515,8 @@ async def _stream_events(
     input_model: ReActInput,
     config: ExecutionConfig,
 ) -> list[Any]:
-    return [event async for event in executor.stream(input_model, config)]
+    with active_turn(_binding()):
+        return [event async for event in executor.stream(input_model, config)]
 
 
 @pytest.mark.asyncio
@@ -900,9 +904,12 @@ async def test_native_children_parent_and_fresh_graph_share_scratchpad(
         available_tool_names=safe_filesystem_tools,
     )
 
-    result = await agent.ainvoke(
-        {"messages": [HumanMessage(content="parent")]},
-        {"configurable": {"thread_id": "shared-scratchpad-first"}},
+    result = await in_turn(
+        _binding(),
+        agent.ainvoke(
+            {"messages": [HumanMessage(content="parent")]},
+            {"configurable": {"thread_id": "shared-scratchpad-first"}},
+        ),
     )
 
     tool_results = {
@@ -943,9 +950,12 @@ async def test_native_children_parent_and_fresh_graph_share_scratchpad(
         backend=fresh_backend,
         available_tool_names=safe_filesystem_tools,
     )
-    fresh_result = await fresh_agent.ainvoke(
-        {"messages": [HumanMessage(content="fresh parent")]},
-        {"configurable": {"thread_id": "shared-scratchpad-fresh"}},
+    fresh_result = await in_turn(
+        _binding(),
+        fresh_agent.ainvoke(
+            {"messages": [HumanMessage(content="fresh parent")]},
+            {"configurable": {"thread_id": "shared-scratchpad-fresh"}},
+        ),
     )
     fresh_read = next(
         message
@@ -1011,9 +1021,12 @@ async def test_native_child_approval_never_waits_or_bypasses(gate: str) -> None:
             enabled=gate == "operator", always_require_tools=("sensitive",)
         ),
     )
-    result = await agent.ainvoke(
-        {"messages": [HumanMessage(content="parent")]},
-        {"configurable": {"thread_id": gate}},
+    result = await in_turn(
+        _binding(),
+        agent.ainvoke(
+            {"messages": [HumanMessage(content="parent")]},
+            {"configurable": {"thread_id": gate}},
+        ),
     )
     assert "__interrupt__" not in result
     assert result["messages"][-1].content == "parent done"
@@ -1062,9 +1075,12 @@ async def test_native_child_cannot_execute_disabled_filesystem_tools() -> None:
         },
     )
     agent = _native_agent(model, tools=[])
-    result = await agent.ainvoke(
-        {"messages": [HumanMessage(content="parent")]},
-        {"configurable": {"thread_id": "blocked"}},
+    result = await in_turn(
+        _binding(),
+        agent.ainvoke(
+            {"messages": [HumanMessage(content="parent")]},
+            {"configurable": {"thread_id": "blocked"}},
+        ),
     )
     assert not result.get("files")
     child_results = [
@@ -1114,9 +1130,12 @@ async def test_native_child_retry_hygiene_does_not_replay_tools(
     )
     tracer = RecordingTracer(capture=True)
     agent = _native_agent(model, tools=[increment], tracer=tracer)
-    await agent.ainvoke(
-        {"messages": [HumanMessage(content="parent")]},
-        {"configurable": {"thread_id": "retry"}},
+    await in_turn(
+        _binding(),
+        agent.ainvoke(
+            {"messages": [HumanMessage(content="parent")]},
+            {"configurable": {"thread_id": "retry"}},
+        ),
     )
     assert executions == 1
     assert model.failed
@@ -1187,9 +1206,12 @@ async def test_native_parallel_children_keep_trace_context_and_close_spans(
     try:
         agent = _native_agent(model, tools=[rendezvous], tracer=tracer)
         run = asyncio.create_task(
-            agent.ainvoke(
-                {"messages": [HumanMessage(content="parent")]},
-                {"configurable": {"thread_id": f"parallel-{cancel}"}},
+            in_turn(
+                _binding(),
+                agent.ainvoke(
+                    {"messages": [HumanMessage(content="parent")]},
+                    {"configurable": {"thread_id": f"parallel-{cancel}"}},
+                ),
             )
         )
         await asyncio.wait_for(both_started.wait(), timeout=10)
@@ -1247,9 +1269,12 @@ async def test_native_child_model_cancellation_propagates_and_closes_spans() -> 
     try:
         agent = _native_agent(model, tools=[], tracer=tracer)
         run = asyncio.create_task(
-            agent.ainvoke(
-                {"messages": [HumanMessage(content="parent")]},
-                {"configurable": {"thread_id": "model-cancel"}},
+            in_turn(
+                _binding(),
+                agent.ainvoke(
+                    {"messages": [HumanMessage(content="parent")]},
+                    {"configurable": {"thread_id": "model-cancel"}},
+                ),
             )
         )
         try:

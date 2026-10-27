@@ -47,10 +47,12 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import tool as lc_tool
 from pydantic import BaseModel
+from weaver_fixtures import in_turn, local_binding
 
 
 def _binding() -> BoundRuntimeContext:
-    return BoundRuntimeContext(
+    return local_binding(
+        "graph-agent",
         runtime_context=RuntimeContext(session_id="s", user_id="u", team_id="t"),
         portable_context=PortableContext(
             request_id="r",
@@ -134,7 +136,7 @@ def test_graph_tool_call_event_carries_no_token_figure() -> None:
         finish_reason=None,
     )
 
-    asyncio.run(ctx.invoke_runtime_tool("noop_probe", {"x": "y"}))
+    asyncio.run(in_turn(_binding(), ctx.invoke_runtime_tool("noop_probe", {"x": "y"})))
 
     (event,) = [e for e in events if isinstance(e, ToolCallRuntimeEvent)]
     assert not hasattr(event, "token_usage")

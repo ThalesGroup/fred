@@ -39,6 +39,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMe
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import Field
+from weaver_fixtures import active_turn, local_binding
 
 _SAFE_FILESYSTEM_TOOLS = {
     "ls",
@@ -85,7 +86,8 @@ class _ScriptedModel(BaseChatModel):
 
 
 def _binding() -> BoundRuntimeContext:
-    return BoundRuntimeContext(
+    return local_binding(
+        "deep-filesystem",
         runtime_context=RuntimeContext(),
         portable_context=PortableContext(
             request_id="request-deep-filesystem",
@@ -103,13 +105,14 @@ def _tool_call(name: str, args: dict[str, Any], call_id: str) -> dict[str, Any]:
 
 async def _drive(agent: Any) -> list[dict[str, Any]]:
     updates: list[dict[str, Any]] = []
-    async for mode, update in agent.astream(
-        {"messages": [HumanMessage(content="write and read the shared note")]},
-        config={"configurable": {"thread_id": "compiled-filesystem-tools"}},
-        stream_mode=["messages", "updates"],
-    ):
-        if mode == "updates" and isinstance(update, dict):
-            updates.append(update)
+    with active_turn(_binding()):
+        async for mode, update in agent.astream(
+            {"messages": [HumanMessage(content="write and read the shared note")]},
+            config={"configurable": {"thread_id": "compiled-filesystem-tools"}},
+            stream_mode=["messages", "updates"],
+        ):
+            if mode == "updates" and isinstance(update, dict):
+                updates.append(update)
     return updates
 
 

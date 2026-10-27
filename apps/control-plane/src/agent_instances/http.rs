@@ -396,6 +396,7 @@ async fn update_agent_instance(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, agent_instance_id)): ApiPath<(Uuid, Uuid)>,
+    headers: HeaderMap,
     ApiJson(mut body): ApiJson<UpdateAgentInstanceRequest>,
 ) -> AppResult<Json<ManagedAgentInstanceSummary>> {
     let space = spaces::authorize(&s.pool, &s.fga, &user.uid, space_id, Permission::Write).await?;
@@ -409,7 +410,7 @@ async fn update_agent_instance(
     tuning::validate_update_request(&mut body)?;
     let changes_capabilities =
         body.capability_ids.is_some() || body.capability_config_values.is_some();
-    // Only the saved source's contract is fetched, without retaining a SQL connection.
+    // Discovery and pod validation run before the lock, without retaining a SQL connection.
     let template = if body.tuning_field_values.is_some() || changes_capabilities {
         match agents::editable_template(
             &s.agent_catalog,
@@ -429,11 +430,24 @@ async fn update_agent_instance(
     } else {
         None
     };
-    if changes_capabilities && template.is_none() {
-        return Err(AppError::Unavailable(
-            "Current template catalog is required to change capability settings.".into(),
-        ));
-    }
+    let capabilities = match (&template, changes_capabilities) {
+        (Some(template), true) => Some(
+            tuning::validate_capability_update(
+                &s.agent_catalog,
+                headers.get(header::AUTHORIZATION),
+                template,
+                &record.tuning.0,
+                &body,
+            )
+            .await?,
+        ),
+        (None, true) => {
+            return Err(AppError::Unavailable(
+                "Current template catalog is required to change capability settings.".into(),
+            ));
+        }
+        _ => None,
+    };
     let (mut tx, mut guard) = spaces::lock_for(&s.pool, &s.fga, &space).await?;
     let space =
         spaces::authorize_locked(&mut tx, &s.fga, &user.uid, space_id, Permission::Write).await?;
@@ -451,7 +465,7 @@ async fn update_agent_instance(
         .as_ref()
         .and_then(Option::as_ref)
         .is_some_and(|key| previous.recommended_model.as_ref() != Some(key));
-    tuning::apply_update(&mut current, &body, template.as_ref())?;
+    tuning::apply_update(&mut current, &body, template.as_ref(), capabilities)?;
     // Descriptive edits and explicit clears never depend on discovery health.
     if new_recommendation || matches!(body.model_options, Some(Some(_))) {
         models::validate_write(

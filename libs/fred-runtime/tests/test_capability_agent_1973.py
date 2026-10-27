@@ -68,6 +68,7 @@ from test_react_middleware_frame import (
     _definition,
     _tool_call,
 )
+from weaver_fixtures import in_turn
 
 # ---------------------------------------------------------------------------
 # Test capabilities
@@ -452,8 +453,9 @@ async def test_demo_capability_tool_is_callable_in_chat_when_enabled() -> None:
         model, registry, {"tracer_echo": {"uppercase": True}}, approval_enabled=False
     )
 
-    res = await agent.ainvoke(
-        {"messages": [HumanMessage("echo hello")]}, _cfg("t-demo")
+    res = await in_turn(
+        _binding(),
+        agent.ainvoke({"messages": [HumanMessage("echo hello")]}, _cfg("t-demo")),
     )
 
     tool_messages = [m for m in res["messages"] if isinstance(m, ToolMessage)]
@@ -484,7 +486,10 @@ async def test_demo_capability_config_defaults_apply() -> None:
         model, registry, {"tracer_echo": {}}, approval_enabled=False
     )
 
-    res = await agent.ainvoke({"messages": [HumanMessage("echo")]}, _cfg("t-demo-def"))
+    res = await in_turn(
+        _binding(),
+        agent.ainvoke({"messages": [HumanMessage("echo")]}, _cfg("t-demo-def")),
+    )
     tool_messages = [m for m in res["messages"] if isinstance(m, ToolMessage)]
     assert str(tool_messages[0].content) == "hello"
 
@@ -531,14 +536,18 @@ async def test_hitl_require_gates_and_proceed_resumes() -> None:
     )
     cfg = _cfg("t-hitl-require")
 
-    res = await agent.ainvoke({"messages": [HumanMessage("use the gadget")]}, cfg)
+    res = await in_turn(
+        _binding(), agent.ainvoke({"messages": [HumanMessage("use the gadget")]}, cfg)
+    )
     assert "__interrupt__" in res
     payload = res["__interrupt__"][0].value
     assert payload["question"] == "Run the gadget?"
     assert payload["pending_calls"][0]["tool_name"] == "demo_gadget"
     assert GADGET_RUNS == []
 
-    res = await agent.ainvoke(Command(resume={"choice_id": "proceed"}), cfg)
+    res = await in_turn(
+        _binding(), agent.ainvoke(Command(resume={"choice_id": "proceed"}), cfg)
+    )
     assert GADGET_RUNS == [{"path": "/workspace/a"}]
     assert str(res["messages"][-1].content) == "gadget done"
 
@@ -559,8 +568,9 @@ async def test_hitl_when_predicate_sees_typed_context_and_real_args() -> None:
         {"demo_gadget": {"workspace_root": "/workspace"}},
     )
 
-    res = await agent.ainvoke(
-        {"messages": [HumanMessage("gadget")]}, _cfg("t-hitl-when")
+    res = await in_turn(
+        _binding(),
+        agent.ainvoke({"messages": [HumanMessage("gadget")]}, _cfg("t-hitl-when")),
     )
 
     # Inside the configured workspace root → predicate says no gate.
@@ -581,8 +591,9 @@ async def test_hitl_raising_when_predicate_fails_closed_to_interrupt() -> None:
         ScriptedModel(script=_gadget_script()), registry, {"demo_gadget": {}}
     )
 
-    res = await agent.ainvoke(
-        {"messages": [HumanMessage("gadget")]}, _cfg("t-hitl-raise")
+    res = await in_turn(
+        _binding(),
+        agent.ainvoke({"messages": [HumanMessage("gadget")]}, _cfg("t-hitl-raise")),
     )
 
     assert "__interrupt__" in res
@@ -602,8 +613,9 @@ async def test_hitl_spec_require_false_does_not_gate_tool() -> None:
         ScriptedModel(script=_gadget_script()), registry, {"demo_gadget": {}}
     )
 
-    res = await agent.ainvoke(
-        {"messages": [HumanMessage("gadget")]}, _cfg("t-hitl-spec-wins")
+    res = await in_turn(
+        _binding(),
+        agent.ainvoke({"messages": [HumanMessage("gadget")]}, _cfg("t-hitl-spec-wins")),
     )
 
     assert "__interrupt__" not in res
@@ -620,8 +632,9 @@ async def test_operator_exact_list_still_overrides_capability_spec() -> None:
         always_require_tools=["demo_gadget"],
     )
 
-    res = await agent.ainvoke(
-        {"messages": [HumanMessage("gadget")]}, _cfg("t-hitl-operator")
+    res = await in_turn(
+        _binding(),
+        agent.ainvoke({"messages": [HumanMessage("gadget")]}, _cfg("t-hitl-operator")),
     )
 
     assert "__interrupt__" in res
@@ -642,8 +655,9 @@ async def test_capability_require_gates_even_when_operator_approval_disabled() -
         approval_enabled=False,
     )
 
-    res = await agent.ainvoke(
-        {"messages": [HumanMessage("gadget")]}, _cfg("t-hitl-disabled")
+    res = await in_turn(
+        _binding(),
+        agent.ainvoke({"messages": [HumanMessage("gadget")]}, _cfg("t-hitl-disabled")),
     )
 
     assert "__interrupt__" in res
@@ -658,9 +672,11 @@ async def test_hitl_cancel_still_replans_for_capability_tools() -> None:
     )
     cfg = _cfg("t-hitl-cancel")
 
-    res = await agent.ainvoke({"messages": [HumanMessage("gadget")]}, cfg)
+    res = await in_turn(
+        _binding(), agent.ainvoke({"messages": [HumanMessage("gadget")]}, cfg)
+    )
     assert "__interrupt__" in res
-    res = await agent.ainvoke(Command(resume="cancel"), cfg)
+    res = await in_turn(_binding(), agent.ainvoke(Command(resume="cancel"), cfg))
 
     assert GADGET_RUNS == []
     assert str(res["messages"][-1].content) == "gadget done"
