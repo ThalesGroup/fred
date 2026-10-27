@@ -190,8 +190,10 @@ organization Manage-protected inventory, refresh and policy read/write.
 store organization choices with expected revision, attribution and composite foreign
 keys. Source approvals remain platform-only. Publication uses the transaction that
 rechecks admission/Manage and fences authorization after HTTP, preserving the M1
-configuration/token fences. These APIs establish no runtime model enforcement or
-validated execution journey; the [component contract](../../apps/control-plane/README.md#platform-model-inventory-and-organization-administration)
+configuration/token fences. Turn admission consumes this policy through the
+[model contract below](#chat-model-preparation-and-turn-admission); saving the policy
+alone does not prove provider connectivity or pod credential provisioning.
+The [component contract](../../apps/control-plane/README.md#platform-model-inventory-and-organization-administration)
 defines source approval, payloads, eligibility, errors and concurrency.
 
 The organization Models tab is bound through
@@ -201,7 +203,14 @@ refreshes discovery on entry as in Swift, and replaces policy with its expected
 revision. Known rows remain visible while discovery runs; the existing Refresh
 action performs the same update without exposing per-source controls.
 Source observations remain distinct from model permission; failed refreshes retain
-existing choices. This UI binding still requires functional validation.
+existing choices. Discovery retains the provider's boolean `capabilities.reasoning`;
+missing metadata remains unknown. The existing reasoning switch persists an
+organization ceiling on permission rows through additive
+[`0018_model_reasoning.sql`](../../apps/control-plane/migrations/0018_model_reasoning.sql).
+Preparation exposes the corresponding per-model control. The pod combines it with
+the user's explicit per-question choice in its admitted turn context, and enforces
+`reasoning_effort: high` (or omission) at the transport boundary. This UI binding
+still requires functional validation.
 
 Instance model settings reuse `agent_instance.tuning` through
 [`agent_instances/http.rs`](../../apps/control-plane/src/agent_instances/http.rs)
@@ -211,9 +220,79 @@ reuses M2 selection locks and defines the three typed invocation options. The
 [existing resolver](../../apps/control-plane/src/agent_instances/runtime.rs) reads
 policy/catalog/configuration in one snapshot and exposes approved inference
 connections only to trusted delegated workloads. Legacy profiles remain diagnostic
-references. These contracts supply data without selecting or invoking a model;
-[component semantics](../../apps/control-plane/README.md#instance-recommendations-and-resolver-data-m3)
+references, never selectable aliases. Control Plane supplies the complete model
+facts and a browser preparation diagnostic; final selection and invocation remain
+in the Python pod. [Component semantics](../../apps/control-plane/README.md#instance-recommendations-and-resolver-data-m3)
 define omission/null, known limits, candidate diagnostics and connection visibility.
+
+### Chat model preparation and turn admission
+
+Companion to [Bob's first exchange](02.3-agent-administration.md). Model identity is
+`(source_id, upstream_model_id)`, not a display name or pod-local profile. Discovery
+supplies observations; the organization's policy supplies permission. The retained
+instance recommendation and organization default are optional.
+
+| Selection step | Rule |
+| --- | --- |
+| Explicit chat choice | Used first, subject to permission and candidate checks. |
+| Instance recommendation | Used only when the chat supplies no choice. |
+| Organization default | Used only when neither choice nor recommendation is present. |
+| No selection | Refuse with a diagnostic; do not pick the first available offer. |
+
+A missing or forbidden selected offer cannot trigger substitution. An approved
+fallback applies only to confirmed withdrawal without another disqualifying
+condition, and must itself be permitted and a candidate. Failed discovery alone
+is not withdrawal: an existing candidate may remain usable, while new administrative selection
+writes require successful observation at the current source revision. A retained
+legacy profile requires explicit offer re-selection unless a recommendation exists.
+
+**Browser preparation.**
+[`preparation.rs`](../../apps/control-plane/src/agent_instances/preparation.rs)
+accepts paired `model_source_id` / `model_upstream_id` query parameters and an
+optional registered `session_id`. It verifies space, instance, template and session
+access, then evaluates the model facts already read in its transaction.
+`ExecutionPreparation` returns `model_choice` and nullable `model_error` alongside
+the offers, controls and approved runtime URLs. A readable response may be HTTP 200
+with an unusable model choice: callers must check the diagnostic before sending.
+No inference connection or secret is exposed in this browser response.
+
+[`model_catalog/instance.rs`](../../apps/control-plane/src/model_catalog/instance.rs),
+`preparation_error`, distinguishes `selection_missing`, `reselection_required`,
+`offer_unknown`, `offer_forbidden`, `offer_unavailable` and `fallback_unavailable`.
+These are safe fixed messages. Preparation does not verify pod-local credentials
+or make an inference request.
+
+**Turn admission.** The browser sends canonical `runtime_context.space_id` and
+its requested model choice to Agent Pod. It does not invent a `team_id` to establish
+authority. The pod obtains a fresh trusted binding from Control Plane; it does not
+reuse browser preparation as a grant. The pure Python
+[`ModelRoutingResolver`](../../libs/fred-runtime/fred_runtime/model_routing/resolver.py)
+selects over that binding, and `TurnAuthority` enforces it within the admitted turn.
+The [security annex](A6-security.md#managed-agent-turn-authority) describes identity,
+conversation binding and the turn boundary. No per-LLM-call authority refresh is
+added. Catalogue management and policy are centralized; the final resolver remains
+in Python.
+
+**UI consumers.** The generated
+[`Control Plane client`](../../apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts)
+is consumed by
+[`useChatSse`](../../apps/frontend/src/rework/core/hooks/useChatSse.ts) and
+[`useManagedChat`](../../apps/frontend/src/rework/components/pages/ManagedChatPage/useManagedChat.ts).
+The chat binds the preparation diagnostic to the requested choice, preserves the
+draft and keeps the selector accessible. Every send checks preparation before
+optimistic message insertion or runtime dispatch. Resume code has the same guard;
+Weaver preparation still advertises `supports_hitl: false`. An enabled instance is
+not a model-readiness guarantee, and creation does not require a recommendation.
+
+**Operator boundary.**
+[`model_catalog/config.rs`](../../apps/control-plane/src/model_catalog/config.rs)
+defines platform-approved discovery and inference destinations separately.
+Control Plane uses the configured discovery authentication; the inference
+connection contains a binding reference that the pod resolves locally, not a secret
+value. Alice may refresh an approved source and change Acme's policy, but her
+organization role cannot rewrite platform connections. Dana must provision both
+discovery and inference access; discovering an offer proves neither permission nor
+a successful model call.
 
 <!-- generated: routes apps/control-plane/src/model_catalog/http.rs /control-plane/v1 -->
 | Method | Path | Handler |

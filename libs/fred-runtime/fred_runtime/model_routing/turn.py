@@ -7,7 +7,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from fred_sdk.contracts.context import PortableContext, RuntimeContext
-from fred_sdk.contracts.weaver import ModelOfferKey, WeaverRuntimeBinding
+from fred_sdk.contracts.weaver import (
+    ModelOfferKey,
+    RuntimeModelOffer,
+    WeaverRuntimeBinding,
+)
 
 from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_runtime.runtime_support.run_scope import RunScope
@@ -17,12 +21,32 @@ if TYPE_CHECKING:
 
 
 class TurnAuthority:
-    def __init__(self, binding: WeaverRuntimeBinding, choice: ModelOfferKey | None):
+    def __init__(
+        self,
+        binding: WeaverRuntimeBinding,
+        choice: ModelOfferKey | None,
+        *,
+        reasoning: bool = False,
+    ):
         self.binding = binding
         self.choice = choice
+        self._reasoning_requested = reasoning
         self._scope: RunScope | None = None
         self._ended = False
         self.models: dict[ModelOfferKey, BaseChatModel] = {}
+
+    def reasoning_effort(self, offer: RuntimeModelOffer) -> str | None:
+        if (
+            self._reasoning_requested
+            and offer.permitted
+            and offer.candidate
+            and offer.key in self.binding.models.policy.reasoning_enabled
+            and offer.metadata is not None
+            and offer.metadata.reasoning is True
+        ):
+            # Preserve Swift's on/off mode: its connected chat profiles use high.
+            return "high"
+        return None
 
     def start(self, scope: RunScope) -> None:
         if self._scope is not None or self._ended:

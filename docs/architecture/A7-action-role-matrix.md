@@ -2,12 +2,11 @@
 
 Companion to the [Security chapter](03-security.md).
 
-This reference describes the implemented **control-plane Rust** contract on the
-organization/team/project model. It covers every registered HTTP operation,
-operator entry points and every permission accepted by the authorization API.
-It does not assert that the corresponding Python surfaces use the same rules.
-The [Python comparison](#differences-from-the-python-contract) names the verified
-differences; those differences are not a claim of team approval.
+This reference describes **Control Plane** permissions on the
+organization/team/project model, HTTP entry points and operator commands.
+The [managed chat section](#model-administration-and-the-first-managed-chat)
+connects these permissions to the Agent Pod admission boundary; other Python
+surfaces are not inferred to share the same contract.
 
 ## How to read the matrices
 
@@ -73,6 +72,29 @@ deletion to manager. Its directory response supplies the current write decision;
 each mutation rechecks it. Names are display metadata; paths use immutable UUIDs.
 Original upload and individual download use manager; processing controls preserve
 their presentation with processing unavailable in this view.
+
+## Model administration and the first managed chat
+
+Companion to [Alice and Bob's journey](02.3-agent-administration.md). Dana's source
+configuration is a deployment responsibility, not an organization-role API.
+The ordinary admission and organization-isolation conditions above still apply.
+
+| Action | Required authority | Example / additional conditions |
+| --- | --- | --- |
+| Configure model sources and inference destinations | Platform deployment access | Dana provisions approved connections; no business content rights follow. |
+| Read model inventory/policy, refresh an approved source, change permitted models/default/fallback | `Manage` on the organization | Alice's Acme administrator role qualifies. A team administrator, editor or organization owner alone does not. |
+| Create or edit an agent instance | `Write` on its supported space, plus template-use permission | Bob's Research editor role qualifies when the template is authorized. |
+| Prepare a chat and see its model offers | `Read` on its supported space, plus template-use permission | The instance must be executable; a supplied session must belong to the person and instance. Browser offers contain no inference credentials. |
+| Resolve execution for an admitted turn | The person's `Read` and template-use permission, plus trusted delegation for a workload | A service token alone does not authorize Bob's turn; model policy and conversation binding remain enforced. |
+
+Sources: [`model_catalog/http.rs`](../../apps/control-plane/src/model_catalog/http.rs),
+[`agent_instances/http.rs`](../../apps/control-plane/src/agent_instances/http.rs),
+[`preparation.rs`](../../apps/control-plane/src/agent_instances/preparation.rs),
+[`runtime.rs`](../../apps/control-plane/src/agent_instances/runtime.rs) and
+[`sessions.rs`](../../apps/control-plane/src/sessions.rs).
+The [security annex](A6-security.md#managed-agent-turn-authority) explains the
+boundary with the Python pod; this table does not grant access to another person's
+conversation.
 
 ## Space governance and personal-space actions
 

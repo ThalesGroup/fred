@@ -21,6 +21,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 
 from fred_runtime.runtime_support.authority import AuthorityLostError
+from fred_runtime.support.reasoning_replay import MistralReasoningReplayChatOpenAI
 
 from .turn import TurnAuthority
 
@@ -76,9 +77,18 @@ class GuardedChatOpenAI(ChatOpenAI):
             yield chunk
 
 
+class GuardedMistralChatOpenAI(GuardedChatOpenAI, MistralReasoningReplayChatOpenAI):
+    """Keep native reasoning replay alongside the invocation and transport guards."""
+
+
 def guarded_model(model: ChatOpenAI, check: Callable[[], None]) -> ChatOpenAI:
     # Preserve the existing OpenAI clients and pool, as the reasoning replay adapter does.
-    object.__setattr__(model, "__class__", GuardedChatOpenAI)
+    guarded_class = (
+        GuardedMistralChatOpenAI
+        if isinstance(model, MistralReasoningReplayChatOpenAI)
+        else GuardedChatOpenAI
+    )
+    object.__setattr__(model, "__class__", guarded_class)
     object.__setattr__(model, "_turn_check", check)
     model.cache = False
     return model
@@ -172,7 +182,12 @@ def checked_clients(authority: TurnAuthority, offer: RuntimeModelOffer, api_key:
             raise AuthorityLostError()
         if options.max_tokens is not None and not tokens:
             raise AuthorityLostError()
-        if "reasoning_effort" in payload or "reasoning" in payload:
+        effort = authority.reasoning_effort(offer)
+        if (
+            "reasoning" in payload
+            or payload.get("reasoning_effort") != effort
+            or (effort is None and "reasoning_effort" in payload)
+        ):
             raise AuthorityLostError()
 
     def wrap(

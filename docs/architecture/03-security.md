@@ -1,7 +1,7 @@
 # 3. Security
 
 Fred separates identity, admission and permission. This chapter explains access
-to organizations, spaces and documents through Control Plane.
+to organizations, spaces, documents and managed conversations through Control Plane.
 
 ## 3.1. Signing in is not permission
 
@@ -69,3 +69,16 @@ upload prevents publication; an already authorized read may finish.
 The [technical security annex](A6-security.md) describes authentication,
 service identities and enforcement. The [action and role matrix](A7-action-role-matrix.md)
 provides exact permissions, conditions and implementation references.
+
+## 3.5. Model permission and conversation access
+
+Alice can authorize a model for Acme without being allowed to read Bob's Research
+conversation. Bob needs access to the space and permission to use its assistant;
+Carol's Support membership does not open his conversation. Selecting the same
+model never merges their rights or conversations.
+
+The browser's choice is a request, not authority. Fred verifies it on the server.
+Each new turn acquires its authorized context; an admitted turn may finish with
+that context after a policy change. Cancellation and run termination remain
+separate controls. The [technical boundary](A6-security.md#managed-agent-turn-authority)
+explains how the person's rights stay distinct from the pod's service identity.

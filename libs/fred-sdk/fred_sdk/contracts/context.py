@@ -454,10 +454,11 @@ class RuntimeContext(BaseModel):
         >>> ctx = RuntimeContext(session_id="s-1", user_id="u-1")
 
     Field groups:
-    - Group A (identity): session_id, user_id, team_id, exchange_id,
+    - Group A (identity): space_id, session_id, user_id, team_id, exchange_id,
       agent_instance_id, template_agent_id, trace_id, correlation_id, execution_action.
-      For managed execution the frontend MUST set team_id (and user_id): the pod
-      authorizes the caller against OpenFGA on team_id (RUNTIME-07 rev. 2 — no grant).
+      For managed execution the frontend supplies the canonical space_id. The pod
+      binds user_id from validated credentials and team_id from the trusted
+      Control Plane resolution; browser identity fields are not authority.
     - Group B (auth delegation): access_token, refresh_token, access_token_expires_at.
       Required when the runtime calls knowledge-flow backend on behalf of the user.
       These fields are mutable (refreshed in place by the token refresh logic).
@@ -473,7 +474,7 @@ class RuntimeContext(BaseModel):
       migrate to session preferences / identity over time.
     """
 
-    # Group A — Identity (managed execution authorizes on team_id via pod-side OpenFGA)
+    # Group A - Identity (bound by the runtime during Weaver admission)
     session_id: Optional[str] = None
     exchange_id: Optional[str] = None
     user_id: Optional[str] = None

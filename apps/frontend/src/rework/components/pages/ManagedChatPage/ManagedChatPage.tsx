@@ -689,96 +689,115 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
   });
 
   const composer = (
-    <RichInputField
-      value={commands.composerValue}
-      onChange={commands.onComposerChange}
-      onSend={commands.submit}
-      onInterrupt={chat.waitResponse ? chat.handleAbort : undefined}
-      placeholder={
-        chat.isReadOnly
-          ? t("chatbot.readOnlyComposerPlaceholder")
-          : (commands.selectedSkillArgumentHint ??
-            t(commands.selectedSkills.length ? "chatbot.skills.requestPlaceholder" : "chatbot.composerPlaceholder"))
-      }
-      accessibleDescription={t(chat.isReadOnly ? "chatbot.deletedAgentTooltip" : "chatbot.composerPlaceholder", {
-        agentsNicknameSingular,
-      })}
-      commandTrigger={commands.trigger}
-      onRecallKeyDown={recallKeyDown}
-      aboveFieldSlot={
-        !chat.executionDisabled && commands.menu ? <CommandMenu {...commands.menu} teamName={team?.name} /> : undefined
-      }
-      disabled={composerControlsDisabled}
-      sendDisabled={composerControlsDisabled || chat.attachmentsUploading || chat.inputTooLong}
-      characterCount={chat.inputCharacterCount}
-      characterLimit={chat.maxChatInputChars}
-      enableVoiceInput={false}
-      onTranscribeAudio={handleTranscribeAudio}
-      voiceInputDisabled={composerControlsDisabled}
-      onVoiceInputError={reportVoiceInputError}
-      focusEndRequestId={focusEndRequestId}
-      showSendButton
-      inlineSkills={{
-        promptTokens: commands.selectedPrompts.map((prompt) => ({ ...prompt, teamName: team?.name })),
-        onOpenPrompt: openPromptPreview,
-        tokens: commands.selectedSkills.map((token) => ({
-          ...token,
-          description: commands.skillDescriptions.get(token.name),
-          onOpen: openSkill,
-        })),
-      }}
-      aboveTextSlot={
-        chat.attachments.length > 0 ? (
-          <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
-        ) : undefined
-      }
-      rightExtraSlot={
-        <ReasoningChip
-          chatControls={chat.chatControls}
-          composer={composerState}
-          disabled={composerControlsDisabled}
-          effectiveModel={chat.models}
-          chatProfileId={chat.chatProfileId}
-          onChatProfileChange={chat.setChatProfileId}
-        />
-      }
-      leftSlot={
-        <>
-          <ComposerActionsMenu
-            disabled={
-              composerControlsDisabled || !chat.chatControls.some((control) => control.widget === "attach_files")
-            }
-          >
-            {({ closeMenu }) => (
-              <ComposerControlSlot
-                part="primary"
-                chatControls={chat.chatControls}
-                onRequestClose={closeMenu}
-                composer={composerState}
-              />
-            )}
-          </ComposerActionsMenu>
-          {hasToolControls && (
+    <>
+      {chat.modelPreparationError && !chat.executionDisabled && (
+        <div className={styles.modelPreparationNotice}>
+          <ServiceNotice
+            color="error"
+            title={t("chatbot.modelPreparationErrorTitle")}
+            description={chat.modelPreparationError}
+          />
+        </div>
+      )}
+      <RichInputField
+        value={commands.composerValue}
+        onChange={commands.onComposerChange}
+        onSend={commands.submit}
+        onInterrupt={chat.waitResponse ? chat.handleAbort : undefined}
+        placeholder={
+          chat.isReadOnly
+            ? t("chatbot.readOnlyComposerPlaceholder")
+            : (commands.selectedSkillArgumentHint ??
+              t(commands.selectedSkills.length ? "chatbot.skills.requestPlaceholder" : "chatbot.composerPlaceholder"))
+        }
+        accessibleDescription={t(chat.isReadOnly ? "chatbot.deletedAgentTooltip" : "chatbot.composerPlaceholder", {
+          agentsNicknameSingular,
+        })}
+        commandTrigger={commands.trigger}
+        onRecallKeyDown={recallKeyDown}
+        aboveFieldSlot={
+          !chat.executionDisabled && commands.menu ? (
+            <CommandMenu {...commands.menu} teamName={team?.name} />
+          ) : undefined
+        }
+        disabled={composerControlsDisabled}
+        sendDisabled={
+          composerControlsDisabled ||
+          chat.attachmentsUploading ||
+          chat.inputTooLong ||
+          !!chat.modelPreparationError ||
+          chat.modelPreparationPending
+        }
+        characterCount={chat.inputCharacterCount}
+        characterLimit={chat.maxChatInputChars}
+        enableVoiceInput={false}
+        onTranscribeAudio={handleTranscribeAudio}
+        voiceInputDisabled={composerControlsDisabled}
+        onVoiceInputError={reportVoiceInputError}
+        focusEndRequestId={focusEndRequestId}
+        showSendButton
+        inlineSkills={{
+          promptTokens: commands.selectedPrompts.map((prompt) => ({ ...prompt, teamName: team?.name })),
+          onOpenPrompt: openPromptPreview,
+          tokens: commands.selectedSkills.map((token) => ({
+            ...token,
+            description: commands.skillDescriptions.get(token.name),
+            onOpen: openSkill,
+          })),
+        }}
+        aboveTextSlot={
+          chat.attachments.length > 0 ? (
+            <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
+          ) : undefined
+        }
+        rightExtraSlot={
+          <ReasoningChip
+            chatControls={chat.chatControls}
+            composer={composerState}
+            disabled={composerControlsDisabled}
+            effectiveModel={chat.models}
+            chatProfileId={chat.chatProfileId}
+            onChatProfileChange={chat.setChatProfileId}
+          />
+        }
+        leftSlot={
+          <>
             <ComposerActionsMenu
-              disabled={composerControlsDisabled}
-              icon={{ category: "outlined", type: "tune" }}
-              openAriaLabel={t("chatbot.composerActions.tuneOpenAria")}
-              dialogAriaLabel={t("chatbot.composerActions.tuneDialogAria")}
-              badge={hasPonctualDocumentScope}
+              disabled={
+                composerControlsDisabled || !chat.chatControls.some((control) => control.widget === "attach_files")
+              }
             >
               {({ closeMenu }) => (
                 <ComposerControlSlot
-                  part="tools"
+                  part="primary"
                   chatControls={chat.chatControls}
                   onRequestClose={closeMenu}
                   composer={composerState}
                 />
               )}
             </ComposerActionsMenu>
-          )}
-        </>
-      }
-    />
+            {hasToolControls && (
+              <ComposerActionsMenu
+                disabled={composerControlsDisabled}
+                icon={{ category: "outlined", type: "tune" }}
+                openAriaLabel={t("chatbot.composerActions.tuneOpenAria")}
+                dialogAriaLabel={t("chatbot.composerActions.tuneDialogAria")}
+                badge={hasPonctualDocumentScope}
+              >
+                {({ closeMenu }) => (
+                  <ComposerControlSlot
+                    part="tools"
+                    chatControls={chat.chatControls}
+                    onRequestClose={closeMenu}
+                    composer={composerState}
+                  />
+                )}
+              </ComposerActionsMenu>
+            )}
+          </>
+        }
+      />
+    </>
   );
 
   // Expert tooling, so it sits at the rail's foot rather than among the

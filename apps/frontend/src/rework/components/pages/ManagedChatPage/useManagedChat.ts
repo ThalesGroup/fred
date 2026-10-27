@@ -32,7 +32,7 @@ import {
 import { useConversationAvailability } from "./useConversationAvailability";
 import { useSessionHistory } from "./useSessionHistory";
 import { useChatAttachments } from "./useChatAttachments";
-import { parseModelChoice } from "../../../features/capabilities/modelChoice";
+import { modelChoiceKey, parseModelChoice } from "../../../features/capabilities/modelChoice";
 import { reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
 import type { ChatMessage, SkillInvocation, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
@@ -511,12 +511,33 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   // Reading an existing conversation needs no execution preparation. Typing
   // expresses send intent; a fresh draft can prepare immediately.
   const preparingExecution = !sessionId || input.length > 0;
+  const requestedModel = useMemo(() => {
+    try {
+      return { choice: composer.chatProfileId ? parseModelChoice(composer.chatProfileId) : undefined, error: null };
+    } catch {
+      return { choice: undefined, error: "The saved model choice must be selected again in the Models menu." };
+    }
+  }, [composer.chatProfileId]);
+  const preparedModelKey = preparation?.model_choice ? modelChoiceKey(preparation.model_choice) : null;
+  const requestedModelKey = requestedModel.choice ? modelChoiceKey(requestedModel.choice) : null;
+  const modelPreparationCurrent = preparation !== undefined && preparedModelKey === requestedModelKey;
+  const modelPreparationError =
+    requestedModel.error ?? (modelPreparationCurrent ? preparation?.model_error?.message : null);
+  const modelPreparationPending = preparingExecution && !preparationUnavailable && !modelPreparationCurrent;
   useEffect(() => {
     if (executionDisabled || !sameSession || !preparingExecution || (sessionId && locallyCreatingSession)) return;
-    const request = prepareChatControls(sessionId);
+    const request = prepareChatControls(sessionId, requestedModel.choice);
     void request.catch(() => refetchSessionRef.current());
     return () => request.abort();
-  }, [sessionId, executionDisabled, preparingExecution, prepareChatControls, sameSession, locallyCreatingSession]);
+  }, [
+    sessionId,
+    executionDisabled,
+    preparingExecution,
+    prepareChatControls,
+    sameSession,
+    locallyCreatingSession,
+    requestedModel,
+  ]);
 
   useEffect(() => {
     if (sessionData) setSessionTitle(sessionData.title);
@@ -670,7 +691,9 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
         waitResponse ||
         awaitingAgentQuestion ||
         attachments.hasUploadingAttachments ||
-        inputTooLong
+        inputTooLong ||
+        modelPreparationError ||
+        modelPreparationPending
       ) {
         console.debug(
           `[useManagedChat] sendTurn() BLOCKED — hasText=${!!text} attachments=${!!attachmentContext} waitResponse=${waitResponse} uploading=${attachments.hasUploadingAttachments} inputTooLong=${inputTooLong}`,
@@ -792,6 +815,8 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       input,
       inputCharacterCount,
       inputTooLong,
+      modelPreparationError,
+      modelPreparationPending,
       waitResponse,
       pendingHitl,
       replacePendingHitls,
@@ -1155,6 +1180,8 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     executionDisabled,
     sessionUnavailable,
     preparationUnavailable,
+    modelPreparationError,
+    modelPreparationPending,
     historyErrorKey: sessionErrorKey ?? historyErrorKey,
     historyUnavailable,
     agentInstance,

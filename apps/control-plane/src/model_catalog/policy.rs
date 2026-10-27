@@ -29,6 +29,9 @@ pub struct OrganizationModelPolicy {
     /// Zero means no saved policy: no permissions or implicit selections.
     pub revision: i64,
     pub permitted: Vec<ModelOfferKey>,
+    /// Organization ceiling, independent of the user's per-question choice.
+    #[schema(max_items = 4096)]
+    pub reasoning_enabled: Vec<ModelOfferKey>,
     pub default: Option<ModelOfferKey>,
     pub fallback: Option<ModelOfferKey>,
     pub created_by: Option<String>,
@@ -44,6 +47,9 @@ pub struct ReplaceModelPolicy {
     pub expected_revision: i64,
     #[schema(max_items = 4096)]
     pub permitted: Vec<ModelOfferKey>,
+    /// Organization ceiling, independent of the user's per-question choice.
+    #[schema(max_items = 4096)]
+    pub reasoning_enabled: Vec<ModelOfferKey>,
     /// Required; null explicitly clears the choice. This is a complete replacement.
     #[serde(deserialize_with = "Option::deserialize")]
     #[schema(required = true)]
@@ -85,18 +91,31 @@ pub(super) async fn read(
              fallback_source_id, fallback_upstream_model_id, created_by, created_at, updated_by, updated_at
          from organization_model_policy where organization_id = $1",
     ).bind(organization_id).fetch_optional(&mut *conn).await?;
-    let permitted = sqlx::query_as(
-        "select source_id, upstream_model_id from organization_model_permission
+    let permissions: Vec<(String, String, bool)> = sqlx::query_as(
+        "select source_id, upstream_model_id, reasoning_enabled from organization_model_permission
          where organization_id = $1 order by source_id, upstream_model_id",
     )
     .bind(organization_id)
     .fetch_all(conn)
     .await?;
+    let mut permitted = Vec::with_capacity(permissions.len());
+    let mut reasoning_enabled = Vec::new();
+    for (source_id, upstream_model_id, enabled) in permissions {
+        let key = ModelOfferKey {
+            source_id,
+            upstream_model_id,
+        };
+        if enabled {
+            reasoning_enabled.push(key.clone());
+        }
+        permitted.push(key);
+    }
     Ok(match row {
         Some(row) => OrganizationModelPolicy {
             organization_id,
             revision: row.revision,
             permitted,
+            reasoning_enabled,
             default: key(row.default_source_id, row.default_upstream_model_id),
             fallback: key(row.fallback_source_id, row.fallback_upstream_model_id),
             created_by: Some(row.created_by),
@@ -108,6 +127,7 @@ pub(super) async fn read(
             organization_id,
             revision: 0,
             permitted,
+            reasoning_enabled,
             default: None,
             fallback: None,
             created_by: None,
@@ -123,10 +143,17 @@ impl ReplaceModelPolicy {
         let permitted: BTreeSet<_> = self.permitted.iter().cloned().collect();
         if self.expected_revision < 0
             || self.permitted.len() > 4096
+            || self.reasoning_enabled.len() > 4096
             || permitted.len() != self.permitted.len()
         {
             return Err(AppError::Unprocessable(
                 "invalid revision, duplicate keys or too many permitted offers".into(),
+            ));
+        }
+        let reasoning: BTreeSet<_> = self.reasoning_enabled.iter().cloned().collect();
+        if reasoning.len() != self.reasoning_enabled.len() || !reasoning.is_subset(&permitted) {
+            return Err(AppError::Unprocessable(
+                "reasoning must name distinct permitted offers".into(),
             ));
         }
         for offer in &permitted {
@@ -235,7 +262,27 @@ pub(super) async fn replace(
             candidates.insert(choice.clone());
         }
     }
+    let previous_reasoning: BTreeSet<_> = current.reasoning_enabled.into_iter().collect();
+    let reasoning: BTreeSet<_> = request.reasoning_enabled.into_iter().collect();
+    let newly_enabled: BTreeSet<_> = reasoning.difference(&previous_reasoning).cloned().collect();
+    candidates.extend(newly_enabled.iter().cloned());
     require_selectable(conn, &candidates).await?;
+    if !newly_enabled.is_empty() {
+        let supported: i64 = sqlx::query_scalar(
+            "select count(*) from model_offer o
+             join jsonb_to_recordset($1) as x(source_id text, upstream_model_id text)
+                 on (o.source_id, o.upstream_model_id) = (x.source_id, x.upstream_model_id)
+             where o.metadata->'reasoning' = 'true'::jsonb",
+        )
+        .bind(Json(&newly_enabled))
+        .fetch_one(&mut *conn)
+        .await?;
+        if supported != newly_enabled.len() as i64 {
+            return Err(AppError::Unprocessable(
+                "reasoning requires a source-reported reasoning-capable offer".into(),
+            ));
+        }
+    }
     let revision = current
         .revision
         .checked_add(1)
@@ -275,6 +322,16 @@ pub(super) async fn replace(
     )
     .bind(organization_id)
     .bind(payload)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query(
+        "update organization_model_permission p set reasoning_enabled = exists (
+             select 1 from jsonb_to_recordset($2) as x(source_id text, upstream_model_id text)
+             where (p.source_id, p.upstream_model_id) = (x.source_id, x.upstream_model_id))
+         where organization_id = $1",
+    )
+    .bind(organization_id)
+    .bind(Json(&reasoning))
     .execute(&mut *conn)
     .await?;
     read(conn, organization_id).await

@@ -1667,7 +1667,9 @@ async def _resolve_agent_instance(
                 status_code=403,
                 detail="Conversation binding mismatch or missing provenance",
             )
-    request._turn_authority = TurnAuthority(resolution, choice)
+    request._turn_authority = TurnAuthority(
+        resolution, choice, reasoning=ctx.get("reasoning") is True
+    )
     request.context = {
         **ctx,
         "space_id": space_id,

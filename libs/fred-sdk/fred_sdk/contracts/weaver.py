@@ -42,6 +42,7 @@ class ModelConnection(ResolverFact):
 class ModelMetadata(ResolverFact):
     chat: bool | None
     chat_provenance: Literal["source_guarantee", "api_metadata"] | None
+    reasoning: bool | None = None
     display_name: str | None
     context_window_tokens: int | None
     max_input_tokens: int | None
@@ -64,6 +65,7 @@ class OrganizationModelPolicy(ResolverFact):
     organization_id: UUID
     revision: int
     permitted: tuple[ModelOfferKey, ...]
+    reasoning_enabled: tuple[ModelOfferKey, ...]
     default: ModelOfferKey | None
     fallback: ModelOfferKey | None
     created_by: str | None
@@ -114,6 +116,11 @@ class RuntimeModels(ResolverFact):
         )
         if len(set(keys)) != len(keys) or set(keys) != expected:
             raise ValueError("Incomplete or duplicate model facts")
+        reasoning = self.policy.reasoning_enabled
+        if len(set(reasoning)) != len(reasoning) or not set(reasoning).issubset(
+            self.policy.permitted
+        ):
+            raise ValueError("Reasoning outside permitted model set")
         for offer in self.offers:
             if offer.permitted != (offer.key in self.policy.permitted):
                 raise ValueError("Inconsistent model permission")

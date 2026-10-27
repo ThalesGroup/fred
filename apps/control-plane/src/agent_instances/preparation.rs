@@ -22,7 +22,10 @@ use crate::{
     extract::{ApiPath, ApiQuery},
     model_catalog::{
         ModelMetadata,
-        instance::{self as models, ModelDiagnostic, ModelOfferKey, ModelOptions, RuntimeModels},
+        instance::{
+            self as models, ModelDiagnostic, ModelOfferKey, ModelOptions, ModelPreparationError,
+            RuntimeModels,
+        },
     },
     onboarding::{self, AdmittedUser},
     sessions, spaces,
@@ -32,6 +35,23 @@ use crate::{
 #[serde(deny_unknown_fields)]
 struct PreparationQuery {
     session_id: Option<String>,
+    model_source_id: Option<String>,
+    model_upstream_id: Option<String>,
+}
+
+impl PreparationQuery {
+    fn model_choice(&self) -> AppResult<Option<ModelOfferKey>> {
+        match (&self.model_source_id, &self.model_upstream_id) {
+            (None, None) => Ok(None),
+            (Some(source_id), Some(upstream_model_id)) => Ok(Some(ModelOfferKey {
+                source_id: source_id.clone(),
+                upstream_model_id: upstream_model_id.clone(),
+            })),
+            _ => Err(AppError::Unprocessable(
+                "Model source and upstream identifiers must be supplied together.".into(),
+            )),
+        }
+    }
 }
 
 #[derive(Serialize, ToSchema)]
@@ -40,6 +60,7 @@ pub struct PreparationModelOffer {
     pub permitted: bool,
     pub candidate: bool,
     pub selectable: bool,
+    pub reasoning_enabled: bool,
     pub diagnostics: Vec<ModelDiagnostic>,
     #[schema(required = true)]
     pub metadata: Option<ModelMetadata>,
@@ -74,6 +95,12 @@ impl From<RuntimeModels> for PreparationModels {
                 .offers
                 .into_iter()
                 .map(|offer| PreparationModelOffer {
+                    reasoning_enabled: offer.candidate
+                        && models.policy.reasoning_enabled.contains(&offer.key)
+                        && offer
+                            .metadata
+                            .as_ref()
+                            .is_some_and(|m| m.reasoning == Some(true)),
                     key: offer.key,
                     permitted: offer.permitted,
                     candidate: offer.candidate,
@@ -110,9 +137,15 @@ pub struct ExecutionPreparation {
     pub supports_ui_parts: bool,
     #[schema(required = true)]
     pub max_chat_input_chars: Option<u64>,
-    /// Empty for the supported no-tool slice; no unconnected widget is advertised.
+    /// Only controls supported by the current model facts are advertised.
     pub chat_controls: Vec<ChatControlDescriptor>,
     pub models: PreparationModels,
+    /// Echo of the requested choice; binds this diagnostic to the current composer selection.
+    #[schema(required = true)]
+    pub model_choice: Option<ModelOfferKey>,
+    /// A readable preparation may be blocked; callers must check before sending a turn.
+    #[schema(required = true)]
+    pub model_error: Option<ModelPreparationError>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -136,7 +169,9 @@ pub(super) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
 
 #[utoipa::path(post, path = "/spaces/{space_id}/agent-instances/{agent_instance_id}/prepare-execution",
     params(("space_id" = Uuid, Path), ("agent_instance_id" = Uuid, Path),
-        ("session_id" = Option<String>, Query, description = "Registered conversation to verify before routing.")),
+        ("session_id" = Option<String>, Query, description = "Registered conversation to verify before routing."),
+        ("model_source_id" = Option<String>, Query, description = "Requested model source; supply together with model_upstream_id."),
+        ("model_upstream_id" = Option<String>, Query, description = "Requested upstream model; never an authorization.")),
     responses((status = 200, body = ExecutionPreparation),
         (status = 401, body = crate::error::ErrorBody), (status = 403, body = crate::error::ErrorBody),
         (status = 404, body = crate::error::ErrorBody), (status = 409, body = crate::error::ErrorBody),
@@ -222,13 +257,28 @@ async fn prepare_execution(
             "Active capabilities are not connected for managed execution preparation yet.",
         ));
     }
+    let model_choice = query.model_choice()?;
     let models = models::resolve(&mut tx, space.organization, &current.tuning.0, false).await?;
+    let model_error = models::preparation_error(&models, model_choice.as_ref());
     tx.commit().await?;
     onboarding::require_accepted(&s.pool, s.onboarding.gcu_version.as_deref(), &user.uid).await?;
     let space = spaces::authorize(&s.pool, &s.fga, &user.uid, space_id, Permission::Read).await?;
     if !s.fga.can_use_agent(current.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
+    let models: PreparationModels = models.into();
+    let chat_controls = if models.offers.iter().any(|offer| offer.reasoning_enabled) {
+        vec![ChatControlDescriptor {
+            capability_id: "platform".into(),
+            widget: "reasoning_toggle".into(),
+            params: Some(std::collections::BTreeMap::from([(
+                "default".into(),
+                serde_json::json!(false),
+            )])),
+        }]
+    } else {
+        Vec::new()
+    };
     let result = ExecutionPreparation {
         agent_instance_id: instance_id,
         space_id,
@@ -241,8 +291,10 @@ async fn prepare_execution(
         supports_hitl: false,
         supports_ui_parts: true,
         max_chat_input_chars: template.max_chat_input_chars,
-        chat_controls: Vec::new(),
-        models: models.into(),
+        chat_controls,
+        models,
+        model_choice,
+        model_error,
     };
     Ok(([(header::CACHE_CONTROL, "no-store")], Json(result)))
 }

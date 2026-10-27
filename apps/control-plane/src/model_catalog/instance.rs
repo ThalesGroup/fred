@@ -282,3 +282,235 @@ fn describe_offer(
         connection: None,
     }
 }
+
+#[derive(Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelPreparationErrorCode {
+    SelectionMissing,
+    ReselectionRequired,
+    OfferUnknown,
+    OfferForbidden,
+    OfferUnavailable,
+    FallbackUnavailable,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct ModelPreparationError {
+    pub code: ModelPreparationErrorCode,
+    pub message: String,
+}
+
+impl ModelPreparationErrorCode {
+    fn diagnostic(self) -> ModelPreparationError {
+        let message = match self {
+            Self::SelectionMissing => {
+                "No model is selected and neither the agent nor the organization defines a default. Choose a model in the chat, or ask an organization administrator to set a default."
+            }
+            Self::ReselectionRequired => {
+                "This agent retains an old model profile. Choose an available model in the chat."
+            }
+            Self::OfferUnknown => {
+                "The selected model is not in this agent's available model catalog. Choose another model or ask an organization administrator to check the model policy."
+            }
+            Self::OfferForbidden => {
+                "The selected model is no longer permitted by the organization. Choose a permitted model or ask an organization administrator to review the model policy."
+            }
+            Self::OfferUnavailable => {
+                "The selected model is currently unavailable for this agent. Choose an available model or ask an organization administrator to check the model source and configuration."
+            }
+            Self::FallbackUnavailable => {
+                "The selected model was withdrawn and no permitted, usable fallback is configured. Choose an available model or ask an organization administrator to update the default or fallback."
+            }
+        };
+        ModelPreparationError {
+            code: self,
+            message: message.into(),
+        }
+    }
+}
+
+/// Early diagnostic over the same model facts used at turn admission.
+/// Preparation is not a grant: the runtime still enforces its fresh turn snapshot.
+/// Existing candidates tolerate a discovery outage; newly selectable offers do not.
+pub(crate) fn preparation_error(
+    models: &RuntimeModels,
+    choice: Option<&ModelOfferKey>,
+) -> Option<ModelPreparationError> {
+    use ModelPreparationErrorCode as Error;
+    let reject = |code: Error| Some(code.diagnostic());
+    if models.requires_reselection && choice.is_none() {
+        return reject(Error::ReselectionRequired);
+    }
+    let Some(key) = choice
+        .or(models.recommendation.as_ref())
+        .or(models.policy.default.as_ref())
+    else {
+        return reject(Error::SelectionMissing);
+    };
+    let Some(offer) = models.offers.iter().find(|offer| &offer.key == key) else {
+        return reject(Error::OfferUnknown);
+    };
+    if !offer.permitted {
+        return reject(Error::OfferForbidden);
+    }
+    if offer
+        .diagnostics
+        .iter()
+        .any(|d| matches!(d, ModelDiagnostic::UnknownOffer))
+    {
+        return reject(Error::OfferUnknown);
+    }
+    if offer.candidate {
+        return None;
+    }
+    let withdrawn = offer
+        .diagnostics
+        .iter()
+        .any(|d| matches!(d, ModelDiagnostic::Withdrawn));
+    if !withdrawn
+        || offer.diagnostics.iter().any(|d| {
+            !matches!(
+                d,
+                ModelDiagnostic::Withdrawn | ModelDiagnostic::DiscoveryUnavailable
+            )
+        })
+    {
+        return reject(Error::OfferUnavailable);
+    }
+    if models.policy.fallback.as_ref().is_some_and(|key| {
+        models
+            .offers
+            .iter()
+            .any(|offer| &offer.key == key && offer.permitted && offer.candidate)
+    }) {
+        None
+    } else {
+        reject(Error::FallbackUnavailable)
+    }
+}
+
+#[cfg(test)]
+mod preparation_tests {
+    use super::*;
+
+    fn key(name: &str) -> ModelOfferKey {
+        ModelOfferKey {
+            source_id: "source".into(),
+            upstream_model_id: name.into(),
+        }
+    }
+
+    fn candidate(name: &str) -> RuntimeModelOffer {
+        RuntimeModelOffer {
+            key: key(name),
+            permitted: true,
+            candidate: true,
+            selectable: true,
+            diagnostics: vec![],
+            metadata: None,
+            observation: None,
+            connection: None,
+        }
+    }
+
+    fn models() -> RuntimeModels {
+        RuntimeModels {
+            policy: OrganizationModelPolicy {
+                organization_id: Uuid::nil(),
+                revision: 1,
+                permitted: vec![key("model"), key("fallback")],
+                reasoning_enabled: vec![],
+                default: None,
+                fallback: Some(key("fallback")),
+                created_by: None,
+                created_at: None,
+                updated_by: None,
+                updated_at: None,
+            },
+            recommendation: None,
+            options: ModelOptions::default(),
+            legacy_profile_id: None,
+            requires_reselection: false,
+            offers: vec![candidate("model"), candidate("fallback")],
+        }
+    }
+
+    fn error(
+        models: &RuntimeModels,
+        choice: Option<&ModelOfferKey>,
+    ) -> Option<ModelPreparationErrorCode> {
+        preparation_error(models, choice).map(|error| error.code)
+    }
+
+    #[test]
+    fn missing_selection_does_not_pick_an_offer_or_fallback() {
+        let models = models();
+        assert_eq!(
+            error(&models, None),
+            Some(ModelPreparationErrorCode::SelectionMissing)
+        );
+        assert_eq!(error(&models, Some(&key("model"))), None);
+        assert_eq!(
+            error(&models, Some(&key("unknown"))),
+            Some(ModelPreparationErrorCode::OfferUnknown)
+        );
+    }
+
+    #[test]
+    fn explicit_choice_then_recommendation_then_default_without_silent_substitution() {
+        let mut models = models();
+        models.policy.default = Some(key("model"));
+        assert_eq!(error(&models, None), None);
+        models.recommendation = Some(key("unknown"));
+        assert_eq!(
+            error(&models, None),
+            Some(ModelPreparationErrorCode::OfferUnknown)
+        );
+        assert_eq!(error(&models, Some(&key("model"))), None);
+        models.requires_reselection = true;
+        assert_eq!(
+            error(&models, None),
+            Some(ModelPreparationErrorCode::ReselectionRequired)
+        );
+        assert_eq!(error(&models, Some(&key("model"))), None);
+    }
+
+    #[test]
+    fn fallback_is_only_for_withdrawal_never_revocation_or_other_unavailability() {
+        let mut models = models();
+        models.policy.default = Some(key("model"));
+        models.offers[0].candidate = false;
+        models.offers[0].diagnostics = vec![
+            ModelDiagnostic::Withdrawn,
+            ModelDiagnostic::DiscoveryUnavailable,
+        ];
+        assert_eq!(error(&models, None), None);
+        models.offers[0].permitted = false;
+        assert_eq!(
+            error(&models, None),
+            Some(ModelPreparationErrorCode::OfferForbidden)
+        );
+        models.offers[0].permitted = true;
+        models.offers[0]
+            .diagnostics
+            .push(ModelDiagnostic::SourceDisabled);
+        assert_eq!(
+            error(&models, None),
+            Some(ModelPreparationErrorCode::OfferUnavailable)
+        );
+        models.offers[0].diagnostics = vec![ModelDiagnostic::Withdrawn];
+        models.offers[1].candidate = false;
+        assert_eq!(
+            error(&models, None),
+            Some(ModelPreparationErrorCode::FallbackUnavailable)
+        );
+    }
+
+    #[test]
+    fn existing_candidate_survives_discovery_outage() {
+        let mut models = models();
+        models.offers[0].selectable = false;
+        models.offers[0].diagnostics = vec![ModelDiagnostic::DiscoveryUnavailable];
+        assert_eq!(error(&models, Some(&key("model"))), None);
+    }
+}

@@ -81,6 +81,7 @@ export function OrganizationModels({
         replaceModelPolicy: {
           expected_revision: policy.revision,
           permitted: policy.permitted,
+          reasoning_enabled: policy.reasoning_enabled,
           default: policy.default ?? null,
           fallback: policy.fallback ?? null,
           ...change,
@@ -98,6 +99,7 @@ export function OrganizationModels({
     if (!policy) return;
     void save({
       permitted: policy.permitted.filter((key) => !sameOffer(key, offer)),
+      reasoning_enabled: policy.reasoning_enabled.filter((key) => !sameOffer(key, offer)),
       default: sameOffer(policy.default, offer) ? null : (policy.default ?? null),
       fallback: sameOffer(policy.fallback, offer) ? null : (policy.fallback ?? null),
     });
@@ -205,11 +207,34 @@ export function OrganizationModels({
     {
       label: t("rework.admin.capabilities.col.reasoning"),
       size: "1fr",
-      cellRenderer: () => (
-        <Tooltip text={t("rework.admin.capabilities.organizationModels.reasoningUnavailable")}>
-          <span className={styles.status}>{t("rework.admin.capabilities.organizationModels.unavailable")}</span>
-        </Tooltip>
-      ),
+      cellRenderer: (offer) => {
+        const enabled = policy?.reasoning_enabled.some((key) => sameOffer(key, offer)) ?? false;
+        if (offer.metadata.reasoning !== true && !enabled) return <div className={styles.centered} />;
+        return (
+          <div className={styles.centered}>
+            <Tooltip text={t("rework.admin.capabilities.reasoningHint")}>
+              <Switch
+                size="small"
+                checked={enabled}
+                disabled={
+                  busy || (!enabled && (!permitted(offer) || !selectable(offer) || offer.metadata.reasoning !== true))
+                }
+                aria-label={t("rework.admin.capabilities.col.reasoning")}
+                onChange={() =>
+                  void save({
+                    reasoning_enabled: enabled
+                      ? (policy?.reasoning_enabled ?? []).filter((key) => !sameOffer(key, offer))
+                      : [
+                          ...(policy?.reasoning_enabled ?? []),
+                          { source_id: offer.source_id, upstream_model_id: offer.upstream_model_id },
+                        ],
+                  })
+                }
+              />
+            </Tooltip>
+          </div>
+        );
+      },
     },
     {
       label: t("rework.admin.capabilities.col.actions"),

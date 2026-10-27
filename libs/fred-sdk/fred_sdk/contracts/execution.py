@@ -18,25 +18,23 @@ Runtime execution contract: identity and request models (RUNTIME-07 rev. 2).
 Why this module exists:
 - Establishes fred-sdk as the single authoritative source of truth for the
   frontend-facing runtime execution contract.
-- Every execution is team-scoped and attributable to user_id + team_id +
-  agent_instance_id (carried in runtime_context).
+- Managed execution requests name a canonical space_id and agent_instance_id.
+  The runtime binds identity and placement from trusted admission.
 
-Authorization model (RUNTIME-07 rev. 2):
-- The control-plane issues NO signed grant or capability. Identity is the
-  caller's Keycloak JWT (Authorization: Bearer); authorization is decided at the
-  agent pod by an OpenFGA check on the caller's team, per request. The pod
-  resolves a managed instance's template + tuning from the control-plane
-  team-scoped binding (ReBAC-gated) — config, never a capability.
+Authorization model (Weaver):
+- Identity comes from validated credentials, never browser-supplied fields.
+  The pod resolves the complete authorized space/instance/conversation binding
+  from the Control Plane once per turn. The browser supplies no authority.
 
 Architectural boundary (MUST NOT cross):
 - Fred code must NOT implement pod discovery, dynamic routing, in-app
   load-balancing, or topology-aware failover. Those concerns belong to:
   Kubernetes Service, Ingress/Gateway, DNS, namespace isolation, and Argo CD.
 - Fred code is responsible for: endpoint protection, RBAC/REBAC checks,
-  team-scoped managed agent authorization, and runtime execution contracts.
+  space-scoped managed agent authorization, and runtime execution contracts.
 
 How to use:
-- Prefer managed execution: set agent_instance_id (team comes from runtime_context).
+- Prefer managed execution: set agent_instance_id and runtime_context.space_id.
 - Use agent_id (direct template) only for internal/dev compatibility.
 - session_id is the primary continuity key across normal turns and HITL resumes.
 - interrupt_id identifies the HITL pause a resume answers (ReAct and Graph
@@ -48,7 +46,7 @@ Example::
         input="What is the status of project X?",
         session_id="sess-abc",
         agent_instance_id="inst-42",
-        runtime_context=RuntimeContext(user_id="u-1", team_id="t-1"),
+        runtime_context=RuntimeContext(space_id="f0137825-89b0-4d36-bdc3-b007a9777122"),
     )
 """
 
@@ -206,9 +204,7 @@ SESSION_ID_RESERVED_CHAR = ":"
 def check_session_id(session_id: str | None) -> None:
     """Raise ValueError when a session id holds the reserved character."""
     if session_id is not None and SESSION_ID_RESERVED_CHAR in session_id:
-        raise ValueError(
-            f"session_id must not contain {SESSION_ID_RESERVED_CHAR!r}: {session_id!r}"
-        )
+        raise ValueError(f"session_id must not contain {SESSION_ID_RESERVED_CHAR!r}")
 
 
 def _advertise_runtime_execution_modes(schema: dict[str, Any]) -> None:
@@ -222,9 +218,9 @@ def _advertise_runtime_execution_modes(schema: dict[str, Any]) -> None:
                 "agent_id": {"type": "null"},
                 "runtime_context": {
                     "type": "object",
-                    "required": ["team_id"],
+                    "required": ["space_id"],
                     "properties": {
-                        "team_id": {
+                        "space_id": {
                             "type": "string",
                             "minLength": 1,
                             "pattern": r"\S",
@@ -253,9 +249,9 @@ class RuntimeExecuteRequest(BaseModel):
 
     Execution paths:
     1. Managed (preferred frontend path):
-       - Set agent_instance_id + runtime_context.team_id
-       - The pod authorizes the caller (Keycloak JWT + OpenFGA on team_id) and
-         resolves the instance template+tuning from the control-plane (no grant)
+       - Set agent_instance_id + runtime_context.space_id
+       - The pod validates identity and resolves the authorized space, instance
+         and conversation binding from the Control Plane once per turn
 
     2. Direct template (internal/dev only):
        - Set agent_id (the registered template agent_id)
@@ -279,8 +275,8 @@ class RuntimeExecuteRequest(BaseModel):
         default=None,
         min_length=1,
         description=(
-            "Managed agent instance ID (preferred). The pod authorizes the caller "
-            "(Keycloak JWT + OpenFGA) on runtime_context.team_id."
+            "Managed agent instance ID (preferred). The pod resolves its authorized "
+            "binding in runtime_context.space_id from the Control Plane."
         ),
     )
     agent_id: str | None = Field(
@@ -351,12 +347,10 @@ class RuntimeExecuteRequest(BaseModel):
     runtime_context: RuntimeContext | None = Field(
         default=None,
         description=(
-            "Per-request execution context carrying per-turn user retrieval selections "
-            "(library IDs, search policy, context prompt text) and user auth delegation. "
-            "Group A identity fields (user_id, team_id, session_id): for managed execution "
-            "the pod authorizes the caller against OpenFGA on team_id, so team_id MUST be set. "
-            "Group B auth fields (access_token, refresh_token) are required when the runtime "
-            "calls knowledge-flow backend on behalf of the user."
+            "Per-request selections and requested canonical space_id, required for managed "
+            "execution. The runtime binds identity from validated credentials and "
+            "resolves placement and authority from the Control Plane; browser fields "
+            "do not establish identity or permission."
         ),
     )
 
@@ -402,7 +396,7 @@ class RuntimeExecuteRequest(BaseModel):
         - Exactly one of agent_id or agent_instance_id must be set.
         - When resume_payload is absent, input must have non-empty content.
         - Managed (agent_instance_id) execution requires a non-blank
-          runtime_context.team_id before runtime resolution begins.
+          runtime_context.space_id before runtime resolution begins.
         - interrupt_id and occurrence_id are only meaningful alongside
           resume_payload — they identify WHICH pending occurrence a resume
           answers, so they have no purpose without a resume in flight.
@@ -413,11 +407,11 @@ class RuntimeExecuteRequest(BaseModel):
             raise ValueError("Provide exactly one of agent_id or agent_instance_id.")
         if has_instance and (
             self.runtime_context is None
-            or self.runtime_context.team_id is None
-            or not self.runtime_context.team_id.strip()
+            or self.runtime_context.space_id is None
+            or not self.runtime_context.space_id.strip()
         ):
             raise ValueError(
-                "runtime_context.team_id is required for managed agent execution."
+                "runtime_context.space_id is required for managed agent execution."
             )
         continuing = self.interrupted_action == "continue"
         if continuing and (

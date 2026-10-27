@@ -45,6 +45,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2xs);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .action {
@@ -62,6 +64,17 @@
 .description {
   color: var(--on-surface-muted);
   font: var(--font-body-medium);
+}
+
+.serviceNotice[data-color="error"] {
+  background: var(--error-container);
+  color: var(--on-error-container);
+
+  .icon,
+  .title,
+  .description {
+    color: var(--on-error-container);
+  }
 }
 
 .serviceNotice[data-color="info"] {

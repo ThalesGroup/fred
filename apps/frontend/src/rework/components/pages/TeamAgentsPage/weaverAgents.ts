@@ -33,7 +33,7 @@ export function createAgentRequest(payload: AgentFormPayload): CreateAgentInstan
   return {
     template_id: payload.templateId,
     display_name: payload.displayName,
-    role: payload.role,
+    role: payload.role || undefined,
     description: payload.description,
     usage_statement: payload.usageStatement,
     tuning_field_values: payload.tuningFieldValues as CreateAgentInstanceRequest["tuning_field_values"],

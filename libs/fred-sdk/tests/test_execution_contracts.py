@@ -188,47 +188,65 @@ def test_request_direct_template_minimal() -> None:
     assert req.session_id is None
 
 
-def test_request_managed_execution_carries_team_in_runtime_context() -> None:
-    # Managed execution: no signed grant. Identity/team travel in runtime_context;
-    # the pod authorizes via OpenFGA on that team (RUNTIME-07 rev. 2).
-    req = RuntimeExecuteRequest(
-        agent_instance_id="inst-42",
-        input="hello",
-        session_id="sess-abc",
-        runtime_context=RuntimeContext(user_id="u-1", team_id="t-1"),
+@pytest.mark.parametrize(
+    "turn",
+    [
+        {"input": "bonjour"},
+        {"input": "second turn", "session_id": "saved-session"},
+        {
+            "session_id": "saved-session",
+            "resume_payload": {"choice_id": "yes"},
+            "interrupt_id": "interrupt-1",
+            "occurrence_id": "occurrence-1",
+        },
+        {
+            "session_id": "saved-session",
+            "interrupted_action": "continue",
+            "interruption_id": "interruption-1",
+        },
+    ],
+)
+def test_managed_turns_accept_canonical_space_without_team(turn: dict) -> None:
+    request = RuntimeExecuteRequest.model_validate(
+        {
+            "agent_instance_id": "inst-42",
+            "runtime_context": {"space_id": "f0137825-89b0-4d36-bdc3-b007a9777122"},
+            **turn,
+        }
     )
-    assert req.agent_instance_id == "inst-42"
-    assert req.session_id == "sess-abc"
-    assert req.effective_team_id() == "t-1"
+    assert request.runtime_context is not None
+    assert request.runtime_context.space_id == "f0137825-89b0-4d36-bdc3-b007a9777122"
+    assert request.effective_team_id() is None
+    assert (
+        RuntimeExecuteRequest.model_validate_json(request.model_dump_json()) == request
+    )
 
 
 @pytest.mark.parametrize(
     "runtime_context",
-    [None, {"user_id": "u-1"}, {"user_id": "u-1", "team_id": "   "}],
+    [None, {}, {"team_id": "t-1"}, {"space_id": ""}, {"space_id": "   "}],
 )
-def test_request_managed_execution_requires_nonblank_team(
+@pytest.mark.parametrize(
+    "turn", [{"input": "hello"}, {"resume_payload": {"choice_id": "yes"}}]
+)
+def test_request_managed_execution_requires_nonblank_space(
     runtime_context: dict[str, str] | None,
+    turn: dict,
 ) -> None:
-    with pytest.raises(ValueError, match=r"runtime_context\.team_id is required"):
+    with pytest.raises(ValueError, match=r"runtime_context\.space_id is required"):
         RuntimeExecuteRequest.model_validate(
-            {
-                "agent_instance_id": "inst-42",
-                "input": "hello",
-                "runtime_context": runtime_context,
-            }
+            {"agent_instance_id": "inst-42", "runtime_context": runtime_context, **turn}
         )
 
 
-def test_request_schema_advertises_managed_team_and_direct_modes() -> None:
+def test_request_schema_advertises_managed_space_and_direct_modes() -> None:
     schema = RuntimeExecuteRequest.model_json_schema()
     managed, direct = schema["oneOf"]
-
     assert managed["required"] == ["agent_instance_id", "runtime_context"]
     assert managed["properties"]["agent_id"] == {"type": "null"}
-    team_schema = managed["properties"]["runtime_context"]
-    assert team_schema["required"] == ["team_id"]
-    assert team_schema["properties"]["team_id"]["pattern"] == r"\S"
-
+    space_schema = managed["properties"]["runtime_context"]
+    assert space_schema["required"] == ["space_id"]
+    assert space_schema["properties"]["space_id"]["pattern"] == r"\S"
     assert direct["required"] == ["agent_id"]
     assert direct["properties"]["agent_instance_id"] == {"type": "null"}
 
@@ -265,7 +283,9 @@ def test_effective_team_id_from_runtime_context() -> None:
     req = RuntimeExecuteRequest(
         agent_instance_id="inst-42",
         input="hello",
-        runtime_context=RuntimeContext(user_id="u-1", team_id="t-ctx"),
+        runtime_context=RuntimeContext(
+            user_id="u-1", team_id="t-ctx", space_id="space-1"
+        ),
     )
     assert req.effective_team_id() == "t-ctx"
 
@@ -302,6 +322,7 @@ def test_to_legacy_context_merges_runtime_context_fields() -> None:
         runtime_context=RuntimeContext(
             user_id="u-ctx",
             team_id="t-ctx",
+            space_id="space-1",
             trace_id="trace-1",
             correlation_id="corr-1",
             language="fr",
@@ -527,3 +548,11 @@ def test_a_session_id_cannot_name_another_sessions_graph_thread(
     # ":" would address, list and purge another session's graph thread.
     with pytest.raises(ValidationError, match="session_id"):
         RuntimeExecuteRequest.model_validate({"agent_id": "a", "input": "x", **fields})
+
+
+def test_session_validation_message_does_not_echo_input() -> None:
+    with pytest.raises(ValidationError) as exc:
+        RuntimeExecuteRequest(
+            agent_id="my-agent", input="hello", session_id="private:session"
+        )
+    assert "private:session" not in exc.value.errors()[0]["msg"]

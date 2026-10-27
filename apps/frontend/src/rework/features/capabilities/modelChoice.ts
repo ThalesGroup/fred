@@ -41,10 +41,13 @@ export function currentModelRow(
 }
 export function offersReasoning(
   controls: readonly ChatControlDescriptor[],
-  _models: PreparationModels | undefined,
-  _choice: string | null,
+  models: PreparationModels | undefined,
+  choice: string | null,
 ): boolean {
-  return controls.some((control) => control.widget === "reasoning_toggle");
+  return (
+    currentModelRow(models, choice)?.reasoning_enabled === true &&
+    controls.some((control) => control.widget === "reasoning_toggle")
+  );
 }
 export function offerLabel(offer: PreparationModelOffer): string {
   return `${offer.metadata?.display_name ?? offer.key.upstream_model_id} (${offer.key.source_id})`;

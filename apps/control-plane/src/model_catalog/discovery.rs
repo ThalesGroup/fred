@@ -56,6 +56,8 @@ pub enum ChatProvenance {
 pub struct ModelMetadata {
     pub chat: Option<bool>,
     pub chat_provenance: Option<ChatProvenance>,
+    /// Source-reported aptitude; absent means unknown, not unsupported.
+    pub reasoning: Option<bool>,
     pub display_name: Option<String>,
     pub context_window_tokens: Option<i64>,
     pub max_input_tokens: Option<i64>,
@@ -83,6 +85,13 @@ fn metadata(item: &Value, qualification: Qualification) -> ModelMetadata {
     ModelMetadata {
         chat,
         chat_provenance,
+        reasoning: match qualification {
+            Qualification::MixedCapabilitiesV1 => item
+                .get("capabilities")
+                .and_then(|v| v.get("reasoning"))
+                .and_then(Value::as_bool),
+            Qualification::ChatSource => None,
+        },
         display_name: ["name", "display_name"].iter().find_map(|key| {
             item.get(key)
                 .and_then(Value::as_str)
@@ -227,4 +236,31 @@ pub(super) async fn discover(
     tokio::time::timeout(TIMEOUT, fetch(source))
         .await
         .unwrap_or(Err(DiscoveryFailure::TransportUnavailable))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reasoning_is_a_discovered_boolean_never_a_name_guess() {
+        for (value, expected) in [
+            (serde_json::json!(true), Some(true)),
+            (serde_json::json!(false), Some(false)),
+            (serde_json::json!(null), None),
+            (serde_json::json!("true"), None),
+        ] {
+            let item =
+                serde_json::json!({"id": "arbitrary-model", "capabilities": {"reasoning": value}});
+            assert_eq!(
+                metadata(&item, Qualification::MixedCapabilitiesV1).reasoning,
+                expected
+            );
+        }
+        let item = serde_json::json!({"id": "mistral-small-latest"});
+        assert_eq!(
+            metadata(&item, Qualification::MixedCapabilitiesV1).reasoning,
+            None
+        );
+    }
 }

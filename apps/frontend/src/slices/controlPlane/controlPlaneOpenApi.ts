@@ -388,6 +388,8 @@ const injectedRtkApi = api.injectEndpoints({
         method: "POST",
         params: {
           session_id: queryArg.sessionId,
+          model_source_id: queryArg.modelSourceId,
+          model_upstream_id: queryArg.modelUpstreamId,
         },
       }),
     }),
@@ -758,6 +760,10 @@ export type PrepareExecutionApiArg = {
   agentInstanceId: string;
   /** Registered conversation to verify before routing. */
   sessionId?: string;
+  /** Requested model source; supply together with model_upstream_id. */
+  modelSourceId?: string;
+  /** Requested upstream model; never an authorization. */
+  modelUpstreamId?: string;
 };
 export type ResolveRuntimeApiResponse = /** status 200 undefined */ RuntimeBinding;
 export type ResolveRuntimeApiArg = {
@@ -1324,6 +1330,8 @@ export type OrganizationModelPolicy = {
   fallback?: ModelOfferKey | null;
   organization_id: string;
   permitted: ModelOfferKey[];
+  /** Organization ceiling, independent of the user's per-question choice. */
+  reasoning_enabled: ModelOfferKey[];
   /** Zero means no saved policy: no permissions or implicit selections. */
   revision: number;
   updated_at?: string | null;
@@ -1334,6 +1342,8 @@ export type ReplaceModelPolicy = {
   expected_revision: number;
   fallback: ModelOfferKey | null;
   permitted: ModelOfferKey[];
+  /** Organization ceiling, independent of the user's per-question choice. */
+  reasoning_enabled: ModelOfferKey[];
 };
 export type ModelObservation = {
   checked_at?: string | null;
@@ -1354,6 +1364,8 @@ export type ModelMetadata = {
   display_name?: string | null;
   max_input_tokens?: number | null;
   max_output_tokens?: number | null;
+  /** Source-reported aptitude; absent means unknown, not unsupported. */
+  reasoning?: boolean | null;
 };
 export type StoredModelOffer = {
   advertised: boolean;
@@ -1598,6 +1610,17 @@ export type ChatControlDescriptor = {
   widget: string;
 };
 export type ExecutionTransport = "sse";
+export type ModelPreparationErrorCode =
+  | "selection_missing"
+  | "reselection_required"
+  | "offer_unknown"
+  | "offer_forbidden"
+  | "offer_unavailable"
+  | "fallback_unavailable";
+export type ModelPreparationError = {
+  code: ModelPreparationErrorCode;
+  message: string;
+};
 export type ModelDiagnostic =
   | "unknown_offer"
   | "not_permitted"
@@ -1613,6 +1636,7 @@ export type PreparationModelOffer = {
   key: ModelOfferKey;
   metadata: ModelMetadata | null;
   permitted: boolean;
+  reasoning_enabled: boolean;
   selectable: boolean;
 };
 export type PreparationModels = {
@@ -1627,7 +1651,7 @@ export type PreparationModels = {
 };
 export type ExecutionPreparation = {
   agent_instance_id: string;
-  /** Empty for the supported no-tool slice; no unconnected widget is advertised. */
+  /** Only controls supported by the current model facts are advertised. */
   chat_controls: ChatControlDescriptor[];
   execute_stream_url: string;
   execute_url: string;
@@ -1635,6 +1659,8 @@ export type ExecutionPreparation = {
   max_chat_input_chars: number | null;
   /** RFC 6570 Level 1 template. Substitute the registered session ID. */
   messages_url_template: string;
+  model_choice: ModelOfferKey | null;
+  model_error: ModelPreparationError | null;
   models: PreparationModels;
   runtime_id: string;
   space_id: string;

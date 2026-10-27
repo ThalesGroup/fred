@@ -23,7 +23,8 @@ Full rationale: `RUNTIME-EXECUTION-CONTRACT.md` §8.117.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TypeVar
+from urllib.parse import urlparse
 
 from langchain_core.language_models import LanguageModelInput
 from langchain_core.messages import AIMessage
@@ -65,10 +66,19 @@ class MistralReasoningReplayChatOpenAI(ChatOpenAI):
         return payload
 
 
-def with_mistral_reasoning_replay(model: object) -> object:
+_ModelT = TypeVar("_ModelT")
+
+
+def with_mistral_reasoning_replay(model: _ModelT) -> _ModelT:
     """Give a plain Mistral `ChatOpenAI` the reasoning-replay payload; others pass."""
 
-    if type(model) is not ChatOpenAI or not is_mistral_model_name(model.model_name):
+    if type(model) is not ChatOpenAI:
+        return model
+    # The provider endpoint also covers discovered aliases with arbitrary names.
+    if (
+        not is_mistral_model_name(model.model_name)
+        and urlparse(model.openai_api_base or "").hostname != "api.mistral.ai"
+    ):
         return model
     # Same fields and clients; only the payload serialisation differs.
     object.__setattr__(model, "__class__", MistralReasoningReplayChatOpenAI)

@@ -25,22 +25,22 @@ export interface ServiceNoticeProps {
    *  the only content in the available area (e.g. service not running, nothing
    *  to show). Omit for inline banners rendered alongside other content. */
   centered?: boolean;
-  /** `info` paints the notice in info-container / on-info-container, for a
-   *  reminder that asks the reader to act. Defaults to the neutral surface. */
-  color?: "neutral" | "info";
+  /** Semantic container/on-container pair. Use `error` for a blocked action;
+   *  expected service-unavailable states keep the neutral default. */
+  color?: "neutral" | "info" | "error";
   /** A control shown at the end of the notice, e.g. a link to where the
    *  reader can act on it. */
   action?: ReactNode;
 }
 
 /**
- * Calm informational notice for expected service-unavailable states.
+ * Inline notice for service availability and blocked actions.
  *
  * Why this component exists:
  * - several pages show a "not running" state when an optional backend service
  *   (runtime pod, knowledge-flow) is not started
- * - this is not an error — it is the expected baseline for standalone mode
- * - a single, consistent, non-alarming component avoids ad-hoc red error text
+ * - expected unavailable states use the neutral default
+ * - blocked actions opt into the error treatment and alert semantics
  *
  * How to use it:
  * - pass a translated title and optional description
@@ -51,7 +51,7 @@ export interface ServiceNoticeProps {
  * - `<ServiceNotice icon="cloud_off" title={t("...")} description={t("...")} centered />`
  */
 export default function ServiceNotice({
-  icon = "info",
+  icon,
   title,
   description,
   centered,
@@ -59,9 +59,9 @@ export default function ServiceNotice({
   action,
 }: ServiceNoticeProps) {
   const notice = (
-    <div className={styles.serviceNotice} data-color={color}>
-      <span className={styles.icon}>
-        <Icon type={icon} />
+    <div className={styles.serviceNotice} data-color={color} role={color === "error" ? "alert" : undefined}>
+      <span className={styles.icon} aria-hidden="true">
+        <Icon type={icon ?? (color === "error" ? "error" : "info")} />
       </span>
       <div className={styles.text}>
         <span className={styles.title}>{title}</span>

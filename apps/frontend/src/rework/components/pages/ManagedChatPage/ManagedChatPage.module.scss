@@ -434,6 +434,16 @@
   font: var(--font-body-large);
 }
 
+.modelPreparationNotice {
+  margin-bottom: var(--spacing-s);
+  padding: 0 var(--spacing-l);
+}
+
+.modelPreparationNotice > * {
+  margin-inline: auto;
+  max-width: var(--composer-max-width);
+}
+
 .conversationNotice {
   margin: 0 0 12px;
   border-radius: 12px;

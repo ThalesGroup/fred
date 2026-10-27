@@ -817,7 +817,7 @@ export type RuntimeExecuteRequest =
   | {
       /** Direct template agent_id. For internal/dev use only. */
       agent_id?: string | null;
-      /** Managed agent instance ID (preferred). The pod authorizes the caller (Keycloak JWT + OpenFGA) on runtime_context.team_id. */
+      /** Managed agent instance ID (preferred). The pod resolves its authorized binding in runtime_context.space_id from the Control Plane. */
       agent_instance_id: string | null;
       /** Optional tuning value overrides for direct template execution (agent_id mode). Ignored when agent_instance_id is set. Intended for CLI and dev tooling — not for production frontend calls. */
       inline_tuning?: {
@@ -845,7 +845,7 @@ export type RuntimeExecuteRequest =
       occurrence_id?: string | null;
       /** HITL resume data returned by the user after an AwaitingHumanRuntimeEvent. When set, input is ignored and the graph resumes from its checkpointed state. */
       resume_payload?: any | null;
-      /** Per-request execution context carrying per-turn user retrieval selections (library IDs, search policy, context prompt text) and user auth delegation. Group A identity fields (user_id, team_id, session_id): for managed execution the pod authorizes the caller against OpenFGA on team_id, so team_id MUST be set. Group B auth fields (access_token, refresh_token) are required when the runtime calls knowledge-flow backend on behalf of the user. */
+      /** Per-request selections and requested canonical space_id, required for managed execution. The runtime binds identity from validated credentials and resolves placement and authority from the Control Plane; browser fields do not establish identity or permission. */
       runtime_context: RuntimeContext | null;
       /** Session identifier for multi-turn continuity. Keep stable across turns. */
       session_id?: string | null;
@@ -859,7 +859,7 @@ export type RuntimeExecuteRequest =
   | {
       /** Direct template agent_id. For internal/dev use only. */
       agent_id: string | null;
-      /** Managed agent instance ID (preferred). The pod authorizes the caller (Keycloak JWT + OpenFGA) on runtime_context.team_id. */
+      /** Managed agent instance ID (preferred). The pod resolves its authorized binding in runtime_context.space_id from the Control Plane. */
       agent_instance_id?: string | null;
       /** Optional tuning value overrides for direct template execution (agent_id mode). Ignored when agent_instance_id is set. Intended for CLI and dev tooling — not for production frontend calls. */
       inline_tuning?: {
@@ -887,7 +887,7 @@ export type RuntimeExecuteRequest =
       occurrence_id?: string | null;
       /** HITL resume data returned by the user after an AwaitingHumanRuntimeEvent. When set, input is ignored and the graph resumes from its checkpointed state. */
       resume_payload?: any | null;
-      /** Per-request execution context carrying per-turn user retrieval selections (library IDs, search policy, context prompt text) and user auth delegation. Group A identity fields (user_id, team_id, session_id): for managed execution the pod authorizes the caller against OpenFGA on team_id, so team_id MUST be set. Group B auth fields (access_token, refresh_token) are required when the runtime calls knowledge-flow backend on behalf of the user. */
+      /** Per-request selections and requested canonical space_id, required for managed execution. The runtime binds identity from validated credentials and resolves placement and authority from the Control Plane; browser fields do not establish identity or permission. */
       runtime_context?: RuntimeContext | null;
       /** Session identifier for multi-turn continuity. Keep stable across turns. */
       session_id?: string | null;

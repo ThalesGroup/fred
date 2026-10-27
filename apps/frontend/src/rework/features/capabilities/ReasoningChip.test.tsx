@@ -65,6 +65,7 @@ const models: PreparationModels = {
     candidate: true,
     selectable: true,
     permitted: true,
+    reasoning_enabled: true,
     diagnostics: [],
     metadata: { display_name: "Shared model" },
   })),
@@ -106,6 +107,13 @@ describe("ReasoningChip Weaver preparation", () => {
       offers: models.offers.map((offer) => ({ ...offer, candidate: false, selectable: false })),
     });
     expect(html).toContain("data-unavailable");
+  });
+  it("does not offer another model's reasoning permission", () => {
+    const html = render([reasoningControl()], true, false, {
+      ...models,
+      offers: models.offers.map((offer, index) => ({ ...offer, reasoning_enabled: index !== 0 })),
+    });
+    expect(html).not.toContain("reasoningOn");
   });
   it("only offers reasoning when preparation advertises its widget", () => {
     expect(render([reasoningControl()], false, true, models)).toContain("disabled");

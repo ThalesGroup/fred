@@ -271,3 +271,29 @@ role revocation remains an immediate role operation without a purge request.
 The worker executes the accepted durable scope without retaining a user token.
 Remaining grants on retired rows still count towards the unique organization
 attachment, using `space.organization_id` even when FGA placement links are gone.
+
+## Managed agent turn authority
+
+Companion to [model permission and conversation access](03-security.md#35-model-permission-and-conversation-access).
+Browser preparation does not grant execution. The Agent Pod authenticates the
+person, checks conversation ownership and resolves one complete context from
+Control Plane at turn admission. Control Plane verifies the person's space access,
+template-use permission, instance lifecycle and conversation association.
+
+A trusted workload authenticates with its own service credential and identifies
+the person, run and instance it acts for. These asserted fields are accepted only
+from configured delegation callers; service roles never replace the person's
+roles. The returned context binds person, canonical space, instance, conversation
+and model policy. The pod enforces that context locally for the admitted turn;
+policy changes are observed at the next admission, not by per-model-call refresh.
+Cancellation and closed-run checks remain effective within the turn.
+
+| Boundary | Implementation reference |
+| --- | --- |
+| Trusted delegation and canonical binding | [`agent_instances/runtime.rs`](../../apps/control-plane/src/agent_instances/runtime.rs), `RuntimeQuery::subject`, `resolve_runtime` |
+| Identity, session and one turn resolution | [`agent_app.py`](../../libs/fred-runtime/fred_runtime/app/agent_app.py), `_authorize_and_resolve`, `_resolve_agent_instance` |
+| Local lifetime and context checks | [`model_routing/turn.py`](../../libs/fred-runtime/fred_runtime/model_routing/turn.py), `TurnAuthority` |
+| Selection and preparation diagnostics | [Model contract](A2-manager-contracts.md#chat-model-preparation-and-turn-admission) |
+
+This describes the simple managed chat boundary. It does not establish document
+search, external-tool authorization or a connected HITL journey.

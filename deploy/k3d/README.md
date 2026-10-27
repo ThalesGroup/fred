@@ -33,7 +33,9 @@ The Control Plane is configured with runtime ID `fred-agents` and base URL
 `GET /agents/templates` response, including `fred.github.assistant` and its full
 tuning metadata. There is no runtime registration callback or new announcement
 protocol. Service `fred-agents` maps port 80 to container port 8000; the ingress
-also routes `/fred/agents/v2` to this service on the secondary host.
+also routes `/fred/agents/v2` to this service on the secondary host. This same
+path is declared as `public_base_url`, used by execution preparation and session
+history to give the browser approved runtime URLs.
 
 The pod's Weaver startup reads the Rust-published `authorization_store` binding
 from PostgreSQL, validates the exact canonical model distributed in its image,
@@ -52,7 +54,7 @@ The inherited factory settings are retained:
 | Keycloak | Secondary issuer/origins, user and M2M authentication; workload client `agentic` and secret `fred-secrets/KEYCLOAK_AGENTIC_CLIENT_SECRET`. Existing outgoing delegation is retained. |
 | Storage / observability | SeaweedFS runtime object store, OpenSearch logs/KPI, Prometheus and node CA mount; their inherited credential references are retained. |
 | Models | The control plane discovers the Mistral source; the pod retains only its inference credential binding. Both explicitly use `fred-model-credentials/OPENAI_API_KEY`. Discovery invokes no model. Web research stays disabled. |
-| Control Plane | Pod URL `http://control-plane-backend:8222/control-plane/v1` comes from the chart. The Rust resolver is implemented, but the Python execution consumer still requires adaptation. |
+| Control Plane | Pod URL `http://control-plane-backend:8222/control-plane/v1` comes from the chart. The pod resolves each turn through the Rust resolver using trusted delegation. |
 
 After deploying, use organization administration -> Agents to find and activate
 `fred.github.assistant`, then verify the list after reload. The deployment does
@@ -61,14 +63,18 @@ Ralph and its embedded execution path are unchanged. Unavailable template
 dependencies still prevent their activation. Discovery still fails globally if
 an enabled catalog source cannot be reached, including while the pod is starting.
 
-This increment prepares deployment and discovery; it does not complete the chat
-journey. The Python consumer of `/spaces/.../runtime`, resource execution gates,
-preparation and session/UI wiring remain subsequent work. The new Rust incoming
-delegation setting is not activated in this discovery-only increment; it belongs
-with the Python consumer and the corresponding generated config schema update.
-The pod remains the actual runtime, with no catalog mode or temporary execution
-block added. No build, render, schema generation, test or deployment was run by
-the assistant; Dimi owns those checks and the cluster rollout.
+The Control Plane accepts runtime delegation from verified service accounts with
+its configured delegation audience and caller role. This matches the pod's
+inherited outgoing delegation; the Keycloak `agentic` service account must carry
+those claims. User authorization is still resolved for the person on each turn.
+
+For the first chat check, authorize a discovered chat model and select the
+organization default in Models, then create a Custom assistant without active
+capabilities. A blank recommended model on the form uses the organization
+default when no model is chosen in the chat. Validate a normal text exchange,
+a second turn and history after reload before testing reasoning or capabilities.
+These are deployment prerequisites, not evidence of a working end-to-end chat;
+Dimi owns functional validation and the cluster rollout.
 
 ## Prepare and deploy
 

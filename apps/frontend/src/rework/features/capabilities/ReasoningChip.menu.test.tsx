@@ -72,6 +72,7 @@ const models: PreparationModels = {
     candidate: true,
     selectable: true,
     permitted: true,
+    reasoning_enabled: true,
     diagnostics: [],
     metadata: { display_name: "Shared model" },
   })),

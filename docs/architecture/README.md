@@ -13,19 +13,17 @@ follow the relevant domain chapter.
 | [2. Journeys](02-journeys.md) | How do the architectural rules work together in practice? |
 | [2.1. User journeys](02.1-user-journeys.md) | How does a user go from first login to creating a folder? |
 | [2.2. Document journey](02.2-document-journey.md) | How does a user import a document and read the result? |
-| [2.3. Agent administration](02.3-agent-administration.md) | How does Alice choose agents and models while inspecting capabilities within their owning pod? |
+| [2.3. Models and first chat](02.3-agent-administration.md) | How does Alice authorize models for Acme, and how does Bob get his first answer? |
 | [3. Security](03-security.md) | Who is authenticated, admitted and authorized, and why? |
 | [4. Organizations and spaces](04-organizations.md) | How are people, spaces and their relationships organized? |
 | [5. Documents and knowledge](05-documents.md) | How does knowledge enter, circulate and leave Fred? |
 | [8. Operations](08-operations.md) | How is Fred configured, deployed and observed? |
 | [9. Quality and invariants](09-quality.md) | Which guarantees are proved, and what do they cost? |
 
-Chapter 2 groups the journeys into numbered subchapters. Start with the user
-journey through folder creation, then follow the document-ingestion journey or
-the relevant domain chapters and SQL catalogue. The dossier describes code behavior, not proof that the current build has
-passed its tests or that Dimi has validated every screen. The introduction's
-agent-governance principles and chapter 2.3 are explicitly identified as agreed
-design, not a completed UI/runtime journey.
+Chapter 2 follows people through access, document ingestion and a first assistant
+exchange. The main chapters explain who acts, which component is responsible and
+what the user experiences. Technical contracts and source references belong in
+the annexes. Validation records and remaining work stay in the working journal.
 
 ## Find a function
 
@@ -93,7 +91,7 @@ provides a bounded, independent audit request.
 - Run `make -C docs/architecture generate` after source changes and
   `make -C docs/architecture check` to verify sources, proofs and diagrams.
 
-The [branch workflow](../../AGENTS.md#control-plane-reconstruction-on-chorerust-rebac)
+The [branch workflow](../../AGENTS.md#control-plane-reconstruction-on-weaver)
 sets review and commit requirements. Only documented behavior belongs in the reading path.
 
 For a repeatable independent review of the Rust reconstruction, use

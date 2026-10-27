@@ -19,6 +19,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
 from fred_runtime.app.config import InferenceCredentialBinding
+from fred_runtime.support.reasoning_replay import with_mistral_reasoning_replay
 
 from .contracts import ModelCapability, ModelRoutingError, ModelSelection
 from .guard import checked_clients, guarded_model
@@ -89,6 +90,9 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         # Explicit options only; do not inject core's default temperature.
         options = authority.binding.models.options.model_dump(exclude_none=True)
         options.setdefault("temperature", None)
+        effort = authority.reasoning_effort(offer)
+        if effort is not None:
+            options["reasoning_effort"] = effort
         config = ModelConfiguration(
             provider="openai",
             name=offer.key.upstream_model_id,
@@ -118,7 +122,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             )
             if type(built) is not ChatOpenAI:
                 raise TypeError("Expected the connected OpenAI-compatible client")
-            model = guarded_model(built, authority.check)
+            model = guarded_model(with_mistral_reasoning_replay(built), authority.check)
             authority.models[offer.key] = model
         logger.info(
             "[MODEL_ROUTING] source=%s requested=%s actual=%s policy_revision=%s",

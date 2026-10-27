@@ -206,13 +206,15 @@ Silent provider truncation remains undetectable; platform approval must establis
 the full-list guarantee for that exact visibility scope.
 
 `chat_source` establishes chat from the platform guarantee;
-`mixed_capabilities_v1` trusts only boolean `capabilities.completion_chat`.
+`mixed_capabilities_v1` reads boolean `capabilities.completion_chat` and
+`capabilities.reasoning` from the discovery response.
 Missing/invalid mixed-source metadata stays unknown, and `false` still retains
 the inventory member. Metadata records chat provenance, optional `name` or
 `display_name`, positive integer `context_length`/`max_model_len`/
 `max_context_length`, `max_input_tokens` and `max_output_tokens`. Invalid optional
 fields become unknown. Labels are bounded to 256 bytes, limits to positive i64;
-these remain source-reported facts. No tools, reasoning, modalities or limits are
+these remain source-reported facts. Reasoning is `true`, `false`, or unknown; no
+static list supplements discovery. No tools, reasoning, modalities or limits are
 inferred from IDs; unsupported feature metadata remains unknown.
 
 Successful publication is atomic per source, including the observation and empty
@@ -324,7 +326,21 @@ instance checks are retained; admission/space/template rights are checked again
 before returning. No SQL transaction survives a provider call (there is no provider
 call here); the additional authorization checks occur outside the read transaction.
 
-`models.policy` includes revision, permitted keys and explicit default/fallback;
+Reasoning activation is an organization ceiling stored on the existing permission
+rows (`0018_model_reasoning.sql`, initially false). Complete policy replacement
+includes `reasoning_enabled`, a subset of permitted composite keys. Newly enabled
+reasoning requires a selectable offer with discovery-reported `reasoning: true`;
+revoking permission removes its reasoning activation too. The same Manage gate,
+revision check and source/offer locks apply. No model-name inference is used.
+
+The pod captures the user's explicit `reasoning: true` at admission. It sends
+`reasoning_effort: high` only when the actual selected offer supports reasoning and
+its organization enables it, preserving Swift's on/off chat mode. Otherwise the
+parameter is omitted. The transport guard enforces that exact setting for calls,
+retries and descendants using the same turn snapshot, without additional authority
+reads. Mistral's existing native-reasoning replay remains combined with these guards.
+
+`models.policy` includes revision, permitted and reasoning-enabled keys and explicit default/fallback;
 `recommendation`, `options`, `legacy_profile_id` and `requires_reselection` describe
 saved settings. `offers` is the union of permitted keys and retained references.
 Each entry separates `permitted`, `candidate`, `selectable`, typed diagnostics,
@@ -400,11 +416,14 @@ Missing public routing is 409 `agent_public_route_unavailable`; disabled instanc
 is 409 `agent_instance_disabled`; unavailable runtime is 409
 `agent_runtime_unavailable`. No-tool react/graph families expose the existing SSE
 and UI-part transport and the advertised input limit; HITL is false and
-`chat_controls=[]`. Active capabilities return 422, other execution families 409.
+a `reasoning_toggle` only when at least one candidate model has reasoning enabled.
+The existing composer offers it only for the selected enabled model, initially off.
+Active capabilities return 422, other execution families 409.
 No unsupported control is replaced with a default or hidden tool selection.
 
 `models` projects M3 `resolve(false)`: recommendation, default/fallback, options,
-legacy diagnostic and composite offers with permission/candidate/selectable facts,
+legacy diagnostic and composite offers with permission/candidate/selectable and
+effective reasoning-enabled facts,
 metadata and diagnostics. The DTO has no inference URL, connection or credential
 binding. It does not select a model or certify provider connectivity. A preparation
 is `Cache-Control: no-store` product data, never a grant or a replacement for M4.

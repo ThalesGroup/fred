@@ -3369,6 +3369,169 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
   déploiement ou commit ; aucune validation navigateur revendiquée.
 
 
+### F25 : correction du statut de raisonnement affiché (2026-10-27)
+
+- Petit lot demandé par Dimi : corriger uniquement l'affirmation systématique
+  « Raisonnement : Indisponible ». Le contrat courant ne renseigne pas cette
+  capacité ; aucune conclusion négative ne peut être tirée pour un modèle.
+- Cellule remplacée par « Non renseigné » et infobulle explicite, traductions
+  FR/EN. Même colonne, styles et parcours ; aucune capacité déduite du nom du
+  modèle. Aucun changement du catalogue, de sa configuration ou de l'exécution.
+- Référence A2 alignée ; ce lot corrige l'affichage et ne raccorde pas le réglage
+  du raisonnement à l'exécution Weaver.
+- Contrôles : Prettier ciblé, `make code-quality` frontend (TypeScript,
+  Prettier, ESLint) et `git diff --check` réussis. Aucun test fonctionnel ni
+  déploiement ; validation navigateur par Dimi.
+
+
+### F25 : raisonnement découvert et raccordé à l'exécution (2026-10-27)
+
+- Dimi précise que le lot doit rétablir le comportement réel de Swift, pas
+  seulement remplacer le libellé. Il confirme que Weaver repose sur la découverte
+  API, sans liste statique. Le correctif d'affichage précédent est remplacé par
+  le contrôle existant, relié à la politique et à l'exécution.
+- Observation directe de `GET https://api.mistral.ai/v1/models` : HTTP 200,
+  63 modèles, champ booléen `capabilities.reasoning`, vrai notamment pour
+  Small/Medium. Aucun secret affiché ni appel d'inférence. Les déclarations
+  Small/Medium envisagées pendant ce lot ont été retirées avant livraison ;
+  aucune modification finale des configurations hôte/k3d.
+- Découverte Rust : `metadata.reasoning` vaut vrai/faux/inconnu selon le champ
+  fourni. Politique organisationnelle : `reasoning_enabled`, sous-ensemble des
+  modèles autorisés, désactivé par défaut. Activation seulement sur une offre
+  sélectionnable dont la capacité est annoncée ; suppression avec l'autorisation.
+  Migration additive `0018_model_reasoning.sql`, non appliquée.
+- UI Swift conservée : interrupteur dans Modèles et menu Normal/Raisonnement du
+  modèle choisi dans le chat, lié à la préparation Weaver. Le choix par question
+  reste explicite. Les clients OpenAPI/RTK sont régénérés.
+- Pod : le contexte admis fige le choix de la question ; capacité annoncée et
+  plafond organisationnel conditionnent `reasoning_effort: high`, sinon omission
+  comme Swift. Le garde HTTP vérifie la valeur réellement envoyée, y compris les
+  transformations/retries. Rejeu natif Mistral conservé avec les gardes. Aucun
+  nouvel appel d'autorité ni lecture SQL par invocation/tour ; pools réutilisés.
+- Contrôles : formatage ciblé, `make code-quality` réussi dans control-plane,
+  fred-sdk, fred-runtime et frontend. Runtime : zéro erreur, cinq avertissements
+  de code inaccessible dans des fichiers hors lot. `git diff --check` réussi.
+  Régressions ciblées préparées et fixtures ajustées ; tests non exécutés.
+- README du control plane, annexe A2 et exigence du change Weaver alignés.
+  Aucun déploiement, migration appliquée, inférence, commit ou push. Validation
+  fonctionnelle par Dimi après application de la migration et redémarrage des
+  composants : actualiser Modèles, autoriser un modèle capable et son raisonnement,
+  choisir le mode dans le chat, comparer les requêtes/réponses Normal/Raisonnement.
+
+
+### F25 : prérequis du premier échange k3d (2026-10-27)
+
+- Capture Dimi : préparation refusée avec `agent_public_route_unavailable`,
+  historique indisponible et rejet antérieur du rôle vide à la création.
+- Profil k3d : `public_base_url: /fred/agents/v2` ajouté à la source runtime,
+  identique au chemin ingress existant. Cette URL fournit aussi l'adresse de
+  lecture des messages ; son absence explique le refus de préparation et peut
+  expliquer l'historique indisponible sans requête au pod.
+- Délégation entrante du Control Plane activée avec `service_accounts_only`,
+  comme la configuration Swift de la factory, exclue du profil Rust. La délégation
+  sortante du pod était déjà héritée. JWT, audience, rôle de délégation et droits
+  de la personne restent vérifiés ; aucun contournement ajouté.
+- Création UI : rôle vide omis pour appliquer le défaut serveur (nom de l'agent).
+  Aucun changement de contrôle, de style ou de navigation.
+- Parcours à valider par Dimi après redéploiement : modèle découvert autorisé et
+  défaut organisationnel choisi, Custom sans capacité, échange normal, second
+  tour, rechargement de l'historique, puis raisonnement. Le sélecteur de modèle
+  recommandé du formulaire et les capacités restent des lots séparés.
+- Contrôles : formatage ciblé et `make code-quality` frontend réussis (types,
+  Prettier, ESLint), `git diff --check` réussi. README k3d aligné. Aucun test,
+  rendu Helm, déploiement ni échange d'inférence effectué ; aucun commit/push.
+
+
+### F25 : contexte canonique du premier appel et diagnostic 422 (2026-10-27)
+
+- OBS-05, HEAD `7a252f041` : premier « bonjour » de e1editor à Custom assistant,
+  rejet 422 avant SSE à 06:24:21 (Europe/Paris). Incohérence confirmée dans le
+  code : le frontend envoie `space_id`, le validateur exigeait `team_id`.
+  Attribution au 422 observé fortement probable, sans corps de réponse capturé.
+- Contrat SDK et schéma alignés sur `runtime_context.space_id` non vide pour
+  l'exécution gérée ; client runtime régénéré par `make update-runtime-api`.
+  Aucun team_id ajouté au frontend. Admission, identité, résolution de confiance
+  et contrôles d'association espace/instance/conversation inchangés.
+- `runtimeHttpError` restitue les détails chaîne/liste et conserve les erreurs
+  structurées ; aucun affichage des champs `input`/`ctx` ni du corps complet.
+  Le message de validation de session n'écho plus sa valeur.
+- Premier envoi, tours suivants, réouverture, continuation et reprise HITL
+  examinés dans le code. Régressions SDK/frontend ajoutées, non exécutées.
+  HITL reste annoncé indisponible (`supports_hitl: false`) par le Control Plane.
+- Contrôles réussis : formatage ciblé, `make code-quality` dans fred-sdk et
+  frontend, génération OpenAPI/client runtime, `git diff --check`.
+  Aucun appel métier, déploiement, commit ou push. Autres lots locaux préservés.
+- Correction à valider par Dimi après déploiement : premier échange, second tour,
+  réouverture puis nouvel envoi. Aucun parcours fonctionnel déclaré validé ;
+  pas d'extension du périmètre arc42. Catalogue modèles et autres anomalies
+  restent suivis séparément. Entrée isolée ajoutée avec l'autorisation de Dimi.
+- Observation suivante : Dimi rapporte « Selected model is absent or forbidden »
+  (référence `8bf68a7f7fe843a88e9a92c5beb93cc1`). Lecture SQL locale en transaction
+  READ ONLY : O1 autorise `mistral / magistral-medium-latest`, annoncé chat avec
+  découverte `ok`, mais sa politique révision 1 n'a ni défaut ni secours ; Custom
+  assistant n'a ni recommandation ni ancien profil. Sans choix explicite dans le
+  chat, le resolver refuse donc faute de sélection. Le choix envoyé par cette
+  requête précise n'a pas été capturé. Prochaine action UI : sélectionner cette
+  offre dans le chat ou définir explicitement le défaut organisationnel.
+  Aucun code ni politique modifié pour cette observation ; aucun appel d'agent.
+- Suite autorisée et volontairement limitée : Dimi confirme le choix par défaut.
+  `prepare-execution` évalue désormais le choix demandé, puis la recommandation
+  existante ou le défaut, avec les faits modèles déjà lus dans sa transaction.
+  Réponse typée `model_error` pour sélection absente, ancien profil à resélectionner,
+  offre inconnue/interdite/indisponible ou secours inutilisable. Messages fixes,
+  sans contenu de requête ni secret ; aucune substitution implicite ajoutée.
+- Le chat affiche ce diagnostic avant l'envoi, conserve le brouillon et laisse
+  le menu Modèles accessible. Un changement de choix relance la préparation ;
+  un résultat portant sur l'ancien choix ne décide pas du nouveau. Envoi et
+  reprise vérifient aussi la préparation juste avant toute mutation optimiste
+  ou requête runtime. HITL reste indisponible côté Weaver, sans activation ajoutée.
+- Centralisation partielle : le contrôle préalable appartient au Control Plane ;
+  le resolver Python conserve l'admission sur les faits frais du tour. Aucun
+  nouvel appel SQL/HTTP de découverte, aucune modification des permissions.
+  Pas de recommandation obligatoire, de garde à la création d'agent ni de nouveau
+  workflow administrateur dans ce lot. La politique O1 reste à configurer dans
+  l'UI, ou un modèle autorisé à choisir explicitement dans le chat.
+- Client Control Plane régénéré (`make update-control-plane-api`). Régressions
+  ciblées Rust et hook frontend ajoutées, non exécutées conformément au mode
+  incrémental. `make code-quality` réussi dans control-plane (Clippy, rustfmt,
+  modèle FGA) et frontend (TypeScript, Prettier, ESLint), `git diff --check` réussi.
+  Fichiers partagés intégrés avec accord de Dimi, lot raisonnement préservé.
+- Validation manuelle à faire après déploiement par Dimi : défaut absent visible
+  dès l'ouverture, envoi bloqué sans perte du texte, sélection explicite qui
+  débloque le premier échange, second tour et réouverture. La préparation ne
+  prouve pas la disponibilité des credentials ou de l'inférence dans le pod.
+  Aucun déploiement, appel métier, test exécuté, commit ou push pour ce correctif.
+- Validation fonctionnelle rapportée par Dimi le 2026-10-27 : le chat répond
+  après sélection explicite du modèle dans le chat. Ce retour valide ce premier
+  parcours ; il ne valide pas encore les autres cas listés ci-dessus.
+- Finition visuelle demandée et approuvée : remplacement du paragraphe neutre
+  par `ServiceNotice color="error"`, fond/texte appariés aux tokens d'erreur,
+  icône standard, titre FR/EN et sémantique d'alerte. Notice alignée sur la largeur
+  du champ, diagnostic toujours visible et sélecteur accessible. Aucune règle
+  d'exécution modifiée. Deux clés de traduction ajoutées avec accord de Dimi,
+  en préservant les changements de l'autre lot. Rendu visuel à valider par Dimi.
+- Finition : formatage ciblé, `make code-quality` frontend (TypeScript, Prettier,
+  ESLint) et `git diff --check` réussis. Aucun test, déploiement, staging, commit
+  ou push exécuté ; préparation du commit laissée à l'étape suivante.
+- Mise à jour arc42 autorisée par Dimi après ce premier échange : le périmètre
+  documenté inclut désormais ce parcours simple avec sélection explicite. Corps
+  recentré sur Acme, Alice, Bob et Carol ; Dana est introduite comme exploitante
+  de la plateforme. Deux schémas fonctionnels dans 2.3 et une vue technique
+  séparée dans 1 expliquent catalogue, autorisation, sélection et réponse.
+- Introduction, sécurité et navigation raccordées ; détails de sélection et de
+  préparation en A2, identité/admission en A6, permissions en A7. Les ajouts du lot
+  raisonnement en A2 sont préservés avec accord explicite. Le seul bloc généré
+  obsolète, l'exemple de configuration modèles en A3, est resynchronisé depuis sa
+  source. Le resolver final Python reste décrit ; aucune centralisation complète
+  de la sélection ni validation HITL/recherche documentaire n'est affirmée.
+- Contrôles documentaires : `python3 docs/architecture/tools/docs.py check` et
+  `git diff --check` réussis ; neuf diagrammes des chapitres concernés rendus
+  localement, dont les trois nouveaux inspectés visuellement. Liens locaux et
+  ancres des fichiers modifiés vérifiés. Pas de régénération ER/PostgreSQL ni de
+  `make check` complet, pas de tests applicatifs, déploiement, commit ou push.
+
+
+
 ## F26 Fusion Swift et préférences utilisateur
 
 - 2026-10-25 : résolution de `git merge swift` à la demande de Dimi. Le commit

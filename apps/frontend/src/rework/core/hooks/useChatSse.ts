@@ -209,13 +209,27 @@ async function runtimeHttpError(response: Response): Promise<RuntimeHttpError> {
   } catch {
     return new RuntimeHttpError(response.status);
   }
-  const detail = recordValue(recordValue(body)?.detail);
+  const rawDetail = recordValue(body)?.detail;
+  const detail = recordValue(rawDetail);
+  // FastAPI validation errors include input/ctx: never serialize those into
+  // notifications or logs. Only the explicit diagnostic message is displayed.
+  const message =
+    typeof rawDetail === "string"
+      ? rawDetail
+      : Array.isArray(rawDetail)
+        ? rawDetail
+            .map((issue) => recordValue(issue)?.msg)
+            .filter((msg): msg is string => typeof msg === "string")
+            .join("; ") || undefined
+        : typeof detail?.message === "string"
+          ? detail.message
+          : undefined;
   return new RuntimeHttpError(
     response.status,
     typeof detail?.code === "string" ? detail.code : undefined,
     typeof detail?.limit_chars === "number" ? detail.limit_chars : undefined,
     typeof detail?.actual_chars === "number" ? detail.actual_chars : undefined,
-    typeof detail?.message === "string" ? detail.message : undefined,
+    message,
   );
 }
 
@@ -1011,6 +1025,8 @@ export function useChatSse(
           spaceId,
           agentInstanceId,
           ...(sessionId ? { sessionId } : {}),
+          modelSourceId: runtimeContext?.model_choice?.source_id,
+          modelUpstreamId: runtimeContext?.model_choice?.upstream_model_id,
         }).unwrap();
         if (ac.signal.aborted || isTurnCurrent?.(sessionId ?? "draft") === false || isExecutionAllowed?.() === false) {
           console.debug(`[useChatSse][${sendId}] aborted right after prepare-execution — never reaching onTurnStarted`);
@@ -1021,9 +1037,14 @@ export function useChatSse(
           `[useChatSse][${sendId}] prepareExecution done — aborted=${ac.signal.aborted} execute_stream_url=${prep.execute_stream_url}`,
         );
         applyPreparation(prep);
+        if (prep.model_error) {
+          onError?.(prep.model_error.message);
+          releasePreflightLock();
+          return false;
+        }
 
-        // RUNTIME-07 rev. 2: the pod authorizes the user against OpenFGA on the
-        // team carried in runtime_context (no signed grant). Always include team_id.
+        // Weaver admission resolves authority from the canonical requested space.
+        // The Control Plane binding supplies the team; the browser does not.
         // `language` rides the same way: it drives backend-rendered copy (e.g.
         // FredHitlMiddleware's approval prompt), which otherwise defaults to
         // English regardless of the UI's own locale — read live off i18next
@@ -1271,7 +1292,14 @@ export function useChatSse(
 
       let prep: ExecutionPreparation;
       try {
-        prep = await prepareExecution({ spaceId, agentInstanceId, sessionId: pending.session_id }).unwrap();
+        preparationGeneration.current += 1;
+        prep = await prepareExecution({
+          spaceId,
+          agentInstanceId,
+          sessionId: pending.session_id,
+          modelSourceId: runtimeContext?.model_choice?.source_id,
+          modelUpstreamId: runtimeContext?.model_choice?.upstream_model_id,
+        }).unwrap();
         if (!prep.supports_hitl) throw new Error("HITL is unavailable for this execution");
       } catch (err) {
         if (!ac.signal.aborted) {
@@ -1307,6 +1335,10 @@ export function useChatSse(
       // awaits triggered would have been discarded.
       const token = KeyCloakService.GetToken() ?? "";
       applyPreparation(prep);
+      if (prep.model_error) {
+        onError?.(prep.model_error.message);
+        return bailOut(false);
+      }
 
       // Optimistic cancel: flip every tool call this HITL prompt gated from
       // "running" straight to a cancelled state, without waiting for the resume
@@ -1567,9 +1599,15 @@ export function useChatSse(
   );
 
   const prepareChatControls = useCallback(
-    (sessionId?: string | null) => {
+    (sessionId?: string | null, modelChoice?: RuntimeContext["model_choice"]) => {
       const generation = ++preparationGeneration.current;
-      const request = prepareExecution({ spaceId, agentInstanceId, ...(sessionId ? { sessionId } : {}) });
+      const request = prepareExecution({
+        spaceId,
+        agentInstanceId,
+        ...(sessionId ? { sessionId } : {}),
+        modelSourceId: modelChoice?.source_id,
+        modelUpstreamId: modelChoice?.upstream_model_id,
+      });
       const result = request
         .unwrap()
         .then((prep) => {

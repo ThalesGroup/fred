@@ -1,5 +1,9 @@
 # 1. System overview
 
+Fred separates governance from execution. Control Plane manages spaces, access
+and model choices. Knowledge Flow processes documents; Agent Pod runs assistants.
+The following views separate document ingestion from a conversation.
+
 ## 1.1. Functional overview: the native document drive
 
 Users upload documents to their space and browse its folders and files.
@@ -56,3 +60,34 @@ and accumulated waiting depend on load and dependency latency.
 The [document journey](02.2-document-journey.md#concurrent-imports-and-publication)
 illustrates the guarantee. [Open Issues](A10-open-issues.md#oi-1-document-write-concurrency)
 records the retained design and the evidence needed to assess its performance.
+
+## 1.4. Model governance and agent execution
+
+**Who checks Bob's choice, and who calls the model?** Control Plane owns the
+catalog, Acme's permissions and the chat's preparation check. Agent Pod executes
+the assistant using the context supplied by Control Plane.
+
+```mermaid
+flowchart TB
+    ui["Fred UI<br/>Bob's chat"]
+    cp["Control Plane<br/>Catalog and permissions"]
+    pod["Agent Pod<br/>Assistant execution"]
+    model["Model service"]
+    ui -->|"Prepare the selected model"| cp
+    ui <-->|"Message / streamed answer"| pod
+    pod -->|"Resolve Bob's authorized turn context"| cp
+    cp -->|"Discover model offerings"| model
+    pod -->|"Call the selected model"| model
+
+    classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
+    classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
+    class ui,cp,pod fred
+    class model cots
+```
+
+Control Plane does not relay the model response. The pod still resolves the final
+selection and enforces it at execution, using the organization's policy rather
+than a separate pod-owned model catalog. An early preparation result is not an
+execution grant. See the [Acme journey](02.3-agent-administration.md) for the user
+view and [admission details](A2-manager-contracts.md#chat-model-preparation-and-turn-admission)
+for the technical boundary.

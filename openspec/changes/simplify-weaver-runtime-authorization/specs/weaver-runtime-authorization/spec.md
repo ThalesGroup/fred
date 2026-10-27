@@ -690,3 +690,33 @@ be accepted merely to unblock activation.
 #### Scenario: A dependency is missing
 - **WHEN** activation or execution encounters a required unsupported or unavailable dependency
 - **THEN** it fails explicitly without a blanket allow, legacy fallback or automatic substitution outside the configured set
+
+
+### Requirement: Discovered reasoning preserves the Swift on/off journey
+
+For mixed-capability model sources, Control Plane SHALL retain the boolean
+`capabilities.reasoning` reported by discovery. Missing or invalid values SHALL
+remain unknown; no configured model list or name-based aptitude inference is used.
+Organization Manage SHALL control reasoning activation through the existing model
+policy and revision boundary, initially off and only for permitted, selectable,
+reasoning-capable offers. Removing model permission SHALL remove that activation.
+
+The existing Models switch and chat Normal/Reasoning menu SHALL consume these
+facts. The pod SHALL send `reasoning_effort: high` only when the actual selected
+model is capable, organization-enabled and explicitly requested for this question.
+Otherwise it SHALL omit the parameter. The admitted turn snapshot SHALL govern
+calls, retries and descendants, without further authority reads; transport guards
+SHALL reject changes to the effective setting. Native Mistral reasoning replay
+SHALL retain both invocation and transport guards.
+
+#### Scenario: Discovery, organization ceiling and question choice agree
+- **WHEN** a discovered reasoning-capable model is permitted and reasoning-enabled
+  and the user chooses reasoning for the question
+- **THEN** the existing chat control is offered and the model receives high effort
+- **AND** another model's permission or reasoning activation cannot authorize it
+
+#### Scenario: No inference or implicit activation
+- **WHEN** capability metadata is absent/false, organization activation is off,
+  or the user does not explicitly request reasoning
+- **THEN** the model request contains no reasoning effort
+- **AND** removing permission and re-adding it does not restore reasoning activation

@@ -67,7 +67,7 @@ pub enum CredentialAuthority {
 pub enum Qualification {
     /// Platform guarantees chat for every advertised model.
     ChatSource,
-    /// Platform trusts the boolean capabilities.completion_chat extension.
+    /// Platform trusts the boolean capabilities.completion_chat and reasoning extensions.
     MixedCapabilitiesV1,
 }
 
