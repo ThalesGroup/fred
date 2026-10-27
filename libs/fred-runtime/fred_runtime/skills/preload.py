@@ -15,6 +15,7 @@ from langchain_core.messages import BaseMessage, HumanMessage
 
 from fred_runtime.react.react_tracing import tool_span
 from fred_runtime.runtime_support.tool_execution import ToolExecution
+from fred_runtime.skills.catalog import PlatformSkills
 from fred_runtime.skills.tools import load_skill
 
 
@@ -31,6 +32,10 @@ async def preload_skills(
     skills = services.skills
     if skills is None:
         raise ValueError("Platform skills are unavailable on this runtime")
+    if isinstance(skills, PlatformSkills):
+        skills = skills.for_execution(
+            tuple(s.name for s in selections), binding.disabled_platform_skills
+        )
 
     # Direct executor callers also fail the whole selection before any load event.
     for selection in selections:

@@ -46,6 +46,17 @@ def load_skill(
     kpi: BaseKPIWriter | None = None,
     binding: BoundRuntimeContext | None = None,
 ) -> tuple[str, SkillLoadAttribution]:
+    from fred_runtime.skills.catalog import PlatformSkills
+
+    if isinstance(skills, PlatformSkills):
+        selections = (
+            tuple(s.name for s in binding.runtime_context.selected_skills)
+            if binding is not None and not binding.is_resuming
+            else ((name,) if origin == "user" else ())
+        )
+        skills = skills.for_execution(
+            selections, binding.disabled_platform_skills if binding is not None else ()
+        )
     content = escape_reserved_prompt_tags(skills.read(name))
     attribution = record_skill_load(
         skills,
@@ -140,6 +151,16 @@ def model_skill_context(
 def build_skill_tools(
     skills: SkillsPort, binding: BoundRuntimeContext, kpi: BaseKPIWriter | None = None
 ) -> list[FredRuntimeToolSpec]:
+    from fred_runtime.skills.catalog import PlatformSkills
+
+    if isinstance(skills, PlatformSkills):
+        skills = skills.for_execution(
+            ()
+            if binding.is_resuming
+            else tuple(s.name for s in binding.runtime_context.selected_skills),
+            binding.disabled_platform_skills,
+        )
+
     async def invoke_load(
         payload: dict[str, object],
     ) -> tuple[str, ToolInvocationResult]:

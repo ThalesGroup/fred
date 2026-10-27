@@ -1354,8 +1354,8 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
                 "runtime_context": {"skills": [selections[0], {"name": "missing"}]},
             },
         )
-        assert invalid.status_code == (200 if deep else 422), invalid.text
-        assert len(model.calls) == before + (1 if deep else 0)
+        assert invalid.status_code == 422, invalid.text
+        assert len(model.calls) == before
         forged = client.post(
             "/pod/v1/agents/execute",
             json={
@@ -1420,7 +1420,7 @@ def test_multiple_skills_reject_unsupported_runtime_configuration(
 
 
 @pytest.mark.parametrize("selection", ["meeting-minutes", "missing"])
-def test_deep_selection_reaches_native_inference_without_snapshot_preload(
+def test_deep_selection_uses_native_pins_and_rejects_unknown_names(
     monkeypatch, tmp_path, selection
 ) -> None:
     from fred_runtime.app.config import LocalRuntimeFilesystemConfig, PodSkillsConfig
@@ -1465,9 +1465,24 @@ def test_deep_selection_reaches_native_inference_without_snapshot_preload(
                 },
             },
         )
+        if selection == "missing":
+            assert response.status_code == 422, response.text
+            assert model.calls == []
+            return
         assert response.status_code == 200, response.text
         messages = model.calls[0]
-        assert [m.content for m in messages if isinstance(m, HumanMessage)] == [text]
+        assert [
+            m.content
+            for m in messages
+            if isinstance(m, HumanMessage)
+            and m.additional_kwargs.get("lc_source") != "pinned_skill"
+        ] == [text]
+        pins = [
+            m
+            for m in messages
+            if m.additional_kwargs.get("lc_source") == "pinned_skill"
+        ]
+        assert len(pins) == 1 and "# Meeting minutes" in str(pins[0].content)
         assert "Loaded platform skill:" not in str(messages)
         assert "/skills/meeting-minutes/SKILL.md" in str(messages[0].content)
         assert "read_file" in model.bound_tool_names
@@ -1476,6 +1491,13 @@ def test_deep_selection_reaches_native_inference_without_snapshot_preload(
         rows = history.json()
         user_row = next(row for row in rows if row["role"] == "user")
         assert user_row["metadata"]["extras"]["skill_invocation"] == {"name": selection}
-        assert not any(
-            row.get("metadata", {}).get("extras", {}).get("skill_load") for row in rows
+        loads = [
+            row.get("metadata", {}).get("extras", {}).get("skill_load")
+            for row in rows
+            if row.get("metadata", {}).get("extras", {}).get("skill_load")
+        ]
+        assert (
+            len(loads) == 1
+            and loads[0]["name"] == selection
+            and loads[0]["origin"] == "user"
         )

@@ -16,6 +16,26 @@ def publish(root: Path, name: str, flags: str = "") -> None:
     )
 
 
+def test_common_loader_enforces_invocation_controls_without_an_http_route(
+    tmp_path: Path,
+) -> None:
+    from fred_runtime.skills.tools import load_skill
+
+    publish(tmp_path, "internal", "user-invocable: false\n")
+    publish(tmp_path, "interview", "disable-model-invocation: true\n")
+    source = PlatformSkills.from_directory(str(tmp_path))
+    with pytest.raises(ValueError, match="user"):
+        load_skill(source, "internal", origin="user", load_id="user", agent_id="test")
+    with pytest.raises(ValueError, match="unavailable"):
+        load_skill(
+            source, "interview", origin="agent", load_id="agent", agent_id="test"
+        )
+    content, attribution = load_skill(
+        source, "interview", origin="user", load_id="selected", agent_id="test"
+    )
+    assert "PROCEDURE" in content and attribution.origin == "user"
+
+
 def test_agent_only_skill_cannot_be_selected_by_a_user(tmp_path: Path) -> None:
     publish(tmp_path, "internal", "user-invocable: false\n")
     skills = PlatformSkills.from_directory(str(tmp_path))
