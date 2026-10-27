@@ -102,7 +102,7 @@ def _run_soffice(command: list[str], *, timeout: float) -> None:
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
-            pass
+            pass  # the whole group already exited, which is the outcome we wanted
         # Not communicate(): a helper that left the group could hold the pipes open.
         process.wait()
         for pipe in (process.stdout, process.stderr):
