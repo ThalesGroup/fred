@@ -991,12 +991,11 @@ def _build_runtime_services(
     skills = runtime_config.skills
     if isinstance(skills, PlatformSkills):
         skills = skills.for_execution(
-            ()
-            if binding.is_resuming
-            else tuple(
+            tuple(
                 selection.name for selection in binding.runtime_context.selected_skills
             ),
             binding.disabled_platform_skills,
+            resuming=binding.is_resuming,
         )
     if conversation_filesystem is None:
         conversation_filesystem = _build_conversation_filesystem(binding)

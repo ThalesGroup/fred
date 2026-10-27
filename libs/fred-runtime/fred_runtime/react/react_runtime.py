@@ -1221,10 +1221,9 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             self._services = replace(
                 self.services,
                 skills=self._skill_source.for_execution(
-                    ()
-                    if binding.is_resuming
-                    else tuple(s.name for s in binding.runtime_context.selected_skills),
+                    tuple(s.name for s in binding.runtime_context.selected_skills),
                     binding.disabled_platform_skills,
+                    resuming=binding.is_resuming,
                 ),
             )
 

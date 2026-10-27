@@ -434,9 +434,18 @@ class PlatformSkills:
         self,
         selected_names: tuple[str, ...] = (),
         disabled_names: tuple[str, ...] = (),
+        *,
+        resuming: bool = False,
     ) -> PlatformSkills:
         view = self.for_catalog(disabled_names)
         by_name = {s.name: s for s in view.catalog.skills}
+        if resuming:
+            # Preserve trusted same-exchange selection intent without allowing
+            # disappeared, disabled or newly user-ineligible names to block a
+            # resume or grant fresh access. Pin/preload suppression is separate.
+            selected_names = tuple(
+                n for n in selected_names if n in by_name and by_name[n].user_invocable
+            )
         for name in selected_names:
             summary = by_name.get(name)
             if summary is None:

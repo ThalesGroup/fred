@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0.
 """Policy changes and explicit pins through real compiled Deep agent loops."""
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -214,10 +215,14 @@ async def test_retained_pin_is_escaped_after_provider_failure_and_policy_change(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("disabled", [False, True])
 async def test_resume_preserves_selection_origin_but_cannot_reload_disabled_skill(
     tmp_path: Path,
+    disabled: bool,
 ) -> None:
-    publish(tmp_path, "example")
+    publish(tmp_path, "example", "disable-model-invocation: true\n")
+    (tmp_path / "example" / "references").mkdir()
+    (tmp_path / "example" / "references" / "method.md").write_text("METHOD REFERENCE")
     skills = PlatformSkills.from_directory(str(tmp_path), builtin=True)
     bound = binding("example")
     bound.runtime_context.ask_user = True
@@ -241,10 +246,20 @@ async def test_resume_preserves_selection_origin_but_cannot_reload_disabled_skil
     interrupts = [i for task in state.tasks for i in task.interrupts]
     assert len(interrupts) == 1
     resumed_bound = bound.model_copy(
-        update={"is_resuming": True, "disabled_platform_skills": ("example",)}
+        update={
+            "is_resuming": True,
+            "disabled_platform_skills": ("example",) if disabled else (),
+        }
     )
     resumed_model = Model(
-        script=[load_call("example", "denied", True), AIMessage(content="done")]
+        script=[
+            call(
+                "read_file",
+                {"file_path": "/skills/example/references/method.md"},
+                "reference",
+            ),
+            AIMessage(content="done"),
+        ]
     )
     resumed_graph = compiled(
         resumed_model, skills, resumed_bound, True, checkpointer=saver
@@ -272,3 +287,37 @@ async def test_resume_preserves_selection_origin_but_cannot_reload_disabled_skil
     assert "PROCEDURE" not in str(
         [m for m in resumed_model.calls[-1] if isinstance(m, ToolMessage)]
     )
+    assert ("METHOD REFERENCE" in str(resumed_model.calls[-1])) is not disabled
+
+
+@pytest.mark.asyncio
+async def test_concurrent_native_pins_keep_graph_namespaces_independent(
+    tmp_path: Path,
+) -> None:
+    publish(tmp_path, "first")
+    publish(tmp_path, "second")
+    skills = PlatformSkills.from_directory(str(tmp_path))
+    graph = compiled(Model(script=[]), skills, binding(), True)
+
+    async def run(index: int) -> str:
+        name = "first" if index % 2 else "second"
+        config = {"configurable": {"thread_id": f"parallel-{index}"}}
+        result = await graph.ainvoke(
+            {
+                "messages": [HumanMessage(content="Use selected procedure")],
+                "pinned_skills": [name],
+            },
+            config,
+        )
+        pins = [
+            m
+            for m in result["messages"]
+            if m.additional_kwargs.get("lc_source") == "pinned_skill"
+        ]
+        assert len(pins) == 1 and pins[0].additional_kwargs["skill"]["name"] == name
+        assert pins[0].additional_kwargs["fred_skill_observed"] is True
+        state = await graph.aget_state(config)
+        assert state.values["fred_pending_skill_names"] == []
+        return name
+
+    assert len(await asyncio.gather(*(run(index) for index in range(12)))) == 12

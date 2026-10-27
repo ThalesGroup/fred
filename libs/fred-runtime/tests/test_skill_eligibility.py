@@ -20,12 +20,24 @@ def test_common_loader_enforces_invocation_controls_without_an_http_route(
     tmp_path: Path,
 ) -> None:
     from fred_runtime.skills.tools import load_skill
+    from test_platform_skills import binding
 
     publish(tmp_path, "internal", "user-invocable: false\n")
     publish(tmp_path, "interview", "disable-model-invocation: true\n")
+    publish(tmp_path, "other")
     source = PlatformSkills.from_directory(str(tmp_path))
     with pytest.raises(ValueError, match="user"):
         load_skill(source, "internal", origin="user", load_id="user", agent_id="test")
+    for bound in (binding(), binding("other")):
+        with pytest.raises(ValueError, match="user"):
+            load_skill(
+                source,
+                "internal",
+                origin="user",
+                load_id="bound-user",
+                agent_id="test",
+                binding=bound,
+            )
     with pytest.raises(ValueError, match="unavailable"):
         load_skill(
             source, "interview", origin="agent", load_id="agent", agent_id="test"

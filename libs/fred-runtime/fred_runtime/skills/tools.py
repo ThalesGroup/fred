@@ -48,14 +48,20 @@ def load_skill(
 ) -> tuple[str, SkillLoadAttribution]:
     from fred_runtime.skills.catalog import PlatformSkills
 
+    if origin == "user" and any(
+        s.name == name and not s.user_invocable for s in skills.catalog.skills
+    ):
+        raise ValueError("Skill is not user-invocable")
     if isinstance(skills, PlatformSkills):
         selections = (
             tuple(s.name for s in binding.runtime_context.selected_skills)
-            if binding is not None and not binding.is_resuming
+            if binding is not None
             else ((name,) if origin == "user" else ())
         )
         skills = skills.for_execution(
-            selections, binding.disabled_platform_skills if binding is not None else ()
+            selections,
+            binding.disabled_platform_skills if binding is not None else (),
+            resuming=binding.is_resuming if binding is not None else False,
         )
     content = escape_reserved_prompt_tags(skills.read(name))
     attribution = record_skill_load(
@@ -155,10 +161,9 @@ def build_skill_tools(
 
     if isinstance(skills, PlatformSkills):
         skills = skills.for_execution(
-            ()
-            if binding.is_resuming
-            else tuple(s.name for s in binding.runtime_context.selected_skills),
+            tuple(s.name for s in binding.runtime_context.selected_skills),
             binding.disabled_platform_skills,
+            resuming=binding.is_resuming,
         )
 
     async def invoke_load(
