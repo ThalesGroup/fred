@@ -91,7 +91,18 @@ vi.mock("../../../security/KeycloakService", () => ({
 
 import { KeyCloakService } from "../../../security/KeycloakService";
 
+const preparation = {
+  space_id: "space-1",
+  agent_instance_id: "agent-1",
+  supports_streaming: true,
+  // Resume mechanics are exercised even though current Weaver admission disables HITL.
+  supports_hitl: true,
+  model_choice: null,
+  model_error: null,
+};
+
 let prepareExecutionImpl: (args: unknown) => Promise<unknown> = async () => ({
+  ...preparation,
   execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
   chat_controls: [],
   capability_base_urls: {},
@@ -104,8 +115,8 @@ function mockMutationResult<T>(promise: Promise<T>): Promise<T> & { unwrap: () =
   return result;
 }
 
-vi.mock("../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
-  usePrepareAgentExecutionMutation: () => [
+vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+  usePrepareExecutionMutation: () => [
     (args: unknown) => {
       prepareExecutionCalls.push(args);
       return mockMutationResult(prepareExecutionImpl(args));
@@ -121,6 +132,7 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
   const hook = useChatSse({
     agentInstanceId: "agent-1",
     teamId: "team-1",
+    spaceId: "space-1",
     flushPendingWrites,
     onError: (msg) => onErrorMock(msg),
     onTurnStarted: () => onTurnStartedMock(),
@@ -166,6 +178,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     dispatchMock.mockClear();
     prepareExecutionCalls.length = 0;
     prepareExecutionImpl = async () => ({
+      ...preparation,
       execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
@@ -218,7 +231,12 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     available = false;
     let accepted: boolean | undefined;
     await act(async () => {
-      preparation.resolve({ execute_stream_url: "/runtime/stream", chat_controls: [], capability_base_urls: {} });
+      preparation.resolve({
+        ...preparation,
+        execute_stream_url: "/runtime/stream",
+        chat_controls: [],
+        capability_base_urls: {},
+      });
       accepted = await result;
     });
     expect(accepted).toBe(false);
@@ -229,6 +247,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
   it("does not send the bearer to a tampered preparation URL", async () => {
     prepareExecutionImpl = async () => ({
+      ...preparation,
       execute_stream_url: "https://outside.example/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
@@ -285,6 +304,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     "uses the current preparation for first-turn ask_user availability ($offered, $requested)",
     async ({ offered, requested, expected }) => {
       prepareExecutionImpl = async () => ({
+        ...preparation,
         execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: offered
           ? [{ capability_id: "platform", widget: "ask_user_toggle", params: { default: true } }]
@@ -412,6 +432,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
   it("parses a structured length rejection, removes the optimistic message, and restores the full draft", async () => {
     flushPendingWrites = async () => true;
     prepareExecutionImpl = async () => ({
+      ...preparation,
       execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
@@ -453,6 +474,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
   it("suppresses a late length rejection after the request's session is reset", async () => {
     flushPendingWrites = async () => true;
     prepareExecutionImpl = async () => ({
+      ...preparation,
       execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
@@ -495,6 +517,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     let activeSessionId = "session-a";
     isTurnCurrent = (turnSessionId) => turnSessionId === activeSessionId;
     prepareExecutionImpl = async () => ({
+      ...preparation,
       execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
@@ -624,6 +647,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
     // Explicit retry: this time prepare-execution succeeds.
     prepareExecutionImpl = async () => ({
+      ...preparation,
       execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
@@ -662,6 +686,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       const firstSend = latest.send("hello", "session-1");
       const secondSend = latest.send("hello", "session-1");
       prep.resolve({
+        ...preparation,
         execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: [],
         capability_base_urls: {},
@@ -688,6 +713,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       latest.abort();
       // The network reply arrives late, after cancellation.
       prep.resolve({
+        ...preparation,
         execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: [],
         capability_base_urls: {},
@@ -701,6 +727,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
     // The lock must not be stuck — a subsequent Send proceeds normally.
     prepareExecutionImpl = async () => ({
+      ...preparation,
       execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
@@ -743,6 +770,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
       // B's prepare-execution reply finally arrives.
       prep.resolve({
+        ...preparation,
         execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: [],
         capability_base_urls: {},
@@ -887,12 +915,14 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       // A's reply arrives late, after reset() and after B has already
       // taken over the lock.
       preps[0].resolve({
+        ...preparation,
         execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: [],
         capability_base_urls: {},
       });
       await sendA;
       preps[1].resolve({
+        ...preparation,
         execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: [],
         capability_base_urls: {},
@@ -1071,12 +1101,10 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     // it fell back to the pod default model and lost the context prompt and
     // search scope of the turn it continued.
     prepareExecutionImpl = async () => ({
+      ...preparation,
       execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
-      context_prompt_text: "session prompt",
-      chat_default_profile_id: "default.chat.team",
-      reasoning_enabled_model_ids: ["model__x__y"],
     });
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
     mount();
@@ -1099,12 +1127,13 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
     const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
     expect(body.runtime_context).toMatchObject({
-      context_prompt_text: "session prompt",
-      chat_default_profile_id: "default.chat.team",
-      reasoning_enabled_model_ids: ["model__x__y"],
       selected_document_libraries_ids: ["lib-1"],
       language: "fr",
     });
+    expect(body.runtime_context.space_id).toBe("space-1");
+    expect(body.runtime_context).not.toHaveProperty("team_id");
+    expect(body.runtime_context).not.toHaveProperty("context_prompt_text");
+    expect(body.runtime_context).not.toHaveProperty("chat_default_profile_id");
     expect(body.turn_options).toEqual({ document_access: { library_tag_ids: ["lib-1"], document_uids: [] } });
     fetchSpy.mockRestore();
   });
@@ -1350,6 +1379,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
   it("handles a structured HITL length rejection without echoing its content", async () => {
     const rejectedText = "🙂🙂🙂🙂🙂🙂";
     prepareExecutionImpl = async () => ({
+      ...preparation,
       execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},

@@ -387,7 +387,7 @@ describe("retired evaluation navigation", () => {
   });
 });
 
-it("skips every legacy sidebar read and chat list on agent management", () => {
+it("skips legacy sidebar reads and shows the Weaver chat list on agent management", () => {
   h.pathname = "/team/team-1/agents";
   const html = renderToStaticMarkup(<TeamContentNavbar />);
   expect(h.selectedTeam).toHaveBeenLastCalledWith(true);
@@ -396,6 +396,6 @@ it("skips every legacy sidebar read and chat list on agent management", () => {
   expect(h.applications).toHaveBeenLastCalledWith("team-1", true);
   expect(h.wiki).toHaveBeenLastCalledWith({ teamId: "team-1" }, { skip: true });
   expect(h.knowledgeBasesQuery).toHaveBeenLastCalledWith({ teamId: "team-1" }, expect.objectContaining({ skip: true }));
-  expect(html).not.toContain("data-chat-list");
-  expect(html).toContain("rework.weaverAgents.chatUnavailable");
+  expect(html).toContain("data-chat-list");
+  expect(html).not.toContain("rework.weaverAgents.chatUnavailable");
 });

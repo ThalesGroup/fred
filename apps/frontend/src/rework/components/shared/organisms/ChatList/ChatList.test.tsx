@@ -16,41 +16,30 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-const defaultSessions = [
-  {
-    session_id: "saved",
-    agent_instance_id: "agent-1",
-    title: "Preserved conversation",
-    agent_display_name: "Preserved assistant",
-  },
-];
-let sessions = defaultSessions;
-let agents: { agent_instance_id: string; display_name: string }[] | undefined;
-let success = true;
+const defaultSession = {
+  session_id: "saved",
+  agent_instance_id: "agent-1",
+  title: "Preserved conversation",
+  agent_display_name: "Preserved assistant",
+  agent_deleted: false,
+};
+let sessions: (typeof defaultSession)[] | undefined;
+let loading = false;
 let error = false;
+const readSessions = vi.hoisted(() => vi.fn());
 vi.mock("../../../../../hooks/useFrontendProperties", () => ({
   useFrontendProperties: () => ({ agentsNicknameSingular: "" }),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
-vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
-  useConfirmationDialog: () => ({ showConfirmationDialog: vi.fn() }),
-}));
-vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
-  useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery: () => ({
-    data: sessions,
-    isLoading: false,
-  }),
-  useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery: () => ({
-    currentData: agents,
-    isSuccess: success,
-    isError: error,
-    refetch: vi.fn(),
-  }),
-  useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation: () => [vi.fn()],
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useListSessionsQuery: (args: unknown, options: unknown) => {
+    readSessions(args, options);
+    return { currentData: sessions, isFetching: loading, isError: error, refetch: vi.fn() };
+  },
 }));
 vi.mock("./ChatListItem/ChatListItem.tsx", () => ({
   ChatListItem: (props: {
@@ -67,56 +56,70 @@ vi.mock("./ChatListItem/ChatListItem.tsx", () => ({
 }));
 import ChatList from "./ChatList";
 
-describe("ChatList deleted agents", () => {
-  it("keeps the saved conversation navigable and labels a confirmed deleted agent", () => {
-    agents = [];
-    success = true;
-    error = false;
-    const html = renderToStaticMarkup(<ChatList teamId="team-1" />);
-    expect(html).toContain("Preserved conversation");
-    expect(html).toContain("Preserved assistant");
-    expect(html).toContain('data-agent-deleted="true"');
-    expect(html).toContain("/team/team-1/managed-chat/agent-1?session=saved");
-  });
-  it.each([
-    [undefined, false, false],
-    [[], false, true],
-  ] as const)("does not label unresolved or failed catalog reads as deletion (%s)", (data, resolved, failed) => {
-    agents = data;
-    success = resolved;
-    error = failed;
-    const html = renderToStaticMarkup(<ChatList teamId="team-1" />);
-    expect(html).toContain("Preserved assistant");
-    expect(html).not.toContain('data-agent-deleted="true"');
-  });
-  it("returns to a live agent label once the next team's catalog resolves", () => {
-    agents = [{ agent_instance_id: "agent-1", display_name: "Assistant" }];
-    success = true;
-    error = false;
-    const html = renderToStaticMarkup(<ChatList teamId="team-2" />);
-    expect(html).toContain("Assistant");
-    expect(html).not.toContain('data-agent-deleted="true"');
-  });
+beforeEach(() => {
+  sessions = [{ ...defaultSession }];
+  loading = false;
+  error = false;
+  readSessions.mockClear();
+});
+
+it("uses the canonical space and keeps a deleted agent's saved conversation navigable", () => {
+  sessions = [{ ...defaultSession, agent_deleted: true }];
+  const html = renderToStaticMarkup(<ChatList teamId="team-1" spaceId="space-1" />);
+  expect(readSessions).toHaveBeenCalledWith({ spaceId: "space-1" }, expect.objectContaining({ skip: false }));
+  expect(html).toContain("Preserved conversation");
+  expect(html).toContain("Preserved assistant");
+  expect(html).toContain('data-agent-deleted="true"');
+  expect(html).toContain("/team/team-1/managed-chat/agent-1?session=saved");
+});
+
+it("uses the live name and deletion fact returned with the current session", () => {
+  sessions = [{ ...defaultSession, agent_display_name: "Current assistant" }];
+  const html = renderToStaticMarkup(<ChatList teamId="team-2" spaceId="space-2" />);
+  expect(html).toContain("Current assistant");
+  expect(html).not.toContain('data-agent-deleted="true"');
+});
+
+it("shows loading rather than inferring deletion from an unresolved read", () => {
+  sessions = undefined;
+  loading = true;
+  const html = renderToStaticMarkup(<ChatList teamId="team-1" spaceId="space-1" />);
+  expect(html).toContain("rework.sidebar.chatList.loading");
+  expect(html).not.toContain('data-agent-deleted="true"');
+});
+
+it("hides retained session metadata after a current read fails", () => {
+  sessions = [{ ...defaultSession, agent_deleted: true }];
+  error = true;
+  const html = renderToStaticMarkup(<ChatList teamId="team-1" spaceId="space-1" />);
+  expect(html).not.toContain("Preserved conversation");
+  expect(html).not.toContain("Preserved assistant");
+  expect(html).not.toContain('data-agent-deleted="true"');
+  expect(html).toContain("chatbot.historyUnavailable");
+});
+
+it("does not use a legacy team id as authority when the space is unresolved", () => {
+  const html = renderToStaticMarkup(<ChatList teamId="team-1" />);
+  expect(readSessions).toHaveBeenCalledWith({ spaceId: "" }, expect.objectContaining({ skip: true }));
+  expect(html).not.toContain("Preserved conversation");
 });
 
 it("groups by agent identity while preserving distinct live and deleted names", () => {
-  agents = [{ agent_instance_id: "live", display_name: "Same name" }];
-  success = true;
-  error = false;
   sessions = [
+    { ...defaultSession, title: "Deleted conversation", agent_display_name: "Same name", agent_deleted: true },
     {
-      session_id: "saved",
-      agent_instance_id: "agent-1",
-      title: "Deleted conversation",
+      ...defaultSession,
+      session_id: "other",
+      agent_instance_id: "live",
+      title: "Live conversation",
       agent_display_name: "Same name",
     },
-    { session_id: "other", agent_instance_id: "live", title: "Live conversation", agent_display_name: "Old live name" },
   ];
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   try {
-    act(() => root.render(<ChatList teamId="team-1" />));
+    act(() => root.render(<ChatList teamId="team-1" spaceId="space-1" />));
     act(() =>
       container.querySelector<HTMLButtonElement>('button[aria-label="rework.sidebar.chatList.groupByAgent"]')!.click(),
     );
@@ -135,6 +138,5 @@ it("groups by agent identity while preserving distinct live and deleted names", 
   } finally {
     act(() => root.unmount());
     container.remove();
-    sessions = defaultSessions;
   }
 });

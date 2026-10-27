@@ -235,7 +235,7 @@ describe("Weaver agent management and unavailable adjacent actions", () => {
       space_id: SPACE_A,
       permission: "write",
     });
-    expect(button("rework.agentCard.chat").disabled).toBe(true);
+    expect(button("rework.agentCard.chat").disabled).toBe(false);
     await click("rework.agentCard.moreMenu");
     for (const text of [
       "rework.agentCard.duplicate",
@@ -337,9 +337,10 @@ describe("Weaver agent management and unavailable adjacent actions", () => {
     expect(writes()[0].body).toMatchObject({
       template_id: TEMPLATE.template_id,
       capability_ids: [],
-      recommended_chat_profile_id: null,
       tuning_field_values: { prompt: "CATALOG DEFAULT", temperature: 0.8 },
     });
+    expect(writes()[0].body).not.toHaveProperty("recommended_chat_profile_id");
+    expect(writes()[0].body).not.toHaveProperty("recommended_model");
     await menu("rework.agentCard.edit");
     expect(calls.some((call) => call.path.endsWith("/agent-instances/created") && call.method === "GET")).toBe(true);
   });

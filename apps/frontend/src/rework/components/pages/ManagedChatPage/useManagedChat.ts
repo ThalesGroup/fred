@@ -32,7 +32,7 @@ import {
 import { useConversationAvailability } from "./useConversationAvailability";
 import { useSessionHistory } from "./useSessionHistory";
 import { useChatAttachments } from "./useChatAttachments";
-import { modelChoiceKey, parseModelChoice } from "../../../features/capabilities/modelChoice";
+import { modelChoiceKey, offersReasoning, parseModelChoice } from "../../../features/capabilities/modelChoice";
 import { reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
 import type { ChatMessage, SkillInvocation, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
@@ -658,10 +658,15 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
 
   const buildTurnContext = useCallback(
     (_resumedExchangeId?: string) => ({
-      runtimeContext: composer.chatProfileId ? { model_choice: parseModelChoice(composer.chatProfileId) } : {},
+      runtimeContext: {
+        ...(composer.chatProfileId ? { model_choice: parseModelChoice(composer.chatProfileId) } : {}),
+        ...(offersReasoning(chatControls, preparation?.models, composer.chatProfileId)
+          ? { reasoning: composer.reasoning }
+          : {}),
+      },
       turnOptions: undefined,
     }),
-    [composer.chatProfileId],
+    [composer.chatProfileId, composer.reasoning, chatControls, preparation?.models],
   );
 
   // Read at answer time so handleHitlAnswer keeps its identity across keystrokes.

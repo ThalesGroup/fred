@@ -39,6 +39,7 @@ type CapturedLauncher = { key: string; icon?: string; iconFilled?: boolean; onOp
 const rail = vi.hoisted(() => ({ launchers: [] as CapturedLauncher[], footerLaunchers: [] as CapturedLauncher[] }));
 // The personal team's id: a chat in it counts as administered by its owner.
 const bootstrap = vi.hoisted(() => ({ activeTeamId: "team-1" }));
+const spaceRoles = vi.hoisted(() => ({ current: [] as string[] }));
 // The composer's recall handler, captured so a test can press an arrow on it.
 const composerKeys = vi.hoisted(() => ({
   recall: undefined as undefined | ((event: unknown) => boolean),
@@ -46,6 +47,7 @@ const composerKeys = vi.hoisted(() => ({
 }));
 // The composer's model read: refetched when the window regains focus or a conversation opens.
 const modelRead = vi.hoisted(() => ({
+  query: vi.fn(),
   refetch: vi.fn(),
   fulfilledTimeStamp: undefined as number | undefined,
   options: undefined as { skip?: boolean } | undefined,
@@ -169,12 +171,18 @@ vi.mock("../../../../hooks/useFrontendProperties", () => ({
 vi.mock("../../../../hooks/useFrontendBootstrap", () => ({
   useFrontendBootstrap: () => ({ activeTeam: { id: bootstrap.activeTeamId } }),
 }));
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useMySpacesQuery: () => ({
+    currentData: [{ id: "team-1", name: "Finance", kind: "team", roles: spaceRoles.current }],
+  }),
+}));
 vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: fetchedTeam.current }),
   // #2387 — the composer's model label. Undefined here: this file covers the
   // chat-input policy wiring, and the label's own behaviour is covered in
   // ReasoningChip.test.tsx.
   useEffectiveChatModelQuery: (_: unknown, options?: { skip?: boolean }) => {
+    modelRead.query();
     modelRead.options = options;
     return {
       data: undefined,
@@ -251,7 +259,7 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showError }),
 }));
 vi.mock("../../../../security/KeycloakService", () => ({
-  KeyCloakService: { GetUserGivenName: () => "Ada" },
+  KeyCloakService: { GetUserGivenName: () => "Ada", GetSessionIdentity: () => "alice-session" },
 }));
 vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation: () => [() => ({ unwrap: async () => ({}) })],
@@ -824,14 +832,14 @@ describe("ManagedChatPage restores a panel behind the conversation", () => {
     ["an admin", "team-1", ["full-reasoning", "debug"]],
     ["a member of a shared team", "personal-team", ["full-reasoning"]],
   ])("offers %s the full reasoning at the rail's foot", (_label, activeTeamId, keys) => {
-    bootstrap.activeTeamId = activeTeamId;
+    spaceRoles.current = activeTeamId === "team-1" ? ["admin"] : ["member"];
     try {
       mount();
       expect(rail.footerLaunchers.map((l) => l.key)).toEqual(keys);
       // The glyph a reasoning row carries in the chain of thought.
       expect(rail.footerLaunchers[0]).toMatchObject({ icon: "settings", iconFilled: true });
     } finally {
-      bootstrap.activeTeamId = "team-1";
+      spaceRoles.current = [];
     }
   });
 
@@ -1031,79 +1039,26 @@ describe("ManagedChatPage — arrow keys recall sent messages", () => {
   });
 });
 
-describe("ManagedChatPage — the model list follows admin changes made elsewhere", () => {
-  let container: HTMLDivElement;
-  let root: Root;
-
-  beforeEach(() => {
-    vi.stubGlobal("localStorage", memoryStorage());
+describe("ManagedChatPage uses the prepared model catalog", () => {
+  it.each(["focus", "rerender", "session", "deleted"])("does not fetch the legacy catalog on %s", (event) => {
+    chatValue = { ...baseChatValue([]), sessionId: "session-1", isHistorySettled: true };
+    modelRead.query.mockClear();
     modelRead.refetch.mockClear();
-    modelRead.fulfilledTimeStamp = Date.now() - 31_000;
-    chatValue = { ...chatValue, sessionId: "session-1", isHistorySettled: true };
-    container = document.createElement("div");
+    const container = document.createElement("div");
     document.body.appendChild(container);
-    root = createRoot(container);
-    act(() => {
-      root.render(<ManagedChatPage />);
-    });
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-    vi.unstubAllGlobals();
-  });
-
-  it("refetches the model list when the window regains focus", () => {
-    act(() => {
-      window.dispatchEvent(new Event("focus"));
-    });
-
-    expect(modelRead.refetch).toHaveBeenCalledTimes(1);
-  });
-
-  // Each read also asks the pod for its catalog: tab switching must not hammer it.
-  it("skips a focus refetch when the last read is under 30 seconds old", () => {
-    modelRead.fulfilledTimeStamp = Date.now() - 5_000;
-    act(() => {
-      root.render(<ManagedChatPage />);
-    });
-    act(() => {
-      window.dispatchEvent(new Event("focus"));
-    });
-
-    expect(modelRead.refetch).not.toHaveBeenCalled();
-  });
-
-  it("refetches the model list when another conversation opens, not on a plain re-render", () => {
-    act(() => {
-      root.render(<ManagedChatPage />);
-    });
-    expect(modelRead.refetch).not.toHaveBeenCalled();
-
-    chatValue = { ...chatValue, sessionId: "session-2" };
-    act(() => {
-      root.render(<ManagedChatPage />);
-    });
-
-    expect(modelRead.refetch).toHaveBeenCalledTimes(1);
-  });
-
-  it("stops reading the model list once the conversation's agent is deleted", () => {
-    expect(modelRead.options?.skip).toBeFalsy();
-
-    chatValue = { ...chatValue, sessionId: "session-2", isReadOnly: true, executionDisabled: true };
-    act(() => {
-      root.render(<ManagedChatPage />);
-    });
-    act(() => {
-      window.dispatchEvent(new Event("focus"));
-    });
-
-    expect(modelRead.options?.skip).toBe(true);
-    expect(modelRead.refetch).not.toHaveBeenCalled();
+    const root = createRoot(container);
+    try {
+      act(() => root.render(<ManagedChatPage />));
+      if (event === "session") chatValue = { ...chatValue, sessionId: "session-2" };
+      if (event === "deleted") chatValue = { ...chatValue, isReadOnly: true, executionDisabled: true };
+      act(() => root.render(<ManagedChatPage />));
+      if (event === "focus") act(() => window.dispatchEvent(new Event("focus")));
+      expect(modelRead.query).not.toHaveBeenCalled();
+      expect(modelRead.refetch).not.toHaveBeenCalled();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
   });
 });
 
@@ -1147,7 +1102,7 @@ describe("ManagedChatPage skill preview", () => {
       act(() => skill!.click());
       expect(skillPreviewQuery).toHaveBeenLastCalledWith(
         { teamId: "team-1", agentInstanceId: "agent-1", skillName: "meeting-minutes" },
-        { skip: false, refetchOnMountOrArgChange: true },
+        { skip: true },
       );
       expect(container.querySelector('aside[data-open="true"]')?.textContent).toContain("Prepare meeting minutes");
       expect(container.querySelector("strong")?.textContent).toBe("notes");
@@ -1183,7 +1138,7 @@ describe("ManagedChatPage skill preview", () => {
       act(() => root.render(<ManagedChatPage />));
       expect(skillPreviewQuery).toHaveBeenLastCalledWith(
         { teamId: "team-1", agentInstanceId: "agent-1", skillName: "" },
-        { skip: true, refetchOnMountOrArgChange: true },
+        { skip: true },
       );
       const skill = container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]');
       expect(skill).not.toBeNull();
@@ -1192,7 +1147,7 @@ describe("ManagedChatPage skill preview", () => {
       act(() => skill!.click());
       expect(skillPreviewQuery).toHaveBeenLastCalledWith(
         { teamId: "team-1", agentInstanceId: "agent-1", skillName: "compare-options" },
-        { skip: false, refetchOnMountOrArgChange: true },
+        { skip: true },
       );
       expect(container.textContent).not.toContain("chatbot.skills.currentVersion");
       expect(container.querySelector('aside[data-open="true"]')?.getAttribute("data-title-size")).toBe("large");
@@ -1205,7 +1160,7 @@ describe("ManagedChatPage skill preview", () => {
       expect(container.textContent).not.toContain("Compare alternatives");
       expect(skillPreviewQuery).toHaveBeenLastCalledWith(
         { teamId: "team-1", agentInstanceId: "agent-1", skillName: "" },
-        { skip: true, refetchOnMountOrArgChange: true },
+        { skip: true },
       );
       act(() => skill!.click());
       expect(container.textContent).toContain("Compare alternatives");
@@ -1304,14 +1259,14 @@ describe("ManagedChatPage skill reference preview", () => {
 });
 
 describe("ManagedChatPage slash prompt sources", () => {
-  it("reads the personal commands in a team chat without waiting for the agent's kind", () => {
+  it("keeps both unported prompt catalogs skipped in a Weaver team chat", () => {
     bootstrap.activeTeamId = "personal-1";
     chatValue = { ...baseChatValue([]), agentInstance: { template_id: "runtime:agent-1" } };
     commandQueries.mockClear();
     renderToStaticMarkup(<ManagedChatPage />);
     expect(commandQueries.mock.calls.slice(-2)).toEqual([
-      [{ teamId: "team-1" }, { skip: false }],
-      [{ teamId: "personal-1" }, { skip: false }],
+      [{ teamId: "team-1" }, { skip: true }],
+      [{ teamId: "" }, { skip: true }],
     ]);
     bootstrap.activeTeamId = "team-1";
   });
@@ -1428,53 +1383,18 @@ describe("ManagedChatPage with several prompt commands", () => {
     expect(chatValue.runCommand).not.toHaveBeenCalled();
   });
 
-  it.each([
-    { status: 404, key: "chatbot.commandMenu.runErrorStale" },
-    { status: 500, key: "chatbot.commandMenu.runErrorDetail" },
-  ])("names the command that held the message back when its read answers $status", async ({ status, key }) => {
-    mount("/summary then /tone now");
-    promptRead.current = ({ promptId }) =>
-      promptId === "p-tone" ? Promise.reject({ status, data: {} }) : Promise.resolve({ text: "Summarise." });
-    await act(async () => composerKeys.send?.());
-
-    expect(showError).toHaveBeenCalledExactlyOnceWith({
-      summary: "chatbot.commandMenu.runErrorSummary",
-      detail: `${key}:tone`,
-    });
-    expect(chatValue.runCommand).not.toHaveBeenCalled();
-    expect(chatValue.handleSend).not.toHaveBeenCalled();
-  });
-
-  it("states the limit when the message holds too many prompt commands", async () => {
-    mount(Array.from({ length: 17 }, () => "/summary").join(" ") + " end");
-    promptRead.current = async () => ({ text: "Summarise." });
-    await act(async () => composerKeys.send?.());
-
-    expect(showError).toHaveBeenCalledExactlyOnceWith({
-      summary: "chatbot.commandMenu.runErrorSummary",
-      detail: "chatbot.commandMenu.runErrorTooMany:16",
-    });
-    expect(chatValue.runCommand).not.toHaveBeenCalled();
-  });
-
-  it("sends the assembled text of every prompt with its list", async () => {
-    mount("/summary then /tone now");
-    promptRead.current = async ({ promptId }) => ({ text: promptId === "p-tone" ? "Be formal." : "Summarise." });
-    await act(async () => composerKeys.send?.());
-
-    expect(showError).not.toHaveBeenCalled();
-    expect(chatValue.runCommand).toHaveBeenCalledExactlyOnceWith({
-      text: "Summarise.\n\nthen\n\nBe formal.\n\nnow",
-      command: expect.objectContaining({
-        command: "summary",
-        appended_text: "then\n\nnow",
-        prompts: [
-          expect.objectContaining({ command: "summary", text_offset: 0, text_length: 10 }),
-          expect.objectContaining({ command: "tone", text_offset: 18, text_length: 10 }),
-        ],
-      }),
-    });
-  });
+  it.each(["/summary then /tone now", Array.from({ length: 17 }, () => "/summary").join(" ")])(
+    "sends %s as ordinary text while command expansion is unavailable",
+    async (draft) => {
+      mount(draft);
+      await act(async () => composerKeys.send?.());
+      expect(chatValue.handleSend).toHaveBeenCalledOnce();
+      expect(chatValue.runCommand).not.toHaveBeenCalled();
+      expect(promptPreviewFetch).not.toHaveBeenCalled();
+      expect(showError).not.toHaveBeenCalled();
+      expect(chatValue.input).toBe(draft);
+    },
+  );
 
   describe("the panel of a sent message", () => {
     const text = "First\n\nSummarise the document.\n\nthen\n\nUse a formal tone.\n\nplease";

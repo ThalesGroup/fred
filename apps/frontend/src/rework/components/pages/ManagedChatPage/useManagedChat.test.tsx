@@ -13,30 +13,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Regression coverage for the context-prompt / session-write reliability
-// finding, and its go-live consolidation pass. These tests drive
-// `useManagedChat` through a minimal host component (no
-// @testing-library/react in this repo) and assert the fixed contract:
-//
-// - session writes (row creation, context-prompt PATCH) are serialized per
-//   session id — two concurrent PATCHes for the same session never race,
-//   and a write for one session never blocks or is affected by another's;
-// - `flushSessionWrites` is a stability loop, not a point-in-time snapshot —
-//   a write enqueued WHILE the flush is already awaiting is also awaited;
-// - a stale write's failure callback is generation-guarded: it can never
-//   roll back a selection the user has already superseded with a newer one;
-// - failures roll back the UI to the last durably-confirmed value, surface a
-//   toast, and block send until an explicit, successful retry — without
-//   ever double-sending;
-// - `onTurnStarted` (not a fixed point before send() is even called) is what
-//   actually clears composer input/attachments, so a later prepare-execution
-//   failure can never wipe text/attachments the user still needs to retry.
+// Weaver session creation, admission and stale-response boundaries. Shared
+// interaction tests also exercise HITL mechanics without claiming Weaver enables it.
 
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assemblePromptTurn } from "@rework/utils/skillInvocation";
-import type { EffectiveChatModel } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { PreparationModels, ModelOfferKey } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { modelChoiceKey } from "../../../features/capabilities/modelChoice";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -45,7 +30,7 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("../../../../security/KeycloakService", () => ({
-  KeyCloakService: { GetUserId: () => "alice" },
+  KeyCloakService: { GetUserId: () => "alice", GetSessionIdentity: () => "alice-session" },
 }));
 
 const translate = vi.hoisted(() => (key: string) => key);
@@ -101,7 +86,7 @@ vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
 // render, re-firing the sessionId-change reset effect forever (observed as
 // an OOM from an actual infinite render loop while writing this test).
 const sendMock = vi.fn(async (..._args: unknown[]) => true);
-const prepareChatControlsMock = vi.fn(async () => ({}));
+const prepareChatControlsMock = vi.fn(() => Object.assign(Promise.resolve({}), { abort: vi.fn() }));
 const chatSseResetMock = vi.fn();
 // Default: the resume reached the backend. `useManagedChat` calls `.then()` on
 // whatever this returns, so an implementation-less `vi.fn()` would throw inside
@@ -111,13 +96,12 @@ const chatSseResetMock = vi.fn();
 const sendHitlResumeMock = vi.fn(async () => true);
 const abortMock = vi.fn();
 const replaceAllMessagesMock = vi.fn();
-// Mutable so the #2239 departure-snapshot test below can put a displayed
-// thread on screen; reset to [] in beforeEach.
+// Mutable displayed thread; reset between cases.
 let chatSseMessages: unknown[] = [];
 let chatSseMaxChatInputChars: number | undefined;
 let chatSseChatControls: unknown[] = [];
-let hostEffectiveModel: EffectiveChatModel | undefined;
-let capturedFlushPendingWrites: ((sid: string | null) => Promise<boolean>) | undefined;
+let hostModels: PreparationModels | undefined;
+let preparedModelChoice: ModelOfferKey | null = null;
 let capturedOnTurnStarted: (() => void) | undefined;
 let capturedOnTurnRejected: ((draft: string, sessionId: string) => void) | undefined;
 let capturedIsTurnCurrent: ((sessionId: string) => boolean) | undefined;
@@ -125,20 +109,19 @@ let capturedOnError: ((msg: string) => void) | undefined;
 let capturedOnAwaitingHuman: ((event: unknown) => void) | undefined;
 vi.mock("@hooks/useChatSse", () => ({
   useChatSse: (params: {
-    flushPendingWrites?: (sid: string | null) => Promise<boolean>;
     onTurnStarted?: () => void;
     onTurnRejected?: (draft: string, sessionId: string) => void;
     isTurnCurrent?: (sessionId: string) => boolean;
     onError?: (msg: string) => void;
     onAwaitingHuman?: (event: unknown) => void;
   }) => {
-    capturedFlushPendingWrites = params.flushPendingWrites;
     capturedOnTurnStarted = params.onTurnStarted;
     capturedOnTurnRejected = params.onTurnRejected;
     capturedIsTurnCurrent = params.isTurnCurrent;
     capturedOnError = params.onError;
     capturedOnAwaitingHuman = params.onAwaitingHuman;
     return {
+      preparation: { model_choice: preparedModelChoice, model_error: null, models: hostModels },
       messages: chatSseMessages,
       waitResponse: false,
       chatControls: chatSseChatControls,
@@ -173,10 +156,8 @@ const composerValue = {
   reset: composerResetMock,
   bindSession: composerBindSessionMock,
 };
-let composerModelArg: unknown;
 vi.mock("./useComposerSettings", () => ({
-  useComposerSettings: (_sessionId: unknown, _controls: unknown, effectiveModel: unknown) => {
-    composerModelArg = effectiveModel;
+  useComposerSettings: (_sessionId: unknown, _controls: unknown, _models: unknown) => {
     return composerValue;
   },
 }));
@@ -249,26 +230,32 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery: () => ({ data: [] }),
-  useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery: () => ({ data: [] }),
-  useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery: () => ({
+  useListAgentInstancesQuery: () => ({ data: [] }),
+  useGetSessionQuery: () => ({
     data: sessionData,
     currentData:
       sessionQueryUnresolved || sessionDataIsStaleForCurrentArgs
         ? undefined
-        : { agent_instance_id: "agent-1", agent_deleted: false, messages_url: "/runtime/messages", ...sessionData },
+        : {
+            space_id: "space-1",
+            agent_instance_id: "agent-1",
+            agent_deleted: false,
+            messages_url: "/runtime/messages",
+            ...sessionData,
+          },
     refetch: refetchSessionMock,
     isError: false,
   }),
-  usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation: () => [
+  useUpdateSessionMutation: () => [
     (args: unknown) => {
       patchSessionCalls.push(args);
       return mockMutationResult(patchSessionImpl(args));
     },
     { isLoading: false },
   ],
-  usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation: () => [
+  useCreateSessionMutation: () => [
     (args: unknown) => {
       registerSessionCalls.push(args);
       return mockMutationResult(registerSessionImpl(args));
@@ -307,12 +294,6 @@ describe("useManagedChat — session write reliability", () => {
     });
   };
 
-  const flush = async (sid: string | null) => {
-    await act(async () => {
-      await capturedFlushPendingWrites?.(sid);
-    });
-  };
-
   // `enqueueSessionWrite` chains onto the write tail with `.then()` — even
   // when the previous tail is ALREADY resolved, `.then()` still defers its
   // callback (here, the write's actual network call) to the next microtask,
@@ -332,7 +313,8 @@ describe("useManagedChat — session write reliability", () => {
     composerValue.reasoning = false;
     composerValue.chatProfileId = null;
     chatSseChatControls = [];
-    hostEffectiveModel = undefined;
+    hostModels = undefined;
+    preparedModelChoice = null;
     clearSessionHistoryCache();
     chatSseMessages = [];
     chatSseMaxChatInputChars = undefined;
@@ -374,7 +356,6 @@ describe("useManagedChat — session write reliability", () => {
     }
     // Captured callbacks are per-mount; leaving a previous test's copy behind
     // lets an assertion pass against a component that is already unmounted.
-    capturedFlushPendingWrites = undefined;
     capturedOnTurnStarted = undefined;
     capturedOnTurnRejected = undefined;
     capturedIsTurnCurrent = undefined;
@@ -560,7 +541,7 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock).toHaveBeenCalledTimes(1);
   });
 
-  it.each([true, false])("keeps the ask_user choice for a first send before controls load (%s)", async (askUser) => {
+  it.each([true, false])("does not send unadvertised ask_user control on the Weaver path (%s)", async (askUser) => {
     composerValue.askUser = askUser;
     mount();
     act(() => {
@@ -573,50 +554,72 @@ describe("useManagedChat — session write reliability", () => {
     });
 
     expect(sendMock).toHaveBeenCalledTimes(1);
-    expect(sendMock.mock.calls[0][2]).toMatchObject({ ask_user: askUser });
+    expect(sendMock.mock.calls[0][2]).not.toHaveProperty("ask_user");
   });
 
-  it("sends the conversation's model choice and an explicit reasoning value while the row is shown", async () => {
-    composerValue.chatProfileId = "chat.large";
-    composerValue.reasoning = false;
+  it.each([false, true])(
+    "sends the composite model choice and explicit reasoning=%s when allowed",
+    async (reasoning) => {
+      const key = { source_id: "source-1", upstream_model_id: "large" };
+      composerValue.chatProfileId = modelChoiceKey(key);
+      preparedModelChoice = key;
+      composerValue.reasoning = reasoning;
+      chatSseChatControls = [{ capability_id: "platform", widget: "reasoning_toggle", params: {} }];
+      hostModels = {
+        default: null,
+        fallback: null,
+        legacy_profile_id: null,
+        recommendation: null,
+        offers: [
+          {
+            key,
+            permitted: true,
+            candidate: true,
+            reasoning_enabled: true,
+            diagnostics: [],
+            metadata: null,
+            selectable: true,
+          },
+        ],
+        options: {},
+        requires_reselection: false,
+      };
+      mount();
+      act(() => latest.setInput("question"));
+      await act(async () => latest.handleSend());
+      expect(sendMock).toHaveBeenCalledOnce();
+      expect(sendMock.mock.calls[0][2]).toEqual({ model_choice: key, reasoning });
+    },
+  );
+
+  it("sends no reasoning override when the recommended model cannot reason", async () => {
+    const key = { source_id: "source-1", upstream_model_id: "normal" };
+    composerValue.reasoning = true;
     chatSseChatControls = [{ capability_id: "platform", widget: "reasoning_toggle", params: {} }];
-    hostEffectiveModel = {
-      capability_id: "model__mistral__small",
-      selectable_models: [
-        { profile_id: "chat.small", capability_id: "model__mistral__small", name: "small", reasoning_enabled: true },
-        { profile_id: "chat.large", capability_id: "model__mistral__large", name: "large", reasoning_enabled: true },
+    hostModels = {
+      default: key,
+      fallback: null,
+      legacy_profile_id: null,
+      recommendation: null,
+      offers: [
+        {
+          key,
+          permitted: true,
+          candidate: true,
+          reasoning_enabled: false,
+          diagnostics: [],
+          metadata: null,
+          selectable: true,
+        },
       ],
-    } as EffectiveChatModel;
+      options: {},
+      requires_reselection: false,
+    };
     mount();
     act(() => latest.setInput("question"));
-    rerender();
-
-    await act(async () => {
-      await latest.handleSend();
-    });
-
-    expect(sendMock.mock.calls[0][2]).toMatchObject({ chat_profile_id: "chat.large", reasoning: false });
-  });
-
-  it("sends no reasoning value when the chosen model cannot reason, and no choice when none is made", async () => {
-    chatSseChatControls = [{ capability_id: "platform", widget: "reasoning_toggle", params: {} }];
-    hostEffectiveModel = {
-      capability_id: "model__mistral__large",
-      selectable_models: [
-        { profile_id: "chat.large", capability_id: "model__mistral__large", name: "large", reasoning_enabled: false },
-      ],
-    } as EffectiveChatModel;
-    mount();
-    act(() => latest.setInput("question"));
-    rerender();
-
-    await act(async () => {
-      await latest.handleSend();
-    });
-
-    const context = sendMock.mock.calls[0][2] as Record<string, unknown>;
-    expect("reasoning" in context).toBe(false);
-    expect("chat_profile_id" in context).toBe(false);
+    await act(async () => latest.handleSend());
+    expect(sendMock).toHaveBeenCalledOnce();
+    expect(sendMock.mock.calls[0][2]).toEqual({});
   });
 
   // #2369: a brand-new conversation's composer settings live only in memory —
@@ -626,6 +629,34 @@ describe("useManagedChat — session write reliability", () => {
   // the composer from that session's still-empty storage and revert the pick.
   // Both halves are this hook's job and invisible from useComposerSettings'
   // own tests, which can only simulate the bind.
+  it("waits for preparation matching the selected composite model before sending", async () => {
+    const key = { source_id: "source-1", upstream_model_id: "large" };
+    composerValue.chatProfileId = modelChoiceKey(key);
+    mount();
+    act(() => latest.setInput("preserved question"));
+    await act(async () => latest.handleSend());
+    expect(latest.modelPreparationPending).toBe(true);
+    expect(registerSessionCalls).toEqual([]);
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(latest.input).toBe("preserved question");
+    preparedModelChoice = key;
+    rerender();
+    await act(async () => latest.handleSend());
+    expect(sendMock).toHaveBeenCalledOnce();
+    expect(sendMock.mock.calls[0][2]).toEqual({ model_choice: key });
+  });
+
+  it("rejects a legacy model profile instead of translating it into an offer", async () => {
+    composerValue.chatProfileId = "chat.large";
+    mount();
+    act(() => latest.setInput("preserved question"));
+    await act(async () => latest.handleSend());
+    expect(latest.modelPreparationError).toBe("The saved model choice must be selected again in the Models menu.");
+    expect(registerSessionCalls).toEqual([]);
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(prepareChatControlsMock).toHaveBeenCalledWith(null, undefined);
+  });
+
   it("hands a handleSend-minted session id to the composer instead of resetting it", async () => {
     mount();
     act(() => {
@@ -786,111 +817,6 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.input).toBe(draft);
   });
 
-  it("selecting a context prompt persists it and a send proceeds", async () => {
-    mount();
-
-    act(() => {
-      latest.setContextPrompts(["p1"]);
-    });
-    expect(latest.contextPromptIds).toEqual(["p1"]);
-    await flush(latest.sessionId);
-
-    expect(registerSessionCalls).toHaveLength(1);
-    expect(patchSessionCalls).toHaveLength(1);
-    expect(notifyApiErrorMock).not.toHaveBeenCalled();
-
-    act(() => {
-      latest.setInput("hello");
-    });
-    rerender();
-    await act(async () => {
-      await latest.handleSend();
-    });
-
-    expect(sendMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("deselecting a context prompt persists the empty selection", async () => {
-    mount();
-    act(() => {
-      latest.setContextPrompts(["p1"]);
-    });
-    await flush(latest.sessionId);
-    expect(latest.contextPromptIds).toEqual(["p1"]);
-
-    act(() => {
-      latest.setContextPrompts([]);
-    });
-    expect(latest.contextPromptIds).toEqual([]);
-    await flush(latest.sessionId);
-
-    expect(notifyApiErrorMock).not.toHaveBeenCalled();
-  });
-
-  it("rolls back the selection and surfaces a toast when the PATCH fails", async () => {
-    mount();
-    act(() => {
-      latest.setContextPrompts(["p1"]);
-    });
-    await flush(latest.sessionId);
-    expect(latest.contextPromptIds).toEqual(["p1"]);
-
-    patchSessionImpl = async () => {
-      throw new Error("network down");
-    };
-
-    act(() => {
-      latest.setContextPrompts(["p1", "p2"]);
-    });
-    // Optimistic value shown immediately.
-    expect(latest.contextPromptIds).toEqual(["p1", "p2"]);
-
-    await flush(latest.sessionId);
-    rerender();
-
-    expect(latest.contextPromptIds).toEqual(["p1"]); // rolled back
-    expect(notifyApiErrorMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("blocks send while a context-prompt PATCH is still failing, then allows a clean retry with no duplicate send", async () => {
-    sessionData = { context_prompt_ids: [] };
-    mount();
-
-    patchSessionImpl = async () => {
-      throw new Error("save failed");
-    };
-
-    act(() => {
-      latest.setContextPrompts(["p1"]);
-    });
-    act(() => {
-      latest.setInput("hello");
-    });
-    rerender();
-
-    await act(async () => {
-      await latest.handleSend();
-    });
-
-    expect(sendMock).not.toHaveBeenCalled();
-    rerender();
-    expect(latest.contextPromptIds).toEqual([]); // rolled back, not left showing "p1"
-    expect(latest.input).toBe("hello"); // preserved for retry
-
-    // Explicit retry: this time the PATCH succeeds, and the message is sent
-    // exactly once — no duplicate from the earlier blocked attempt.
-    patchSessionImpl = async () => ({});
-    act(() => {
-      latest.setContextPrompts(["p1"]);
-    });
-    rerender();
-    await act(async () => {
-      await latest.handleSend();
-    });
-
-    expect(sendMock).toHaveBeenCalledTimes(1);
-  });
-
   it("blocks send when session creation fails, with no send and the message preserved", async () => {
     mount();
     registerSessionImpl = async () => {
@@ -1013,29 +939,6 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock).toHaveBeenCalledTimes(1);
   });
 
-  it("rehydrates the persisted context-prompt selection on reload", async () => {
-    sessionData = undefined;
-    mount();
-    expect(latest.contextPromptIds).toEqual([]);
-
-    // Bind a session without making any local context-prompt mutation —
-    // e.g. dropping an attachment, or (in the real app) simply loading a
-    // page that already carries `?session=...` in the URL. Rehydration must
-    // still apply normally in this case: no local mutation has happened yet.
-    act(() => {
-      latest.handleAddAttachments([], "picker");
-    });
-    rerender();
-    expect(latest.sessionId).not.toBeNull();
-
-    // Simulate a reload: the session query now resolves with the
-    // previously-saved selection.
-    sessionData = { context_prompt_ids: ["p1", "p2"] };
-    rerender();
-
-    expect(latest.contextPromptIds).toEqual(["p1", "p2"]);
-  });
-
   it("échec de préparation: onTurnStarted clears input and ready attachments only once actually invoked", async () => {
     mount();
     act(() => {
@@ -1058,227 +961,6 @@ describe("useManagedChat — session write reliability", () => {
 
     expect(latest.input).toBe("");
     expect(chatAttachmentsValue.clearReadyAttachments).toHaveBeenCalledTimes(1);
-  });
-
-  it("serializes two rapid context-prompt selections — the second PATCH is not sent before the first settles", async () => {
-    sessionData = { context_prompt_ids: [] };
-    mount();
-    // Establish a bound, already-created session first — this test is about
-    // PATCH-to-PATCH ordering specifically, not the creation-then-PATCH
-    // chaining already covered elsewhere.
-    act(() => {
-      latest.setContextPrompts([]);
-    });
-    await flush(latest.sessionId);
-    patchSessionCalls.length = 0;
-
-    const first = deferred<unknown>();
-    patchSessionImpl = () => first.promise;
-
-    act(() => {
-      latest.setContextPrompts(["A"]);
-    });
-    await tick();
-    const sid = latest.sessionId;
-    expect(patchSessionCalls).toHaveLength(1);
-
-    patchSessionImpl = async () => ({});
-    act(() => {
-      latest.setContextPrompts(["A", "B"]);
-    });
-    await tick();
-    // Queued behind the still-pending first PATCH — not dispatched yet.
-    expect(patchSessionCalls).toHaveLength(1);
-
-    const flushPromise = flush(sid);
-    first.resolve({});
-    await flushPromise;
-
-    expect(patchSessionCalls).toHaveLength(2);
-    expect(latest.contextPromptIds).toEqual(["A", "B"]);
-  });
-
-  it("succès A puis succès B: UI and server end up with B", async () => {
-    sessionData = { context_prompt_ids: [] };
-    mount();
-
-    act(() => {
-      latest.setContextPrompts(["A"]);
-    });
-    await flush(latest.sessionId);
-    act(() => {
-      latest.setContextPrompts(["B"]);
-    });
-    await flush(latest.sessionId);
-
-    expect(latest.contextPromptIds).toEqual(["B"]);
-    expect(patchSessionCalls).toHaveLength(2);
-    expect(notifyApiErrorMock).not.toHaveBeenCalled();
-  });
-
-  it("échec A puis succès B: B's success is not undone by A's later-observed (but stale) failure", async () => {
-    sessionData = { context_prompt_ids: ["base"] };
-    mount();
-    act(() => {
-      latest.setContextPrompts(["base"]);
-    });
-    await flush(latest.sessionId);
-    patchSessionCalls.length = 0;
-
-    const a = deferred<unknown>();
-    patchSessionImpl = () => a.promise;
-    act(() => {
-      latest.setContextPrompts(["A"]);
-    });
-    await tick();
-    const sid = latest.sessionId;
-    expect(patchSessionCalls).toHaveLength(1);
-
-    patchSessionImpl = async () => ({});
-    act(() => {
-      latest.setContextPrompts(["B"]);
-    });
-    await tick();
-    expect(patchSessionCalls).toHaveLength(1); // B queued behind A
-
-    const flushPromise = flush(sid);
-    a.reject(new Error("A failed"));
-    await flushPromise;
-    rerender();
-
-    expect(patchSessionCalls).toHaveLength(2); // B's write fired once A settled
-    expect(latest.contextPromptIds).toEqual(["B"]); // never reverted to "base"
-    // A's failure is stale by the time it resolves (B already superseded it):
-    // no rollback, no toast for a selection the user has already moved past.
-    expect(notifyApiErrorMock).not.toHaveBeenCalled();
-  });
-
-  it("succès A puis échec B: rolls back to A, not to whatever preceded A", async () => {
-    sessionData = { context_prompt_ids: ["base"] };
-    mount();
-
-    act(() => {
-      latest.setContextPrompts(["A"]);
-    });
-    await flush(latest.sessionId);
-    expect(latest.contextPromptIds).toEqual(["A"]);
-
-    patchSessionImpl = async () => {
-      throw new Error("B failed");
-    };
-    act(() => {
-      latest.setContextPrompts(["B"]);
-    });
-    expect(latest.contextPromptIds).toEqual(["B"]); // optimistic
-    await flush(latest.sessionId);
-    rerender();
-
-    expect(latest.contextPromptIds).toEqual(["A"]); // rolled back to A, not "base"
-    expect(notifyApiErrorMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("flushSessionWrites waits for a write enqueued while it is already awaiting (stability loop)", async () => {
-    sessionData = { context_prompt_ids: [] };
-    mount();
-    act(() => {
-      latest.setContextPrompts([]);
-    });
-    await flush(latest.sessionId);
-    patchSessionCalls.length = 0;
-
-    const first = deferred<unknown>();
-    const second = deferred<unknown>();
-    const impls = [() => first.promise, () => second.promise];
-    patchSessionImpl = () => impls.shift()!();
-
-    act(() => {
-      latest.setContextPrompts(["A"]);
-    });
-    await tick();
-    const sid = latest.sessionId;
-    expect(patchSessionCalls).toHaveLength(1);
-
-    let flushResolvedTo: boolean | "pending" = "pending";
-    const flushPromise = capturedFlushPendingWrites!(sid).then((ok) => {
-      flushResolvedTo = ok;
-      return ok;
-    });
-
-    // A second write for the SAME session is enqueued while the flush above
-    // is still awaiting the first, unsettled one.
-    act(() => {
-      latest.setContextPrompts(["A", "B"]);
-    });
-    await tick();
-    expect(patchSessionCalls).toHaveLength(1); // B queued, not dispatched yet
-
-    // Settle A: B's network call fires next, but the flush must not resolve
-    // yet — it has to notice and wait for B too.
-    await act(async () => {
-      first.resolve({});
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(patchSessionCalls).toHaveLength(2);
-    expect(flushResolvedTo).toBe("pending");
-
-    // Only once B also settles does the flush resolve.
-    await act(async () => {
-      second.resolve({});
-      await flushPromise;
-    });
-    expect(flushResolvedTo).toBe(true);
-  });
-
-  it("handleSend never calls send() until the write queue is fully stable, even if a write is added mid-flush", async () => {
-    sessionData = { context_prompt_ids: [] };
-    mount();
-    act(() => {
-      latest.setContextPrompts([]);
-    });
-    await flush(latest.sessionId);
-
-    const first = deferred<unknown>();
-    patchSessionImpl = () => first.promise;
-    act(() => {
-      latest.setContextPrompts(["A"]);
-    });
-    act(() => {
-      latest.setInput("hello");
-    });
-    rerender();
-
-    // Deliberately NOT wrapped in `act()`: with the session already
-    // established above, `handleSend()` performs no synchronous state
-    // update before its own first `await` (it goes straight into awaiting
-    // the flush), so there is nothing here for `act()` to batch. Keeping an
-    // async `act()` scope open (unawaited) while other `act()` calls run
-    // below is an unsupported, overlapping-scope pattern that was observed
-    // to corrupt React's act tracking badly enough to leak state into a
-    // LATER, unrelated test.
-    const handleSendPromise = latest.handleSend();
-
-    const second = deferred<unknown>();
-    await act(async () => {
-      patchSessionImpl = () => second.promise;
-      latest.setContextPrompts(["A", "B"]);
-      await Promise.resolve();
-    });
-    expect(sendMock).not.toHaveBeenCalled();
-
-    await act(async () => {
-      first.resolve({});
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(sendMock).not.toHaveBeenCalled(); // still waiting on B
-
-    await act(async () => {
-      second.resolve({});
-      await handleSendPromise;
-    });
-
-    expect(sendMock).toHaveBeenCalledTimes(1);
   });
 
   it("does not let a failed session-creation from a previous session contaminate a newly navigated-to session", async () => {
@@ -1321,208 +1003,6 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock).toHaveBeenCalledTimes(1);
   });
 
-  it("PATCH A pending, navigation to B, then A fails → B's UI is unaffected", async () => {
-    mount();
-
-    // Establish session A with a deliberately still-pending PATCH.
-    const aPatch = deferred<unknown>();
-    patchSessionImpl = () => aPatch.promise;
-    act(() => {
-      latest.setContextPrompts(["pA"]);
-    });
-    const sidA = latest.sessionId;
-    expect(sidA).not.toBeNull();
-    // Let A's own PATCH action actually fire (consuming `aPatch.promise`)
-    // BEFORE the mock impl is reassigned for session B below — otherwise
-    // A's write ends up using B's (later) impl instead, and `aPatch.promise`
-    // is never actually consumed by anything.
-    await tick();
-    await tick();
-    expect(patchSessionCalls).toHaveLength(1);
-
-    // Navigate away — a genuine "enter a new session" transition (not a
-    // handleSend-driven bind), so the reset effect runs normally.
-    act(() => {
-      latest.startNewConversation();
-    });
-    expect(latest.sessionId).toBeNull();
-
-    // Session B gets its own successful selection.
-    patchSessionImpl = async () => ({});
-    act(() => {
-      latest.setContextPrompts(["pB"]);
-    });
-    const sidB = latest.sessionId;
-    expect(sidB).not.toBeNull();
-    expect(sidB).not.toBe(sidA);
-    await flush(sidB);
-    expect(latest.contextPromptIds).toEqual(["pB"]);
-
-    // A's long-pending PATCH finally fails, well after the user moved on.
-    aPatch.reject(new Error("A failed after navigation"));
-    await flush(sidA);
-
-    // B's UI must be completely unaffected: no rollback to A's value, no
-    // toast shown in B's context for a session the user no longer sees.
-    expect(latest.contextPromptIds).toEqual(["pB"]);
-    expect(notifyApiErrorMock).not.toHaveBeenCalled();
-  });
-
-  it("PATCH A pending, navigation to B, then A succeeds → B's confirmation is unaffected", async () => {
-    mount();
-
-    const aPatch = deferred<unknown>();
-    patchSessionImpl = () => aPatch.promise;
-    act(() => {
-      latest.setContextPrompts(["pA"]);
-    });
-    const sidA = latest.sessionId;
-    // Let A's own PATCH action actually fire before the mock impl is
-    // reassigned for session B below — see the sibling test above.
-    await tick();
-    await tick();
-    expect(patchSessionCalls).toHaveLength(1);
-
-    act(() => {
-      latest.startNewConversation();
-    });
-
-    patchSessionImpl = async () => ({});
-    act(() => {
-      latest.setContextPrompts(["pB"]);
-    });
-    const sidB = latest.sessionId;
-    await flush(sidB);
-    expect(latest.contextPromptIds).toEqual(["pB"]);
-
-    // A's long-pending PATCH finally succeeds — after the user already
-    // moved on to B. A's own write completing normally server-side must not
-    // leak into B's UI.
-    aPatch.resolve({});
-    await flush(sidA);
-
-    expect(latest.contextPromptIds).toEqual(["pB"]);
-    expect(notifyApiErrorMock).not.toHaveBeenCalled();
-  });
-
-  it("an optimistic selection survives a stale sessionData snapshot arriving afterward", async () => {
-    sessionData = undefined;
-    mount();
-
-    // Bind a session with no local mutation yet, so initial rehydration applies.
-    act(() => {
-      latest.handleAddAttachments([], "picker");
-    });
-    rerender();
-    const sid = latest.sessionId;
-    expect(sid).not.toBeNull();
-
-    sessionData = { context_prompt_ids: ["old"] };
-    rerender();
-    expect(latest.contextPromptIds).toEqual(["old"]);
-
-    // A local mutation, with its PATCH deliberately left pending.
-    const pending = deferred<unknown>();
-    patchSessionImpl = () => pending.promise;
-    act(() => {
-      latest.setContextPrompts(["new"]);
-    });
-    expect(latest.contextPromptIds).toEqual(["new"]);
-
-    // A stale sessionData snapshot (a slow initial fetch, or a refetch that
-    // started before the local mutation) resolves now, AFTER the local
-    // mutation was already made.
-    sessionData = { context_prompt_ids: ["old"] };
-    rerender();
-
-    // The optimistic (still-pending) local selection must survive — never
-    // silently replaced by the older server snapshot.
-    expect(latest.contextPromptIds).toEqual(["new"]);
-
-    pending.resolve({});
-    await flush(sid);
-    expect(latest.contextPromptIds).toEqual(["new"]);
-  });
-
-  it("navigating to a genuinely new session re-enables normal rehydration", async () => {
-    mount();
-
-    // Session A: a local mutation happens, disabling further rehydration for A.
-    act(() => {
-      latest.setContextPrompts(["pA"]);
-    });
-    await flush(latest.sessionId);
-
-    // Navigate to a new session B — a real transition, not a handleSend bind.
-    act(() => {
-      latest.startNewConversation();
-    });
-    expect(latest.contextPromptIds).toEqual([]);
-
-    act(() => {
-      latest.handleAddAttachments([], "picker");
-    });
-    rerender();
-    const sidB = latest.sessionId;
-    expect(sidB).not.toBeNull();
-
-    // B has no local mutation yet — a fresh server snapshot for B must apply
-    // normally, exactly like a first-time session entry.
-    sessionData = { context_prompt_ids: ["pB-from-server"] };
-    rerender();
-    expect(latest.contextPromptIds).toEqual(["pB-from-server"]);
-  });
-
-  it("does not attribute session A's reused (stale) sessionData to session B while B's query is still resolving", async () => {
-    // Regression test: RTK Query's `data` deliberately reuses the last
-    // resolved result across an arg change (here, a session switch) while
-    // the new args' request is still in flight — `sessionDataIsStaleForCurrentArgs`
-    // models exactly that. The fix reads `currentData` instead, which stays
-    // undefined until the result genuinely belongs to the new session.
-    mount();
-
-    // Bind and enter session A.
-    act(() => {
-      latest.handleAddAttachments([], "picker");
-    });
-    rerender();
-    const sidA = latest.sessionId;
-    expect(sidA).not.toBeNull();
-
-    // A's server snapshot resolves normally.
-    sessionData = { context_prompt_ids: ["pA-from-server"] };
-    rerender();
-    expect(latest.contextPromptIds).toEqual(["pA-from-server"]);
-
-    // Navigate to a new session B — a real transition, not a handleSend bind.
-    act(() => {
-      latest.startNewConversation();
-    });
-    expect(latest.contextPromptIds).toEqual([]);
-
-    // B's own query hasn't resolved yet — set this BEFORE the render where
-    // sessionId actually flips to B, so the race is captured at the exact
-    // render where they first interact: `data` still reflects A's payload
-    // (the real-world RTK Query behavior), but `currentData` correctly does
-    // not.
-    sessionDataIsStaleForCurrentArgs = true;
-    act(() => {
-      latest.handleAddAttachments([], "picker");
-    });
-    rerender();
-    const sidB = latest.sessionId;
-    expect(sidB).not.toBeNull();
-    expect(sidB).not.toBe(sidA);
-    // Must NOT inherit A's prompts under B's session id.
-    expect(latest.contextPromptIds).toEqual([]);
-
-    // B's real snapshot finally arrives.
-    sessionDataIsStaleForCurrentArgs = false;
-    sessionData = { context_prompt_ids: ["pB-from-server"] };
-    rerender();
-    expect(latest.contextPromptIds).toEqual(["pB-from-server"]);
-  });
-
   it("handleSend() called twice while session creation is suspended: one sid, one creation, one bind, one send", async () => {
     mount();
     const create = deferred<unknown>();
@@ -1556,29 +1036,13 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.sessionId).not.toBeNull();
   });
 
-  it("leaving a session snapshots the displayed thread into the session-history cache (#2239)", async () => {
+  it("does not promote a displayed thread into an authorized history snapshot on departure", () => {
     mount();
-    // Bind session A without a send (attachment-drop path).
-    act(() => {
-      latest.handleAddAttachments([], "picker");
-    });
+    bindSession("session-a");
+    chatSseMessages = [{ id: "x:1" }];
     rerender();
-    const sidA = latest.sessionId;
-    expect(sidA).not.toBeNull();
-
-    // The thread as displayed at departure time — streamed live into
-    // useChatSse's state, so no history fetch ever saw it. Only the
-    // departure snapshot can fold it into the cache.
-    const displayed = [{ id: "x:1" }];
-    chatSseMessages = displayed;
-    rerender();
-
-    act(() => {
-      latest.startNewConversation();
-    });
-
-    // The exact displayed array was snapshotted under A's session id.
-    expect(getCachedSessionHistory(sidA!)).toBe(displayed);
+    act(() => latest.startNewConversation());
+    expect(getCachedSessionHistory(JSON.stringify(["alice-session", "space-1", "session-a"]))).toBeUndefined();
   });
 
   // handleHitlAnswer clears pendingHitl BEFORE awaiting the resume, so the
@@ -2271,10 +1735,10 @@ describe("useManagedChat — session write reliability", () => {
   });
 
   it.each([
-    { exchangeId: "exch-1", invocation: { name: "meeting-minutes" }, expected: "meeting-minutes" },
-    { exchangeId: "older-exchange", invocation: { name: "meeting-minutes" }, expected: undefined },
-    { exchangeId: "exch-1", invocation: { name: 42 }, expected: undefined },
-  ])("restores only the resumed exchange's typed skill ($exchangeId)", async ({ exchangeId, invocation, expected }) => {
+    { exchangeId: "exch-1", invocation: { name: "meeting-minutes" } },
+    { exchangeId: "older-exchange", invocation: { name: "meeting-minutes" } },
+    { exchangeId: "exch-1", invocation: { name: 42 } },
+  ])("does not turn stored skill metadata into resume authority ($exchangeId)", async ({ exchangeId, invocation }) => {
     chatSseMessages = [
       {
         session_id: "session-1",
@@ -2296,9 +1760,7 @@ describe("useManagedChat — session write reliability", () => {
       awaitingHumanEvent,
       "proceed",
       undefined,
-      expected
-        ? expect.objectContaining({ skills: [{ name: expected }] })
-        : expect.not.objectContaining({ skills: expect.anything() }),
+      expect.not.objectContaining({ skills: expect.anything() }),
       undefined,
       false,
     );
@@ -2310,7 +1772,7 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock.mock.calls[0]?.[2]).not.toHaveProperty("skill");
   });
 
-  it("sends a prompt with all skills and restores them only for its interrupted exchange", async () => {
+  it("sends explicit command skills but does not infer resume authority from stored metadata", async () => {
     const skills = [{ name: "meeting-minutes" }, { name: "mermaid" }];
     const command = {
       command: "summary",
@@ -2346,7 +1808,7 @@ describe("useManagedChat — session write reliability", () => {
       awaitingHumanEvent,
       "proceed",
       undefined,
-      expect.objectContaining({ skills }),
+      expect.not.objectContaining({ skills: expect.anything() }),
       undefined,
       false,
     );
@@ -2656,34 +2118,20 @@ describe("useManagedChat — session write reliability", () => {
   });
   // The page reads the model list before it knows whether the conversation can
   // run; that answer must not drop the stored choice (and warn) meanwhile.
-  it("hides the model read from the composer while the conversation cannot run", () => {
-    hostEffectiveModel = {
-      capability_id: "model__mistral__small",
-      selectable_models: [{ profile_id: "chat.small", capability_id: "model__mistral__small", name: "small" }],
-    };
+  it("does not prepare or send when session metadata is deleted, mismatched or unresolved", async () => {
     mount();
-    act(() => capturedSetSearchParams?.(new URLSearchParams("session=saved")));
-    expect(composerModelArg).toBe(hostEffectiveModel);
-
-    // Agent deleted: the read answers with an empty model.
-    sessionData = { agent_deleted: true };
-    rerender();
-    expect(composerModelArg).toBeUndefined();
-
-    // Conversation of another agent: the read describes the wrong agent.
-    sessionData = { agent_instance_id: "agent-2" };
-    rerender();
-    expect(composerModelArg).toBeUndefined();
-
-    // Conversation row not loaded yet.
-    sessionData = undefined;
-    sessionQueryUnresolved = true;
-    rerender();
-    expect(composerModelArg).toBeUndefined();
-
-    sessionQueryUnresolved = false;
-    rerender();
-    expect(composerModelArg).toBe(hostEffectiveModel);
+    bindSession("saved");
+    for (const state of [{ agent_deleted: true }, { agent_instance_id: "other" }, undefined]) {
+      sessionData = state;
+      sessionQueryUnresolved = state === undefined;
+      rerender();
+      const count = prepareChatControlsMock.mock.calls.length;
+      act(() => latest.setInput("blocked"));
+      await act(async () => latest.handleSend());
+      expect(latest.executionDisabled).toBe(true);
+      expect(prepareChatControlsMock).toHaveBeenCalledTimes(count);
+      expect(sendMock).not.toHaveBeenCalled();
+    }
   });
 
   it("freezes an existing conversation after deletion and resumes normal behavior on a live conversation", async () => {
@@ -2715,7 +2163,7 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.sessionId).toBe("saved");
     expect(latest.input).toBe("draft to preserve");
     expect(prepareChatControlsMock).toHaveBeenCalledTimes(prepCalls);
-    act(() => latest.commitTitle("Readable title"));
+    await act(async () => latest.commitTitle("Readable title"));
     expect(patchSessionCalls[patchSessionCalls.length - 1]).toMatchObject({
       updateSessionRequest: { title: "Readable title" },
     });
@@ -2791,7 +2239,7 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock).toHaveBeenCalledOnce();
   });
 
-  it("ends a failed-create exemption once current details confirm the saved session", async () => {
+  it("ends the local exemption after an idempotent creation retry confirms the saved session", async () => {
     mount();
     sessionQueryUnresolved = true;
     registerSessionImpl = async () => {
@@ -2802,12 +2250,14 @@ describe("useManagedChat — session write reliability", () => {
       await latest.handleSend();
     });
     const created = latest.sessionId!;
+    registerSessionImpl = async () => ({});
     sessionQueryUnresolved = false;
     rerender();
     await act(async () => {
       await latest.handleSend();
     });
-    expect(registerSessionCalls).toHaveLength(1);
+    expect(registerSessionCalls).toHaveLength(2);
+    expect(registerSessionCalls[1]).toEqual(registerSessionCalls[0]);
     expect(sendMock).toHaveBeenCalledOnce();
     act(() => capturedSetSearchParams?.(new URLSearchParams("session=other")));
     sessionQueryUnresolved = true;
@@ -2822,8 +2272,8 @@ describe("useManagedChat — session write reliability", () => {
   it("limits the local creation exemption to its first handoff and blocks a later unresolved visit", async () => {
     mount();
     sessionQueryUnresolved = true;
-    act(() => latest.setContextPrompts(["initial"]));
-    await tick();
+    act(() => latest.setInput("first question"));
+    await act(async () => latest.handleSend());
     const created = latest.sessionId!;
     expect(latest.executionDisabled).toBe(false);
     sessionQueryUnresolved = false;
@@ -2835,40 +2285,37 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.isReadOnly).toBe(false);
   });
 
-  it("keeps a failed context write blocked through confirmed creation retries until the context saves", async () => {
+  it.each([false, true])("does not read or write legacy context prompts (saved=%s)", async (saved) => {
     mount();
-    sessionQueryUnresolved = true;
-    registerSessionImpl = async () => {
-      throw new Error("POST response lost or duplicate");
-    };
-    act(() => latest.setInput("draft"));
-    await act(async () => {
-      await latest.handleSend();
-    });
-    patchSessionImpl = async () => {
-      throw new Error("context save failed");
-    };
-    act(() => latest.setContextPrompts(["uncommitted"]));
-    await flush(latest.sessionId);
-    expect(latest.contextPromptIds).toEqual([]);
-    await act(async () => {
-      await latest.handleSend();
-    });
-    expect(sendMock).not.toHaveBeenCalled();
-    sessionQueryUnresolved = false;
-    sessionData = { context_prompt_ids: [] };
+    if (saved) bindSession("saved");
+    sessionData = { context_prompt_ids: ["legacy"] };
     rerender();
-    await act(async () => {
-      await latest.handleSend();
-    });
+    act(() => latest.setContextPrompts(["new"]));
+    await tick();
+    expect(latest.contextPromptIds).toEqual([]);
+    expect(registerSessionCalls).toEqual([]);
+    expect(patchSessionCalls).toEqual([]);
     expect(sendMock).not.toHaveBeenCalled();
-    patchSessionImpl = async () => ({});
-    act(() => latest.setContextPrompts(["committed"]));
-    await flush(latest.sessionId);
-    await act(async () => {
-      await latest.handleSend();
+  });
+
+  it.each([false, true])("ignores a late title response after navigation (failed=%s)", async (failed) => {
+    const update = deferred<{ title: string }>();
+    patchSessionImpl = () => update.promise;
+    mount();
+    bindSession("session-a");
+    let pending: Promise<void>;
+    act(() => {
+      pending = latest.commitTitle("A title");
     });
-    expect(sendMock).toHaveBeenCalledOnce();
+    sessionData = { title: "B title" };
+    bindSession("session-b");
+    await act(async () => {
+      if (failed) update.reject(new Error("old request failed"));
+      else update.resolve({ title: "A title" });
+      await pending;
+    });
+    expect(latest.sessionTitle).toBe("B title");
+    expect(notifyApiErrorMock).not.toHaveBeenCalled();
   });
 
   it("does not interpret unresolved session metadata as a deleted agent", async () => {

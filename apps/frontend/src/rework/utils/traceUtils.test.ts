@@ -418,7 +418,7 @@ describe("categorized tool labels", () => {
 
   it("keeps the fallback for a namespaced external MCP tool with the same slug", () => {
     const entry = { kind: "combo" as const, call: toolCallMsg("c1", "mcp__other__prometheus_query") };
-    expect(entryLabel(entry, translate)).toBe("Prometheus Query");
+    expect(entryLabel(entry, translate)).toBe("Querying prometheus");
   });
 });
 

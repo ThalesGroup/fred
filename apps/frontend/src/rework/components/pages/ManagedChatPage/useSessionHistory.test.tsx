@@ -13,17 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage for the session-history cache: switching back to a
-// previously opened conversation renders instantly from the in-memory cache
-// (no spinner) while the runtime is revalidated in the background - and the
-// guards that keep that safe:
-//
-// - a response that lands after the user switched sessions is neither
-//   rendered under the new session nor written to the cache;
-// - a response never replaces a live streamed turn;
-// - an empty response never wipes the optimistic first message of a
-//   brand-new session;
-// - the cache is a bounded LRU.
+// History requires a current authorized read. Local snapshots never bypass
+// admission; stale responses and active turns retain their isolation guarantees.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -48,11 +39,14 @@ vi.mock("../../../../common/config", () => ({ getConfig: () => ({ frontend_basen
 vi.mock("../../../../security/KeycloakService", () => ({
   KeyCloakService: {
     ensureFreshToken: async () => {},
+    GetSessionIdentity: () => "alice-session",
     GetToken: () => "test-token",
   },
 }));
 
 import { useSessionHistory } from "./useSessionHistory";
+
+const historyKey = (sid: string) => JSON.stringify(["alice-session", "space-1", sid]);
 
 const msg = (id: string): ChatMessage => ({ id }) as unknown as ChatMessage;
 
@@ -82,6 +76,7 @@ function TestHost({
 }) {
   const hook = useSessionHistory({
     sessionId,
+    spaceId: "space-1",
     messagesUrl: routeOverride === "default" ? `/runtime/sessions/${sessionId}/messages` : routeOverride,
     onLoaded,
     isTurnActive,
@@ -90,7 +85,7 @@ function TestHost({
   return null;
 }
 
-describe("useSessionHistory serve-then-revalidate cache", () => {
+describe("useSessionHistory authorized reads", () => {
   let container: HTMLDivElement;
   let root: Root;
   let latest: ReturnType<typeof useSessionHistory>;
@@ -118,7 +113,7 @@ describe("useSessionHistory serve-then-revalidate cache", () => {
     render(sessionId);
   };
 
-  // Drains the microtask chain inside load() (token → prepare → fetch → json).
+  // Drains token refresh, fetch and JSON decoding.
   const settle = async () => {
     await act(async () => {
       for (let i = 0; i < 10; i++) await Promise.resolve();
@@ -152,37 +147,41 @@ describe("useSessionHistory serve-then-revalidate cache", () => {
 
     mount("session-a");
     expect(latest.isLoading).toBe(true);
-    expect(onLoaded).not.toHaveBeenCalled();
+    expect(onLoaded.mock.calls.every(([messages]) => messages.length === 0)).toBe(true);
 
     response.resolve(okResponse(history));
     await settle();
 
     expect(latest.isLoading).toBe(false);
     expect(onLoaded).toHaveBeenCalledWith(history);
-    expect(getCachedSessionHistory("session-a")).toEqual(history);
-    expect(fetch).toHaveBeenCalledWith("http://localhost:3000/runtime/sessions/session-a/messages", {
+    expect(getCachedSessionHistory(historyKey("session-a"))).toEqual(history);
+    expect(fetch).toHaveBeenCalledWith(new URL("/runtime/sessions/session-a/messages", window.location.origin), {
+      cache: "no-store",
+      redirect: "error",
+      signal: expect.any(AbortSignal),
       headers: { Authorization: "Bearer test-token" },
     });
   });
 
-  it("cache hit: renders synchronously with no loading state, then revalidates in the background", async () => {
+  it("a cached snapshot stays hidden until the current authorized read succeeds", async () => {
     const cachedHistory = [msg("m1")];
     const freshHistory = [msg("m1"), msg("m2-from-another-device")];
-    setCachedSessionHistory("session-a", cachedHistory);
+    setCachedSessionHistory(historyKey("session-a"), cachedHistory);
     const response = deferred<{ ok: boolean; json: () => Promise<ChatMessage[]> }>();
     fetchImpl = () => response.promise;
 
     mount("session-a");
-    // Served from cache before any network round-trip, composer never gated.
-    expect(onLoaded).toHaveBeenCalledWith(cachedHistory);
-    expect(latest.isLoading).toBe(false);
+    // A local snapshot cannot prove access to this conversation.
+    expect(onLoaded).toHaveBeenCalledWith([]);
+    expect(onLoaded).not.toHaveBeenCalledWith(cachedHistory);
+    expect(latest.isLoading).toBe(true);
 
     response.resolve(okResponse(freshHistory));
     await settle();
 
     expect(latest.isLoading).toBe(false);
     expect(onLoaded).toHaveBeenLastCalledWith(freshHistory);
-    expect(getCachedSessionHistory("session-a")).toEqual(freshHistory);
+    expect(getCachedSessionHistory(historyKey("session-a"))).toEqual(freshHistory);
   });
 
   it("a response landing after a session switch is neither applied nor cached under either session", async () => {
@@ -201,8 +200,8 @@ describe("useSessionHistory serve-then-revalidate cache", () => {
     await settle();
 
     expect(onLoaded).not.toHaveBeenCalled(); // A's history never rendered under B
-    expect(getCachedSessionHistory("session-a")).toBeUndefined(); // and never cached as fresh
-    expect(getCachedSessionHistory("session-b")).toEqual(bHistory);
+    expect(getCachedSessionHistory(historyKey("session-a"))).toBeUndefined(); // and never cached as fresh
+    expect(getCachedSessionHistory(historyKey("session-b"))).toEqual(bHistory);
     // ...nor does it report ITS completion as B's: callers sequence work behind
     // this flag, and B's own load has already settled and will not settle twice.
     expect(latest.isSettled).toBe(true);
@@ -222,7 +221,7 @@ describe("useSessionHistory serve-then-revalidate cache", () => {
   });
 
   it("re-entering a conversation is not settled by its previous visit", async () => {
-    setCachedSessionHistory("session-a", [msg("a1")]);
+    setCachedSessionHistory(historyKey("session-a"), [msg("a1")]);
     const slowB = deferred<{ ok: boolean; json: () => Promise<ChatMessage[]> }>();
     fetchImpl = (url) => (url.includes("session-b") ? slowB.promise : Promise.resolve(okResponse([msg("a1")])));
 
@@ -259,13 +258,15 @@ describe("useSessionHistory serve-then-revalidate cache", () => {
     expect(onLoaded).toHaveBeenLastCalledWith([msg("a1")]);
   });
 
-  it("an empty response is not applied - a brand-new session's optimistic first message survives", async () => {
+  it("an authorized empty response is a settled empty history", async () => {
     fetchImpl = async () => okResponse([]);
     mount("session-new");
     await settle();
 
-    expect(onLoaded).not.toHaveBeenCalled();
-    expect(getCachedSessionHistory("session-new")).toBeUndefined();
+    expect(onLoaded.mock.calls.every(([messages]) => messages.length === 0)).toBe(true);
+    expect(getCachedSessionHistory(historyKey("session-new"))).toEqual([]);
+    expect(latest.isSettled).toBe(true);
+    expect(latest.isUnavailable).toBe(false);
   });
 
   it("a response never replaces a live streamed turn, and is not cached over it", async () => {
@@ -277,8 +278,8 @@ describe("useSessionHistory serve-then-revalidate cache", () => {
     response.resolve(okResponse([msg("stale-history")]));
     await settle();
 
-    expect(onLoaded).not.toHaveBeenCalled();
-    expect(getCachedSessionHistory("session-a")).toBeUndefined();
+    expect(onLoaded.mock.calls.every(([messages]) => messages.length === 0)).toBe(true);
+    expect(getCachedSessionHistory(historyKey("session-a"))).toBeUndefined();
   });
 
   it("does not re-fetch on an effect re-fire for the same session", async () => {
@@ -291,13 +292,14 @@ describe("useSessionHistory serve-then-revalidate cache", () => {
     await settle();
     expect(fetch).toHaveBeenCalledTimes(1); // still one fetch round-trip
   });
-  it("waits for routing, preserves cached history, and settles unavailable legacy sessions", async () => {
+  it("hides cached history while routing and evicts it when the route is unavailable", async () => {
     const history = [msg("cached")];
-    setCachedSessionHistory("legacy", history);
+    setCachedSessionHistory(historyKey("legacy"), history);
     routeOverride = undefined;
     mount("legacy");
     await settle();
-    expect(onLoaded).toHaveBeenCalledWith(history);
+    expect(onLoaded).toHaveBeenCalledWith([]);
+    expect(onLoaded).not.toHaveBeenCalledWith(history);
     expect(fetch).not.toHaveBeenCalled();
     expect(latest.isUnavailable).toBe(false);
     routeOverride = null;
@@ -305,7 +307,7 @@ describe("useSessionHistory serve-then-revalidate cache", () => {
     await settle();
     expect(latest.isUnavailable).toBe(true);
     expect(latest.isSettled).toBe(true);
-    expect(getCachedSessionHistory("legacy")).toEqual(history);
+    expect(getCachedSessionHistory(historyKey("legacy"))).toBeUndefined();
   });
 
   it("shows an unavailable state for failed history reads", async () => {
@@ -314,7 +316,7 @@ describe("useSessionHistory serve-then-revalidate cache", () => {
     await settle();
     expect(latest.isUnavailable).toBe(true);
     expect(latest.isSettled).toBe(true);
-    expect(onLoaded).not.toHaveBeenCalled();
+    expect(onLoaded.mock.calls.every(([messages]) => messages.length === 0)).toBe(true);
   });
 
   it("preserves platform admission denial handling when a history read is refused", async () => {
@@ -334,7 +336,7 @@ describe("useSessionHistory serve-then-revalidate cache", () => {
       expect(denied).toHaveBeenCalledTimes(1);
       expect(latest.isUnavailable).toBe(true);
       expect(latest.isSettled).toBe(true);
-      expect(onLoaded).not.toHaveBeenCalled();
+      expect(onLoaded.mock.calls.every(([messages]) => messages.length === 0)).toBe(true);
     } finally {
       window.removeEventListener(platformAccessDenied, denied);
       redirect.mockRestore();
@@ -350,7 +352,7 @@ describe("useSessionHistory serve-then-revalidate cache", () => {
     render("legacy");
     response.resolve(okResponse([msg("stale")]));
     await settle();
-    expect(onLoaded).not.toHaveBeenCalled();
+    expect(onLoaded.mock.calls.every(([messages]) => messages.length === 0)).toBe(true);
     expect(latest.isUnavailable).toBe(true);
   });
 });
