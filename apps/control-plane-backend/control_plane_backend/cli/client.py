@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 import httpx
+from fred_sdk.contracts.skills import SkillInvocation
 from pydantic import BaseModel
 
 from control_plane_backend.platform_skills.schemas import (
@@ -27,7 +28,6 @@ from control_plane_backend.platform_skills.schemas import (
     PlatformSkillInventory,
     SetPlatformSkillEnabledRequest,
 )
-from fred_sdk.contracts.skills import SkillInvocation
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
     CreateAgentInstanceRequest,

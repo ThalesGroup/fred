@@ -9,17 +9,16 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-from fastapi import HTTPException
-from fred_core import KeycloakUser
-
 from control_plane_backend.config.models import RuntimeCatalogSourceConfig
-from control_plane_backend.platform_skills.service import get_platform_skills
 from control_plane_backend.platform_skills.service import (
     get_platform_skill_policy,
+    get_platform_skills,
     set_platform_skill_enabled,
 )
 from control_plane_backend.platform_skills.store import PlatformSkillPolicyStore
 from control_plane_backend.product.dependencies import ProductServiceDependencies
+from fastapi import HTTPException
+from fred_core import KeycloakUser
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 

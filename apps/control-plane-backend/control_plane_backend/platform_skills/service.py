@@ -15,8 +15,8 @@ from pydantic import ValidationError
 from control_plane_backend.config.models import RuntimeCatalogSourceConfig
 from control_plane_backend.organization_authz import require_manage_capabilities
 from control_plane_backend.platform_skills.schemas import (
-    PlatformSkillEntry,
     PlatformSkillEnabled,
+    PlatformSkillEntry,
     PlatformSkillInventory,
     PlatformSkillPolicy,
 )

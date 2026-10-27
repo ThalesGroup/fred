@@ -5,9 +5,8 @@
 import asyncio
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncEngine
-
 from control_plane_backend.platform_skills.store import PlatformSkillPolicyStore
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 
 @pytest.mark.asyncio

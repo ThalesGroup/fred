@@ -6,8 +6,8 @@ Revision ID: d7b24ef08361
 Revises: f28c3e9ab641
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision: str = "d7b24ef08361"
 down_revision: str = "f28c3e9ab641"

@@ -55,8 +55,8 @@ from control_plane_backend.platform_prompt.store import (
     CreationAssistantSettingsStore,
     PlatformPromptStore,
 )
-from control_plane_backend.platform_ui_settings.store import PlatformUiSettingsStore
 from control_plane_backend.platform_skills.store import PlatformSkillPolicyStore
+from control_plane_backend.platform_ui_settings.store import PlatformUiSettingsStore
 from control_plane_backend.prompts.category_store import PromptCategoryStore
 from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.routing_policy.store import (
