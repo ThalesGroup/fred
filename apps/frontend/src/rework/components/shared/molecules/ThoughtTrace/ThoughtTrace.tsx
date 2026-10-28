@@ -21,6 +21,7 @@ import type { TraceRow, TraceSummary } from "../../../../utils/traceUtils";
 import {
   formatLatencyMs,
   groupTraceEntries,
+  skillLoadOf,
   traceEntryKey,
   traceRows,
   traceSummary,
@@ -78,6 +79,14 @@ export function ThoughtTrace({
   // Memoized: this fold runs on every streamed delta, and the page re-renders
   // for reasons of its own on top of that.
   const entries = useMemo(() => groupTraceEntries(messages), [messages]);
+  const initialSkillCount = useMemo(() => {
+    const nextActivity = entries.findIndex((entry) => {
+      const load = entry.kind === "solo" ? skillLoadOf(entry.message) : null;
+      return !load || load.origin !== "user" || load.child;
+    });
+    return nextActivity < 0 ? entries.length : nextActivity;
+  }, [entries]);
+  const initialSkills = useMemo(() => traceRows(entries.slice(0, initialSkillCount)), [entries, initialSkillCount]);
   const summary = useMemo(() => traceSummary(entries, pendingToolCallIds), [entries, pendingToolCallIds]);
   const label = useSummaryLabel(summary);
   const { expanded, toggle } = useTraceExpansion(done);
@@ -85,28 +94,41 @@ export function ThoughtTrace({
   // array on each streamed frame, so this memo is invalidated for the WHOLE
   // conversation on every token — and traceRows flattens markdown. Behind the
   // toggle, a long history's collapsed traces cost nothing per token.
-  const rows = useMemo(() => (expanded ? traceRows(entries) : EMPTY_ROWS), [entries, expanded]);
+  const rows = useMemo(
+    () => (expanded ? traceRows(entries).slice(initialSkillCount) : EMPTY_ROWS),
+    [entries, expanded, initialSkillCount],
+  );
+  const hasActivities = entries.length > initialSkillCount;
 
   if (entries.length === 0) return null;
 
   return (
     <div className={styles.root} aria-label={t("rework.chatTrace.ariaLabel")}>
-      <button
-        type="button"
-        className={styles.toggle}
-        onClick={toggle}
-        aria-expanded={expanded}
-        title={t(expanded ? "rework.chatTrace.hide" : "rework.chatTrace.show")}
-      >
-        <span className={styles.chevron} aria-hidden="true">
-          <Icon category="outlined" type={expanded ? "expand_less" : "expand_more"} />
-        </span>
-        <span className={`${styles.summary} ${summary.running ? styles.summaryStreaming : ""}`}>{label}</span>
-      </button>
+      {initialSkills.length > 0 && (
+        <div className={styles.body}>
+          {initialSkills.map(({ entry, index }) => (
+            <TraceEntryRow key={traceEntryKey(entry)} entry={entry} index={index} />
+          ))}
+        </div>
+      )}
+      {hasActivities && (
+        <button
+          type="button"
+          className={styles.toggle}
+          onClick={toggle}
+          aria-expanded={expanded}
+          title={t(expanded ? "rework.chatTrace.hide" : "rework.chatTrace.show")}
+        >
+          <span className={styles.chevron} aria-hidden="true">
+            <Icon category="outlined" type={expanded ? "expand_less" : "expand_more"} />
+          </span>
+          <span className={`${styles.summary} ${summary.running ? styles.summaryStreaming : ""}`}>{label}</span>
+        </button>
+      )}
 
       {/* One sequence, in the order the turn actually unfolded: reasoning and
           tool steps alternate rather than being stacked into two lanes. */}
-      {expanded && (
+      {expanded && hasActivities && (
         <div className={styles.body}>
           {rows.map(({ entry, lane, index, reasoningText, restated }) =>
             lane === "reasoning" ? (

@@ -5588,15 +5588,19 @@ personal skill counts; team aggregates retain elevated-role gating.
 
 Deep skill selections retain their inline badge and preview after reopening through
 name-only user-message `metadata.extras.skill_invocations` (legacy singular metadata remains readable). This metadata records
-the user's selection, not a skill load. DeepAgents loads instructions through
-native model-driven filesystem reads. An actual instruction read matching the
-any current selected name displays user origin, including child reads; other skill
+the user's selection, not a skill load. DeepAgents loads explicit selections
+through native pins before inference; model-selected skills use native filesystem
+reads. A successful pin or an actual instruction read matching a current selected
+name displays user origin, including child reads; other skill
 reads display model origin. Legacy ReAct attribution remains supported for
 existing history.
 
 The interaction contract is in the platform-agent-skills OpenSpec change.
 
-In the expanded reasoning trace, successful skill loads share the tools’ compact
+Initial user-requested parent skill loads appear before the reasoning toggle,
+including while the turn is streaming and when its reasoning is collapsed.
+Later loads, autonomous loads and child loads remain in chronological order
+inside the reasoning trace. Successful skill loads share the tools' compact
 step-number marker and chronological numbering. A load followed by two tools is
 numbered 1, 2, 3; reasoning and ordinary notes remain unnumbered. Attribution and
 the header’s tool-execution count retain their existing meaning. Each skill-load
