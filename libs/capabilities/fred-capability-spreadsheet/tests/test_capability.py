@@ -163,10 +163,10 @@ def test_tool_schema_exposes_only_llm_arguments():
     assert "Never send a formula as a plain string" in schema["description"]
     assert "{formula: '=...'}" in schema["description"]
     assert "Never compute derived columns yourself" in schema["description"]
-    assert "share_of_total" in schema["description"]
-    assert "A division by zero leaves the cell empty" in schema["description"]
-    assert "send null for it in rows" in schema["description"]
-    assert "Do not add your own total/subtotal row" in schema["description"]
+    assert "'compute'" not in str(schema["parameters"])
+    assert 'Use IFERROR(...,"") when a divisor may be 0' in schema["description"]
+    assert "null for it in rows" in schema["description"]
+    assert "never add a column or a row" in schema["description"]
     assert "Call this tool once per file" in schema["description"]
     assert "If you are a sub-agent" in schema["description"]
     assert "that agent creates one workbook" in schema["description"]
@@ -382,7 +382,7 @@ async def test_changed_data_or_a_new_turn_creates_a_new_file():
 
 
 @pytest.mark.asyncio
-async def test_literal_derived_columns_keep_the_file_and_return_a_compute_note():
+async def test_literal_derived_columns_keep_the_file_and_return_a_formula_note():
     args = {
         "file_name": "Budget",
         "sheets": [
@@ -402,9 +402,7 @@ async def test_literal_derived_columns_keep_the_file_and_return_a_compute_note()
     content, artifact = await _tool(workspace)(**args)
 
     assert artifact.is_error is False and len(workspace.writes) == 2
-    assert (
-        "'Gap' -> compute {op: 'subtract', left: 'Actual', right: 'Budget'}" in content
-    )
+    assert "'Gap' -> formula '=C2-B2'" in content
     assert content.endswith("Do not create it again; reply now.")
 
 

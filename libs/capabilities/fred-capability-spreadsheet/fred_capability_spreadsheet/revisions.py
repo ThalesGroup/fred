@@ -72,7 +72,7 @@ _ALIASES = {
     "move_row": "move_rows",
     "split_sheet": "move_rows",
 }
-_COLUMN_FIELDS = ("header", "type", "currency", "total", "compute", "formula", "width")
+_COLUMN_FIELDS = ("header", "type", "currency", "total", "formula", "width")
 _CELL_RE = re.compile(r"^\$?([A-Za-z]{1,3})\$?([0-9]+)$")
 NO_BASE = (
     "No file was written: there is no previous workbook in this conversation to "
@@ -89,7 +89,7 @@ class ChangeError(ValueError):
 
 
 def normalize_spec(spec: Spec) -> Spec:
-    """Full-length rows (computed and formula columns hold null) and no hidden
+    """Full-length rows (formula columns hold null) and no hidden
     fields, so stored bases compare and replay exactly."""
 
     out = copy.deepcopy(spec)
@@ -97,7 +97,7 @@ def normalize_spec(spec: Spec) -> Spec:
     out.pop("changes", None)
     for sheet in out.get("sheets", []):
         columns = sheet.get("columns", [])
-        holes = [bool(c.get("compute") or c.get("formula")) for c in columns]
+        holes = [bool(c.get("formula")) for c in columns]
         for column in columns:
             if column.pop("type_inferred", False):
                 column.pop("type", None)
@@ -108,7 +108,7 @@ def normalize_spec(spec: Spec) -> Spec:
             if len(row) != len(columns):
                 values = iter(row)
                 row = [None if hole else next(values, None) for hole in holes]
-            # A formula cell in a computed column overrides it, so it is kept.
+            # A formula cell in a formula column overrides it, so it is kept.
             rows.append(
                 [
                     None if hole and not _is_formula(v) else v
@@ -465,9 +465,7 @@ def _resolve(
             raise ChangeError("give `value`, the new value (null to empty the cell)")
         base = sheet.base_columns[column]
         value = change["value"]
-        if (base.get("compute") or base.get("formula")) and not (
-            value is None or _is_formula(value)
-        ):
+        if base.get("formula") and not (value is None or _is_formula(value)):
             raise ChangeError(
                 f"{cell} is in column '{base.get('header')}', which its formula "
                 'fills; give {"formula": "=..."} to override this one cell'
@@ -656,31 +654,23 @@ def _rebuild(sheet: _Sheet, errors: _Errors) -> tuple[_Built, _Layout]:
     )
     columns: list[dict[str, Any]] = []
     column_map: dict[int, int | None] = {i: None for i in range(base_count)}
-    renamed_headers: dict[str, str] = {}
     fresh_columns: set[int] = set()
     for position, item in enumerate(plan):
         if isinstance(item, int):
             column = dict(sheet.base_columns[item])
             edits = sheet.column_edits.get(item, {})
             for key, value in edits.items():
-                if key == "header" and value:
-                    old = str(column.get("header", "")).strip().casefold()
-                    renamed_headers[old] = str(value)
                 if value is None:
                     column.pop(key, None)
                 else:
                     column[key] = value
-            if edits.get("compute"):
-                column.pop("formula", None)
             if edits.get("formula"):
-                column.pop("compute", None)
                 fresh_columns.add(position)
             column_map[item] = position + 1
         else:
             column = dict(sheet.added_columns[item[1]][1])
             fresh_columns.add(position)
         columns.append(column)
-    _follow_headers(sheet, columns, renamed_headers, errors)
 
     def materialize(values: list[Any] | dict[str, Any]) -> list[Any]:
         """A row sent by this call, in the result's column order."""
@@ -698,7 +688,7 @@ def _rebuild(sheet: _Sheet, errors: _Errors) -> tuple[_Built, _Layout]:
                 by_header.get(str(c.get("header", "")).strip().casefold())
                 for c in columns
             ]
-        holes = [bool(c.get("compute") or c.get("formula")) for c in sheet.base_columns]
+        holes = [bool(c.get("formula")) for c in sheet.base_columns]
         if sum(holes) and len(values) == base_count - sum(holes):
             it = iter(values)
             values = [None if hole else next(it) for hole in holes]
@@ -770,41 +760,6 @@ def _rebuild(sheet: _Sheet, errors: _Errors) -> tuple[_Built, _Layout]:
         fresh_columns=fresh_columns,
     )
     return built, layout
-
-
-def _follow_headers(
-    sheet: _Sheet,
-    columns: list[dict[str, Any]],
-    renamed: dict[str, str],
-    errors: _Errors,
-) -> None:
-    """Compute operands follow renamed headers and may not name a removed column."""
-
-    removed = {
-        str(sheet.base_columns[i].get("header", "")).strip().casefold(): str(
-            sheet.base_columns[i].get("header", "")
-        )
-        for i in sheet.removed_columns
-    }
-    for column in columns:
-        compute = column.get("compute")
-        if not isinstance(compute, dict):
-            continue
-        compute = dict(cast(dict[str, Any], compute))
-        for key in ("left", "right", "column"):
-            operand = compute.get(key)
-            if not isinstance(operand, str):
-                continue
-            folded = operand.strip().casefold()
-            if folded in removed:
-                errors.items.append(
-                    f"column '{removed[folded]}' of sheet '{sheet.name}' is used by "
-                    f"the computed column '{column.get('header')}'; remove or edit "
-                    "that column in the same changes"
-                )
-            elif folded in renamed:
-                compute[key] = renamed[folded]
-        column["compute"] = compute
 
 
 # --- formulas follow the changes -----------------------------------------------------
