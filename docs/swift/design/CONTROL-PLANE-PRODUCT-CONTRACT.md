@@ -5198,7 +5198,8 @@ their own data. `PresetDef.platform_admin_only` is removed.
 **Presets.** Section presets return `PeriodValue {current, previous}`
 (`null` = no data) and `previous_since`: `analytics_overview`,
 `analytics_activity_over_time` (`{bucket, series, points: [{start,
-values}]}`, `start` in `tz`), `analytics_adoption`, `analytics_usage`,
+values}]}`, `start` in `tz`; values include `co2e_grams` and `kwh` for the
+trend dialog), `analytics_adoption`, `analytics_usage`,
 `analytics_teams`, `analytics_agents` (including `capabilities`, from
 `dims.capability_id` on tool KPIs, RUNTIME §8.122), `analytics_quality_cost`,
 and `analytics_teams_catalog` (`{rows: [{team_id, name, member_count}]}`).

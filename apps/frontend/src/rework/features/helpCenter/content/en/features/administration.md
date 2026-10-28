@@ -114,7 +114,9 @@ Its tabs: **Overview**, **Adoption** (who has access, who comes, who sends
 messages, and whether newcomers come back), **Usage**, **Teams**, **Agents and
 tools**, **Quality and cost** (failed answers, tokens, estimated cost in euros
 and footprint) and **Technical** (storage, web research, instructions length).
-Each indicator has a short explanation behind its info icon.
+Each indicator has a short explanation behind its info icon. Conversations,
+messages, cost, tokens, footprint, visitors and active users also have a chart
+icon that shows how they evolved over the period.
 
 **Scope** narrows the page to a few teams, or comes back to **Whole platform**.
 Some figures are not attached to a team and say so when teams are selected.

@@ -126,7 +126,9 @@ envoie des messages, et si les nouveaux reviennent), **Usage**, **Équipes**,
 **Agents et outils**, **Qualité et coût** (réponses en échec, tokens, coût
 estimé en euros et empreinte) et **Technique** (stockage, recherche web,
 longueur des instructions). Chaque indicateur a une courte explication
-derrière son icône d'information.
+derrière son icône d'information. Les conversations, messages, coût, tokens,
+empreinte, visiteurs et utilisateurs actifs ont aussi une icône de courbe qui
+montre leur évolution sur la période.
 
 **Périmètre** limite la page à quelques équipes, ou revient à **Toute la
 plateforme**. Certains chiffres ne sont pas rattachés à une équipe et
