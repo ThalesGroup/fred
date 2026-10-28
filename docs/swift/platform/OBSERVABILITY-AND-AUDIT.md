@@ -372,11 +372,14 @@ instructions. Capture retains the existing serialization limits and remains a
 LangChain model input view; provider-specific wire normalization is outside it.
 Trace preparation time remains excluded from model-call latency diagnostics.
 
-For Deep turns, the root agent observation includes the canonical `question`
-and the actual `pinned_skills` submitted to the graph in its input, with the
-same list in metadata. An empty selection or resume reports `[]`. These names
-describe the submitted selection, not successful loading, and are exported
-only when content capture is enabled. ReAct keeps its existing input shape.
+For Deep turns, the root agent observation input includes the actual `messages`
+and `pinned_skills` submitted to the graph. The selection is not added to trace
+metadata or the model's request: native middleware consumes it and appends the
+skill instructions as conversation messages before inference. A resume submits
+no new messages or selections, so both lists are empty; restored context is
+visible in the model observation. These names describe the submitted selection,
+not successful loading, and are exported only when content capture is enabled.
+ReAct keeps its existing input shape.
 
 Why this is bounded rather than a hole in the rule:
 

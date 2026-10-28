@@ -96,7 +96,10 @@ from fred_runtime.runtime_support.run_scope import (
     complete_cleanup,
     terminal_stop_event,
 )
-from fred_runtime.runtime_support.trace_payloads import to_langfuse_usage
+from fred_runtime.runtime_support.trace_payloads import (
+    serialize_model_request,
+    to_langfuse_usage,
+)
 from fred_runtime.skills.catalog import PlatformSkills, build_skills_middleware
 from fred_runtime.support.thinking import content_to_text
 
@@ -227,39 +230,35 @@ def _trace_input_payload(
     """
     Render the turn's input for the trace-level `input` of a tracing backend.
 
-    A turn's transcript can be long, but what identifies the turn in a trace
-    list is the message that opened it — so a single trailing user message
-    collapses to its bare text, and anything else keeps the full role/content
-    list.
-
-    Deep supplies its graph input to include submitted skill names, without
-    claiming that their instructions loaded successfully.
+    Deep mirrors submitted messages and skill names, without claiming that
+    instructions loaded successfully. Resume submits no new messages. ReAct
+    retains its canonical question or role/content list.
 
     Only ever called behind `tracer.captures_content` — this is content in the
     sense of `OBSERVABILITY-AND-AUDIT.md` §7.
     """
 
+    if deep_graph_input is not None:
+        update = cast(
+            dict[str, object],
+            deep_graph_input.update
+            if isinstance(deep_graph_input, Command)
+            else deep_graph_input,
+        )
+        pins = cast(Overwrite, update["pinned_skills"])
+        submitted_messages = cast(Sequence[BaseMessage], update.get("messages", ()))
+        return {
+            "messages": serialize_model_request(submitted_messages),
+            "pinned_skills": list(pins.value),
+        }
     messages = list(input_model.messages)
-    question: object
     if not messages:
-        question = ""
-    elif messages[-1].role == ReActMessageRole.USER:
-        question = messages[-1].content
-    else:
-        question = [
-            {"role": message.role.value, "content": message.content}
-            for message in messages
-        ]
-    if deep_graph_input is None:
-        return question
-    update = (
-        deep_graph_input.update
-        if isinstance(deep_graph_input, Command)
-        else deep_graph_input
-    )
-    # Report the submitted names, not whether native skill loading succeeded.
-    pins = cast(dict[str, Overwrite], update)["pinned_skills"]
-    return {"question": question, "pinned_skills": list(pins.value)}
+        return ""
+    if messages[-1].role == ReActMessageRole.USER:
+        return messages[-1].content
+    return [
+        {"role": message.role.value, "content": message.content} for message in messages
+    ]
 
 
 def _graph_input(
@@ -447,12 +446,11 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 and self._services.tracer is not None
             ):
                 if self._services.tracer.captures_content:
-                    payload = cast(
-                        dict[str, object],
-                        _trace_input_payload(input_model, deep_graph_input=graph_input),
+                    span.set_io(
+                        input=_trace_input_payload(
+                            input_model, deep_graph_input=graph_input
+                        )
                     )
-                    span.set_io(input=payload)
-                    span.set_attribute("pinned_skills", payload["pinned_skills"])
             result = await self._compiled_agent.ainvoke(
                 graph_input,
                 config=_to_runnable_config(config),
@@ -738,12 +736,11 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 and self._services.tracer is not None
             ):
                 if self._services.tracer.captures_content:
-                    payload = cast(
-                        dict[str, object],
-                        _trace_input_payload(input_model, deep_graph_input=graph_input),
+                    span.set_io(
+                        input=_trace_input_payload(
+                            input_model, deep_graph_input=graph_input
+                        )
                     )
-                    span.set_io(input=payload)
-                    span.set_attribute("pinned_skills", payload["pinned_skills"])
             for event in preload:
                 yield event.model_copy(update={"sequence": sequence})
                 sequence += 1

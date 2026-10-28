@@ -1,6 +1,6 @@
 # Copyright Thales 2026
 # Licensed under the Apache License, Version 2.0.
-"""Root trace inputs preserve the question and Deep's actual graph selections."""
+"""Root trace inputs preserve Deep's submitted messages and skill selections."""
 
 import json
 from collections.abc import AsyncIterator, Mapping
@@ -12,8 +12,10 @@ import pytest
 from fred_runtime.integrations.v2_runtime.adapters import LangfuseTracerAdapter
 from fred_runtime.react import react_runtime
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
+from fred_runtime.runtime_support.trace_payloads import serialize_model_request
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
+    ConversationTurn,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
@@ -104,7 +106,14 @@ async def test_root_trace_input_matches_graph_selections(
     builder.add_edge(START, "answer")
     builder.add_edge("answer", END)
     graph = builder.compile(checkpointer=InMemorySaver())
-    config = ExecutionConfig(session_id="trace-input")
+    config = ExecutionConfig(
+        session_id="trace-input",
+        invocation_turns=(
+            ConversationTurn(
+                user_message="Context question", agent_response="Context answer"
+            ),
+        ),
+    )
     if resume:
         graph_config: RunnableConfig = {
             "configurable": {"thread_id": config.session_id}
@@ -149,6 +158,8 @@ async def test_root_trace_input_matches_graph_selections(
     )
     payload = Mock(wraps=react_runtime._trace_input_payload)
     monkeypatch.setattr(react_runtime, "_trace_input_payload", payload)
+    serialize = Mock(wraps=serialize_model_request)
+    monkeypatch.setattr(react_runtime, "serialize_model_request", serialize)
     input_model = ReActInput(
         messages=(
             ReActMessage(role=ReActMessageRole.USER, content="earlier question"),
@@ -179,14 +190,29 @@ async def test_root_trace_input_matches_graph_selections(
         **client.start_kwargs[0]["metadata"],
         **update_payload.get("metadata", {}),
     }
+    assert "pinned_skills" not in metadata
     if capture:
         if deep:
             raw_input = recording_graph.inputs[0]
             update = raw_input.update if isinstance(raw_input, Command) else raw_input
             pins = cast(dict[str, Overwrite], update)["pinned_skills"].value
-            expected = {"question": "canonical question", "pinned_skills": pins}
+            messages = cast(dict[str, list[BaseMessage]], update).get("messages", [])
+            expected = {
+                "messages": serialize_model_request(messages),
+                "pinned_skills": pins,
+            }
             assert update_payload["input"] == expected
-            assert metadata["pinned_skills"] == observed[0] == pins
+            assert pins == observed[0]
+            if resume:
+                assert expected == {"messages": [], "pinned_skills": []}
+            else:
+                assert messages[0].type == "system"
+                assert "Context question" in str(messages[0].content)
+                assert [m.content for m in messages[1:]] == [
+                    "earlier question",
+                    "earlier answer",
+                    "canonical question",
+                ]
             assert (
                 json.loads(observation._otel_span.attributes["langfuse.trace.input"])
                 == expected
@@ -205,3 +231,4 @@ async def test_root_trace_input_matches_graph_selections(
         assert "langfuse.trace.input" not in observation._otel_span.attributes
         payload.assert_not_called()
     assert observation.ended
+    assert serialize.call_count == int(capture and deep)
