@@ -3,11 +3,21 @@
 
 import { useLayoutEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Annotation, Compartment, EditorState, StateEffect, StateField, Transaction, Prec } from "@codemirror/state";
+import {
+  Annotation,
+  Compartment,
+  EditorState,
+  StateEffect,
+  StateField,
+  Transaction,
+  Prec,
+  type ChangeDesc,
+} from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap, invertedEffects } from "@codemirror/commands";
 import { Decoration, EditorView, keymap, WidgetType } from "@codemirror/view";
 import type { CommandChoice, CommandKeyEvent, CommandTriggerBinding, DraftEdit } from "./RichInputField";
 import { skillPresentation, skillTooltip } from "@rework/utils/skillPresentation";
+import { isCommandTokenAt } from "@rework/utils/skillInvocation";
 import badgeStyles from "../SkillBadge/SkillBadge.module.css";
 import iconStyles from "../../atoms/Icon/Icon.module.scss";
 import styles from "./InlineSkillInput.module.css";
@@ -149,15 +159,29 @@ function deleteToken(view: EditorView, tokens: readonly TokenRange[], forward: b
   return true;
 }
 
-const rememberChoices = StateEffect.define<readonly CommandChoice[]>({
-  map: (choices, changes) =>
-    choices.map((choice) => ({ ...choice, from: changes.mapPos(choice.from), to: changes.mapPos(choice.to) })),
-});
+function mapChoices(choices: readonly CommandChoice[], changes: ChangeDesc): CommandChoice[] {
+  return choices.flatMap((choice) => {
+    const from = changes.mapPos(choice.from, 1);
+    const to = changes.mapPos(choice.to, -1);
+    return to > from ? [{ ...choice, from, to }] : [];
+  });
+}
+
+const rememberChoices = StateEffect.define<readonly CommandChoice[]>({ map: mapChoices });
 const choiceHistory = StateField.define<readonly CommandChoice[]>({
   create: () => [],
   update: (choices, transaction) => {
+    // A second editor transaction may precede the controlled parent's render.
+    // History snapshots must already refer to that transaction's document.
+    if (transaction.docChanged) choices = mapChoices(choices, transaction.changes);
     for (const effect of transaction.effects) if (effect.is(rememberChoices)) choices = effect.value;
-    return choices;
+    const text = transaction.newDoc.toString();
+    // The parent keeps choices while clearing/restoring a rejected draft.
+    // Remember only identities belonging to the current text, never old offsets.
+    return choices.filter(
+      (choice) =>
+        choice.to === choice.from + choice.name.length + 1 && isCommandTokenAt(text, choice.from, choice.name),
+    );
   },
 });
 

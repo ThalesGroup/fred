@@ -235,6 +235,14 @@ export function useComposerCommands(params: {
   // reporting is keyed on the callback it was handed.
   const paramsRef = useRef(params);
   paramsRef.current = params;
+  const updateDraft = useCallback((value: string, nextChoices: Choice[]) => {
+    // CodeMirror may report another edit or submit before React renders.
+    // Publish matching text and identities together for those callbacks.
+    choicesRef.current = nextChoices;
+    paramsRef.current = { ...paramsRef.current, input: value };
+    setChoices(nextChoices);
+    paramsRef.current.setInput(value);
+  }, []);
 
   // Its own endpoint rather than a filter over the prompt listing: that listing
   // is capped, and a command past the cap would resolve to nothing — silently,
@@ -398,10 +406,9 @@ export function useComposerCommands(params: {
       const edits = pendingEditsRef.current;
       pendingEditsRef.current = null;
       const mapped = mapChoices(value, edits);
-      setChoices(restored ? [...restored] : mapped);
-      paramsRef.current.setInput(value);
+      updateDraft(value, restored ? [...restored] : mapped);
     },
-    [mapChoices],
+    [mapChoices, updateDraft],
   );
   const skillEntries = useMemo<CommandMenuEntry[]>(
     () =>
@@ -573,14 +580,13 @@ export function useComposerCommands(params: {
           ? { kind: "prompt", promptId: entry.promptId, promptTeamId: entry.promptTeamId }
           : { kind: "skill" }),
       };
-      setChoices([...preserved, choice]);
-      paramsRef.current.setInput(value);
+      updateDraft(value, [...preserved, choice]);
       setSelectionRequest((previous) => ({
         id: (previous?.id ?? 0) + 1,
         caret: range.start + token.length + (separator.length || (/^\s/.test(trailing) ? 1 : 0)),
       }));
     },
-    [mapChoices],
+    [mapChoices, updateDraft],
   );
 
   type PromptEntry = Extract<CommandMenuEntry, { kind: "prompt" }>;

@@ -2331,6 +2331,56 @@ describe("several prompt commands in one message", () => {
     expect(onRunCommand.mock.calls[0][0]).not.toHaveProperty("skills");
   });
 
+  it.each([0, 2])(
+    "keeps a picked prompt's identity through consecutive edits before rendering (second edit at %i)",
+    async (secondAt) => {
+      mount([{ ...TONE, prompt_id: "p-review", command: "review", name: "Review prompt" }], ["review"]);
+      cmAppend("/rev");
+      cmPress("Tab");
+      cmAppend("Notes");
+      expect(latest().selectedPrompts.map((prompt) => prompt.promptId)).toEqual(["p-review"]);
+      act(() => cm().dispatch({ selection: { anchor: 0 } }));
+      act(() => {
+        cm().dispatch({ changes: { from: 0, insert: "a " }, userEvent: "input.type" });
+        cm().dispatch({ changes: { from: secondAt, insert: "b " }, userEvent: "input.type" });
+      });
+      const draft = `${secondAt === 0 ? "b a" : "a b"} /review Notes`;
+      expect(cm().state.doc.toString()).toBe(draft);
+      expect(latest().selectedPrompts.map((prompt) => [prompt.promptId, prompt.from])).toEqual([["p-review", 4]]);
+      expect(latest().selectedSkills).toEqual([]);
+      await submit();
+      expect(onRunCommand.mock.calls[0][0].command).toMatchObject({
+        prompt_id: "p-review",
+        draft_text: draft,
+        draft_command_offset: 4,
+      });
+      expect(onRunCommand.mock.calls[0][0]).not.toHaveProperty("skills");
+      expect(onRunSkill).not.toHaveBeenCalled();
+      act(() => undo(cm()));
+      expect(latest().selectedPrompts.map((prompt) => [prompt.promptId, prompt.from])).toEqual([["p-review", 0]]);
+      act(() => redo(cm()));
+      expect(latest().selectedPrompts.map((prompt) => [prompt.promptId, prompt.from])).toEqual([["p-review", 4]]);
+    },
+  );
+
+  it("submits the latest draft and prompt identity before the controlled parent renders", async () => {
+    mount([{ ...TONE, prompt_id: "p-review", command: "review", name: "Review prompt" }], ["review"]);
+    cmAppend("/rev");
+    cmPress("Tab");
+    cmAppend("Notes");
+    await act(async () => {
+      cm().dispatch({ changes: { from: 0, insert: "a " }, userEvent: "input.type" });
+      cm().dispatch({ changes: { from: 0, insert: "b " }, userEvent: "input.type" });
+      latest().submit();
+    });
+    expect(onRunCommand.mock.calls[0][0].command).toMatchObject({
+      prompt_id: "p-review",
+      draft_text: "b a /review Notes",
+      draft_command_offset: 4,
+    });
+    expect(onRunSkill).not.toHaveBeenCalled();
+  });
+
   it("keeps hand-typed tokens while the text around them is edited", () => {
     mount();
     cmAppend("/summary and /tone now");
