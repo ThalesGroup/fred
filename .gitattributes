@@ -1,0 +1,5 @@
+# Generated RTK Query clients: collapsed in GitHub diffs, regenerate rather than edit.
+apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts linguist-generated=true
+apps/frontend/src/slices/knowledgeFlow/knowledgeFlowOpenApi.ts linguist-generated=true
+apps/frontend/src/slices/runtime/runtimeOpenApi.ts linguist-generated=true
+apps/frontend/src/rework/features/capabilities/*/api/*CapabilityOpenApi.ts linguist-generated=true
