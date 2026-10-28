@@ -30,7 +30,7 @@ class LiteMarkdownOptions:
     - page_range: zero- or one-based inclusive page selection depending on format
     - max_chars: hard cap of output size (post-assembly)
     - normalize_whitespace: collapse multiple spaces/newlines
-    - add_page_headings: add '## Page N' markers (PDF only)
+    - add_page_headings: add '## Page N' (PDF) or '## Slide N' (PPTX) markers
     - return_per_page: include per-page payloads when applicable
     - trim_empty_lines: remove leading/trailing blank lines per block
     """
