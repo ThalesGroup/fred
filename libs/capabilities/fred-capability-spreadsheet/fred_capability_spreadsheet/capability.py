@@ -27,7 +27,7 @@ import json
 import logging
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -153,6 +153,9 @@ class SpreadsheetPreviewPart(BaseModel):
     file_name: str
     xlsx_download_url: str
     preview_url: str
+    # Versions of one workbook share an id; the chat marks the highest as latest.
+    workbook_id: str | None = None
+    version: int | None = None
 
 
 @dataclass(frozen=True)
@@ -197,7 +200,9 @@ async def _preview_part(
     preview: bytes | None,
     path: str,
     published: PublishedArtifact,
-    base_name: str,
+    visible_name: str,
+    workbook_id: str,
+    version: int,
 ) -> UiPart | None:
     """Store the preview beside the file; None falls back to the download chip."""
 
@@ -208,7 +213,7 @@ async def _preview_part(
             path.removesuffix(".xlsx") + ".preview.json",
             preview,
             content_type=PREVIEW_CONTENT_TYPE,
-            title=f"{base_name}.preview.json",
+            title=f"{visible_name}.preview.json",
         )
     except Exception:
         logger.warning(
@@ -219,9 +224,11 @@ async def _preview_part(
         return None
     part = SpreadsheetPreviewPart(
         preview_id=published.key,
-        file_name=f"{base_name}.xlsx",
+        file_name=f"{visible_name}.xlsx",
         xlsx_download_url=published.href,
         preview_url=stored.href,
+        workbook_id=workbook_id,
+        version=version,
     )
     # Capability parts join the runtime UiPart union at registry boot.
     return cast(UiPart, part)
@@ -410,9 +417,13 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
         finally:
             _active_builds -= 1
 
-        output_file_name = f"{base_name}.xlsx"
+        lineage = base if same_workbook else None
+        workbook_id = lineage.workbook_id if lineage else uuid.uuid4().hex[:12]
+        version = lineage.version + 1 if lineage else 1
+        visible_name = base_name if version == 1 else f"{base_name}-v{version}"
+        output_file_name = f"{visible_name}.xlsx"
         folder = f"spreadsheets/{session_id}" if session_id else "spreadsheets"
-        path = f"{folder}/{base_name}-{uuid.uuid4().hex[:8]}.xlsx"
+        path = f"{folder}/{visible_name}-{uuid.uuid4().hex[:8]}.xlsx"
         try:
             published = await workspace.write(
                 path,
@@ -428,7 +439,13 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
             )
 
         part = await _preview_part(
-            workspace, outputs.preview, path, published, base_name
+            workspace,
+            outputs.preview,
+            path,
+            published,
+            visible_name,
+            workbook_id,
+            version,
         )
         if part is None:
             part = LinkPart(
@@ -442,8 +459,7 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
         revisable = await _remember(
             turn,
             request,
-            base if same_workbook else None,
-            base_name,
+            StoredWorkbook(workbook_id, version, base_name, ""),
             cast(str, session_id) if durable else None,
             cast(str, instance_id) if durable else None,
         )
@@ -486,20 +502,14 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
 async def _remember(
     turn: _TurnState,
     request: CreateSpreadsheetInput,
-    lineage: StoredWorkbook | None,
-    base_name: str,
+    delivered: StoredWorkbook,
     session_id: str | None,
     instance_id: str | None,
 ) -> bool:
     """Keep the delivered request as the next base; False when too large to keep."""
 
     spec_json = json.dumps(request_spec(request), ensure_ascii=False)
-    workbook = StoredWorkbook(
-        workbook_id=lineage.workbook_id if lineage else uuid.uuid4().hex[:12],
-        version=lineage.version + 1 if lineage else 1,
-        file_name=base_name,
-        spec_json=spec_json,
-    )
+    workbook = replace(delivered, spec_json=spec_json)
     too_large = len(spec_json.encode()) > MAX_STORED_SPEC_BYTES
     turn.base = None if too_large else workbook
     turn.too_large = too_large

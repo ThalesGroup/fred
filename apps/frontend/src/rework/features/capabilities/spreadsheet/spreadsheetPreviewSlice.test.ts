@@ -52,6 +52,17 @@ describe("spreadsheetPreviewSlice", () => {
       openSpreadsheet({ sessionId: "s-1", preview: file("a") }),
       registerSpreadsheet({ sessionId: "s-2", preview: file("c") }),
     );
-    expect(state).toEqual({ sessionId: "s-2", current: file("c") });
+    expect(state).toEqual({ sessionId: "s-2", current: file("c"), latest: {} });
+  });
+
+  it("tracks the highest version of each workbook, live or replayed in any order", () => {
+    const version = (id: string, n: number) => ({ ...file(id), workbook_id: "w1", version: n });
+    const state = reduce(
+      registerSpreadsheet({ sessionId: "s-1", preview: version("b", 2) }),
+      registerSpreadsheet({ sessionId: "s-1", preview: version("a", 1) }),
+      openSpreadsheet({ sessionId: "s-1", preview: version("c", 3) }),
+    );
+    expect(state.latest).toEqual({ w1: 3 });
+    expect(reducer(state, registerSpreadsheet({ sessionId: "s-2", preview: file("x") })).latest).toEqual({});
   });
 });

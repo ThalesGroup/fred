@@ -288,7 +288,9 @@
       "moreRows_other": "{{formatted}} more rows are not shown. Download the file to see them all.",
       "card": {
         "aria": "Excel file",
-        "open": "Preview"
+        "open": "Preview",
+        "latest": "Latest version",
+        "version": "Version {{version}}"
       }
     },
     "html_artifact": {

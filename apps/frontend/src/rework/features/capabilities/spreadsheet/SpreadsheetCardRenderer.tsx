@@ -17,15 +17,16 @@
 // launcher); a card created live, not replayed from history, opens the pane once.
 
 import { useEffect } from "react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import Button from "@shared/atoms/Button/Button";
+import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge";
 import { requestSidePanelOpen } from "../sidePanelOpenRequestSlice";
 import { useMountSessionId } from "../useOpenSessionId";
 import type { UiPartRendererProps } from "../types";
 import { CAPABILITY_ID, PANE_WIDGET, type SpreadsheetPreviewPartData } from "./types";
-import { openSpreadsheet, registerSpreadsheet } from "./spreadsheetPreviewSlice";
+import { openSpreadsheet, registerSpreadsheet, selectLatestVersion } from "./spreadsheetPreviewSlice";
 import SpreadsheetDownloadButton from "./SpreadsheetDownloadButton";
 import styles from "./SpreadsheetCardRenderer.module.css";
 
@@ -40,6 +41,10 @@ export function SpreadsheetCardRenderer({ part }: UiPartRendererProps) {
   const dispatch = useDispatch();
   const sessionId = useMountSessionId();
   const preview = part as unknown as SpreadsheetPreviewPartData;
+  const latest = useSelector((state: Parameters<typeof selectLatestVersion>[0]) =>
+    selectLatestVersion(state, preview.workbook_id),
+  );
+  const isLatest = !!preview.version && preview.version === latest;
 
   const openPane = () => {
     dispatch(openSpreadsheet({ sessionId, preview }));
@@ -67,6 +72,18 @@ export function SpreadsheetCardRenderer({ part }: UiPartRendererProps) {
         </span>
         <SpreadsheetDownloadButton href={preview.xlsx_download_url} fileName={preview.file_name} />
       </div>
+      {preview.version && latest && latest > 1 ? (
+        <div>
+          <StatusBadge
+            tone={isLatest ? "info" : "neutral"}
+            label={
+              isLatest
+                ? t("capability.spreadsheet.card.latest")
+                : t("capability.spreadsheet.card.version", { version: preview.version })
+            }
+          />
+        </div>
+      ) : null}
       <div>
         <Button
           color="primary"

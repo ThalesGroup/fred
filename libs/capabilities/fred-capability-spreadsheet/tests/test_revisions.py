@@ -478,3 +478,27 @@ async def test_graph_assembled_tool_takes_changes_through_a_tool_call(store):
     )
     assert message.artifact.is_error is False, message.content
     assert message.artifact.ui_parts[0].type == "spreadsheet_preview"
+
+
+@pytest.mark.asyncio
+async def test_versions_are_named_and_carried_on_the_card(store):
+    del store
+    workspace = FakeWorkspace()
+    tool = _tool(workspace)
+    _, first = await tool(**BUDGET)
+    text, second = await tool(changes=[{"op": "remove_sheet", "sheet": "Synthèse"}])
+    third_text, third = await tool(**{**BUDGET, "language": "en"})
+    parts = [first.ui_parts[0], second.ui_parts[0], third.ui_parts[0]]
+    assert [p.file_name for p in parts] == [
+        "Budget.xlsx",
+        "Budget-v2.xlsx",
+        "Budget-v3.xlsx",
+    ]
+    assert [p.version for p in parts] == [1, 2, 3]
+    assert len({p.workbook_id for p in parts}) == 1
+    assert "'Budget-v2.xlsx'" in text and "'Budget-v3.xlsx'" in third_text
+    # Another file name starts another workbook at version 1.
+    _, other = await tool(**{**BUDGET, "file_name": "Ventes"})
+    assert other.ui_parts[0].version == 1
+    assert other.ui_parts[0].workbook_id != parts[0].workbook_id
+    assert any("/Budget-v2-" in w[0] for w in workspace.writes)
