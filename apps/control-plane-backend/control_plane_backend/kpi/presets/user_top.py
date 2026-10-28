@@ -19,7 +19,7 @@ user's own turns (`dims.user_id`) — self_scoped, so the router skips OpenFGA
 (same contract as the other `user_*` presets):
 
   - user_top_agents — the agents the user used most (ranked by turn count, the
-    same proxy the platform `top_agents_by_conversations` preset uses). Each row
+    same proxy the `analytics_agents` preset uses). Each row
     carries the agent's display name and origin team, both read from the latest
     matching event via a top_hits sub-agg (deleted-instance safety net — the
     name/team were persisted at emit time), so no agent-store lookup is needed.

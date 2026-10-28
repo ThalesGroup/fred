@@ -27,7 +27,7 @@ events (`dims.user_id`) — no team scoping, no OpenFGA check (the router's
 absolute change vs the immediately preceding equal-length window
 [since - (until - since), since]. The frontend turns that into the ▲/▼ % chip
 (prev = value - delta), which keeps every ScalarWithDeltaResponse preset on the
-same "value + absolute net change" contract as agents_total / documents_total.
+same "value + absolute net change" contract as agents_total.
 
 Both underlying events already carry `dims.user_id` (the KPI writer folds the
 actor in — see kpi_writer.py), so these are pure reads: no emitter change, no

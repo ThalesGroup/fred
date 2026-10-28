@@ -27,23 +27,21 @@ class PresetDef:
     handler: Callable[..., Coroutine[Any, Any, BaseModel]]
     summary: str
     # True only when the underlying KPI event carries a `dims.team_id` (or an
-    # equivalent team-scoped store lookup exists) — set case by case, never
-    # assumed. A preset whose source event has no team_id (e.g. the generic
-    # HTTP middleware's `api.request_latency_ms`, by design — see
-    # `KPI-ANALYTICS-RFC.md` §2.2) or that is inherently cross-team (e.g.
-    # `top_teams_by_sessions`) stays False; the router (`api.py`) rejects a
-    # `team_id` query param for it with 400 rather than silently ignoring it.
+    # equivalent team-scoped store lookup exists) - set case by case, never
+    # assumed. Otherwise the router rejects `team_ids` with 400 rather than
+    # silently returning platform-wide data.
     team_scopable: bool = False
-    # True only for the platform-wide admin section's presets (§2.4 —
-    # `storage_by_team` at org scope): the router requires `can_manage_platform`
-    # instead of the usual `can_observe_platform` when `team_id` is None. Never
-    # affects the team-scoped check (`can_read_members`), which applies
-    # uniformly regardless of this flag.
-    platform_admin_only: bool = False
     # True only for the personal presets (§2.4 "Personal presets (Page 3)"):
     # the handler itself filters `WHERE dims.user_id = requesting_user.uid`,
     # so no OpenFGA check applies — any authenticated user may call it. Must
-    # never be combined with `team_scopable=True`: the router rejects a
-    # `team_id` query param for these the same way it does for any other
+    # never be combined with `team_scopable=True`: the router rejects
+    # `team_ids` for these the same way it does for any other
     # preset that isn't `team_scopable`.
     self_scoped: bool = False
+    # Over-time presets: the router passes `bucket` (calendar unit, `auto` from
+    # the period length) and `tz`. `zoned` passes only `tz`, for day-based maths.
+    bucketable: bool = False
+    zoned: bool = False
+    # The router passes `user_ids` (platform user filter) and the handler MUST
+    # apply `user_filter()` to every search; otherwise the router rejects one.
+    user_filterable: bool = False

@@ -16,15 +16,29 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fred_core import KeycloakUser, get_current_user
+from fred_core import (
+    ORGANIZATION_ID,
+    KeycloakUser,
+    OrganizationPermission,
+    get_current_user,
+)
 from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.app.dependencies import get_application_container
+from control_plane_backend.kpi.export import add_export_route
 from control_plane_backend.kpi.presets import PRESETS
 from control_plane_backend.kpi.scope import resolve_kpi_scope
+from control_plane_backend.kpi.user_filter import (
+    UserFilterParam,
+    UserFilterSummary,
+    parse_user_filter,
+    user_filter_summary,
+)
+from control_plane_backend.kpi.utils import Bucket
 
 
 def get_kpi_store(request: Request) -> OpenSearchKPIStore:
@@ -51,32 +65,45 @@ def build_kpi_router() -> APIRouter:
                     default=None,
                     description="End of the time range (ISO 8601 datetime). Defaults to now.",
                 ),
-                team_id: TeamId | None = Query(
-                    default=None,
+                team_ids: list[TeamId] = Query(
+                    default_factory=list,
                     description=(
-                        "Scope the query to one team instead of the whole platform. "
-                        "Requires can_read_members on that team. Only accepted for "
-                        "presets whose underlying data actually carries a team "
-                        "dimension — others reject it with 400."
+                        "Scope the query to these teams instead of the whole platform "
+                        "(repeat the parameter). Platform observers may pass any teams; "
+                        "others need can_read_members on each. Rejected with 400 for "
+                        "presets whose data carries no team dimension."
                     ),
                 ),
+                bucket: Bucket = Query(
+                    default="auto",
+                    description="Calendar bucket of over-time presets; auto follows the period length.",
+                ),
+                tz: str = Query(
+                    default="Europe/Paris",
+                    description="IANA time zone of calendar buckets and days (over-time presets).",
+                ),
+                user_filter: UserFilterParam = None,
                 user: KeycloakUser = Depends(get_current_user),
                 store: OpenSearchKPIStore = Depends(get_kpi_store),
             ):
-                if team_id is not None and not p.team_scopable:
+                if team_ids and not p.team_scopable:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"preset {p.name!r} does not support team_id scoping",
+                        detail=f"preset {p.name!r} does not support team_ids scoping",
                     )
-                # Single authorization chokepoint for every preset (§2.3/§2.4,
-                # KPI-ANALYTICS-RFC.md v3) — handlers never check permissions
-                # themselves.
+                parsed_filter = parse_user_filter(user_filter)
+                if parsed_filter is not None and not p.user_filterable:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"preset {p.name!r} does not support user_filter",
+                    )
+                # Single authorization chokepoint: handlers never check permissions.
                 scope = await resolve_kpi_scope(
                     request,
                     user,
-                    team_id,
-                    platform_admin_only=p.platform_admin_only,
+                    team_ids,
                     self_scoped=p.self_scoped,
+                    user_filter=parsed_filter,
                 )
 
                 now = datetime.now(tz=timezone.utc)
@@ -89,7 +116,19 @@ def build_kpi_router() -> APIRouter:
                     request=request,
                 )
                 if p.team_scopable:
-                    kwargs["team_id"] = scope.team_id
+                    kwargs["team_ids"] = scope.team_ids
+                if p.user_filterable:
+                    kwargs["user_ids"] = scope.user_ids
+                if p.bucketable or p.zoned:
+                    try:
+                        ZoneInfo(tz)
+                    except (ZoneInfoNotFoundError, ValueError, OSError):
+                        raise HTTPException(
+                            status_code=400, detail=f"unknown time zone {tz!r}"
+                        ) from None
+                    kwargs["tz"] = tz
+                if p.bucketable:
+                    kwargs["bucket"] = bucket
                 return await p.handler(store, **kwargs)
 
             return handler
@@ -103,4 +142,21 @@ def build_kpi_router() -> APIRouter:
             response_model_exclude_none=True,
         )
 
+    @router.get(
+        "/user-filter",
+        response_model=UserFilterSummary,
+        summary="Account attribute paths a user filter can use, and how many users a filter matches",
+    )
+    async def get_user_filter_summary(
+        request: Request,
+        user_filter: UserFilterParam = None,
+        user: KeycloakUser = Depends(get_current_user),
+    ) -> UserFilterSummary:
+        rebac = get_application_container(request).get_rebac_engine()
+        await rebac.check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID
+        )
+        return await user_filter_summary(parse_user_filter(user_filter))
+
+    add_export_route(router, get_kpi_store)
     return router

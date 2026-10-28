@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from pydantic import AwareDatetime, BaseModel
@@ -54,6 +55,27 @@ BY_AGENT_SCOPE_FILTER: dict[str, Any] = {
 }
 
 
+def team_filter(team_ids: Sequence[str]) -> list[dict[str, Any]]:
+    """The `bool.filter` clause for a team scope; empty for the whole platform."""
+    if not team_ids:
+        return []
+    return [{"terms": {"dims.team_id": [str(t) for t in team_ids]}}]
+
+
+def user_filter(user_ids: Sequence[str] | None) -> list[dict[str, Any]]:
+    """The `bool.filter` clause of a user filter; None = no filter, empty = nobody."""
+    if user_ids is None:
+        return []
+    return [{"terms": {"dims.user_id": list(user_ids)}}]
+
+
+def scope_filter(
+    team_ids: Sequence[str], user_ids: Sequence[str] | None = None
+) -> list[dict[str, Any]]:
+    """Team and user clauses of a KPI query, in one call so neither is forgotten."""
+    return [*team_filter(team_ids), *user_filter(user_ids)]
+
+
 class TimeSeriesPoint(BaseModel):
     date: str  # display-formatted label produced by strftime (e.g. "Jan 15")
     value: float
@@ -61,7 +83,7 @@ class TimeSeriesPoint(BaseModel):
     # every other preset leaves these None. Estimates, not billing-grade.
     co2e_grams: float | None = None
     kwh: float | None = None
-    cost_usd: float | None = None
+    cost_eur: float | None = None
 
 
 class TimeSeriesResponse(BaseModel):
@@ -69,13 +91,6 @@ class TimeSeriesResponse(BaseModel):
     since: AwareDatetime
     until: AwareDatetime
     interval: str
-    # Set only by the trailing-window trend presets (issue #2428) — the window
-    # each point pools before taking its median, in the same compact form as
-    # `interval` ("7d" for 7 daily buckets). None everywhere else, and the
-    # routes serialize with `response_model_exclude_none=True`, so a plain
-    # time-series preset's payload is unchanged on the wire. The frontend
-    # localizes the unit letter rather than hardcoding "7-day".
-    window: str | None = None
 
 
 class ScalarResponse(BaseModel):
@@ -119,7 +134,7 @@ class LabelValuePoint(BaseModel):
     # every other preset leaves these None. Estimates, not billing-grade.
     co2e_grams: float | None = None
     kwh: float | None = None
-    cost_usd: float | None = None
+    cost_eur: float | None = None
 
 
 class LabelValueResponse(BaseModel):
@@ -140,35 +155,6 @@ class SkillUsageResponse(BaseModel):
     since: AwareDatetime
     until: AwareDatetime
     truncated: bool = False
-
-
-class DistributionResponse(BaseModel):
-    """Histogram of a per-entity count, plus the median of the raw counts.
-
-    `rows` always holds every bucket (value 0 when empty) so the chart has no
-    gaps. `median` is None when the range contains no entity at all — an empty
-    distribution, not a zero one.
-    """
-
-    rows: list[LabelValuePoint]
-    median: float | None = None
-    since: AwareDatetime
-    until: AwareDatetime
-
-
-class MultiSeriesPoint(BaseModel):
-    date: str
-    values: dict[str, float]
-
-
-class MultiSeriesTimeSeriesResponse(BaseModel):
-    """Multi-series time-bucketed metric — one named series per tracked entity."""
-
-    rows: list[MultiSeriesPoint]
-    series: list[str]
-    since: AwareDatetime
-    until: AwareDatetime
-    interval: str
 
 
 class TeamStorageRow(BaseModel):
