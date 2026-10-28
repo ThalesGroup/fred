@@ -188,6 +188,44 @@ impl Directory<'_> {
         }
     }
 
+    /// Display summaries of known subjects, in order. A subject the directory no longer
+    /// knows keeps an id-only summary rather than disappearing from governance views.
+    pub async fn summaries(&self, subjects: &[String]) -> AppResult<Vec<UserSummary>> {
+        let known: Vec<UserSummary> = match self {
+            // Governance rosters are a few accounts: one lookup each, in order.
+            Self::Keycloak(Some(directory)) => {
+                let mut found = Vec::with_capacity(subjects.len());
+                for subject in subjects {
+                    found.extend(directory.user(subject).await?);
+                }
+                found
+            }
+            Self::Keycloak(None) => Vec::new(),
+            Self::Local(pool) => {
+                let ids: Vec<Uuid> = subjects.iter().filter_map(|s| s.parse().ok()).collect();
+                sqlx::query_as("select id::text as id, username, email, first_name, last_name, null::text as avatar_image_url from user_identity where id = any($1)")
+                    .bind(&ids)
+                    .fetch_all(*pool)
+                    .await?
+            }
+        };
+        let mut known: std::collections::HashMap<String, UserSummary> =
+            known.into_iter().map(|u| (u.id.clone(), u)).collect();
+        Ok(subjects
+            .iter()
+            .map(|id| {
+                known.remove(id).unwrap_or_else(|| UserSummary {
+                    id: id.clone(),
+                    username: None,
+                    first_name: None,
+                    last_name: None,
+                    email: None,
+                    avatar_image_url: None,
+                })
+            })
+            .collect())
+    }
+
     pub async fn find_username(&self, username: &str) -> AppResult<Option<keycloak::User>> {
         match self {
             Self::Keycloak(Some(directory)) => Ok(directory.find_username(username).await?),

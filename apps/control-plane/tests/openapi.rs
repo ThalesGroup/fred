@@ -131,6 +131,8 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /admin/organizations",
         "get /admin/organizations/candidates",
         "post /admin/organizations",
+        "get /admin/organizations/{id}",
+        "patch /admin/organizations/{id}",
         "post /authorize/platform",
         "post /authorize/space",
         "post /import-export/import",

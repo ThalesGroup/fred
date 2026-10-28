@@ -480,6 +480,16 @@ rechecks caller ownership and validates each distinct nominee's attachment. The
 existing persistence path inserts the row, publishes only Owner/Admin direct roles
 with both guards, audits and commits. Failed publication leaves no committed row;
 orphan tuples on an uncommitted UUID confer no effective attachment or access.
+`GET /admin/organizations/{id}` and `PATCH /admin/organizations/{id}` require the same
+authority and answer the organization with its direct owners and admins as user
+summaries, read with two holder Reads on that organization only; the registry stays
+free of roster reads. `PATCH` takes any of `name`, `owner_username` and
+`admin_username`, validated and resolved as for creation. Under the platform and
+organization locks it rechecks caller ownership and retirement, keeps names unique
+and makes each named account the sole direct holder of its role, checking the new
+holder's attachment. The rename, grants and revocations commit together after one
+guarded Write; a lost acknowledgment can leave the roles applied without the rename,
+and a retry converges. A missing or non-organization id answers 404.
 
 Team creation requires management of the parent organization, project creation
 management of the parent team. The nominated admin must hold a direct content

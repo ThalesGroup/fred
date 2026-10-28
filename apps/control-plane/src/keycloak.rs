@@ -310,8 +310,13 @@ impl Directory {
     }
 
     pub async fn exists(&self, subject: &str) -> Result<bool> {
+        Ok(self.user(subject).await?.is_some())
+    }
+
+    /// One account by subject; `None` when the directory does not know it.
+    pub async fn user(&self, subject: &str) -> Result<Option<crate::users::UserSummary>> {
         if subject.is_empty() {
-            return Ok(false);
+            return Ok(None);
         }
         let mut url = self.users_url.clone();
         url.path_segments_mut()
@@ -319,19 +324,21 @@ impl Directory {
             .push(subject);
         let response = self.request(Method::GET, url, None).await?;
         if response.status() == StatusCode::NOT_FOUND {
-            return Ok(false);
+            return Ok(None);
         }
         if !response.status().is_success() {
             bail!("Keycloak directory lookup rejected ({})", response.status());
         }
-        let user: User = response
+        let raw: serde_json::Value = response
             .json()
             .await
             .map_err(|_| anyhow::anyhow!("invalid Keycloak user response"))?;
+        let user =
+            crate::users::UserSummary::from_raw(&raw).context("invalid Keycloak user response")?;
         if user.id != subject {
             bail!("Keycloak returned a different subject");
         }
-        Ok(true)
+        Ok(Some(user))
     }
 }
 

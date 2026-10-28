@@ -79,6 +79,8 @@ carries the space's `organization_id` from SQL placement.
 | GET | `/control-plane/v1/admin/organizations` | `organization_registry` |
 | POST | `/control-plane/v1/admin/organizations` | `create_organization` |
 | GET | `/control-plane/v1/admin/organizations/candidates` | `search_organization_candidates` |
+| GET | `/control-plane/v1/admin/organizations/{id}` | `get_organization` |
+| PATCH | `/control-plane/v1/admin/organizations/{id}` | `update_organization` |
 | GET | `/control-plane/v1/admin/teams` | `team_registry` |
 | POST | `/control-plane/v1/authorize/document` | `authorize_document` |
 | POST | `/control-plane/v1/authorize/platform` | `authorize_platform` |

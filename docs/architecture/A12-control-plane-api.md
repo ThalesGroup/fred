@@ -30,6 +30,8 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/autho
 | GET | [/admin/organizations](#get-adminorganizations) |  |
 | POST | [/admin/organizations](#post-adminorganizations) |  |
 | GET | [/admin/organizations/candidates](#get-adminorganizationscandidates) |  |
+| GET | [/admin/organizations/{id}](#get-adminorganizationsid) |  |
+| PATCH | [/admin/organizations/{id}](#patch-adminorganizationsid) |  |
 | GET | [/admin/teams](#get-adminteams) |  |
 
 ### GET /admin/organizations
@@ -64,6 +66,30 @@ Operation `search_organization_candidates`.
 
 - 200: array of [`UserSummary`](#usersummary)
 - 400, 401, 403, 422, 500, 503: [`ErrorBody`](#errorbody)
+
+### GET /admin/organizations/{id}
+
+Operation `get_organization`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `id` | path | string (uuid) | yes |  |
+
+- 200: [`OrganizationDetail`](#organizationdetail)
+- 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
+
+### PATCH /admin/organizations/{id}
+
+Operation `update_organization`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `id` | path | string (uuid) | yes |  |
+
+Request: [`UpdateOrganization`](#updateorganization).
+
+- 200: [`OrganizationDetail`](#organizationdetail)
+- 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
 
 ### GET /admin/teams
 
@@ -1786,6 +1812,16 @@ Extends [`Space`](#space) with:
 | `user_id` | string | yes |  |
 | `username` | string | yes |  |
 
+### OrganizationDetail
+
+Governance view of one organization: its direct owners and administrators.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `admins` | array of [`UserSummary`](#usersummary) | yes |  |
+| `organization` | [`Space`](#space) | yes |  |
+| `owners` | array of [`UserSummary`](#usersummary) | yes |  |
+
 ### OrganizationModelInventory
 
 | Field | Type | Required | Description |
@@ -2385,6 +2421,16 @@ Type: [`TuningScalar`](#tuningscalar) or array of [`TuningScalar`](#tuningscalar
 | `status` | [`AgentInstanceStatus`](#agentinstancestatus) or null |  |  |
 | `tuning_field_values` | map of [`TuningValue`](#tuningvalue) or null |  | Omitted keeps values; null/{} clears them; an object replaces known values. |
 | `usage_statement` | string, min length 1 or null |  |  |
+
+### UpdateOrganization
+
+Absent fields stay unchanged. A named account becomes the role's sole direct holder.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `admin_username` | string or null |  |  |
+| `name` | string or null |  |  |
+| `owner_username` | string or null |  |  |
 
 ### UpdateSessionRequest
 
