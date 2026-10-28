@@ -581,15 +581,25 @@ class LangfuseTracerAdapter(TracerPort):
         if parent_span_id is not None:
             trace_context["parent_span_id"] = parent_span_id
         observation_type = _LANGFUSE_OBSERVATION_TYPE_BY_SPAN_NAME.get(name, "span")
-        span = cast(
-            "_LangfuseSpanLike",
-            self._client.start_observation(
+        if isinstance(parent, LangfuseSpanAdapter):
+            # trace_context marks a new application root in the SDK, even
+            # with a parent_span_id. Native child creation preserves the root
+            # that owns the trace's input/output.
+            span = parent._span.start_observation(
                 name=name,
-                as_type=cast(Any, observation_type),
-                trace_context=trace_context,
+                as_type=observation_type,
                 metadata=metadata,
-            ),
-        )
+            )
+        else:
+            span = cast(
+                "_LangfuseSpanLike",
+                self._client.start_observation(
+                    name=name,
+                    as_type=cast(Any, observation_type),
+                    trace_context=trace_context,
+                    metadata=metadata,
+                ),
+            )
         self._apply_trace_attributes(
             span, portable_context=portable_context, span_name=name
         )
@@ -661,6 +671,9 @@ _LANGFUSE_TRACER: TracerPort | None | bool = False
 
 class _LangfuseSpanLike(Protocol):
     id: str
+
+    def start_observation(self, **kwargs: Any) -> _LangfuseSpanLike:
+        ...
 
     # Kept fully open (`**kwargs`) because the adapter flushes a span in one
     # call whose keys depend on what the caller recorded — metadata, input,

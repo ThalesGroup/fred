@@ -381,6 +381,12 @@ visible in the model observation. These names describe the submitted selection,
 not successful loading, and are exported only when content capture is enabled.
 ReAct keeps its existing input shape.
 
+Langfuse child observations are created through their parent observation, not
+through a new client call with explicit trace context. The latter marks another
+application root in the SDK and can replace the trace overview's input with a
+model prompt. Only the turn root owns the overview input/output; generation
+observations retain their actual model messages and tool schemas.
+
 Why this is bounded rather than a hole in the rule:
 
 - **Default-off and structurally enforced.** The switch is exposed as `Tracer.captures_content`

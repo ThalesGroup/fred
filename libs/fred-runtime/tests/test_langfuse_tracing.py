@@ -20,14 +20,20 @@ unless explicitly enabled, because `OBSERVABILITY-AND-AUDIT.md` §7 excludes
 prompts and tool payloads from every observability stream.
 """
 
+import json
 from typing import Any, cast
+from uuid import uuid4
 
+import pytest
 from fred_runtime.integrations.v2_runtime.adapters import (
     LangfuseTracerAdapter,
     langfuse_content_capture_enabled,
     langfuse_max_content_chars,
 )
 from fred_sdk.contracts.context import PortableContext, PortableEnvironment
+from langfuse import Langfuse
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 
 class _FakeOtelSpan:
@@ -39,11 +45,15 @@ class _FakeOtelSpan:
 
 
 class _FakeObservation:
-    def __init__(self) -> None:
+    def __init__(self, client: "_FakeLangfuse") -> None:
+        self._client = client
         self.id = "obs-1"
         self.updates: list[dict[str, Any]] = []
         self.ended = False
         self._otel_span = _FakeOtelSpan()
+
+    def start_observation(self, **kwargs: Any) -> "_FakeObservation":
+        return self._client.start_observation(**kwargs)
 
     def update(self, **kwargs: Any) -> None:
         self.updates.append(kwargs)
@@ -64,7 +74,7 @@ class _FakeLangfuse:
 
     def start_observation(self, **kwargs: Any) -> _FakeObservation:
         self.start_kwargs.append(kwargs)
-        observation = _FakeObservation()
+        observation = _FakeObservation(self)
         self.observations.append(observation)
         return observation
 
@@ -475,6 +485,72 @@ def test_a_child_span_does_not_overwrite_the_trace_row() -> None:
     attributes = fake.observations[1]._otel_span.attributes
     assert "langfuse.trace.input" not in attributes
     assert "langfuse.trace.output" not in attributes
+
+
+@pytest.mark.parametrize("capture", [False, True])
+def test_real_sdk_children_do_not_become_trace_roots(capture: bool) -> None:
+    """Exercise SDK export flags that the fake client cannot validate."""
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    client = Langfuse(
+        public_key=f"pk-lf-offline-{uuid4()}",
+        secret_key="offline-test-secret",
+        tracer_provider=provider,
+        span_exporter=exporter,
+    )
+    tracer = LangfuseTracerAdapter(client, capture_content=capture)
+    graph_input = {
+        "messages": [{"role": "user", "content": "/graph Draw the workflow"}],
+        "pinned_skills": ["graph"],
+    }
+    model_input = {
+        "messages": [
+            *graph_input["messages"],
+            {"role": "user", "content": '<skill name="graph">Instructions</skill>'},
+        ]
+    }
+    try:
+        root = tracer.start_span("agent.stream", context=_context())
+        root.set_io(input=graph_input)
+        other = tracer.start_span(
+            "agent.invoke", context=_context(baggage={"exchange_id": "other-turn"})
+        )
+        child = tracer.start_span("v2.react.model", context=_context(), parent=root)
+        child.set_io(input=model_input, output="diagram")
+        nested = tracer.start_span("tool.invoke", context=_context(), parent=child)
+        nested.set_io(input="reference", output="syntax")
+        nested.end()
+        child.end()
+        other.end()
+        root.end()
+        client.flush()
+        spans = {span.name: span for span in exporter.get_finished_spans()}
+        root_span = spans["agent.stream"]
+        model_span = spans["v2.react.model"]
+        tool_span = spans["tool.invoke"]
+        assert root_span.context is not None
+        assert model_span.context is not None
+        assert model_span.parent is not None
+        assert model_span.parent.span_id == root_span.context.span_id
+        assert tool_span.parent is not None
+        assert tool_span.parent.span_id == model_span.context.span_id
+        assert model_span.context.trace_id == root_span.context.trace_id
+        assert root_span.attributes is not None
+        assert root_span.attributes.get("langfuse.internal.as_root") is True
+        for span in (model_span, tool_span):
+            assert span.attributes is not None
+            assert not span.attributes.get("langfuse.internal.as_root")
+        for span, payload in ((root_span, graph_input), (model_span, model_input)):
+            assert span.attributes is not None
+            if capture:
+                assert (
+                    json.loads(str(span.attributes["langfuse.observation.input"]))
+                    == payload
+                )
+            else:
+                assert "langfuse.observation.input" not in span.attributes
+    finally:
+        client.shutdown()
 
 
 def test_a_failed_flush_still_closes_the_span() -> None:
