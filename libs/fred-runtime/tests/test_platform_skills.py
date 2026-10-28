@@ -1442,6 +1442,92 @@ async def test_skill_preview_reuses_catalog_authorization_and_snapshot(
             assert exc.value.status_code == status
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("disabled", "denied", "source_status", "preview_status"),
+    [
+        pytest.param(False, False, None, None, id="available-agent-only"),
+        pytest.param(True, False, None, 404, id="globally-disabled"),
+        pytest.param(False, True, None, 403, id="unauthorized"),
+        pytest.param(False, False, 404, 404, id="unknown-instance"),
+        pytest.param(False, False, 503, 503, id="unavailable-source"),
+    ],
+)
+async def test_agent_only_skill_preview_retains_selection_and_access_rules(
+    monkeypatch: pytest.MonkeyPatch,
+    disabled: bool,
+    denied: bool,
+    source_status: int | None,
+    preview_status: int | None,
+) -> None:
+    from unittest.mock import AsyncMock
+
+    from fastapi import HTTPException
+    from fred_runtime.app import agent_app
+    from fred_runtime.skills import api
+    from fred_runtime.skills.tools import load_skill
+    from test_history import _PingAgent
+
+    snapshot = PlatformSkills.from_directory("package")
+    definition = _PingAgent()
+    _, attribution = load_skill(
+        snapshot,
+        "data-visualization",
+        origin="agent",
+        load_id="agent-read",
+        agent_id=definition.agent_id,
+    )
+    assert attribution.origin == "agent"
+    monkeypatch.setattr(
+        agent_app,
+        "_authorize_execution_or_raise",
+        AsyncMock(side_effect=HTTPException(status_code=403) if denied else None),
+    )
+    monkeypatch.setattr(
+        agent_app,
+        "_resolve_agent_instance",
+        AsyncMock(
+            side_effect=HTTPException(status_code=source_status)
+            if source_status is not None
+            else None,
+            return_value=SimpleNamespace(
+                definition=definition,
+                team_id="team",
+                disabled_platform_skills=("data-visualization",) if disabled else (),
+            ),
+        ),
+    )
+    monkeypatch.setattr(agent_app, "_validate_resolved_team", lambda *args: None)
+    monkeypatch.setattr(
+        api,
+        "get_runtime_context",
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(
+                control_plane_url="https://control.invalid", skills=snapshot
+            )
+        ),
+    )
+    container = cast(Any, SimpleNamespace(get_control_plane_http_client=lambda: None))
+    if not denied and source_status is None:
+        catalog = await api.get_instance_skills(
+            "selected", "team", None, None, container, {}
+        )
+        assert "data-visualization" not in {skill.name for skill in catalog.skills}
+    if preview_status is not None:
+        with pytest.raises(HTTPException) as exc:
+            await api.get_instance_skill_detail(
+                "data-visualization", "selected", "team", None, None, container, {}
+            )
+        assert exc.value.status_code == preview_status
+    else:
+        detail = await api.get_instance_skill_detail(
+            "data-visualization", "selected", "team", None, None, container, {}
+        )
+        assert detail.skill.name == "data-visualization"
+        assert detail.skill.user_invocable is False
+        assert "# Clear data visualization" in detail.content
+
+
 class RecordingSkillKPIStore(BaseKPIStore):
     def __init__(self, fail: bool = False) -> None:
         self.events: list[KPIEvent] = []
