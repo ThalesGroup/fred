@@ -25,15 +25,42 @@ import io
 import json
 import math
 import re
-from dataclasses import dataclass, replace
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import date, datetime
-from decimal import ROUND_HALF_UP, Context, Decimal
 from typing import Any, Literal, cast
 
 import xlsxwriter
-from fred_capability_spreadsheet.formulas import is_formula_like
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
+
+from fred_capability_spreadsheet.evaluator import (
+    Evaluator,
+    FormulaCell,
+    LocatedFormulaError,
+    SheetGrid,
+    XLError,
+    aggregate,
+    from_serial,
+    to_serial,
+)
+from fred_capability_spreadsheet.formulas import (
+    Binary,
+    Call,
+    FormulaError,
+    Group,
+    Node,
+    Num,
+    Ref,
+    Str,
+    Unary,
+    column_letters,
+    emit,
+    fill_down,
+    is_formula_like,
+    row_template,
+    uses_dynamic_arrays,
+)
 
 MAX_SHEETS = 10
 MAX_COLUMNS = 50
@@ -48,7 +75,8 @@ TotalKind = Literal["sum", "average", "min", "max", "count"]
 CurrencyCode = Literal["EUR", "USD", "GBP", "CHF", "JPY", "CNY", "CAD", "AUD"]
 Language = Literal["fr", "en"]
 CellValue = str | int | float | bool | None
-Converted = str | int | float | date | None
+# Formula results add booleans and Excel error values to the literal types.
+Converted = str | int | float | bool | date | XLError | None
 
 # Excel number formats; the quoted symbol is literal text, so it renders the same
 # in every locale (the `,` and `.` placeholders still follow the reader's locale).
@@ -125,8 +153,6 @@ _OP_ALIASES = {"+": "add", "-": "subtract", "*": "multiply", "/": "divide"}
 _OP_SYMBOLS = {"add": "+", "subtract": "-", "multiply": "*", "divide": "/"}
 NUMERIC_TYPES = ("number", "integer", "percent", "currency")
 MAX_ROUND_DECIMALS = 10
-# Enough digits for any finite float plus MAX_ROUND_DECIMALS: quantize never overflows.
-_ROUND_CONTEXT = Context(prec=400)
 _NUMERIC_JUNK = re.compile(r"[\s  _$€£¥]")
 # "1,234" reads as 1234 in English and 1.234 in French: refuse to guess.
 _AMBIGUOUS_COMMA = re.compile(r"^[+-]?\d{1,3},\d{3}$")
@@ -307,31 +333,36 @@ class CreateSpreadsheetInput(BaseModel):
 
 
 @dataclass(frozen=True)
-class Operand:
-    column: int | None = None
-    number: float = 0.0
-
-
-@dataclass(frozen=True)
-class ComputePlan:
-    op: str
-    left: Operand
-    right: Operand | None
-    decimals: int | None
-    # Can yield "" in the file (division by zero, or an operand that can).
-    may_fail: bool
-
-
-@dataclass(frozen=True)
 class PreparedSheet:
     name: str
     columns: list[ColumnSpec]
     headers: list[str]
-    # Converted once; both the writer and the preview read these. Computed cells
+    # Converted once; both the writer and the preview read these. Formula cells
     # hold the value their formula yields (None for an empty result).
     rows: list[list[Converted]]
     formats: list[str]
-    computes: list[ComputePlan | None]
+    # Each formula column's formula at the first data row; filled down when written.
+    column_formulas: list[Node | None]
+    # The totals row: one formula per totals column, and its evaluated values.
+    total_formulas: list[Node | None]
+    totals: list[Converted] | None
+    data_rows: int
+    # Formula cells by (row index, column index); spills by anchor as (rows, cols).
+    cell_formulas: dict[tuple[int, int], Node] = field(default_factory=dict)
+    spills: dict[tuple[int, int], tuple[int, int]] = field(default_factory=dict)
+
+
+@dataclass
+class _Draft:
+    """A sheet after conversion, before its formulas are evaluated."""
+
+    name: str
+    columns: list[ColumnSpec]
+    headers: list[str]
+    rows: list[list[Converted]]
+    column_formulas: list[Node | None]
+    total_formulas: list[Node | None]
+    cell_formulas: dict[tuple[int, int], Node] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -359,20 +390,14 @@ def prepare(request: CreateSpreadsheetInput) -> PreparedWorkbook:
     """Validate the request and convert each value once."""
 
     _check_structure(request)
-    return PreparedWorkbook(
-        sheets=[_prepare_sheet(sheet) for sheet in request.sheets],
-        language=normalize_language(request.language),
-    )
+    language = normalize_language(request.language)
+    drafts = [_prepare_sheet(sheet) for sheet in request.sheets]
+    return PreparedWorkbook(sheets=_evaluate(drafts, language), language=language)
 
 
-def column_letter(index: int) -> str:
-    """Excel column letters of a 1-based column index (1 -> A, 27 -> AA)."""
-
-    letters = ""
-    while index:
-        index, rest = divmod(index - 1, 26)
-        letters = chr(65 + rest) + letters
-    return letters
+def _stored_formula(formula: str, expand_future_functions: bool = False) -> str:
+    del expand_future_functions
+    return formula[1:] if formula.startswith("=") else formula
 
 
 def build_workbook(prepared: PreparedWorkbook) -> bytes:
@@ -383,9 +408,12 @@ def build_workbook(prepared: PreparedWorkbook) -> bytes:
     workbook.set_properties({"author": "Fred"})
     formats = _Formats(workbook)
     for sheet in prepared.sheets:
-        _write_sheet(
-            workbook.add_worksheet(sheet.name), sheet, prepared.language, formats
-        )
+        worksheet = workbook.add_worksheet(sheet.name)
+        # Our formulas are already in stored form (prefixes added from the AST):
+        # skip XlsxWriter's regex rewrite, which costs ~30 scans per formula and
+        # would also rename function names inside quoted text.
+        worksheet._prepare_formula = _stored_formula
+        _write_sheet(worksheet, sheet, prepared.language, formats)
     workbook.close()
     data = buffer.getvalue()
     if len(data) > MAX_OUTPUT_BYTES:
@@ -404,7 +432,7 @@ def build_preview(prepared: PreparedWorkbook) -> bytes:
     `MAX_PREVIEW_ROWS` rows per sheet and computed totals (the file keeps formulas).
     """
 
-    sheets = [_preview_sheet(sheet, prepared.language) for sheet in prepared.sheets]
+    sheets = [_preview_sheet(sheet) for sheet in prepared.sheets]
     payload = {"version": 1, "sheets": sheets}
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
 
@@ -427,7 +455,7 @@ def derived_column_hints(prepared: PreparedWorkbook) -> list[str]:
         if len(numeric) > _HINT_MAX_NUMERIC_COLUMNS:
             continue
         for target in numeric:
-            if sheet.computes[target] is not None:
+            if sheet.column_formulas[target] is not None:
                 continue
             found = _derivation(sheet, target, numeric)
             if found is None:
@@ -544,12 +572,13 @@ def manual_total_hints(prepared: PreparedWorkbook) -> list[str]:
         if not labelled:
             continue
         skip = {i for i, _ in labelled}
-        others = replace(
-            sheet, rows=[r for i, r in enumerate(sheet.rows) if i not in skip]
-        )
-        expected = _preview_totals(others, prepared.language) or [None] * len(
-            sheet.columns
-        )
+        others = [r for i, r in enumerate(sheet.rows) if i not in skip]
+        expected = {
+            i: aggregate(
+                cast(str, sheet.columns[i].total), [_scalar(r[i]) for r in others]
+            )
+            for i in kept
+        }
         for index, label in labelled:
             cells = [sheet.rows[index][i] for i in kept]
             if all(v is None for v in cells) or _matches(
@@ -572,10 +601,22 @@ def _total_label(row: list[Converted]) -> str | None:
 
 
 def _number(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
     return float(value) if isinstance(value, int | float) else None
 
 
-def _prepare_sheet(sheet: SheetSpec) -> PreparedSheet:
+def _scalar(value: Converted) -> float | str | bool | XLError | None:
+    """A converted value as the evaluator reads it (dates as serial numbers)."""
+
+    if isinstance(value, date):
+        return to_serial(value)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return float(value)
+    return value
+
+
+def _prepare_sheet(sheet: SheetSpec) -> _Draft:
     headers: list[str] = []
     for index, column in enumerate(sheet.columns, start=1):
         header = _strip_illegal(column.header)
@@ -589,17 +630,18 @@ def _prepare_sheet(sheet: SheetSpec) -> PreparedSheet:
                 f"characters; the limit is {MAX_CELL_CHARS}. Use a short title."
             )
         headers.append(header)
-    computes = _plan_computes(sheet, headers)
+    last_row = len(sheet.rows) + 1
+    column_formulas = _compile_computes(sheet, headers, last_row)
     rows: list[list[Converted]] = []
     for row_number, row in enumerate(sheet.rows, start=2):
         if len(row) != len(sheet.columns):
             # Rows that leave computed columns out get their placeholders back.
             values = iter(row)
-            row = [None if plan else next(values) for plan in computes]
+            row = [None if node else next(values) for node in column_formulas]
         rows.append(
             [
                 None
-                if computes[index]
+                if column_formulas[index]
                 else _convert(
                     raw,
                     column.type,
@@ -611,25 +653,28 @@ def _prepare_sheet(sheet: SheetSpec) -> PreparedSheet:
                 )
             ]
         )
-    _evaluate(computes, rows)
-    formats = [
-        _number_format(column, [row[index] for row in rows], computes[index])
+    total_formulas: list[Node | None] = [
+        _total_node(column, index, last_row) if column.total and sheet.rows else None
         for index, column in enumerate(sheet.columns)
     ]
-    return PreparedSheet(
+    return _Draft(
         name=sheet.name,
         columns=sheet.columns,
         headers=headers,
         rows=rows,
-        formats=formats,
-        computes=computes,
+        column_formulas=column_formulas,
+        total_formulas=total_formulas,
     )
 
 
-def _plan_computes(sheet: SheetSpec, headers: list[str]) -> list[ComputePlan | None]:
-    """Resolve each `compute` to column indexes; only earlier computed columns count."""
+def _compile_computes(
+    sheet: SheetSpec, headers: list[str], last_row: int
+) -> list[Node | None]:
+    """Each `compute` as the formula of its first data row; only earlier computed
+    columns may be referenced, so there is no cycle."""
 
-    plans: list[ComputePlan | None] = [None] * len(sheet.columns)
+    nodes: list[Node | None] = [None] * len(sheet.columns)
+    may_fail = [False] * len(sheet.columns)
     for index, column in enumerate(sheet.columns):
         spec = column.compute
         if spec is None:
@@ -650,7 +695,6 @@ def _plan_computes(sheet: SheetSpec, headers: list[str]) -> list[ComputePlan | N
             raise SpreadsheetInputError(
                 f"{where}: round must be between 0 and {MAX_ROUND_DECIMALS} decimals."
             )
-        right: Operand | None = None
         if op == "share_of_total":
             target = spec.column if spec.column is not None else spec.left
             left = (
@@ -658,11 +702,16 @@ def _plan_computes(sheet: SheetSpec, headers: list[str]) -> list[ComputePlan | N
                 if target is not None
                 else None
             )
-            if left is None or left.column is None:
+            if left is None or isinstance(left, float):
                 raise SpreadsheetInputError(
                     f"{where}: share_of_total needs `column`, the header of the "
                     "column whose values are divided by its total."
                 )
+            whole = Ref(
+                None, left + 1, 2, left + 1, last_row, True, True, True, True, True
+            )
+            expr: Node = Binary("/", _cell_ref(left), Call("SUM", (whole,)))
+            failing = True
         else:
             if spec.left is None or spec.right is None:
                 raise SpreadsheetInputError(
@@ -671,41 +720,53 @@ def _plan_computes(sheet: SheetSpec, headers: list[str]) -> list[ComputePlan | N
                 )
             left = _operand(spec.left, sheet, headers, index, where)
             right = _operand(spec.right, sheet, headers, index, where)
-            if left.column is None and right.column is None:
+            if isinstance(left, float) and isinstance(right, float):
                 raise SpreadsheetInputError(
                     f"{where}: compute needs at least one column header; with two "
                     "numbers, send the result as a value instead."
                 )
-            if op == "divide" and right.column is None and right.number == 0:
+            if op == "divide" and isinstance(right, float) and right == 0:
                 raise SpreadsheetInputError(
                     f"{where}: divide by 0 is not possible; fix `right`."
                 )
-        failing = [
-            plans[operand.column]
-            for operand in (left, right)
-            if operand is not None and operand.column is not None
-        ]
-        plans[index] = ComputePlan(
-            op=op,
-            left=left,
-            right=right,
-            decimals=spec.round,
-            may_fail=op in ("divide", "share_of_total")
-            or any(plan is not None and plan.may_fail for plan in failing),
-        )
-    return plans
+            expr = Binary(_OP_SYMBOLS[op], _operand_node(left), _operand_node(right))
+            failing = op == "divide" or any(
+                not isinstance(x, float) and may_fail[x] for x in (left, right)
+            )
+        if spec.round is not None:
+            expr = Call("ROUND", (expr, Num(float(spec.round))))
+        if failing:
+            # An empty result would otherwise give #VALUE! in later formulas.
+            expr = Call("IFERROR", (expr, Str("")))
+        nodes[index] = expr
+        may_fail[index] = failing
+    return nodes
+
+
+def _cell_ref(index: int) -> Ref:
+    return Ref(None, index + 1, 2, index + 1, 2)
+
+
+def _operand_node(operand: int | float) -> Node:
+    if isinstance(operand, float):
+        if operand < 0:
+            return Group(Unary("-", Num(-operand)))
+        return Num(operand)
+    return _cell_ref(operand)
 
 
 def _operand(
     raw: str | float, sheet: SheetSpec, headers: list[str], index: int, where: str
-) -> Operand:
+) -> int | float:
+    """A column index, or a number (always a float)."""
+
     if not isinstance(raw, str):
         if isinstance(raw, bool) or not math.isfinite(raw):
             raise SpreadsheetInputError(
                 f"{where}: compute operand {raw!r} must be a column header or a "
                 "finite number."
             )
-        return Operand(number=float(raw))
+        return float(raw)
     name = raw.strip()
     matches = [i for i, h in enumerate(headers) if h.strip() == name] or [
         i for i, h in enumerate(headers) if h.strip().casefold() == name.casefold()
@@ -713,8 +774,8 @@ def _operand(
     if not matches:
         try:
             if name.endswith("%"):
-                return Operand(number=float(_to_number(name[:-1])) / 100)
-            return Operand(number=float(_to_number(name)))
+                return float(_to_number(name[:-1])) / 100
+            return float(_to_number(name))
         except (TypeError, ValueError):
             known = ", ".join(f"'{h}'" for h in headers)
             raise SpreadsheetInputError(
@@ -742,104 +803,153 @@ def _operand(
             f"{where}: compute refers to '{headers[ref]}', a {target.type} column; "
             "only number, integer, percent and currency columns can be computed on."
         )
-    return Operand(column=ref)
+    return ref
 
 
-def _evaluate(plans: list[ComputePlan | None], rows: list[list[Converted]]) -> None:
-    """Fill computed cells with what Excel shows: a blank source cell counts as 0,
-    a division by zero (or a failed operand) is empty."""
-
-    for index, plan in enumerate(plans):
-        if plan is None:
-            continue
-        total = 0.0
-        if plan.op == "share_of_total":
-            source = cast(int, plan.left.column)
-            total = math.fsum(
-                float(v) for row in rows if isinstance(v := row[source], int | float)
-            )
-        for row in rows:
-            row[index] = _apply(plan, row, plans, total)
-
-
-def _apply(
-    plan: ComputePlan,
-    row: list[Converted],
-    plans: list[ComputePlan | None],
-    total: float,
-) -> float | None:
-    left = _operand_value(plan.left, row, plans)
-    right = total if plan.right is None else _operand_value(plan.right, row, plans)
-    if left is None or right is None:
-        return None
-    if plan.op == "add":
-        result = left + right
-    elif plan.op == "subtract":
-        result = left - right
-    elif plan.op == "multiply":
-        result = left * right
-    elif right == 0:
-        return None
-    else:
-        result = left / right
-    if not math.isfinite(result):
-        return None
-    if plan.decimals is not None:
-        # Excel's ROUND rounds halves away from zero, unlike Python's round().
-        step = Decimal(1).scaleb(-plan.decimals)
-        result = float(
-            Decimal(repr(result)).quantize(
-                step, rounding=ROUND_HALF_UP, context=_ROUND_CONTEXT
-            )
-        )
-    return result
-
-
-def _operand_value(
-    operand: Operand, row: list[Converted], plans: list[ComputePlan | None]
-) -> float | None:
-    if operand.column is None:
-        return operand.number
-    value = row[operand.column]
-    if value is None:
-        # An empty source cell is 0 in Excel; an empty computed one is "" (fails).
-        return None if plans[operand.column] else 0.0
-    return float(cast(int | float, value))
-
-
-def _formula(plan: ComputePlan, row: int | str, last_row: int) -> str:
-    def ref(operand: Operand) -> str:
-        if operand.column is not None:
-            return f"{column_letter(operand.column + 1)}{row}"
-        number = operand.number
-        text = str(int(number)) if number.is_integer() else repr(number).upper()
-        return f"({text})" if number < 0 else text
-
-    if plan.right is None:
-        letter = column_letter(cast(int, plan.left.column) + 1)
-        expr = f"{letter}{row}/SUM(${letter}$2:${letter}${last_row})"
-    else:
-        expr = f"{ref(plan.left)}{_OP_SYMBOLS[plan.op]}{ref(plan.right)}"
-    if plan.decimals is not None:
-        expr = f"ROUND({expr},{plan.decimals})"
-    if plan.may_fail:
-        expr = f'IFERROR({expr},"")'
-    return "=" + expr
-
-
-def _total_formula(column: ColumnSpec, index: int, last_row: int) -> str:
-    letter = column_letter(index + 1)
+def _total_node(column: ColumnSpec, index: int, last_row: int) -> Node:
     function = _TOTAL_FUNCTIONS[cast(str, column.total)]
     if column.total == "count" and column.type in ("text", "date"):
         function = "COUNTA" if column.type == "text" else "COUNT"
-    return f"={function}({letter}2:{letter}{last_row})"
+    data = Ref(None, index + 1, 2, index + 1, last_row, is_range=True)
+    return Call(function, (data,))
 
 
-def _preview_sheet(sheet: PreparedSheet, language: Language) -> dict[str, object]:
+def _evaluate(drafts: list[_Draft], language: Language) -> list[PreparedSheet]:
+    """Evaluate every formula of the workbook once, across sheets."""
+
+    grids = [_grid(draft, language) for draft in drafts]
+    evaluator = Evaluator(grids, max_rows=MAX_ROWS + 1)
+    try:
+        evaluator.run()
+    except LocatedFormulaError as exc:
+        hint = _LIMIT_HINT if exc.budget else ""
+        raise SpreadsheetInputError(f"{exc}.{hint}") from None
+    except FormulaError as exc:  # raised outside any cell
+        raise SpreadsheetInputError(str(exc)) from None
+    results = evaluator.results
+    sheets: list[PreparedSheet] = []
+    for draft in drafts:
+        rows = [list(row) for row in draft.rows]
+        for (name, r, c), value in evaluator.spilled().items():
+            if name != draft.name:
+                continue
+            while len(rows) < r - 1:
+                rows.append([None] * len(draft.columns))
+            rows[r - 2][c - 1] = _from_result(value, draft.columns[c - 1].type)
+        for index, node in enumerate(draft.column_formulas):
+            if node is None:
+                continue
+            kind = draft.columns[index].type
+            for r in range(len(draft.rows)):
+                rows[r][index] = _from_result(
+                    results[(draft.name, r + 2, index + 1)], kind
+                )
+        for r, c in draft.cell_formulas:
+            rows[r][c] = _from_result(
+                results[(draft.name, r + 2, c + 1)], draft.columns[c].type
+            )
+        totals = _totals_values(draft, results, language)
+        sheets.append(
+            PreparedSheet(
+                name=draft.name,
+                columns=draft.columns,
+                headers=draft.headers,
+                rows=rows,
+                formats=[
+                    _number_format(column, [row[i] for row in rows])
+                    for i, column in enumerate(draft.columns)
+                ],
+                column_formulas=draft.column_formulas,
+                total_formulas=draft.total_formulas,
+                totals=totals,
+                data_rows=len(draft.rows),
+                cell_formulas=draft.cell_formulas,
+                spills={
+                    (r - 2, c - 1): (spill.height, spill.width)
+                    for (name, r, c), spill in evaluator.spills.items()
+                    if name == draft.name
+                },
+            )
+        )
+    return sheets
+
+
+def _grid(draft: _Draft, language: Language) -> SheetGrid:
+    has_totals = any(node is not None for node in draft.total_formulas)
+    last_data_row = len(draft.rows) + 1
+    grid = SheetGrid(
+        draft.name,
+        len(draft.columns),
+        spill_limit=last_data_row if has_totals else MAX_ROWS + 1,
+    )
+    for c, header in enumerate(draft.headers, start=1):
+        grid.values[(1, c)] = header
+    for r, row in enumerate(draft.rows, start=2):
+        for c, value in enumerate(row, start=1):
+            if value is not None:
+                grid.values[(r, c)] = _scalar(value)
+    for c, node in enumerate(draft.column_formulas, start=1):
+        if node is not None:
+            for r in range(len(draft.rows)):
+                grid.formulas[(r + 2, c)] = FormulaCell(node, rows=r)
+    for (r, c), node in draft.cell_formulas.items():
+        grid.formulas[(r + 2, c + 1)] = FormulaCell(node, may_spill=True)
+    if has_totals:
+        totals_row = last_data_row + 1
+        label_index = _label_index(draft.columns)
+        if label_index is not None:
+            grid.values[(totals_row, label_index + 1)] = _totals_label(
+                draft.columns, language
+            )
+        for c, node in enumerate(draft.total_formulas, start=1):
+            if node is not None:
+                grid.formulas[(totals_row, c)] = FormulaCell(node)
+    return grid
+
+
+def _from_result(value: object, column_type: str) -> Converted:
+    """An evaluated value as the writer and preview read it."""
+
+    if value is None or value == "":
+        return None
+    if (
+        column_type == "date"
+        and isinstance(value, float)
+        and not isinstance(value, bool)
+    ):
+        try:
+            return from_serial(value)
+        except Exception:  # an out-of-range serial stays a number
+            return value
+    return cast(Converted, value)
+
+
+def _totals_values(
+    draft: _Draft, results: Mapping[tuple[str, int, int], object], language: Language
+) -> list[Converted] | None:
+    if not any(node is not None for node in draft.total_formulas):
+        return None
+    totals_row = len(draft.rows) + 2
+    totals: list[Converted] = [None] * len(draft.columns)
+    label_index = _label_index(draft.columns)
+    if label_index is not None:
+        totals[label_index] = _totals_label(draft.columns, language)
+    for index, node in enumerate(draft.total_formulas):
+        if node is not None:
+            value = results[(draft.name, totals_row, index + 1)]
+            totals[index] = None if value == "" else cast(Converted, value)
+    return totals
+
+
+def _preview_sheet(sheet: PreparedSheet) -> dict[str, object]:
     columns: list[dict[str, object]] = []
-    last_row = len(sheet.rows) + 1
-    for index, (column, header, fmt, plan) in enumerate(
-        zip(sheet.columns, sheet.headers, sheet.formats, sheet.computes, strict=True)
+    for column, header, fmt, node, total in zip(
+        sheet.columns,
+        sheet.headers,
+        sheet.formats,
+        sheet.column_formulas,
+        sheet.total_formulas,
+        strict=True,
     ):
         entry: dict[str, object] = {"header": header, "type": column.type}
         if column.type not in ("text", "date"):
@@ -848,27 +958,50 @@ def _preview_sheet(sheet: PreparedSheet, language: Language) -> dict[str, object
             entry["currency"] = column.currency
         if column.total:
             entry["total"] = column.total
-            if sheet.rows:
-                entry["total_formula"] = _total_formula(column, index, last_row)
-        if plan is not None:
+            if total is not None:
+                entry["total_formula"] = emit(total)
+        if node is not None and (template := row_template(node, ROW_PLACEHOLDER)):
             # One template per column; the viewer puts the row number in.
-            entry["formula"] = _formula(plan, ROW_PLACEHOLDER, last_row)
+            entry["formula"] = template
         columns.append(entry)
-    values = [
-        [_preview_value(value) for value in row]
-        for row in sheet.rows[:MAX_PREVIEW_ROWS]
-    ]
-    return {
+    shown = min(len(sheet.rows), MAX_PREVIEW_ROWS)
+    payload: dict[str, object] = {
         "name": sheet.name,
         "columns": columns,
-        "rows": values,
+        "rows": [[_preview_value(v) for v in row] for row in sheet.rows[:shown]],
         "row_count": len(sheet.rows),
-        "totals": _preview_totals(sheet, language),
+        "totals": None
+        if sheet.totals is None
+        else [_preview_value(v) for v in sheet.totals],
     }
+    cell_formulas = _preview_cell_formulas(sheet, shown)
+    if cell_formulas:
+        payload["cell_formulas"] = cell_formulas
+    return payload
+
+
+def _preview_cell_formulas(sheet: PreparedSheet, shown: int) -> dict[str, str]:
+    """Formula-bar text for cells no column template covers, by A1 address."""
+
+    out: dict[str, str] = {}
+    for (r, c), node in sorted(sheet.cell_formulas.items()):
+        if r < shown:
+            out[f"{column_letters(c + 1)}{r + 2}"] = emit(node)
+    for c, node in enumerate(sheet.column_formulas):
+        if node is not None and row_template(node, ROW_PLACEHOLDER) is None:
+            for r in range(min(shown, sheet.data_rows)):
+                out[f"{column_letters(c + 1)}{r + 2}"] = emit(node, rows=r)
+    return out
 
 
 def _preview_value(value: Converted) -> str | int | float | None:
-    return value.isoformat() if isinstance(value, date) else value
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, XLError):
+        return value.code
+    return value
 
 
 def _format_decimals(fmt: str) -> int:
@@ -893,36 +1026,6 @@ def _totals_label(columns: list[ColumnSpec], language: Language) -> str:
         if column.total and labels[column.total] not in seen:
             seen.append(labels[column.total])
     return " / ".join(seen)
-
-
-def _preview_totals(
-    sheet: PreparedSheet, language: Language
-) -> list[str | int | float | None] | None:
-    # Same placement as `_write_totals`; values mirror the Excel functions.
-    columns = sheet.columns
-    if not sheet.rows or not any(column.total for column in columns):
-        return None
-    totals: list[str | int | float | None] = [None] * len(columns)
-    label_index = _label_index(columns)
-    if label_index is not None:
-        totals[label_index] = _totals_label(columns, language)
-    for index, column in enumerate(columns):
-        present = [row[index] for row in sheet.rows if row[index] is not None]
-        if column.total == "count":
-            totals[index] = len(present)
-            continue
-        if not column.total:
-            continue
-        numbers = [float(value) for value in present if isinstance(value, int | float)]
-        if column.total == "sum":
-            totals[index] = math.fsum(numbers)
-        elif column.total == "average":
-            totals[index] = math.fsum(numbers) / len(numbers) if numbers else None
-        elif column.total == "min":
-            totals[index] = min(numbers, default=0)
-        else:
-            totals[index] = max(numbers, default=0)
-    return totals
 
 
 def _check_structure(request: CreateSpreadsheetInput) -> None:
@@ -1047,32 +1150,28 @@ def _write_sheet(
     for index, header in enumerate(sheet.headers):
         ws.write_string(0, index, header, formats.header(_is_trigger(header)))
 
-    last_row = len(sheet.rows) + 1
-    for row_number, row in enumerate(sheet.rows, start=2):
+    fills = [
+        None if node is None else fill_down(node, stored=True)
+        for node in sheet.column_formulas
+    ]
+    for r, row in enumerate(sheet.rows):
         for index, value in enumerate(row):
-            plan = sheet.computes[index]
-            if plan is not None:
-                cached: object = "" if value is None else value
-                ws.write_formula(
-                    row_number - 1,
-                    index,
-                    _formula(plan, row_number, last_row),
-                    formats.get(sheet.formats[index]),
-                    cached,
-                )
-                if value is not None:
-                    widths[index] = max(widths[index], _display_length(value))
-                continue
-            if value is None:
-                continue
-            _write_value(
-                ws, row_number - 1, index, value, sheet.formats[index], formats
-            )
-            widths[index] = max(widths[index], _display_length(value))
+            fmt = formats.get(sheet.formats[index])
+            fill = fills[index] if r < sheet.data_rows else None
+            cell = sheet.cell_formulas.get((r, index))
+            if fill is not None:
+                ws.write_formula(r + 1, index, fill(r), fmt, _cached(value))
+            elif cell is not None:
+                _write_cell_formula(ws, sheet, r, index, cell, value, fmt)
+            elif value is not None:
+                _write_value(ws, r + 1, index, value, sheet.formats[index], formats)
+            if value is not None:
+                widths[index] = max(widths[index], _display_length(value))
 
+    last_row = len(sheet.rows) + 1
     ws.freeze_panes(1, 0)
     ws.autofilter(0, 0, last_row - 1, len(columns) - 1)
-    if sheet.rows and any(column.total for column in columns):
+    if sheet.totals is not None:
         _write_totals(ws, sheet, last_row, language, formats)
 
     for index, column in enumerate(columns):
@@ -1084,11 +1183,46 @@ def _write_sheet(
         ws.set_column(index, index, width)
 
 
+def _write_cell_formula(
+    ws: Any,
+    sheet: PreparedSheet,
+    r: int,
+    c: int,
+    node: Node,
+    value: Converted,
+    fmt: Any,
+) -> None:
+    text = emit(node, stored=True)
+    spill = sheet.spills.get((r, c))
+    if spill is None and not uses_dynamic_arrays(node):
+        ws.write_formula(r + 1, c, text, fmt, _cached(value))
+        return
+    height, width = spill or (1, 1)
+    # Spill metadata, so Excel does not show a legacy `@` array formula.
+    ws.write_dynamic_array_formula(
+        r + 1, c, r + height, c + width - 1, text, fmt, _cached(value)
+    )
+
+
+def _cached(value: Converted) -> object:
+    if value is None:
+        return ""
+    if isinstance(value, XLError):
+        return value.code
+    if isinstance(value, date):
+        return to_serial(value)
+    return value
+
+
 def _write_value(
     ws: Any, row: int, column: int, value: Converted, fmt: str, formats: _Formats
 ) -> None:
     if isinstance(value, str):
         ws.write_string(row, column, value, formats.get(quote=_is_trigger(value)))
+    elif isinstance(value, bool):
+        ws.write_boolean(row, column, value)
+    elif isinstance(value, XLError):
+        ws.write_string(row, column, value.code)
     elif isinstance(value, date):
         ws.write_datetime(row, column, value, formats.get(fmt))
     elif value is not None:
@@ -1105,9 +1239,10 @@ def _write_totals(
         ws.write_string(
             row, label_index, _totals_label(columns, language), formats.get(bold=True)
         )
-    values = _preview_totals(sheet, language) or [None] * len(columns)
+    values = sheet.totals or [None] * len(columns)
     for index, column in enumerate(columns):
-        if not column.total:
+        node = sheet.total_formulas[index]
+        if node is None:
             continue
         if column.total == "count":
             fmt = NUMBER_FORMATS["integer"]
@@ -1115,27 +1250,29 @@ def _write_totals(
             fmt = NUMBER_FORMATS["number"]
         else:
             fmt = sheet.formats[index]
-        value = values[index]
         ws.write_formula(
             row,
             index,
-            _total_formula(column, index, last_row),
+            emit(node, stored=True),
             formats.get(fmt, bold=True),
-            "" if value is None else value,
+            _cached(values[index]),
         )
 
 
-def _number_format(
-    column: ColumnSpec, values: list[Converted], plan: ComputePlan | None = None
-) -> str:
-    if column.type == "number" and plan is not None and plan.decimals is not None:
+def _number_format(column: ColumnSpec, values: list[Converted]) -> str:
+    decimals = column.compute.round if column.compute is not None else None
+    if column.type == "number" and decimals is not None:
         # Show the decimals `round` keeps, not the default two.
-        return "#,##0" + ("." + "0" * plan.decimals if plan.decimals else "")
+        return "#,##0" + ("." + "0" * decimals if decimals else "")
     if column.type == "currency" and column.currency:
         return CURRENCY_FORMATS[column.currency]
     if column.type == "percent":
         decimals = max(
-            (_decimals(value * 100) for value in values if isinstance(value, float)),
+            (
+                _decimals(value * 100)
+                for value in values
+                if isinstance(value, float) and math.isfinite(value)
+            ),
             default=0,
         )
         return "0%" if decimals == 0 else "0." + "0" * min(decimals, 2) + "%"
@@ -1153,6 +1290,10 @@ def _is_trigger(value: str) -> bool:
 
 
 def _display_length(value: object) -> int:
+    if isinstance(value, bool):
+        return 5
+    if isinstance(value, XLError):
+        return len(value.code)
     if isinstance(value, int | float):
         # Two decimals plus room for a currency symbol or a percent sign.
         return len(f"{value:,.2f}") + 3

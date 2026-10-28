@@ -390,7 +390,8 @@ def test_preview_total_of_an_empty_numeric_column():
         {"header": "Avg", "type": "number", "total": "average"},
     ]
     sheet = _preview(_sheet(columns=columns, rows=[[None, None]]))["sheets"][0]
-    assert sheet["totals"] == [0, None]
+    # As Excel shows it: AVERAGE of no number is #DIV/0!.
+    assert sheet["totals"] == [0, "#DIV/0!"]
 
 
 def test_preview_caps_rows_but_totals_cover_every_row():
