@@ -373,7 +373,7 @@ export async function buildUi() {
   assertUiBuildSourceGraph(buildEvidence.modules);
   const producerRoot = path.dirname(packageRoot);
   await run(
-    process.execPath,
+    "node",
     [
       path.join(producerRoot, "node_modules/typescript/bin/tsc"),
       "-p",

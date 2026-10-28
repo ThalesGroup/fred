@@ -104,8 +104,14 @@ python3 .claude/skills/jira/scripts/jira.py assign PRISM-68 \
 ## Workflow — first pass on a ticket
 
 Always start the same way: `jira.py show <KEY>`, then `jira.py attachments <KEY>` and
-`Read` the images if it lists any. Move the ticket to "Analysis in progress" (below). Then
-branch on the type.
+`Read` the images if it lists any. Use the investigation status supported by the ticket's
+workflow (below), then choose the handling from the findings, not the Jira issue type.
+
+**Bug handling applies to every ticket type** when the reported behavior is abnormal and
+should be corrected through a PR. This includes `Platform Incident`, `Service Request`,
+`Improvement`, `Task` and `Sub-task` tickets diagnosed as bugs. Follow the bug workflow
+through investigation, planning, deployment and closure, keeping the original Jira issue
+type unchanged. Requests for new behavior follow "Feature / improvement" instead.
 
 ### Ticket status
 
@@ -115,9 +121,9 @@ Keep the status in step with the work: the reporter watches it, and the team fil
 | ------------------------------------------------------------------------ | ---------------------- |
 | You start investigating                                                  | `Analysis in progress` |
 | A public reply asking the reporter a question is posted                  | `Waiting for customer` |
-| Bug: GitHub bug issue created and public reply with its link posted       | `Planned`              |
-| Bug: fix deployed on the reporter's production platform                  | `Resolved`             |
-| Bug: second-person verification of fix and customer satisfaction         | `Closed`               |
+| Fix tracked in GitHub and approved public reply explaining it posted     | `Planned`              |
+| Fix deployed on the reporter's production platform                       | `Resolved`             |
+| Second-person verification of fix and customer satisfaction              | `Closed`               |
 
 ```bash
 acli jira workitem transition --key PRISM-68 --status "Analysis in progress" --yes
@@ -125,43 +131,54 @@ acli jira workitem transition --key PRISM-68 --status "Analysis in progress" --y
 
 - Move only after the step is actually done. `Waiting for customer` and `Planned` follow a
   public reply, so they wait for the developer's approval of that reply (rule 2).
-- From `Analysis in progress`, reaching `Planned` requires `CCB` -> `Planned`.
+- These lifecycle rules apply to every ticket handled as a bug, regardless of its Jira
+  issue type. An existing GitHub issue or PR satisfies fix tracking; reuse it even if
+  the fix is already merged or tagged, and update the status after posting the reply.
+- Jira transition routes depend on the issue type. `Bug` and `Platform Incident`
+  tickets reach `Planned` from `Analysis in progress` through `CCB` -> `Planned`.
   Once the planning criteria above are met, move through `CCB` and immediately to
   `Planned`. `CCB` normally holds tickets where the decision to fix is still uncertain
   and is currently used rarely; this required intermediate transition adds no new
   approval step for bugs already accepted for a fix. Verify each resulting status.
-- For bugs, keep the ticket `Planned` while the fix is developed, reviewed, merged or
-  tagged. Move it to `Resolved` only after confirmed deployment on the reporter's
-  production platform: this status notifies the customer that their bug is resolved.
+- For `Service Request` tickets, Jira offers the `Ready` transition directly from
+  `Analysis in progress` to `Planned`; use it once the same planning criteria are met.
+- For every ticket handled as a bug, keep it `Planned` while the fix is developed,
+  reviewed, merged or tagged. Move it to `Resolved` only after confirmed deployment
+  on the reporter's production platform: this status notifies the customer that their
+  problem is resolved.
   Deployment detection is being worked on separately; for now, wait for the developer
   to confirm deployment rather than inferring it from a merge, tag or release.
 - `Resolved` -> `Closed` is a second verification by someone other than the person who
   resolved the ticket. Move it only after that person checks that the bug was indeed
   addressed and the customer appears satisfied; deployment alone does not close it.
-- The post-analysis bug lifecycle above applies to `Bug` tickets. For other ticket types,
-  ask the developer before planning, resolving or closing a ticket.
 - `Analysis in progress` and `Waiting for customer` apply to `Bug`, `Improvement`,
   `Service Request` and `Platform Incident`.
-  `Task` and `Sub-task` use a different workflow (`Work in progress`, `Completed`, …), so
-  ask before moving one.
+  `Task` and `Sub-task` use a different workflow (`Work in progress`, `Completed`, ...).
+  For other routes or status names, inspect the available transitions using Jira REST
+  `GET /rest/api/3/issue/<KEY>/transitions` before attempting a move. Use supported
+  equivalents for the bug lifecycle; ask only if the required state has no clear
+  equivalent. Keep the deployment and second-verification gates above.
+- For tickets not handled as bugs, ask the developer before planning, resolving or
+  closing them, unless the feature workflow below already authorizes the move.
 - If a transition fails (a required field, or a status unreachable from the current one),
   report the error to the developer rather than trying another route.
 
-### Bug
+### Bug workflow (any Jira issue type)
 
 Try to **reproduce** it, and locate the cause in this repo (`git log`, `grep`, run it).
 
 **Reproduced / cause found:**
 
 1. Internal note: what happens, root cause, where in the code, how confident you are.
-2. Open a GitHub bug so the fix is tracked, and link the ticket back:
+2. Find an existing GitHub issue or PR for the fix and link it to the ticket. If none
+   exists, open a GitHub bug so the fix is tracked:
    ```bash
    gh issue create --title "…" --body "Reported in PRISM-68 — <one-line repro>…"
    ```
 3. Draft a public reply for the developer to approve (rule 2): thank the reporter, give a
-   workaround if one exists, and include the GitHub issue link so they can follow the fix.
+   workaround if one exists, and include the GitHub issue or PR link so they can follow the fix.
    The reporter is usually an end user, so keep the reply non-technical.
-4. Once the reply with the GitHub issue link is posted, follow "Ticket status" to move
+4. Once the approved reply explaining the fix is posted, follow "Ticket status" to move
    the ticket to `Planned`.
    Follow the deployment and second-verification rules in "Ticket status" for subsequent
    resolution and closure.

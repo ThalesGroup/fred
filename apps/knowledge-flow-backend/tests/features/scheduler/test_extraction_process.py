@@ -37,6 +37,8 @@ import os
 import pathlib
 import signal
 import socket
+import subprocess  # nosec B404: only starts a fixed sleeping interpreter
+import sys
 import time
 from multiprocessing import reduction
 from typing import Any
@@ -97,6 +99,16 @@ def _child_that_spawns_a_descendant(request, _pipe, _parent_pid) -> None:
     descendant = multiprocessing.get_context("fork").Process(target=time.sleep, args=(300,), daemon=False)
     descendant.start()
     _report_pid(request, "descendant.pid", descendant.pid or 0)
+    _report_pid(request, "child.pid", os.getpid())
+    time.sleep(300)
+
+
+def _child_that_spawns_a_descendant_in_its_own_group(request, _pipe, _parent_pid) -> None:
+    """How fred-core runs LibreOffice: a group of its own, so its timeout can kill
+    it, inside the child's session."""
+    os.setsid()
+    descendant = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(300)"], process_group=0)  # nosec B603: fixed test command
+    _report_pid(request, "descendant.pid", descendant.pid)
     _report_pid(request, "child.pid", os.getpid())
     time.sleep(300)
 
@@ -276,6 +288,22 @@ async def test_a_descendant_of_the_child_is_stopped_too(tmp_path) -> None:
         assert await _stop(process) is True
         assert await _wait_gone(pid), "the child survived the stop"
         assert await _wait_gone(descendant), "the descendant outlived its group"
+    finally:
+        for stray in (pid, descendant):
+            if _alive(stray):
+                os.kill(stray, signal.SIGKILL)
+
+
+@pytest.mark.asyncio
+async def test_a_descendant_in_a_group_of_its_own_is_stopped_too(tmp_path) -> None:
+    """The group signal misses it; the stop is confirmed only once it is gone."""
+    process = _start_directly(_child_that_spawns_a_descendant_in_its_own_group, tmp_path)
+    pid = await _read_pid(tmp_path)
+    descendant = await _read_pid(tmp_path, "descendant.pid")
+    try:
+        assert await _stop(process) is True
+        assert await _wait_gone(pid), "the child survived the stop"
+        assert extraction_process._live_members(pid) == [], "the stop was confirmed with a helper still running"
     finally:
         for stray in (pid, descendant):
             if _alive(stray):

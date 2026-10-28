@@ -184,6 +184,19 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}/messages` }),
     }),
+    steerActiveTurnPodV1AgentsSessionsSessionIdSteerPost: build.mutation<
+      SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiResponse,
+      SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/steer`,
+        method: "POST",
+        body: queryArg.runtimeExecuteRequest,
+        params: {
+          message_id: queryArg.messageId,
+        },
+      }),
+    }),
     getRuntimeInstanceSkills: build.query<GetRuntimeInstanceSkillsApiResponse, GetRuntimeInstanceSkillsApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/skills`,
@@ -327,6 +340,9 @@ export type ExecuteAgentApiResponse = /** status 200 Successful Response */
           kind: "status";
         } & StatusRuntimeEvent)
       | ({
+          kind: "steered_user_message";
+        } & SteeredUserMessageRuntimeEvent)
+      | ({
           kind: "thought_delta";
         } & ThoughtDeltaEvent)
       | ({
@@ -387,6 +403,14 @@ export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse
   /** status 200 Successful Response */ ChatMessage[];
 export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiArg = {
   sessionId: string;
+};
+export type SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiResponse = /** status 202 Successful Response */ {
+  [key: string]: string;
+};
+export type SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiArg = {
+  sessionId: string;
+  messageId: string;
+  runtimeExecuteRequest: RuntimeExecuteRequest;
 };
 export type GetRuntimeInstanceSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
 export type GetRuntimeInstanceSkillsApiArg = {
@@ -849,6 +873,8 @@ export type RuntimeExecuteRequest =
       runtime_context: RuntimeContext | null;
       /** Session identifier for multi-turn continuity. Keep stable across turns. */
       session_id?: string | null;
+      /** Identity of the active chat turn for mid-turn message delivery. */
+      steering_turn_id?: string | null;
       /** Per-capability typed chat-time values, keyed by capability id. Each slice is validated at turn start against the owning capability's TurnOptionsModel; an unknown capability id or an invalid slice is a typed 422 (RFC §3.5). The envelope is generic — the key is the discriminator — but every leaf is a typed model exported to OpenAPI, so each composer widget writes into turn_options[capability_id]. */
       turn_options?: {
         [key: string]: {
@@ -891,6 +917,8 @@ export type RuntimeExecuteRequest =
       runtime_context?: RuntimeContext | null;
       /** Session identifier for multi-turn continuity. Keep stable across turns. */
       session_id?: string | null;
+      /** Identity of the active chat turn for mid-turn message delivery. */
+      steering_turn_id?: string | null;
       /** Per-capability typed chat-time values, keyed by capability id. Each slice is validated at turn start against the owning capability's TurnOptionsModel; an unknown capability id or an invalid slice is a typed 422 (RFC §3.5). The envelope is generic — the key is the discriminator — but every leaf is a typed model exported to OpenAPI, so each composer widget writes into turn_options[capability_id]. */
       turn_options?: {
         [key: string]: {
@@ -1069,6 +1097,12 @@ export type StatusRuntimeEvent = {
   sequence?: number;
   skill_load?: SkillLoadAttribution | null;
   status: string;
+};
+export type SteeredUserMessageRuntimeEvent = {
+  content: string;
+  kind?: "steered_user_message";
+  message_id: string;
+  sequence?: number;
 };
 export type ThoughtDeltaEvent = {
   delta: string;
@@ -1448,6 +1482,7 @@ export const {
   useDeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteMutation,
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
+  useSteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostMutation,
   useGetRuntimeInstanceSkillsQuery,
   useLazyGetRuntimeInstanceSkillsQuery,
   useGetRuntimeInstanceSkillDetailQuery,

@@ -53,7 +53,7 @@ from collections.abc import (
     Mapping,
     Sequence,
 )
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal, cast
@@ -254,6 +254,7 @@ from fred_runtime.runtime_support.hitl_batch import (
     parse_batched_human_answers,
 )
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
+from fred_runtime.runtime_support.turn_steering import turn_steering_mailbox
 
 from ..common.structures import AgentSettingsLike
 from ..integrations.v2_runtime.adapters import (
@@ -1160,6 +1161,7 @@ class _AgentExecuteRequest(BaseModel):
     agent_instance_id: str | None = Field(default=None, min_length=1)
     message: str = Field(default="")
     context: dict[str, Any] | None = None
+    steering_turn_id: str | None = None
     interrupt_id: str | None = Field(default=None, min_length=1)
     occurrence_id: str | None = Field(default=None, min_length=1)
     resume_payload: Any | None = Field(
@@ -2764,7 +2766,12 @@ async def _write_turn_history(
     for payload in payloads:
         kind = payload.get("kind")
 
-        if kind == "status" and isinstance(payload.get("skill_load"), dict):
+        if kind == RuntimeEventKind.STEERED_USER_MESSAGE.value:
+            messages.append(
+                make_user_text(session_id, exchange_id, rank, payload["content"])
+            )
+            rank += 1
+        elif kind == "status" and isinstance(payload.get("skill_load"), dict):
             from fred_sdk.contracts.skills import SkillLoadAttribution
 
             attribution = SkillLoadAttribution.model_validate(payload["skill_load"])
@@ -3358,6 +3365,38 @@ async def _stream(
         resolved_team_id = "personal"
 
     collected: list[dict[str, Any]] = []
+    steering_token = (
+        await turn_steering_mailbox.start(
+            session_id,
+            request.agent_instance_id,
+            user_id,
+            # Weaver scopes steering by the admitted space, as the steer route does.
+            str(ctx.get("space_id") or "personal"),
+            request.steering_turn_id,
+            resume=request.resume_payload is not None,
+        )
+        if session_id
+        and request.agent_instance_id
+        and request.steering_turn_id
+        and not isinstance(definition, GraphAgentDefinition)
+        else None
+    )
+    if request.steering_turn_id and steering_token is None:
+        request = request.model_copy(update={"steering_turn_id": None})
+
+    async def renew_lease(active_session_id: str, active_turn_id: str) -> None:
+        while True:
+            await asyncio.sleep(30)
+            try:
+                await turn_steering_mailbox.renew(active_session_id, active_turn_id)
+            except Exception:
+                logger.exception("Failed to renew active turn steering lease")
+
+    steering_heartbeat = (
+        asyncio.create_task(renew_lease(session_id, steering_token))
+        if steering_token is not None and session_id is not None
+        else None
+    )
     payloads = _iterate_runtime_event_payloads(
         definition,
         request,
@@ -3374,12 +3413,34 @@ async def _stream(
     )
     try:
         async for payload in payloads:
+            if (
+                payload.get("kind") == "awaiting_human"
+                and steering_token is not None
+                and session_id is not None
+            ):
+                await turn_steering_mailbox.pause(session_id, steering_token)
             collected.append(payload)
             yield _sse(json.dumps(payload, ensure_ascii=False))
     finally:
         # Closing this stream closes the run's stream with it, so a dropped
         # response never leaves the run to garbage collection.
-        await payloads.aclose()
+        try:
+            await payloads.aclose()
+        finally:
+            if steering_heartbeat is not None:
+                steering_heartbeat.cancel()
+                with suppress(asyncio.CancelledError):
+                    await steering_heartbeat
+            if steering_token is not None and session_id is not None:
+                paused = any(
+                    payload.get("kind") == "awaiting_human" for payload in collected
+                )
+                failed = any(
+                    payload.get("kind") == "execution_error" for payload in collected
+                )
+                await turn_steering_mailbox.end(
+                    session_id, steering_token, paused=paused and not failed
+                )
 
     _emit_turn_completed(
         container,
@@ -4151,6 +4212,7 @@ async def _iterate_runtime_event_payloads_inner(
                 else ctx.get("user_id"),
                 "session_id": ctx.get("session_id"),
                 "exchange_id": exchange_id,
+                "steering_turn_id": request.steering_turn_id,
                 "agent_instance_id": request.agent_instance_id,
                 "template_agent_id": definition.agent_id,
                 "run_id": getattr(credential_provider, "run_id", None),
@@ -4188,6 +4250,7 @@ async def _iterate_runtime_event_payloads_inner(
                 "occurrence_id": resolved_occurrence_id,
                 "execution_action": execution_action,
                 "exchange_id": exchange_id,
+                "steering_turn_id": request.steering_turn_id,
                 "is_service_agent": ctx.get("is_service_agent"),
             }.items()
             if isinstance(value, str) and value
@@ -5349,6 +5412,7 @@ def _build_agent_router(
         count = await history_store.delete_session(
             session_id=session_id, user_id=caller_uid
         )
+        await turn_steering_mailbox.purge(session_id, caller_uid)
         return {"deleted": count}
 
     @router.delete(
@@ -5782,6 +5846,7 @@ def _build_agent_router(
             )
         else:
             deleted = await cp.adelete_thread(session_id)
+        await turn_steering_mailbox.purge(session_id, caller_uid)
         return {"deleted": deleted}
 
     @router.post(
@@ -6011,6 +6076,49 @@ def _build_agent_router(
             turn_start=turn_start,
         )
 
+    @router.post("/sessions/{session_id}/steer", status_code=status.HTTP_202_ACCEPTED)
+    async def steer_active_turn(
+        session_id: str,
+        request: RuntimeExecuteRequest,
+        message_id: str = Query(..., min_length=1),
+        authenticated_user: KeycloakUser | AssertedUser | None = Depends(
+            _execution_subject
+        ),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> dict[str, str]:
+        _refuse_reserved_session_id(session_id)
+        if (
+            request.session_id != session_id
+            or not request.agent_instance_id
+            or not request.input.strip()
+            or not request.steering_turn_id
+        ):
+            raise HTTPException(status_code=422, detail="invalid_steering_request")
+        _enforce_chat_input_limit(request)
+        await _enforce_session_ownership(
+            session_id,
+            authenticated_user,
+            container,
+            agent_instance_id=request.agent_instance_id,
+        )
+        await _authorize_execution_or_raise(request, authenticated_user, container)
+        assert request.runtime_context is not None  # the admission requires its space
+        user_id = (
+            authenticated_user.uid if authenticated_user is not None else "unknown"
+        )
+        offered = await turn_steering_mailbox.offer(
+            session_id,
+            request.agent_instance_id,
+            user_id,
+            str(request.runtime_context.space_id),
+            request.steering_turn_id,
+            message_id,
+            request.input.strip(),
+        )
+        if not offered:
+            raise HTTPException(status_code=409, detail="active_turn_unavailable")
+        return {"status": "pending"}
+
     @router.post(
         "/execute/stream",
         operation_id="execute_agent_stream",
@@ -6075,6 +6183,7 @@ def _build_agent_router(
             _discard_run_record(target.credential_provider)
             raise
         provider = target.credential_provider
+        internal_req.steering_turn_id = request.steering_turn_id
         stream = _stream(
             target.definition,
             internal_req,
@@ -6229,6 +6338,7 @@ def create_agent_app(
         gc_diagnostics = install_gc_diagnostics()
         container = build_pod_container(config)
         rebac_engine: PublishedOpenFgaRebacEngine | None = None
+        steering_cleanup_task: asyncio.Task[None] | None = None
         try:
             container.initialize_kpi_writer()
             container.initialize_control_plane_client()
@@ -6259,6 +6369,18 @@ def create_agent_app(
                     "Custom inference adapters are not connected to Weaver"
                 )
             await container.initialize_filesystem()
+            turn_steering_mailbox.configure(sql_engine)
+            await turn_steering_mailbox.cleanup_expired()
+
+            async def cleanup_expired_steering() -> None:
+                while True:
+                    await asyncio.sleep(24 * 60 * 60)
+                    try:
+                        await turn_steering_mailbox.cleanup_expired()
+                    except Exception:
+                        logger.exception("Failed to clean expired turn steering rows")
+
+            steering_cleanup_task = asyncio.create_task(cleanup_expired_steering())
             await container.initialize_web_research()
             container.initialize_platform_sql()
             container.start_metrics_exporter()
@@ -6333,6 +6455,10 @@ def create_agent_app(
                 )
             yield
         finally:
+            if steering_cleanup_task is not None:
+                steering_cleanup_task.cancel()
+                await asyncio.gather(steering_cleanup_task, return_exceptions=True)
+            turn_steering_mailbox.configure(None)
             try:
                 if rebac_engine is not None:
                     await rebac_engine.close()

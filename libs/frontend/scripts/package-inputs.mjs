@@ -181,11 +181,14 @@ export const PACKAGE_WORKSPACE_PATTERN = "libs/frontend/**";
 export const WORKFLOW_PATH = ".github/workflows/Check-pending-requests.yml";
 export const PUBLISH_WORKFLOW_PATH =
   ".github/workflows/Publish-frontend-packages.yml";
+export const PUBLISH_WORKFLOW_HELPER_PATH =
+  ".github/scripts/frontend-release-workflow.mjs";
 
 export const VALIDATION_ORCHESTRATION_PATHS = [
   "Makefile",
   WORKFLOW_PATH,
   PUBLISH_WORKFLOW_PATH,
+  PUBLISH_WORKFLOW_HELPER_PATH,
 ];
 
 export const RELEASE_TOOLING_INPUTS = [
@@ -197,8 +200,6 @@ export const RELEASE_TOOLING_INPUTS = [
   "libs/frontend/release/package-inventory.schema.json",
   "libs/frontend/release/compatibility-baselines.json",
   "libs/frontend/release/compatibility-baselines.schema.json",
-  "libs/frontend/release/known-published-coordinates.json",
-  "libs/frontend/release/known-published-coordinates.schema.json",
   "libs/frontend/release/release-record.schema.json",
   "libs/frontend/design-tokens/CHANGELOG.md",
   "libs/frontend/ui/CHANGELOG.md",
@@ -212,10 +213,10 @@ export const RELEASE_TOOLING_INPUTS = [
   "libs/frontend/scripts/release-changelog.mjs",
   "libs/frontend/scripts/compatibility-baselines.mjs",
   "libs/frontend/scripts/release-selection.mjs",
-  "libs/frontend/scripts/release-dispatch.mjs",
-  "libs/frontend/scripts/release-artifact.mjs",
-  "libs/frontend/scripts/release-publisher.mjs",
-  "libs/frontend/scripts/release-summary.mjs",
+  "libs/frontend/scripts/release-operation-inputs.mjs",
+  "libs/frontend/scripts/release-preflight.mjs",
+  "libs/frontend/scripts/release-toolchain.mjs",
+  "libs/frontend/scripts/npm-release.mjs",
   "libs/frontend/scripts/provision-compatible-token.mjs",
   "libs/frontend/scripts/provision-react-consumer.mjs",
   "libs/frontend/scripts/provision-iframe-sdk-consumer.mjs",
@@ -232,9 +233,7 @@ export const RELEASE_TOOLING_INPUTS = [
   "libs/frontend/tests/release-contract.test.mjs",
   "libs/frontend/tests/release-foundations.test.mjs",
   "libs/frontend/tests/release-selection.test.mjs",
-  "libs/frontend/tests/release-dispatch.test.mjs",
-  "libs/frontend/tests/release-artifact.test.mjs",
-  "libs/frontend/tests/release-publisher.test.mjs",
+  "libs/frontend/tests/npm-release.test.mjs",
   "libs/frontend/tests/provision-compatible-token.test.mjs",
   "libs/frontend/tests/release-candidate.test.mjs",
   "libs/frontend/tests/fixture-transfer.test.mjs",

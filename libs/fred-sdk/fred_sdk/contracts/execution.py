@@ -296,6 +296,12 @@ class RuntimeExecuteRequest(BaseModel):
         default=None,
         description="Session identifier for multi-turn continuity. Keep stable across turns.",
     )
+    steering_turn_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        description="Identity of the active chat turn for mid-turn message delivery.",
+    )
     interrupt_id: str | None = Field(
         default=None,
         description=(

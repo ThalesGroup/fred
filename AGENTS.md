@@ -415,6 +415,24 @@ tables. Add a separate table when distinct meaning, lifecycle, access rules or
 compatibility makes it clearer or safer; briefly explain that choice in the
 existing change design or PR.
 
+## Scale and multi-pod operation
+
+For every change, assess behavior at the platform's target scale: hundreds of
+concurrent users, thousands of registered users, hundreds of teams, and tens of
+thousands of documents. Design affected runtime paths for these volumes. Check
+bounded work and memory use, query and index costs, pagination, contention, and
+reuse of configured client and database connection pools. Validate material
+scaling risks with focused load or concurrency tests; a single-user test is not
+sufficient evidence for a shared hot path.
+
+Assume every backend can run with multiple pod replicas, including during
+rollouts and retries. State needed across requests or instances must use shared
+storage or an existing distributed coordination mechanism, with clear ownership,
+idempotency, expiration, and failure recovery. Do not rely on process-local
+queues, locks, caches, or sticky routing for correctness. For changes involving
+long-running work, streaming, HITL, callbacks, or background jobs, verify that
+successive requests can land on different pods.
+
 ## Commit and verification rhythm
 
 Commit completed, reviewable blocks as work progresses instead of accumulating

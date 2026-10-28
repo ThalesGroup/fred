@@ -267,7 +267,26 @@ export function conversationTokenTotals(messages: ThreadMessage[]): TokenUsage {
 }
 
 export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): ThreadMessage[] {
-  const { order, groups } = groupByExchange(messages);
+  const exchanges = groupByExchange(messages);
+  // A steered user message starts a new display segment inside its persisted exchange.
+  const order: string[] = [];
+  const groups = new Map<string, ChatMessage[]>();
+  const segmentOrigins = new Map<string, string>();
+  for (const eid of exchanges.order) {
+    let segmentId = eid;
+    let hasUser = false;
+    for (const message of exchanges.groups.get(eid)!) {
+      const isUserMessage = message.role === "user" && (message.channel as string) !== "hitl_response";
+      if (isUserMessage && hasUser) segmentId = `${eid}:steer:${message.rank}`;
+      if (isUserMessage) hasUser = true;
+      if (!groups.has(segmentId)) {
+        order.push(segmentId);
+        groups.set(segmentId, []);
+        segmentOrigins.set(segmentId, eid);
+      }
+      groups.get(segmentId)!.push(message);
+    }
+  }
 
   const result: ThreadMessage[] = [];
   const lastEid = order[order.length - 1] as string | undefined;
@@ -282,7 +301,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
   // of 0, or pass null to fall back to the billed total.
   let previousContextTokens: number | null = 0;
 
-  for (const eid of order) {
+  for (const [segmentIndex, eid] of order.entries()) {
     const msgs = groups.get(eid)!;
     const isLast = eid === lastEid;
 
@@ -437,7 +456,10 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         if (meta?.sources?.length) sources.push(...meta.sources);
       }
       const marginal = marginalTokenUsage(contextTokens, tokenUsage, previousContextTokens);
-      previousContextTokens = contextTokens;
+      const nextSegmentId = order[segmentIndex + 1];
+      if (contextTokens !== null || !nextSegmentId || segmentOrigins.get(nextSegmentId) !== segmentOrigins.get(eid)) {
+        previousContextTokens = contextTokens;
+      }
       // Raw retention (#1977): every ui_part — link, geo, capability kinds,
       // and kinds this build does not know — survives into the view model.
       const uiParts: RawUiPart[] = metadataMessages.flatMap((m) => uiPartsOf(m));

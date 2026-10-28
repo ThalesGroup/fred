@@ -139,6 +139,10 @@ vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhanceme
   useSetPlatformModelFallbackMutation: () => [vi.fn(), { isLoading: false }],
   useDeletePlatformModelFallbackMutation: () => [vi.fn(), { isLoading: false }],
   useSetModelDiscoveryUrlMutation: () => [vi.fn(), { isLoading: false }],
+  useSetPodChatDefaultMutation: () => [vi.fn(), { isLoading: false }],
+  useClearPodChatDefaultMutation: () => [vi.fn(), { isLoading: false }],
+  useSetPodChatFallbackMutation: () => [vi.fn(), { isLoading: false }],
+  useClearPodChatFallbackMutation: () => [vi.fn(), { isLoading: false }],
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
@@ -158,6 +162,7 @@ vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
   useFrontendFeatureFlag: () => ({ enabled: h.applicationsEnabled, isLoading: false }),
 }));
 
+// Same reason: the admin gate reads the frontend bootstrap through RTK Query.
 vi.mock("@rework/core/hooks/useUserCapabilities", () => ({
   useUserCapabilities: () => ({ canAdmin: true }),
 }));

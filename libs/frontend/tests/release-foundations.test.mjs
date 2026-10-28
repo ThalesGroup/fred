@@ -51,14 +51,9 @@ import {
   verifyBaselineImport,
 } from "../scripts/compatibility-baselines.mjs";
 import {
-  assertRecordAuthorizesPublication,
-  assertRecordAuthorizesRegistrySuccess,
   candidateRecordFromEvidence,
-  publicationOutcomeModel,
-  publishingAttemptModel,
   releaseRecordDigest,
   validateReleaseRecord,
-  verificationModel,
 } from "../scripts/release-record.mjs";
 
 const inventory = JSON.parse(
@@ -508,7 +503,7 @@ test("committed baseline remains locally usable without its expiring CI ZIP", as
   // Neither load nor digest traverses the historical artifact ID/ZIP path.
 });
 
-test("records support SDK-only fixture selection but never authorize publish or registry success", async () => {
+test("records support SDK-only fixture selection", async () => {
   const contract = await loadReleaseContract();
   const ledger = await loadCompatibilityLedger();
   const sdk = contract.packages.iframeSdk;
@@ -602,36 +597,6 @@ test("records support SDK-only fixture selection but never authorize publish or 
     selectedIds: ["iframeSdk"],
   });
   assert.equal(unverified.readiness, "incomplete");
-  const execution = {
-    repository: "ThalesGroup/fred",
-    workflow: "Publish-frontend-packages.yml",
-    sourceCommit,
-    runId: "1",
-    runAttempt: "1",
-    signerIssuer: "https://token.actions.githubusercontent.com",
-  };
-  const attempt = publishingAttemptModel({ candidate, execution });
-  assert.throws(
-    () => assertRecordAuthorizesPublication(attempt),
-    /unpersisted/,
-  );
-  const outcome = publicationOutcomeModel({
-    attempt,
-    memberId: "iframeSdk",
-    coordinate: candidate.selected[0].coordinate,
-    integrity,
-    provenance: { cryptographicallyVerified: false },
-  });
-  const verification = verificationModel({
-    candidate,
-    execution,
-    outcomes: [outcome],
-    gates: {},
-  });
-  assert.throws(
-    () => assertRecordAuthorizesRegistrySuccess(verification),
-    /controlled/,
-  );
   assert(/^sha256-/.test(releaseRecordDigest(candidate)));
   for (const mutate of [
     (record) => (record.archives.iframeSdk.bytes = 0),

@@ -32,6 +32,7 @@ from fred_sdk.contracts.runtime import TracerPort
 from langchain.agents.middleware import AgentMiddleware, ToolCallLimitMiddleware
 
 from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
+from fred_runtime.runtime_support.turn_steering import TurnSteeringMiddleware
 
 from .checkpoint_hygiene import CheckpointHygieneMiddleware
 from .dynamic_prompt import DynamicPromptMiddleware
@@ -85,6 +86,10 @@ def build_react_platform_middleware_frame(
             kpi=kpi,
         ),
         DynamicPromptMiddleware(available_tool_names=available_tool_names),
+        TurnSteeringMiddleware(
+            binding.portable_context.session_id,
+            binding.portable_context.baggage.get("steering_turn_id"),
+        ),
         *skills_middleware,
         # --- CAPABILITY BLOCK INSERTION SLOT (#1973, RFC §5.3) ---
         *capability_middleware,

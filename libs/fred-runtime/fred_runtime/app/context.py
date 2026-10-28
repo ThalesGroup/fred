@@ -216,7 +216,7 @@ class PodApplicationContext:
         # Runtime migrations own history/checkpoints, never the Python manager.
         await require_tables(
             engine,
-            [SessionHistoryRow.__tablename__],
+            [SessionHistoryRow.__tablename__, "runtime_turn_steering"],
             component="fred-runtime",
             migrate_command=_MIGRATE_COMMAND,
             version_table=_RUNTIME_VERSION_TABLE,
