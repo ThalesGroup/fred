@@ -11,6 +11,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "Documents",
     "DocumentUploads",
     "OrganizationAgents",
+    "OrganizationCapabilities",
     "OrganizationModels",
     "AgentInstances",
     "AgentTemplates",
@@ -101,6 +102,14 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       invalidatesTags: (_result, _error, arg) => [{ type: "OrganizationAgents", id: arg.organizationId }],
       extraOptions: { retryUnauthorized: false },
     },
+    organizationCapabilities: {
+      providesTags: (_result, _error, arg) => [{ type: "OrganizationCapabilities", id: arg.organizationId }],
+    },
+    refreshOrganizationCapabilities: {
+      extraOptions: { retryUnauthorized: false },
+      // A failed refresh also records the pod as unavailable; pods are shared by organizations.
+      invalidatesTags: ["OrganizationCapabilities"],
+    },
     entries: { providesTags: ["Folders", "Documents"] },
     summary: { providesTags: ["Documents"] },
     receipts: { providesTags: ["DocumentUploads"] },
@@ -183,6 +192,8 @@ export const {
   useRefreshModelSourceMutation,
   useOrganizationAgentsQuery,
   useSetOrganizationAgentDefaultMutation,
+  useOrganizationCapabilitiesQuery,
+  useRefreshOrganizationCapabilitiesMutation,
   useStartMutation,
   useSetRetrievableMutation,
   useLazyPreviewQuery,

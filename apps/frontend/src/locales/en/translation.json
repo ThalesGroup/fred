@@ -1436,6 +1436,25 @@
           "max_output_tokens": "Output: {{count}} tokens",
           "noSources": "No model source is configured in the control plane.",
           "noModels": "No models in the catalog."
+        },
+        "organizationCapabilities": {
+          "col": {
+            "pod": "Agent pod",
+            "observation": "Inventory",
+            "checkedAt": "Last check",
+            "capabilities": "Capabilities"
+          },
+          "observation": {
+            "observed": "Observed",
+            "unavailable": "Unavailable",
+            "not_observed": "Never observed"
+          },
+          "disabledHint": "This pod is disabled in the control plane configuration.",
+          "refreshError": "Could not refresh the inventory of {{runtimeId}}.",
+          "noPods": "No agent pod is configured in the control plane.",
+          "backToPods": "Back to pods",
+          "unavailableHint": "The pod did not answer the last check. Showing the inventory received on {{date}}.",
+          "neverAnsweredHint": "The pod has never answered."
         }
       },
       "platformModelBindings": {

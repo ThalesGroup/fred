@@ -52,8 +52,9 @@ import {
   useOrganizationAgentsQuery,
   useSetOrganizationAgentDefaultMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { AgentEnablement } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { AgentEnablement, CapabilityInventoryOffer } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./FeaturesPage.module.css";
+import { OrganizationCapabilities } from "./OrganizationCapabilities";
 import { OrganizationModels } from "./OrganizationModels";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
 import { PlatformModelBindingsPanel } from "./PlatformModelBindingsPanel/PlatformModelBindingsPanel.tsx";
@@ -92,7 +93,10 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   const [kindFilter, setKindFilter] = useState<CapabilityKind>(readOnly ? "agent" : "tool");
   const discoveringAgents = readOnly && kindFilter === "agent";
   const discoveringModels = readOnly && kindFilter === "model";
-  const organizationCatalog = discoveringAgents || discoveringModels;
+  const discoveringCapabilities = readOnly && kindFilter === "tool";
+  // Models and capabilities render their own organization panel below the tabs.
+  const organizationPanel = discoveringModels || discoveringCapabilities;
+  const organizationCatalog = discoveringAgents || organizationPanel;
   const discovery = useOrganizationAgentsQuery(discoveringAgents && organizationId ? { organizationId } : skipToken, {
     refetchOnMountOrArgChange: true,
   });
@@ -104,7 +108,7 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
 
   const legacy = useAdminCapabilitiesQuery(undefined, { skip: organizationCatalog });
   const { data, refetch: refetchCapabilities } = legacy;
-  const { isLoading, isError } = discoveringModels
+  const { isLoading, isError } = organizationPanel
     ? { isLoading: false, isError: false }
     : discoveringAgents
       ? discovery
@@ -560,6 +564,21 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
     );
   };
 
+  const manageTeamsCell = (dimmed: boolean, disabled: boolean, onClick?: () => void) => (
+    <div className={`${styles.actionsCell} ${dimmed ? styles.dimmed : ""}`}>
+      <Button
+        color="on-surface"
+        variant="outlined"
+        size="small"
+        icon={{ category: "outlined", type: "groups" }}
+        onClick={onClick}
+        disabled={disabled}
+      >
+        {t("rework.admin.capabilities.manageTeams")}
+      </Button>
+    </div>
+  );
+
   const columns: (DataTableColumn<CapabilityEnablementItem> & { field?: "defaultOn" | "identity" | "actions" })[] = [
     {
       field: "defaultOn",
@@ -783,24 +802,14 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
       label: t("rework.admin.capabilities.col.actions"),
       // Keep the icon and label clear of the outline at desktop widths.
       size: "1.55fr",
-      cellRenderer: (cap) => (
-        // Dimmed but never disabled: an unused capability is exactly the one an
-        // admin opens to grant its first team.
-        <div
-          className={`${styles.actionsCell} ${rowIsUnused(cap) && !unavailableDiscoveredIds.has(cap.id) ? styles.dimmed : ""}`}
-        >
-          <Button
-            color="on-surface"
-            variant="outlined"
-            size="small"
-            icon={{ category: "outlined", type: "groups" }}
-            onClick={() => setMatrixCapabilityId(cap.id)}
-            disabled={readOnly || unavailableDiscoveredIds.has(cap.id)}
-          >
-            {t("rework.admin.capabilities.manageTeams")}
-          </Button>
-        </div>
-      ),
+      // Dimmed but never disabled: an unused capability is exactly the one an
+      // admin opens to grant its first team.
+      cellRenderer: (cap) =>
+        manageTeamsCell(
+          rowIsUnused(cap) && !unavailableDiscoveredIds.has(cap.id),
+          readOnly || unavailableDiscoveredIds.has(cap.id),
+          () => setMatrixCapabilityId(cap.id),
+        ),
     },
   ];
 
@@ -815,6 +824,27 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
       }
       return <div className={styles.centered} />;
     },
+  }));
+  // Pod offers keep the catalog layout. No organization authorization exists yet,
+  // so access, team and health cells stay empty and team management is disabled.
+  const offerColumns: DataTableColumn<CapabilityInventoryOffer>[] = columns.map((column) => ({
+    label: column.label,
+    size: column.size,
+    cellRenderer: (offer) =>
+      column.field === "identity" ? (
+        <EntityIdentity
+          name={t(offer.descriptor.name, { defaultValue: offer.descriptor.name })}
+          icon={toIconType(offer.descriptor.icon, "tune")}
+          sourceId={offer.capability_id}
+          runtimeId={offer.runtime_id}
+          version={offer.descriptor.public_version}
+          dimmed={!offer.advertised}
+        />
+      ) : column.field === "actions" ? (
+        manageTeamsCell(!offer.advertised, true)
+      ) : (
+        <div className={styles.centered} />
+      ),
   }));
   const rowCount = discoveringAgents ? agents.length : visibleCapabilities.length;
 
@@ -875,6 +905,13 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
           onCloseDefaults={() => setPlatformBindingsPanelOpen(false)}
         />
       )}
+      {discoveringCapabilities && organizationId && (
+        <OrganizationCapabilities
+          key={organizationId}
+          organizationId={organizationId}
+          capabilityColumns={offerColumns}
+        />
+      )}
 
       {isLoading && <p className={styles.status}>{t("rework.admin.capabilities.loading")}</p>}
       {isError && <p className={styles.statusError}>{t("rework.admin.capabilities.loadError")}</p>}
@@ -917,7 +954,7 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
         <UnverifiedRuntimeWarning runtimes={currentUnverifiedRuntimes} />
       )}
 
-      {!discoveringModels &&
+      {!organizationPanel &&
         !isLoading &&
         !isError &&
         (activeKindFilter !== "model" || discoveryConfigurationReady) &&
@@ -939,7 +976,7 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
           />
         )}
 
-      {!discoveringModels &&
+      {!organizationPanel &&
         !isLoading &&
         !isError &&
         (activeKindFilter !== "model" || discoveryConfigurationReady) &&
