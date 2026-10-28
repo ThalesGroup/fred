@@ -414,7 +414,7 @@ selection; `disable-model-invocation: true` excludes new autonomous loads unless
 the current request explicitly selects it. Display-only French/English labels
 never change these English instructions, model descriptions or canonical slugs.
 
-Mermaid diagram rules live in the packaged `mermaid` skill. The composer advertises
+Mermaid diagram rules live in the packaged `graph` skill. The composer advertises
 its metadata when that skill is configured; the full rules reach the model only
 through a user or model load. No global SDK prompt bundle is injected.
 

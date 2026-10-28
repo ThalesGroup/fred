@@ -700,7 +700,7 @@ def test_skill_selection_reaches_model_without_body_or_followup_leak(
     if legacy:
         bound.runtime_context.skill = selections[0]
     else:
-        bound.runtime_context.skills = [*selections, SkillInvocation(name="mermaid")]
+        bound.runtime_context.skills = [*selections, SkillInvocation(name="graph")]
 
     def compose() -> str:
         return compose_system_prompt(
@@ -713,7 +713,7 @@ def test_skill_selection_reaches_model_without_body_or_followup_leak(
         "the user explicitly requested these platform skills: `meeting-minutes`"
         in prompt
     )
-    assert ("`mermaid`" in prompt) is not legacy
+    assert ("`graph`" in prompt) is not legacy
     assert "names are skills, not tool or subagent names" in prompt
     assert "unless already loaded" in prompt
     assert "absent from the catalog, report it as unavailable" in prompt
@@ -791,7 +791,7 @@ def test_compose_system_prompt_omits_a_blank_block_entirely() -> None:
     assert prompt.count("<tools>") == 1 and prompt.count("</tools>") == 1
 
 
-def test_compose_system_prompt_advertises_mermaid_without_injecting_its_body() -> None:
+def test_compose_system_prompt_advertises_graph_without_injecting_its_body() -> None:
     skills = PlatformSkills.from_directory("package")
     prompt = compose_system_prompt(
         "BASE-TEMPLATE",
@@ -804,9 +804,9 @@ def test_compose_system_prompt_advertises_mermaid_without_injecting_its_body() -
     tools = prompt[prompt.index("<tools>") : prompt.index("</tools>")]
     assert "TOOL-LIST" in tools
     assert "FILESYSTEM-NOTICE" in tools
-    assert "mermaid" in tools
-    assert "Skill `mermaid` (not a tool)" in tools
-    assert 'load_skill(name="mermaid")' in tools
+    assert "graph" in tools
+    assert "Skill `graph` (not a tool)" in tools
+    assert 'load_skill(name="graph")' in tools
     assert 'load_skill(name="meeting-minutes")' in tools
     assert "Before answering or choosing a task tool, check the catalog" in tools
     assert (

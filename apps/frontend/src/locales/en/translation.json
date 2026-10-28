@@ -682,7 +682,7 @@
           "title": "Verify an answer",
           "description": "Check an answer against available evidence, correct unsupported claims and explain verification limits."
         },
-        "mermaid": {
+        "graph": {
           "title": "Graphs",
           "description": "Create or repair diagrams and charts suited to the question, with a clear and reliable result."
         },

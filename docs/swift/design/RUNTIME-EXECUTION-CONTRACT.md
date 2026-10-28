@@ -6770,13 +6770,13 @@ general agent scope descriptor stays open in `CAPABILITY-SCOPE-CEILING-RFC.md`.
 ### 8.105 Mermaid instructions become a platform skill (2026-10-08)
 
 The Mermaid output rules move from the SDK global prompt bundle to
-`fred_runtime/skills/mermaid/SKILL.md`, with English metadata and optional
-`[diagram goal or source] [constraints]` input guidance. Configured ReAct
+`fred_runtime/skills/graph/SKILL.md`, with English metadata and optional
+`[goal or source] [constraints]` input guidance. Configured ReAct
 agents discover it through the snapshot catalog and `load_skill`; Deep parents
 and children use native discovery and `read_file` on the physical mount.
-Explicit ReAct selection preloads the body; Deep selection records intent and
-native reads perform loading, with the shared attribution and KPI paths. No tool named
-`mermaid` is created. Ordinary history and reload rules apply.
+Explicit ReAct selection preloads the body; Deep selection uses native
+`pinned_skills` to inject it before inference, with shared attribution and KPI
+paths. No tool named `graph` is created. Ordinary history and reload rules apply.
 
 `compose_system_prompt` no longer imports or injects
 `GLOBAL_BASE_PROMPT_MARKDOWN`; the SDK bundle/resource and their registration are

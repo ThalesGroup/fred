@@ -682,7 +682,7 @@
           "title": "Vérifier une réponse",
           "description": "Vérifier une réponse à partir des sources disponibles, corriger les affirmations non étayées et expliquer les limites de la vérification."
         },
-        "mermaid": {
+        "graph": {
           "title": "Graphiques",
           "description": "Créer ou corriger des schémas et graphiques adaptés au besoin, avec un rendu clair et fiable."
         },

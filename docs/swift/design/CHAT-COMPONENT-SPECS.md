@@ -1307,7 +1307,7 @@ or native `<details>`, respectively). Implemented by
 - Citations use `[N]`, rendered as clickable badges by `rehypeCitations`
   (`SourceBadge`).
 
-Mermaid parse-safe rules are supplied by the configured platform `mermaid`
+Mermaid parse-safe rules are supplied by the configured platform `graph`
 skill through user or model loading, rather than an automatic prompt suffix.
 See `RUNTIME-EXECUTION-CONTRACT.md §8.105`. Graph agents (mindmap,
 `GraphRuntime`) remain outside this skill-loading path.
@@ -1325,7 +1325,7 @@ See `RUNTIME-EXECUTION-CONTRACT.md §8.105`. Graph agents (mindmap,
 | `styles/spacings.css`, `typography.css`, `radius.css` | Prose/tokens |
 | `apps/fred-agents/fred_agents/general_assistant.py` | Reference agent system prompt |
 | `libs/fred-sdk/fred_sdk/resources/prompts.py` | Verbatim packaged Markdown loaders for agent authors |
-| `libs/fred-runtime/fred_runtime/skills/mermaid/SKILL.md` | Progressively loaded Mermaid diagram instructions |
+| `libs/fred-runtime/fred_runtime/skills/graph/SKILL.md` | Progressively loaded Mermaid diagram instructions |
 | `libs/fred-runtime/fred_runtime/react/react_prompting.py` | `compose_system_prompt()` |
 
 ---

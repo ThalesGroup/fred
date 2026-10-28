@@ -78,6 +78,23 @@ it("preserves authored custom skills and histories without packaged provenance",
   }
 });
 
+it.each([
+  ["fr", "Graphiques"],
+  ["en", "Graphs"],
+])("presents the graph skill in %s while keeping its engine out of the label", async (locale, title) => {
+  await act(() => language.changeLanguage(locale));
+  render(true, "graph");
+  const button = container.querySelector("button")!;
+  expect(button.textContent).toBe(title);
+  expect(button.title).toMatch(new RegExp(`^${title}: `));
+  expect(button.title.toLowerCase()).not.toContain("mermaid");
+  act(() => button.click());
+  expect(onOpen).toHaveBeenCalledWith("graph");
+  const range = document.createRange();
+  range.selectNodeContents(container.querySelector("[data-skill-message]")!);
+  expect(selectedSkillText(range, container)).toBe("/graph");
+});
+
 it("falls back to English, then authored metadata for an untranslated packaged skill", async () => {
   language.removeResourceBundle("fr", "translation");
   render(true);

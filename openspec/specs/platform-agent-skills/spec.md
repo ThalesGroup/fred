@@ -63,20 +63,20 @@ Every ReAct agent with skills configured SHALL receive validated catalog names, 
 
 ### Requirement: Mermaid guidance uses progressive skill loading
 
-The packaged catalog SHALL include an English `mermaid` skill, presented as Graphs, with an advisory argument hint. Its procedure SHALL choose a representation suited to the question and source facts, with type-specific syntax and examples available as shared references. It SHALL cover flowcharts, sequence, state, class and entity relationship diagrams, mindmaps, timelines, Gantt charts, pie and XY charts, user journeys and Git graphs. Quantitative data, relationships, dates and scores SHALL come from supplied facts or actual tool results. Mermaid instructions SHALL be loaded only through the shared skill workflow; runtime prompt assembly SHALL NOT inject the former SDK output contract automatically. The existing frontend Mermaid renderer and sanitization SHALL remain available.
+The packaged catalog SHALL include an English `graph` skill, presented as Graphs, with an advisory argument hint. Its procedure SHALL choose a representation suited to the question and source facts, with type-specific syntax and examples available as shared references. It SHALL cover flowcharts, sequence, state, class and entity relationship diagrams, mindmaps, timelines, Gantt charts, pie and XY charts, user journeys and Git graphs. Quantitative data, relationships, dates and scores SHALL come from supplied facts or actual tool results. Mermaid instructions SHALL be loaded only through the shared skill workflow; runtime prompt assembly SHALL NOT inject the former SDK output contract automatically. The existing frontend Mermaid renderer and sanitization SHALL remain available.
 
 #### Scenario: Mermaid catalog metadata before loading
 
 - **GIVEN** a pod uses the packaged skills directory
 - **WHEN** an agent receives its system prompt
-- **THEN** `mermaid` is advertised with its description in the native Deep index or with its description and advisory hint in the ReAct catalog
+- **THEN** `graph` is advertised with its description in the native Deep index or with its description and advisory hint in the ReAct catalog
 - **AND** its diagram syntax instructions are absent until loaded
 
 #### Scenario: User or model loads Mermaid
 
-- **WHEN** a user invokes `/mermaid` with or without text, or the model reads its instructions with ReAct `load_skill` or Deep native `read_file`
+- **WHEN** a user invokes `/graph` with or without text, or the model reads its instructions with ReAct `load_skill` or Deep native `read_file`
 - **THEN** the runtime supplies its instructions with the existing origin attribution and successful-load KPI
-- **AND** no tool named `mermaid` is registered
+- **AND** no tool named `graph` is registered
 - **AND** complete returned Mermaid diagrams continue to use the existing frontend renderer
 - **AND** Mermaid instructions direct output to a fenced Markdown block in chat, rather than sending Mermaid source to the static HTML artifact viewer
 - **AND** display labels and captions use the user's language without introducing the rendering engine unless requested

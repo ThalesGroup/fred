@@ -1,5 +1,5 @@
 ---
-name: mermaid
+name: graph
 description: Create or repair diagrams and charts for workflows, systems, relationships, hierarchies, timelines, plans and verified numerical data, using Mermaid for the chat renderer.
 argument-hint: "[goal or source] [constraints]"
 ---

@@ -549,7 +549,7 @@ catalog label shown when browsing templates; the `display_name` the operator
 enters at enrollment becomes the instance's identity within the team.
 
 **Platform procedures.** English `SKILL.md` workflows live in
-`fred_runtime/skills/`, including Mermaid diagram rules in `mermaid/SKILL.md`.
+`fred_runtime/skills/`, including Mermaid diagram rules in `graph/SKILL.md`.
 Configured agents receive catalog metadata. ReAct uses confined shared skill
 tools and preloads explicit selections. Deep parents and children use native
 filesystem reads through `create_deep_agent(skills=["/skills/"])`; explicit

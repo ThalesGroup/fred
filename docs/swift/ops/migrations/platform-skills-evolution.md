@@ -23,6 +23,15 @@ Packaged resources remain English; the frontend translates their titles and
 descriptions using trusted packaged provenance. No translation files are needed
 for custom skills.
 
+The packaged diagram skill is now named `graph` (`/graph`), displayed as
+Graphiques in French and Graphs in English. Mermaid remains its rendering
+format. The former packaged `mermaid` name is no longer advertised; stored
+messages keep their original text and selections. Existing retired-skill
+handling applies to old names. If an installation tested this branch with a
+disabled `mermaid` policy, review the retired entry and disable `graph` after
+the runtime rollout if that opt-out is still intended. Custom skill names are
+unchanged.
+
 ## Upgrade
 
 1. Apply the linear control-plane migration `d7b24ef08361` after `f28c3e9ab641`.

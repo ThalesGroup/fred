@@ -90,7 +90,7 @@ it("retains the active switch focus through saving and refresh while guarding ra
       enabled: true,
       runtime_ids: ["pod-a"],
     },
-    { skill: { name: "mermaid", description: "Diagrams", builtin: true }, enabled: true, runtime_ids: ["pod-a"] },
+    { skill: { name: "graph", description: "Diagrams", builtin: true }, enabled: true, runtime_ids: ["pod-a"] },
   ];
   let complete: () => void;
   let completeRefresh: () => void;
@@ -181,7 +181,7 @@ it("keeps the current state and reports a refused write", async () => {
 
 it("blocks new disables for unverified sources and still allows recovery during a total outage", async () => {
   state.data.skills = [
-    { skill: { name: "mermaid", description: "Diagrams", builtin: true }, enabled: true, runtime_ids: ["pod-a"] },
+    { skill: { name: "graph", description: "Diagrams", builtin: true }, enabled: true, runtime_ids: ["pod-a"] },
   ];
   state.data.unavailable_runtime_ids = ["offline"];
   state.data.disabled_skill_names = ["meeting-minutes"];

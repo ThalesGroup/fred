@@ -79,19 +79,19 @@ def test_invalid_invocation_flags_exclude_only_the_bad_skill(tmp_path: Path) -> 
 def test_packaged_policy_is_scoped_without_mutating_the_shared_catalog() -> None:
     skills = PlatformSkills.from_directory("package")
     assert all(s.builtin for s in skills.catalog.skills)
-    denied = skills.for_execution(disabled_names=("mermaid",))
+    denied = skills.for_execution(disabled_names=("graph",))
     with pytest.raises(ValueError, match="unavailable"):
-        denied.read("mermaid")
-    assert "mermaid" not in {s.name for s in denied.catalog.skills}
-    assert "mermaid" in {s.name for s in skills.catalog.skills}
-    assert skills.for_execution().read("mermaid")
+        denied.read("graph")
+    assert "graph" not in {s.name for s in denied.catalog.skills}
+    assert "graph" in {s.name for s in skills.catalog.skills}
+    assert skills.for_execution().read("graph")
 
 
 def test_packaged_policy_does_not_disable_a_custom_homonym(tmp_path: Path) -> None:
-    publish(tmp_path, "mermaid")
+    publish(tmp_path, "graph")
     skills = PlatformSkills.from_directory(str(tmp_path))
     assert not skills.catalog.skills[0].builtin
-    assert skills.for_execution(disabled_names=("mermaid",)).read("mermaid")
+    assert skills.for_execution(disabled_names=("graph",)).read("graph")
 
 
 def test_runtime_rebinding_uses_original_catalog_after_selection_and_policy_changes() -> (
@@ -111,9 +111,7 @@ def test_runtime_rebinding_uses_original_catalog_after_selection_and_policy_chan
     assert "grill-me" not in {s.name for s in runtime.services.skills.catalog.skills}
     runtime.bind(binding("grill-me"))
     assert runtime.services.skills.read("grill-me")
-    runtime.bind(
-        binding().model_copy(update={"disabled_platform_skills": ("mermaid",)})
-    )
-    assert "mermaid" not in {s.name for s in runtime.services.skills.catalog.skills}
+    runtime.bind(binding().model_copy(update={"disabled_platform_skills": ("graph",)}))
+    assert "graph" not in {s.name for s in runtime.services.skills.catalog.skills}
     runtime.bind(binding())
-    assert runtime.services.skills.read("mermaid")
+    assert runtime.services.skills.read("graph")
