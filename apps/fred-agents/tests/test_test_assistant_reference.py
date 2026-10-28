@@ -29,7 +29,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from fred_agents.test_assistant.conformance import CHECKS, Check, Event, TurnResult
 from fred_agents.test_assistant.graph_agent import TestAssistantGraphAgent
-from fred_agents.test_assistant.graph_state import TestInput
+from fred_agents.test_assistant.graph_state import TEST_ASSISTANT_AGENT_ID, TestInput
 from fred_agents.test_assistant.mock_llm import MockChatModelFactory
 from fred_core.store import VectorSearchHit
 from fred_runtime.graph.graph_runtime import GraphRuntime
@@ -53,6 +53,7 @@ from fred_sdk.contracts.runtime import (
 )
 from fred_sdk.graph.runtime import GraphExecutionOutput
 from langgraph.checkpoint.memory import InMemorySaver
+from weaver_fixtures import active_turn, local_binding
 
 
 class _FakeKnowledgeSearch(ToolInvokerPort):
@@ -79,9 +80,14 @@ class _InProcessAgentInvoker(AgentInvokerPort):
     async def invoke(self, request: AgentInvocationRequest) -> AgentInvocationResult:
         runtime = GraphRuntime(
             definition=TestAssistantGraphAgent(),
-            services=self._services,
+            # Never the parent's checkpoint: a child does not resume its caller.
+            services=RuntimeServices(
+                chat_model_factory=self._services.chat_model_factory,
+                checkpointer=InMemorySaver(),
+            ),
         )
-        runtime.bind(_binding(session_id="s-delegate", instance_id=None))
+        # A local child runs in its parent's turn, under the parent's context.
+        runtime.bind(_binding(session_id=str(request.context.session_id)))
         executor = await runtime.get_executor()
         final = [
             event
@@ -94,8 +100,9 @@ class _InProcessAgentInvoker(AgentInvokerPort):
         return AgentInvocationResult(agent_id=request.agent_id, content=final.content)
 
 
-def _binding(*, session_id: str, instance_id: str | None) -> BoundRuntimeContext:
-    return BoundRuntimeContext(
+def _binding(*, session_id: str) -> BoundRuntimeContext:
+    return local_binding(
+        TEST_ASSISTANT_AGENT_ID,
         runtime_context=RuntimeContext(
             session_id=session_id, user_id="u1", team_id="t1", ask_user=True
         ),
@@ -108,7 +115,6 @@ def _binding(*, session_id: str, instance_id: str | None) -> BoundRuntimeContext
             session_id=session_id,
             user_id="u1",
             team_id="t1",
-            baggage={"agent_instance_id": instance_id} if instance_id else {},
         ),
     )
 
@@ -141,7 +147,7 @@ class _ExecutorDriver:
             definition=TestAssistantGraphAgent(),
             services=self.services,
         )
-        runtime.bind(_binding(session_id=session_id, instance_id="inst-parent"))
+        runtime.bind(_binding(session_id=session_id))
         return await runtime.get_executor()
 
     async def send(self, session_id: str, message: str) -> TurnResult:
@@ -167,10 +173,13 @@ class _ExecutorDriver:
     ) -> TurnResult:
         executor = await self.executor(session_id)
         try:
-            events = [
-                event.model_dump(mode="json")
-                async for event in executor.stream(TestInput(message=message), config)
-            ]
+            with active_turn(_binding(session_id=session_id)):
+                events = [
+                    event.model_dump(mode="json")
+                    async for event in executor.stream(
+                        TestInput(message=message), config
+                    )
+                ]
         except RuntimeError as exc:
             return TurnResult(rejected=str(exc))
         return TurnResult(events=events)

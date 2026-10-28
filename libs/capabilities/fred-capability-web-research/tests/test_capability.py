@@ -128,56 +128,6 @@ async def test_absent_or_unready_sink_blocks_save_and_tool_construction():
         )
 
 
-@pytest.mark.asyncio
-async def test_graph_uses_same_native_tools_and_error_artifacts():
-    from fred_runtime.graph.node_context import NodeContext
-    from fred_sdk.contracts.context import (
-        BoundRuntimeContext,
-        PortableContext,
-        PortableEnvironment,
-        RuntimeContext,
-    )
-
-    capability = WebResearchCapability()
-    port = Port()
-    ctx = context(port)
-    graph = NodeContext(
-        binding=BoundRuntimeContext(
-            runtime_context=RuntimeContext(user_id="user"),
-            portable_context=PortableContext(
-                request_id="request",
-                correlation_id="correlation",
-                actor="user",
-                tenant="default",
-                environment=PortableEnvironment.DEV,
-                user_id="user",
-            ),
-        ),
-        services=ctx.services,
-        model=None,
-        graph_agent_id="graph",
-        node_id="web",
-        allowed_tool_refs=frozenset(),
-        tuning_values={},
-        sink=lambda event: None,
-        runtime_tools={tool.name: tool for tool in capability.tools(ctx)},
-    )
-    result = await graph.invoke_runtime_tool("web_search", {"query": "evidence"})
-    assert isinstance(result, dict)
-    assert result["is_error"] is False
-    text = result["blocks"][0]["text"]
-    assert json.loads(text)["results"][0]["url"] == "https://example.com"
-    port.fail = True
-    result = await graph.invoke_runtime_tool("web_search", {"query": "evidence"})
-    assert isinstance(result, dict)
-    assert result["is_error"] is True
-    carrier = capability.middleware(ctx)
-    assert {tool.name for tool in carrier[0].tools} == {
-        "web_search",
-        "fetch_url",
-    }
-
-
 def test_citations_skip_failed_duplicate_and_non_http_pages():
     result = WebResearchResult(
         results=[

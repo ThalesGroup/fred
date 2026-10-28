@@ -10,6 +10,7 @@
     "../../libs/fred-core",
     "../../libs/fred-sdk",
     "../../libs/fred-runtime",
+    "../../libs/fred-runtime/tests",
     "../../libs/capabilities/fred-capability-writable-document",
     "../../libs/capabilities/fred-capability-ppt-filler",
     "../../libs/capabilities/fred-capability-platform-ops",

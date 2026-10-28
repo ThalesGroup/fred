@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 from fred_agents.test_assistant.graph_agent import TestAssistantGraphAgent
-from fred_agents.test_assistant.graph_state import TestInput
+from fred_agents.test_assistant.graph_state import TEST_ASSISTANT_AGENT_ID, TestInput
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -26,10 +26,12 @@ from fred_sdk.contracts.runtime import (
     ToolResultRuntimeEvent,
 )
 from langgraph.checkpoint.memory import InMemorySaver
+from weaver_fixtures import active_turn, local_binding
 
 
 def _binding(*, ask_user: bool) -> BoundRuntimeContext:
-    return BoundRuntimeContext(
+    return local_binding(
+        TEST_ASSISTANT_AGENT_ID,
         runtime_context=RuntimeContext(ask_user=ask_user, language="fr"),
         portable_context=PortableContext(
             request_id="request-1",
@@ -66,15 +68,17 @@ async def test_test_assistant_questions_use_real_tool_and_resume(
     saver = InMemorySaver()
     services = RuntimeServices(checkpointer=saver)
     runtime = GraphRuntime(definition=TestAssistantGraphAgent(), services=services)
-    executor = await runtime.build_executor(_binding(ask_user=True))
+    binding = _binding(ask_user=True)
+    executor = await runtime.build_executor(binding)
     session_id = "hitl-scenario"
 
-    pending = [
-        event
-        async for event in executor.stream(
-            TestInput(message=scenario), ExecutionConfig(session_id=session_id)
-        )
-    ]
+    with active_turn(binding):
+        pending = [
+            event
+            async for event in executor.stream(
+                TestInput(message=scenario), ExecutionConfig(session_id=session_id)
+            )
+        ]
     pause = next(
         event for event in pending if isinstance(event, AwaitingHumanRuntimeEvent)
     )
@@ -87,17 +91,18 @@ async def test_test_assistant_questions_use_real_tool_and_resume(
     assert pause.request.free_text is True
     assert not any(isinstance(event, ToolResultRuntimeEvent) for event in pending)
 
-    resumed = [
-        event
-        async for event in executor.stream(
-            TestInput(message=scenario),
-            ExecutionConfig(
-                session_id=session_id,
-                interrupt_id=pause.request.interrupt_id,
-                resume_payload=answer,
-            ),
-        )
-    ]
+    with active_turn(binding):
+        resumed = [
+            event
+            async for event in executor.stream(
+                TestInput(message=scenario),
+                ExecutionConfig(
+                    session_id=session_id,
+                    interrupt_id=pause.request.interrupt_id,
+                    resume_payload=answer,
+                ),
+            )
+        ]
     results = [event for event in resumed if isinstance(event, ToolResultRuntimeEvent)]
     assert len(results) == 1
     assert results[0].call_id == calls[0].call_id
