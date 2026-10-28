@@ -1052,26 +1052,8 @@ export const {
     useLazyDisableImpactQuery,
   useHandlerControlPlaneV1KpiPresetsSkillUsageGetQuery: useSkillUsageQuery,
   useHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery: useUserSkillUsageQuery,
-  useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery: useActiveUsersOverTimeQuery,
-  useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery: useUniqueUsersTotalQuery,
-  useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery: useSessionsOverTimeQuery,
-  useHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery: useMessagesOverTimeQuery,
-  useHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery: useSessionsByScopeQuery,
-  // Engagement distributions (#2426) — histogram rows + a median, both fed to
-  // the Engagement section of the admin analytics page.
-  useHandlerControlPlaneV1KpiPresetsConversationsPerUserGetQuery: useConversationsPerUserQuery,
-  useHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery: useConversationDepthQuery,
-  useHandlerControlPlaneV1KpiPresetsAgentsPerUserGetQuery: useAgentsPerUserQuery,
-  // Engagement trends (#2428) — the same three medians, recomputed per bucket
-  // over a trailing window the response carries in `window`.
-  useHandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetQuery: useConversationsPerUserTrendQuery,
-  useHandlerControlPlaneV1KpiPresetsConversationDepthTrendGetQuery: useConversationDepthTrendQuery,
-  useHandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetQuery: useAgentsPerUserTrendQuery,
-  useHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery: useTopTeamsBySessionsQuery,
   useHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery: useAgentsTotalQuery,
-  useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery: useTopAgentsByConversationsQuery,
   useHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery: useAgentPromptLengthDistributionQuery,
-  useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery: useDocumentsTotalQuery,
   // Home dashboard "Votre activité" — self-scoped scalar+delta presets (#2298).
   useHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery: useUserSessionsTotalQuery,
   useHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery: useUserMessagesTotalQuery,
@@ -1090,14 +1072,20 @@ export const {
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery: useUserTokenUsageOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery: useUserTokenUsageByAgentQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery: useUserTokenUsageByModelQuery,
-  // Platform-wide or team-scoped token usage (OBSERV-02 v3, F1/F2) — same
-  // shape as the user_-prefixed personal presets above, different scope.
-  useHandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetQuery: useTokenUsageOverTimeQuery,
-  useHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery: useTokenUsageByAgentQuery,
-  useHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery: useTokenUsageByModelQuery,
   useHandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetQuery: useCreationAssistantUsageQuery,
   useHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery: useStorageByTeamQuery,
   useHandlerControlPlaneV1KpiPresetsWebResearchSummaryGetQuery: useWebResearchSummaryQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGetQuery: useAnalyticsTeamsCatalogQuery,
+  // Admin analytics sections: each returns the period and the previous one.
+  useHandlerControlPlaneV1KpiPresetsAnalyticsOverviewGetQuery: useAnalyticsOverviewQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGetQuery: useAnalyticsActivityOverTimeQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsAdoptionGetQuery: useAnalyticsAdoptionQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsUsageGetQuery: useAnalyticsUsageQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsTeamsGetQuery: useAnalyticsTeamsQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsAgentsGetQuery: useAnalyticsAgentsQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsQualityCostGetQuery: useAnalyticsQualityCostQuery,
+  // Stored access attribute paths and the coverage of a user filter (platform observers).
+  useGetUserFilterSummaryControlPlaneV1KpiUserFilterGetQuery: useAnalyticsUserFilterQuery,
   // Persisted task acknowledgement (OPS-04, TASK-EVENT-STREAM-RFC.md §2.10 rev 3).
   useAcknowledgeTaskControlPlaneV1TasksTaskIdAckPostMutation: useAcknowledgeTaskMutation,
   usePlatformStatsControlPlaneV1ImportExportStatsGetQuery: usePlatformStatsQuery,

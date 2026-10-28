@@ -14,44 +14,129 @@
  * limitations under the License.
  */
 
+/* Title, filters and tabs stay in place; only the tab body scrolls. */
 .page {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: var(--spacing-l);
-  padding: var(--spacing-xl);
+  min-height: 0;
 }
 
-/* One-line scope note under a section title — muted so it reads as context,
-   not as a chart label. */
-.sectionDescription {
-  margin: 0 0 var(--spacing-m);
-  color: var(--on-surface-muted);
+/* The title, filters and tabs as one card above the scrolling body. */
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  margin: var(--spacing-m) var(--spacing-m) 0;
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
+  color: var(--on-surface);
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  padding: var(--spacing-m);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* On narrow screens the header scrolls away with the body instead of eating its height. */
+@media (max-width: 900px) {
+  .page {
+    overflow-y: auto;
+  }
+
+  .body {
+    flex: none;
+    overflow-y: visible;
+  }
+}
+
+.tabContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+/* A question-led card: heading, then tiles and charts on the second surface. */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
+  min-width: 0;
+  color: var(--on-surface);
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-s);
+}
+
+.sectionAside {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--on-surface-retreat);
   font: var(--font-body-medium);
+}
+
+.sectionHeading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.eyebrow {
+  color: var(--primary);
+  font: var(--font-label-medium-emphasized);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-large-emphasized);
+}
+
+.infoIcon {
+  display: inline-flex;
+  cursor: help;
+  color: var(--on-surface-muted);
+  font-size: 1rem;
+}
+
+/* Tooltip panel for a definition and its "how to read it" line. */
+.hintPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-s);
+  max-width: 300px;
+  font: var(--font-body-small);
 }
 
 /* Compact number tiles, wrapping across the width. */
 .kpiRow {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--spacing-s);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--spacing-m);
 }
 
-/* Disclosure's content wrapper is a plain block container, so consecutive grids
-   would otherwise sit flush — the KPI tiles touching the chart cards below, or
-   Engagement's trend row touching its histograms. Space them on the chart
-   grid's own rhythm rather than the tighter tile gap. */
-.kpiRow + .chartGrid,
-.kpiRow + .sectionStack,
-.chartGrid + .chartGrid {
-  margin-top: var(--spacing-m);
-}
-
-/* Bento grid: 3 base columns. Most charts take one cell; the busy multi-series
-   gets two (.cellWide) and the prompt-length distribution the full width
-   (.cellFull) — "space for the ones that need it". */
 .chartGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--spacing-m);
 }
 
@@ -59,54 +144,416 @@
   min-width: 0;
 }
 
-.cellWide {
-  grid-column: span 2;
-  min-width: 0;
-}
-
-.cellFull {
-  grid-column: span 3;
-  min-width: 0;
-}
-
-@media (max-width: 1100px) {
-  .chartGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .cellWide,
-  .cellFull {
-    grid-column: span 2;
-  }
-}
-
-@media (max-width: 700px) {
+@media (max-width: 900px) {
   .chartGrid {
     grid-template-columns: 1fr;
   }
-  .cellWide,
-  .cellFull {
-    grid-column: auto;
-  }
 }
 
-/* Admin-only section: storage chart, Activités embed, governance link —
-   stacked, not a bento grid (each item's height is content-driven, not
-   uniform like the KPI charts above). */
-.sectionStack {
+/* A titled block nested in a section card, on the second surface like the tiles. */
+.block {
   display: flex;
   flex-direction: column;
+  gap: var(--spacing-s);
+  border-radius: var(--radius-ms);
+  background: var(--surface-container-high);
+  padding: var(--spacing-m);
+  min-width: 0;
+  overflow-x: auto;
+  color: var(--on-surface);
+}
+
+/* A table straight on the section card. */
+.tableBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  min-width: 0;
+  overflow-x: auto;
+}
+
+/* Teams tab: team vs personal conversations as one bar of two labelled shares. */
+.scopeBar {
+  display: flex;
+  border-radius: var(--radius-s);
+  height: var(--spacing-2xl);
+  overflow: hidden;
+}
+
+.scopeTeam,
+.scopePersonal {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--spacing-s);
+  min-width: 0;
+  overflow: hidden;
+  font: var(--font-label-large);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scopeTeam {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.scopePersonal {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.scopeLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-l);
+}
+
+.blockHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.blockTitle {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-small);
+}
+
+/* Usage: the top-decile line, its share as the figure to read. */
+.topDecile {
+  margin: 0;
+  border-top: 1px solid var(--outline-variant);
+  padding-top: var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.topDecileValue {
+  color: var(--on-surface);
+  font: var(--font-title-large-emphasized);
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+.positive {
+  color: var(--success);
+}
+
+.negative {
+  color: var(--error);
+}
+
+/* A main block with a narrow column of tiles beside it, and the reverse. */
+.mainAside {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(220px, 1fr);
+  align-items: start;
   gap: var(--spacing-m);
 }
 
-.governanceLink {
-  display: inline-flex;
-  align-items: center;
-  align-self: flex-start;
-  color: var(--primary);
-  font: var(--font-body-medium-emphasized);
-  text-decoration: none;
+@media (max-width: 900px) {
+  .mainAside {
+    grid-template-columns: 1fr;
+  }
 }
 
-.governanceLink:hover {
-  text-decoration: underline;
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  min-width: 0;
+}
+
+.funnel {
+  gap: var(--spacing-xs);
+}
+
+.funnelStep {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.funnelRow {
+  display: grid;
+  grid-template-columns: minmax(120px, 11rem) minmax(0, 1fr) minmax(4rem, auto);
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.funnelLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
+}
+
+/* The atom's bar is a thin progress line; a funnel step reads better thicker. */
+.funnelTrack > [role="progressbar"] {
+  height: var(--spacing-l);
+}
+
+.funnelValue {
+  color: var(--on-surface);
+  font: var(--font-title-medium-emphasized);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.funnelRate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  padding-inline-start: calc(11rem + var(--spacing-s));
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
+}
+
+.funnelRate strong {
+  color: var(--on-surface);
+}
+
+.funnelArrow {
+  display: inline-flex;
+  font-size: 1rem;
+}
+
+@media (max-width: 600px) {
+  .funnelRate {
+    padding-inline-start: 0;
+  }
+}
+
+.funnelDelta {
+  font: var(--font-label-medium);
+}
+
+.funnelAdoption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+  border-top: 1px solid var(--outline-variant);
+  padding-top: var(--spacing-s);
+}
+
+.funnelAdoptionValue {
+  color: var(--on-surface);
+  font: var(--font-title-large-emphasized);
+  font-variant-numeric: tabular-nums;
+}
+
+.funnelAdoption .funnelDelta {
+  margin-inline-start: auto;
+}
+
+.asideMain {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 3fr);
+  align-items: start;
+  gap: var(--spacing-m);
+}
+
+@media (max-width: 900px) {
+  .asideMain {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cohorts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  min-width: 0;
+}
+
+.cohortScroll {
+  overflow-x: auto;
+}
+
+.cohortTable {
+  border: 1px solid var(--outline-variant);
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 420px;
+  color: var(--on-surface);
+  font: var(--font-body-small);
+}
+
+.cohortTable th,
+.cohortTable td {
+  border: 1px solid var(--outline-variant);
+  padding: var(--spacing-xs) var(--spacing-s);
+  text-align: start;
+}
+
+.cohortTable thead th {
+  background: var(--surface-container-high);
+  color: var(--on-surface-muted);
+  font: var(--font-label-medium);
+}
+
+.cohortTable tbody th {
+  font-weight: normal;
+  text-transform: capitalize;
+}
+
+.cohortTable .cohortNumber {
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.cohortTable .cohortCell {
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.cohortCell[data-level="high"] {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.cohortCell[data-level="good"] {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.cohortCell[data-level="fair"] {
+  background: var(--surface-container-highest);
+  color: var(--on-surface);
+}
+
+.cohortCell[data-level="low"] {
+  background: var(--surface-container-high);
+  color: var(--on-surface);
+}
+
+.cohortCell[data-level="none"] {
+  color: var(--on-surface-retreat);
+}
+
+/* Ranked lists and inline table bars: the atom's thin progress line, thickened. */
+.thickBar {
+  display: block;
+  flex: 1;
+  min-width: 0;
+}
+
+.thickBar > [role="progressbar"] {
+  height: var(--spacing-xs);
+}
+
+/* One grid for every row, so the bars line up whatever the value width. */
+.rankList {
+  display: grid;
+  grid-template-columns: minmax(0, 12rem) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--spacing-s) var(--spacing-m);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rankRow {
+  display: contents;
+}
+
+.rankLabel {
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rankValue {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.barCell {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  width: 100%;
+}
+
+.barCellValue {
+  min-width: 4.5rem;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.barCellValue[data-tone] {
+  font-weight: 600;
+}
+
+.barCellValue[data-tone="warning"] {
+  color: var(--warning);
+}
+
+.splitBar {
+  display: flex;
+  flex: 1;
+  border-radius: var(--radius-full);
+  height: var(--spacing-xs);
+  overflow: hidden;
+}
+
+.splitFirst {
+  background: var(--primary);
+}
+
+.splitSecond {
+  flex: 1;
+  background: var(--primary-container);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-m);
+  margin: 0;
+  padding: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  list-style: none;
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.legendSwatch {
+  border-radius: var(--radius-xs);
+  width: var(--spacing-s);
+  height: var(--spacing-s);
+}
+
+.legendSwatch.splitSecond {
+  flex: none;
+}
+
+/* Web research: narrower tiles, beside the refusal reasons. */
+.kpiRowDense {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--spacing-m);
 }

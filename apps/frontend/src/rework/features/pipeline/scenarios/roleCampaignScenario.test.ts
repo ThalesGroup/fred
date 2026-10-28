@@ -68,6 +68,7 @@ function fake(
       ...(roles.includes("team_admin")
         ? [
             "can_update_info",
+            "can_read_analytics",
             "can_administer_members",
             "can_administer_editors",
             "can_administer_analysts",

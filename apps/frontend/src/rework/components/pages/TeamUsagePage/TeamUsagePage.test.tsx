@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,296 +13,208 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Focus: the new team sections (KPI-ANALYTICS-RFC.md §2.5 Page 2) are
-// capability-conditional, in-page gating with no route guard
-// (FRONTEND-AUTHZ-PATTERN.md). `useTeamCapabilities`/`hasElevatedTeamRole`
-// run for real here (pure functions over `TeamPermission[]`) so each test
-// only has to set the permission array a real backend would return for that
-// role, rather than hand-picking booleans that could drift from the mapping.
-
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { TeamPermission, TeamWithPermissions } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 
+const query = (data?: unknown) => ({ data, currentData: data, isLoading: false, isFetching: false, isError: false });
+
 const h = vi.hoisted(() => ({
-  selected: {
-    teamId: "team-1",
-    selectedTeam: undefined as TeamWithPermissions | undefined,
-    isPersonalTeam: false,
-  },
-  skillQuery: vi.fn(() => ({
-    data: undefined,
-    currentData: undefined,
-    isLoading: false,
-    isFetching: false,
-    isError: false,
-  })),
-  personalSkillQuery: vi.fn(() => ({
-    currentData: undefined,
-    data: undefined,
-    isLoading: false,
-    isFetching: false,
-    isError: false,
-  })),
-  neutralQuery: vi.fn(() => ({ data: undefined, isLoading: false, isFetching: false, isError: false })),
+  selected: { teamId: "team-1", selectedTeam: undefined as unknown, isPersonalTeam: false },
+  exportAnalytics: vi.fn(),
+  hooks: {} as Record<string, Mock<(...args: unknown[]) => unknown>>,
 }));
+
+function hook(name: string, data?: unknown) {
+  h.hooks[name] ??= vi.fn(() => query(data));
+  return h.hooks[name];
+}
+
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => {
+  const names = [
+    "useAnalyticsOverviewQuery",
+    "useAnalyticsAdoptionQuery",
+    "useAnalyticsUsageQuery",
+    "useAnalyticsActivityOverTimeQuery",
+    "useAnalyticsAgentsQuery",
+    "useAnalyticsQualityCostQuery",
+    "useAnalyticsTeamsCatalogQuery",
+    "useAgentsTotalQuery",
+    "useSkillUsageQuery",
+    "useUserSkillUsageQuery",
+    "useUserTokenUsageByAgentQuery",
+    "useUserTokenUsageByModelQuery",
+  ];
+  return {
+    ...Object.fromEntries(names.map((n) => [n, (...args: unknown[]) => hook(n)(...args)])),
+    useAnalyticsTeamsQuery: (...args: unknown[]) =>
+      hook("useAnalyticsTeamsQuery", {
+        active_teams: { current: 1, previous: 1 },
+        rows: [{ team_id: "team-1", name: "Team One", active_members: 3, messages: 9, messages_previous: 3 }],
+      })(...args),
+    useUserTokenUsageOverTimeQuery: (...args: unknown[]) =>
+      hook("useUserTokenUsageOverTimeQuery", {
+        rows: [{ date: "Oct 1", value: 10, co2e_grams: 1, kwh: 0.1, cost_eur: 0.0123 }],
+        interval: "1d",
+      })(...args),
+  };
+});
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string, options?: { cost?: string }) => (options?.cost ? `${key}:${options.cost}` : key),
+    i18n: { language: "fr" },
+  }),
+}));
+vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({ useSelectedTeam: () => h.selected }));
+vi.mock("../admin/AnalyticsPage/exportAnalytics", () => ({ exportAnalytics: h.exportAnalytics }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({ showError: vi.fn(), showInfo: vi.fn(), showSuccess: vi.fn() }),
+}));
+for (const chart of ["TimeSeriesLineChart", "MultiSeriesLineChart", "BarChart", "HistogramChart"]) {
+  vi.doMock(`@shared/molecules/${chart}/${chart}`, () => ({
+    default: ({ title }: { title: string }) => <div>{title}</div>,
+  }));
+}
+vi.mock("@shared/molecules/TimeRangeSelector/TimeRangeSelector", () => ({
+  default: () => <div data-testid="time-range" />,
+}));
+
+const { default: TeamUsagePage } = await import("./TeamUsagePage");
+
+declare global {
+  // eslint-disable-next-line no-var
+  var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+let container: HTMLDivElement;
+let root: Root | undefined;
 
 function team(permissions: TeamPermission[]): TeamWithPermissions {
   return { id: "team-1", name: "Team One", member_count: 4, permissions };
 }
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
-}));
-
-vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
-  useSelectedTeam: () => h.selected,
-}));
-
-vi.mock("@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart", () => ({
-  default: ({ title }: { title: string }) => <div>{title}</div>,
-}));
-vi.mock("@shared/molecules/MultiSeriesLineChart/MultiSeriesLineChart", () => ({
-  default: ({ title }: { title: string }) => <div>{title}</div>,
-}));
-vi.mock("@shared/molecules/BarChart/BarChart", () => ({
-  default: ({ title }: { title: string }) => <div>{title}</div>,
-}));
-vi.mock("@shared/molecules/KpiStatCard/LocalizedKpiStatCard", () => ({
-  default: ({ label }: { label: string }) => <div>{label}</div>,
-}));
-vi.mock("@shared/molecules/TimeRangeSelector/TimeRangeSelector", () => ({
-  default: () => <div data-testid="time-range-selector" />,
-}));
-
-vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useUserTokenUsageOverTimeQuery: h.neutralQuery,
-  useUserTokenUsageByAgentQuery: h.neutralQuery,
-  useUserTokenUsageByModelQuery: h.neutralQuery,
-  useAgentsTotalQuery: h.neutralQuery,
-  useSkillUsageQuery: h.skillQuery,
-  useUserSkillUsageQuery: h.personalSkillQuery,
-  useDocumentsTotalQuery: h.neutralQuery,
-  useSessionsOverTimeQuery: h.neutralQuery,
-  useStorageByTeamQuery: h.neutralQuery,
-  useTokenUsageOverTimeQuery: h.neutralQuery,
-  useTokenUsageByAgentQuery: h.neutralQuery,
-  useTokenUsageByModelQuery: h.neutralQuery,
-  useTopAgentsByConversationsQuery: h.neutralQuery,
-}));
-
-import TeamUsagePage from "./TeamUsagePage";
-
-function render(): string {
-  return renderToStaticMarkup(<TeamUsagePage />);
+function render(selected: typeof h.selected) {
+  h.selected = selected;
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  act(() => root!.render(<TeamUsagePage />));
 }
 
-describe("TeamUsagePage capability-conditional sections (§2.5 Page 2)", () => {
-  it("shows only the personal section and the personal title for a plain team_member (no elevated role)", () => {
-    h.selected = { teamId: "team-1", selectedTeam: team(["can_read", "can_use_team_agents"]), isPersonalTeam: false };
-    const html = render();
-    expect(html).toContain("rework.teamUsage.title");
-    expect(html).not.toContain("rework.teamUsage.team.pageTitle");
-    expect(html).toContain("rework.teamUsage.personalSectionTitle");
-    expect(html).not.toContain("rework.teamUsage.team.sectionTitle");
-    expect(h.skillQuery).toHaveBeenLastCalledWith(expect.objectContaining({ teamId: h.selected.teamId }), {
-      skip: true,
-      refetchOnMountOrArgChange: 300,
-    });
+const asAdmin = () =>
+  render({ teamId: "team-1", selectedTeam: team(["can_read", "can_read_analytics"]), isPersonalTeam: false });
+const tabs = () => [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+const panel = () => container.querySelector('[role="tabpanel"]')?.textContent ?? "";
+const button = (text: string) =>
+  [...container.querySelectorAll("button")].find((el) => el.textContent?.includes(text))!;
+function openTab(label: string) {
+  act(() =>
+    tabs()
+      .find((el) => el.textContent === label)!
+      .click(),
+  );
+}
+const analyticsHooks = () => Object.keys(h.hooks).filter((n) => /Analytics|AgentsTotal|useSkillUsage/.test(n));
+
+afterEach(() => {
+  act(() => root?.unmount());
+  root = undefined;
+  container.remove();
+  Object.values(h.hooks).forEach((fn) => fn.mockClear());
+  vi.clearAllMocks();
+});
+
+describe("TeamUsagePage for a team admin", () => {
+  it("shows the analytics tabs without Technical, then the personal tab, and no scope selector", () => {
+    asAdmin();
+    expect(container.textContent).toContain("rework.analytics.title");
+    expect(tabs().map((el) => el.textContent)).toEqual([
+      ...["overview", "adoption", "usage", "teams", "agents", "cost"].map((id) => `rework.analytics.tabs.${id}`),
+      "rework.teamUsage.personalSectionTitle",
+    ]);
+    expect(container.querySelector('button[aria-haspopup="dialog"]')).toBeNull();
+    expect(container.querySelector('[aria-label="rework.analytics.aboutLabel"]')).not.toBeNull();
   });
 
-  it("shows only the personal section on a personal team (no team context at all)", () => {
-    h.selected = { teamId: "personal-u1", selectedTeam: undefined, isPersonalTeam: true };
-    const html = render();
-    expect(html).toContain("rework.teamUsage.title");
-    expect(html).toContain("rework.teamUsage.personalSectionTitle");
-    expect(html).not.toContain("rework.teamUsage.team.sectionTitle");
-  });
-
-  it("shows only the personal section on a personal team even though the backend grants it team_editor-shaped permissions (build_personal_team)", () => {
-    // Regression: `teams/system.py::build_personal_team` unconditionally grants
-    // can_update_resources/can_update_agents so the owner can manage their own
-    // docs/agents — that's a personal-resource permission, not an elevated
-    // *team* role, and must not unlock the collaborative-team sections.
-    h.selected = {
-      teamId: "personal-u1",
-      selectedTeam: team(["can_read", "can_update_resources", "can_update_agents"]),
-      isPersonalTeam: true,
-    };
-    const html = render();
-    expect(html).toContain("rework.teamUsage.title");
-    expect(html).toContain("rework.teamUsage.personalSectionTitle");
-    expect(html).not.toContain("rework.teamUsage.team.sectionTitle");
-  });
-
-  it("shows the shared team section and the team title for team_analyst (can_run_evaluations)", () => {
-    h.selected = { teamId: "team-1", selectedTeam: team(["can_read", "can_run_evaluations"]), isPersonalTeam: false };
-    const html = render();
-    expect(html).toContain("rework.teamUsage.team.pageTitle");
-    expect(html).toContain("rework.analytics.skillUsage.title");
-    expect(h.skillQuery).toHaveBeenLastCalledWith(
-      expect.objectContaining({ teamId: "team-1", since: expect.any(String), until: expect.any(String) }),
-      { skip: false, refetchOnMountOrArgChange: 300 },
+  it("scopes every read to the team and never reads the platform team catalog", () => {
+    asAdmin();
+    expect(h.hooks.useAnalyticsOverviewQuery).toHaveBeenCalledWith(
+      { since: expect.any(String), until: expect.any(String), teamIds: ["team-1"] },
+      { refetchOnMountOrArgChange: 300 },
     );
-    expect(html).not.toContain("rework.teamUsage.title");
-    expect(html).toContain("rework.teamUsage.team.sectionTitle");
+    expect(h.hooks.useAnalyticsTeamsCatalogQuery).toHaveBeenCalledWith({}, expect.objectContaining({ skip: true }));
+    expect(panel()).not.toContain("rework.analytics.tiles.activeTeams.label");
+    openTab("rework.analytics.tabs.teams");
+    expect(h.hooks.useAnalyticsTeamsCatalogQuery).toHaveBeenLastCalledWith(
+      { teamIds: ["team-1"] },
+      { refetchOnMountOrArgChange: 300 },
+    );
   });
 
-  it("shows the shared team section and the team title for team_editor (can_update_resources)", () => {
-    h.selected = {
-      teamId: "team-1",
-      selectedTeam: team(["can_read", "can_update_resources", "can_update_agents"]),
-      isPersonalTeam: false,
-    };
-    const html = render();
-    expect(html).toContain("rework.teamUsage.team.pageTitle");
-    expect(html).not.toContain("rework.teamUsage.title");
-    expect(html).toContain("rework.teamUsage.team.sectionTitle");
+  it("shows the team's own members on the Teams tab, without cross-team figures", () => {
+    asAdmin();
+    openTab("rework.analytics.tabs.teams");
+    expect(panel()).toContain("rework.analytics.sections.members.title");
+    expect(panel()).toContain("rework.analytics.tables.teams.active");
+    expect(panel()).not.toContain("rework.analytics.tiles.teamShare.label");
+    expect(panel()).not.toContain("rework.analytics.tables.teams.title");
+    expect(panel()).not.toContain("rework.analytics.conversationsByScope.title");
   });
 
-  it("shows the shared team section and the team title for team_admin (can_update_info)", () => {
-    h.selected = { teamId: "team-1", selectedTeam: team(["can_read", "can_update_info"]), isPersonalTeam: false };
-    const html = render();
-    expect(html).toContain("rework.teamUsage.team.pageTitle");
-    expect(html).not.toContain("rework.teamUsage.title");
-    expect(html).toContain("rework.teamUsage.team.sectionTitle");
+  it("hides the corpus figures that only exist across teams", () => {
+    asAdmin();
+    openTab("rework.analytics.tabs.agents");
+    expect(panel()).toContain("rework.analytics.tiles.documentsAdded.label");
+    expect(panel()).not.toContain("rework.analytics.tiles.teamsFeedingCorpus.label");
+    expect(panel()).not.toContain("rework.analytics.tiles.corpusSearches.label");
   });
-});
 
-it("hides previous scope/range skill results while the current request is fetching", () => {
-  h.selected = { teamId: "team-1", selectedTeam: team(["can_read", "can_update_resources"]), isPersonalTeam: false };
-  const previous = h.skillQuery.getMockImplementation();
-  h.skillQuery.mockReturnValue({
-    data: {
-      rows: [{ skill_name: "stale-skill", user_count: 9, model_count: 1, total: 10 }],
-      since: "old",
-      until: "old",
-    },
-    currentData: undefined,
-    isLoading: false,
-    isFetching: true,
-    isError: false,
+  it("exports the team only", async () => {
+    h.exportAnalytics.mockResolvedValueOnce(undefined);
+    asAdmin();
+    await act(async () => button("rework.analytics.export").click());
+    expect(h.exportAnalytics).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ teamIds: ["team-1"], lang: "fr" }),
+    );
   });
-  try {
-    const html = renderToStaticMarkup(<TeamUsagePage />);
-    expect(html).not.toContain("stale-skill");
-    expect(html).toContain("common.loading");
-    expect(html).not.toContain("rework.analytics.skillUsage.empty");
-  } finally {
-    h.skillQuery.mockImplementation(previous!);
-  }
-});
 
-it("does not substitute personal skills for unauthorized team counts in team space", () => {
-  h.selected = {
-    teamId: "team-member",
-    selectedTeam: team(["can_read", "can_use_team_agents"]),
-    isPersonalTeam: false,
-  };
-  const html = render();
-  expect(html).not.toContain("rework.teamUsage.personalSkillsSectionTitle");
-  expect(html).not.toContain("rework.teamUsage.team.skillsSectionTitle");
-  expect(h.personalSkillQuery).toHaveBeenLastCalledWith(
-    { since: expect.any(String), until: expect.any(String) },
-    { skip: true, refetchOnMountOrArgChange: 300 },
-  );
-  expect(h.skillQuery).toHaveBeenLastCalledWith(expect.anything(), { skip: true, refetchOnMountOrArgChange: 300 });
-});
-
-it("shows only team skills for an elevated viewer in team space", () => {
-  h.selected = { teamId: "team-1", selectedTeam: team(["can_read", "can_update_resources"]), isPersonalTeam: false };
-  const html = render();
-  expect(html).toContain("rework.teamUsage.team.skillsSectionTitle");
-  expect(html).not.toContain("rework.teamUsage.personalSkillsSectionTitle");
-  expect(html.match(/aria-label="rework.analytics.skillUsage.title"/g)).toHaveLength(1);
-  expect(h.skillQuery).toHaveBeenLastCalledWith(expect.objectContaining({ teamId: "team-1" }), {
-    skip: false,
-    refetchOnMountOrArgChange: 300,
-  });
-  expect(h.personalSkillQuery).toHaveBeenLastCalledWith(
-    { since: expect.any(String), until: expect.any(String) },
-    { skip: true, refetchOnMountOrArgChange: 300 },
-  );
-});
-
-it("does not render cached personal skill counts after selecting team space", () => {
-  h.selected = { teamId: "team-1", selectedTeam: team(["can_read", "can_update_resources"]), isPersonalTeam: false };
-  const previous = h.personalSkillQuery.getMockImplementation();
-  const personalData = {
-    rows: [{ skill_name: "personal-only-skill", user_count: 8, model_count: 1, total: 9 }],
-    since: "old",
-    until: "old",
-  };
-  h.personalSkillQuery.mockReturnValue({
-    data: personalData,
-    currentData: personalData,
-    isLoading: false,
-    isFetching: false,
-    isError: false,
-  });
-  try {
-    const html = render();
-    expect(html).not.toContain("personal-only-skill");
-    expect(html.match(/aria-label="rework.analytics.skillUsage.title"/g)).toHaveLength(1);
-  } finally {
-    h.personalSkillQuery.mockImplementation(previous!);
-  }
-});
-
-it("keeps personal skills visible in personal space and suppresses stale personal data", () => {
-  h.selected = { teamId: "personal-u1", selectedTeam: undefined, isPersonalTeam: true };
-  const previous = h.personalSkillQuery.getMockImplementation();
-  h.personalSkillQuery.mockReturnValue({
-    data: {
-      rows: [{ skill_name: "old-personal-skill", user_count: 10, model_count: 1, total: 11 }],
-      since: "old",
-      until: "old",
-    },
-    currentData: undefined,
-    isLoading: false,
-    isFetching: true,
-    isError: false,
-  });
-  try {
-    const html = render();
-    expect(html).toContain("rework.teamUsage.personalSkillsSectionTitle");
-    expect(html).not.toContain("rework.teamUsage.team.skillsSectionTitle");
-    expect(html).not.toContain("old-personal-skill");
-    expect(html).toContain("common.loading");
-    expect(html.match(/aria-label="rework.analytics.skillUsage.title"/g)).toHaveLength(1);
-    expect(h.personalSkillQuery).toHaveBeenLastCalledWith(
+  it("shows the viewer's own usage on the personal tab, cost in euros", () => {
+    asAdmin();
+    openTab("rework.teamUsage.personalSectionTitle");
+    expect(panel()).toContain("rework.teamUsage.tokensOverTime.title");
+    act(() => button("rework.tokenUsageImpact.costTitle").click());
+    expect(panel()).toMatch(/rework\.tokenUsageImpact\.costValue:0,0123\s€/);
+    expect(h.hooks.useUserTokenUsageOverTimeQuery).toHaveBeenCalledWith(
       { since: expect.any(String), until: expect.any(String) },
-      { skip: false, refetchOnMountOrArgChange: 300 },
+      { refetchOnMountOrArgChange: 300 },
     );
-  } finally {
-    h.personalSkillQuery.mockImplementation(previous!);
-  }
+  });
 });
 
-it.each([
-  { space: "personal", personal: true, permissions: [] as TeamPermission[] },
-  { space: "team member", personal: false, permissions: ["can_read", "can_use_team_agents"] as TeamPermission[] },
-  { space: "team editor", personal: false, permissions: ["can_read", "can_update_resources"] as TeamPermission[] },
-])("preserves the full service outage notice in $space space", ({ personal, permissions }) => {
-  h.selected = {
-    teamId: personal ? "personal-u1" : "team-1",
-    selectedTeam: team(permissions),
-    isPersonalTeam: personal,
-  };
-  const previousNeutral = h.neutralQuery.getMockImplementation();
-  const previousPersonal = h.personalSkillQuery.getMockImplementation();
-  const previousTeam = h.skillQuery.getMockImplementation();
-  h.neutralQuery.mockReturnValue({ data: undefined, isLoading: false, isFetching: false, isError: true });
-  const failed = { data: undefined, currentData: undefined, isLoading: false, isFetching: false, isError: true };
-  h.personalSkillQuery.mockReturnValue(failed);
-  h.skillQuery.mockReturnValue(failed);
-  try {
-    const html = render();
-    expect(html).toContain("rework.serviceNotice.controlPlane.title");
-    expect(html).not.toContain("rework.analytics.skillUsage.title");
-  } finally {
-    h.neutralQuery.mockImplementation(previousNeutral!);
-    h.personalSkillQuery.mockImplementation(previousPersonal!);
-    h.skillQuery.mockImplementation(previousTeam!);
-  }
+describe("TeamUsagePage for everyone else", () => {
+  it("shows a member without team admin rights their own usage only, with no team read", () => {
+    render({ teamId: "team-1", selectedTeam: team(["can_read", "can_read_members"]), isPersonalTeam: false });
+    expect(container.textContent).toContain("rework.teamUsage.title");
+    expect(container.textContent).toContain("rework.teamUsage.personalSectionTitle");
+    expect(tabs()).toHaveLength(0);
+    expect(container.textContent).not.toContain("rework.analytics.export");
+    expect(analyticsHooks().filter((n) => h.hooks[n].mock.calls.length > 0)).toEqual([]);
+    expect(h.hooks.useUserSkillUsageQuery).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ skip: true }),
+    );
+  });
+
+  it("shows the personal skill loads in a personal space", () => {
+    render({ teamId: "personal-u1", selectedTeam: undefined, isPersonalTeam: true });
+    expect(container.textContent).toContain("rework.teamUsage.personalSkillsSectionTitle");
+    expect(tabs()).toHaveLength(0);
+    expect(h.hooks.useUserSkillUsageQuery).toHaveBeenCalledWith(
+      { since: expect.any(String), until: expect.any(String) },
+      { refetchOnMountOrArgChange: 300, skip: false },
+    );
+  });
 });
