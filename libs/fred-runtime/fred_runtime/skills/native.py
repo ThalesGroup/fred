@@ -3,26 +3,37 @@
 """Request eligibility and attribution around DeepAgents' native skill loader.
 
 The library owns discovery metadata, pinning, body reads and skill prompts.
-Fred supplies the current policy view and observes successful native pins.
+Fred supplies eligibility and identifies complete pins already in context.
 """
 
 from collections.abc import Awaitable, Callable
 from typing import Any, NotRequired, cast
 
-from deepagents.middleware.skills import SkillsState
+from deepagents.middleware.skills import SKILLS_SYSTEM_PROMPT, SkillsState
 from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.prompt_utils import escape_reserved_prompt_tags
 from fred_sdk.contracts.runtime import StatusRuntimeEvent
 from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
 from langchain.agents.middleware.types import ExtendedModelResponse
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 
 from fred_runtime.skills.catalog import PlatformSkills
 from fred_runtime.skills.tools import model_skill_context, record_skill_load
+
+NATIVE_SKILLS_SYSTEM_PROMPT = SKILLS_SYSTEM_PROMPT + (
+    "\n\nRequired skill selection: before answering or using any other tool, "
+    "including task delegation, you MUST compare the request with the available "
+    "skill descriptions and apply every matching skill. Read its complete "
+    "instructions first with read_file at the catalog path (limit=1000; continue "
+    "if truncated), unless the complete instructions are already in context. "
+    "Reuse complete pinned instructions without rereading SKILL.md. Read any "
+    "missing required references. Familiarity with the task does not replace "
+    "reading and following the skill procedure."
+)
 
 
 class NativeSkillState(SkillsState):
@@ -79,6 +90,7 @@ class NativeSkillPolicyMiddleware(AgentMiddleware[NativeSkillState, Any]):
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse | ExtendedModelResponse:
+        """Observe native pins and tell the model which instructions it already has."""
         summaries = {s.name: s for s in self.skills.catalog.skills}
         pending = tuple(
             cast(NativeSkillState, request.state).get("fred_pending_skill_names") or ()
@@ -86,6 +98,7 @@ class NativeSkillPolicyMiddleware(AgentMiddleware[NativeSkillState, Any]):
         updates: list[HumanMessage] = []
         found: set[str] = set()
         actual: list[tuple[str, str]] = []
+        loaded: dict[str, None] = {}
         last_user = max(
             (
                 i
@@ -105,6 +118,8 @@ class NativeSkillPolicyMiddleware(AgentMiddleware[NativeSkillState, Any]):
             name = marker.get("name") if isinstance(marker, dict) else None
             if not isinstance(marker, dict) or not isinstance(name, str):
                 continue
+            if name in summaries:
+                loaded[name] = None
             # Sanitize every retained native pin, even after model failure or
             # policy changes. Native before_model checkpointed its raw message
             # before this wrapper; an LLM failure cannot be a safety boundary.
@@ -160,6 +175,28 @@ class NativeSkillPolicyMiddleware(AgentMiddleware[NativeSkillState, Any]):
         if updates:
             request = request.override(
                 messages=[by_id.get(m.id, m) for m in request.messages]
+            )
+        notices: list[str] = []
+        if loaded:
+            notices.append(
+                "Already-loaded skill instructions: "
+                + ", ".join(f"`{name}`" for name in loaded)
+                + ". Their complete instructions are present in this conversation. "
+                "Apply them directly when relevant to the current request. "
+                "Do not read their SKILL.md files again while those instructions "
+                "remain in context. Read any required references that are still missing."
+            )
+        if notices:
+            system = request.system_message or SystemMessage(content="")
+            request = request.override(
+                system_message=system.model_copy(
+                    update={
+                        "content": [
+                            *system.content_blocks,
+                            {"type": "text", "text": "\n\n" + "\n\n".join(notices)},
+                        ]
+                    }
+                )
             )
         response = await handler(request)
         return (

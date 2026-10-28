@@ -817,6 +817,14 @@ Deep registers neither Fred loading tool. Only ReAct uses explicit preload.
 Deep selections remain canonical user text alongside native `pinned_skills`,
 without Fred skill-body injection. A name-only reminder of the current selected procedures
 appears in the existing per-turn system context, without duplicating the catalog.
+When complete native pins are still visible to a model call, a name-only loading
+status identifies the currently eligible instructions it already has. The status
+is derived from that call's messages, so trimming and isolated child contexts do
+not retain a false loaded state. Platform instructions require matching skills
+even without a slash command and reuse of complete instructions before further
+reads; required references remain available through native tools. Deep's native
+skills middleware retains its upstream prompt and adds the same selection and
+reuse rules after its catalogue, for both parent and explicit child graphs.
 Native successful
 reads retain the existing attribution/KPI and stored reference previews; reserved
 Fred tags in returned reads/searches are escaped at the model boundary.

@@ -35,6 +35,7 @@ from typing import cast
 from deepagents.backends import CompositeBackend, FilesystemBackend
 from deepagents.backends.protocol import BackendProtocol
 from deepagents.middleware.filesystem import FilesystemMiddleware, FilesystemPermission
+from deepagents.middleware.skills import SkillsMiddleware
 from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
@@ -99,7 +100,10 @@ from fred_runtime.react.react_tool_resolution import ReActRuntimeToolResolver
 from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
 from fred_runtime.runtime_support.turn_steering import TurnSteeringMiddleware
 from fred_runtime.skills.catalog import PlatformSkills
-from fred_runtime.skills.native import NativeSkillPolicyMiddleware
+from fred_runtime.skills.native import (
+    NATIVE_SKILLS_SYSTEM_PROMPT,
+    NativeSkillPolicyMiddleware,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -374,6 +378,22 @@ def _create_compiled_deep_agent(
     )
     if child_policy is not None:
         child_permissions = skills_permissions(child_permissions, child_policy.skills)
+    parent_middleware = list(middleware)
+    child_middleware = list(subagent_middleware)
+    if skills is not None:
+        # DeepAgents replaces its native skills slot by name, preserving hooks
+        # and ordering on both the parent and our explicit child graph.
+        for frame in (parent_middleware, child_middleware):
+            frame.append(
+                cast(
+                    AgentMiddleware,
+                    SkillsMiddleware(
+                        backend=backend,
+                        sources=skills,
+                        system_prompt=NATIVE_SKILLS_SYSTEM_PROMPT,
+                    ),
+                )
+            )
     # Explicitly replace the library's general-purpose child, which otherwise
     # has neither Fred's composed prompt nor its middleware frame.
     subagent: SubAgent = {
@@ -383,7 +403,7 @@ def _create_compiled_deep_agent(
             (system_prompt, _SUBAGENT_FRAMING, DEFAULT_SUBAGENT_PROMPT)
         ),
         "tools": list(subagent_tools if subagent_tools is not None else tools),
-        "middleware": list(subagent_middleware),
+        "middleware": child_middleware,
         "permissions": child_permissions,
         "skills": skills or [],
     }
@@ -393,7 +413,7 @@ def _create_compiled_deep_agent(
             model=model,
             tools=list(tools),
             system_prompt=system_prompt,
-            middleware=list(middleware),
+            middleware=parent_middleware,
             subagents=[subagent],
             checkpointer=checkpointer,
             backend=backend,

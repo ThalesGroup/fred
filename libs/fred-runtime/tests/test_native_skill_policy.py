@@ -5,9 +5,13 @@
 import asyncio
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
+import deepagents.graph as deepagents_graph
+import deepagents.middleware.subagents as deepagents_subagents
 import pytest
 from deepagents.backends import StateBackend
+from deepagents.middleware.skills import SkillsMiddleware
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.deep.deep_runtime import mount_skills
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
@@ -19,7 +23,8 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     StatusRuntimeEvent,
 )
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain.agents import create_agent as native_create_agent
+from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage, ToolMessage
 from langchain_core.outputs import ChatResult
 from langgraph.checkpoint.memory import InMemorySaver
 from test_platform_skills import Model, binding, call, compiled, load_call
@@ -29,6 +34,255 @@ from test_skill_eligibility import publish
 def input_turn(text: str = "Use the chosen procedure") -> ReActInput:
     return ReActInput(
         messages=(ReActMessage(role=ReActMessageRole.USER, content=text),)
+    )
+
+
+@pytest.mark.asyncio
+async def test_natural_request_receives_skill_selection_guidance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    publish(tmp_path, "example")
+    create_agent = Mock(wraps=native_create_agent)
+    create_child = Mock(wraps=native_create_agent)
+    monkeypatch.setattr(deepagents_graph, "create_agent", create_agent)
+    monkeypatch.setattr(deepagents_subagents, "create_agent", create_child)
+    model = Model(
+        script=[
+            call(
+                "task",
+                {
+                    "description": "Complete the task",
+                    "subagent_type": "general-purpose",
+                },
+                "child",
+            ),
+            AIMessage(content="Child answer"),
+            AIMessage(content="Parent answer"),
+        ]
+    )
+    graph = compiled(
+        model, PlatformSkills.from_directory(str(tmp_path)), binding(), True
+    )
+    await graph.ainvoke(
+        {"messages": [HumanMessage(content="Help me with this task")]},
+        {"configurable": {"thread_id": "natural-skill-selection"}},
+    )
+
+    assert len(model.calls) == 3
+    for messages in model.calls:
+        system = str(messages[0].content)
+        assert system.index("Required skill selection:") > system.index(
+            "/skills/example/SKILL.md"
+        )
+        assert (
+            "you MUST compare the request with the available skill descriptions"
+            in system
+        )
+        assert (
+            "before answering or using any other tool, including task delegation"
+            in system
+        )
+        assert (
+            "read_file at the catalog path (limit=1000; continue if truncated)"
+            in system
+        )
+        assert "unless the complete instructions are already in context" in system
+        assert "Reuse complete pinned instructions without rereading SKILL.md" in system
+        assert "Read any missing required references" in system
+        assert (
+            "Familiarity with the task does not replace reading and following the skill procedure"
+            in system
+        )
+        assert system.count("## Skills System") == 1
+        assert system.count("Required skill selection:") == 1
+        assert "Skill selection for this request:" not in system
+        assert "Already-loaded skill instructions:" not in system
+        assert not [
+            m
+            for m in messages
+            if m.additional_kwargs.get("lc_source") == "pinned_skill"
+        ]
+    create_agent.assert_called_once()
+    assert create_child.call_count >= 1
+    for compilation in [*create_agent.call_args_list, *create_child.call_args_list]:
+        native = [
+            m for m in compilation.kwargs["middleware"] if m.name == "SkillsMiddleware"
+        ]
+        assert len(native) == 1 and type(native[0]) is SkillsMiddleware
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ineligible", [False, True])
+async def test_empty_eligible_catalog_does_not_offer_unavailable_skills(
+    tmp_path: Path, ineligible: bool
+) -> None:
+    if ineligible:
+        publish(tmp_path, "example", "disable-model-invocation: true\n")
+    model = Model()
+    graph = compiled(
+        model, PlatformSkills.from_directory(str(tmp_path)), binding(), True
+    )
+    await graph.ainvoke(
+        {"messages": [HumanMessage(content="Help me with this task")]},
+        {"configurable": {"thread_id": "empty-skill-selection"}},
+    )
+
+    system = str(model.calls[0][0].content)
+    assert "Skill selection for this request:" not in system
+    assert "Already-loaded skill instructions:" not in system
+    assert system.count("## Skills System") == 1
+    assert system.count("Required skill selection:") == 1
+    assert "No skills available yet" in system
+    assert "/skills/example/SKILL.md" not in system
+
+
+@pytest.mark.asyncio
+async def test_complete_native_pin_is_identified_to_the_model(tmp_path: Path) -> None:
+    """The model can distinguish a complete native pin from an unread entry."""
+    publish(tmp_path, "example")
+    skills = PlatformSkills.from_directory(str(tmp_path))
+    bound = binding("example")
+    model = Model(script=[AIMessage(content="Answer using the supplied procedure")])
+    executor = _TransportBackedReActExecutor(
+        compiled_agent=compiled(model, skills, bound, True),
+        binding=bound,
+        services=RuntimeServices(skills=skills),
+        runtime_class_name="Deep",
+        preload_selected_skill=False,
+    )
+    events = [
+        event
+        async for event in executor.stream(
+            input_turn(), ExecutionConfig(session_id="pin-loading-status")
+        )
+    ]
+    system = str(model.calls[0][0].content)
+    assert (
+        system.index("Already-loaded skill instructions: `example`")
+        < system.index("## Skills System")
+        < system.index("Required skill selection:")
+    )
+    assert "unless the complete instructions are already in context" in system
+    assert "Already-loaded skill instructions: `example`" in system
+    assert "Do not read their SKILL.md files again" in system
+    pins = [
+        message
+        for message in model.calls[0]
+        if message.additional_kwargs.get("lc_source") == "pinned_skill"
+    ]
+    assert len(pins) == 1 and str(pins[0].content).startswith("<skill ")
+    assert (
+        len(
+            [
+                event
+                for event in events
+                if isinstance(event, StatusRuntimeEvent) and event.skill_load
+            ]
+        )
+        == 1
+    )
+
+
+@pytest.mark.asyncio
+async def test_native_loading_status_tracks_retained_context(tmp_path: Path) -> None:
+    """A later turn reuses a visible pin and can load again after it is trimmed."""
+    publish(tmp_path, "example")
+    skills = PlatformSkills.from_directory(str(tmp_path))
+    saver = InMemorySaver()
+    selected = binding("example")
+    graph = compiled(Model(), skills, selected, True, checkpointer=saver)
+    executor = _TransportBackedReActExecutor(
+        compiled_agent=graph,
+        binding=selected,
+        services=RuntimeServices(skills=skills),
+        runtime_class_name="Deep",
+        preload_selected_skill=False,
+    )
+    config = ExecutionConfig(session_id="retained-loading-status")
+    await executor.invoke(input_turn(), config)
+    graph_config = {"configurable": {"thread_id": config.session_id}}
+    state = await graph.aget_state(graph_config)
+    pin = next(
+        message
+        for message in state.values["messages"]
+        if message.additional_kwargs.get("lc_source") == "pinned_skill"
+    )
+    later_model = Model()
+    later_graph = compiled(later_model, skills, binding(), True, checkpointer=saver)
+    later = _TransportBackedReActExecutor(
+        compiled_agent=later_graph,
+        binding=binding(),
+        services=RuntimeServices(skills=skills),
+        runtime_class_name="Deep",
+        preload_selected_skill=False,
+    )
+    events = [event async for event in later.stream(input_turn("Continue"), config)]
+    assert "Already-loaded skill instructions: `example`" in str(
+        later_model.calls[0][0].content
+    )
+    assert not [
+        event
+        for event in events
+        if isinstance(event, StatusRuntimeEvent) and event.skill_load
+    ]
+    await later_graph.aupdate_state(
+        graph_config, {"messages": [RemoveMessage(id=pin.id)]}
+    )
+    later_model.script = [
+        load_call("example", "load-after-trimming", True),
+        AIMessage(content="Answer with the reloaded procedure"),
+    ]
+    events = [event async for event in later.stream(input_turn("Continue"), config)]
+    assert "Already-loaded skill instructions:" not in str(
+        later_model.calls[1][0].content
+    )
+    loads = [
+        event.skill_load
+        for event in events
+        if isinstance(event, StatusRuntimeEvent) and event.skill_load
+    ]
+    assert len(loads) == 1 and loads[0].origin == "agent"
+
+
+@pytest.mark.asyncio
+async def test_native_loading_status_stays_with_its_parent_context(
+    tmp_path: Path,
+) -> None:
+    """A fresh native child must not be told it received its parent's pin."""
+    publish(tmp_path, "example")
+    skills = PlatformSkills.from_directory(str(tmp_path))
+    bound = binding("example")
+    model = Model(
+        script=[
+            call(
+                "task",
+                {
+                    "description": "Return a greeting",
+                    "subagent_type": "general-purpose",
+                },
+                "child",
+            ),
+            AIMessage(content="Child answer"),
+            AIMessage(content="Parent answer"),
+        ]
+    )
+    executor = _TransportBackedReActExecutor(
+        compiled_agent=compiled(model, skills, bound, True),
+        binding=bound,
+        services=RuntimeServices(skills=skills),
+        runtime_class_name="Deep",
+        preload_selected_skill=False,
+    )
+    await executor.invoke(
+        input_turn(), ExecutionConfig(session_id="parent-loading-status")
+    )
+    assert len(model.calls) == 3
+    assert "Already-loaded skill instructions: `example`" in str(
+        model.calls[0][0].content
+    )
+    assert "Already-loaded skill instructions:" not in str(model.calls[1][0].content)
+    assert "Already-loaded skill instructions: `example`" in str(
+        model.calls[2][0].content
     )
 
 
@@ -297,7 +551,8 @@ async def test_concurrent_native_pins_keep_graph_namespaces_independent(
     publish(tmp_path, "first")
     publish(tmp_path, "second")
     skills = PlatformSkills.from_directory(str(tmp_path))
-    graph = compiled(Model(script=[]), skills, binding(), True)
+    model = Model(script=[])
+    graph = compiled(model, skills, binding(), True)
 
     async def run(index: int) -> str:
         name = "first" if index % 2 else "second"
@@ -321,3 +576,13 @@ async def test_concurrent_native_pins_keep_graph_namespaces_independent(
         return name
 
     assert len(await asyncio.gather(*(run(index) for index in range(12)))) == 12
+    for messages in model.calls:
+        pin = next(
+            message
+            for message in messages
+            if message.additional_kwargs.get("lc_source") == "pinned_skill"
+        )
+        name = pin.additional_kwargs["skill"]["name"]
+        assert f"Already-loaded skill instructions: `{name}`." in str(
+            messages[0].content
+        )
