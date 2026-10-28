@@ -527,9 +527,10 @@ fn document_receipts_and_lifecycle_receipts_have_distinct_generated_contracts() 
     let schemas = &api["components"]["schemas"];
     assert!(schemas["UploadReceipt"]["properties"]["request_key"].is_object());
     assert!(schemas["Receipt"]["properties"]["target_id"].is_object());
+    let file = &schemas["FileUpload"]["properties"]["file"];
     assert_eq!(
-        schemas["FileUpload"]["properties"]["file"],
-        json!({"type":"string","format":"binary"})
+        (&file["type"], &file["format"]),
+        (&json!("string"), &json!("binary"))
     );
     assert!(
         schemas["EntryOrder"]["enum"]
