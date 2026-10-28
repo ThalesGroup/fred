@@ -64,4 +64,6 @@ export interface SpreadsheetSheet {
 export interface SpreadsheetPreview {
   version: number;
   sheets: SpreadsheetSheet[];
+  /** Build date (YYYY-MM-DD) when values read TODAY or NOW. */
+  computed_at?: string;
 }

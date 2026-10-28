@@ -31,6 +31,7 @@ from fred_capability_spreadsheet.capability import (
     XLSX_CONTENT_TYPE,
     SpreadsheetCapability,
     SpreadsheetPreviewPart,
+    _created_text,
 )
 from fred_capability_spreadsheet.store import WorkbookRow
 from fred_runtime.capabilities.assembly import build_capability_agent_block
@@ -171,6 +172,15 @@ def test_tool_schema_exposes_only_llm_arguments():
     assert "that agent creates one workbook" in schema["description"]
     assert "Charts are not supported yet" in schema["description"]
     assert "charts_ignored" not in str(schema)
+    assert "Not available: RAND, INDIRECT" in schema["description"]
+    assert "TODAY" not in schema["description"]
+
+
+def test_success_text_says_when_today_or_now_were_read():
+    text = _created_text("a.xlsx", computed_at="2026-10-28")
+    assert "computed at build time (2026-10-28)" in text
+    assert text.endswith("reply now.")
+    assert "build time" not in _created_text("a.xlsx")
 
 
 def test_graph_assembly_exposes_the_tool():

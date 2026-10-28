@@ -34,7 +34,8 @@ vi.mock("./SpreadsheetDownloadButton", () => ({
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { formatted?: string }) => (options?.formatted ? `${key}:${options.formatted}` : key),
+    t: (key: string, options?: { formatted?: string; date?: string }) =>
+      options?.formatted || options?.date ? `${key}:${options.formatted ?? options.date}` : key,
     i18n: { language: state.language },
   }),
 }));
@@ -289,6 +290,15 @@ describe("SpreadsheetPane", () => {
     expect(budget.getAttribute("aria-selected")).toBe("true");
     expect(document.activeElement).toBe(budget);
     expect(text(container.querySelector("tbody td"))).toBe("Rent");
+  });
+
+  it("says when values were computed at build time, only when TODAY or NOW were read", async () => {
+    await render();
+    expect(container.textContent).not.toContain("capability.spreadsheet.computedOn");
+    state.load = { status: "ready", preview: { ...preview, computed_at: "2026-10-28" } };
+    state.language = "fr";
+    await render();
+    expect(text(container)).toContain("capability.spreadsheet.computedOn:28/10/2026");
   });
 
   it("keeps one tab for a single sheet and no scroll arrows when the tabs fit", async () => {

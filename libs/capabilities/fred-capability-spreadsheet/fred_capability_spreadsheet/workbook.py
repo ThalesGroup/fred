@@ -430,6 +430,8 @@ class _Draft:
 class PreparedWorkbook:
     sheets: list[PreparedSheet]
     language: Language
+    # The build time TODAY/NOW were evaluated with; None when no value reads it.
+    computed_at: datetime | None = None
 
 
 def sanitize_file_name(raw: str) -> str:
@@ -447,14 +449,21 @@ def normalize_language(raw: str | None) -> Language:
     return "en" if (raw or "").strip().lower().startswith("en") else "fr"
 
 
-def prepare(request: CreateSpreadsheetInput) -> PreparedWorkbook:
-    """Validate the request and convert each value once."""
+def prepare(
+    request: CreateSpreadsheetInput, now: datetime | None = None
+) -> PreparedWorkbook:
+    """Validate the request and convert each value once; `now` feeds TODAY/NOW."""
 
     _check_structure(request)
     language = normalize_language(request.language)
     drafts = [_prepare_sheet(sheet) for sheet in request.sheets]
     _check_model_formulas(drafts)
-    return PreparedWorkbook(sheets=_evaluate(drafts, language), language=language)
+    evaluator = Evaluator(
+        [_grid(draft, language) for draft in drafts], max_rows=MAX_ROWS + 1, now=now
+    )
+    sheets = _evaluate(drafts, language, evaluator)
+    computed_at = evaluator.now if evaluator.clock_read else None
+    return PreparedWorkbook(sheets=sheets, language=language, computed_at=computed_at)
 
 
 def _check_model_formulas(drafts: list[_Draft]) -> None:
@@ -551,7 +560,9 @@ def build_preview(prepared: PreparedWorkbook) -> bytes:
     """
 
     sheets = [_preview_sheet(sheet) for sheet in prepared.sheets]
-    payload = {"version": 1, "sheets": sheets}
+    payload: dict[str, object] = {"version": 1, "sheets": sheets}
+    if prepared.computed_at is not None:
+        payload["computed_at"] = prepared.computed_at.date().isoformat()
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
 
 
@@ -952,11 +963,11 @@ def _total_node(column: ColumnSpec, index: int, last_row: int) -> Node:
     return Call(function, (data,))
 
 
-def _evaluate(drafts: list[_Draft], language: Language) -> list[PreparedSheet]:
+def _evaluate(
+    drafts: list[_Draft], language: Language, evaluator: Evaluator
+) -> list[PreparedSheet]:
     """Evaluate every formula of the workbook once, across sheets."""
 
-    grids = [_grid(draft, language) for draft in drafts]
-    evaluator = Evaluator(grids, max_rows=MAX_ROWS + 1)
     try:
         evaluator.run()
     except LocatedFormulaError as exc:

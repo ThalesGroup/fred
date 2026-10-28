@@ -286,6 +286,7 @@
       "unavailable": "Aperçu indisponible. Téléchargez le fichier pour l'ouvrir.",
       "moreRows_one": "{{formatted}} ligne de plus n'est pas affichée. Téléchargez le fichier pour la voir.",
       "moreRows_other": "{{formatted}} lignes de plus ne sont pas affichées. Téléchargez le fichier pour tout voir.",
+      "computedOn": "Calculé le {{date}}",
       "card": {
         "aria": "Fichier Excel",
         "open": "Aperçu",

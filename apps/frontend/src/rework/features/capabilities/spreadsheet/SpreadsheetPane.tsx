@@ -368,6 +368,7 @@ function SheetTabs({ names, selected, onSelect, tabId, panelId }: SheetTabsProps
 }
 
 function SpreadsheetView({ preview, locale }: { preview: SpreadsheetPreview; locale: string }) {
+  const { t } = useTranslation();
   const [selected, setSelected] = useState(0);
   const baseId = useId();
   const index = preview.sheets[selected] ? selected : 0;
@@ -378,6 +379,13 @@ function SpreadsheetView({ preview, locale }: { preview: SpreadsheetPreview; loc
   return (
     <div className={styles.view}>
       {sheet && <SheetGrid key={index} sheet={sheet} locale={locale} panelId={panelId} tabId={tabId(index)} />}
+      {preview.computed_at && (
+        <p className={styles.note}>
+          {t("capability.spreadsheet.computedOn", {
+            date: new Intl.DateTimeFormat(locale).format(new Date(`${preview.computed_at}T00:00:00`)),
+          })}
+        </p>
+      )}
       <SheetTabs
         names={preview.sheets.map((s) => s.name)}
         selected={index}

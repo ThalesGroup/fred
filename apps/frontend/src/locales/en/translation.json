@@ -286,6 +286,7 @@
       "unavailable": "Preview unavailable. Download the file to open it.",
       "moreRows_one": "{{formatted}} more row is not shown. Download the file to see it.",
       "moreRows_other": "{{formatted}} more rows are not shown. Download the file to see them all.",
+      "computedOn": "Calculated on {{date}}",
       "card": {
         "aria": "Excel file",
         "open": "Preview",
