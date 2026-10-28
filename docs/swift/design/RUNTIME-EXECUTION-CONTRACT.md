@@ -565,7 +565,9 @@ It returns `SkillCatalog`: `supported`, a snapshot `revision` and skill
 `metadata_version=1` opts into `builtin`, `user_invocable`,
 `disable_model_invocation` and catalog `policy_supported`. Default version 0
 preserves the earlier JSON shape for strict older control planes. Both versions
-omit agent-only and globally disabled packaged skills from user discovery and previews.
+omit agent-only skills from user discovery. Globally disabled packaged skills
+are unavailable for both discovery and previews. Authorized instruction previews
+can include agent-only skills without permitting direct user selection.
 The hint comes from `argument-hint` frontmatter; non-string, blank or oversized
 hints are ignored with bounded diagnostics. It is advisory, never mandatory-input
 validation or argument substitution. No bodies, filesystem paths or cross-source
@@ -774,7 +776,7 @@ explicitly disables them. `skills.directory: package` resolves
 `fred_runtime/skills` from the installed package; other paths resolve against
 the configuration file parent. Helm preserves absent, null and custom values.
 
-Standard frontmatter `user-invocable` defaults to true and
+Agent-skill ecosystem frontmatter `user-invocable` defaults to true and
 `disable-model-invocation` defaults to false. Non-boolean values exclude only
 the malformed skill. Agent-only skills cannot be selected by typed user input;
 explicit-only skills are available for new model loads only when selected for
@@ -810,6 +812,8 @@ handled by native discovery.
 
 Existing parent/child filesystem permissions deny agent writes to `/skills` and
 its descendants. Capability ports also refuse system-origin writes there;
+capability reads check both the requested and resolved target's eligibility,
+including aliases and system-origin consumers.
 production skill files/volumes must remain read-only. The upstream filesystem
 backend is not wrapped or subclassed. Virtual paths confine reads to the mounted
 root, and script execution stays unavailable. Route collisions fail activation.
@@ -823,8 +827,11 @@ is derived from that call's messages, so trimming and isolated child contexts do
 not retain a false loaded state. Platform instructions require matching skills
 even without a slash command and reuse of complete instructions before further
 reads; required references remain available through native tools. Deep's native
-skills middleware retains its upstream prompt and adds the same selection and
-reuse rules after its catalogue, for both parent and explicit child graphs.
+skills middleware formats its catalogue inside a concise procedure prompt with
+the same selection and reuse rules, for parent and explicit child graphs.
+Explicit pins guarantee loading before inference; spontaneous selection without
+a typed selection remains a model decision. A model can ignore that instruction,
+so a generated diagram alone is not evidence that the graph skill was read.
 Native successful
 reads retain the existing attribution/KPI and stored reference previews; reserved
 Fred tags in returned reads/searches are escaped at the model boundary.
@@ -844,6 +851,8 @@ uses native pins for explicit Deep selections without an extra model call.
 Successful shared skill loads emit `agent.skill_loaded_total` once per actual
 read of the procedure, with `skill_name`, trusted `skill_origin` (`user` or
 `agent`) and bound team/session/exchange/user/instance dimensions (2026-10-07).
+Native context recovery does not re-emit an already observed pin's activity or
+usage; observation identity is isolated to that model invocation's graph state.
 Successful native `read_file` windows starting at normalized offset zero on a
 mounted `SKILL.md` emit a selection-aware load through the existing tool boundary;
 zero-length windows and failed reads do not. Further pages and reference reads
