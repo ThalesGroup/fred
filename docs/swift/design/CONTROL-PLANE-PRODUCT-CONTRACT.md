@@ -2445,6 +2445,9 @@ email lands in any conversation store.
 
 ## 36. Contract Notes — KPI preset endpoints & authorization (OBSERV-02) (2026-07-26)
 
+**2026-10-28 - superseded by §74** for parameters, authorization and the preset list;
+the paragraphs below describe the earlier contract where they differ.
+
 Product/business analytics (active users, sessions, agent usage, tokens,
 storage) live entirely in `fred-control-plane`, backed by the shared
 OpenSearch KPI store every user-facing backend writes to via a request
@@ -5175,3 +5178,56 @@ personal localStorage values do not seed the row or serve as a fallback; the
 frontend applies the database response or defaults to in-memory controls and
 does not mirror database-backed choices to localStorage. Before login, theme boot uses only public
 platform settings and the OS color mode. Resizable pane widths and trace expansion remain local.
+
+## 74. Contract Notes - admin analytics redesign (2026-10-28)
+
+OpenSpec change: `openspec/changes/redesign-admin-analytics/`.
+
+**Parameters.** `GET /control-plane/v1/kpi/presets/{name}` takes repeated
+`team_ids` (empty = whole platform, at most 200) instead of `team_id`, plus
+`bucket` (`auto|hour|day|week|month`) and `tz` (IANA, default
+`Europe/Paris`; 400 when unknown). A preset whose data has no team answers
+400 to a team scope; platform-only fields of section presets are `null` there.
+
+**Authorization** (`kpi/scope.py::resolve_kpi_scope`). No team:
+`organization#can_observe_platform`. Teams: an observer may pass any
+non-personal team; anyone else needs `team#can_read_analytics` (`team_admin`
+only) on every listed team. `self_scoped` presets stay open to any user for
+their own data. `PresetDef.platform_admin_only` is removed.
+
+**Presets.** Section presets return `PeriodValue {current, previous}`
+(`null` = no data) and `previous_since`: `analytics_overview`,
+`analytics_activity_over_time` (`{bucket, series, points: [{start,
+values}]}`, `start` in `tz`), `analytics_adoption`, `analytics_usage`,
+`analytics_teams`, `analytics_agents` (including `capabilities`, from
+`dims.capability_id` on tool KPIs, RUNTIME §8.122), `analytics_quality_cost`,
+and `analytics_teams_catalog` (`{rows: [{team_id, name, member_count}]}`).
+Costs are `cost_eur`, from `usd_per_eur` in `model_impact_factors.yaml`.
+`web_research_summary` returns `available` and `estimated_cost_eur`
+(`estimated_cost_usd` removed); `user_token_usage_*` report `cost_eur`.
+
+**Removed presets:** `active_users_over_time`, `unique_users_total`,
+`messages_over_time`, `sessions_by_scope`, `conversations_per_user`,
+`conversation_depth`, `agents_per_user`, the three `*_trend` presets,
+`top_teams_by_sessions`, `documents_total`, `token_usage_over_time`,
+`token_usage_by_agent`, `token_usage_by_model`, `top_agents_by_conversations`.
+
+**Export.** `GET /control-plane/v1/kpi/analytics/export` takes the preset
+parameters plus `lang` (`fr|en`) and returns an `.xlsx` attachment named
+`analytics_<scope>_<start>_<end>.xlsx`, built from the same section
+functions. Its texts (`kpi/export_texts.py`) are checked against the
+frontend i18n files by a test.
+
+**User filter** (platform page). User-filterable presets
+(`PresetDef.user_filterable`) and the export take `user_filter`: JSON
+`{combination: all|any, conditions: [{claim, operator, value,
+case_sensitive}]}`, 1 to 8 conditions, at most 2 000 characters; requires
+`can_observe_platform`; more than 50 000 matching users is 400. `GET
+/control-plane/v1/kpi/user-filter` (observers) returns `{fields: [{claim,
+users, in_rule}], known_users, matched, no_data}`. Not filtered:
+configuration figures (agents existing, agents equipped, team members,
+storage, prompt length).
+
+**Team usage page.** `team/:teamId/usage` shows a team admin the analytics
+tabs without Technical, fixed to that team; everyone else sees only their
+own usage.

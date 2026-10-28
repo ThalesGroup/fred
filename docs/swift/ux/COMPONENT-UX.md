@@ -348,8 +348,8 @@ Escape closes only the topmost layer: the confirmation, else the dialog, never t
 The description step's **Suggest** button shows the outlined `auto_awesome` icon
 through Dialog's optional `confirmIcon`; the review **Apply** action keeps its text.
 
-Its token use shows on the admin `AnalyticsPage` as a **Creation assistant** `KpiStatCard`
-(token-usage section) with the number of uses in the card's optional `caption`
+Its use shows on the admin `AnalyticsPage` Technical tab as a **Creation assistant** `KpiStatCard`:
+the number of drafts as value, the tokens in the card's optional `caption`
 (`--font-body-small`, retreat).
 
 ---
@@ -3133,42 +3133,20 @@ autofocuses nothing otherwise, stranding a keyboard user behind an
 **Location:** `src/rework/components/pages/TeamUsagePage/TeamUsagePage.tsx`
 **Status:** `Functional`
 
-Personal token-usage dashboard (OBSERV-02 / `BACKLOG.md` §7b), extended in place for v3
-(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36, 2026-07-26): the personal section (unchanged, wrapped in
-its own `Disclosure`) now sits below a capability-gated team section prepended above it, all
-in-page gating (`FRONTEND-AUTHZ-PATTERN.md`, no route guard) via `useTeamCapabilities()`/
-`hasElevatedTeamRole()`. Shared section (team_admin/editor/analyst): members/agents/documents
-tiles, team-scoped token usage + green/cost (`TokenUsageImpact`, shared with `AnalyticsPage`),
-storage quota, conversations over time, and a most-active-agents breakdown. Entry point is a new
-gear icon on the personal-space banner (`TeamContentNavbar.tsx`) — the same slot team settings
-uses, gated on `isPersonalTeam` instead of `canOpenTeamSettings` since the two are mutually
-exclusive.
-
-The page's `<h1>` is role-aware (2026-07-30 fix): "My token usage" for a plain member or anyone
-on a personal team (only the personal section ever renders for them), "Team usage" for an
-elevated viewer (admin/editor/analyst) — the original always-"My token usage" title read as
-mislabeled for an admin looking at a page that's majority team-scoped content.
-
-**Activités removed from this page (2026-07-30).** team_editor's ingestion-filtered and
-team_admin's unfiltered `TaskActivity` sections (plus team_admin's `team_activity_summary` trend
-line) were embedded here per v3 §2.8 — removed as a live-review finding: they duplicated
-`/team/:teamId/settings/activity` (`TeamSettingsPage`'s Activity tab), one click away in the same
-nav rail, which additionally has ack support this embed never did. With this page as its only
-consumer gone, the `team_activity_summary` preset endpoint itself was retired outright
-(2026-08-08) — it is no longer part of the contract. See `CONTROL-PLANE-PRODUCT-CONTRACT.md` §36
-and the `TaskActivity` entry below.
-
-The Team Settings nav (`TeamContentNavbar.tsx`) was also widened the same day: being on
-`/team/:teamId/usage` used to collapse the sidebar to a bare "← Back" with no indication of where
-you were; it now renders the same `settingsItems` tab list Team Settings uses (Members/Settings/
-Activity/Usage/Routing), with Usage highlighted via `NavLink`'s own active-route
-match — consistent with every other elevated-role tab instead of a dead end. Personal-space Usage
-(no sibling tabs to switch to) keeps the bare Back.
+`/team/:teamId/usage`, named **Analytics** in the team settings nav and page title for a team
+admin, like the platform page, and **My usage** (fr: Ma consommation) for everyone else. A team admin (`useTeamCapabilities().canReadAnalytics`, non-personal
+team) gets `AnalyticsView` in `mode="team"` with `teamIds=[teamId]`: the platform analytics
+tabs without Technical, no scope selector, cross-team tiles hidden (active teams, team share,
+teams table, teams feeding a corpus, corpus searches; the Teams tab shows the team's own member
+tiles), the team export, and a last tab with the viewer's own usage (`PersonalUsage`). Anyone else,
+and any personal space (plus personal skills), sees only `PersonalUsage` under a plain header
+with the analytics periods. `PersonalUsage` reads the `self_scoped` `user_token_usage_*` presets;
+`TokenUsageImpact` shows their CO2e/kWh and the euro cost. In-page gating only
+(`FRONTEND-AUTHZ-PATTERN.md`). The sidebar keeps the Team Settings tab list on this route.
 
 #### Open UX issues
 
-- Not yet design-reviewed. First functional pass only — layout and empty/loading states mirror
-  `AnalyticsPage` but haven't been checked against a live stack with real token data.
+- Not yet checked against a live stack as a team admin.
 
 ---
 
@@ -3177,8 +3155,8 @@ match — consistent with every other elevated-role tab instead of a dead end. P
 **Location:** `src/rework/components/shared/molecules/PageHeader/PageHeader.tsx`
 **Status:** `Functional`
 
-The single canonical page-title row — `<h1>` + optional subtitle + optional right-aligned
-`actions` + optional `breadcrumb` (full-width row above the title) + optional `tabs` (full-width
+The single canonical page-title row — `<h1>` + optional subtitle + optional `filters` (next to
+the title, 2026-10-28) + optional right-aligned `actions` + optional `breadcrumb` (full-width row above the title) + optional `tabs` (full-width
 row below the title/actions row). This is the only place a page-level title should ever be
 rendered — no page should hand-roll its own `<h1>`/`<h2>` page title. Vertically centers the
 title against `actions` when there's no subtitle; aligns to the top when there is one, so
@@ -3192,9 +3170,9 @@ now share one consistent header pattern instead of diverging per page:
 
 | Page                                                   | Slots used                                                                               |
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `TeamUsagePage`                                        | title, actions (`TimeRangeSelector` + refresh), `sticky`                                 |
+| `TeamUsagePage`                                        | as `AnalyticsPage` without scope for a team admin; else title, actions (`TimeRangeSelector`) |
 | `TaskActivity` (platform Activity + team Activity tab) | title, subtitle                                                                          |
-| `AnalyticsPage`                                        | title, actions (`TimeRangeSelector` + refresh), `sticky`                                 |
+| `AnalyticsPage`                                        | title + info, filters (scope + user filter + `TimeRangeSelector`), actions (export), tabs (`ButtonGroup`) |
 | `CorpusAuditPage`                                      | title, subtitle, actions (refresh + Fix)                                                 |
 | `SelfTestPage`                                         | title only                                                                               |
 | `FeaturesPage`                                         | title, subtitle, tabs (kind-filter `ButtonGroup`)                                        |
@@ -3204,12 +3182,11 @@ now share one consistent header pattern instead of diverging per page:
 | `TeamSettingsParameters`                               | title only (new)                                                                         |
 | `TeamSettingsRouting`                                  | title only (new)                                                                         |
 
-`sticky` (2026-09-14) pins the header to the top of the scrolling `<main>` so the two usage
-dashboards keep their time range reachable next to the charts far down the page. It bleeds over
-the page's `--spacing-xl` gutter to hide what scrolls under it, so it only fits pages with that
-gutter. The `TimeRangeSelector` in those headers steps the range back/forward with ‹ › (calendar
-presets by a whole day/week/month, rolling and custom ranges by their length, weeks starting
-Monday) and ends its dropdown with a month timeline: current month on the right, older months
+The two usage dashboards keep their header (title, filters, tabs) out of the scroll: the page is
+a flex column whose body alone scrolls (2026-10-27; this replaced the `sticky` mode). The
+`TimeRangeSelector` in those headers sizes to its label (12ch to 28ch) and steps the range back/forward with ‹ › (calendar
+presets by a whole day/week/month, rolling and custom ranges by their length - 3 and 12 months from the same day, clamped to a shorter month's last day - weeks
+starting Monday; a page may pass its own `presetKeys`) and ends its dropdown with a month timeline: current month on the right, older months
 loaded as you scroll left, each year labelled once above its months.
 
 Known deliberate non-adoption: `FeaturesPage`'s Tools/Agents/Models control is `ButtonGroup
@@ -5822,3 +5799,22 @@ The platform administration Teams registry owns the Free toggle, labeled Link ac
 Admission denial, every enrollment state and the transient admission-verification failure of `PlatformAdmissionGuard` share the card described above instead of PageError; sign-out appears on admission denial and on the guard's failure, never on the enrollment route. Ordinary error pages retain their home action. Picker values disappear on dismissal, unsupported numeric/boolean fields stay unselectable, and selecting a key only changes the draft.
 
 Invitation history filtering and cleanup (2026-10-09): the shared Select filters All, Active, Revoked or Expired across server-paginated history. Suspended links appear in All with grayscale rows at reduced opacity, retaining copying and revocation actions; the status is available to screen readers without a visible Suspended label or explanatory paragraph. Suspension has no separate filter. A height-bounded shared DataTable (same rule as the activation review) keeps headers and pagination outside its scrolling body. Loading hides previous rows while retaining pagination totals until the requested page arrives. Cleanup is triggered from the history dialog's footer, away from the filter, and uses the shared destructive confirmation Dialog (revocation confirms in the error colour too) with the selected team in its title and the team-wide eligible count; the history dialog remains visible behind it, inert and hidden from assistive navigation while confirmation alone handles focus and keyboard dismissal; it preserves the filter and refreshes history after success. Copy keeps the chat ActionBar feedback without changing modal geometry.
+
+## Admin Analytics page (2026-10-28)
+
+`AnalyticsPage` (`AnalyticsView`, shared with the team usage page): a fixed header card with the
+title, `PageHeader`'s `filters` slot (scope, user filter, `TimeRangeSelector`, **Export**) and a
+seven-tab `ButtonGroup`; only the tab body scrolls (at 900px and below the header scrolls too).
+Each section is one `surface-container` card; tiles, funnel and ranked lists nest on
+`surface-container-high` (`KpiStatCard` `nested`); charts and tables sit flat on the card. Info
+icons are focusable spans with an `aria-label`, never buttons. Charts opt in to a token-coloured
+grammar (values on bars and points instead of an axis, legend in the header, no animation);
+other pages keep the defaults. A figure without team data reads "Not available for a team
+selection". Page-local pieces: `AnalyticsScopeSelector`, `AnalyticsUserFilter` (reuses the
+`ClaimConditionList` molecule of platform access), `InfoTile`, `AdoptionFunnel`, `CohortTable`,
+`RankedBars.tsx` (`RankedList`, `BarCell`, `SplitCell`).
+
+#### Open UX issues
+
+- Mockup sizes without a token (36px figures, 18px titles, 6/10/20 radii, the mockup's indigo,
+  a sequential ramp for cohort cells) wait for the design-system update.

@@ -114,15 +114,62 @@ adressée à la plateforme.
 Lorsqu'une fonction déjà utilisée par un agent est refermée, cet agent est
 **suspendu** jusqu'à son rétablissement.
 
+## La page Analytiques
+
+La page **Analytiques** montre l'usage de la plateforme sur la période choisie
+(7 ou 30 jours, 3 ou 12 mois glissants, un mois, vos propres dates ; les flèches
+passent à la période précédente ou suivante). Chaque chiffre se compare à la
+période précédente de même durée.
+
+Ses onglets : **Vue d'ensemble**, **Adoption** (qui a accès, qui vient, qui
+envoie des messages, et si les nouveaux reviennent), **Usage**, **Équipes**,
+**Agents et outils**, **Qualité et coût** (réponses en échec, tokens, coût
+estimé en euros et empreinte) et **Technique** (stockage, recherche web,
+longueur des instructions). Chaque indicateur a une courte explication
+derrière son icône d'information.
+
+**Périmètre** limite la page à quelques équipes, ou revient à **Toute la
+plateforme**. Certains chiffres ne sont pas rattachés à une équipe et
+l'indiquent quand des équipes sont sélectionnées.
+
+**Filtre utilisateurs** limite tous les chiffres aux personnes dont les
+attributs de compte correspondent à des conditions, construites comme une
+règle d'accès à la plateforme (par exemple « organisation est égal à … »).
+Seuls les attributs que la règle d'accès enregistre sont proposés, avec leur
+dernière valeur connue. Avant d'appliquer, le filtre affiche combien de
+personnes correspondent et combien sont « sans donnée » : celles qui ne se
+sont pas connectées depuis que la règle utilise cet attribut. Quelques
+chiffres de configuration (agents existants, membres des équipes, stockage)
+ne sont pas filtrés ; l'icône d'information du filtre les liste.
+
+**Exporter** télécharge la période et le périmètre affichés dans un
+classeur, avec les mêmes chiffres et explications. Il ne contient ni noms, ni
+adresses e-mail, ni messages.
+
+## Les analytiques d'une équipe
+
+La page **Analytiques** d'une équipe (dans ses réglages) montre à un
+**Admin** de l'équipe les mêmes analytiques que la page **Analytiques**,
+limitées à son équipe : les mêmes onglets sauf **Technique**, les mêmes
+périodes et comparaisons, les coûts en euros. Il n'y a pas de choix de
+périmètre : la page montre toujours l'équipe sélectionnée. Les chiffres qui
+n'ont de sens qu'entre équipes (équipes actives, part des conversations en
+équipe, tableau des équipes) n'y figurent pas ; l'onglet **Équipes** montre
+les membres de l'équipe, combien sont actifs et leur part.
+
+**Exporter** télécharge le classeur de l'équipe seule. Il ne dit rien
+des autres équipes de la plateforme.
+
+Le dernier onglet, **Ma consommation**, montre votre propre consommation de
+tokens, par agent et par modèle, avec son empreinte et son coût estimé. Les
+Éditeurs, Analystes et Membres de l'équipe ne voient que cette partie
+personnelle, sous le nom **Ma consommation** dans les réglages de l'équipe, et
+dans votre espace personnel elle s'accompagne de vos skills.
+
 ## Deux pages d'usage, à ne pas confondre
 
-- **L'usage de votre équipe** — la page **Usage** de l'équipe : la consommation
-  dans le temps, par agent et par modèle, plus votre part personnelle. La vue
-  d'ensemble de l'équipe demande un rôle **Admin**, **Éditeur** ou
-  **Analyste** ; un simple Membre ne voit que sa propre consommation.
+- **L'usage de votre équipe** — la page **Analytiques** de l'équipe, réservée
+  aux **Admins** de l'équipe pour sa partie équipe.
 - **L'usage de la plateforme** — la page **Analytiques** de la console, à
-  l'échelle de tous les utilisateurs. Elle demande le rôle **Observateur
-  plateforme**.
-
-Les deux pages ne font donc pas double emploi : leurs périmètres et leurs
-conditions d'accès diffèrent.
+  l'échelle de tous les utilisateurs ou des équipes choisies. Elle demande le
+  rôle **Observateur plateforme**.
