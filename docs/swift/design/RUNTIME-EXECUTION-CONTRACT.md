@@ -868,8 +868,7 @@ Weaver contract note (2026-10-26): the additive `/agents/capabilities` read surf
 advertises the complete installed tool registry and registered template consumer links.
 It reuses manifest descriptors without configured values or connection details;
 agent/model/Application/KB projections remain outside this inventory. Execution
-contracts are unchanged. See decision 5d in
-[the Weaver change](../../../openspec/changes/simplify-weaver-runtime-authorization/design.md#5d-complete-inventory-and-organization-readrefresh).
+contracts are unchanged.
 
 
 These gaps were surfaced while implementing an external SSE bench client.
@@ -7172,8 +7171,7 @@ facts, revisions, references and instance invocation options. Approved inference
 connections are visible only on trusted delegated workload calls; discovery
 credentials are never returned. Legacy profile strings remain diagnostic-only and
 are excluded from the resolver configuration copy. The canonical contract is
-[Control Plane M3](../../../apps/control-plane/README.md#instance-recommendations-and-resolver-data-m3),
-with decision 5e in the active `simplify-weaver-runtime-authorization` change.
+[Control Plane M3](../../../apps/control-plane/README.md#instance-recommendations-and-resolver-data-m3).
 This local implementation does not connect Python routing, choose pod credentials
 or enforce restrictions before invocations. Those remain the separate M4 lot;
 the Swift behavior described above is not proof of Weaver runtime integration.

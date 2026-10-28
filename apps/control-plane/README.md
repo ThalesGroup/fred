@@ -271,12 +271,8 @@ consistency. A trigger restricts the policy owner to an organization. Policy and
 permissions cascade only on physical organization purge, not retirement or a user's
 departure. No model OpenFGA objects are introduced.
 
-Neither migration was applied in these increments. Use the existing migration
-procedure before deploying this binary; startup checks the full sequence. Technical
-quality/generation evidence and **unexecuted** functional cases are in the existing
-OpenSpec [M1-M3 checklist](../../openspec/changes/simplify-weaver-runtime-authorization/tasks.md#platform-model-catalog-accepted-sequence-decision-5e).
-Instance settings and resolver data are described below. Model selection UI/chat and
-invocation enforcement remain separate M4/M5 work.
+Use the existing migration procedure before deploying this binary; startup checks
+the full sequence. Instance settings and resolver data are described below.
 
 ### Instance recommendations and resolver data (M3)
 

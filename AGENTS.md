@@ -130,10 +130,7 @@ capabilities, the goal is that every capability installed on the native agent
 pod becomes enableable, selectable and working from the existing UI.
 
 - **No OpenSpec** for these lots unless the team decides otherwise: the issue
-  brief is the agreement. For capability lots, this supersedes the
-  capability exclusions of OpenSpec `simplify-weaver-runtime-authorization`
-  (decision 5a, task 2.2). Its security decisions (M4 turn boundary, pod-owned
-  offers 5b-5d, document visibility 5) and the security section below still apply.
+  brief is the agreement. The security section below applies to every lot.
 - **No invention.** A lot rewires an existing Swift feature; for a capability,
   the same package, manifest, tools, UI packs and panels. Adapt only what Weaver's ReBAC
   boundary requires: canonical space context instead of `team_id`, Rust Control
@@ -192,9 +189,7 @@ clear, robust behavior. Do not weaken controls or compress code to claim savings
   refresh turn authority during the turn; revocation/decommissioning is observed at
   the next turn. A started turn may finish. Explicit cancellation, terminal-run
   enforcement, execution limits and resource-specific data checks remain separate.
-  See OpenSpec simplify-weaver-runtime-authorization, design 5e. This is an accepted
-  implementation target, not evidence of a wired runtime. Runtime/access cleanup
-  is not implicit authorization to erase shared content, persisted histories or
+  Runtime/access cleanup is not implicit authorization to erase shared content, persisted histories or
   audit evidence.
 - Preserve JWT validation, the distinction between the authenticated workload
   and the person it acts for, trusted delegation, user/service credential
