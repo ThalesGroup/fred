@@ -1754,6 +1754,62 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setAnnouncementEnabledRequest,
       }),
     }),
+    getNotificationSummaryControlPlaneV1NotificationsSummaryGet: build.query<
+      GetNotificationSummaryControlPlaneV1NotificationsSummaryGetApiResponse,
+      GetNotificationSummaryControlPlaneV1NotificationsSummaryGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/notifications/summary` }),
+    }),
+    listNotificationsControlPlaneV1NotificationsGet: build.query<
+      ListNotificationsControlPlaneV1NotificationsGetApiResponse,
+      ListNotificationsControlPlaneV1NotificationsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/notifications`,
+        params: {
+          limit: queryArg.limit,
+          before: queryArg.before,
+        },
+      }),
+    }),
+    clearNotificationsControlPlaneV1NotificationsDelete: build.mutation<
+      ClearNotificationsControlPlaneV1NotificationsDeleteApiResponse,
+      ClearNotificationsControlPlaneV1NotificationsDeleteApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/notifications`, method: "DELETE" }),
+    }),
+    markNotificationsSeenControlPlaneV1NotificationsSeenPost: build.mutation<
+      MarkNotificationsSeenControlPlaneV1NotificationsSeenPostApiResponse,
+      MarkNotificationsSeenControlPlaneV1NotificationsSeenPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/notifications/seen`,
+        method: "POST",
+        body: queryArg.markNotificationsSeenRequest,
+      }),
+    }),
+    deleteNotificationControlPlaneV1NotificationsNotificationIdDelete: build.mutation<
+      DeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteApiResponse,
+      DeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/notifications/${queryArg.notificationId}`, method: "DELETE" }),
+    }),
+    listNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGet: build.query<
+      ListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetApiResponse,
+      ListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/notification-types` }),
+    }),
+    setNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePut: build.mutation<
+      SetNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePutApiResponse,
+      SetNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/notification-types/${queryArg.notificationType}`,
+        method: "PUT",
+        body: queryArg.setNotificationTypeRequest,
+      }),
+    }),
     startTaskControlPlaneV1TasksPost: build.mutation<
       StartTaskControlPlaneV1TasksPostApiResponse,
       StartTaskControlPlaneV1TasksPostApiArg
@@ -3356,6 +3412,36 @@ export type SetAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnoun
   announcementId: string;
   setAnnouncementEnabledRequest: SetAnnouncementEnabledRequest;
 };
+export type GetNotificationSummaryControlPlaneV1NotificationsSummaryGetApiResponse =
+  /** status 200 Successful Response */ NotificationSummary;
+export type GetNotificationSummaryControlPlaneV1NotificationsSummaryGetApiArg = void;
+export type ListNotificationsControlPlaneV1NotificationsGetApiResponse =
+  /** status 200 Successful Response */ NotificationPage;
+export type ListNotificationsControlPlaneV1NotificationsGetApiArg = {
+  limit?: number;
+  /** `next_cursor` of the previous page. */
+  before?: string | null;
+};
+export type ClearNotificationsControlPlaneV1NotificationsDeleteApiResponse = unknown;
+export type ClearNotificationsControlPlaneV1NotificationsDeleteApiArg = void;
+export type MarkNotificationsSeenControlPlaneV1NotificationsSeenPostApiResponse =
+  /** status 200 Successful Response */ NotificationSummary;
+export type MarkNotificationsSeenControlPlaneV1NotificationsSeenPostApiArg = {
+  markNotificationsSeenRequest: MarkNotificationsSeenRequest;
+};
+export type DeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteApiResponse = unknown;
+export type DeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteApiArg = {
+  notificationId: string;
+};
+export type ListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetApiResponse =
+  /** status 200 Successful Response */ NotificationTypeSettings;
+export type ListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetApiArg = void;
+export type SetNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePutApiResponse =
+  /** status 200 Successful Response */ NotificationTypeSetting;
+export type SetNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePutApiArg = {
+  notificationType: NotificationType;
+  setNotificationTypeRequest: SetNotificationTypeRequest;
+};
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
   body:
@@ -3822,11 +3908,15 @@ export type WikiProposalLifecycleResult = {
   rejected?: number;
   dry_run_actions?: number;
 };
+export type NotificationExpiryResult = {
+  deleted?: number;
+};
 export type LifecycleManagerResult = {
   scanned?: number;
   deleted?: number;
   dry_run_actions?: number;
   wiki_proposals?: WikiProposalLifecycleResult;
+  notifications?: NotificationExpiryResult;
 };
 export type WorkflowStartResponse = {
   status?: "queued" | "completed";
@@ -5807,6 +5897,84 @@ export type AnnouncementWriteRequest = {
 export type SetAnnouncementEnabledRequest = {
   enabled: boolean;
 };
+export type NotificationSummary = {
+  unseen_count: number;
+};
+export type AgentMarketplaceRemovedPayload = {
+  team_id: string;
+  team_name?: string | null;
+  agent_instance_id: string;
+  agent_name: string;
+  entry_id: string;
+  /** The removal reason code, as `AgentMarketplaceState.removed_reason`. */
+  reason: string;
+  /** The platform admin's message, if any. */
+  message?: string | null;
+};
+export type AgentMarketplaceRemovedNotification = {
+  id: string;
+  team_id?: string | null;
+  created_at: string;
+  expires_at: string;
+  seen_at?: string | null;
+  /** Set once someone else acted on the subject; the tile then shows `handled_by_name` instead of its buttons. */
+  handled_at?: string | null;
+  handled_by_name?: string | null;
+  handled_outcome?: string | null;
+  type: "agent.marketplace_removed";
+  payload: AgentMarketplaceRemovedPayload;
+};
+export type AgentRepublishNeededPayload = {
+  team_id: string;
+  team_name?: string | null;
+  agent_instance_id: string;
+  agent_name: string;
+  entry_id: string;
+  editor_name: string;
+};
+export type AgentRepublishNeededNotification = {
+  id: string;
+  team_id?: string | null;
+  created_at: string;
+  expires_at: string;
+  seen_at?: string | null;
+  /** Set once someone else acted on the subject; the tile then shows `handled_by_name` instead of its buttons. */
+  handled_at?: string | null;
+  handled_by_name?: string | null;
+  handled_outcome?: string | null;
+  type: "agent.republish_needed";
+  payload: AgentRepublishNeededPayload;
+};
+export type NotificationPage = {
+  items: (
+    | ({
+        type: "agent.marketplace_removed";
+      } & AgentMarketplaceRemovedNotification)
+    | ({
+        type: "agent.republish_needed";
+      } & AgentRepublishNeededNotification)
+  )[];
+  /** Opaque; pass it as `before` for the next page. Null on the last. */
+  next_cursor?: string | null;
+};
+export type MarkNotificationsSeenRequest = {
+  /** The newest notification id the popover listed; it and every older notification are marked seen. */
+  up_to: string;
+};
+export type NotificationType = "agent.republish_needed" | "agent.marketplace_removed";
+export type NotificationTypeSetting = {
+  type: NotificationType;
+  enabled: boolean;
+  disabled_by?: string | null;
+  disabled_at?: string | null;
+};
+export type NotificationTypeSettings = {
+  items: NotificationTypeSetting[];
+};
+export type SetNotificationTypeRequest = {
+  /** False hides every notification of the type from everyone, those already sent included; true shows every one still there. */
+  enabled: boolean;
+};
 export type StartTaskResponse = {
   task_id: string;
 };
@@ -6463,6 +6631,16 @@ export const {
   useUpdateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPutMutation,
   useDeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteMutation,
   useSetAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPutMutation,
+  useGetNotificationSummaryControlPlaneV1NotificationsSummaryGetQuery,
+  useLazyGetNotificationSummaryControlPlaneV1NotificationsSummaryGetQuery,
+  useListNotificationsControlPlaneV1NotificationsGetQuery,
+  useLazyListNotificationsControlPlaneV1NotificationsGetQuery,
+  useClearNotificationsControlPlaneV1NotificationsDeleteMutation,
+  useMarkNotificationsSeenControlPlaneV1NotificationsSeenPostMutation,
+  useDeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteMutation,
+  useListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetQuery,
+  useLazyListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetQuery,
+  useSetNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePutMutation,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
   useLazyListTasksControlPlaneV1TasksGetQuery,
