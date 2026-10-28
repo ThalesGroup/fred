@@ -21,10 +21,10 @@ import MonthStrip from "./MonthStrip";
 import {
   CalendarUnit,
   canShiftForward,
+  DEFAULT_PRESET_KEYS,
   getPreset,
   resolvePreset,
   shiftTimeRange,
-  TIME_PRESETS,
   TimePresetKey,
   TimeRange,
 } from "./timeRange.types";
@@ -33,6 +33,8 @@ import styles from "./TimeRangeSelector.module.scss";
 interface TimeRangeSelectorProps {
   value: TimeRange;
   onChange: (range: TimeRange) => void;
+  /** Presets offered in the dropdown, in this order. */
+  presetKeys?: TimePresetKey[];
 }
 
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
@@ -80,10 +82,14 @@ function formatRangeLabel(range: TimeRange, t: (k: string) => string, locale: st
   const { labelKey, period } = getPreset(range.presetKey);
   if (!range.offset) return t(labelKey);
   if (period.kind === "calendar") return formatCalendarPeriod(period.unit, since, until, locale);
-  return formatSpan(since, until, period.durationMs < TWO_DAYS_MS, locale);
+  return formatSpan(since, until, period.kind === "rolling" && period.durationMs < TWO_DAYS_MS, locale);
 }
 
-export default function TimeRangeSelector({ value, onChange }: TimeRangeSelectorProps) {
+export default function TimeRangeSelector({
+  value,
+  onChange,
+  presetKeys = DEFAULT_PRESET_KEYS,
+}: TimeRangeSelectorProps) {
   const { t, i18n } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -161,7 +167,7 @@ export default function TimeRangeSelector({ value, onChange }: TimeRangeSelector
             <div className={styles.divider} />
 
             <div className={styles.presets}>
-              {TIME_PRESETS.map((preset) => (
+              {presetKeys.map(getPreset).map((preset) => (
                 <button
                   key={preset.key}
                   type="button"

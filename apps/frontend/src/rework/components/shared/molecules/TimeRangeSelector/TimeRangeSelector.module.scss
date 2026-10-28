@@ -47,12 +47,12 @@
   padding: var(--spacing-xs) var(--spacing-s);
   color: var(--on-surface);
   font: var(--font-body-medium);
-  font-size: 0.85rem;
 }
 
-/* Fixed width so the ‹ › arrows stay under the cursor while stepping through periods. */
+/* Sized to its content; the floor keeps the ‹ › arrows from jumping between short labels. */
 .label {
-  width: 28ch;
+  min-width: 12ch;
+  max-width: 28ch;
   overflow: hidden;
   text-align: center;
   text-overflow: ellipsis;
