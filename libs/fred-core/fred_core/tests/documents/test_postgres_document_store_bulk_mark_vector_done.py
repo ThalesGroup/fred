@@ -17,8 +17,7 @@ vector-metadata repair action (#2234, 3a) performs.
 
 Runs against SQLite, which takes the store's Python-fallback branch (no
 `jsonb`/`||`/`#>>` operators) -- the same branch every other JSON-manipulating
-method in this store already falls back to for tests (see
-`test_postgres_document_store_count_by_team.py`). IMPORTANT LIMITATION: this
+method in this store already falls back to for tests. IMPORTANT LIMITATION: this
 means the actual PostgreSQL `jsonb_build_object`/`COALESCE`/`#>>` SQL text
 (the part of the #2234 fix that specifically handles a document whose
 `processing`/`stages` JSON key is missing) is exercised here only via its
