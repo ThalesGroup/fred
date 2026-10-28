@@ -1487,7 +1487,7 @@ class IngestionController:
             # Extract
             try:
                 logger.debug("[FAST TEXT] Extracting text for %s with options %s", filename, opts)
-                result = self._get_fast_text_processor(filename).extract(raw_path, options=opts)
+                result = await asyncio.to_thread(self._get_fast_text_processor(filename).extract, raw_path, options=opts)
                 logger.info(
                     "[FAST TEXT] user=%s file=%s format=%s chars=%s pages=%s  truncated=%s",
                     user.uid,
@@ -1633,7 +1633,7 @@ class IngestionController:
                 # Extract fast text
                 result: FastTextResult
                 try:
-                    result = self._get_fast_text_processor(filename).extract(raw_path, options=opts)
+                    result = await asyncio.to_thread(self._get_fast_text_processor(filename).extract, raw_path, options=opts)
                     logger.info(
                         "[FAST TEXT][INGEST] user=%s file=%s chars=%s pages=%s truncated=%s",
                         user.uid,
