@@ -28,8 +28,7 @@ interface ChatListItemProps {
   agentTooltipName?: string;
   agentDeleted?: boolean;
   dateLabel?: string;
-  onDelete?: (e: React.MouseEvent) => void;
-  deleteUnavailableReason?: string;
+  onDelete: (e: React.MouseEvent) => void;
 }
 
 export function ChatListItem({
@@ -41,7 +40,6 @@ export function ChatListItem({
   agentDeleted,
   dateLabel,
   onDelete,
-  deleteUnavailableReason,
 }: ChatListItemProps) {
   const { t } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
@@ -84,7 +82,7 @@ export function ChatListItem({
         </span>
       )}
       <span className={styles.chatActions}>
-        <DeleteIconButton size="small" onClick={onDelete} disabled={!onDelete} title={deleteUnavailableReason} />
+        <DeleteIconButton size="small" onClick={onDelete} />
       </span>
     </Link>
   );

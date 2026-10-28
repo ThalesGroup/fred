@@ -35,11 +35,15 @@ vi.mock("../../../../../hooks/useFrontendProperties", () => ({
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
+vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
+  useConfirmationDialog: () => ({ showConfirmationDialog: vi.fn() }),
+}));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useListSessionsQuery: (args: unknown, options: unknown) => {
     readSessions(args, options);
     return { currentData: sessions, isFetching: loading, isError: error, refetch: vi.fn() };
   },
+  useDeleteSessionMutation: () => [vi.fn()],
 }));
 vi.mock("./ChatListItem/ChatListItem.tsx", () => ({
   ChatListItem: (props: {

@@ -46,6 +46,13 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
     if receipt.status == Status::Completed || receipt.due_at > Utc::now() {
         return Ok(());
     }
+    if receipt.target_kind == TargetKind::Session {
+        // The conversation stays retired; nothing purges runtime history yet.
+        sqlx::query("update deletion set status = 'blocked', error_code = 'session_purge_unavailable' where id = $1")
+            .bind(id).execute(&mut *tx).await?;
+        tx.commit().await?;
+        return Ok(());
+    }
     let organization = Space::from(SpaceRow {
         id: receipt.organization_id,
         kind: SpaceKind::Organization,

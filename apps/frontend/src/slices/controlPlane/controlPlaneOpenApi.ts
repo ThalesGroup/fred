@@ -420,6 +420,12 @@ const injectedRtkApi = api.injectEndpoints({
     getSession: build.query<GetSessionApiResponse, GetSessionApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}` }),
     }),
+    deleteSession: build.mutation<DeleteSessionApiResponse, DeleteSessionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}`,
+        method: "DELETE",
+      }),
+    }),
     updateSession: build.mutation<UpdateSessionApiResponse, UpdateSessionApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}`,
@@ -798,6 +804,11 @@ export type GetSessionApiArg = {
   spaceId: string;
   sessionId: string;
 };
+export type DeleteSessionApiResponse = /** status 200 undefined */ Receipt | /** status 202 undefined */ Receipt;
+export type DeleteSessionApiArg = {
+  spaceId: string;
+  sessionId: string;
+};
 export type UpdateSessionApiResponse = /** status 200 undefined */ SessionDetails;
 export type UpdateSessionApiArg = {
   spaceId: string;
@@ -938,7 +949,7 @@ export type BootstrapRequest = {
   token: string;
 };
 export type Status = "queued" | "running" | "retrying" | "blocked" | "completed";
-export type TargetKind = "organization" | "team" | "project" | "document";
+export type TargetKind = "organization" | "team" | "project" | "document" | "session";
 export type Receipt = {
   actor_subject: string;
   completed_at?: string | null;
@@ -1776,7 +1787,7 @@ export type SessionDetails = {
 };
 export type CreateSessionRequest = {
   agent_instance_id: string;
-  /** Frontend-selected identifier, retained verbatim; ':' is reserved for graph threads. */
+  /** Frontend-generated identifier, retained verbatim. */
   session_id: string;
   title?: string | null;
 };
@@ -1914,6 +1925,7 @@ export const {
   useCreateSessionMutation,
   useGetSessionQuery,
   useLazyGetSessionQuery,
+  useDeleteSessionMutation,
   useUpdateSessionMutation,
   useGetMyPreferencesQuery,
   useLazyGetMyPreferencesQuery,

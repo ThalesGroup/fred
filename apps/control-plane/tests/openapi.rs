@@ -153,6 +153,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /spaces/{space_id}/sessions",
         "get /spaces/{space_id}/sessions/{session_id}",
         "patch /spaces/{space_id}/sessions/{session_id}",
+        "delete /spaces/{space_id}/sessions/{session_id}",
         "get /organizations/{organization_id}/supervision",
         "get /organizations/{organization_id}/supervision/teams/{team_id}",
         "put /organizations/{organization_id}/agents/{agent_id}/default-on",
@@ -306,7 +307,7 @@ fn upload_and_empty_responses_match_the_http_contract() {
                     if status == "202"
                         && matches!(
                             operation["operationId"].as_str(),
-                            Some("delete_space" | "delete_document")
+                            Some("delete_space" | "delete_document" | "delete_session")
                         )
                     {
                         assert_eq!(

@@ -4,7 +4,7 @@
 use super::policy::{Catalog, LifecycleConfig};
 use crate::{
     bootstrap, db,
-    domain::{Space, SpaceKind},
+    domain::{Permission, Space, SpaceKind},
     error::{AppError, AppResult},
     fga::{Fga, Scope},
     roles::PlatformPermission,
@@ -38,6 +38,7 @@ pub enum TargetKind {
     Team,
     Project,
     Document,
+    Session,
 }
 impl TryFrom<SpaceKind> for TargetKind {
     type Error = AppError;
@@ -120,8 +121,15 @@ pub(crate) async fn reserved<'e>(
     parent: Uuid,
     name: &str,
 ) -> AppResult<bool> {
-    Ok(sqlx::query_scalar("select exists(select 1 from deletion d join space s on s.id = d.target_id where d.status <> 'completed' and d.target_parent_id = $1 and s.name = $2)")
-        .bind(parent).bind(name).fetch_one(ex).await?)
+    Ok(sqlx::query_scalar(concat!(
+        "select exists(select 1 from deletion d join space s on s.id = d.target_id where ",
+        space_target!(),
+        " and d.status <> 'completed' and d.target_parent_id = $1 and s.name = $2)"
+    ))
+    .bind(parent)
+    .bind(name)
+    .fetch_one(ex)
+    .await?)
 }
 impl Lifecycle {
     pub async fn accept_document(
@@ -205,6 +213,57 @@ impl Lifecycle {
         Ok(receipt)
     }
 
+    /// Only the owner deletes a session; its row answers replays until purge.
+    pub async fn accept_session(
+        &self,
+        pool: &PgPool,
+        fga: &Fga,
+        actor: &str,
+        space_id: Uuid,
+        session_id: Uuid,
+    ) -> AppResult<Receipt> {
+        let space = spaces::authorize(pool, fga, actor, space_id, Permission::Read).await?;
+        let (mut tx, mut guard) = spaces::lock_for(pool, fga, &space).await?;
+        let space =
+            spaces::authorize_locked(&mut tx, fga, actor, space_id, Permission::Read).await?;
+        let retired: Option<Option<Uuid>> = sqlx::query_scalar(
+            "select deletion_id from session_metadata where space_id = $1 and user_id = $2 and session_id = $3 for update",
+        )
+        .bind(space_id)
+        .bind(actor)
+        .bind(session_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if let Some(operation) = retired.ok_or(AppError::NotFound)? {
+            let receipt = sqlx::query_as("select * from deletion where id = $1")
+                .bind(operation)
+                .fetch_one(&mut *tx)
+                .await?;
+            tx.commit().await?;
+            return Ok(receipt);
+        }
+        if !self.config.enabled {
+            return Err(AppError::Unavailable(
+                "session deletion is disabled by configuration".into(),
+            ));
+        }
+        let (action, rule) = self.catalog.resolve(space_id, space.kind);
+        let requested_at = Utc::now();
+        let due_at = action.retention.after(requested_at)?;
+        let operation = Uuid::new_v4();
+        let receipt = sqlx::query_as("insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning *")
+            .bind(operation).bind(session_id).bind(TargetKind::Session).bind(space_id).bind(space.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).fetch_one(&mut *tx).await?;
+        sqlx::query("update session_metadata set deletion_id = $2 where session_id = $1")
+            .bind(session_id)
+            .bind(operation)
+            .execute(&mut *tx)
+            .await?;
+        fga.fence(&mut guard).await?;
+        tx.commit().await?;
+        tracing::info!(target: "fred.security.audit", audit_event="deletion.accepted", target_kind="session", operation_id=%operation, session_id=%session_id, space_id=%space_id, actor_uid=actor, "Session deletion accepted");
+        Ok(receipt)
+    }
+
     pub async fn accept(
         &self,
         pool: &PgPool,
@@ -213,11 +272,11 @@ impl Lifecycle {
         id: Uuid,
     ) -> AppResult<Receipt> {
         // Repeat requests never require a target row or a running scheduler.
-        if let Some(receipt) = sqlx::query_as("select * from deletion where target_id = $1")
-            .bind(id)
-            .fetch_optional(pool)
-            .await?
-        {
+        const REPLAY: &str = concat!(
+            "select * from deletion where target_id = $1 and ",
+            space_target!()
+        );
+        if let Some(receipt) = sqlx::query_as(REPLAY).bind(id).fetch_optional(pool).await? {
             permitted(fga, actor).await?;
             return Ok(receipt);
         }
@@ -228,7 +287,7 @@ impl Lifecycle {
         let mut tx = bootstrap::locked(pool).await?;
         let mut platform_guard = fga.guard(&[Scope::Platform]).await?;
         permitted(fga, actor).await?;
-        if let Some(receipt) = sqlx::query_as("select * from deletion where target_id = $1")
+        if let Some(receipt) = sqlx::query_as(REPLAY)
             .bind(id)
             .fetch_optional(&mut *tx)
             .await?
@@ -242,7 +301,7 @@ impl Lifecycle {
         let target_kind = TargetKind::try_from(root.kind)?;
         let org_guard = fga.guard(&[Scope::Organization(root.organization)]).await?;
         platform_guard.extend(org_guard)?;
-        let overlaps: bool = sqlx::query_scalar("select exists(select 1 from deletion where status <> 'completed' and organization_id = $1 and ($2 = 'organization' or target_id = $3 or target_parent_id = $3))")
+        let overlaps: bool = sqlx::query_scalar(concat!("select exists(select 1 from deletion where status <> 'completed' and organization_id = $1 and ($2 = 'organization' or (", space_target!(), " and target_id = $3) or target_parent_id = $3))"))
             .bind(root.organization).bind(match root.kind { SpaceKind::Organization => "organization", _ => "child" }).bind(id).fetch_one(&mut *tx).await?;
         if overlaps {
             return Err(AppError::Conflict("overlapping space deletion".into()));

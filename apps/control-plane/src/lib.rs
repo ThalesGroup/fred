@@ -16,6 +16,14 @@
 //! folders, original documents and their processing, provisioning import and deferred
 //! space cleanup.
 
+/// Receipts are keyed by kind and ID: a session ID is client-chosen and may
+/// equal a space ID, so every space lookup by target ID applies this filter.
+macro_rules! space_target {
+    () => {
+        "target_kind in ('organization', 'team', 'project')"
+    };
+}
+
 pub mod agent_instances;
 pub mod agents;
 pub mod api;

@@ -24,6 +24,7 @@ erDiagram
 "organization_model_policy" }o--|| "organization_model_permission" : "organization_id, fallback_source_id, fallback_upstream_model_id"
 "organization_model_permission" }o--|| "model_offer" : "source_id, upstream_model_id"
 "organization_model_permission" }o--|| "organization_model_policy" : "organization_id"
+"session_metadata" }o--o| "deletion" : "deletion_id"
 
 "deletion" {
   uuid id
@@ -267,7 +268,7 @@ erDiagram
   boolean reasoning_enabled
 }
 "session_metadata" {
-  text session_id
+  uuid session_id
   text user_id
   uuid space_id
   uuid agent_instance_id
@@ -277,4 +278,5 @@ erDiagram
   varchar_500_ title
   timestamp_with_time_zone created_at
   timestamp_with_time_zone updated_at
+  uuid deletion_id FK
 }

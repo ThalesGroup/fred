@@ -39,6 +39,10 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
               { type: "Sessions", id: `${spaceId}:${sessionId}` },
             ],
     },
+    deleteSession: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { spaceId }) => (error ? [] : [{ type: "Sessions", id: spaceId }]),
+    },
 
     listAgentInstances: {
       providesTags: (_result, _error, { spaceId }) => [{ type: "AgentInstances", id: spaceId }],
@@ -162,6 +166,7 @@ export const {
   useGetSessionQuery,
   useCreateSessionMutation,
   useUpdateSessionMutation,
+  useDeleteSessionMutation,
   usePrepareExecutionMutation,
   useListAgentInstancesQuery,
   useGetAgentInstanceQuery,

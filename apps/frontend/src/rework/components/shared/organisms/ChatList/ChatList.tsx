@@ -12,16 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties";
-import { useListSessionsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import {
+  useDeleteSessionMutation,
+  useListSessionsQuery,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { SessionDetails as Session } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { ChatListItem } from "./ChatListItem/ChatListItem.tsx";
+import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import styles from "./ChatList.module.scss";
+import { KeyCloakService } from "../../../../../security/KeycloakService";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
+import { clearToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
 interface ChatListProps {
   teamId?: string;
@@ -44,6 +51,9 @@ function formatSessionDate(dateStr: string | undefined): string {
 export default function ChatList({ teamId, spaceId }: ChatListProps) {
   const { t } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
+  const navigate = useNavigate();
+  const { showConfirmationDialog } = useConfirmationDialog();
+  const [deleteSession] = useDeleteSessionMutation();
   const [groupByAgent, setGroupByAgent] = useState(false);
 
   const {
@@ -63,6 +73,31 @@ export default function ChatList({ teamId, spaceId }: ChatListProps) {
     managedSessions.some((session) => session.agent_instance_id === id && session.agent_deleted);
   const isEmpty = !isLoading && !isError && managedSessions.length === 0;
 
+  const handleDelete =
+    (sessionId: string, agentInstanceId: string, href: string, label: string) => (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showConfirmationDialog({
+        criticalAction: true,
+        title: t("rework.sidebar.chatList.deleteDialog.title"),
+        message: t("rework.sidebar.chatList.deleteDialog.message", { name: label }),
+        confirmButtonLabel: t("rework.sidebar.chatList.deleteDialog.confirm"),
+        cancelButtonLabel: t("rework.sidebar.chatList.deleteDialog.cancel"),
+        onConfirm: async () => {
+          try {
+            await deleteSession({ spaceId: spaceId!, sessionId }).unwrap();
+            clearToolApprovalGrants({ userId: KeyCloakService.GetUserId(), agentInstanceId, sessionId });
+          } catch {
+            // Keep grants if deletion failed and the conversation still exists.
+          }
+          const sessionPath = href.split("?")[0];
+          if (window.location.pathname === sessionPath) {
+            navigate(`/team/${teamId}/agents`);
+          }
+        },
+      });
+    };
+
   const renderItem = (session: Session & { agent_instance_id: string }, showAgentName: boolean) => {
     const href = `/team/${teamId}/managed-chat/${session.agent_instance_id}?session=${session.session_id}`;
     const label = session.title || session.session_id.slice(0, 8) + "…";
@@ -76,7 +111,7 @@ export default function ChatList({ teamId, spaceId }: ChatListProps) {
         agentTooltipName={agentName(session)}
         agentDeleted={agentDeleted(session.agent_instance_id)}
         dateLabel={formatSessionDate(session.updated_at)}
-        deleteUnavailableReason={t("rework.weaverAgents.notConnected")}
+        onDelete={handleDelete(session.session_id, session.agent_instance_id, href, label)}
       />
     );
   };
