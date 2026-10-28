@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+from importlib.resources import files
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -123,16 +124,12 @@ def test_package_discovery_and_read_only_reference() -> None:
     assert upload_results[0].error == "permission_denied"
 
 
-@pytest.mark.parametrize(
-    "reference", ["references/syntax-and-examples.md", "references/compatibility.md"]
-)
-def test_graph_skill_references_are_available_to_react_and_native_deep(
-    reference: str,
-) -> None:
+def test_graph_skill_is_one_complete_file_for_react_and_native_deep() -> None:
     skills = PlatformSkills.from_directory("package")
-    assert f"]({reference})" in skills.read("graph")
-    snapshot_content = skills.read("graph", reference)
-    native_result = skills.filesystem_backend.download_files([f"/graph/{reference}"])
+    resource = files("fred_runtime.skills").joinpath("graph")
+    assert {entry.name for entry in resource.iterdir()} == {"SKILL.md"}
+    snapshot_content = skills.read("graph")
+    native_result = skills.filesystem_backend.download_files(["/graph/SKILL.md"])
     assert len(native_result) == 1
     assert native_result[0].error is None
     assert native_result[0].content == snapshot_content.encode()

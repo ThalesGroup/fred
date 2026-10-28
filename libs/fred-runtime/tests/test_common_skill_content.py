@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import hashlib
+import re
+from importlib.resources import files
 
 import pytest
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
@@ -51,7 +53,6 @@ def test_packaged_data_analysis_is_available_to_users_and_agents() -> None:
     assert not analysis.disable_model_invocation
     assert skills.for_execution().read("analyze-data")
     assert skills.for_execution(("analyze-data",)).read("analyze-data")
-    assert skills.read("analyze-data", "references/sources.md")
 
 
 def test_packaged_visualization_is_agent_only_and_obeys_global_disablement() -> None:
@@ -64,13 +65,29 @@ def test_packaged_visualization_is_agent_only_and_obeys_global_disablement() -> 
     assert visualization.builtin and not visualization.user_invocable
     assert not visualization.disable_model_invocation
     assert skills.for_execution().read("data-visualization")
-    assert skills.read("data-visualization", "references/sources.md")
     with pytest.raises(ValueError, match="user-invocable"):
         skills.for_execution(("data-visualization",))
     with pytest.raises(ValueError):
         skills.for_execution(disabled_names=("data-visualization",)).read(
             "data-visualization"
         )
+
+
+def test_original_skill_instructions_do_not_require_external_documentation() -> None:
+    """Packaged original procedures stay readable without fetching a web page."""
+    skills = PlatformSkills.from_directory("package")
+    for skill in skills.catalog.skills:
+        if skill.name == "grill-me":
+            continue  # Imported material retains its upstream references and notices.
+        pending = [files("fred_runtime.skills").joinpath(skill.name)]
+        while pending:
+            resource = pending.pop()
+            if resource.is_dir():
+                pending.extend(resource.iterdir())
+            else:
+                assert not re.search(
+                    r"https?://|www\.", resource.read_text(encoding="utf-8")
+                ), str(resource)
 
 
 @pytest.mark.asyncio

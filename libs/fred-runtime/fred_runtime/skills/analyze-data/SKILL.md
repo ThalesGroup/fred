@@ -5,7 +5,7 @@ argument-hint: "[data or document] [question or metric]"
 license: Apache-2.0
 metadata:
   author: Fred contributors
-  provenance: Original Fred procedure; references record consulted documentation.
+  provenance: Original Fred procedure.
 ---
 
 # Grounded data analysis
@@ -53,5 +53,3 @@ metadata:
    or an appropriate supported chart when helpful. Keep internal table aliases
    and irrelevant raw records out of the answer. If the evidence cannot answer
    the question, identify the missing input and the next useful check.
-
-For source and licensing details, see [the provenance notes](references/sources.md).

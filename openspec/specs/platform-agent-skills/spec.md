@@ -63,7 +63,7 @@ Every ReAct agent with skills configured SHALL receive validated catalog names, 
 
 ### Requirement: Mermaid guidance uses progressive skill loading
 
-The packaged catalog SHALL include an English `graph` skill, presented as Graphs, with an advisory argument hint. Its procedure SHALL choose a representation suited to the question and source facts, with type-specific syntax and examples available as shared references. It SHALL cover flowcharts, sequence, state, class and entity relationship diagrams, mindmaps, timelines, Gantt charts, pie and XY charts, user journeys and Git graphs. Quantitative data, relationships, dates and scores SHALL come from supplied facts or actual tool results. Mermaid instructions SHALL be loaded only through the shared skill workflow; runtime prompt assembly SHALL NOT inject the former SDK output contract automatically. The existing frontend Mermaid renderer and sanitization SHALL remain available.
+The packaged catalog SHALL include an English `graph` skill, presented as Graphs, with an advisory argument hint. Its procedure SHALL choose a representation suited to the question and source facts, with type-specific syntax and examples in a single self-contained `SKILL.md`. It SHALL cover flowcharts, sequence, state, class and entity relationship diagrams, mindmaps, timelines, Gantt charts, pie and XY charts, user journeys and Git graphs without requiring reference-file or external-documentation reads. Quantitative data, relationships, dates and scores SHALL come from supplied facts or actual tool results. Mermaid instructions SHALL be loaded only through the shared skill workflow; runtime prompt assembly SHALL NOT inject the former SDK output contract automatically. The existing frontend Mermaid renderer and sanitization SHALL remain available.
 
 #### Scenario: Mermaid catalog metadata before loading
 
@@ -84,9 +84,9 @@ The packaged catalog SHALL include an English `graph` skill, presented as Graphs
 #### Scenario: The chosen diagram has type-specific guidance
 
 - **WHEN** the graph procedure selects a representation
-- **THEN** its syntax reference is available through both the ReAct skill loader and the Deep native filesystem
-- **AND** the procedure directs the model to consult the selected type's guidance before drafting
-- **AND** compatibility guidance describes the installed renderer version and fallback behavior without claiming unperformed validation
+- **THEN** its syntax guidance and examples are included in the same instructions through both the ReAct skill loader and the Deep native filesystem
+- **AND** applying the procedure does not require fetching external documentation or another graph skill file
+- **AND** the guidance identifies the installed syntax baseline without claiming unperformed validation
 
 ### Requirement: Agents can load and combine skills through shared tools
 
@@ -1293,6 +1293,8 @@ Administration SHALL provide a global Skills tab under Features with packaged in
 ### Requirement: Common skills include an explicit interview and grounded data workflows
 
 The packaged catalog SHALL include an explicit-only grill-me procedure adapted for general users, a user-facing analyze-data procedure and an agent-only data-visualization procedure. Instructions SHALL be English and UI titles/descriptions SHALL have French/English presentation. New skills SHALL be enabled by default and respect current invocation and administrative policy. They SHALL use available tools without installing dependencies, inventing values or duplicating capability-specific access rules.
+
+Original Fred procedures SHALL include their instructions in packaged resources without requiring external documentation downloads. Imported skills SHALL retain their upstream references and required notices.
 
 #### Scenario: Explicit interview
 - **WHEN** the user invokes grill-me

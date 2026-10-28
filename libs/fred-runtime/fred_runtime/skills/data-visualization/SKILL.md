@@ -5,7 +5,7 @@ user-invocable: false
 license: Apache-2.0
 metadata:
   author: Fred contributors
-  provenance: Original Fred procedure; references record consulted documentation.
+  provenance: Original Fred procedure.
 ---
 
 # Clear data visualization
@@ -51,5 +51,3 @@ labels or shapes as well as color. Provide the key values or an accessible
 table so the result can be understood without seeing the figure. Check that
 every plotted value matches the data and that sorting, totals and labels agree
 before presenting it.
-
-For source and licensing details, see [the provenance notes](references/sources.md).
