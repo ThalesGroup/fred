@@ -26,6 +26,7 @@ dependencies = [
 
 [project.scripts]
 fred-control-plane-cli = "control_plane_backend.cli:main"
+fred-control-plane-kpi-backfill = "control_plane_backend.kpi.backfill:main"
 
 [project.optional-dependencies]
 dev = [
