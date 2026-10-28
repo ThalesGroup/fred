@@ -2131,6 +2131,27 @@
           "def": "Active users over the period divided by the number of registered users.",
           "how": "the indicator to follow over time. The rest is the potential still to reach."
         }
+      },
+      "trend": {
+        "show": "Show trend",
+        "title": {
+          "cumulative": {
+            "hour": "Running total by hour",
+            "day": "Running total by day",
+            "week": "Running total by week",
+            "month": "Running total by month"
+          },
+          "distinct": {
+            "hour": "By hour",
+            "day": "By day",
+            "week": "By week",
+            "month": "By month"
+          }
+        },
+        "distinctNote": {
+          "activeUsers": "Over the period: {{value}} (a person active in several intervals counts once)",
+          "visitors": "Over the period: {{value}} (a person who came in several intervals counts once)"
+        }
       }
     },
     "imports": {

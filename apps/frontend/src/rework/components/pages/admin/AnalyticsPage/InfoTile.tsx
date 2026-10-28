@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import KpiStatCard from "@shared/molecules/KpiStatCard/LocalizedKpiStatCard";
 import type { KpiStatCardProps } from "@shared/molecules/KpiStatCard/KpiStatCard";
 import type { PeriodValue } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { HintContent, useInSection } from "./AnalyticsSection";
 import { type DeltaKind, formatValue, periodDelta, type ValueFormat } from "./analyticsFormat";
+import KpiTrendDialog, { type ActivityArgs } from "./KpiTrendDialog";
+import { isTrendId } from "./kpiTrend";
 
 type InfoTileProps = Omit<KpiStatCardProps, "label" | "hint" | "caption"> & {
   /** Names the tile's keys under `rework.analytics.tiles`. */
@@ -32,6 +35,8 @@ type InfoTileProps = Omit<KpiStatCardProps, "label" | "hint" | "caption"> & {
   lowerIsBetter?: boolean;
   /** A change that is neither good nor bad in itself, like a cost. */
   neutralDelta?: boolean;
+  /** The tab's activity arguments: a tile with a per-bucket series then offers its trend. */
+  trendArgs?: ActivityArgs;
 };
 
 /** A KPI tile whose label, caption and definition come from the analytics catalog. */
@@ -44,9 +49,11 @@ export default function InfoTile({
   deltaKind = "relative",
   lowerIsBetter,
   neutralDelta,
+  trendArgs,
   ...card
 }: InfoTileProps) {
   const { t, i18n } = useTranslation();
+  const [trendOpen, setTrendOpen] = useState(false);
   const nested = useInSection();
   const key = `rework.analytics.tiles.${id}`;
   const how = withHow ? t(`${key}.how`, { defaultValue: "" }) : "";
@@ -55,23 +62,38 @@ export default function InfoTile({
     period != null
       ? periodDelta(period, deltaKind, t, i18n.language, { lowerIsBetter, neutral: neutralDelta })
       : undefined;
+  const label = t(`${key}.label`);
+  const trendId = trendArgs && isTrendId(id) ? id : undefined;
   return (
-    <KpiStatCard
-      nested={nested}
-      {...card}
-      value={value}
-      displayValue={
-        value != null && (format || period !== undefined)
-          ? formatValue(value, format ?? "count", i18n.language)
-          : undefined
-      }
-      deltaLabel={delta?.label}
-      deltaTone={delta?.tone}
-      deltaDirection={delta?.direction}
-      unavailable={card.unavailable ?? (period !== undefined && !card.isLoading && value == null)}
-      label={t(`${key}.label`)}
-      caption={caption ?? t(`${key}.caption`, { defaultValue: "" })}
-      hint={<HintContent def={t(`${key}.def`)} how={how || undefined} />}
-    />
+    <>
+      <KpiStatCard
+        nested={nested}
+        {...card}
+        value={value}
+        displayValue={
+          value != null && (format || period !== undefined)
+            ? formatValue(value, format ?? "count", i18n.language)
+            : undefined
+        }
+        deltaLabel={delta?.label}
+        deltaTone={delta?.tone}
+        deltaDirection={delta?.direction}
+        unavailable={card.unavailable ?? (period !== undefined && !card.isLoading && value == null)}
+        label={label}
+        caption={caption ?? t(`${key}.caption`, { defaultValue: "" })}
+        hint={<HintContent def={t(`${key}.def`)} how={how || undefined} />}
+        trendAction={trendId && { label: t("rework.analytics.trend.show"), onClick: () => setTrendOpen(true) }}
+      />
+      {trendId && trendArgs && (
+        <KpiTrendDialog
+          id={trendId}
+          label={label}
+          value={value}
+          args={trendArgs}
+          open={trendOpen}
+          onClose={() => setTrendOpen(false)}
+        />
+      )}
+    </>
   );
 }

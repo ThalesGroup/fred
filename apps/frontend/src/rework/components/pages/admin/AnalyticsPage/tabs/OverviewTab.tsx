@@ -29,9 +29,10 @@ import styles from "../AnalyticsPage.module.css";
 export default function OverviewTab({ timeRange, teamIds, mode = "platform", userFilter }: AnalyticsTabProps) {
   const { t, i18n } = useTranslation();
   const overview = useAnalyticsOverviewQuery(kpiArgs(timeRange, teamIds, userFilter), KPI_CACHE);
-  const activity = useAnalyticsActivityOverTimeQuery(zonedKpiArgs(timeRange, teamIds, userFilter), KPI_CACHE);
+  const zoned = zonedKpiArgs(timeRange, teamIds, userFilter);
+  const activity = useAnalyticsActivityOverTimeQuery(zoned, KPI_CACHE);
   // Same arguments as the Adoption tab: one cached read serves both.
-  const adoption = useAnalyticsAdoptionQuery(zonedKpiArgs(timeRange, teamIds, userFilter), KPI_CACHE);
+  const adoption = useAnalyticsAdoptionQuery(zoned, KPI_CACHE);
   // Active teams out of all teams is a platform figure: a team's page neither shows nor reads it.
   const crossTeam = mode === "platform";
   const catalog = useAnalyticsTeamsCatalogQuery({}, { ...KPI_CACHE, skip: !crossTeam });
@@ -51,7 +52,7 @@ export default function OverviewTab({ timeRange, teamIds, mode = "platform", use
   return (
     <div className={styles.tabContent}>
       <div className={styles.kpiRow}>
-        <InfoTile id="activeUsers" period={data?.active_users} {...tile} />
+        <InfoTile id="activeUsers" period={data?.active_users} trendArgs={zoned} {...tile} />
         <InfoTile id="newUsers" period={adoption.data?.new_users} {...lifecycleTile} />
         {crossTeam && (
           <InfoTile
@@ -90,13 +91,14 @@ export default function OverviewTab({ timeRange, teamIds, mode = "platform", use
         isError={activity.isError}
       />
       <div className={styles.kpiRow}>
-        <InfoTile id="conversations" period={data?.conversations} {...tile} />
-        <InfoTile id="messages" period={data?.messages} {...tile} />
+        <InfoTile id="conversations" period={data?.conversations} trendArgs={zoned} {...tile} />
+        <InfoTile id="messages" period={data?.messages} trendArgs={zoned} {...tile} />
         <InfoTile
           id="cost"
           period={data?.cost_eur}
           format="eur"
           neutralDelta
+          trendArgs={zoned}
           caption={
             perUser != null
               ? t("rework.analytics.tiles.cost.caption", { value: formatValue(perUser, "eur", i18n.language) })
