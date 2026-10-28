@@ -291,6 +291,16 @@
   gap: var(--spacing-s);
 }
 
+/* A last column for the trend button, empty on steps without a series so values stay aligned. */
+.funnelRow[data-trend] {
+  grid-template-columns: minmax(120px, 11rem) minmax(0, 1fr) minmax(4rem, auto) var(--spacing-2xl);
+}
+
+/* Full hit area without making the row taller than its bar. */
+.funnelAction {
+  margin-block: calc((var(--spacing-l) - var(--spacing-2xl)) / 2);
+}
+
 .funnelLabel {
   display: inline-flex;
   align-items: center;

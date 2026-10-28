@@ -2131,6 +2131,27 @@
           "def": "Utilisateurs actifs de la période divisés par le nombre d'utilisateurs enregistrés.",
           "how": "l'indicateur à suivre dans le temps. Le reste est le potentiel à aller chercher."
         }
+      },
+      "trend": {
+        "show": "Voir l'évolution",
+        "title": {
+          "cumulative": {
+            "hour": "Cumul par heure",
+            "day": "Cumul par jour",
+            "week": "Cumul par semaine",
+            "month": "Cumul par mois"
+          },
+          "distinct": {
+            "hour": "Par heure",
+            "day": "Par jour",
+            "week": "Par semaine",
+            "month": "Par mois"
+          }
+        },
+        "distinctNote": {
+          "activeUsers": "Sur la période : {{value}} (une personne active sur plusieurs intervalles n'est comptée qu'une fois)",
+          "visitors": "Sur la période : {{value}} (une personne venue sur plusieurs intervalles n'est comptée qu'une fois)"
+        }
       }
     },
     "imports": {

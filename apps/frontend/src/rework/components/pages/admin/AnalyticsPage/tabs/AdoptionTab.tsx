@@ -24,10 +24,11 @@ import { allFailed, type AnalyticsTabProps, KPI_CACHE, zonedKpiArgs } from "../a
 import styles from "../AnalyticsPage.module.css";
 
 export default function AdoptionTab({ timeRange, teamIds, userFilter }: AnalyticsTabProps) {
-  const adoption = useAnalyticsAdoptionQuery(zonedKpiArgs(timeRange, teamIds, userFilter), KPI_CACHE);
+  const zoned = zonedKpiArgs(timeRange, teamIds, userFilter);
+  const adoption = useAnalyticsAdoptionQuery(zoned, KPI_CACHE);
   const data = adoption.data;
   const tile = { isLoading: adoption.isLoading, isError: adoption.isError };
-  const usage = useAnalyticsUsageQuery(zonedKpiArgs(timeRange, teamIds, userFilter), KPI_CACHE);
+  const usage = useAnalyticsUsageQuery(zoned, KPI_CACHE);
 
   if (allFailed([adoption, usage])) return <AnalyticsServiceDown />;
 
@@ -35,7 +36,7 @@ export default function AdoptionTab({ timeRange, teamIds, userFilter }: Analytic
     <div className={styles.tabContent}>
       <AnalyticsSection id="reach">
         <div className={styles.mainAside}>
-          <AdoptionFunnel data={data} {...tile} />
+          <AdoptionFunnel data={data} trendArgs={zoned} {...tile} />
           <div className={styles.stack}>
             <InfoTile
               id="activeUsersPerWorkday"

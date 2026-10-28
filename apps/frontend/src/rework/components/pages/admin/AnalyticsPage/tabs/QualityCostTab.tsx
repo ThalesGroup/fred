@@ -157,6 +157,7 @@ export default function QualityCostTab({ timeRange, teamIds, userFilter }: Analy
             period={data?.cost_eur}
             format="eur"
             neutralDelta
+            trendArgs={zoned}
             caption={
               data?.cost_eur_per_active_user.current != null
                 ? t("rework.analytics.tiles.cost.caption", {
@@ -171,6 +172,7 @@ export default function QualityCostTab({ timeRange, teamIds, userFilter }: Analy
             period={data ? tokens : undefined}
             format="compact"
             neutralDelta
+            trendArgs={zoned}
             caption={
               data
                 ? t("rework.analytics.tiles.tokens.caption", {
@@ -186,6 +188,7 @@ export default function QualityCostTab({ timeRange, teamIds, userFilter }: Analy
             period={footprintKg || undefined}
             format="decimal"
             neutralDelta
+            trendArgs={zoned}
             caption={
               data?.kwh.current != null
                 ? t("rework.analytics.tiles.footprint.caption", { value: fmt(data.kwh.current, "decimal") })

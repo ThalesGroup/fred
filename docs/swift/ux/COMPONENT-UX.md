@@ -5812,7 +5812,10 @@ grammar (values on bars and points instead of an axis, legend in the header, no 
 other pages keep the defaults. A figure without team data reads "Not available for a team
 selection". Page-local pieces: `AnalyticsScopeSelector`, `AnalyticsUserFilter` (reuses the
 `ClaimConditionList` molecule of platform access), `InfoTile`, `AdoptionFunnel`, `CohortTable`,
-`RankedBars.tsx` (`RankedList`, `BarCell`, `SplitCell`).
+`RankedBars.tsx` (`RankedList`, `BarCell`, `SplitCell`). Tiles and funnel rows with a per-bucket
+series carry `KpiStatCard`'s `trendAction` (`show_chart` IconButton beside the info icon), which
+opens `KpiTrendDialog`: a cumulative line for additive values, a per-bucket line plus a period
+note for distinct counts.
 
 #### Open UX issues
 

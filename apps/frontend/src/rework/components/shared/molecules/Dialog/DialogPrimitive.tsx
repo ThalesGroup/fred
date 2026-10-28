@@ -143,6 +143,8 @@ export function DialogPrimitive({
   useLayoutEffect(() => {
     if (!open) return;
     openingFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // A dialog opened by a click gives focus back without a keyboard ring.
+    const ringOnReturn = openingFocus.current?.matches(":focus-visible") ?? false;
     const originRoot = uiPortalRoot(originRef.current);
     if (portalContainer && originRoot !== document.body && !originRoot.contains(portalContainer)) {
       throw new Error("Dialog portalContainer must be inside its originating .fred-ui root");
@@ -152,7 +154,7 @@ export function DialogPrimitive({
       const target = openingFocus.current;
       openingFocus.current = null;
       setPortalRoot(null);
-      if (target?.isConnected) target.focus();
+      if (target?.isConnected) target.focus({ focusVisible: ringOnReturn } as FocusOptions);
     };
   }, [open, portalContainer]);
 

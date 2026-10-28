@@ -79,8 +79,8 @@ export default function UsageTab({ timeRange, teamIds, userFilter }: AnalyticsTa
             maxBarSize={48}
           />
           <div className={styles.stack}>
-            <InfoTile id="conversations" period={data?.conversations} {...tile} />
-            <InfoTile id="messages" withHow={false} period={data?.messages} {...tile} />
+            <InfoTile id="conversations" period={data?.conversations} trendArgs={args} {...tile} />
+            <InfoTile id="messages" withHow={false} period={data?.messages} trendArgs={args} {...tile} />
           </div>
         </div>
       </AnalyticsSection>
