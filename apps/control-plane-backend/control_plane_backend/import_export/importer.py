@@ -152,9 +152,9 @@ _PLATFORM_ROLE_RELATIONS: dict[str, RelationType] = {
     "observer": RelationType.PLATFORM_OBSERVER,
 }
 
-# TEAM-09 (2026-07-26 narrowing): a bundle exported before `JoiningMode`
-# dropped `request_only`/`closed` may still carry those literal strings —
-# see `_import_team_metadata` below.
+# A bundle exported before the 2026-07-26 narrowing may carry `request_only`
+# or `closed`. `request_only` was every team's default then, not an admin's
+# choice, so it never becomes the opt-in `on_request`, which imports as is.
 _LEGACY_JOINING_MODES: dict[str, str] = {
     "request_only": "invite_only",
     "closed": "invite_only",
@@ -1255,10 +1255,8 @@ async def _run_import_body(
                         # rather than deriving one from the legacy bool (see
                         # FRED-TEAM-CONFIG-RFC.md §5.1.1). A bundle exported
                         # before the 2026-07-26 narrowing may carry the now-
-                        # removed `request_only`/`closed` literally — map
-                        # both to `invite_only` so importing an old bundle
-                        # doesn't write a value the `JoiningMode` enum (and
-                        # therefore any later read of this row) will reject.
+                        # removed `request_only`/`closed`: see
+                        # `_LEGACY_JOINING_MODES`.
                         joining_mode=_LEGACY_JOINING_MODES.get(
                             row.get("joining_mode", "invite_only"),
                             row.get("joining_mode", "invite_only"),

@@ -47,6 +47,7 @@ from control_plane_backend.scheduler.policies.policy_models import (
     ConversationPolicyCatalog,
 )
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from control_plane_backend.teams.schemas import CreateTeamRequest, UserTeamRelation
 from control_plane_backend.teams.service import (
     _list_teams,
@@ -147,6 +148,7 @@ def _deps(
 
     return TeamServiceDependencies(
         get_notification_service=lambda: AsyncMock(spec=NotificationService),
+        get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
         configuration=config,
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),

@@ -63,6 +63,7 @@ from control_plane_backend.notifications.schemas import (
 from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.notifications.store import NotificationStore
 from control_plane_backend.product.schemas import ManagedAgentInstanceSummary
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from fred_core import (
     AuthorizationError,
     KeycloakUser,
@@ -290,6 +291,7 @@ async def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[
         get_agent_instance_store=lambda: agents,
         get_kpi_writer=None,
         get_notification_service=lambda: notifications,
+        get_team_join_request_store=lambda: TeamJoinRequestStore(engine),
     )
     deps = SimpleNamespace(
         configuration=SimpleNamespace(

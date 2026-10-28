@@ -115,6 +115,7 @@ def _deps(
         get_team_wiki_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),
         get_notification_store=cast(Any, None),
+        get_team_join_request_store=cast(Any, None),
     )
 
 
@@ -143,6 +144,7 @@ async def test_list_due_conversation_candidates_threads_user_id() -> None:
         get_team_wiki_store=cast(Any, None),
         get_policy_catalog=cast(Any, None),
         get_notification_store=cast(Any, None),
+        get_team_join_request_store=cast(Any, None),
     )
 
     batch = await list_due_conversation_candidates(limit=10, deps=deps)
@@ -312,6 +314,7 @@ async def test_erase_at_expiry_retryable_when_bearer_mint_fails() -> None:
         get_team_wiki_store=cast(Any, None),
         get_policy_catalog=cast(Any, None),
         get_notification_store=cast(Any, None),
+        get_team_join_request_store=cast(Any, None),
     )
 
     result = await delete_conversation_and_mark_done(event=_event(), deps=deps)

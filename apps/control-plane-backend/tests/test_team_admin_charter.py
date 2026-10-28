@@ -37,6 +37,7 @@ from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.teams import service as team_service
 from control_plane_backend.teams.admin_charter_store import TeamAdminCharterStore
 from control_plane_backend.teams.api import register_exception_handlers
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     GrantTeamMemberRoleRequest,
@@ -187,6 +188,7 @@ def _deps(
             get_team_metadata_store=lambda: metadata_store,
             get_team_admin_charter_store=lambda: store,
             get_notification_service=lambda: AsyncMock(spec=NotificationService),
+            get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
         ),
     )
 

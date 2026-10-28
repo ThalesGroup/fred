@@ -292,10 +292,19 @@ class NotificationStore:
             return rowcount(result) > 0
 
     async def delete_all(self, recipient_id: str) -> None:
-        """ "Clear all": every row the recipient sees."""
+        """ "Clear all": every visible row but the open decisions still waiting."""
+        decisions = [
+            p.TYPE.value for p in NotificationPayload.__subclasses__() if p.DECISION
+        ]
+        waiting = and_(
+            NotificationRow.type.in_(decisions),
+            NotificationRow.handled_at.is_(None),
+        )
         async with use_session(self._sessions) as s:
             await s.execute(
-                delete(NotificationRow).where(*self._mine(recipient_id, utcnow()))
+                delete(NotificationRow).where(
+                    *self._mine(recipient_id, utcnow()), ~waiting
+                )
             )
 
     async def delete_expired(self, *, limit: int) -> int:

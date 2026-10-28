@@ -55,6 +55,7 @@ from control_plane_backend.scheduler.temporal.structures import (
     WikiProposalCandidate,
     WikiProposalCandidateBatch,
 )
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -358,6 +359,9 @@ async def test_the_expiry_activity_deletes_expired_rows_only(
         get_team_wiki_store=None,  # type: ignore[arg-type]
         get_policy_catalog=None,  # type: ignore[arg-type]
         get_notification_store=lambda: store,
+        get_team_join_request_store=lambda: TeamJoinRequestStore(
+            control_plane_sql_engine
+        ),
     )
 
     result = await expire_notifications(ExpireNotificationsInput(), deps=deps)

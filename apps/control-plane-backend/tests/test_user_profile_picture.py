@@ -479,7 +479,10 @@ def _delete_user_app(content_store: _FakeContentStore, calls: list[str]) -> Fast
         ),
         get_announcement_store=lambda: SimpleNamespace(delete_seen_for_user=no_seen),
         get_notification_service=lambda: SimpleNamespace(
-            delete_for_user=no_notifications
+            delete_for_user=no_notifications, delete_groups=AsyncMock()
+        ),
+        get_team_join_request_store=lambda: SimpleNamespace(
+            delete_for_requester=AsyncMock(return_value=[])
         ),
     )
     app = FastAPI()

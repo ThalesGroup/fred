@@ -38,6 +38,7 @@ import pytest
 from _rebac_test_doubles import CountingRebacEngine, assert_no_openfga_calls
 from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from control_plane_backend.teams.schemas import TeamNotFoundError
 from control_plane_backend.teams.service import require_team_access
 from fred_core import (
@@ -69,6 +70,7 @@ def _deps(
     config.app.personal_max_resources_storage_size = 5368709120
     return TeamServiceDependencies(
         get_notification_service=lambda: AsyncMock(spec=NotificationService),
+        get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
         configuration=config,
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),
