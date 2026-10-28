@@ -1153,6 +1153,25 @@ digit after the name.
 
 ---
 
+### `TeamMemberGate`, `JoinRequestDialog`, join request tiles (2026-10-22)
+
+**Location:** `src/rework/components/shared/organisms/TeamMemberGate/`,
+`src/rework/components/shared/molecules/JoinRequestDialog/`,
+`src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamJoinRequestsSection/`
+
+**Status:** `Functional`
+
+- **`TeamMemberGate`** — wraps `MainLayout`'s team pages: a `Spinner`, then the pages or a
+  `PageError` "You are not a member of this team" with "Ask to join" or "Browse teams".
+  UI only; server-side enforcement is #3260.
+- **`JoinRequestDialog`** — the shared `Dialog` with an optional `TextArea` (280).
+- **Members / Requests tabs** — Requests lists pending rows (Refuse left, outlined error;
+  Accept right, filled success) and rows refused in the last 7 days ("Accept anyway").
+- **Decision tile** — a pending join request tile has no close button and survives
+  "Clear all"; its buttons are disabled while a call is in flight.
+
+---
+
 ### `Switch` sizes and pill shape (2026-09-14)
 
 **Location:** `src/rework/components/shared/atoms/Switch/`
@@ -2274,6 +2293,14 @@ the team's `joining_mode`, gated on `!team.is_member`:
 | `invite_only`    | No button; muted label (`body-small`, `on-surface-muted`) — the team is discoverable but not self-joinable                                                                                                                                                                |
 | already a member | Nothing renders in the footer's join slot                                                                                                                                                                                                                                 |
 
+`on_request` (2026-10-22, team join requests) follows the caller's own request, passed in as `joinRequest` by `MarketplaceTeams`:
+
+| Request state                         | Footer content                                                                                                                                              |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| none, or refused more than 24 h ago   | "Ask to join" button (same as "Join") opening the shared `Dialog`: optional `TextArea` (guidance in `description`, 280 max with counter), "Send the request" |
+| pending                               | Muted "Request sent" label above a `text` "Cancel request" button                                                                                           |
+| refused less than 24 h ago            | Muted "Request declined" label above the date asking is allowed again (`can_ask_again_at`); no button                                                       |
+
 The former lock icon next to the team name (driven by the retired
 `is_private` bool) was removed rather than remapped to `joining_mode` — the
 footer label already communicates restricted-join state more specifically,
@@ -2409,6 +2436,8 @@ see the #2398 note below). Both are `ButtonGroup`s (`variant="radio"`,
 same pattern as the theme/language pickers in `UserSettingsPage.tsx`).
 Selecting an option PATCHes immediately (no separate save step), mirroring
 the retired `is_private` `Switch`'s auto-save behavior this control replaced.
+
+Joining mode is a three-item group Open / On request / Invite only since 2026-10-22 (team join requests); a private team keeps the locked "manual only" button.
 
 Joining mode narrowed to 2 options (`open`, `invite_only`) 2026-07-26 —
 `request_only` and `closed` were dropped from the `JoiningMode` enum

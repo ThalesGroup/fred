@@ -1931,6 +1931,9 @@ See the [migration note](../ops/migrations/retire-corpus-filesystem-mcp.md).
 
 ## 29. Contract Notes — TEAM-09 amendment, `joining_mode` narrowed to 2 states (2026-07-26, #2084)
 
+> 2026-10-22: the opt-in `on_request` mode adds requests back on top of
+> notifications; see §73. A legacy `request_only` still imports as `invite_only`.
+
 **`JoiningMode` drops `request_only` and `closed`**, leaving `open` /
 `invite_only` — see §24 for the original 4-value contract and
 `FRED-TEAM-CONFIG-RFC.md` §5.1.1 for the full amendment rationale.
@@ -5201,3 +5204,26 @@ all; audit event `platform.notification_type.updated`. Rows expire after 30
 days; `LifecycleManagerResult.notifications.deleted` reports the lifecycle
 delete. fred-core `KPIMiddleware` gains `skip_suffixes`; control-plane skips
 `/notifications/summary`. Behavior: OpenSpec `add-in-app-notifications`.
+
+## 73. Contract Notes — team join requests (2026-10-22, #3232)
+
+`JoiningMode` gains `on_request` (public teams only: a private team stores
+`invite_only`). Leaving it refuses and deletes every pending request. Import
+keeps `request_only`/`closed` → `invite_only` and passes `on_request` through.
+
+| Route                                                     | Permission                    | Response                                   |
+| --------------------------------------------------------- | ----------------------------- | ------------------------------------------ |
+| `GET /teams/join-requests/mine`                           | authenticated                 | `list[MyTeamJoinRequest]`                  |
+| `POST /teams/{team_id}/join-requests`                     | authenticated, non-member     | `MyTeamJoinRequest` (201 new, 200 pending) |
+| `DELETE /teams/{team_id}/join-requests/mine`              | authenticated, own request    | 204                                        |
+| `GET /teams/{team_id}/join-requests`                      | `can_administer_members`      | `list[TeamJoinRequest]`                    |
+| `POST /teams/{team_id}/join-requests/{request_id}/accept` | `can_administer_members`      | 204                                        |
+| `POST /teams/{team_id}/join-requests/{request_id}/refuse` | `can_administer_members`      | 204                                        |
+
+Errors carry `{detail, code}`: 404 `join_request_not_found`, 409
+`team_not_on_request`, `already_team_member`, `join_request_refused`. Table
+`team_join_requests` (revision `fd4dc8d9d058`). New notification types
+`team.join_requested` (to the team admins, `DECISION = True`: kept by clear
+all until handled) and `team.join_request_answered` (to the requester, no
+permission). Audit events `team.join_request.created|cancelled|accepted|refused`,
+never the message. Behavior: OpenSpec `add-team-join-requests`.
