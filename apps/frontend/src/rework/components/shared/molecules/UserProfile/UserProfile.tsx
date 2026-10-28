@@ -46,9 +46,6 @@ export default function UserProfile({
   const { notes: patchNotes } = usePatchNoteHistory(!admitted || platformArea || organizationArea || agentManagement);
   const [readingPatchNotes, setReadingPatchNotes] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const logoutRef = useRef<HTMLButtonElement>(null);
-  const profileRef = useRef<HTMLButtonElement>(null);
 
   const userFullName =
     KeyCloakService.GetUserFullName() || KeyCloakService.GetUserName() || KeyCloakService.GetUserId();
@@ -56,15 +53,11 @@ export default function UserProfile({
 
   useEffect(() => {
     if (!open) return;
-    (admitted ? profileRef : logoutRef).current?.focus();
     const onPointer = (e: MouseEvent) => {
       if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setOpen(false);
-        triggerRef.current?.focus();
-      }
+      if (e.key === "Escape") setOpen(false);
     };
     document.addEventListener("mousedown", onPointer);
     document.addEventListener("keydown", onKey);
@@ -72,7 +65,7 @@ export default function UserProfile({
       document.removeEventListener("mousedown", onPointer);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open, admitted]);
+  }, [open]);
 
   return (
     <div className={styles.container} ref={containerRef}>
@@ -87,7 +80,6 @@ export default function UserProfile({
                 ? [
                     <MenuPopoverItem
                       key="profile"
-                      ref={profileRef}
                       icon={{ category: "outlined", type: "person" }}
                       label={t("rework.profileMenu.profile")}
                       onClick={() => {
@@ -126,7 +118,6 @@ export default function UserProfile({
               [
                 <MenuPopoverItem
                   key="logout"
-                  ref={logoutRef}
                   icon={{ category: "outlined", type: "logout" }}
                   label={t("rework.userSettings.disconnect")}
                   danger
@@ -141,7 +132,6 @@ export default function UserProfile({
       <Tooltip text={t("rework.profileMenu.trigger", { name: userFullName })} placement="right">
         <button
           type="button"
-          ref={triggerRef}
           className={styles.trigger}
           onClick={() => setOpen((value) => !value)}
           aria-expanded={open}

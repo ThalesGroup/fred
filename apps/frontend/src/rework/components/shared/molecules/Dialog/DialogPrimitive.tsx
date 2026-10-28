@@ -16,6 +16,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import Button, { type ButtonProps } from "../../atoms/Button/Button";
 import { type ColorTheme } from "../../utils/Type";
 import { isTopmostModal, Portal, uiPortalRoot } from "../../utils/Portal";
+import { lastInputWasKeyboard } from "../../utils/useFocusHandoff";
 import styles from "./Dialog.module.css";
 
 const NON_TEXT_INPUT_TYPES = new Set([
@@ -143,6 +144,8 @@ export function DialogPrimitive({
   useLayoutEffect(() => {
     if (!open) return;
     openingFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // A dialog opened by a click gives focus back without a keyboard ring.
+    const ringOnReturn = lastInputWasKeyboard();
     const originRoot = uiPortalRoot(originRef.current);
     if (portalContainer && originRoot !== document.body && !originRoot.contains(portalContainer)) {
       throw new Error("Dialog portalContainer must be inside its originating .fred-ui root");
@@ -152,7 +155,7 @@ export function DialogPrimitive({
       const target = openingFocus.current;
       openingFocus.current = null;
       setPortalRoot(null);
-      if (target?.isConnected) target.focus();
+      if (target?.isConnected) target.focus({ focusVisible: ringOnReturn } as FocusOptions);
     };
   }, [open, portalContainer]);
 

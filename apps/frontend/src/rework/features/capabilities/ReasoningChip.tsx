@@ -106,20 +106,15 @@ export function ReasoningChip({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
 
-  // Same compact close contract as ContextualPicker: click outside closes,
-  // Escape closes and restores focus to the trigger.
+  // Click outside or Escape closes; MenuPopover gives focus back to the trigger.
   useEffect(() => {
     if (!open) return;
     const handleMouseDown = (event: MouseEvent) => {
       if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-        triggerRef.current?.focus();
-      }
+      if (event.key === "Escape") setOpen(false);
     };
     document.addEventListener("mousedown", handleMouseDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -180,10 +175,7 @@ export function ReasoningChip({
     );
   }
 
-  const close = () => {
-    setOpen(false);
-    triggerRef.current?.focus();
-  };
+  const close = () => setOpen(false);
   const pick = (next: boolean) => {
     composer.onReasoningChange(next);
     close();
@@ -237,7 +229,6 @@ export function ReasoningChip({
   return (
     <div ref={containerRef} className={styles.wrap}>
       <button
-        ref={triggerRef}
         type="button"
         className={styles.trigger}
         data-open={open}
