@@ -494,7 +494,7 @@ def test_real_sdk_children_do_not_become_trace_roots(capture: bool) -> None:
     provider = TracerProvider()
     client = Langfuse(
         public_key=f"pk-lf-offline-{uuid4()}",
-        secret_key="offline-test-secret",
+        secret_key=uuid4().hex,
         tracer_provider=provider,
         span_exporter=exporter,
     )

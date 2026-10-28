@@ -418,7 +418,7 @@ The platform SHALL distribute English-written instructions and references for a 
 
 ### Requirement: Read-only skill instruction preview
 
-Managed web chat SHALL make an explicitly selected inline skill name clickable in the composer and in sent or reopened user messages, and each successful skill-load row activatable in the reasoning trace regardless of user, agent or child origin. Activating it SHALL open the existing right-hand chat panel with the complete name, description, optional argument hint and formatted instructions from that skill's current runtime snapshot. Catalog responses SHALL remain metadata-only. A separate authenticated, typed detail read SHALL use the selected managed instance's runtime source and the existing team-use authorization. It SHALL expose only the selected startup-snapshot `SKILL.md`, never an arbitrary client path. Preview SHALL NOT send a user turn, invoke a model, load instructions into agent context or modify the draft. Preview SHALL use a large neutral `Skill: <name>` title, optional `Arguments:` followed by the argument hint above `Description:` and its text, and a divider before the instructions. It SHALL omit redundant content headings and technical runtime-version labels. Activating the currently previewed skill again SHALL close the panel; activating another skill SHALL replace its contents. Historical preview SHALL read the current runtime snapshot without claiming to reconstruct the previously loaded body.
+Managed web chat SHALL make an explicitly selected inline skill name clickable in the composer and in sent or reopened user messages, and each successful skill-load row activatable in the reasoning trace regardless of user, agent or child origin. Activating it SHALL open the existing right-hand chat panel with the complete name, description, optional argument hint and formatted instructions from that skill's current runtime snapshot. Catalog responses SHALL remain metadata-only. A separate authenticated, typed detail read SHALL use the selected managed instance's runtime source and the existing team-use authorization. It SHALL expose only the selected startup-snapshot `SKILL.md`, never an arbitrary client path. Preview SHALL NOT send a user turn, invoke a model, load instructions into agent context or modify the draft. Preview SHALL use a large neutral `Skill: <name>` title, `Description:` and its text above optional `Arguments:` followed by the argument hint, and a divider before the instructions. It SHALL omit redundant content headings and technical runtime-version labels. Activating the currently previewed skill again SHALL close the panel; activating another skill SHALL replace its contents. Historical preview SHALL read the current runtime snapshot without claiming to reconstruct the previously loaded body.
 
 #### Scenario: Preview from the composer
 
@@ -1220,6 +1220,26 @@ Explicit Deep selections SHALL be deduplicated in request order and passed as pi
 - **WHEN** a Deep turn selects two skills and subsequently resumes a human approval
 - **THEN** both load natively before inference in selection order
 - **AND** the resume does not repeat their loads or usage counts
+
+#### Scenario: Explicit loads appear before reasoning
+- **WHEN** initial parent skill loads succeed for the user's explicit selections
+- **THEN** their activity rows appear in selection order before the Thinking toggle
+- **AND** they remain visible while streaming and when reasoning is collapsed
+- **AND** later, autonomous and child loads retain their chronological place inside the reasoning trace
+
+#### Scenario: The trace overview preserves the submitted graph input
+- **GIVEN** local content capture is enabled
+- **WHEN** a Deep turn submits a canonical user message and selected skill names
+- **THEN** the root and trace overview input contain the submitted messages, including the skill command, and pinned_skills
+- **AND** model and tool child observations cannot replace that overview input
+- **AND** model observations retain their actual messages, including native skill instructions, without inventing a provider-level pinned_skills argument
+
+#### Scenario: A pinned turn completes and survives reload
+- **WHEN** native middleware emits multiple partial model updates for a pinned turn
+- **THEN** the streamed answer completes with one final response and its usage
+- **AND** that response is persisted and remains available after reloading the conversation
+- **AND** the current request appears once alongside legitimate previous turns and native skill instructions
+- **AND** middleware context repairs do not appear as new tool executions
 
 ### Requirement: Packaged skill presentation follows the interface language
 
