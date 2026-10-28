@@ -204,14 +204,14 @@ async def stream_server(mode: str):
             model.root_client.close()
 
 
-def middleware(kpi=None, role="root"):
+def middleware(kpi=None, role="root", tracer=None):
     binding = cast(
         BoundRuntimeContext,
         SimpleNamespace(
             portable_context=SimpleNamespace(agent_id="test", agent_name="test")
         ),
     )
-    return TracingKpiMiddleware(tracer=None, kpi=kpi, binding=binding, role=role)
+    return TracingKpiMiddleware(tracer=tracer, kpi=kpi, binding=binding, role=role)
 
 
 async def invoke(model, telemetry, text="synthetic-request"):
@@ -240,12 +240,15 @@ def terminal_records(caplog):
         ("truncated", "remote_protocol_error", 1),
     ],
 )
-async def test_real_stream_faults(mode, code, chunks, caplog):
+@pytest.mark.parametrize("captures_content", [False, True])
+async def test_real_stream_faults(mode, code, chunks, caplog, captures_content):
     caplog.set_level(logging.INFO)
     kpi = Mock(spec=BaseKPIWriter)
+    tracer = Mock(captures_content=captures_content)
+    telemetry = middleware(kpi, tracer=tracer)
     async with stream_server(mode) as (model, requests, _):
         if mode == "success":
-            response = await invoke(model, middleware(kpi))
+            response = await invoke(model, telemetry)
             assert response.result[0].content == "synthetic-answer"
         else:
             # openai wraps mid-stream transport faults; the httpx cause stays chained.
@@ -253,7 +256,7 @@ async def test_real_stream_faults(mode, code, chunks, caplog):
                 APIConnectionError if mode == "truncated" else StreamChunkTimeoutError
             )
             with pytest.raises(expected) as caught:
-                await invoke(model, middleware(kpi))
+                await invoke(model, telemetry)
             message = report_execution_error(
                 logging.getLogger("test.support"), caught.value, "execution"
             )
@@ -277,14 +280,23 @@ async def test_real_stream_faults(mode, code, chunks, caplog):
         assert terminal[0].stage == "before_first_chunk"
     assert kpi.gauge.call_args.args == ("llm.active_calls", 0)
     assert active_model_http.get() is None
+    span = tracer.start_span.return_value
+    span.end.assert_called_once()
+    if captures_content:
+        assert span.set_io.call_args_list[0].kwargs["input"] == [
+            {"role": "user", "content": "synthetic-request"}
+        ]
+    else:
+        span.set_io.assert_not_called()
 
 
 @pytest.mark.parametrize("mode", ["no_first", "stall"])
 async def test_cancellation_is_not_provider_failure(mode, caplog):
     caplog.set_level(logging.INFO)
     kpi = Mock(spec=BaseKPIWriter)
+    tracer = Mock(captures_content=False)
     async with stream_server(mode) as (model, requests, first):
-        task = asyncio.create_task(invoke(model, middleware(kpi)))
+        task = asyncio.create_task(invoke(model, middleware(kpi, tracer=tracer)))
         if mode == "stall":
             await asyncio.wait_for(first.wait(), 1)
         else:
@@ -297,6 +309,8 @@ async def test_cancellation_is_not_provider_failure(mode, caplog):
     assert len(terminal) == 1
     assert terminal[0].status == terminal[0].error_code == "cancelled"
     assert kpi.gauge.call_args.args == ("llm.active_calls", 0)
+    tracer.start_span.return_value.end.assert_called_once()
+    tracer.start_span.return_value.set_io.assert_not_called()
 
 
 async def test_callback_composition_and_broken_sinks(caplog):
@@ -533,7 +547,10 @@ async def test_guarded_tool_fragments_through_real_stream_and_middleware(monkeyp
 
 
 @pytest.mark.parametrize("outcome", ["ok", "error", "cancelled"])
-async def test_timings_exclude_telemetry_outside_handler(outcome, monkeypatch, caplog):
+@pytest.mark.parametrize("with_input_capture", [False, True])
+async def test_timings_exclude_telemetry_outside_handler(
+    outcome, monkeypatch, caplog, with_input_capture
+):
     from fred_core.model import diagnostics as http_diagnostics
     from fred_runtime.react.middleware import tracing_kpi
     from fred_runtime.runtime_support import llm_diagnostics
@@ -551,10 +568,14 @@ async def test_timings_exclude_telemetry_outside_handler(outcome, monkeypatch, c
 
     def slow_sizing(*args, **kwargs):
         clock.now += 100
-        return {}
+        return {"chars_system": 0, "chars_messages": 0, "chars_tools": 0}
 
     def slow_response_log(*args):
         clock.now += 1000
+
+    def slow_input_capture(*args, **kwargs):
+        clock.now += 100
+        return []
 
     original_classify = tracing_kpi.classify_error
 
@@ -563,9 +584,11 @@ async def test_timings_exclude_telemetry_outside_handler(outcome, monkeypatch, c
         return original_classify(exc)
 
     monkeypatch.setattr(tracing_kpi, "model_request_char_sizes", slow_sizing)
+    monkeypatch.setattr(tracing_kpi, "serialize_model_request", slow_input_capture)
     monkeypatch.setattr(tracing_kpi, "classify_error", slow_classify)
     kpi = Mock(spec=BaseKPIWriter)
-    telemetry = middleware(kpi)
+    tracer = Mock(captures_content=True) if with_input_capture else None
+    telemetry = middleware(kpi, tracer=tracer)
     monkeypatch.setattr(telemetry, "_log_model_response", slow_response_log)
     request = ModelRequest(
         model=FakeListChatModel(responses=["ok"]), messages=[], state={"messages": []}
@@ -575,6 +598,8 @@ async def test_timings_exclude_telemetry_outside_handler(outcome, monkeypatch, c
     )
 
     async def handler(req):
+        if with_input_capture:
+            await req.model.ainvoke(req.messages)
         clock.now += 2
         http_diagnostics.observe_model_response(httpx.Response(200))
         clock.now += 1
@@ -595,6 +620,10 @@ async def test_timings_exclude_telemetry_outside_handler(outcome, monkeypatch, c
         assert snapshots[0]["elapsed_ms"] == 9000
         assert snapshots[0]["terminal_silence_ms"] == 2000
     terminal = terminal_records(caplog)[0]
+    if tracer is not None:
+        assert tracer.start_span.return_value.set_io.call_args_list[0].kwargs == {
+            "input": []
+        }
     assert terminal.status == outcome
     assert terminal.elapsed_ms == 9000
     assert terminal.response_headers_ms == 2000

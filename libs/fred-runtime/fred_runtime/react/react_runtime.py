@@ -221,7 +221,9 @@ def _format_invocation_turns(turns: tuple[ConversationTurn, ...]) -> str:
     return "\n\n".join(parts)
 
 
-def _trace_input_payload(input_model: ReActInput) -> object:
+def _trace_input_payload(
+    input_model: ReActInput, *, deep_graph_input: object | None = None
+) -> object:
     """
     Render the turn's input for the trace-level `input` of a tracing backend.
 
@@ -230,19 +232,34 @@ def _trace_input_payload(input_model: ReActInput) -> object:
     collapses to its bare text, and anything else keeps the full role/content
     list.
 
+    Deep supplies its graph input to include submitted skill names, without
+    claiming that their instructions loaded successfully.
+
     Only ever called behind `tracer.captures_content` — this is content in the
     sense of `OBSERVABILITY-AND-AUDIT.md` §7.
     """
 
     messages = list(input_model.messages)
+    question: object
     if not messages:
-        return ""
-    last = messages[-1]
-    if last.role == ReActMessageRole.USER:
-        return last.content
-    return [
-        {"role": message.role.value, "content": message.content} for message in messages
-    ]
+        question = ""
+    elif messages[-1].role == ReActMessageRole.USER:
+        question = messages[-1].content
+    else:
+        question = [
+            {"role": message.role.value, "content": message.content}
+            for message in messages
+        ]
+    if deep_graph_input is None:
+        return question
+    update = (
+        deep_graph_input.update
+        if isinstance(deep_graph_input, Command)
+        else deep_graph_input
+    )
+    # Report the submitted names, not whether native skill loading succeeded.
+    pins = cast(dict[str, Overwrite], update)["pinned_skills"]
+    return {"question": question, "pinned_skills": list(pins.value)}
 
 
 def _graph_input(
@@ -419,11 +436,23 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 context=self._binding.portable_context,
                 attributes={"agent_id": self._binding.portable_context.agent_id or ""},
             )
-            if self._services.tracer.captures_content:
+            if self._preload_selected_skill and self._services.tracer.captures_content:
                 span.set_io(input=_trace_input_payload(input_model))
             span_token = active_agent_span.set(span)
         try:
             graph_input, _ = await self._input_with_skill(input_model, config)
+            if (
+                not self._preload_selected_skill
+                and span is not None
+                and self._services.tracer is not None
+            ):
+                if self._services.tracer.captures_content:
+                    payload = cast(
+                        dict[str, object],
+                        _trace_input_payload(input_model, deep_graph_input=graph_input),
+                    )
+                    span.set_io(input=payload)
+                    span.set_attribute("pinned_skills", payload["pinned_skills"])
             result = await self._compiled_agent.ainvoke(
                 graph_input,
                 config=_to_runnable_config(config),
@@ -475,10 +504,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 context=self._binding.portable_context,
                 attributes={"agent_id": self._binding.portable_context.agent_id or ""},
             )
-            # The turn's root span carries the trace-level input/output, which
-            # is what the Langfuse trace list shows for a conversation: the
-            # question that opened the turn and the answer that closed it.
-            if self._services.tracer.captures_content:
+            if self._preload_selected_skill and self._services.tracer.captures_content:
                 span.set_io(input=_trace_input_payload(input_model))
             span_token = active_agent_span.set(span)
 
@@ -706,6 +732,18 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             # Built here rather than above: translating the input can raise, and
             # by then the scope is open and owes the caller a close.
             graph_input, preload = await self._input_with_skill(input_model, config)
+            if (
+                not self._preload_selected_skill
+                and span is not None
+                and self._services.tracer is not None
+            ):
+                if self._services.tracer.captures_content:
+                    payload = cast(
+                        dict[str, object],
+                        _trace_input_payload(input_model, deep_graph_input=graph_input),
+                    )
+                    span.set_io(input=payload)
+                    span.set_attribute("pinned_skills", payload["pinned_skills"])
             for event in preload:
                 yield event.model_copy(update={"sequence": sequence})
                 sequence += 1

@@ -366,6 +366,18 @@ switch is `observability.langfuse.capture_content` in `configuration.yaml`, over
 the `LANGFUSE_CAPTURE_CONTENT` env var. It is **off by default**, and enabling it exports prompts,
 model answers, and tool arguments/results to Langfuse.
 
+Model input capture uses the model-start callback after middleware has composed
+the prompt and bound tools, including Deep's native skills catalogue and pinned
+instructions. Capture retains the existing serialization limits and remains a
+LangChain model input view; provider-specific wire normalization is outside it.
+Trace preparation time remains excluded from model-call latency diagnostics.
+
+For Deep turns, the root agent observation includes the canonical `question`
+and the actual `pinned_skills` submitted to the graph in its input, with the
+same list in metadata. An empty selection or resume reports `[]`. These names
+describe the submitted selection, not successful loading, and are exported
+only when content capture is enabled. ReAct keeps its existing input shape.
+
 Why this is bounded rather than a hole in the rule:
 
 - **Default-off and structurally enforced.** The switch is exposed as `Tracer.captures_content`
