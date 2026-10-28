@@ -22,6 +22,7 @@ import json
 import threading
 from importlib.metadata import entry_points
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fred_capability_spreadsheet import capability
@@ -403,7 +404,9 @@ async def test_literal_derived_columns_keep_the_file_and_return_a_formula_note()
 
     assert artifact.is_error is False and len(workspace.writes) == 2
     assert "'Gap' -> formula '=C2-B2'" in content
-    assert content.endswith("Do not create it again; reply now.")
+    assert content.endswith(
+        "If a note applies, you may send the fix as changes; otherwise reply now."
+    )
 
 
 @pytest.mark.asyncio
@@ -429,7 +432,9 @@ async def test_a_manual_total_row_keeps_the_file_and_returns_a_note():
         "sheet 'Budget', row 4 ('Total') looks like a manual total next to the "
         "automatic totals row" in content
     )
-    assert content.endswith("Do not create it again; reply now.")
+    assert content.endswith(
+        "If a note applies, you may send the fix as changes; otherwise reply now."
+    )
     # An identical repeat returns the same text, notes included.
     tool = _tool(workspace)
     first, _ = await tool(**args)
@@ -464,7 +469,9 @@ async def test_chart_arguments_are_dropped_and_the_user_is_told(args):
     assert message.artifact.is_error is False and len(workspace.writes) == 2
     assert message.artifact.ui_parts[0].type == "spreadsheet_preview"
     assert CHART_NOTE in message.content
-    assert message.content.endswith("Do not create it again; reply now.")
+    assert message.content.endswith(
+        "If a note applies, you may send the fix as changes; otherwise reply now."
+    )
 
 
 @pytest.mark.asyncio
@@ -477,3 +484,108 @@ async def test_no_chart_argument_means_no_chart_note():
     )
 
     assert "charts are not supported" not in message.content
+
+
+def _stats_args(rows: list[list[Any]], columns: list[dict[str, Any]] | None = None):
+    return {
+        "file_name": "Ventes",
+        "sheets": [
+            {
+                "name": "Ventes",
+                "columns": columns
+                or [
+                    {"header": "Vendeur"},
+                    {"header": "Janvier", "type": "currency", "total": "sum"},
+                ],
+                "rows": rows,
+            }
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_stat_row_ending_the_data_is_noted_and_the_file_kept():
+    rows = [["Alice", 100], ["Bruno", 200], ["Moyenne", 150]]
+    content, artifact = await _tool(FakeWorkspace())(**_stats_args(rows))
+    assert artifact.is_error is False
+    assert (
+        "column 'Janvier' has total sum and a 'Moyenne' data row: it is included "
+        "in the total" in content
+    )
+    assert "drop total on these columns" in content and "(=SUM(B2:B3))" in content
+
+
+@pytest.mark.asyncio
+async def test_empty_stat_rows_are_noted():
+    rows = [["Paris", 19.2], ["Lyon", 21.0], ["Minimum", None], ["Maximum", None]]
+    columns = [{"header": "Ville"}, {"header": "Juin", "type": "number"}]
+    content, artifact = await _tool(FakeWorkspace())(**_stats_args(rows, columns))
+    assert artifact.is_error is False
+    assert "the data rows 'Minimum', 'Maximum' are empty" in content
+    assert "=MIN(B2:B3)" in content
+
+
+@pytest.mark.asyncio
+async def test_a_percent_average_total_is_noted():
+    columns = [
+        {"header": "Région"},
+        {"header": "2025", "type": "number", "total": "sum"},
+        {"header": "2026", "type": "number", "total": "sum"},
+        {"header": "Évolution", "type": "percent", "formula": "=(C2-B2)/B2"},
+    ]
+    columns[3]["total"] = "average"
+    rows = [["Nord", 100, 110, None], ["Sud", 200, 190, None]]
+    content, artifact = await _tool(FakeWorkspace())(**_stats_args(rows, columns))
+    assert artifact.is_error is False
+    assert "column 'Évolution' averages row percentages" in content
+    assert "=(C4-B4)/B4" in content
+
+
+@pytest.mark.asyncio
+async def test_near_misses_get_no_stat_note():
+    rows = [["Alice", 100], ["Moyenne nationale", 150], ["Bruno", 200]]
+    mid, _ = await _tool(FakeWorkspace())(**_stats_args(rows))
+    rows = [["Alice", 100], ["Bruno", 200], ["Moyenne", 150]]
+    columns = [
+        {"header": "Vendeur"},
+        {"header": "Janvier", "type": "currency"},
+        {"header": "Part", "type": "percent", "formula": "=B2/SUM($B$2:$B$4)"},
+    ]
+    untotalled, _ = await _tool(FakeWorkspace())(**_stats_args(rows, columns))
+    for content in (mid, untotalled):
+        assert "data row: it is included" not in content
+        assert "averages row percentages" not in content and "are empty" not in content
+
+
+def test_a_note_lets_the_model_fix_or_reply_and_no_note_keeps_the_ending():
+    noted = _created_text("a.xlsx", notes=["column 'X' averages row percentages."])
+    assert noted.endswith(
+        "If a note applies, you may send the fix as changes; otherwise reply now."
+    )
+    assert "Do not create it again" not in noted
+    assert _created_text("a.xlsx").endswith(
+        "File created and shown to the user. Do not create it again; reply now."
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("label", ["Moyenne par mois", "Total général", "Max:"])
+async def test_a_stat_word_starting_a_trailing_row_is_noted(label):
+    rows = [["Alice", 100], ["Bruno", 200], [label, 150]]
+    content, artifact = await _tool(FakeWorkspace())(**_stats_args(rows))
+    assert artifact.is_error is False
+    assert f"a '{label}' data row: it is included in the total" in content
+
+
+@pytest.mark.asyncio
+async def test_a_stat_row_of_formula_cells_is_not_empty():
+    rows = [
+        ["Paris", 19.2],
+        ["Lyon", 21.0],
+        ["Moyenne", {"formula": "=AVERAGE(B2:B3)"}],
+    ]
+    columns = [{"header": "Ville"}, {"header": "Juin", "type": "number"}]
+    content, artifact = await _tool(FakeWorkspace())(**_stats_args(rows, columns))
+    assert artifact.is_error is False
+    assert " Note: " not in content
+    assert content.endswith("Do not create it again; reply now.")
