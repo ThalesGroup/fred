@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::borrow::Cow;
+
 use axum::{
     Json,
     http::StatusCode,
@@ -47,7 +49,7 @@ pub enum AppError {
     Problem {
         status: StatusCode,
         code: &'static str,
-        detail: &'static str,
+        detail: Cow<'static, str>,
     },
     #[error(transparent)]
     Internal(anyhow::Error),
@@ -56,11 +58,15 @@ pub enum AppError {
 pub type AppResult<T> = Result<T, AppError>;
 
 impl AppError {
-    pub fn problem(status: StatusCode, code: &'static str, detail: &'static str) -> Self {
+    pub fn problem(
+        status: StatusCode,
+        code: &'static str,
+        detail: impl Into<Cow<'static, str>>,
+    ) -> Self {
         Self::Problem {
             status,
             code,
-            detail,
+            detail: detail.into(),
         }
     }
 }

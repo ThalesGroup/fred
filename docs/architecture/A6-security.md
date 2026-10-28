@@ -284,14 +284,16 @@ are not connected under it.
 
 Companion to [documents used by an assistant](03-security.md#36-documents-used-by-an-assistant)
 and the [component view](01-system-overview.md#15-document-search-during-a-conversation).
-Control Plane accepts only `document_access` with corpus search. Other
-capabilities, attachments, library or document selections and capability edits
-after creation are refused explicitly; the pod registers no document tree tool.
+Control Plane encodes no capability rule: it accepts a capability from the
+template's pod inventory once that pod validates its configuration, at creation
+and on every capability edit. `document_access` refuses session attachments and
+library or document selections, and the pod registers no document tree tool, so
+the capability only searches the corpus.
 
 | Step | Rule | Implementation reference |
 | --- | --- | --- |
-| Creation | The owning pod validates and normalizes the configuration; Control Plane stores its versioned envelope only if `team_documents=true` and `attachments=false`. | [`tuning.rs`](../../apps/control-plane/src/agent_instances/tuning.rs), `enroll`, `validate_document_access`; pod `POST /agents/capabilities/document_access/validate-config` |
-| Preparation | The saved selection and configuration are rechecked before each chat; unsupported selections or defaults refuse preparation. | [`preparation.rs`](../../apps/control-plane/src/agent_instances/preparation.rs), `require_connected_capabilities` |
+| Creation | The capability on the owning pod validates the configuration and refuses session attachments and library or document selections; Control Plane stores the versioned envelope the pod returns. | [`tuning.rs`](../../apps/control-plane/src/agent_instances/tuning.rs), `enroll`, `validate_capability`; [`capability.py`](../../libs/capabilities/fred-capability-document-access/fred_capability_document_access/capability.py), `DocumentAccessCapability.validate_config`; pod `POST /agents/capabilities/document_access/validate-config` |
+| Preparation | Before each chat, Control Plane rechecks only that the saved selection, or the template defaults when none is saved, is still in the template's pod inventory; otherwise preparation is refused. | [`preparation.rs`](../../apps/control-plane/src/agent_instances/preparation.rs), `require_available_capabilities`; [`tuning.rs`](../../apps/control-plane/src/agent_instances/tuning.rs), `require_inventory` |
 | Tool call | The adapter checks that its context matches the admitted turn and takes the space from the turn binding, never from tool arguments. | [`adapters.py`](../../libs/fred-runtime/fred_runtime/integrations/v2_runtime/adapters.py), `DocumentSearchAdapter`; [`capability.py`](../../libs/capabilities/fred-capability-document-access/fred_capability_document_access/capability.py), `search_documents_using_vectorization` |
 | Scope | The space and its ancestors, never children or siblings; a space being deleted is refused. | [`access.py`](../../libs/fred-core/fred_core/documents/access.py), `resolve_scope`, `scope_from_space` |
 | Index query | Every semantic, strict or hybrid sub-query carries the `metadata.space_id` and `metadata.retrievable` prefilters. They narrow candidates and prove nothing. | [`opensearch_queries.py`](../../libs/capabilities/fred-capability-document-access/fred_capability_document_access/opensearch_queries.py), `build_search`, `mandatory_filters` |

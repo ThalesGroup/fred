@@ -3,7 +3,7 @@
 
 //! Swift enrollment and partial edits over the complete saved tuning snapshot.
 
-use std::{collections::BTreeMap, sync::OnceLock, time::Duration};
+use std::{borrow::Cow, collections::BTreeMap, sync::OnceLock, time::Duration};
 
 use anyhow::Context;
 use axum::http::{HeaderValue, StatusCode, header};
@@ -303,29 +303,26 @@ async fn validate_capability(
             ));
         }
         StatusCode::UNPROCESSABLE_ENTITY => {
+            // The capability owns the rule, so its reason is what the person can act on.
+            let detail = read_limited(&mut response, 16 * 1024)
+                .await
+                .and_then(|bytes| rejection_detail(&bytes))
+                .map_or(
+                    Cow::Borrowed("The pod rejected the capability configuration."),
+                    Cow::Owned,
+                );
             return Err(AppError::problem(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "agent_capability_config_invalid",
-                "The pod rejected the capability configuration.",
+                detail,
             ));
         }
         _ => return Err(unavailable()),
     }
     // Bound the response and validate only the envelope; the pod owns the config schema.
-    const MAX_BYTES: usize = 2 * 1024 * 1024;
-    if response
-        .content_length()
-        .is_some_and(|size| size > MAX_BYTES as u64)
-    {
-        return Err(unavailable());
-    }
-    let mut bytes = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(|_| unavailable())? {
-        if bytes.len() + chunk.len() > MAX_BYTES {
-            return Err(unavailable());
-        }
-        bytes.extend_from_slice(&chunk);
-    }
+    let bytes = read_limited(&mut response, 2 * 1024 * 1024)
+        .await
+        .ok_or_else(unavailable)?;
     let stored: Value = serde_json::from_slice(&bytes).map_err(|_| unavailable())?;
     if !stored
         .get("schema_version")
@@ -336,6 +333,39 @@ async fn validate_capability(
         return Err(unavailable());
     }
     Ok(stored)
+}
+
+/// The body, or `None` when it exceeds `max` bytes or the stream fails.
+async fn read_limited(response: &mut reqwest::Response, max: usize) -> Option<Vec<u8>> {
+    if response
+        .content_length()
+        .is_some_and(|size| size > max as u64)
+    {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.ok()? {
+        if bytes.len() + chunk.len() > max {
+            return None;
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Some(bytes)
+}
+
+/// Only the textual `detail` of a pod refusal, bounded in characters.
+fn rejection_detail(bytes: &[u8]) -> Option<String> {
+    const MAX_CHARS: usize = 500;
+    let body: Value = serde_json::from_slice(bytes).ok()?;
+    let detail = body.get("detail")?.as_str()?.trim();
+    if detail.is_empty() {
+        return None;
+    }
+    let mut bounded: String = detail.chars().take(MAX_CHARS).collect();
+    if bounded.len() < detail.len() {
+        bounded.push_str("...");
+    }
+    Some(bounded)
 }
 
 pub(super) fn apply_update(
@@ -518,4 +548,91 @@ fn validate_values(
         values.insert(key, value);
     }
     Ok(values)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agents::{AgentTemplateStatus, RuntimeCatalogSource};
+    use axum::{Router, routing::post};
+
+    const GENERIC: &str = "The pod rejected the capability configuration.";
+
+    async fn pod_refusing(body: String) -> (PlatformConfig, AgentTemplateSummary) {
+        let app = Router::new().route(
+            "/agents/capabilities/{id}/validate-config",
+            post(move || async move { (StatusCode::UNPROCESSABLE_ENTITY, body) }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let platform = PlatformConfig {
+            runtime_catalog_sources: vec![RuntimeCatalogSource {
+                runtime_id: "pod".into(),
+                base_url,
+                public_base_url: None,
+                enabled: true,
+            }],
+            ..Default::default()
+        };
+        let template = AgentTemplateSummary {
+            template_id: uuid::Uuid::nil(),
+            source_runtime_id: "pod".into(),
+            source_agent_id: "custom".into(),
+            display_name: "Custom".into(),
+            description: String::new(),
+            description_by_lang: None,
+            category: "react".into(),
+            tags: vec![],
+            capabilities: vec![],
+            team_instantiable: true,
+            status: AgentTemplateStatus::Available,
+            public_version: None,
+            default_tuning_fields: vec![],
+            max_chat_input_chars: None,
+            available_capabilities: vec![],
+            supports_capabilities: true,
+            default_capability_ids: vec![],
+        };
+        (platform, template)
+    }
+
+    async fn refusal(body: String) -> String {
+        let (platform, template) = pod_refusing(body).await;
+        match validate_capability(&platform, &template, None, "document_access", json!({})).await {
+            Err(AppError::Problem {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "agent_capability_config_invalid",
+                detail,
+            }) => detail.into_owned(),
+            other => panic!("unexpected result: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn pod_refusal_relays_only_its_bounded_detail() {
+        let reason = "Capability 'document_access' rejected the configuration: \
+                      Session attachments are not available on this platform.";
+        let body = json!({"detail": reason, "secret": "never relayed"}).to_string();
+        assert_eq!(refusal(body).await, reason);
+
+        // Multibyte text is cut on a character boundary.
+        let long = "é".repeat(600);
+        let detail = refusal(json!({"detail": long}).to_string()).await;
+        assert_eq!(detail, format!("{}...", "é".repeat(500)));
+    }
+
+    #[tokio::test]
+    async fn unusable_pod_refusal_keeps_the_generic_message() {
+        for body in [
+            String::new(),
+            "not json".into(),
+            json!({"detail": [{"msg": "structured"}]}).to_string(),
+            json!({"detail": "  "}).to_string(),
+            json!({"message": "no detail"}).to_string(),
+            json!({"detail": "x".repeat(20 * 1024)}).to_string(),
+        ] {
+            assert_eq!(refusal(body).await, GENERIC);
+        }
+    }
 }

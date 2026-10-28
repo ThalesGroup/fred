@@ -245,6 +245,8 @@ def narrow_scope_ids(
 
 # Legacy keys parse like the fields they replace: "false" must stay false.
 _LEGACY_BOOL = TypeAdapter(bool)
+# Back to True once session attachments are served on Weaver.
+_ATTACHMENTS_DEFAULT = False
 
 
 class DocumentAccessConfig(BaseModel):
@@ -279,7 +281,7 @@ class DocumentAccessConfig(BaseModel):
     show_document_selection: bool = True
     # Sources: `attachments` drives the paperclip and the session search scope,
     # `team_documents` the corpus scope, the scope pickers and the tree tool.
-    attachments: bool = True
+    attachments: bool = _ATTACHMENTS_DEFAULT
     team_documents: bool = True
     show_search_policy_control: bool = True
     show_rag_scope_control: bool = True
@@ -306,7 +308,7 @@ class DocumentAccessConfig(BaseModel):
         if isinstance(data, dict):
             data = dict(data)
             paperclip = _LEGACY_BOOL.validate_python(
-                data.pop("show_attach_files_control", True)
+                data.pop("show_attach_files_control", _ATTACHMENTS_DEFAULT)
             )
             only_attached = _LEGACY_BOOL.validate_python(
                 data.pop("search_attachments_only", False)
@@ -366,7 +368,7 @@ class DocumentAccessCapability(
         id="document_access",
         # Bump on every config-surface change: the version keys the stored-slice
         # schema_version and the control-plane chat-controls cache.
-        version="0.2.0",
+        version="0.2.1",
         name="capability.document_access.name",
         description="capability.document_access.description",
         icon="find_in_page",
@@ -376,7 +378,7 @@ class DocumentAccessCapability(
                 type="boolean",
                 title="capability.document_access.fields.attachments.title",
                 description="capability.document_access.fields.attachments.description",
-                default=True,
+                default=_ATTACHMENTS_DEFAULT,
                 # `ui.group` drives the form's visual sections: the renderer
                 # draws a thin divider whenever the group changes between two
                 # consecutive visible fields.

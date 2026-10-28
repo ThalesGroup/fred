@@ -59,6 +59,7 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     CapabilityManifest,
     EmptyModel,
+    SaveContext,
     reset_scope_private,
 )
 from fred_sdk.contracts.context import (
@@ -274,9 +275,9 @@ LEGACY_SOURCES = [
         (True, True),
     ),
     ({"show_attach_files_control": True}, (True, True)),
-    # An absent paperclip key counts as on, which was its default.
-    ({"search_attachments_only": True}, (True, False)),
-    ({}, (True, True)),
+    # An absent paperclip key takes the attachments field default (off on Weaver).
+    ({"search_attachments_only": True}, (False, True)),
+    ({}, (False, True)),
     # String booleans parse like the former bool fields, not as truthy text.
     ({"show_attach_files_control": "false"}, (False, True)),
     (
@@ -299,9 +300,9 @@ def test_legacy_keys_map_onto_the_two_sources(
 
 def test_new_source_keys_win_over_leftover_legacy_keys() -> None:
     config = DocumentAccessConfig.model_validate(
-        {"team_documents": False, "search_attachments_only": False}
+        {"team_documents": True, "search_attachments_only": True}
     )
-    assert (config.attachments, config.team_documents) == (True, False)
+    assert (config.attachments, config.team_documents) == (False, True)
     config = DocumentAccessConfig.model_validate(
         {"attachments": True, "show_attach_files_control": False}
     )
@@ -333,15 +334,49 @@ def _widgets(controls) -> list[str]:
     return [c.widget for c in controls]
 
 
-def test_chat_controls_default_to_the_full_legacy_parity_set() -> None:
+def test_chat_controls_default_to_the_corpus_controls() -> None:
     cap = DocumentAccessCapability()
-    controls = cap.chat_controls(DocumentAccessConfig())
-    assert _widgets(controls) == [
-        "attach_files",
+    assert _widgets(cap.chat_controls(DocumentAccessConfig())) == [
         "document_scope",
         "search_policy",
         "rag_scope",
     ]
+    with_attachments = DocumentAccessConfig(attachments=True)
+    assert _widgets(cap.chat_controls(with_attachments))[0] == "attach_files"
+
+
+def test_manifest_and_config_share_the_attachments_default() -> None:
+    fields = {f.key: f for f in DocumentAccessCapability.manifest.config_fields}
+    assert fields["attachments"].default is False
+    assert fields["team_documents"].default is True
+    config = DocumentAccessConfig()
+    assert (config.attachments, config.team_documents) == (False, True)
+
+
+@pytest.mark.asyncio
+async def test_validate_config_accepts_the_defaults() -> None:
+    cap = DocumentAccessCapability()
+    ctx = SaveContext(identity=_identity(), services=_full_services())
+    config = DocumentAccessConfig.model_validate({})
+    assert await cap.validate_config(config, {}, ctx) == config
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "stored,reason",
+    [
+        ({"attachments": True}, "Session attachments are not available"),
+        ({"bind_libraries": True}, "Library or document selections"),
+        ({"document_uids": ["doc-1"]}, "Library or document selections"),
+    ],
+)
+async def test_validate_config_refuses_sources_weaver_does_not_serve(
+    stored: dict[str, Any], reason: str
+) -> None:
+    cap = DocumentAccessCapability()
+    ctx = SaveContext(identity=_identity(), services=_full_services())
+    with pytest.raises(ValueError, match=reason):
+        await cap.validate_config(DocumentAccessConfig.model_validate(stored), {}, ctx)
 
 
 def test_chat_control_document_scope_bound_to_config_libraries() -> None:
@@ -640,6 +675,7 @@ async def test_stored_binding_is_inert_without_team_documents() -> None:
     cap = DocumentAccessCapability()
     port = _FakePort(hits=(_hit("d1"),))
     stored = {
+        "attachments": True,
         "team_documents": False,
         "bind_libraries": True,
         "library_tag_ids": ["A"],
@@ -678,7 +714,9 @@ def test_rag_scope_offers_every_choice_with_team_documents() -> None:
 @pytest.mark.parametrize("default", ["corpus_only", "hybrid", "general_only"])
 def test_rag_scope_offers_document_only_with_attachments(default: str) -> None:
     params = _rag_params(
-        DocumentAccessConfig(team_documents=False, default_rag_scope=default)
+        DocumentAccessConfig(
+            attachments=True, team_documents=False, default_rag_scope=default
+        )
     )
     assert params["options"] is None
     assert params["default"] == default
@@ -762,7 +800,7 @@ def test_team_documents_off_drops_the_tree_tool() -> None:
         cap,
         identity=_identity(),
         services=_full_services(),
-        config={"team_documents": False},
+        config={"attachments": True, "team_documents": False},
     )
     assert list(_capability_tools(cap, ctx)) == ["search_documents_using_vectorization"]
 
