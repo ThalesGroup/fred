@@ -37,10 +37,10 @@ Choose an output supported by this request's declared tools:
 
 - With a plotting or presentation tool, use its documented formats and actual
   result. Inspect or validate the artifact when a supported read-back exists.
-- With `render_html_artifact`, use static HTML and CSS, such as labeled bars
-  paired with their values. This viewer does not execute JavaScript or load
-  external libraries; scripts, remote chart resources and Mermaid source will
-  not create a working chart there.
+- With a renderer limited to HTML and CSS, use a static chart supported by
+  its documented contract, such as labeled bars paired with their values.
+  Use scripts, external libraries or diagram syntax only when the selected
+  tool explicitly supports them.
 - Without a suitable renderer, return a Markdown table with a short explanation
   and the proposed chart type if useful. Do not claim to have generated a chart
   or downloadable file. Installing a library is outside this procedure.

@@ -15,14 +15,14 @@ metadata:
    calculating. Ask for missing data or a decision that blocks a useful result;
    state a reasonable non-blocking assumption so the user can correct it.
 
-2. Read the actual data with the tools available for this request. For Fred's
-   tabular tools, follow their capability instructions for discovery, schema
-   inspection and scoped read-only queries; those instructions own SQL access.
-   Choose the tool from its declared schema rather than inventing a function
-   named after this skill. If no reader or query tool is available, work only
-   from data visible in the conversation. Small complete tables can support
-   transparent manual arithmetic; for larger or inaccessible sources, request
-   a usable excerpt or access and explain which computation remains unverified.
+2. Read the actual data with the readers or query tools declared for this
+   request. Follow their documented access rules for source discovery, schema
+   inspection and scoped read-only queries. Choose a tool from its declared
+   purpose and schema rather than inventing a function named after this skill.
+   If no reader or query tool is available, work only from data visible in the
+   conversation. Small complete tables can support transparent manual arithmetic;
+   for larger or inaccessible sources, request a usable excerpt or access and
+   explain which computation remains unverified.
 
 3. Check the fields needed for the question: row meaning, duplicate keys,
    missing or non-finite values, units and currencies, date coverage and any
