@@ -31,6 +31,7 @@ from decimal import ROUND_HALF_UP, Context, Decimal
 from typing import Any, Literal, cast
 
 import xlsxwriter
+from fred_capability_spreadsheet.formulas import is_formula_like
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
@@ -90,9 +91,17 @@ _FORBIDDEN_SHEET_CHARS = set("[]:*?/\\")
 _RESERVED_SHEET_NAMES = {"history"}
 # Text starting with one of these would be read as a formula by a spreadsheet.
 _FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
-# A model-written formula (`=SUM(`, `=B2/...`, `=$B$2`): rejected so it sends the
-# computed value; other `=` text (`=1+1`, `=== x ===`) stays literal text.
-_FORMULA_LIKE = re.compile(r"^=\s*(?:[A-Za-z][A-Za-z0-9.]*\s*\(|\$?[A-Za-z]{1,3}\$?\d)")
+# Text a spreadsheet would follow to another program (DDE `cmd|`) or file
+# (`[book.xlsx]`, a path before `!`): refused even as text (CSV re-import runs it).
+_LINK_TRIGGERS = "=+-@\uff1d\uff0b\uff0d\uff20"
+_LINK_TEXT = re.compile(
+    r"\|[^|]*!|\[[^\]]*\][^!]*!|(?:[A-Za-z]:\\|\\\\|https?://|file:)[^!]*!",
+    re.IGNORECASE,
+)
+LINK_TEXT_REJECTED = (
+    "this text looks like a link to another program or file (DDE or an external "
+    "workbook) and is not accepted, even as text. Drop the leading sign or rephrase."
+)
 FORMULA_REJECTED = (
     "formulas are not accepted in cells: send the computed value, set `compute` "
     "on the column for a per-row calculation (add, subtract, multiply, divide, "
@@ -570,6 +579,10 @@ def _prepare_sheet(sheet: SheetSpec) -> PreparedSheet:
     headers: list[str] = []
     for index, column in enumerate(sheet.columns, start=1):
         header = _strip_illegal(column.header)
+        if links_out(header):
+            raise SpreadsheetInputError(
+                f"Sheet '{sheet.name}', column {index}: {header!r}: {LINK_TEXT_REJECTED}"
+            )
         if len(header) > MAX_CELL_CHARS:
             raise SpreadsheetInputError(
                 f"Sheet '{sheet.name}', column {index}: the header has {len(header)} "
@@ -979,6 +992,8 @@ def _check_sheet_name(name: str, seen: set[str]) -> None:
         raise SpreadsheetInputError(
             f"Sheet name {name!r} contains control characters; use plain text."
         )
+    if links_out(name):
+        raise SpreadsheetInputError(f"Sheet name {name!r}: {LINK_TEXT_REJECTED}")
     if name.strip().lower() in _RESERVED_SHEET_NAMES:
         raise SpreadsheetInputError(
             f"Sheet name '{name}' is reserved by Excel; choose another name."
@@ -1146,6 +1161,15 @@ def _display_length(value: object) -> int:
     return max((len(line) for line in str(value).splitlines()), default=0)
 
 
+def links_out(text: str) -> bool:
+    stripped = text.lstrip()
+    return (
+        bool(stripped)
+        and stripped[0] in _LINK_TRIGGERS
+        and bool(_LINK_TEXT.search(stripped))
+    )
+
+
 def _strip_illegal(text: str) -> str:
     return ILLEGAL_CHARACTERS_RE.sub("", text)
 
@@ -1157,10 +1181,12 @@ def _convert(raw: CellValue, column_type: str, where: str) -> Converted:
         raise SpreadsheetInputError(
             f"{where}: the value has {len(raw)} characters; the limit is {MAX_CELL_CHARS}."
         )
+    if isinstance(raw, str) and links_out(raw):
+        raise SpreadsheetInputError(f"{where}: {raw!r}: {LINK_TEXT_REJECTED}")
     if (
         isinstance(raw, str)
         and raw.lstrip().startswith("=")
-        and (column_type != "text" or _FORMULA_LIKE.match(raw.strip()))
+        and (column_type != "text" or is_formula_like(raw.strip()))
     ):
         raise SpreadsheetInputError(f"{where}: {raw!r}: {FORMULA_REJECTED}")
     if isinstance(raw, str) and _LEAKED_ROW.search(raw):

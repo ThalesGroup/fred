@@ -1001,3 +1001,42 @@ def test_text_never_becomes_a_formula_number_or_link():
     for row, expected in enumerate(values, start=2):
         cell = ws.cell(row=row, column=1)
         assert (cell.value, cell.data_type, cell.hyperlink) == (expected, "s", None)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["='Données 2025'!B2", "=Synthèse!B2", "=Q1!$B$2"],
+)
+def test_sheet_qualified_formula_text_is_refused_not_written(text):
+    message = _error(_sheet(columns=[{"header": "Note"}], rows=[[text]]))
+    assert "Sheet 'Data', row 2, column 1 ('Note')" in message
+    assert FORMULA_REJECTED in message
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "=cmd|' /C calc'!A0",
+        "@SUM(1+1)*cmd|' /C calc'!A0",
+        "+cmd|' /C notepad'!A0",
+        "=[x.xlsx]Feuil1!A1",
+        "＝cmd|' /C calc'!A0",
+    ],
+)
+def test_dde_and_external_text_is_refused(text):
+    message = _error(_sheet(columns=[{"header": "Note"}], rows=[[text]]))
+    assert "row 2, column 1" in message
+    assert "link to another program or file" in message
+
+
+def test_dde_header_and_sheet_name_are_refused():
+    assert "link to another program" in _error(
+        _sheet(columns=[{"header": "=cmd|' /C calc'!A0"}])
+    )
+    assert "link to another program" in _error(_sheet(name="-x|y!z"))
+
+
+@pytest.mark.parametrize("text", ["+33 6 12 34 56 78", "- point", "a|b", "- a | b"])
+def test_ordinary_text_with_signs_or_pipes_is_kept(text):
+    ws = _ws(_sheet(columns=[{"header": "Note"}], rows=[[text]]))
+    assert ws["A2"].value == text
