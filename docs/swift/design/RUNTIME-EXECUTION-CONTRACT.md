@@ -7155,3 +7155,21 @@ The outer request authenticates before MCP dispatch; the inner FastAPI request
 gets only the verified grant and admitted log context. The upgrade preserves
 tool names, descriptions and callable input schemas, allowing existing agents
 and legacy HTTP peers to use the same catalog entries.
+
+### 8.122 KPI events: capability on tool calls, team on API requests (2026-10-28)
+
+- `agent.tool_latency_ms` and `agent.tool_failed_total` carry
+  `dims.capability_id` when the tool came from a capability
+  (`build_capability_agent_block` stamps `metadata["fred.capability_id"]`;
+  `ToolExecution.run(capability_id=...)` emits it). Built-in tools and Graph
+  `tool_ref` calls carry none.
+- `KPIMiddleware` adds `dims.team_id` to `api.request_latency_ms` when the
+  route has a `team_id` path parameter and the request is authenticated and
+  not refused (4xx).
+- `KPI_INDEX_MAPPING` adds `dims.capability_id`,
+  `quantities.cache_read_tokens` and `quantities.tool_count`; startup adds
+  them to an existing index.
+
+All three are OpenSearch-only: no Prometheus label, Grafana unchanged. Past
+events are completed only by the optional `fred-control-plane-kpi-backfill`
+command (`docs/swift/ops/migrations/kpi-analytics-dims.md`).
