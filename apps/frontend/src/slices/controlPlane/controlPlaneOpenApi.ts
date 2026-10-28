@@ -407,6 +407,12 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    listMyTeamJoinRequestsControlPlaneV1TeamsJoinRequestsMineGet: build.query<
+      ListMyTeamJoinRequestsControlPlaneV1TeamsJoinRequestsMineGetApiResponse,
+      ListMyTeamJoinRequestsControlPlaneV1TeamsJoinRequestsMineGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/teams/join-requests/mine` }),
+    }),
     searchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGet: build.query<
       SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiResponse,
       SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiArg
@@ -455,6 +461,46 @@ const injectedRtkApi = api.injectEndpoints({
       JoinTeamControlPlaneV1TeamsTeamIdJoinPostApiArg
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/join`, method: "POST" }),
+    }),
+    createTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsPost: build.mutation<
+      CreateTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsPostApiResponse,
+      CreateTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/join-requests`,
+        method: "POST",
+        body: queryArg.createTeamJoinRequest,
+      }),
+    }),
+    listTeamJoinRequestsControlPlaneV1TeamsTeamIdJoinRequestsGet: build.query<
+      ListTeamJoinRequestsControlPlaneV1TeamsTeamIdJoinRequestsGetApiResponse,
+      ListTeamJoinRequestsControlPlaneV1TeamsTeamIdJoinRequestsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/join-requests` }),
+    }),
+    cancelMyTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsMineDelete: build.mutation<
+      CancelMyTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsMineDeleteApiResponse,
+      CancelMyTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsMineDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/join-requests/mine`, method: "DELETE" }),
+    }),
+    acceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPost: build.mutation<
+      AcceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPostApiResponse,
+      AcceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/join-requests/${queryArg.requestId}/accept`,
+        method: "POST",
+      }),
+    }),
+    refuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePost: build.mutation<
+      RefuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePostApiResponse,
+      RefuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/join-requests/${queryArg.requestId}/refuse`,
+        method: "POST",
+      }),
     }),
     rescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPost: build.mutation<
       RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiResponse,
@@ -2575,6 +2621,9 @@ export type ListAllTeamsControlPlaneV1TeamsAllGetApiArg = {
   /** false skips the per-team ReBAC reads: admins, membership and member_count are left unset. For pickers that only need ids and names. */
   includeMembership?: boolean;
 };
+export type ListMyTeamJoinRequestsControlPlaneV1TeamsJoinRequestsMineGetApiResponse =
+  /** status 200 Successful Response */ MyTeamJoinRequest[];
+export type ListMyTeamJoinRequestsControlPlaneV1TeamsJoinRequestsMineGetApiArg = void;
 export type SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiResponse =
   /** status 200 Successful Response */ UserSummary[];
 export type SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiArg = {
@@ -2604,6 +2653,32 @@ export type JoinTeamControlPlaneV1TeamsTeamIdJoinPostApiResponse =
   /** status 200 Successful Response */ TeamWithPermissions;
 export type JoinTeamControlPlaneV1TeamsTeamIdJoinPostApiArg = {
   teamId: string;
+};
+export type CreateTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsPostApiResponse = /** status 200 OK */
+  | MyTeamJoinRequest
+  | /** status 201 Successful Response */ MyTeamJoinRequest;
+export type CreateTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsPostApiArg = {
+  teamId: string;
+  createTeamJoinRequest: CreateTeamJoinRequest;
+};
+export type ListTeamJoinRequestsControlPlaneV1TeamsTeamIdJoinRequestsGetApiResponse =
+  /** status 200 Successful Response */ TeamJoinRequest[];
+export type ListTeamJoinRequestsControlPlaneV1TeamsTeamIdJoinRequestsGetApiArg = {
+  teamId: string;
+};
+export type CancelMyTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsMineDeleteApiResponse = unknown;
+export type CancelMyTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsMineDeleteApiArg = {
+  teamId: string;
+};
+export type AcceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPostApiResponse = unknown;
+export type AcceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPostApiArg = {
+  teamId: string;
+  requestId: string;
+};
+export type RefuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePostApiResponse = unknown;
+export type RefuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePostApiArg = {
+  teamId: string;
+  requestId: string;
 };
 export type RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiResponse = unknown;
 export type RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiArg = {
@@ -4149,7 +4224,7 @@ export type PatchUserPreferences = {
   agent_sort?: ("name" | "created_at:desc" | "updated_at:desc") | null;
 };
 export type UserTeamRelation = "team_admin" | "pending_team_admin" | "team_editor" | "team_analyst" | "team_member";
-export type JoiningMode = "open" | "invite_only";
+export type JoiningMode = "open" | "on_request" | "invite_only";
 export type TeamVisibility = "public" | "private";
 export type TeamPermission =
   | "can_read"
@@ -4232,6 +4307,15 @@ export type CreateTeamRequest = {
   description: string;
   initial_team_admin_ids: string[];
 };
+export type MyTeamJoinRequest = {
+  id: string;
+  team_id: string;
+  status: "pending" | "refused";
+  created_at: string;
+  decided_at?: string | null;
+  /** Set on a refused request: when asking is allowed again. */
+  can_ask_again_at?: string | null;
+};
 export type UpdateTeamRequest = {
   name?: string | null;
   description?: string | null;
@@ -4246,6 +4330,21 @@ export type EditTeamRegistryRequest = {
   description?: string | null;
   add_admin_ids?: string[];
   remove_admin_ids?: string[];
+};
+export type CreateTeamJoinRequest = {
+  /** Plain text shown to the team admins only. */
+  message?: string | null;
+};
+export type TeamJoinRequest = {
+  id: string;
+  team_id: string;
+  requester_id: string;
+  requester_name: string;
+  message?: string | null;
+  status: "pending" | "refused";
+  created_at: string;
+  decided_at?: string | null;
+  expires_at: string;
 };
 export type RescueTeamAdminRequest = {
   user_id: string;
@@ -5945,6 +6044,45 @@ export type AgentRepublishNeededNotification = {
   type: "agent.republish_needed";
   payload: AgentRepublishNeededPayload;
 };
+export type TeamJoinRequestAnsweredPayload = {
+  team_id: string;
+  team_name: string;
+  outcome: "accepted" | "refused";
+};
+export type TeamJoinRequestAnsweredNotification = {
+  id: string;
+  team_id?: string | null;
+  created_at: string;
+  expires_at: string;
+  seen_at?: string | null;
+  /** Set once someone else acted on the subject; the tile then shows `handled_by_name` instead of its buttons. */
+  handled_at?: string | null;
+  handled_by_name?: string | null;
+  handled_outcome?: string | null;
+  type: "team.join_request_answered";
+  payload: TeamJoinRequestAnsweredPayload;
+};
+export type TeamJoinRequestedPayload = {
+  team_id: string;
+  team_name: string;
+  request_id: string;
+  requester_id: string;
+  requester_name: string;
+  message?: string | null;
+};
+export type TeamJoinRequestedNotification = {
+  id: string;
+  team_id?: string | null;
+  created_at: string;
+  expires_at: string;
+  seen_at?: string | null;
+  /** Set once someone else acted on the subject; the tile then shows `handled_by_name` instead of its buttons. */
+  handled_at?: string | null;
+  handled_by_name?: string | null;
+  handled_outcome?: string | null;
+  type: "team.join_requested";
+  payload: TeamJoinRequestedPayload;
+};
 export type NotificationPage = {
   items: (
     | ({
@@ -5953,6 +6091,12 @@ export type NotificationPage = {
     | ({
         type: "agent.republish_needed";
       } & AgentRepublishNeededNotification)
+    | ({
+        type: "team.join_request_answered";
+      } & TeamJoinRequestAnsweredNotification)
+    | ({
+        type: "team.join_requested";
+      } & TeamJoinRequestedNotification)
   )[];
   /** Opaque; pass it as `before` for the next page. Null on the last. */
   next_cursor?: string | null;
@@ -5961,7 +6105,11 @@ export type MarkNotificationsSeenRequest = {
   /** The newest notification id the popover listed; it and every older notification are marked seen. */
   up_to: string;
 };
-export type NotificationType = "agent.republish_needed" | "agent.marketplace_removed";
+export type NotificationType =
+  | "agent.republish_needed"
+  | "agent.marketplace_removed"
+  | "team.join_requested"
+  | "team.join_request_answered";
 export type NotificationTypeSetting = {
   type: NotificationType;
   enabled: boolean;
@@ -6411,6 +6559,8 @@ export const {
   useCreateTeamControlPlaneV1TeamsPostMutation,
   useListAllTeamsControlPlaneV1TeamsAllGetQuery,
   useLazyListAllTeamsControlPlaneV1TeamsAllGetQuery,
+  useListMyTeamJoinRequestsControlPlaneV1TeamsJoinRequestsMineGetQuery,
+  useLazyListMyTeamJoinRequestsControlPlaneV1TeamsJoinRequestsMineGetQuery,
   useSearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetQuery,
   useLazySearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetQuery,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery,
@@ -6419,6 +6569,12 @@ export const {
   useDeleteTeamControlPlaneV1TeamsTeamIdDeleteMutation,
   useEditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation,
+  useCreateTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsPostMutation,
+  useListTeamJoinRequestsControlPlaneV1TeamsTeamIdJoinRequestsGetQuery,
+  useLazyListTeamJoinRequestsControlPlaneV1TeamsTeamIdJoinRequestsGetQuery,
+  useCancelMyTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsMineDeleteMutation,
+  useAcceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPostMutation,
+  useRefuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePostMutation,
   useRescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostMutation,
   useGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,
   useLazyGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,
