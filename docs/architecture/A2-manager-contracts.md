@@ -177,7 +177,8 @@ configured sources to organization Manage-protected read/refresh. The pod's comp
 registry advertisement lives in
 [`agent_app.py`](../../libs/fred-runtime/fred_runtime/app/agent_app.py).
 Read uses a consistent SQL snapshot; bounded discovery precedes the authorized
-write transaction. Neither API establishes a validated UI or execution journey.
+write transaction. The organization Capabilities tab is their only consumer; agent
+enrollment and chat preparation read live template discovery, not this store.
 
 Model storage has a separate platform owner in
 [`model_catalog`](../../apps/control-plane/src/model_catalog/mod.rs) and additive

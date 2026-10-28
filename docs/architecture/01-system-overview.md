@@ -127,15 +127,16 @@ with Knowledge Flow.
 
 ## 1.4. Governance: administering resources by space
 
-The organization admin sets business choices, including permitted agents,
-capabilities and models. Each person's space roles determine what they may
+The organization admin sets business choices, including permitted agents and
+models; capabilities are not restricted per organization. Each person's
+space roles determine what they may
 manage, contribute to or read. The owner's separate institutional mandate and
 the precise role boundaries are defined in the [roles annex](A11-roles.md).
 
 ```mermaid
 flowchart TB
     admin["Organization admin"]
-    policy["Organization policy<br/>Permitted agents, capabilities and models"]
+    policy["Organization policy<br/>Permitted agents and models"]
     person["Person"]
     roles["Roles in a space<br/>Read / contribute / administer"]
     space["Working space<br/>Organization, team, project or personal"]
