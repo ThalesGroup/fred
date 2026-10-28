@@ -13,250 +13,83 @@
 # limitations under the License.
 
 import logging
-from typing import List, Literal, Union
+from typing import List
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.concurrency import run_in_threadpool
-from fred_core import (
-    DocumentPermission,
-    KeycloakUser,
-    TagPermission,
-    get_current_user,
-)
+from fred_core.documents.access import SpaceNotFoundError, SpacePendingDeletionError
 from fred_core.kpi import phase_timer
+from fred_core.security.delegation import AssertedUser
 from fred_core.store import VectorSearchHit
-from pydantic import BaseModel, Field
 
-from knowledge_flow_backend.application_context import get_kpi_writer, get_rebac_engine
+from knowledge_flow_backend.application_context import get_kpi_writer
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
-from knowledge_flow_backend.features.vector_search.vector_search_structures import RerankRequest, SearchPolicyName, SearchRequest, SimilaritySearchRequest, VisualEvidenceArtifactResponse
+from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchRequest
+from knowledge_flow_backend.security.weaver_admission import delegated_person, require_space_read
 
 logger = logging.getLogger(__name__)
 
-# ---------------- Echo types for UI OpenAPI ----------------
 
-EchoPayload = Union[SearchPolicyName]
-
-
-class EchoEnvelope(BaseModel):
-    kind: Literal["SearchPolicyName"]
-    payload: EchoPayload = Field(..., description="Schema payload being echoed")
+def _space_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, SpacePendingDeletionError):
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail="space_pending_deletion")
+    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="space_not_found")
 
 
 class VectorSearchController:
-    """
-    REST + MCP tool: vector similarity search.
-    Pass-through: returns List[VectorSearchHit] from the service.
-    """
+    """Corpus search for capabilities, in the space of the calling agent turn."""
 
     def __init__(self, router: APIRouter):
         self.service = VectorSearchService()
         self.kpi = get_kpi_writer()
 
         @router.post(
-            "/schemas/echo",
-            tags=["Schemas"],
-            summary="Ignore. Not a real endpoint.",
-            description="Ignore. This endpoint is only used to include some types (mainly one used in websocket) in the OpenAPI spec, so they can be generated as typescript types for the UI. This endpoint is not really used, this is just a code generation hack.",
-        )
-        async def echo_schema(
-            envelope: EchoEnvelope,
-            user: KeycloakUser = Depends(get_current_user),
-        ) -> None:
-            # AUTHZ-05 §27/8a: OpenAPI-typegen hack, returns no data — the
-            # org-level CAN_READ_CONTENT gate it used is removed (item 8a);
-            # authentication alone is sufficient.
-            pass
-
-        @router.post(
             "/vector/search",
             tags=["Vector Search"],
             summary="Search documents using vectorization",
-            description="Returns ranked VectorSearchHit objects for the query.",
+            description="Returns ranked hits from the space and its ancestors, published documents only.",
             response_model=list[VectorSearchHit],
             operation_id="search_documents_using_vectorization",
-            responses={status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Internal server error", "content": {"application/json": {"example": {"detail": "An error occurred during search"}}}}},
         )
         async def vector_search(
             request: SearchRequest,
-            user: KeycloakUser = Depends(get_current_user),
+            person: AssertedUser = Depends(delegated_person),
         ) -> List[VectorSearchHit]:
+            await require_space_read(person, request.space_id)
             try:
                 async with phase_timer(self.kpi, "vector_search"):
-                    hits = await self.service.search(
+                    return await self.service.search(
                         question=request.question,
-                        user=user,
+                        user=person,
                         top_k=request.top_k,
-                        document_library_tags_ids=request.document_library_tags_ids or [],
-                        document_uids=request.document_uids,
                         policy_name=request.search_policy,
-                        owner_filter=request.owner_filter,
-                        team_id=request.team_id,
-                        session_id=request.session_id,
-                        include_session_scope=request.include_session_scope,
-                        include_corpus_scope=request.include_corpus_scope,
+                        space_id=request.space_id,
                     )
-                return hits
-            except Exception as e:
-                logger.exception("[VECTOR][SEARCH] Unexpected error during vector search")
-                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-
-        @router.post(
-            "/vector/similarity-search",
-            tags=["Vector Search"],
-            summary="Targeted similarity / comparison search within named documents/folders",
-            description=(
-                "Returns the passages most similar to an anchor text, restricted to the "
-                "named targets (documents and/or library folders), ranked best-first. "
-                "A comparison primitive (not corpus-wide Q&A): at least one target is "
-                "required. See KF-SIMILARITY-SEARCH."
-            ),
-            response_model=list[VectorSearchHit],
-            operation_id="similarity_search",
-        )
-        async def similarity_search(
-            request: SimilaritySearchRequest,
-            user: KeycloakUser = Depends(get_current_user),
-        ) -> List[VectorSearchHit]:
-            # AUTHZ-05 §27: team-scoped via the request's own targets (at least
-            # one of document_uids/document_library_tags_ids is required by the
-            # request's own validator) instead of the org-level CAN_READ_CONTENT
-            # gate.
-            rebac = get_rebac_engine()
-            for tag_id in request.document_library_tags_ids:
-                await rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
-            for document_uid in request.document_uids:
-                await rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
-            try:
-                async with phase_timer(self.kpi, "vector_similarity_search"):
-                    return await self.service.similarity_search(
-                        anchor=request.anchor,
-                        user=user,
-                        document_uids=request.document_uids or None,
-                        document_library_tags_ids=request.document_library_tags_ids or None,
-                        top_k=request.top_k,
-                        rerank=request.rerank,
-                        min_score=request.min_score,
-                    )
-            except ValueError as e:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-            except Exception as e:
-                logger.exception("[VECTOR][SIMILARITY] Unexpected error during similarity search")
-                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-
-        @router.get(
-            "/vector/visual-evidence-artifact",
-            tags=["Vector Search"],
-            summary="Get a visual evidence artifact for a rich PPTX hit",
-            operation_id="get_visual_evidence_artifact",
-            response_model=VisualEvidenceArtifactResponse,
-        )
-        async def get_visual_evidence_artifact(
-            document_uid: str,
-            artifact_path: str,
-            user: KeycloakUser = Depends(get_current_user),
-        ) -> VisualEvidenceArtifactResponse:
-            # AUTHZ-05 §27: team-scoped via the target document instead of the
-            # org-level CAN_READ_CONTENT gate.
-            await get_rebac_engine().check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
-            artifact_name = (artifact_path or "").strip().lstrip("/")
-            if not artifact_name:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Artifact path is empty.",
-                )
-
-            lowered = artifact_name.lower()
-            content_type = "application/octet-stream"
-            if lowered.endswith(".png"):
-                content_type = "image/png"
-            elif lowered.endswith(".jpg") or lowered.endswith(".jpeg"):
-                content_type = "image/jpeg"
-            elif lowered.endswith(".webp"):
-                content_type = "image/webp"
-
-            artifact_url = f"/knowledge-flow/v1/markdown/{document_uid}/artifact/{artifact_name}"
-
-            return VisualEvidenceArtifactResponse(
-                document_uid=document_uid,
-                artifact_path=artifact_name,
-                file_name=artifact_name.split("/")[-1],
-                content_type=content_type,
-                artifact_url=artifact_url,
-            )
-
-        @router.post(
-            "/vector/test",
-            summary="Test endpoint that always returns a successful dummy response.",
-            description="A simple test endpoint for POST requests. Returns a fixed list of VectorSearchHit.",
-            response_model=list[VectorSearchHit],
-            operation_id="test_post_success",
-        )
-        async def test_post_success(
-            user: KeycloakUser = Depends(get_current_user),
-        ) -> List[VectorSearchHit]:
-            """Always succeeds and returns a dummy VectorSearchHit."""
-            # AUTHZ-05 §27/8a: dummy test route, no team-owned data returned —
-            # the org-level CAN_READ_CONTENT gate it used is removed (item 8a);
-            # authentication alone is sufficient.
-            logger.info("SECURITY: test_post_success called by user: %s", user.username)
-
-            # Construct a dummy hit to ensure the return type matches the schema
-            dummy_hit = VectorSearchHit(content="This is a test document chunk.", uid="test-doc-001", title="Dummy Test Document", score=0.99, rank=1, type="test")
-
-            return [dummy_hit]
+            except (SpaceNotFoundError, SpacePendingDeletionError) as exc:
+                raise _space_error(exc) from None
 
         @router.get(
             "/vector/document-chunks",
             tags=["Vector Search"],
-            summary="Fetch a document's chunks in index order",
-            description=(
-                "Returns a document's stored chunks sorted by chunk_index, capped at `limit`. "
-                "A direct store fetch with no similarity ranking, so a whole table comes back "
-                "intact. Requires READ on the document."
-            ),
+            summary="Fetch a document's published chunks in index order",
+            description="Returns a whole table intact; the document must be published in the space or its ancestors.",
             response_model=List[VectorSearchHit],
             operation_id="get_document_chunks_ordered",
-            status_code=status.HTTP_200_OK,
         )
         async def get_document_chunks_ordered(
             document_uid: str,
+            space_id: UUID,
             limit: int = Query(default=200, ge=1, le=1000),
-            user: KeycloakUser = Depends(get_current_user),
+            person: AssertedUser = Depends(delegated_person),
         ) -> List[VectorSearchHit]:
-            rebac = get_rebac_engine()
-            await rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
-            async with phase_timer(self.kpi, "vector_document_chunks"):
-                return await self.service.get_document_chunks_ordered(
-                    user=user,
-                    document_uid=document_uid,
-                    limit=limit,
-                )
-
-        @router.post(
-            "/vector/rerank",
-            tags=["Vector Search"],
-            summary="Sort documents according to their relevance",
-            description="Returns a list of VectorSearchHit sorted by relevance",
-            response_model=List[VectorSearchHit],
-            operation_id="rerank_documents",
-            status_code=status.HTTP_200_OK,
-        )
-        async def rerank(
-            request: RerankRequest,
-            user: KeycloakUser = Depends(get_current_user),
-        ) -> List[VectorSearchHit]:
-            # AUTHZ-05 §27: team-scoped via the documents being reranked instead
-            # of the org-level CAN_PROCESS_CONTENT gate. PROCESS (not READ)
-            # preserves the original capability's editor-level strictness.
-            rebac = get_rebac_engine()
-            for document_uid in {hit.uid for hit in request.documents}:
-                await rebac.check_user_permission_or_raise(user, DocumentPermission.PROCESS, document_uid)
-            async with phase_timer(self.kpi, "vector_rerank"):
-                documents = await run_in_threadpool(
-                    self.service.rerank_documents,
-                    question=request.question,
-                    documents=request.documents,
-                    top_r=request.top_r,
-                )
-            return documents
+            await require_space_read(person, space_id)
+            try:
+                async with phase_timer(self.kpi, "vector_document_chunks"):
+                    return await self.service.get_document_chunks_ordered(
+                        user=person,
+                        document_uid=document_uid,
+                        space_id=space_id,
+                        limit=limit,
+                    )
+            except (SpaceNotFoundError, SpacePendingDeletionError) as exc:
+                raise _space_error(exc) from None

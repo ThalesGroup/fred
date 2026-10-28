@@ -63,6 +63,8 @@ class Resource(str, Enum):
     # relations again, distinct type again: the authorized object is the
     # definition, and instances are not authorization objects at all.
     KNOWLEDGE_BASE_DEFINITION = "knowledge_base_definition"
+    # Weaver organization, team, project or personal space (Control Plane model).
+    SPACE = "space"
 
     # Authorization subject
     USER = "user"

@@ -3807,7 +3807,7 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
   autres que `document_access` sont identiques à Swift ; fred-agents aussi, sauf
   Sentinel et le catalogue de modèles du pod. Seul écart : la recherche locale
   (commits `cd235a2a0`, `6e4b49e`, F27-F30).
-- Proposition, en attente de Dimi : le pod natif garde les librairies Swift ; l'étape « retirer
+- Décision de Dimi (annulation du retrait dans fred-agents) : le pod natif garde les librairies Swift ; l'étape « retirer
   les librairies et templates » de L1 est abandonnée. La porte d'usage est
   l'autorisation d'Alice (L1b, interdite par défaut). Une capacité dont les
   endpoints KF ne sont pas adaptés échoue fermée : les documents Weaver sont
@@ -3834,3 +3834,46 @@ garantit pas son achèvement à la seconde près. Aucun déploiement exécuté.
   `apps/frontend` et la librairie `document_access`. Aucun test, commit ni push.
 - Constat pour K2 : KF API est désactivée dans `deploy/k3d/values.yaml.gotmpl`
   (`knowledge-flow-backend.enabled: false`) ; K2 inclut sa réactivation.
+- 2026-10-27, décisions de Dimi pour K2 : KF API devient uniquement le backend
+  des capacités, appelé par le pod en délégation ; elle ne monte que les
+  endpoints adaptés. Les faits de publication (document vivant, génération
+  publiée, `retrievable`) sont lus en SQL, en lecture seule, par
+  `fred_core.documents.access` (option a). Les binaires API et worker restent
+  dans le même package pour l'instant. K3 : suppression des contrôleurs UI Swift
+  de KF API et nettoyage de leurs 41 consommateurs frontend.
+
+### CAP K2 : recherche documentaire rendue à Knowledge Flow API (2026-10-27)
+
+- Départ `662d3c255` (savepoint). Décisions K1 (a), lecture SQL (a), KF API
+  backend des capacités ; trajectoire validée par Dimi.
+- KF API (`main.py`) : démarrage Weaver comme le pod (`configure_token_security`,
+  moteur OpenFGA publié en lecture seule ouvert au lifespan, aucune admission ni
+  table Swift, plus de CORS). Ne monte que le monitoring et la recherche. Nouveau
+  `security/weaver_admission.py` : seuls les appels délégués (`AssertedUser`)
+  sont acceptés ; un `can_read` sur `space:<id>` par requête. `fred-core` :
+  `Resource.SPACE` et `SpacePermission.CAN_READ`.
+- `/vector/search` : contrat `question`, `top_k`, `search_policy`, `space_id`,
+  champs inconnus refusés. Stratégies KF existantes filtrées sur `space_id` du
+  périmètre (`resolve_scope`), puis `verify_candidates` avant toute réponse.
+  `/vector/document-chunks` : même contrôle d'espace, chunks publiés seulement.
+  Recherche par tags, similarité, rerank, aperçus visuels et routes de test
+  retirés du contrôleur ; le service ne dépend plus du catalogue KF Swift.
+- Pod : `DocumentSearchAdapter` et `knowledge.search` appellent KF avec l'espace
+  du tour, refusent pièces jointes et sélections, gardent `check_context`.
+  Retour à `426bb9813` pour `context.py`, `config.py`, `runtime_context.py`,
+  `table_hits.py`, `pyproject`, `uv.lock` et schémas ; contexte de logs canonique
+  conservé. Librairie : `search.py`, `opensearch_queries.py`, `table_hits.py`,
+  `document_tree.py` et leurs tests supprimés ; README raccourci.
+- k3d : KF API réactivée (sans migration KF), index `document-vectors`, identité
+  OpenSearch `fred-kf-api` (lecture corpus, écriture logs/KPI) à la place de celle
+  du pod ; la préparation vérifie que l'API et le worker partagent l'index.
+- Tests : KF `test_vector_search_service.py`, `test_document_chunks_authz.py` et
+  `test_retired_mcp_routes.py` supprimés (comportement Swift retiré), un test
+  Prometheus de montage MCP retiré ; runtime : tests de plafond et de réparation
+  de tableaux réécrits sur le client KF, tests de liaison de bibliothèques de
+  `knowledge.search` retirés. Aucun test exécuté.
+- Contrôles : `make code-quality` réussi dans knowledge-flow-backend, fred-core,
+  fred-runtime (5 avertissements préexistants) et la librairie `document_access`.
+  Client frontend KF non régénéré (lot K3). Aucun commit ni déploiement.
+- Arc42 (01 §1.5, 03 §3.6, A6) décrit encore la recherche dans le pod : mise à
+  jour après validation de Dimi.

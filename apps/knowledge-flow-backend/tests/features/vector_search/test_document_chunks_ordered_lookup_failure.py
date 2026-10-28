@@ -25,6 +25,8 @@ the behavior stays intentional rather than an untested side effect.
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 import pytest
 from fred_core import KeycloakUser
 
@@ -46,4 +48,4 @@ async def test_get_document_chunks_ordered_propagates_a_lookup_failure() -> None
     service.vector_store = _FailingChunkStore()
 
     with pytest.raises(RuntimeError):
-        await service.get_document_chunks_ordered(user=_user(), document_uid="doc-1", limit=200)
+        await service.get_document_chunks_ordered(user=_user(), document_uid="doc-1", space_id=uuid4(), limit=200)

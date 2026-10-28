@@ -13,8 +13,7 @@
     "../fred-pod",
     "../fred-core",
     "../fred-sdk",
-    "../capabilities/fred-capability-web-research",
-    "../capabilities/fred-capability-document-access"
+    "../capabilities/fred-capability-web-research"
   ],
   "executionEnvironments": [
     {
@@ -23,8 +22,7 @@
         "../fred-pod",
         "../fred-core",
         "../fred-sdk",
-        "../capabilities/fred-capability-web-research",
-        "../capabilities/fred-capability-document-access"
+        "../capabilities/fred-capability-web-research"
       ]
     }
   ]

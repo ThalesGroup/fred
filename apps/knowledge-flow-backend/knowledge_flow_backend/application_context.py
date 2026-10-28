@@ -30,7 +30,6 @@ from fred_core import (
     build_log_store,
     get_embeddings,
     get_model,
-    rebac_factory,
     split_realm_url,
 )
 from fred_core.common import DuckdbStoreConfig, LogStoreConfig, ModelConfiguration, OpenSearchIndexConfig, PostgresTableConfig
@@ -38,6 +37,9 @@ from fred_core.documents import BaseDocumentMetadataStore as BaseMetadataStore
 from fred_core.documents import PostgresDocumentMetadataStore as PostgresMetadataStore
 from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIWriter, build_kpi_writer
 from fred_core.scheduler import SchedulerBackend, resolve_scheduler_backend
+from fred_core.security.rebac.authorization_binding import read_authorization_binding
+from fred_core.security.rebac.authorization_model import validate_authorization_binding
+from fred_core.security.rebac.published_engine import PublishedOpenFgaRebacEngine
 from fred_core.sql import create_async_engine_from_config
 from fred_core.users.store.postgres_user_store import init_user_store
 from langchain_core.embeddings import Embeddings
@@ -912,10 +914,24 @@ class ApplicationContext:
         )
         return self._kpi_writer
 
+    async def open_published_rebac_engine(self) -> None:
+        """Check permissions against the model Control Plane published, read-only.
+
+        Same startup as Weaver agent pods: no store creation, model write or tuple.
+        """
+        rebac_config = self.configuration.security.rebac
+        if not isinstance(rebac_config, OpenFgaRebacConfig):
+            raise ValueError("Weaver Knowledge Flow requires OpenFGA")
+        sql_engine = self.get_pg_async_engine()
+        binding = await read_authorization_binding(sql_engine, expected_configured_store=rebac_config.store_name)
+        await validate_authorization_binding(binding, rebac_config)
+        engine = PublishedOpenFgaRebacEngine(rebac_config, binding, kpi_writer=self.get_kpi_writer())
+        await engine.get_client()
+        self._rebac_engine = engine
+
     def get_rebac_engine(self) -> RebacEngine:
         if self._rebac_engine is None:
-            self._rebac_engine = rebac_factory(self.configuration.security, kpi_writer=self.get_kpi_writer())
-
+            raise RuntimeError("The published authorization engine is opened at API startup")
         return self._rebac_engine
 
     def get_kpi_store(self) -> BaseKPIStore:

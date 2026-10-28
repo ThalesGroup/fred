@@ -36,6 +36,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from fred_sdk.support.builtins.catalog import TOOL_REF_KNOWLEDGE_SEARCH
+from weaver_fixtures import SPACE_ID, active_turn
 
 HEADER = "| name | default |\n| --- | --- |"
 NO_LEADING_PIPE = "name | default\n--- | ---"
@@ -202,13 +203,15 @@ async def _invoke(monkeypatch: pytest.MonkeyPatch, client_cls) -> Any:
     invoker = adapters_module.FredKnowledgeSearchToolInvoker(
         binding=binding, settings=_FakeSettings()
     )
-    return await invoker.invoke(
-        ToolInvocationRequest(
-            tool_ref=TOOL_REF_KNOWLEDGE_SEARCH,
-            payload={"query": "what is the default of b?", "top_k": 2},
-            context=binding.portable_context,
+    with active_turn("agent-1") as turn:
+        assert str(turn.binding.space.id) == SPACE_ID
+        return await invoker.invoke(
+            ToolInvocationRequest(
+                tool_ref=TOOL_REF_KNOWLEDGE_SEARCH,
+                payload={"query": "what is the default of b?", "top_k": 2},
+                context=binding.portable_context,
+            )
         )
-    )
 
 
 @pytest.mark.asyncio
@@ -229,7 +232,11 @@ async def test_truncated_table_is_refetched_whole_with_a_bounded_limit(
     result = await _invoke(monkeypatch, client_cls)
 
     assert calls == [
-        {"document_uid": "d1", "limit": table_hits.TABLE_EXPANSION_MAX_CHUNKS}
+        {
+            "document_uid": "d1",
+            "space_id": SPACE_ID,
+            "limit": table_hits.TABLE_EXPANSION_MAX_CHUNKS,
+        }
     ]
     contents = [hit["content"] for hit in result.blocks[0].data["hits"]]
     assert contents == [f"{HEADER}\n| a | 0 |", "| b | 1 |", "| c | 2 |"]

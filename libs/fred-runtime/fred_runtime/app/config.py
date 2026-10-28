@@ -72,8 +72,6 @@ if TYPE_CHECKING:
 
 from fred_core.common import (
     KpiObservabilityConfig,
-    ModelConfiguration,
-    OpenSearchIndexConfig,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
     TemporalSchedulerConfig,
@@ -193,8 +191,6 @@ class PodAIConfig(BaseModel):
     - `PodAIConfig(knowledge_flow_url="http://localhost:8111/knowledge-flow/v1", timeout=RuntimeTimeouts(connect=20, read=60))`
     """
 
-    embedding_model: ModelConfiguration | None = None
-    document_vector_store: OpenSearchIndexConfig | None = None
     knowledge_flow_url: str = "http://localhost:8111/knowledge-flow/v1"
     timeout: RuntimeTimeouts = Field(
         default_factory=RuntimeTimeouts,

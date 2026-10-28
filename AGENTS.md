@@ -84,9 +84,9 @@ Control Plane governs.
 | Component | Target role | On `weaver` today |
 | --- | --- | --- |
 | Control Plane (`apps/control-plane`, Rust) | Identity and admission, OpenFGA permissions, organizations, teams, spaces, users, document drive, ingestion through Temporal, agent instances | Replaces the deleted Python `apps/control-plane-backend`; covers part of the product. Unported screens still call `slices/legacyControlPlane` and fail. |
-| Agent pod (`apps/fred-agents`, `libs/fred-runtime`, `fred-sdk`, capability libraries) | Runs agents; reaches knowledge only through capabilities, which call Knowledge Flow API | Custom assistant wired. `document_access` search temporarily runs locally in the pod (to be returned to Knowledge Flow API); other capabilities call Knowledge Flow over HTTP and are not yet adapted (see capability lots below). |
+| Agent pod (`apps/fred-agents`, `libs/fred-runtime`, `fred-sdk`, capability libraries) | Runs agents; reaches knowledge only through capabilities, which call Knowledge Flow API | Custom assistant wired. `document_access` search calls Knowledge Flow API with the turn's space; other capabilities call Knowledge Flow endpoints not yet adapted or mounted (see capability lots below). |
 | Knowledge Flow worker (`main_worker.py`) | Temporal worker for document processing | Native ingestion path being finished. |
-| Knowledge Flow API (`main.py`) | Serves knowledge to capabilities (search, markdown, tree, content, files, tabular) under the space-based model | Endpoints still use the Swift catalog and per-document ReBAC; adaptation to Weaver documents and space permissions is the capability lots' work. |
+| Knowledge Flow API (`main.py`) | Serves knowledge to capabilities (search, markdown, tree, content, files, tabular) under the space-based model | Capability backend only: Weaver startup, delegated calls only, mounts vector search and document chunks. Other endpoints are adapted and mounted by their capability lots; the Swift UI controllers are deleted in K3. |
 | Frontend | Same business UI, rebound to the Control Plane | Partially rebound. |
 
 Keep the two columns apart in every audit, review, plan and report:

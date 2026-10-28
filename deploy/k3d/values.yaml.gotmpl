@@ -39,9 +39,6 @@ applications:
           api_root: https://api.mistral.ai/v1
           credential_binding: mistral
           api_key_env: OPENAI_API_KEY
-      storage:
-        opensearch:
-          username: fred-agents
       app:
         gcu_version: v1
       security:
@@ -187,8 +184,17 @@ applications:
     enabled: false
 
   knowledge-flow-backend:
-    enabled: false
+    # The capability backend: agent pods call it for a person, in an admitted turn.
+    # It reads Control Plane tables and the published OpenFGA model; no KF migration.
     migration: {enabled: false}
+    configuration:
+      storage:
+        opensearch:
+          username: fred-kf-api
+        vector_store:
+          type: opensearch
+          # Must equal the worker's manager_processing.vector_store.index.
+          index: document-vectors
 
   knowledge-flow-worker:
     # This worker has no SQL, OpenFGA or legacy KF service credentials.

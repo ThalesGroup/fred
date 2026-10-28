@@ -23,12 +23,10 @@ from fastapi.testclient import TestClient
 from fred_core import BaseUserStore, UserRow, get_config
 from fred_core.users.store.postgres_user_store import get_user_store
 
-from knowledge_flow_backend import main as main_module
 from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
 from knowledge_flow_backend.common.structures import IntegrationsConfig, PrometheusConfig
 from knowledge_flow_backend.features.kpi import prometheus_controller as prom_controller_module
 from knowledge_flow_backend.features.kpi.prometheus_controller import PrometheusOpsController
-from knowledge_flow_backend.main import create_app
 
 fake_user = UserRow(id=uuid4(), gcuVersionAccepted=None, gcuAcceptedAt=datetime.now())
 
@@ -214,46 +212,3 @@ def test_prometheus_metrics_catalog_forwards_limit_and_search(
         {"name": "process_start_time_seconds", "type": "gauge"},
     ]
     assert observed == {"limit": 10, "search": "time"}
-
-
-def test_create_app_mounts_prometheus_mcp_when_enabled(
-    app_context: ApplicationContext,
-    monkeypatch,
-) -> None:
-    config = app_context.configuration.model_copy(deep=True)
-    config.integrations = IntegrationsConfig(
-        prometheus=PrometheusConfig(
-            base_url="http://prometheus:9090",
-            verify_ssl=False,
-            timeout_seconds=10.0,
-        )
-    )
-    config.mcp = config.mcp.model_copy(update={"prometheus_ops_enabled": True})
-
-    monkeypatch.setattr("knowledge_flow_backend.main.load_configuration", lambda: config)
-    monkeypatch.setattr(main_module, "start_http_server", lambda *args, **kwargs: None)
-    for attr_name in [
-        "MonitoringController",
-        "TasksController",
-        "MetadataController",
-        "ContentController",
-        "IngestionController",
-        "LibrarySyncController",
-        "TagController",
-        "VectorSearchController",
-        "CorpusTreeController",
-        "SummarizeController",
-        "ExtractController",
-        "ResourceController",
-        "McpFilesystemController",
-        "TabularController",
-        "SchedulerController",
-    ]:
-        monkeypatch.setattr(main_module, attr_name, lambda *args, **kwargs: None)
-    ApplicationContext.reset_instance()
-
-    app = create_app()
-
-    assert any(getattr(route, "path", "").startswith(f"{config.app.base_url}/mcp-prometheus-ops") for route in app.routes)
-
-    ApplicationContext.reset_instance()

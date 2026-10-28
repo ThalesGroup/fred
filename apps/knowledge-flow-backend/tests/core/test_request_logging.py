@@ -139,7 +139,7 @@ async def _served_records(
     # Controllers need live stores; one probe route on the application router stands in for them.
     for name in [name for name in vars(main_module) if name.endswith("Controller")]:
         monkeypatch.setattr(main_module, name, lambda *args, **kwargs: None)
-    monkeypatch.setattr(main_module, "TasksController", lambda router: _register_probe(router, failure=failure))
+    monkeypatch.setattr(main_module, "VectorSearchController", lambda router: _register_probe(router, failure=failure))
     sink = _Sink()
     with preserved_delegation(), _restored_logging():
         # Production order: uvicorn configures its loggers, then the factory runs log_setup.

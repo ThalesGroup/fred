@@ -943,9 +943,10 @@ def _build_runtime_services(
     )
     document_search = DocumentSearchAdapter(
         binding=binding,
-        corpus=runtime_config.document_search,
+        settings=settings,
+        credentials=credential_provider,
     )
-    # No local tree port is wired yet; document_access omits its tree tool.
+    # The tree tool waits for its Knowledge Flow endpoint; document_access omits it.
     document_summarize = DocumentSummarizeAdapter(
         binding=binding,
         settings=settings,
@@ -6260,7 +6261,6 @@ def create_agent_app(
             await container.initialize_filesystem()
             await container.initialize_web_research()
             container.initialize_platform_sql()
-            container.initialize_document_search()
             container.start_metrics_exporter()
             await container.start_kpi_tasks()
             checkpointer = container.get_checkpointer()
@@ -6307,7 +6307,6 @@ def create_agent_app(
                         ),
                         kpi_writer=container.get_kpi_writer(),
                         platform_sql=container.get_platform_sql(),
-                        document_search=container.document_search,
                         web_research_factory=(
                             container.web_research.bind
                             if container.web_research

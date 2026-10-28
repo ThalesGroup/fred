@@ -20,7 +20,6 @@ import random
 from typing import Any, Dict, List, Optional, Sequence
 
 import httpx
-from fred_core.common import OwnerFilter
 from fred_core.store.vector_search import VectorSearchHit
 from pydantic import TypeAdapter
 
@@ -96,60 +95,28 @@ class VectorSearchClient(KfBaseClient):
         self,
         *,
         question: str,
+        space_id: str,
         top_k: int = 10,
-        document_library_tags_ids: Optional[Sequence[str]] = None,
-        document_uids: Optional[Sequence[str]] = None,
         search_policy: Optional[str] = None,
-        owner_filter: Optional[OwnerFilter] = None,
-        team_id: Optional[str] = None,
-        session_id: Optional[str] = None,
-        include_session_scope: bool = True,
-        include_corpus_scope: bool = True,
     ) -> List[VectorSearchHit]:
+        """Corpus search in the turn's Weaver space and its ancestors.
+
+        Wire format (matches controller): POST /vector/search with
+        {"question", "top_k", "search_policy"?, "space_id"}. Knowledge Flow refuses
+        any other field, so a library or session selection can never widen silently.
         """
-        Perform a vector search against the Knowledge Flow backend. This method
-        requires an access_token for user-authenticated requests. It will trigger
-        token refresh via the provided agent callback if the token is expired.
-        Wire format (matches controller):
-          POST /vector/search
-          {
-            "question": str,
-            "top_k": int,
-            "library_tags_ids": [str]?,
-            "document_uids": [str]?,
-            "search_policy": str?,
-            "owner_filter": str?,
-            "team_id": str?,
-            "session_id": str?,
-            "include_session_scope": bool,
-            "include_corpus_scope": bool
-          }
-        """
-        payload: Dict[str, Any] = {"question": question, "top_k": top_k}
-        if document_library_tags_ids:
-            payload["document_library_tags_ids"] = list(document_library_tags_ids)
-        if document_uids:
-            payload["document_uids"] = list(document_uids)
+        payload: Dict[str, Any] = {
+            "question": question,
+            "top_k": top_k,
+            "space_id": space_id,
+        }
         if search_policy:
             payload["search_policy"] = search_policy
-        if owner_filter:
-            payload["owner_filter"] = owner_filter.value
-        if team_id:
-            payload["team_id"] = team_id
-        if session_id:
-            payload["session_id"] = session_id
-            payload["include_session_scope"] = include_session_scope
-        payload["include_corpus_scope"] = include_corpus_scope
         logger.info(
-            "[VECTOR][CLIENT] team_id=%s session_id=%s include_session_scope=%s include_corpus_scope=%s top_k=%d search_policy=%s document_library_tags_ids=%s document_uids=%s",
-            team_id,
-            session_id,
-            include_session_scope,
-            include_corpus_scope,
+            "[VECTOR][CLIENT] space_id=%s top_k=%d search_policy=%s",
+            space_id,
             top_k,
             search_policy,
-            payload.get("document_library_tags_ids"),
-            payload.get("document_uids"),
         )
 
         # Use the base class's request method, passing the required access_token.
@@ -174,6 +141,7 @@ class VectorSearchClient(KfBaseClient):
         self,
         *,
         document_uid: str,
+        space_id: str,
         limit: int,
     ) -> List[VectorSearchHit]:
         """Fetch a document's chunks in chunk_index order, capped at `limit`.
@@ -185,7 +153,7 @@ class VectorSearchClient(KfBaseClient):
             method="GET",
             path="/vector/document-chunks",
             phase_name="kf_vector_document_chunks",
-            params={"document_uid": document_uid, "limit": limit},
+            params={"document_uid": document_uid, "space_id": space_id, "limit": limit},
         )
         r.raise_for_status()
 

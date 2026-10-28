@@ -581,7 +581,7 @@ async def test_min_source_score_ratio_is_configurable_per_instance() -> None:
 
 @pytest.mark.asyncio
 async def test_search_failure_is_an_error_artifact() -> None:
-    port = _FakePort(error=DocumentPortCallError("Weaver corpus search failed"))
+    port = _FakePort(error=DocumentPortCallError("search failed"))
     cap = DocumentAccessCapability()
     ctx = build_capability_context(
         cap,
@@ -591,7 +591,7 @@ async def test_search_failure_is_an_error_artifact() -> None:
     )
     message = await _invoke_tool(cap, ctx)
     assert message.artifact.is_error is True
-    assert "document corpus" in message.content
+    assert "Knowledge Flow" in message.content
     assert message.artifact.sources == ()
 
 
@@ -689,9 +689,12 @@ def test_rag_scope_offers_document_only_with_attachments(default: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_adapter_keeps_binding_and_token_private() -> None:
+def test_adapter_keeps_binding_and_token_private(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(adapters_module, "VectorSearchClient", lambda **_kw: object())
     binding = _binding(access_token="secret-token")  # nosec B106 - test fixture
-    adapter = DocumentSearchAdapter(binding=binding, corpus=None)
+    adapter = DocumentSearchAdapter(binding=binding, settings=_settings())
 
     # No PUBLIC attribute exposes the binding/token/client — all private.
     public = [name for name in vars(adapter) if not name.startswith("_")]

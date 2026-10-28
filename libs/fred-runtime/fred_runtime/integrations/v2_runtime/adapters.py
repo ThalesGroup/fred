@@ -42,10 +42,8 @@ from contextlib import contextmanager
 from functools import partial
 from typing import Any, Protocol, TypedDict, cast
 from urllib.parse import quote
-from uuid import uuid4
 
 import httpx
-from fred_capability_document_access.search import CorpusSearch
 from fred_core.common import OwnerFilter
 from fred_core.common.fastapi_handlers import (
     ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
@@ -54,7 +52,6 @@ from fred_core.common.fastapi_handlers import (
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
-from fred_core.logs.context import operation_log_scope
 from fred_core.logs.propagation import outbound_context_headers
 from fred_core.portable import LoggingTracer, MetricsProvider, Tracer, get_tracer
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
@@ -981,28 +978,28 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         if _matches_nothing(library_ids, document_uids):
             return _no_hits("None of the selected libraries is bound to this agent.")
 
-        include_session_scope, include_corpus_scope = get_vector_search_scopes(
-            runtime_context
-        )
-        hits = await self._search_client.search(
-            question=query,
-            top_k=top_k,
-            document_library_tags_ids=library_ids,
-            document_uids=document_uids,
-            search_policy=get_search_policy(runtime_context),
-            owner_filter=OwnerFilter.TEAM
-            if self._settings.team_id
-            and not is_personal_team_id(self._settings.team_id)
-            else OwnerFilter.PERSONAL,
-            team_id=self._settings.team_id
-            if not is_personal_team_id(self._settings.team_id)
-            else None,
-            session_id=runtime_context.session_id,
-            include_session_scope=include_session_scope,
-            include_corpus_scope=include_corpus_scope,
-        )
+        _, include_corpus_scope = get_vector_search_scopes(runtime_context)
+        if library_ids or document_uids:
+            raise RuntimeError(
+                "Library and document selections are not available on Weaver"
+            )
+        if not include_corpus_scope:
+            return _no_hits("Corpus retrieval is disabled for this turn.")
+        space_id = str(current_turn().binding.space.id)
+        client = self._search_client
 
-        hits = await repair_table_hits(hits, self._search_client.get_document_chunks)
+        async def chunks(*, document_uid: str, limit: int) -> list[VectorSearchHit]:
+            return await client.get_document_chunks(
+                document_uid=document_uid, space_id=space_id, limit=limit
+            )
+
+        hits = await client.search(
+            question=query,
+            space_id=space_id,
+            top_k=top_k,
+            search_policy=get_search_policy(runtime_context),
+        )
+        hits = await repair_table_hits(hits, chunks)
 
         # Only expose the fields the LLM needs for citation and reasoning.
         # URL and operational fields are excluded to prevent the model from
@@ -1393,19 +1390,33 @@ def _ensure_uid_in_turn_scope(
 
 
 class DocumentSearchAdapter(DocumentSearchPort):
-    """Bind corpus access to the canonical authority and local lifetime of this turn."""
+    """Corpus search through Knowledge Flow, in the space of the admitted turn.
+
+    The binding and token stay private (`_VectorSearchAgentShim`); the capability
+    passes scope parameters, never identity. Knowledge Flow checks the person's
+    read on that space and returns published documents only.
+    """
 
     def __init__(
         self,
         *,
         binding: BoundRuntimeContext,
-        corpus: CorpusSearch | None,
+        settings: AgentSettingsLike,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
-        self._binding = binding
-        self._corpus = corpus
+        self._credentials = credentials
+        self._settings = settings
+        self.rebind(binding)
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
         self._binding = binding
+        self._search_client = VectorSearchClient(
+            agent=_VectorSearchAgentShim(
+                binding=binding,
+                settings=self._settings,
+                credentials=self._credentials,
+            )
+        )
 
     async def search(
         self,
@@ -1418,118 +1429,49 @@ class DocumentSearchAdapter(DocumentSearchPort):
         include_attachments: bool = True,
         include_team_documents: bool = True,
     ) -> DocumentSearchResult:
-        with operation_log_scope(completion=False, search_id=uuid4().hex):
-            authority = current_turn()
-            context = self._binding.runtime_context
-            authority.check_context(context, authority.binding.agent.template_key)
-            logger.info(
-                "[VECTOR][ADAPTER] started",
-                extra={
-                    "event_name": "vector_adapter_started",
-                    "space_id": str(authority.binding.space.id),
-                    "top_k": top_k,
-                    "include_attachments": include_attachments,
-                    "include_team_documents": include_team_documents,
-                },
+        authority = current_turn()
+        runtime_context = self._binding.runtime_context
+        authority.check_context(runtime_context, authority.binding.agent.template_key)
+        if get_rag_knowledge_scope(runtime_context) == "general_only":
+            return DocumentSearchResult(hits=())
+        turn_session, turn_corpus = get_vector_search_scopes(runtime_context)
+        if turn_session and include_attachments:
+            raise DocumentScopeRefusedError(
+                "Chat attachments are not available on Weaver"
             )
-            if get_rag_knowledge_scope(context) == "general_only":
-                logger.info(
-                    "[VECTOR][ADAPTER] skipped",
-                    extra={
-                        "event_name": "vector_search_skipped",
-                        "reason": "general_only",
-                        "outcome": "skipped",
-                    },
-                )
-                return DocumentSearchResult(hits=())
-            _, turn_corpus = get_vector_search_scopes(context)
-            if not (turn_corpus and include_team_documents):
-                logger.info(
-                    "[VECTOR][ADAPTER] skipped",
-                    extra={
-                        "event_name": "vector_search_skipped",
-                        "reason": "corpus_disabled",
-                        "outcome": "skipped",
-                    },
-                )
-                return DocumentSearchResult(hits=())
-            if include_attachments:
-                logger.warning(
-                    "[VECTOR][ADAPTER] refused",
-                    extra={
-                        "event_name": "vector_search_refused",
-                        "outcome": "refused",
-                        "reason": "attachments_unsupported",
-                    },
-                )
-                raise DocumentScopeRefusedError(
-                    "Corpus search does not support attachments"
-                )
-            # Swift tag/document selections cannot be silently interpreted as all corpus.
-            if (
-                library_tag_ids
-                or document_uids
-                or get_document_library_tags_ids(context)
-                or get_document_uids(context)
-            ):
-                logger.warning(
-                    "[VECTOR][ADAPTER] refused",
-                    extra={
-                        "event_name": "vector_search_refused",
-                        "outcome": "refused",
-                        "reason": "selections_unsupported",
-                    },
-                )
-                raise DocumentScopeRefusedError(
-                    "Library and document selections are not supported by Weaver corpus search"
-                )
-            if _matches_nothing(library_tag_ids, document_uids):
-                logger.info(
-                    "[VECTOR][ADAPTER] skipped",
-                    extra={
-                        "event_name": "vector_search_skipped",
-                        "reason": "empty_selection",
-                        "outcome": "skipped",
-                    },
-                )
-                return DocumentSearchResult(hits=())
-            if self._corpus is None:
-                logger.warning(
-                    "[VECTOR][ADAPTER] refused",
-                    extra={
-                        "event_name": "vector_search_refused",
-                        "outcome": "refused",
-                        "reason": "corpus_not_configured",
-                    },
-                )
-                raise DocumentPortCallError("Weaver corpus search is not configured")
-            try:
-                result = await self._corpus.search(
-                    query,
-                    space_id=authority.binding.space.id,
-                    top_k=top_k if isinstance(top_k, int) and top_k > 0 else 8,
-                    policy=search_policy or get_search_policy(context),
-                    check_active=authority.check,
-                )
-            except Exception as exc:
-                run_stop = unwrap_run_stop_error(exc)
-                if run_stop is not None:
-                    raise run_stop from None
-                logger.error(
-                    "[VECTOR][ADAPTER] failed",
-                    extra={
-                        "event_name": "vector_adapter_failed",
-                        "error_type": type(exc).__name__,
-                        "timed_out": isinstance(exc, TimeoutError),
-                        "outcome": "failed",
-                    },
-                )
-                raise DocumentPortCallError(
-                    "Weaver corpus search failed",
-                    timed_out=isinstance(exc, TimeoutError),
-                ) from exc
-            authority.check()
-            return result
+        if not (turn_corpus and include_team_documents):
+            return DocumentSearchResult(hits=())
+        # Swift library/document selections must not be read as the whole corpus.
+        if (
+            library_tag_ids
+            or document_uids
+            or get_document_library_tags_ids(runtime_context)
+            or get_document_uids(runtime_context)
+        ):
+            raise DocumentScopeRefusedError(
+                "Library and document selections are not available on Weaver"
+            )
+        if _matches_nothing(library_tag_ids, document_uids):
+            return DocumentSearchResult(hits=())
+        space_id = str(authority.binding.space.id)
+        client = self._search_client
+
+        async def chunks(*, document_uid: str, limit: int) -> list[VectorSearchHit]:
+            return await client.get_document_chunks(
+                document_uid=document_uid, space_id=space_id, limit=limit
+            )
+
+        try:
+            hits = await client.search(
+                question=query,
+                space_id=space_id,
+                top_k=top_k if isinstance(top_k, int) and top_k > 0 else 8,
+                search_policy=search_policy or get_search_policy(runtime_context),
+            )
+        except Exception as exc:
+            raise _wrap_document_port_error(exc) from exc
+        hits = await repair_table_hits(list(hits), chunks)
+        return DocumentSearchResult(hits=tuple(hits))
 
 
 class DocumentSimilarityAdapter(DocumentSimilarityPort):

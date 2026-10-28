@@ -1,14 +1,15 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
-"""Corpus access uses canonical turn authority and refuses unsupported sources."""
+"""Corpus search sends the turn's space to Knowledge Flow and refuses unsupported sources."""
 
 from __future__ import annotations
 
-from typing import Any, cast
+from collections.abc import Sequence
+from typing import Any
 
+import httpx
 import pytest
-from fred_capability_document_access.search import CorpusSearch
-from fred_runtime.integrations.v2_runtime.adapters import DocumentSearchAdapter
+from fred_runtime.integrations.v2_runtime import adapters as adapters_module
 from fred_runtime.model_routing.turn import TurnAuthority
 from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_runtime.runtime_support.run_scope import RunScope
@@ -18,30 +19,34 @@ from fred_sdk.contracts.context import (
     PortableEnvironment,
     RuntimeContext,
 )
-from fred_sdk.contracts.runtime import (
-    DocumentPortCallError,
-    DocumentScopeRefusedError,
-    DocumentSearchResult,
-)
+from fred_sdk.contracts.models import AgentTuning, MCPServerRef
+from fred_sdk.contracts.runtime import DocumentPortCallError, DocumentScopeRefusedError
 from weaver_fixtures import resolved_binding
 
 
-class _Corpus:
+class _Settings:
+    id: str = "agent-1"
+    team_id: str | None = None
+    tuning: AgentTuning | None = None
+    active_mcp_servers: Sequence[MCPServerRef] = ()
+
+
+class _Client:
     def __init__(self, error: Exception | None = None) -> None:
         self.calls: list[dict[str, Any]] = []
         self.error = error
 
-    async def search(self, query: str, **kwargs: Any) -> DocumentSearchResult:
+    async def search(self, **kwargs: Any) -> list[Any]:
         self.calls.append(kwargs)
-        kwargs["check_active"]()
         if self.error:
             raise self.error
-        return DocumentSearchResult()
+        return []
 
 
 def _adapter(
-    corpus: _Corpus | None, **fields: Any
-) -> tuple[DocumentSearchAdapter, TurnAuthority]:
+    client: _Client, monkeypatch: pytest.MonkeyPatch, **fields: Any
+) -> tuple[adapters_module.DocumentSearchAdapter, TurnAuthority]:
+    monkeypatch.setattr(adapters_module, "VectorSearchClient", lambda **_kw: client)
     binding = resolved_binding()
     authority = TurnAuthority(binding, None)
     context = RuntimeContext(
@@ -61,8 +66,8 @@ def _adapter(
             environment=PortableEnvironment.DEV,
         ),
     )
-    return DocumentSearchAdapter(
-        binding=bound, corpus=cast(CorpusSearch | None, corpus)
+    return adapters_module.DocumentSearchAdapter(
+        binding=bound, settings=_Settings()
     ), authority
 
 
@@ -70,10 +75,10 @@ def _adapter(
 @pytest.mark.parametrize("rag_scope", ["hybrid", "corpus_only", "general_only"])
 @pytest.mark.parametrize("corpus_enabled", [True, False])
 async def test_sources_bound_the_turn_scope(
-    rag_scope: str, corpus_enabled: bool
+    rag_scope: str, corpus_enabled: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    corpus = _Corpus()
-    adapter, authority = _adapter(corpus, search_rag_scope=rag_scope)
+    client = _Client()
+    adapter, authority = _adapter(client, monkeypatch, search_rag_scope=rag_scope)
     with RunScope.open() as scope:
         scope.turn_authority = authority
         authority.start(scope)
@@ -82,25 +87,9 @@ async def test_sources_bound_the_turn_scope(
         )
     assert result.hits == ()
     if rag_scope == "general_only" or not corpus_enabled:
-        assert corpus.calls == []
+        assert client.calls == []
     else:
-        assert corpus.calls[0]["space_id"] == authority.binding.space.id
-
-
-@pytest.mark.asyncio
-async def test_general_only_overrides_explicit_corpus_scope() -> None:
-    corpus = _Corpus()
-    adapter, authority = _adapter(
-        corpus, search_rag_scope="general_only", include_corpus_scope=True
-    )
-    with RunScope.open() as scope:
-        scope.turn_authority = authority
-        authority.start(scope)
-        result = await adapter.search(
-            "q", include_team_documents=True, include_attachments=False
-        )
-    assert result.hits == ()
-    assert corpus.calls == []
+        assert client.calls[0]["space_id"] == str(authority.binding.space.id)
 
 
 @pytest.mark.asyncio
@@ -112,34 +101,38 @@ async def test_general_only_overrides_explicit_corpus_scope() -> None:
         {"document_uids": ["document"]},
     ],
 )
-async def test_unsupported_scope_is_refused(restriction: dict[str, Any]) -> None:
-    corpus = _Corpus()
-    adapter, authority = _adapter(corpus)
+async def test_unsupported_scope_is_refused(
+    restriction: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = _Client()
+    adapter, authority = _adapter(client, monkeypatch)
     with RunScope.open() as scope:
         scope.turn_authority = authority
         authority.start(scope)
         with pytest.raises(DocumentScopeRefusedError):
             await adapter.search("q", **{"include_attachments": False, **restriction})
-    assert corpus.calls == []
+    assert client.calls == []
 
 
 @pytest.mark.asyncio
-async def test_empty_scope_does_not_read_corpus() -> None:
-    corpus = _Corpus()
-    adapter, authority = _adapter(corpus)
+async def test_empty_scope_does_not_search(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _Client()
+    adapter, authority = _adapter(client, monkeypatch)
     with RunScope.open() as scope:
         scope.turn_authority = authority
         authority.start(scope)
         assert (
             await adapter.search("q", include_attachments=False, document_uids=[])
         ).hits == ()
-    assert corpus.calls == []
+    assert client.calls == []
 
 
 @pytest.mark.asyncio
-async def test_closed_or_missing_turn_cannot_read_corpus() -> None:
-    corpus = _Corpus()
-    adapter, authority = _adapter(corpus)
+async def test_closed_or_missing_turn_cannot_search(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _Client()
+    adapter, authority = _adapter(client, monkeypatch)
     with pytest.raises(AuthorityLostError):
         await adapter.search("q", include_attachments=False)
     with RunScope.open() as scope:
@@ -148,16 +141,15 @@ async def test_closed_or_missing_turn_cannot_read_corpus() -> None:
         authority.close()
         with pytest.raises(AuthorityLostError):
             await adapter.search("q", include_attachments=False)
-    assert corpus.calls == []
+    assert client.calls == []
 
 
 @pytest.mark.asyncio
-async def test_failure_is_not_an_empty_result() -> None:
-    adapter, authority = _adapter(_Corpus(TimeoutError("private transport details")))
+async def test_failure_is_not_an_empty_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    adapter, authority = _adapter(_Client(httpx.ReadTimeout("timed out")), monkeypatch)
     with RunScope.open() as scope:
         scope.turn_authority = authority
         authority.start(scope)
         with pytest.raises(DocumentPortCallError) as exc:
             await adapter.search("q", include_attachments=False)
     assert exc.value.timed_out
-    assert "private transport" not in str(exc.value)

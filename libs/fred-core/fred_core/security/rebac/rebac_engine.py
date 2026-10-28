@@ -340,6 +340,12 @@ class KnowledgeBaseDefinitionPermission(str, Enum):
     CAN_MANAGE = "can_manage"
 
 
+class SpacePermission(str, Enum):
+    """Weaver space permissions, as named in the published Control Plane model."""
+
+    CAN_READ = "can_read"
+
+
 RebacPermission = (
     TagPermission
     | DocumentPermission
@@ -350,6 +356,7 @@ RebacPermission = (
     | CapabilityPermission
     | AppPermission
     | KnowledgeBaseDefinitionPermission
+    | SpacePermission
 )
 
 
@@ -378,6 +385,8 @@ def _resource_for_permission(permission: RebacPermission) -> Resource:
         return Resource.APP
     if isinstance(permission, KnowledgeBaseDefinitionPermission):
         return Resource.KNOWLEDGE_BASE_DEFINITION
+    if isinstance(permission, SpacePermission):
+        return Resource.SPACE
     raise ValueError(f"Unsupported permission type: {permission!r}")
 
 

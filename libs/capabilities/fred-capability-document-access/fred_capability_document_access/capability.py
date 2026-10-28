@@ -25,7 +25,7 @@ What this capability ships (and deliberately does NOT):
 - `search_documents_using_vectorization`, the vector-search tool, wired live
   through `ctx.services.document_search`
 - `list_document_tree`: exposed only when `ctx.services.document_tree` exists.
-  Weaver corpus search does not supply that port. Failures surface as
+  The Weaver pod does not supply it yet. Failures surface as
   `is_error` tool results with actionable detail (timeout/HTTP status), never
   raised exceptions.
 - NOT `summarize_document` — that tool is its own capability,
@@ -146,7 +146,6 @@ def _document_tool_failure(
     exc: Exception,
     elapsed_s: float,
     document_uid: str | None = None,
-    service: str = _KF_SERVICE,
 ) -> tuple[str, ToolInvocationResult]:
     """Turn any document tool-call failure into a non-empty, actionable error
     message plus an ``is_error=True`` artifact.
@@ -194,11 +193,11 @@ def _document_tool_failure(
     structured = timed_out or status_code is not None
 
     if timed_out:
-        cause = f"the {service} service timed out after {elapsed_s:.0f}s"
+        cause = f"the {_KF_SERVICE} service timed out after {elapsed_s:.0f}s"
     elif status_code is not None:
-        cause = f"the {service} service returned HTTP {status_code}"
+        cause = f"the {_KF_SERVICE} service returned HTTP {status_code}"
     else:
-        cause = f"the {service} service call failed after {elapsed_s:.0f}s"
+        cause = f"the {_KF_SERVICE} service call failed after {elapsed_s:.0f}s"
 
     target = f" (document_uid={document_uid})" if document_uid else ""
     if structured:
@@ -495,7 +494,7 @@ class DocumentAccessCapability(
         uploads: Mapping[str, list[UploadedFile]],
         ctx: SaveContext,
     ) -> DocumentAccessConfig:
-        """Refuse sources and scopes the Weaver document ports cannot serve yet."""
+        """Refuse sources and scopes Knowledge Flow does not serve on Weaver yet."""
 
         del uploads, ctx
         if config.attachments:
@@ -689,7 +688,6 @@ class DocumentAccessCapability(
                 return _document_tool_failure(
                     tool_ref=DOCUMENT_ACCESS_TOOL_REF,
                     action="search documents",
-                    service="document corpus",
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
                 )

@@ -12,13 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Server-side library binding of the builtin `knowledge.search` tool.
+Library binding resolution and the legacy tree port's "empty scope finds nothing" rule.
 
-An agent instance bound to libraries (a capability's `document_scope` chat
-control carrying `bound_library_ids`) keeps that scope whatever the client
-sends: the turn's selection may only narrow it, and a selection wholly outside
-it finds nothing rather than searching unfiltered. The legacy tree
-port applies the same "empty scope finds nothing" rule.
+The builtin `knowledge.search` refuses library and document selections on Weaver;
+its corpus search is covered by test_document_search_source_ceilings.py.
 """
 
 from __future__ import annotations
@@ -49,7 +46,6 @@ from fred_sdk.contracts.context import (
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
-    ToolInvocationRequest,
 )
 from fred_sdk.contracts.models import (
     AgentTuning,
@@ -60,7 +56,6 @@ from fred_sdk.contracts.models import (
     MCPServerRef,
 )
 from fred_sdk.contracts.runtime import DocumentTreeResult
-from fred_sdk.support.builtins.catalog import TOOL_REF_KNOWLEDGE_SEARCH
 from pydantic import BaseModel
 
 
@@ -110,87 +105,6 @@ def _binding(
             environment=PortableEnvironment.DEV,
         ),
     )
-
-
-async def _search(
-    monkeypatch: pytest.MonkeyPatch,
-    *,
-    bound: list[str] | None,
-    selected: list[str] | None,
-    documents: list[str] | None = None,
-):
-    _RecordingSearchClient.calls = []
-    monkeypatch.setattr(adapters_module, "VectorSearchClient", _RecordingSearchClient)
-    binding = _binding(selected, documents)
-    invoker = adapters_module.FredKnowledgeSearchToolInvoker(
-        binding=binding, settings=_FakeSettings(), bound_library_ids=bound
-    )
-    return await invoker.invoke(
-        ToolInvocationRequest(
-            tool_ref=TOOL_REF_KNOWLEDGE_SEARCH,
-            payload={"query": "what is alpha?"},
-            context=binding.portable_context,
-        )
-    )
-
-
-@pytest.mark.asyncio
-async def test_bound_libraries_apply_without_any_client_selection(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # An API run (no chat UI) sends no library selection at all.
-    await _search(monkeypatch, bound=["lib-a"], selected=None)
-
-    assert [
-        call["document_library_tags_ids"] for call in _RecordingSearchClient.calls
-    ] == [["lib-a"]]
-
-
-@pytest.mark.asyncio
-async def test_selection_narrows_bound_libraries(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    await _search(monkeypatch, bound=["lib-a", "lib-b"], selected=["lib-b", "lib-x"])
-
-    assert [
-        call["document_library_tags_ids"] for call in _RecordingSearchClient.calls
-    ] == [["lib-b"]]
-
-
-@pytest.mark.asyncio
-async def test_selection_outside_bound_libraries_finds_nothing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    result = await _search(monkeypatch, bound=["lib-a"], selected=["lib-x"])
-
-    # Never an unfiltered search: the vector client drops an empty filter.
-    assert _RecordingSearchClient.calls == []
-    assert result.sources == ()
-
-
-@pytest.mark.asyncio
-async def test_selection_outside_bound_libraries_still_searches_picked_documents(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Libraries and documents union in Knowledge Flow: an empty library arm
-    # leaves the picked document to search.
-    await _search(monkeypatch, bound=["lib-a"], selected=["lib-x"], documents=["doc-d"])
-
-    assert [
-        (call["document_library_tags_ids"], call["document_uids"])
-        for call in _RecordingSearchClient.calls
-    ] == [([], ["doc-d"])]
-
-
-@pytest.mark.asyncio
-async def test_unbound_agent_keeps_the_client_selection(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    await _search(monkeypatch, bound=None, selected=["lib-x"])
-
-    assert [
-        call["document_library_tags_ids"] for call in _RecordingSearchClient.calls
-    ] == [["lib-x"]]
 
 
 class _RecordingTreeClient:

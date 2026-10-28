@@ -18,34 +18,21 @@ import asyncio
 import logging
 from collections.abc import Sequence
 from datetime import datetime, timezone
-from typing import Any, List, Optional, Protocol, Set, cast, runtime_checkable
+from typing import Any, List, Optional, Protocol, cast, runtime_checkable
+from uuid import UUID
 
-from fred_core import KeycloakUser, is_service_agent
-from fred_core.common import OwnerFilter
+from fred_core import KeycloakUser
+from fred_core.documents.access import Candidate, SearchScope, resolve_scope, verify_candidates
 from fred_core.kpi import BaseKPIWriter, KPIActor
-from fred_core.security.delegation import holds_caller_role
+from fred_core.security.delegation import AssertedUser
 from fred_core.store import VectorSearchHit
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.vector.base_vector_store import AnnHit, BaseVectorHit, FullTextHit, HybridHit, SearchFilter
-from knowledge_flow_backend.features.metadata.service import MetadataService
-from knowledge_flow_backend.features.tag.tag_service import TagService
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName
 
 logger = logging.getLogger(__name__)
-
-
-def _log_visual_search_hits(stage: str, hits: list) -> None:
-    visual_hits = [h for h in hits if getattr(h, "has_visual_evidence", False) and getattr(h, "slide_image_uri", None)]
-    logger.debug(
-        "[RICH][KFB][%s] total_hits=%d visual_hits=%d slide_ids=%s image_uris=%s",
-        stage,
-        len(hits),
-        len(visual_hits),
-        [getattr(h, "slide_id", None) for h in visual_hits[:5]],
-        [getattr(h, "slide_image_uri", None) for h in visual_hits[:5]],
-    )
 
 
 @runtime_checkable
@@ -66,70 +53,6 @@ class SupportsHybridSearch(Protocol):
         top_k: int,
         search_filter: Optional[SearchFilter] = None,
     ) -> List[HybridHit]: ...
-
-
-def _merge_attachment_and_corpus_hits(
-    *,
-    attachment_hits: List[VectorSearchHit],
-    corpus_hits: List[VectorSearchHit],
-    top_k: int,
-    attachment_quota: int = 3,
-) -> List[VectorSearchHit]:
-    """
-    Merge attachment (session-scoped) and corpus hits, ensuring attachments are represented.
-
-    Policy:
-    - Always include up to `attachment_quota` attachment hits when present.
-    - Fill remaining slots with the best-scoring remaining candidates.
-    """
-    if top_k <= 0:
-        return []
-    if not attachment_hits:
-        return sorted(corpus_hits, key=lambda h: h.score or 0.0, reverse=True)[:top_k]
-
-    attachment_quota = max(0, min(int(attachment_quota), top_k))
-    attachment_ranked = sorted(attachment_hits, key=lambda h: h.score or 0.0, reverse=True)
-    attachment_primary = attachment_ranked[:attachment_quota]
-    attachment_rest = attachment_ranked[attachment_quota:]
-
-    remaining_ranked = sorted(
-        [*attachment_rest, *corpus_hits],
-        key=lambda h: h.score or 0.0,
-        reverse=True,
-    )
-    return (attachment_primary + remaining_ranked)[:top_k]
-
-
-def _merge_corpus_scope_hits(*hit_groups: List[VectorSearchHit], top_k: int) -> List[VectorSearchHit]:
-    """
-    Merge corpus hit groups using union semantics with stable de-duplication.
-
-    Why:
-    - chat scoping can now mix whole libraries and explicitly selected documents
-    - those two selectors must widen the allowed corpus set, not intersect it
-
-    How:
-    - pass each independently searched corpus hit list
-    - duplicate chunks are collapsed by a document/chunk-ish key
-    - the highest-scoring copy wins
-    """
-    if top_k <= 0:
-        return []
-
-    merged_by_key: dict[tuple[object, ...], VectorSearchHit] = {}
-    for hit in [candidate for group in hit_groups for candidate in group]:
-        key = (
-            hit.uid,
-            hit.page,
-            hit.section,
-            hit.viewer_fragment,
-            hit.content,
-        )
-        current = merged_by_key.get(key)
-        if current is None or (hit.score or 0.0) > (current.score or 0.0):
-            merged_by_key[key] = hit
-
-    return sorted(merged_by_key.values(), key=lambda h: h.score or 0.0, reverse=True)[:top_k]
 
 
 def _coerce_chunk_index(raw: Any) -> Optional[int]:
@@ -161,8 +84,6 @@ class VectorSearchService:
         ctx = ApplicationContext.get_instance()
         self.embedder = ctx.get_embedder()
         self.vector_store = ctx.get_create_vector_store(self.embedder)
-        self.tag_service = TagService()
-        self.metadata_service = MetadataService()
         self.kpi: BaseKPIWriter = ctx.get_kpi_writer()
         self._crossencoder_model: Optional[Any] = None
 
@@ -183,14 +104,14 @@ class VectorSearchService:
             "index": str(index_name) if index_name else None,
         }
 
-    def _kpi_actor(self, *, user: Optional[KeycloakUser] = None) -> KPIActor:
+    def _kpi_actor(self, *, user: Optional[KeycloakUser | AssertedUser] = None) -> KPIActor:
         return KPIActor(type="system")
 
     def _phase_timer(
         self,
         *,
         phase: str,
-        user: Optional[KeycloakUser],
+        user: Optional[KeycloakUser | AssertedUser],
         extra_dims: Optional[dict[str, Optional[str]]] = None,
     ):
         dims: dict[str, Optional[str]] = {"phase": phase}
@@ -208,7 +129,7 @@ class VectorSearchService:
         base_dims: dict[str, Optional[str]],
         hits_count: int,
         top_k: int,
-        user: Optional[KeycloakUser],
+        user: Optional[KeycloakUser | AssertedUser],
     ) -> None:
         ok_dims = {**base_dims, "status": "ok"}
         self.kpi.count(
@@ -241,43 +162,12 @@ class VectorSearchService:
 
     # ---------- helpers -------------------------------------------------------
 
-    async def _collect_document_ids_from_tags(self, tags_ids: Optional[List[str]], user: KeycloakUser) -> Set[str]:
-        """
-        Resolve UI tag_ids -> document_uids (library scoping).
-        Returns an empty set when no tags provided to keep call sites simple.
-        """
-        if not tags_ids:
-            return set()
-        doc_ids: Set[str] = set()
-        for tag_id in tags_ids:
-            tag = await self.tag_service.get_tag_for_user(tag_id, user)
-            # Tag.item_ids is expected to be a list[str] of document_uids
-            doc_ids.update(tag.item_ids or [])
-        return doc_ids
-
-    async def _tags_meta_from_ids(self, tag_ids: List[str], user: KeycloakUser) -> tuple[list[str], list[str]]:
-        """Resolve tag IDs to human-readable names for UI chips + full breadcrumb paths."""
-        if not tag_ids:
-            return [], []
-        names, full_paths = [], []
-        for tid in tag_ids:
-            try:
-                tag = await self.tag_service.get_tag_for_user(tid, user)
-                if not tag:
-                    continue
-                names.append(tag.name)
-                full_paths.append(tag.full_path)
-            except Exception as e:
-                logger.debug("Could not resolve tag id=%s: %s", tid, e)
-        return names, full_paths
-
     async def _to_hit(
         self,
         doc: Document,
         score: float,
         rank: int,
-        user: KeycloakUser,
-        tags_meta: tuple[list[str], list[str]] | None = None,
+        user: KeycloakUser | AssertedUser,
     ) -> VectorSearchHit:
         """
         Convert a LangChain Document + score into a VectorSearchHit UI DTO.
@@ -287,8 +177,6 @@ class VectorSearchService:
         md = doc.metadata or {}
 
         # Pull both ids and names (UI displays names; filters might use ids)
-        tag_ids = md.get("tag_ids") or []
-        tag_names, tag_full_paths = tags_meta if tags_meta is not None else await self._tags_meta_from_ids(tag_ids, user)
         uid = md.get("document_uid") or "Unknown"
         vf = md.get("viewer_fragment")
         preview_url = f"/documents/{uid}"
@@ -332,9 +220,9 @@ class VectorSearchService:
             mime_type=md.get("mime_type"),
             type=md.get("type") or "document",
             # tags
-            tag_ids=tag_ids,
-            tag_names=tag_names,
-            tag_full_paths=tag_full_paths,
+            tag_ids=[],
+            tag_names=[],
+            tag_full_paths=[],
             # link fields
             preview_url=preview_url,
             preview_at_url=preview_at_url,
@@ -359,7 +247,7 @@ class VectorSearchService:
     async def _semantic(
         self,
         question: str,
-        user: KeycloakUser,
+        user: KeycloakUser | AssertedUser,
         k: int,
         library_tags_ids: List[str] | None,
         metadata_terms_extra: Optional[dict[str, Any]] = None,
@@ -416,7 +304,7 @@ class VectorSearchService:
     async def _strict(
         self,
         question: str,
-        user: KeycloakUser,
+        user: KeycloakUser | AssertedUser,
         k: int,
         library_tags_ids: List[str] | None,
         metadata_terms_extra: Optional[dict[str, Any]] = None,
@@ -491,7 +379,7 @@ class VectorSearchService:
     async def _hybrid(
         self,
         question: str,
-        user: KeycloakUser,
+        user: KeycloakUser | AssertedUser,
         k: int,
         library_tags_ids: List[str] | None,
         metadata_terms_extra: Optional[dict[str, Any]] = None,
@@ -569,361 +457,54 @@ class VectorSearchService:
         self,
         *,
         question: str,
-        user: KeycloakUser,
-        top_k: int = 10,
-        document_library_tags_ids: List[str] | None,
-        document_uids: Optional[List[str]] = None,
-        policy_name: Optional[SearchPolicyName] = None,
-        owner_filter: Optional[OwnerFilter] = None,
-        team_id: Optional[str] = None,
-        session_id: Optional[str] = None,
-        include_session_scope: bool = True,
-        include_corpus_scope: bool = True,
+        user: AssertedUser,
+        top_k: int,
+        policy_name: Optional[SearchPolicyName],
+        space_id: UUID,
     ) -> List[VectorSearchHit]:
+        """Search one Weaver space and its ancestors; the caller checked the space read.
+
+        The index only proposes candidates. A chunk is returned only if the Control
+        Plane facts keep it: live document in scope, retrievable, published generation.
         """
-        Args:
-            question (str): The search query string.
-            user (KeycloakUser): The user performing the search.
-            top_k (int): The number of top results to return. Defaults to 10.
-            document_library_tags_ids (Optional[List[str]]): List of tag IDs to filter the search by library.
-            policy_name (Optional[SearchPolicyName]): The search policy to use (hybrid, strict, semantic). Defaults to hybrid.
-            document_uids (Optional[List[str]]): Optional list of document UIDs to filter the search results by.
-            owner_filter (Optional[OwnerFilter]): Filter by ownership: 'personal' for user-owned resources, 'team' for team-owned resources.
-            team_id (Optional[str]): Team ID, required when owner_filter is 'team'.
-            include_session_scope (bool): Whether to search session-scoped attachment vectors.
-            include_corpus_scope (bool): Whether to search corpus/library vectors.
-        Returns:
-            List[VectorSearchHit]: A list of VectorSearchHit objects containing the search results.
-
-        Raises:
-            Exception: For any other unexpected errors during the search process.
-        """
-        corpus_hits: List[VectorSearchHit] = []
-        attachment_hits: List[VectorSearchHit] = []
-
-        try:
-            if not include_session_scope and not include_corpus_scope:
-                logger.info("[VECTOR][SEARCH] both session and corpus scopes disabled; returning empty result.")
-                return []
-
-            with self._phase_timer(phase="vector_search_authorize_tags", user=user):
-                context_tag_ids = await self.tag_service.list_authorized_tags_ids(user, owner_filter, team_id) if include_corpus_scope else set()
-            authorized_tag_ids = context_tag_ids
-            if document_library_tags_ids:
-                authorized_tag_ids = set(document_library_tags_ids) & context_tag_ids
-            elif document_uids:
-                authorized_tag_ids = set()
-
-            # Cache only within this search: later turns must observe membership changes.
-            memberships: dict[str, set[str]] = {}
-
-            async def load_memberships(uids: set[str]) -> None:
-                missing = sorted(uids - memberships.keys())
-                for offset in range(0, len(missing), 100):
-                    batch = missing[offset : offset + 100]
-                    docs = await self.metadata_service.metadata_store.get_metadata_by_uids(batch)
-                    current = {doc.identity.document_uid: set(doc.tags.tag_ids) & context_tag_ids for doc in docs}
-                    eligible = [uid for uid in batch if current.get(uid)]
-                    readable: set[str] = set()
-                    if is_service_agent(user) and not holds_caller_role(user):
-                        # The tag resolver already authorizes the evaluation worker's team.
-                        readable.update(eligible)
-                    else:
-                        # Bound OpenFGA fan-out independently of candidate/chunk count.
-                        for index in range(0, len(eligible), 10):
-                            readable.update(await self.metadata_service.filter_readable_document_uids(user, eligible[index : index + 10]))
-                    memberships.update({uid: current[uid] if uid in readable else set() for uid in batch})
-
-            authorized_document_uids: set[str] = set()
-            if include_corpus_scope and document_uids:
-                with self._phase_timer(phase="vector_search_filter_document_uids", user=user):
-                    await load_memberships(set(document_uids))
-                    authorized_document_uids = {uid for uid in document_uids if memberships[uid]}
-
-            # Search function dispatch
-            policy_key = policy_name or SearchPolicyName.hybrid
-            logger.debug(
-                "[SEARCH_POLICY] received=%r resolved=%r question_preview=%r",
-                policy_name,
-                policy_key,
-                question[:80],
-            )
-            strategy = {
-                SearchPolicyName.strict: self._strict,
-                SearchPolicyName.hybrid: self._hybrid,
-                SearchPolicyName.semantic: self._semantic,
-            }.get(policy_key, self._hybrid)
-            stats_policy = policy_key
-            if (policy_key == SearchPolicyName.strict and not isinstance(self.vector_store, SupportsFullTextSearch)) or (
-                policy_key == SearchPolicyName.hybrid and not isinstance(self.vector_store, SupportsHybridSearch)
-            ):
-                stats_policy = SearchPolicyName.semantic
-
-            async def search_fn(*, question: str, user: KeycloakUser, k: int, library_tags_ids: list[str] | None, metadata_terms_extra: dict[str, Any]) -> list[VectorSearchHit]:
-                candidates = await strategy(question=question, user=user, k=k, library_tags_ids=library_tags_ids, metadata_terms_extra=metadata_terms_extra)
-                session_scope = metadata_terms_extra.get("scope") == ["session"]
-                if not session_scope:
-                    with self._phase_timer(phase="vector_search_authorize_candidates", user=user):
-                        await load_memberships({uid for hit in candidates if isinstance(uid := hit.document.metadata.get("document_uid"), str) and uid})
-                documents: list[tuple[Document, float]] = []
-                for hit in candidates:
-                    md = hit.document.metadata
-                    if session_scope:
-                        if md.get("scope") != "session" or md.get("user_id") != user.uid or md.get("session_id") != session_id:
-                            continue
-                        tags = []
-                    else:
-                        uid = md.get("document_uid") or ""
-                        current_tags = memberships.get(uid, set())
-                        if not current_tags or md.get("scope") == "session":
-                            continue
-                        if library_tags_ids is not None:
-                            if not current_tags.intersection(library_tags_ids):
-                                continue
-                        elif uid not in authorized_document_uids:
-                            continue
-                        tags = sorted(current_tags)
-                    documents.append((Document(page_content=hit.document.page_content, metadata={**md, "tag_ids": tags}), hit.score))
-                # Resolve each current tag set once, after authorization, before enrichment.
-                tag_sets = dict.fromkeys(tuple(doc.metadata["tag_ids"]) for doc, _ in documents)
-                resolved = await asyncio.gather(*(self._tags_meta_from_ids(list(tags), user) for tags in tag_sets))
-                tags_meta = dict(zip(tag_sets, resolved))
-                results = [await self._to_hit(doc, score, rank, user, tags_meta[tuple(doc.metadata["tag_ids"])]) for rank, (doc, score) in enumerate(documents, 1)]
-                # Keep the strategy-call denominator, but count only authorized results.
-                self._record_search_stats(base_dims=self._kpi_search_dims(policy=stats_policy.value), hits_count=len(results), top_k=k, user=user)
-                return results
-
-            logger.info(
-                "[OBS][SEARCH] session=%s q=%r policy=%s libs=%d session_scope=%s top_k=%d",
-                session_id,
-                question[:100],
-                policy_key.value,
-                len(authorized_tag_ids),
-                bool(include_session_scope and session_id),
-                top_k,
-            )
-
-            # Attachment/session-scope query (uses user_id/session_id metadata, no tag filtering)
-            if include_session_scope and session_id:
-                attachment_metadata: dict[str, Any] = {
-                    "user_id": [user.uid],
-                    "session_id": [session_id],
-                    "scope": ["session"],
-                }
-                logger.debug(
-                    "[VECTOR][SEARCH][ATTACH] session=%s user=%s policy=%s question=%r top_k=%d",
-                    session_id,
-                    user.uid,
-                    policy_key,
-                    question,
-                    top_k,
-                )
-                with self._phase_timer(
-                    phase="vector_search_scope_attachment",
-                    user=user,
-                ):
-                    attachment_hits = await search_fn(
-                        question=question,
-                        user=user,
-                        k=top_k,
-                        library_tags_ids=None,
-                        metadata_terms_extra=attachment_metadata,
-                    )
-                logger.debug(
-                    "[VECTOR][SEARCH][ATTACH] count=%d hits=%s",
-                    len(attachment_hits),
-                    [(h.title, round(h.score, 4), h.uid) for h in attachment_hits],
-                )
-
-            # Corpus query now supports a union of:
-            # - whole selected/authorized libraries
-            # - specifically selected documents
-            corpus_hits_from_libraries: List[VectorSearchHit] = []
-            corpus_hits_from_documents: List[VectorSearchHit] = []
-            if include_corpus_scope and not authorized_tag_ids and not authorized_document_uids:
-                logger.warning(
-                    "[OBS][SEARCH] session=%s — no authorized libs or documents, corpus search skipped",
-                    session_id,
-                )
-            if include_corpus_scope and authorized_tag_ids:
-                corpus_metadata: dict[str, Any] = {"scope": ["!session"]}
-                logger.debug(
-                    "[VECTOR][SEARCH][CORPUS_LIBS] policy=%s tags=%s owner=%s team=%s question=%r top_k=%d",
-                    policy_key,
-                    sorted(authorized_tag_ids),
-                    owner_filter,
-                    team_id,
-                    question[:80],
-                    top_k,
-                )
-                with self._phase_timer(
-                    phase="vector_search_scope_corpus_libraries",
-                    user=user,
-                ):
-                    corpus_hits_from_libraries = await search_fn(
-                        question=question,
-                        user=user,
-                        k=top_k,
-                        library_tags_ids=list(authorized_tag_ids),
-                        metadata_terms_extra=corpus_metadata,
-                    )
-                logger.debug(
-                    "[VECTOR][SEARCH][CORPUS_LIBS] count=%d hits=%s",
-                    len(corpus_hits_from_libraries),
-                    [(h.title, round(h.score, 4), h.uid) for h in corpus_hits_from_libraries],
-                )
-            if include_corpus_scope and authorized_document_uids:
-                corpus_document_metadata: dict[str, Any] = {
-                    "scope": ["!session"],
-                    "document_uid": list(authorized_document_uids),
-                }
-                logger.debug(
-                    "[VECTOR][SEARCH][CORPUS_DOCS] policy=%s docs=%s owner=%s team=%s question=%r top_k=%d",
-                    policy_key,
-                    sorted(authorized_document_uids),
-                    owner_filter,
-                    team_id,
-                    question[:80],
-                    top_k,
-                )
-                with self._phase_timer(
-                    phase="vector_search_scope_corpus_documents",
-                    user=user,
-                ):
-                    corpus_hits_from_documents = await search_fn(
-                        question=question,
-                        user=user,
-                        k=top_k,
-                        library_tags_ids=None,
-                        metadata_terms_extra=corpus_document_metadata,
-                    )
-                logger.debug(
-                    "[VECTOR][SEARCH][CORPUS_DOCS] count=%d hits=%s",
-                    len(corpus_hits_from_documents),
-                    [(h.title, round(h.score, 4), h.uid) for h in corpus_hits_from_documents],
-                )
-
-            corpus_hits = _merge_corpus_scope_hits(
-                corpus_hits_from_libraries,
-                corpus_hits_from_documents,
-                top_k=top_k,
-            )
-
-            # Unambiguous resolved-scope line: states EXACTLY what was searched —
-            # which corpus branches ran, the exact tag ids and document uids used,
-            # the active scopes, and the candidate pool. One INFO line is enough to
-            # confirm a search hit only the intended target(s).
-            logger.info(
-                "[OBS][SEARCH][SCOPE] session=%s branches=[%s%s%s] tag_ids=%s doc_uids=%s scopes=(session=%s,corpus=%s) policy=%s pool=%d counts=(libs=%d,docs=%d,attach=%d)",
-                session_id,
-                "session " if attachment_hits else "",
-                "libraries " if corpus_hits_from_libraries else "",
-                "documents" if corpus_hits_from_documents else "",
-                sorted(authorized_tag_ids) if authorized_tag_ids else [],
-                sorted(authorized_document_uids) if authorized_document_uids else [],
-                include_session_scope,
-                include_corpus_scope,
-                policy_key,
-                top_k,
-                len(corpus_hits_from_libraries),
-                len(corpus_hits_from_documents),
-                len(attachment_hits),
-            )
-
-            with self._phase_timer(
-                phase="vector_search_merge_results",
-                user=user,
-            ):
-                merged = _merge_attachment_and_corpus_hits(
-                    attachment_hits=attachment_hits,
-                    corpus_hits=corpus_hits,
-                    top_k=top_k,
-                    attachment_quota=3,
-                )
-            logger.info(
-                "[OBS][SEARCH] session=%s count=%d attach=%d corpus=%d top=%s",
-                session_id,
-                len(merged),
-                len(attachment_hits),
-                len(corpus_hits),
-                [(h.title, round(h.score, 4), h.tag_names) for h in merged],
-            )
-            _log_visual_search_hits("MERGED", merged)
-            return merged
-
-        except TypeError as e:
-            logger.error("[VECTOR][SEARCH]: %s", str(e))
-            raise
-
-        except Exception as e:
-            logger.error("[VECTOR][SEARCH] Unexpected error during search: %s", str(e))
-            raise
-
-    async def similarity_search(
-        self,
-        *,
-        anchor: str,
-        user: KeycloakUser,
-        document_uids: Optional[List[str]] = None,
-        document_library_tags_ids: Optional[List[str]] = None,
-        top_k: int = 10,
-        rerank: bool = True,
-        min_score: Optional[float] = None,
-    ) -> List[VectorSearchHit]:
-        """Targeted similarity / comparison search (KF-SIMILARITY-SEARCH RFC).
-
-        Returns the passages most similar to ``anchor``, restricted to the named
-        targets (documents and/or library folders), ranked best-first. This is a
-        thin orchestration over the existing primitives: ``search`` does the
-        targeted retrieval (with ReBAC filtering), ``rerank_documents`` reorders
-        with the cross-encoder. Targeting is REQUIRED — it is a comparison
-        primitive, not a corpus-wide question-answering search.
-
-        Args:
-            anchor: the text/passage to find similar content for.
-            document_uids / document_library_tags_ids: the search targets.
-            top_k: number of matches to return (best-first).
-            rerank: re-rank best-first with the cross-encoder (default on).
-            min_score: drop matches below this relevance score.
-        """
-        document_uids = document_uids or []
-        document_library_tags_ids = document_library_tags_ids or []
-        if not document_uids and not document_library_tags_ids:
-            raise ValueError("similarity search requires at least one target: document_uids or document_library_tags_ids")
-
-        # Retrieve a wider candidate pool when reranking so the cross-encoder has
-        # something to reorder; otherwise just top_k.
-        rerank_pool_factor, max_pool = 5, 100
-        pool = min(top_k * rerank_pool_factor, max_pool) if rerank else top_k
-        logger.info(
-            "[OBS][SIMILARITY] anchor=%r targets=(documents=%s, libraries=%s) top_k=%d rerank=%s pool=%d min_score=%s",
-            anchor[:80],
-            document_uids or [],
-            document_library_tags_ids or [],
-            top_k,
-            rerank,
-            pool,
-            min_score,
-        )
-        hits = await self.search(
-            question=anchor,
+        engine = ApplicationContext.get_instance().get_pg_async_engine()
+        async with engine.connect() as conn:
+            scope = await resolve_scope(conn, space_id)
+        policy_key = policy_name or SearchPolicyName.hybrid
+        strategy = {
+            SearchPolicyName.strict: self._strict,
+            SearchPolicyName.hybrid: self._hybrid,
+            SearchPolicyName.semantic: self._semantic,
+        }.get(policy_key, self._hybrid)
+        candidates = await strategy(
+            question=question,
             user=user,
-            top_k=pool,
-            document_library_tags_ids=document_library_tags_ids,
-            document_uids=document_uids or None,
-            include_session_scope=False,  # comparison is over the corpus targets, not chat attachments
-            include_corpus_scope=True,
+            k=top_k,
+            library_tags_ids=None,
+            metadata_terms_extra={"space_id": [str(value) for value in scope.space_ids]},
         )
-        if rerank and hits:
-            hits = self.rerank_documents(anchor, hits, top_r=top_k)
-        if min_score is not None:
-            hits = [hit for hit in hits if (hit.score or 0.0) >= min_score]
-        logger.info(
-            "[OBS][SIMILARITY] returned=%d hits from documents=%s",
-            len(hits),
-            sorted({hit.uid for hit in hits}),
-        )
-        return hits[:top_k]
+        hits = await self._visible_hits(scope, [(hit.document, hit.score) for hit in candidates], user)
+        stats_policy = policy_key
+        if (policy_key == SearchPolicyName.strict and not isinstance(self.vector_store, SupportsFullTextSearch)) or (
+            policy_key == SearchPolicyName.hybrid and not isinstance(self.vector_store, SupportsHybridSearch)
+        ):
+            stats_policy = SearchPolicyName.semantic
+        self._record_search_stats(base_dims=self._kpi_search_dims(policy=stats_policy.value), hits_count=len(hits), top_k=top_k, user=user)
+        return hits
+
+    async def _visible_hits(
+        self,
+        scope: SearchScope,
+        documents: Sequence[tuple[Document, float]],
+        user: AssertedUser,
+    ) -> List[VectorSearchHit]:
+        """Keep, in order, the chunks the Control Plane facts still publish in `scope`."""
+        pairs = [(Candidate(document_uid=str(md.get("document_uid") or ""), chunk_uid=str(md.get("chunk_uid") or "")), doc, score) for doc, score in documents if (md := doc.metadata or {})]
+        engine = ApplicationContext.get_instance().get_pg_async_engine()
+        async with engine.connect() as conn:
+            visible = set(await verify_candidates(conn, scope, [candidate for candidate, _, _ in pairs]))
+        kept = [(doc, score) for candidate, doc, score in pairs if candidate in visible]
+        return [await self._to_hit(doc, score, rank, user) for rank, (doc, score) in enumerate(kept, 1)]
 
     def rerank_documents(self, question: str, documents: List[VectorSearchHit], top_r: int) -> List[VectorSearchHit]:
         """
@@ -974,23 +555,16 @@ class VectorSearchService:
     async def get_document_chunks_ordered(
         self,
         *,
-        user: KeycloakUser,
+        user: AssertedUser,
         document_uid: str,
+        space_id: UUID,
         limit: int,
     ) -> List[VectorSearchHit]:
-        """Return a document's stored chunks in chunk_index order, capped at `limit`.
+        """Return a document's published chunks in chunk_index order, capped at `limit`.
 
         A direct store fetch, not a search: similarity ranking cannot guarantee that
-        every row of a large table comes back, so callers that need a whole table ask
-        for the document itself.
-
-        The ReBAC READ check belongs to the caller, as for every other route on
-        this controller.
-
-        Known cost: `limit` bounds the response, not the store read - every backend's
-        `get_chunks_for_document` fetches the whole document (OpenSearch caps at 10k)
-        and the slice happens here. Pushing the bound into the stores is a separate
-        change; this route is no worse than the existing callers of that method.
+        every row of a large table comes back. The caller checked the space read;
+        staged or retired chunks are dropped before the limit applies.
         """
         try:
             raw_chunks = await asyncio.to_thread(self.vector_store.get_chunks_for_document, document_uid)
@@ -1001,35 +575,21 @@ class VectorSearchService:
             return []
 
         def _order(chunk: dict) -> tuple[bool, int]:
-            # None last, matching the runtime adapter: an unindexed legacy chunk
-            # degrades to the end rather than jumping ahead of chunk 0.
+            # None last: an unindexed chunk degrades to the end rather than ahead of chunk 0.
             index = _coerce_chunk_index((chunk.get("metadata") or {}).get("chunk_index"))
             return (index is None, index or 0)
 
         raw_chunks.sort(key=_order)
-        truncated = len(raw_chunks) > limit
-
-        tags_cache: dict[tuple[str, ...], tuple[list[str], list[str]]] = {}
-        hits: List[VectorSearchHit] = []
-        for rank, entry in enumerate(raw_chunks[:limit]):
-            metadata = entry.get("metadata") or {}
-            tag_ids = tuple(metadata.get("tag_ids") or [])
-            if tag_ids not in tags_cache:
-                tags_cache[tag_ids] = await self._tags_meta_from_ids(list(tag_ids), user)
-            hits.append(
-                await self._to_hit(
-                    Document(page_content=entry.get("text") or "", metadata=metadata),
-                    score=0.0,
-                    rank=rank,
-                    user=user,
-                    tags_meta=tags_cache[tag_ids],
-                )
-            )
+        engine = ApplicationContext.get_instance().get_pg_async_engine()
+        async with engine.connect() as conn:
+            scope = await resolve_scope(conn, space_id)
+        documents = [(Document(page_content=entry.get("text") or "", metadata=entry.get("metadata") or {}), 0.0) for entry in raw_chunks]
+        hits = await self._visible_hits(scope, documents, user)
         logger.info(
-            "[VECTOR][DOC_CHUNKS] document_uid=%s returned=%d of %d truncated=%s",
+            "[VECTOR][DOC_CHUNKS] document_uid=%s published=%d of %d truncated=%s",
             document_uid,
             len(hits),
             len(raw_chunks),
-            truncated,
+            len(hits) > limit,
         )
-        return hits
+        return hits[:limit]

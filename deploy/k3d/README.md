@@ -3,7 +3,8 @@
 On `weaver`, `deploy/k3d/build` builds `apps/control-plane` as the
 `control-plane-backend` image. The ingestion profile runs it as `control-plane serve`:
 HTTP, durable Temporal submission and lifecycle work share one process. Knowledge
-Flow runs only its worker; its HTTP API and the separate manager worker are disabled.
+Flow runs its worker and its HTTP API, the latter as the capability backend called by
+agent pods; the separate manager worker is disabled.
 
 The k3d profile enables `scheduler.lifecycle.enabled` for deletion admission and
 lifecycle processing through `temporal:7233` in the same control-plane process.
@@ -52,7 +53,7 @@ The inherited factory settings are retained:
 | PostgreSQL / migrations | Database `fred`, user `fred`, host `postgres`; password from `fred-secrets/POSTGRES_FRED_PASSWORD`. The enabled job runs `python -m fred_runtime migrate`, including installed capabilities, without old Python Control Plane migrations. |
 | OpenFGA | `http://openfga:9080`, token from `fred-secrets/OPENFGA_API_TOKEN`; Rust must have published the binding. |
 | Keycloak | Secondary issuer/origins, user and M2M authentication; workload client `agentic` and secret `fred-secrets/KEYCLOAK_AGENTIC_CLIENT_SECRET`. Existing outgoing delegation is retained. |
-| Storage / observability | SeaweedFS runtime object store, Prometheus and node CA mount retain their references. OpenSearch uses `fred-agents` with `fred-ingestion/agents-opensearch-password`, scoped to corpus reads and the configured logs/KPI indexes. |
+| Storage / observability | SeaweedFS runtime object store, OpenSearch logs/KPI, Prometheus and node CA mount; their inherited credential references are retained. |
 | Models | The control plane discovers the Mistral source; the pod retains only its inference credential binding. Both explicitly use `fred-model-credentials/OPENAI_API_KEY`. Discovery invokes no model. Web research stays disabled. |
 | Control Plane | Pod URL `http://control-plane-backend:8222/control-plane/v1` comes from the chart. The pod resolves each turn through the Rust resolver using trusted delegation. |
 
@@ -78,37 +79,20 @@ Dimi owns functional validation and the cluster rollout.
 
 ## Corpus search configuration on secondary
 
-Preparation reads `knowledge-flow-worker-back` from the effective Helm render,
-including factory settings and operator values. It copies `embedding_model`
-(provider, name and all settings) to the pod's `ai.embedding_model`, and the
-`type`/`index` from `manager_processing.vector_store` to
-`ai.document_vector_store`. Worker-only bulk settings are excluded. These values
-join the existing Control Plane annotation in `manager-ingestion.generated.yaml`,
-loaded by the same Helmfile. There is no second embedding-model or corpus-index
-setting to maintain. Re-run preparation through deployment after changing worker
-settings; a render alone can still consume values from an earlier preparation.
+Agent pods search the corpus through Knowledge Flow API, enabled here as the
+capability backend. It searches `document-vectors`, the index the worker writes;
+preparation refuses a render where the two differ. Its embedding model is the
+shared KF configuration, so queries and chunks use the same vector space.
 
-The pod and worker retain `OPENAI_API_KEY` from
-`fred-model-credentials/OPENAI_API_KEY`; that operator-provided key must permit
-embeddings at the configured endpoint. Preparation retains or creates
-`fred-ingestion/agents-opensearch-password` without putting its value in Helm
-values. The dedicated OpenSearch identity can read the corpus and use the hybrid
-pipeline provisioned by the existing hook, but cannot create, modify or delete
-corpus data or pipelines. Its separate logs/KPI index permissions preserve
-creation, mapping maintenance, writes and reads. Preparation rejects an
-observability index equal to the corpus index.
+The API reads with `fred-kf-api` and `fred-ingestion/kf-api-opensearch-password`,
+created by preparation without putting its value in Helm values. That identity
+can read the corpus and use the hybrid pipeline, but cannot modify corpus data or
+pipelines; its separate logs/KPI permissions keep writes there. Preparation rejects
+an observability index equal to the corpus index.
 
-PostgreSQL remains `postgres:5432/fred`, user `fred`, with
-`fred-secrets/POSTGRES_FRED_PASSWORD`. The Control Plane migration job uses the
-same role and owns `space`, `document` and `document_processing`; no additional
-SQL grant is needed in this local profile. This shared SQL role is not a
-read-only account. The pod's existing runtime migrations and writes still need
-it; the ingestion worker receives no SQL credentials. Control Plane migrations
-and the published authorization binding must exist before corpus reads.
-
-This is prepared configuration, not a validated search journey. Rendering checks
-neither live grants nor credentials, model access, index contents or hybrid
-search execution. Dimi must deploy and validate the complete path separately.
+PostgreSQL remains `postgres:5432/fred`, user `fred`. The API reads the Control
+Plane's `space`, `document`, `document_processing` and published authorization
+binding; it runs no KF migration. This shared SQL role is not a read-only account.
 
 ## Prepare and deploy
 
@@ -134,10 +118,10 @@ own Helmfile. The model key must already exist in the secondary cluster's
 key from another checkout or cluster. Host Python needs PyYAML, as do the
 factory's identity helpers.
 
-The four application deployments are `control-plane-backend`, `knowledge-flow-worker`,
-`frontend` and `fred-agents`. The manager image occupies the chart's
-`control-plane-backend` key and runs `control-plane serve`; the separate
-control-plane worker and KF HTTP API / SQL migration remain disabled. Manager
+The five application deployments are `control-plane-backend`, `knowledge-flow-backend`,
+`knowledge-flow-worker`, `frontend` and `fred-agents`. The manager image occupies the
+chart's `control-plane-backend` key and runs `control-plane serve`; the separate
+control-plane worker and the KF SQL migration remain disabled. Manager
 and runtime migrations are enabled. Manager and the Python agent runtime access
 PostgreSQL and the published OpenFGA model; the ingestion worker keeps its scoped
 storage credentials.
@@ -151,8 +135,7 @@ The generic identity hook provisions `knowledge-flow-worker`. The checkout's
   identities plus manager/input and worker/output policies, and waits for its
   rollout; creates `app-content-documents` if absent;
 - configures the worker's OIDC audience/claims and scoped OpenSearch identity;
-- provisions the pod's corpus reader and logs/KPI permissions, and writes its
-  worker-derived embedding/index configuration to the generated Helm values;
+- provisions the Knowledge Flow API corpus reader and its logs/KPI permissions;
 - creates the contract ConfigMap and a digest annotation to restart manager
   when the worker image or contract changes.
 
@@ -163,7 +146,7 @@ setup. It does not change the factory chart or reset existing data. Secrets and
 the contract remain outside Helm's application release so they survive an app
 uninstall. The dedicated Temporal queue is `manager-ingestion`.
 
-OpenSearch admin credentials are used by preparation, not by the worker or agent pod. KF receives its
+OpenSearch admin credentials are used by preparation, not by the worker or the API. KF receives its
 manager service identity, output-only S3 credentials and scoped OpenSearch
 credentials. The frontend receives no infrastructure credentials.
 

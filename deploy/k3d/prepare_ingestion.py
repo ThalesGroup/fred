@@ -42,21 +42,21 @@ def prepare() -> None:
     configs = {item["metadata"]["name"]: item for item in manifests if item["kind"] == "ConfigMap"}
     worker_yaml = configs["knowledge-flow-worker-back"]["data"]["configuration.yaml"]
     worker_config = yaml.safe_load(worker_yaml)
-    agent_config = yaml.safe_load(
-        configs["fred-agents-back"]["data"]["configuration.yaml"]
+    api_config = yaml.safe_load(
+        configs["knowledge-flow-backend-back"]["data"]["configuration.yaml"]
     )
     generated = output / "manager-ingestion.generated.yaml"
     if not worker_config.get("manager_processing", {}).get("enabled"):
         raise RuntimeError("This profile requires manager_processing.enabled for the KF worker")
-    agent_ai, agent_indexes = corpus_settings(worker_config, agent_config)
-    indexes = [agent_ai["document_vector_store"]["index"]]
+    corpus_index, api_indexes = corpus_settings(worker_config, api_config)
+    indexes = [corpus_index]
     kpi = worker_config["observability"]["kpi"]["opensearch"]
     if kpi["enabled"]:
         indexes.append(concrete_index(kpi.get("index")))
     deploys = {item["metadata"]["name"]: item for item in manifests if item["kind"] == "Deployment"}
-    expected_deployments = {"control-plane-backend", "knowledge-flow-worker", "frontend", "fred-agents"}
+    expected_deployments = {"control-plane-backend", "knowledge-flow-backend", "knowledge-flow-worker", "frontend", "fred-agents"}
     if set(deploys) != expected_deployments:
-        raise RuntimeError("Expected only control-plane-backend, knowledge-flow-worker, frontend and fred-agents deployments")
+        raise RuntimeError("Expected only control-plane-backend, knowledge-flow-backend, knowledge-flow-worker, frontend and fred-agents deployments")
     image = deploys["knowledge-flow-worker"]["spec"]["template"]["spec"]["containers"][0]["image"]
     image_id = run(["docker", "image", "inspect", "--format", "{{.Id}}", image]).strip()
     with tempfile.TemporaryDirectory(prefix="fred-contract-") as directory:
@@ -93,8 +93,8 @@ def prepare() -> None:
         application["opensearch-password"],
         pipeline,
         indexes,
-        application["agents-opensearch-password"],
-        agent_indexes,
+        application["kf-api-opensearch-password"],
+        api_indexes,
     )
     run([*kube, "apply", "-f", "-"], body=json.dumps(resource))
     generated.write_text(
@@ -104,13 +104,12 @@ def prepare() -> None:
                     "control-plane-backend": {
                         "podAnnotations": {"fred/processing-contract": digest}
                     },
-                    "fred-agents": {"configuration": {"ai": agent_ai}},
                 }
             }
         )
     )
     print(
-        "Manager ingestion and agent corpus configuration: scoped OpenSearch identities and image-matched processing contract prepared"
+        "Manager ingestion and Knowledge Flow API corpus access: scoped OpenSearch identities and image-matched processing contract prepared"
     )
 
 
@@ -121,32 +120,25 @@ def concrete_index(value: object) -> str:
     return value
 
 
-def corpus_settings(worker_config: dict, agent_config: dict) -> tuple[dict, list[str]]:
-    """Derive pod search settings and writable observability indexes without I/O."""
+def corpus_settings(worker_config: dict, api_config: dict) -> tuple[str, list[str]]:
+    """Return the corpus index both KF processes share, and the API's writable indexes."""
     vector = worker_config["manager_processing"]["vector_store"]
     if vector.get("type") != "opensearch":
         raise RuntimeError("Local ingestion requires an OpenSearch vector store")
     corpus_index = concrete_index(vector.get("index"))
-    agent_indexes = []
-    log_store = agent_config["storage"].get("log_store") or {}
+    if api_config["storage"].get("vector_store", {}).get("index") != corpus_index:
+        raise RuntimeError("Knowledge Flow API must search the index the worker writes")
+    api_indexes = []
+    log_store = api_config["storage"].get("log_store") or {}
     if log_store.get("type") == "opensearch":
-        agent_indexes.append(concrete_index(log_store.get("index")))
+        api_indexes.append(concrete_index(log_store.get("index")))
     # KpiOpenSearchSinkConfig enables this sink and index by default.
-    agent_kpi = (
-        agent_config.get("observability", {}).get("kpi", {}).get("opensearch", {})
-    )
-    if agent_kpi.get("enabled", True):
-        agent_indexes.append(concrete_index(agent_kpi.get("index", "kpi-index")))
-    if corpus_index in agent_indexes:
-        raise RuntimeError(
-            "The corpus index must be separate from writable agent observability indexes"
-        )
-    agent_ai = {
-        "embedding_model": worker_config["embedding_model"],
-        # AgentPodConfig accepts the index reference, not worker-only bulk settings.
-        "document_vector_store": {"type": vector["type"], "index": corpus_index},
-    }
-    return agent_ai, agent_indexes
+    api_kpi = api_config.get("observability", {}).get("kpi", {}).get("opensearch", {})
+    if api_kpi.get("enabled", True):
+        api_indexes.append(concrete_index(api_kpi.get("index", "kpi-index")))
+    if corpus_index in api_indexes:
+        raise RuntimeError("The corpus index must be separate from writable API observability indexes")
+    return corpus_index, api_indexes
 
 
 def provision_search(
@@ -155,8 +147,8 @@ def provision_search(
     password: str,
     pipeline: dict,
     indexes: list[str],
-    agent_password: str,
-    agent_indexes: list[str],
+    api_password: str,
+    api_indexes: list[str],
 ) -> None:
     # The existing adapter checks a cluster-wide hybrid pipeline at startup.
     # Provision it as operator; the application only needs to read it.
@@ -168,7 +160,7 @@ def provision_search(
         ("roles/fred-kf-ingestion", role), ("internalusers/fred-kf-ingestion", account),
         ("rolesmapping/fred-kf-ingestion", {"backend_roles": ["fred-kf-ingestion"], "users": []})]]
     # One connection serves search and observability; only the latter may write.
-    agent_role = {
+    api_role = {
         "cluster_permissions": [
             "cluster_monitor",
             "cluster_composite_ops",
@@ -178,24 +170,24 @@ def provision_search(
             {"index_patterns": [indexes[0]], "allowed_actions": ["read"]}
         ],
     }
-    if agent_indexes:
-        agent_role["index_permissions"].append(
+    if api_indexes:
+        api_role["index_permissions"].append(
             {
-                "index_patterns": sorted(set(agent_indexes)),
+                "index_patterns": sorted(set(api_indexes)),
                 "allowed_actions": ["crud", "create_index", "manage"],
             }
         )
     resources += [
         (endpoint + "/" + suffix, payload)
         for suffix, payload in [
-            ("roles/fred-agents", agent_role),
+            ("roles/fred-kf-api", api_role),
             (
-                "internalusers/fred-agents",
-                {"password": agent_password, "backend_roles": ["fred-agents"]},
+                "internalusers/fred-kf-api",
+                {"password": api_password, "backend_roles": ["fred-kf-api"]},
             ),
             (
-                "rolesmapping/fred-agents",
-                {"backend_roles": ["fred-agents"], "users": []},
+                "rolesmapping/fred-kf-api",
+                {"backend_roles": ["fred-kf-api"], "users": []},
             ),
         ]
     ]
@@ -219,7 +211,7 @@ def provision_storage(kube: list[str], foundation: dict, here: Path, image: str)
         "manager-s3-secret",
         "processor-s3-secret",
         "opensearch-password",
-        "agents-opensearch-password",
+        "kf-api-opensearch-password",
     ):
         credentials[key] = base64.b64decode(data[key]).decode() if key in data else "F1!" + secrets.token_hex(24)
     apply(kube, {"apiVersion": "v1", "kind": "Secret", "metadata": {"name": "fred-ingestion"},

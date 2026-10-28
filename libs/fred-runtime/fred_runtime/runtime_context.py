@@ -30,7 +30,6 @@ from fred_sdk.contracts.web_research import WebResearchPort
 from langchain_core.language_models.chat_models import BaseChatModel
 
 if TYPE_CHECKING:
-    from fred_capability_document_access.search import CorpusSearch
     from fred_core.filesystem.structures import BaseFilesystem
 
     from fred_runtime.conversation_filesystem import (
@@ -156,7 +155,6 @@ class RuntimeConfig:
     # `PodApplicationContext.initialize_platform_sql()`. None on the SQLite
     # dev escape hatch (Postgres-only enforcement).
     platform_sql: PlatformSqlPort | None = None
-    document_search: CorpusSearch | None = None
     web_research_factory: Callable[[BoundRuntimeContext], WebResearchPort] | None = None
     # The two head blocks from the pod's `config/platform_prompt.json`, threaded
     # through from `AgentPodConfig.get_platform_prompt_file()` at boot.

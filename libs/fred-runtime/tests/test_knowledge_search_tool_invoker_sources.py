@@ -36,6 +36,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from fred_sdk.support.builtins.catalog import TOOL_REF_KNOWLEDGE_SEARCH
+from weaver_fixtures import active_turn
 
 
 class _FakeSettings:
@@ -92,13 +93,14 @@ async def test_low_relevance_hit_excluded_from_knowledge_search_sources(
         binding=binding, settings=_FakeSettings()
     )
 
-    result = await invoker.invoke(
-        ToolInvocationRequest(
-            tool_ref=TOOL_REF_KNOWLEDGE_SEARCH,
-            payload={"query": "what is alpha?", "top_k": 8},
-            context=binding.portable_context,
+    with active_turn("agent-1"):
+        result = await invoker.invoke(
+            ToolInvocationRequest(
+                tool_ref=TOOL_REF_KNOWLEDGE_SEARCH,
+                payload={"query": "what is alpha?", "top_k": 8},
+                context=binding.portable_context,
+            )
         )
-    )
 
     # The model still sees both hits (blocks carry the full JSON hit list).
     assert result.blocks[0].data is not None
