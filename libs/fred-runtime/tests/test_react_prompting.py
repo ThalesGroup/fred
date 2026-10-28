@@ -813,7 +813,7 @@ def test_compose_system_prompt_advertises_mermaid_without_injecting_its_body() -
         "you MUST call load_skill(name) before answering or using task tools" in tools
     )
     assert "even without a skill name or slash" in tools
-    assert "[diagram goal or source] [constraints]" in tools
+    assert "[goal or source] [constraints]" in tools
     assert _EXPECTED_MERMAID_FRAGMENT not in prompt
     assert "That viewer displays static HTML" not in prompt
     assert "subgraph SUBGRAPH_ID" not in prompt
