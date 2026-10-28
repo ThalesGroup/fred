@@ -25,8 +25,29 @@ upload your documents into it.
 > is the first point to check when a document seems ignored.
 
 Common formats work: PDF, text, Word, OpenDocument, PowerPoint, Excel, CSV,
-Markdown, images and audio files. An unusual format may be refused; convert it
-to a common one.
+Markdown, emails and images. An unusual format may be refused;
+convert it to a common one.
+
+## Importing emails
+
+An email saved from Outlook (a **.msg** file) or from another mail client (an
+**.eml** file) is uploaded like any other document, into a library or as a
+conversation attachment. To get the file, drag the email out of your mail
+client, or use **Save as**.
+
+What is kept: the sender, the recipients, the date, the subject, the text of the
+email and **the names** of its attachments. The text of PDF, Word and
+PowerPoint attachments is read too; a file attached several times is read only
+once. Other attachments (images, archives…) are not read: upload them
+separately if the agent needs them. Blind-copy (Bcc) recipients are never kept.
+An email forwarded as an attachment is read too: its text follows the email's.
+
+> **An uploaded email is visible to the whole team**, along with the names and
+> addresses it contains. Check that it can be shared before uploading it.
+
+An encrypted email cannot be read and is refused; an email that is only signed
+goes through fine. An email over 25 MB is refused: remove its heaviest
+attachments and save it again.
 
 ## A document of the same name already exists
 

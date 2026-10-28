@@ -26,8 +26,30 @@ d'abord une bibliothèque, puis déposez vos documents dedans.
 > agent.** C'est le premier point à vérifier lorsqu'un document semble ignoré.
 
 Les formats courants passent : PDF, texte, Word, OpenDocument, PowerPoint,
-Excel, CSV, Markdown, images et fichiers audio. Un format inhabituel peut être
-refusé ; convertissez-le dans un format courant.
+Excel, CSV, Markdown, mails et images. Un format inhabituel peut être refusé ;
+convertissez-le dans un format courant.
+
+## Importer des mails
+
+Un mail enregistré depuis Outlook (fichier **.msg**) ou depuis une autre
+messagerie (fichier **.eml**) se dépose comme n'importe quel document, dans une
+bibliothèque ou en pièce jointe d'une conversation. Pour l'obtenir, faites
+glisser le mail hors de votre messagerie, ou utilisez **Enregistrer sous**.
+
+Ce qui est gardé : l'expéditeur, les destinataires, la date, l'objet, le texte
+du mail et **le nom** de ses pièces jointes. Le texte des pièces jointes PDF,
+Word et PowerPoint est lu aussi ; un même fichier joint plusieurs fois n'est lu
+qu'une fois. Les autres pièces jointes (images, archives…) ne sont pas lues :
+déposez-les à part si l'agent doit s'en servir. Les destinataires en copie
+cachée ne sont jamais conservés.
+Un mail transféré en pièce jointe est lu aussi : son texte suit celui du mail.
+
+> **Un mail déposé est visible par toute l'équipe**, avec les noms et adresses
+> qu'il contient. Vérifiez qu'il peut être partagé avant de le déposer.
+
+Un mail chiffré ne peut pas être lu et sera refusé ; un mail seulement signé
+passe sans souci. Un mail dépassant 25 Mo est refusé : retirez ses pièces
+jointes les plus lourdes et enregistrez-le à nouveau.
 
 ## Un document du même nom existe déjà
 

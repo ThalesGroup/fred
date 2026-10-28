@@ -63,6 +63,13 @@ Current production and worker templates define:
 - DOCX/PPTX same as above
 - `process_images: true` (image descriptions via configured vision model)
 
+### Mail files (all profiles)
+
+- `.msg` and `.eml`: `EmailMarkdownProcessor`, the same in every profile; chat attachments use `FastEmailProcessor` with the same layout. Document attachments inside a mail are read with the fast text processors in every profile.
+- The markdown holds a From / To / Cc / Date / Subject header, the body (plain text preferred, otherwise sanitised HTML) and the attachment names; attachment content and Bcc are never ingested.
+- Files over 25 MB are refused before parsing; the library body is capped at 1,000,000 characters. Encrypted (S/MIME, IRM) mails fail permanently; signed-only mails are ingested.
+- Full rule: the `email-ingestion` OpenSpec capability.
+
 Note:
 
 - Even in `medium`, PDF uses `PdfMarkdownProcessor` in production templates.
@@ -111,6 +118,7 @@ Current status:
 | `LiteDocxToMd`/`FastLiteDocxProcessor`              | Fast attachment DOCX                | None                                                      | Low                                                                          |
 | `LitePptxToMd`/`FastLitePptxProcessor`              | Fast attachment PPTX                | None                                                      | Low                                                                          |
 | `FastLiteCsvProcessor`                              | Fast attachment CSV                 | None                                                      | Low                                                                          |
+| `EmailMarkdownProcessor` / `FastEmailProcessor`     | All profiles + attachments MSG/EML  | None                                                      | None (no remote content is fetched)                                          |
 
 Additional runtime/model dependencies:
 
