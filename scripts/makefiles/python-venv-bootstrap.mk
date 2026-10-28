@@ -5,7 +5,7 @@
 
 ##@ Virtualenv Bootstrap
 
-# Keep aligned with the uv dependency pins, Docker images and setup-uv steps.
+# Keep aligned with the Docker images and setup-uv steps.
 UV_VERSION := 0.13.5
 
 $(TARGET)/.venv-created:

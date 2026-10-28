@@ -1326,7 +1326,6 @@ dependencies = [
     { name = "starlette" },
     { name = "structlog" },
     { name = "temporalio" },
-    { name = "uv" },
 ]
 
 [package.metadata]
@@ -1379,7 +1378,6 @@ requires-dist = [
     { name = "starlette", specifier = ">=1.3.1" },
     { name = "structlog", specifier = ">=25.5.0,<27.0.0" },
     { name = "temporalio", specifier = ">=1.30.0,<2.0.0" },
-    { name = "uv", specifier = ">=0.13.5" },
 ]
 provides-extras = ["mcp", "migration", "vertexai", "dev"]
 
@@ -2113,7 +2111,6 @@ dependencies = [
     { name = "torchvision", version = "0.28.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'linux'" },
     { name = "torchvision", version = "0.28.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "transformers" },
-    { name = "uv" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -2225,7 +2222,6 @@ requires-dist = [
     { name = "torchvision", marker = "platform_machine == 'aarch64' or platform_machine == 'arm64'", specifier = "==0.28.0" },
     { name = "tox", marker = "extra == 'dev'", specifier = "==4.27.0" },
     { name = "transformers", specifier = ">=5.16.0,<6.0.0" },
-    { name = "uv", specifier = "==0.13.5" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.35,<0.36" },
 ]
 provides-extras = ["pymupdf", "chroma", "dev"]
@@ -5186,19 +5182,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/93/66/83e62c7a152bbbb8b30ac58eaad81f3860ba2fba91a334c50f223f9ce878/uuid_utils-0.16.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9bf8bfdffb22f620635580b17fd178272f30a9841b824b19b935c8db64bf09b6", size = 323064, upload-time = "2026-06-18T13:35:27.356Z" },
     { url = "https://files.pythonhosted.org/packages/24/d8/cdf79b242e41ae47b7cd617ac5d48f15ce44e81da8000379c757091ae5f8/uuid_utils-0.16.2-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:725110434a1d482a639a9ac467a24f1cb531d84ab52e454a13fe145b10b42cae", size = 499187, upload-time = "2026-06-18T13:35:30.042Z" },
     { url = "https://files.pythonhosted.org/packages/a3/d0/f6011dbe4e5d751a8494715e014019cb5b242d8cd6dbec1cfec3d3fb2e81/uuid_utils-0.16.2-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:fd32dbca0792b9683160151dc07fad11b915020eed7c82b43faf0862c2ff06a0", size = 528462, upload-time = "2026-06-18T13:35:33.685Z" },
-]
-
-[[package]]
-name = "uv"
-version = "0.13.5"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/de/f0/7565e80415f841c3500ed69d86516c7676e3b24470a218ab61b1f43071a2/uv-0.13.5.tar.gz", hash = "sha256:979409b8c9a78df140ffb19c53f511b7a73526da8d1d5e36558833055e371c6c", size = 7513309, upload-time = "2026-10-22T01:32:33.909Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d2/26/9ac45211123244ea68be852775093af487a64debc13621a2de239f8ebe73/uv-0.13.5-py3-none-macosx_11_0_arm64.whl", hash = "sha256:a42c85fa8156e1e5e2cecdbc77bb818ea1dcf5f78b8e2a8f84c7fe4f16f0702e", size = 14470685, upload-time = "2026-10-22T01:31:43.897Z" },
-    { url = "https://files.pythonhosted.org/packages/e8/2e/5bf9acf9d11fb790420e258a875e13bba36bc890858350642aca185efe0e/uv-0.13.5-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64.whl", hash = "sha256:2386c2dc9b59fc1d39b1c500e4319d71d3268232eb3b38e29cd6775d6269e8d4", size = 17784583, upload-time = "2026-10-22T01:31:46.95Z" },
-    { url = "https://files.pythonhosted.org/packages/3a/ad/3c2a81d66d1839063662e5b6c0002ec31f8ee987dbc5295747627ca6160a/uv-0.13.5-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:fa8d26e08e34c29c0c4e820cf3181757086d547240b4f4d31ff1d8bd810ca946", size = 17211825, upload-time = "2026-10-22T01:32:06.393Z" },
-    { url = "https://files.pythonhosted.org/packages/4c/92/d83d019c63c1ccc6ff17df2bfe76270412f9766e7e71aa4d4ccbf018683f/uv-0.13.5-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:91e58e304b63b6c91bac5561459ab0c3ea24f17bc01ea9359d69fed72142978f", size = 16654136, upload-time = "2026-10-22T01:32:10.086Z" },
-    { url = "https://files.pythonhosted.org/packages/4f/b0/7dba2cb636d7f58e0d74e948ad1afc6b7923e84e82de025e9951a68055db/uv-0.13.5-py3-none-musllinux_1_1_x86_64.whl", hash = "sha256:d162669e3a7811c584b03690eaa11e796ad1d309aa8229d5dfe3cbcd68a90400", size = 18963145, upload-time = "2026-10-22T01:32:22.362Z" },
 ]
 
 [[package]]

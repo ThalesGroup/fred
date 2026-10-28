@@ -127,9 +127,9 @@ RUN --mount=type=secret,id=ca-bundle \
     UV_PROJECT_ENVIRONMENT=/app/venv SSL_CERT_FILE=${SSL_CERT_FILE:-/etc/ssl/certs/ca-certificates.crt} \
     /app/venv/bin/uv sync --locked --no-default-groups --no-cache
 
-# pip is only needed for the builder bootstrap; remove it and its vendored
-# dependencies after the last install. Runtime packages stay locked.
-RUN /app/venv/bin/python -m pip uninstall --yes pip
+# uv and pip only build the venv: remove both after the last install.
+# Runtime packages stay locked.
+RUN /app/venv/bin/python -m pip uninstall --yes uv pip
 
 # Packaged procedures and their source path stay read-only for the runtime UID.
 RUN chown -R root:root /workspace/libs/fred-runtime && \

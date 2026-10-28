@@ -205,8 +205,8 @@ RUN --mount=type=secret,id=ca-bundle,mode=0444 \
     UV_PROJECT_ENVIRONMENT=/app/venv SSL_CERT_FILE=${SSL_CERT_FILE:-/etc/ssl/certs/ca-certificates.crt} \
     /app/venv/bin/uv sync --locked --no-default-groups --no-cache "$@"
 
-# Runtime uses uv; pip and its vendored libraries are only needed during bootstrap.
-RUN /app/venv/bin/python -m pip uninstall --yes pip
+# uv and pip only build the venv: remove both after the last install.
+RUN /app/venv/bin/python -m pip uninstall --yes uv pip
 
 COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/. /app/
 

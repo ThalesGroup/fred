@@ -45,7 +45,6 @@ dependencies = [
   "duckdb-engine>=0.17.0",
   "psycopg2-binary>=2.9.10",
   "sqlparse>=0.6.0",
-  "uv==0.13.5",
   "python-keycloak>=5.8.1",
   # ClickHouse client
   "clickhouse-connect>=0.8.0",

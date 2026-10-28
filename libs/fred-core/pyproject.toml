@@ -54,7 +54,6 @@ dependencies = [
     "google-cloud-storage>=3.1.0",
     # Patched embedded PyO3, quinn-proto and OpenTelemetry dependencies.
     "temporalio>=1.30.0,<2.0.0",
-    "uv>=0.13.5",
     "asyncpg>=0.31.0",
     "aiosqlite>=0.22.1",
     "greenlet>=3.4.0",
