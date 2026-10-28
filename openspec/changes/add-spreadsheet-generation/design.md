@@ -188,6 +188,16 @@ The open questions of the scoping pass are closed; every recommended option was 
 5. Formula surface (D13): explicit forms only (column `formula`, formula cells); plain `=` strings still refused with the exact form.
 6. `edit_column` is included in the revision ops (D10); the migration note moves to `impact: minor`.
 
+## Implementation notes (2026-10-28)
+
+Where the code settled a detail the decisions above left open, or diverged from their wording:
+
+- D13: in a column formula, a range written without any `$` is anchored (`Tarifs!A2:A40` -> `Tarifs!$A$2:$A$40`), since every row reads the whole table; a model-written relative lookup range would otherwise slide out of the table when filled down. A single cell still shifts; a fill-down that leaves the table gets "a cell every row reads must be written with $".
+- D10: formulas sent inside `changes` (a new column's `formula`, an edited cell) are written for the resulting workbook; only formulas already in the base are remapped. A row cannot be edited and moved in the same call. Rows inserted above the first row of a range shift it down, as Excel does; inside it, they widen it; appended after a range ending on the last data row, they extend it. A repeated identical `changes` call in a turn returns the first result (deduplicated on its arguments, not on the base version).
+- D15: XlsxWriter stores any formula whose text names a dynamic-array function (`XLOOKUP`, `FILTER`, `SORT`, `UNIQUE`, also inside quoted text) as a one-cell dynamic array; harmless for Excel and LibreOffice. Formulas are emitted in stored form from the AST and XlsxWriter's regex rewrite is bypassed (it cost ~30 regex scans per formula). `SUM($B$2:B2)` running totals over thousands of rows read too many cells for the budget; the limit message suggests `=C1+B2`. A spill that reads another spill's cells is evaluated after anchors in row order.
+- D16: the manual-total hint compares rows with the evaluator's own `SUM`/`AVERAGE`/`MIN`/`MAX`. The preview's `AVERAGE` of a column with no number now shows `#DIV/0!`, as Excel does (was empty).
+- Performance review: applying changes and serializing requests run in a worker thread (~180 ms at the cell limit on the event loop before the fix).
+
 ## Deferred gaps
 
 Known limits after this change, kept on #3215 or their own issues:
@@ -195,6 +205,7 @@ Known limits after this change, kept on #3215 or their own issues:
 - Only the **last** workbook delivered in the conversation (per agent) can be revised; an older card's file, a file the user edited in Excel, or an uploaded workbook cannot be the base.
 - Stored bases are never deleted (no session-deletion hook reaches a capability, as `cap_ppt_builder_deck_plan`; per-instance cleanup #2990, erasure cascade #3212). One row per conversation and agent, up to 4 MB.
 - Two deliveries racing in the same conversation: last writer wins the base.
+- A `SUM($B$2:B2)`-style running total over thousands of rows exceeds the evaluation budget (use `=C1+B2`).
 - Not available: `TEXT`, `TODAY`/`NOW` and other volatile functions, `INDIRECT`/`OFFSET`, `HYPERLINK`, defined names, structured table references, whole-column references, R1C1, legacy array (CSE) formulas, external links, functions outside D14. French function names are refused with the English form, not translated.
 - The evaluator follows Excel for the allow-list, but edge cases (floating-point display, the 1900 leap-year quirk, rare criteria syntax) can differ; Excel and LibreOffice recompute on open, so only non-recalculating viewers and the preview could show such a difference.
 - A spill (`FILTER`, `SORT`, `UNIQUE`) is checked against the data at build time; data edited later in Excel can still produce `#SPILL!` there.
