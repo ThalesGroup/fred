@@ -532,7 +532,7 @@ def _create_model(
                 )
             except ImportError as e:
                 raise ImportError(
-                    "Provider 'vertex-ai-model-garden' with model_family='mistral' requires 'langchain-google-vertexai' and 'langchain-mistralai'."
+                    "Provider 'vertex-ai-model-garden' with model_family='mistral' requires 'langchain-google-vertexai' (fred-core[vertexai]) and 'langchain-mistralai'."
                 ) from e
             model_cls = VertexModelGardenMistral
         elif model_family == "llama":
@@ -542,7 +542,7 @@ def _create_model(
                 )
             except ImportError as e:
                 raise ImportError(
-                    "Provider 'vertex-ai-model-garden' with model_family='llama' requires package 'langchain-google-vertexai'."
+                    "Provider 'vertex-ai-model-garden' with model_family='llama' requires package 'langchain-google-vertexai' (fred-core[vertexai])."
                 ) from e
             model_cls = VertexModelGardenLlama
         elif model_family in {"anthropic", "claude"}:
@@ -550,7 +550,7 @@ def _create_model(
                 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
             except ImportError as e:
                 raise ImportError(
-                    "Provider 'vertex-ai-model-garden' with model_family='anthropic' requires package 'langchain-google-vertexai'."
+                    "Provider 'vertex-ai-model-garden' with model_family='anthropic' requires package 'langchain-google-vertexai' (fred-core[vertexai])."
                 ) from e
             model_cls = ChatAnthropicVertex
         else:

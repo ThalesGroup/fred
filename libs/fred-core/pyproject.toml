@@ -40,7 +40,6 @@ dependencies = [
     "langchain-google-genai>=4.2.1",
     "langchain-ollama>=1.0.1",
     "langchain-mistralai>=1.1.2",
-    "langchain-google-vertexai>=3.2.2",
     "langchain-anthropic>=0.3.0",
     "langchain-openai>=1.1.14",
     "azure-identity>=1.25.0",
@@ -99,8 +98,14 @@ mcp = [
 migration = [
     "alembic>=1.18.4",
 ]
+# Only the vertex-ai-model-garden chat provider imports it; it pulls pyarrow and
+# google-cloud-aiplatform (~270 MB), so images install it only on request.
+vertexai = [
+    "langchain-google-vertexai>=3.2.2",
+]
 dev = [
     "alembic>=1.18.4",
+    "langchain-google-vertexai>=3.2.2",
     "bandit>=1.8.6",
     "basedpyright==1.31.0",
     "detect-secrets>=1.5.0",

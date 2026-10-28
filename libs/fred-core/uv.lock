@@ -1007,7 +1007,6 @@ dependencies = [
     { name = "langchain-anthropic" },
     { name = "langchain-core" },
     { name = "langchain-google-genai" },
-    { name = "langchain-google-vertexai" },
     { name = "langchain-mistralai" },
     { name = "langchain-ollama" },
     { name = "langchain-openai" },
@@ -1038,6 +1037,7 @@ dev = [
     { name = "basedpyright" },
     { name = "detect-secrets" },
     { name = "httpx2" },
+    { name = "langchain-google-vertexai" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -1050,6 +1050,9 @@ mcp = [
 ]
 migration = [
     { name = "alembic" },
+]
+vertexai = [
+    { name = "langchain-google-vertexai" },
 ]
 
 [package.dev-dependencies]
@@ -1084,7 +1087,8 @@ requires-dist = [
     { name = "langchain-anthropic", specifier = ">=0.3.0" },
     { name = "langchain-core", specifier = ">=1.6.5" },
     { name = "langchain-google-genai", specifier = ">=4.2.1" },
-    { name = "langchain-google-vertexai", specifier = ">=3.2.2" },
+    { name = "langchain-google-vertexai", marker = "extra == 'dev'", specifier = ">=3.2.2" },
+    { name = "langchain-google-vertexai", marker = "extra == 'vertexai'", specifier = ">=3.2.2" },
     { name = "langchain-mistralai", specifier = ">=1.1.2" },
     { name = "langchain-ollama", specifier = ">=1.0.1" },
     { name = "langchain-openai", specifier = ">=1.1.14" },
@@ -1114,7 +1118,7 @@ requires-dist = [
     { name = "temporalio", specifier = ">=1.30.0,<2.0.0" },
     { name = "uv", specifier = ">=0.13.5" },
 ]
-provides-extras = ["mcp", "migration", "dev"]
+provides-extras = ["mcp", "migration", "vertexai", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
