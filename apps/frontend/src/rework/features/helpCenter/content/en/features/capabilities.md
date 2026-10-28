@@ -123,15 +123,27 @@ amounts with their currency, or dates shown in your computer's date format.
 The agent can add a totals row that Excel computes (sum, average, minimum,
 maximum, count), and columns calculated row by row from other columns with
 real Excel formulas: add, subtract, multiply, divide or share of the total (for
-example "a Total incl. VAT column equal to Excl. VAT × 1.2"). Each request
-produces a new file: to change one, ask the agent
-and it writes a corrected copy beside the previous one.
+example "a Total incl. VAT column equal to Excl. VAT × 1.2"). It can also
+write other Excel formulas: lookups in another sheet, conditional sums,
+calculations on text or dates, or a summary sheet that reads the others ("add a
+Summary sheet with the total of each sheet"). The files keep their formulas and
+show their results even in a viewer that does not recalculate.
+
+**Changing the last file** — just ask for the change: "add a Variance column",
+"add a row with these values", "split this table into 2 sheets, with North in
+the first one". The agent changes only what you ask, the rest of the file stays
+the same, and formulas follow the rows and columns that move. Each change
+produces a new version ("Budget-v2.xlsx", "Budget-v3.xlsx"); the card of the
+newest one shows **Latest version**, and earlier ones can still be downloaded.
+This works long after the file was created, in the same conversation.
 
 **Its limits** — the agent writes every value itself, so the file stays modest
 in size: at most 10 sheets, 5,000 rows per sheet and 50,000 cells in all;
 beyond that, the agent tells you and suggests splitting the data. Charts are
 not available yet: add them in Excel from the data. No colors by value, no
-macros, and the agent does not edit an existing workbook. Deleting the
+macros. Only the last file created in the conversation can be changed; the agent
+does not pick up a file you edited yourself in Excel. Some formulas are not
+available, such as today's date and links to websites or other files. Deleting the
 conversation does not yet delete the files it produced.
 
 **The preview** — the **Preview** button on the file card opens the workbook

@@ -131,16 +131,32 @@ format de votre ordinateur. L'agent peut ajouter une ligne de totaux calculée
 par Excel (somme, moyenne, minimum, maximum, nombre), ainsi que des colonnes
 calculées ligne par ligne à partir d'autres colonnes, avec de vraies formules
 Excel : addition, soustraction, multiplication, division ou part du total (par
-exemple « une colonne TTC égale à HT × 1,2 »). Chaque demande produit un
-nouveau fichier : pour en modifier un, demandez-le à l'agent, qui en écrit une
-copie corrigée à côté de la précédente.
+exemple « une colonne TTC égale à HT × 1,2 »). Il peut aussi écrire d'autres
+formules Excel : recherches dans un autre onglet, sommes sous condition,
+calculs sur du texte ou des dates, ou un onglet de synthèse qui reprend les
+autres (« ajoute un onglet Synthèse avec le total de chaque onglet »). Les
+fichiers gardent leurs formules et affichent leurs résultats même dans une
+visionneuse qui ne recalcule pas.
+
+**Modifier le dernier fichier** — demandez simplement le changement :
+« ajoute une colonne Écart », « ajoute une ligne avec ces valeurs », « sépare
+ce tableau en 2 onglets, avec le Nord dans le premier ». L'agent ne modifie
+que ce que vous demandez, le reste du fichier ne change pas, et les formules
+suivent les lignes et colonnes déplacées. Chaque modification produit une
+nouvelle version (« Budget-v2.xlsx », « Budget-v3.xlsx ») ; la carte de la plus
+récente porte la mention **Dernière version**, et les précédentes restent
+téléchargeables. Cela fonctionne même longtemps après la création du fichier,
+dans la même conversation.
 
 **Ses limites** — l'agent écrit lui-même chaque valeur, le fichier reste donc
 de taille modeste : au plus 10 feuilles, 5 000 lignes par feuille et 50 000
 cellules en tout ; au-delà, l'agent vous le dit et propose de découper les
 données. Les graphiques ne sont pas encore disponibles : ajoutez-les dans Excel
-à partir des données. Pas de couleurs selon les valeurs, pas de macro, et
-l'agent ne modifie pas un classeur existant. Supprimer la conversation ne
+à partir des données. Pas de couleurs selon les valeurs, pas de macro. Seul le
+dernier fichier créé dans la conversation peut être modifié ; l'agent ne
+reprend pas un fichier que vous avez modifié vous-même dans Excel. Certaines
+formules ne sont pas disponibles, comme la date du jour, les liens vers des
+sites ou vers d'autres fichiers. Supprimer la conversation ne
 supprime pas encore les fichiers qu'elle a produits.
 
 **L'aperçu** — le bouton **Aperçu** de la carte du fichier ouvre le classeur à

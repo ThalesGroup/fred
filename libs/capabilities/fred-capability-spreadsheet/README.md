@@ -8,7 +8,7 @@ Design: `openspec/changes/add-spreadsheet-generation/` (issue #3208).
 
 ## What it ships
 
-- **Tool** `create_spreadsheet(file_name, sheets, language?)`: sheets with typed
+- **Tool** `create_spreadsheet(file_name?, sheets | changes, language?)`: sheets with typed
   columns (text, number, integer, percent, currency with an optional symbol,
   date in Excel's built-in short-date format, which follows the reader's locale),
   a bold frozen header, an auto filter, column widths and an optional totals row
@@ -28,14 +28,26 @@ Design: `openspec/changes/add-spreadsheet-generation/` (issue #3208).
   written, and a limit error asks the model to tell the user and suggest
   splitting. An ambiguous number such as `"1,234"` is refused: numbers travel
   as JSON numbers.
-- Text that looks like a formula is stored as literal text; control characters
-  are stripped from cells and headers. No macros.
-- Each call writes a new file and a new card; nothing is overwritten. Files are
-  not yet removed when the conversation is erased.
+- Formulas: a column `formula` (written for row 2, filled down) and formula cells
+  `{"formula": "=..."}`, checked against an allow-list (math, statistics,
+  logical, text, date, lookups, `FILTER`/`SORT`/`UNIQUE`) and against the
+  workbook's sheets and ranges (`formulas.py`); every formula is evaluated
+  server-side (`evaluator.py`, pure Python, cell-read budget) and its value is
+  cached in the file. Volatile, network, link and environment functions,
+  external workbooks and DDE are refused; plain text starting with `=`, `+`, `-`
+  or `@` stays literal, DDE-looking text is refused. No macros.
+- Revisions: `changes` (add/remove/edit columns, rows and cells, rename, add or
+  remove sheets, move rows) apply to the last delivered request, stored per
+  conversation and agent in `cap_spreadsheet_workbook` (`store.py`, own Alembic
+  tree `spreadsheet_migrations/`, version table `cap_spreadsheet_alembic_version`);
+  existing formulas follow the rows, columns and sheets (`revisions.py`).
+- Each call writes a new file and a new card; nothing is overwritten. Revisions
+  are named `-v2`, `-v3`, and the chat marks the latest version. Files and
+  stored bases are not yet removed when the conversation is erased.
 - The file and a JSON preview (first 500 rows per sheet, totals computed for
   display) are written through `RuntimeServices.workspace_fs`; the chat shows a
   `spreadsheet_preview` card that opens a read-only side panel, or a download
-  chip when the preview could not be stored. No config, table or router.
+  chip when the preview could not be stored. No config or router.
 
 `tools()` only, so it works on ReAct, Deep and Graph agents. Admin-gated: a
 platform administrator opens it per team.
