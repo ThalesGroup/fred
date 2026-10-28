@@ -765,8 +765,8 @@ dependencies = [
     { name = "fred-core" },
     { name = "fred-sdk", extra = ["agents"] },
     { name = "langchain-core" },
-    { name = "openpyxl" },
     { name = "pydantic" },
+    { name = "xlsxwriter" },
 ]
 
 [package.optional-dependencies]
@@ -775,6 +775,7 @@ dev = [
     { name = "basedpyright" },
     { name = "detect-secrets" },
     { name = "fred-runtime" },
+    { name = "openpyxl" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -788,6 +789,7 @@ dev = [
     { name = "basedpyright" },
     { name = "detect-secrets" },
     { name = "fred-runtime" },
+    { name = "openpyxl" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -804,13 +806,14 @@ requires-dist = [
     { name = "fred-runtime", marker = "extra == 'dev'", editable = "../../fred-runtime" },
     { name = "fred-sdk", extras = ["agents"], editable = "../../fred-sdk" },
     { name = "langchain-core", specifier = ">=0.3.0" },
-    { name = "openpyxl", specifier = ">=3.1.5" },
+    { name = "openpyxl", marker = "extra == 'dev'", specifier = ">=3.1.5" },
     { name = "pydantic", specifier = ">=2.7.0,<3.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.2.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
     { name = "pytest-socket", marker = "extra == 'dev'", specifier = ">=0.7.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
+    { name = "xlsxwriter", specifier = ">=3.2.0" },
 ]
 provides-extras = ["dev"]
 
@@ -820,6 +823,7 @@ dev = [
     { name = "basedpyright", specifier = "==1.31.0" },
     { name = "detect-secrets", specifier = ">=1.5.0" },
     { name = "fred-runtime", editable = "../../fred-runtime" },
+    { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
     { name = "pytest-cov", specifier = ">=6.2.1" },
@@ -3511,6 +3515,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/22/d5/39d5a704650f18799f37841442b464edb81cf2015f006eaef26068acc6ea/wrapt-2.5.1-cp312-cp312-win_amd64.whl", hash = "sha256:c39c7130ea0702c4ab0faf12da1df1e02d5174305c17edf02309e2f058c4114f", size = 106048, upload-time = "2026-10-14T00:37:33.188Z" },
     { url = "https://files.pythonhosted.org/packages/21/bf/65743adeeb5476920c62dad6cded7bc8789e19bd4f9a336d4ac812adb8de/wrapt-2.5.1-cp312-cp312-win_arm64.whl", hash = "sha256:e089a22ff5af1290b8c759a610830bdb2a829ef9c3d7797e4ee32c2f795ed482", size = 103200, upload-time = "2026-10-14T00:37:34.673Z" },
     { url = "https://files.pythonhosted.org/packages/bc/0c/7da7513ddcc8f1d831ec4bfbedc9f7f174ecb91042bc16916fc1e0d06b22/wrapt-2.5.1-py3-none-any.whl", hash = "sha256:c6e6c226b1ca5402d7ae5fb34a0d21f1b49124fe4200e5884d1e19e53c47ac1d", size = 81849, upload-time = "2026-10-14T00:39:37.441Z" },
+]
+
+[[package]]
+name = "xlsxwriter"
+version = "3.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/93/f2/98b45e52bc0330256bd4bb039cc44b28f838ad85602ce4f358f355d501bb/xlsxwriter-3.3.0.tar.gz", hash = "sha256:0a6bf2e4dcec8b29dd9b86d1e622132134c48bb6fd10f925fdfb229f0447199a", size = 221380, upload-time = "2026-10-22T00:26:03.317Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ce/9d/3d30eaaa7e06bdb6172f938b2661d64f8d899bdca54120384ecf3759488a/xlsxwriter-3.3.0-py3-none-any.whl", hash = "sha256:5f04772d43281da5109af66f39b65153359a203e896847c416476e709b024469", size = 179548, upload-time = "2026-10-22T00:26:02.009Z" },
 ]
 
 [[package]]

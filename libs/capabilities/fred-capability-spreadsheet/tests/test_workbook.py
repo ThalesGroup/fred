@@ -159,9 +159,9 @@ def test_widths_are_declared_or_computed_and_capped():
         {"header": "Long"},
     ]
     ws = _ws(_sheet(columns=columns, rows=[["abc", "x", "y" * 200]]))
-    assert ws.column_dimensions["A"].width == len("Short") + 2
-    assert ws.column_dimensions["B"].width == 30
-    assert ws.column_dimensions["C"].width == 60
+    # XlsxWriter stores the width Excel shows plus its cell padding (< 1 char).
+    shown = {k: int(ws.column_dimensions[k].width) for k in "ABC"}
+    assert shown == {"A": len("Short") + 2, "B": 30, "C": 60}
 
 
 def test_totals_row_holds_formulas_with_column_formats():
@@ -965,3 +965,39 @@ def test_a_rounded_number_column_shows_its_decimals(decimals, fmt):
     )
     assert _ws(sheet)["D2"].number_format == fmt
     assert _preview(sheet)["sheets"][0]["columns"][3]["decimals"] == decimals
+
+
+def test_formulas_carry_cached_values_for_viewers_that_do_not_recalculate():
+    sheet = _sheet(
+        columns=[
+            {"header": "Item"},
+            {"header": "Budget", "type": "number", "total": "sum"},
+            {"header": "Real", "type": "number", "total": "average"},
+            {
+                "header": "Rate",
+                "compute": {"op": "divide", "left": "Real", "right": "Budget"},
+            },
+            {
+                "header": "Gap",
+                "compute": {"op": "subtract", "left": "Real", "right": "Budget"},
+            },
+        ],
+        rows=[["a", 100, 120, None, None], ["b", 0, 50, None, None]],
+    )
+    data = _xlsx(sheet)
+    cached = load_workbook(io.BytesIO(data), data_only=True).worksheets[0]
+    formulas = load_workbook(io.BytesIO(data)).worksheets[0]
+    assert formulas["D2"].value == '=IFERROR(C2/B2,"")'
+    assert [cached[c].value for c in ("D2", "E2", "E3")] == [1.2, 20, 50]
+    assert cached["D3"].value in (None, "")  # division by zero: empty, not 0
+    assert (cached["B4"].value, cached["C4"].value) == (100, 85)
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        assert 'fullCalcOnLoad="1"' in archive.read("xl/workbook.xml").decode()
+
+
+def test_text_never_becomes_a_formula_number_or_link():
+    values = ["=1+1", "https://example.com", "00123", "1e5"]
+    ws = _ws(_sheet(columns=[{"header": "Note"}], rows=[[v] for v in values]))
+    for row, expected in enumerate(values, start=2):
+        cell = ws.cell(row=row, column=1)
+        assert (cell.value, cell.data_type, cell.hyperlink) == (expected, "s", None)
