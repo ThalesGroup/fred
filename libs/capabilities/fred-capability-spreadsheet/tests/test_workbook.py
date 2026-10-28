@@ -1288,3 +1288,62 @@ def test_fixed_cell_without_dollar_in_a_column_formula_gets_the_hint():
         rows=[[1, None], [2, None], [3, None]],
     )
     assert "must be written with $" in _error(sheet)
+
+
+def _cached(*sheets: dict[str, Any]) -> tuple[Worksheet, Worksheet]:
+    data = _xlsx(*sheets)
+    name = sheets[0]["name"]
+    return (
+        load_workbook(io.BytesIO(data))[name],
+        load_workbook(io.BytesIO(data), data_only=True)[name],
+    )
+
+
+@pytest.mark.parametrize(
+    ("formula", "written", "expected"),
+    [
+        ("=SUM(B2:C2)", "=SUM(B3:C3)", [4, 30]),
+        ("=AVERAGE(B2:C2)", "=AVERAGE(B3:C3)", [2, 15]),
+        # Mixed: the row reads its own cell, the whole column stays anchored.
+        ("=B2/SUM(B2:B3)", "=B3/SUM($B$2:$B$3)", [1 / 11, 10 / 11]),
+        ("=B2/SUM($B$2:$B$3)", "=B3/SUM($B$2:$B$3)", [1 / 11, 10 / 11]),
+        # An explicit $ is kept as written.
+        ("=SUM($B2:$C2)", "=SUM($B3:$C3)", [4, 30]),
+    ],
+)
+def test_a_range_on_the_formula_row_shifts_with_the_fill(formula, written, expected):
+    ws, cached = _cached(
+        _sheet(
+            columns=[
+                {"header": "Item"},
+                {"header": "X", "type": "number"},
+                {"header": "Y", "type": "number"},
+                {"header": "Out", "type": "number", "formula": formula},
+            ],
+            rows=[["a", 1, 3, None], ["b", 10, 20, None]],
+        )
+    )
+    assert ws["D3"].value == written
+    assert [cached["D2"].value, cached["D3"].value] == pytest.approx(expected)
+
+
+def test_a_formula_cell_overrides_its_column_formula():
+    sheet = _sheet(
+        columns=[
+            {"header": "Item"},
+            {"header": "HT", "type": "currency"},
+            {"header": "TTC", "type": "currency", "formula": "=B2*1.2"},
+        ],
+        rows=[
+            ["a", 10, None],
+            ["b", 20, None],
+            ["Total", {"formula": "=SUM(B2:B3)"}, {"formula": "=SUM(C2:C3)"}],
+        ],
+    )
+    ws, cached = _cached(sheet)
+    assert ws["C3"].value == "=B3*1.2"
+    assert ws["C4"].value == "=SUM(C2:C3)"
+    assert cached["C4"].value == pytest.approx(36)
+    preview = json.loads(build_preview(prepare(_request(sheet))))["sheets"][0]
+    assert preview["rows"][2][2] == pytest.approx(36)
+    assert preview["cell_formulas"]["C4"] == "=SUM(C2:C3)"

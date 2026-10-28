@@ -30,6 +30,8 @@ MAX_FORMULA_CHARS = 8_192
 MAX_DEPTH = 32
 MAX_COLUMN = 16_384
 MAX_ROW = 1_048_576
+# Row 1 holds the headers; a column formula is written for row 2 and filled down.
+FIRST_DATA_ROW = 2
 
 
 class FormulaError(ValueError):
@@ -1003,10 +1005,13 @@ def check(
 
 def anchor_ranges(node: Node) -> Node:
     """In a filled-down formula, a range written without any `$` is read whole by
-    every row (a lookup table, a total): anchor it instead of shifting it."""
+    every row (a lookup table, a total): anchor it instead of shifting it. A range
+    on the formula's own row (`B2:D2`) is a row-wise read and shifts with it."""
 
     def anchor(ref: Ref) -> Node:
         if not ref.is_range or ref.abs_c1 or ref.abs_r1 or ref.abs_c2 or ref.abs_r2:
+            return ref
+        if ref.r1 == ref.r2 == FIRST_DATA_ROW:
             return ref
         return replace(ref, abs_c1=True, abs_r1=True, abs_c2=True, abs_r2=True)
 
