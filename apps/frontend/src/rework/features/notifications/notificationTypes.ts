@@ -16,17 +16,25 @@
 // only its type and a payload snapshot, and everything shown is derived here,
 // in the viewer's locale. Category and buttons are never stored.
 
+import type { ThunkDispatch, UnknownAction } from "@reduxjs/toolkit";
 import type { TFunction } from "i18next";
 import type { NotificationCategory } from "@shared/molecules/NotificationTile/NotificationTile.tsx";
-import type { IconType } from "@shared/utils/Type.ts";
+import type { ColorTheme, IconType } from "@shared/utils/Type.ts";
+import { enhancedControlPlaneApi } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { NotificationPage } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import { teamAgentsPath } from "../../components/pages/TeamAgentsPage/agentDeepLink.ts";
 
 export type NotificationItem = NotificationPage["items"][number];
 type NotificationOfType<K extends NotificationItem["type"]> = Extract<NotificationItem, { type: K }>;
 
-/** A tile button that opens a route. */
-export type NotificationAction = { id: string; label: string; primary?: boolean; kind: "navigate"; to: string };
+export type NotificationDispatch = ThunkDispatch<unknown, unknown, UnknownAction>;
+
+/** A tile button: either a route, or a call to the domain endpoint that owns the
+ *  action (which keeps its own authorization and resolves the group). */
+export type NotificationAction = { id: string; label: string; primary?: boolean; color?: ColorTheme } & (
+  | { kind: "navigate"; to: string }
+  | { kind: "call"; call: (dispatch: NotificationDispatch) => Promise<unknown> }
+);
 
 interface NotificationTypeDefinition<N> {
   /** Its subtree under `rework.notifications.types`, which holds its `name` and `description` too. */
@@ -34,12 +42,16 @@ interface NotificationTypeDefinition<N> {
   icon: IconType;
   category: NotificationCategory;
   title: (notification: N, t: TFunction) => string;
+  /** A one-line second heading, between the title and the body. */
+  subtitle?: (notification: N, t: TFunction) => string;
   body: (notification: N, t: TFunction) => string;
   /** Where a click on the tile leads, if anywhere. */
   link: (notification: N) => string | null;
   actions: (notification: N, t: TFunction) => NotificationAction[];
   /** Overrides the generic "Handled by" line, e.g. to name the outcome. */
   handled?: (notification: N, t: TFunction) => string | undefined;
+  /** Asks for a decision: no close button and kept by "Clear all" until handled. */
+  decision?: boolean;
 }
 
 const openAgent = (teamId: string, agentInstanceId: string, t: TFunction): NotificationAction => ({
@@ -49,6 +61,23 @@ const openAgent = (teamId: string, agentInstanceId: string, t: TFunction): Notif
   kind: "navigate",
   to: teamAgentsPath(teamId, agentInstanceId),
 });
+
+const teamMembersPath = (teamId: string) => `/team/${teamId}/settings/members`;
+
+/** A join request decision, through the route that owns it. */
+function decideJoinRequest(
+  notification: NotificationOfType<"team.join_requested">,
+  decision: "accept" | "refuse",
+): (dispatch: NotificationDispatch) => Promise<unknown> {
+  const { endpoints } = enhancedControlPlaneApi;
+  const args = { teamId: notification.payload.team_id, requestId: notification.payload.request_id };
+  return (dispatch) =>
+    dispatch(
+      decision === "accept"
+        ? endpoints.acceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPost.initiate(args)
+        : endpoints.refuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePost.initiate(args),
+    ).unwrap();
+}
 
 const NOTIFICATION_TYPES: {
   [K in NotificationItem["type"]]: NotificationTypeDefinition<NotificationOfType<K>>;
@@ -99,17 +128,76 @@ const NOTIFICATION_TYPES: {
     link: ({ payload }) => teamAgentsPath(payload.team_id, payload.agent_instance_id),
     actions: ({ payload }, t) => [openAgent(payload.team_id, payload.agent_instance_id, t)],
   },
+  "team.join_requested": {
+    key: "joinRequested",
+    icon: "person_add",
+    category: "action_required",
+    decision: true,
+    // Team first: an admin of several teams sorts the requests by team.
+    title: ({ payload }) => payload.team_name,
+    subtitle: ({ payload }, t) =>
+      t("rework.notifications.types.joinRequested.subtitle", { name: payload.requester_name }),
+    // The requester's message: it is what the admin decides on (clamped, full on hover).
+    body: ({ payload }) => payload.message ?? "",
+    link: ({ payload }) => teamMembersPath(payload.team_id),
+    // Refuse left, Accept right: the same order as the Members tab.
+    actions: (notification, t) => [
+      {
+        id: "refuse",
+        label: t("rework.notifications.actions.refuse"),
+        primary: true,
+        color: "error",
+        kind: "call",
+        call: decideJoinRequest(notification, "refuse"),
+      },
+      {
+        id: "accept",
+        label: t("rework.notifications.actions.accept"),
+        primary: true,
+        color: "success",
+        kind: "call",
+        call: decideJoinRequest(notification, "accept"),
+      },
+    ],
+    handled: ({ handled_by_name: name, handled_outcome: outcome }, t) => {
+      if (!name || (outcome !== "accepted" && outcome !== "refused")) return undefined;
+      return t(`rework.notifications.types.joinRequested.${outcome}By`, { name });
+    },
+  },
+  "team.join_request_answered": {
+    key: "joinRequestAnswered",
+    icon: "groups",
+    category: "information",
+    title: ({ payload }) => payload.team_name,
+    body: ({ payload }, t) => t(`rework.notifications.types.joinRequestAnswered.${payload.outcome}Body`),
+    link: ({ payload }) => (payload.outcome === "accepted" ? teamAgentsPath(payload.team_id) : null),
+    actions: ({ payload }, t) =>
+      payload.outcome === "accepted"
+        ? [
+            {
+              id: "open-team",
+              label: t("rework.notifications.actions.openTeam"),
+              primary: true,
+              kind: "navigate",
+              to: teamAgentsPath(payload.team_id),
+            },
+          ]
+        : [],
+  },
 };
 
 export interface RenderedNotification {
   icon: IconType;
   category: NotificationCategory;
   title: string;
+  subtitle?: string;
   body: string;
   link: string | null;
   /** Empty once the notification is handled. */
   actions: NotificationAction[];
   handledLabel?: string;
+  /** See `isPendingDecision`. */
+  pendingDecision: boolean;
 }
 
 function handledLabel(notification: NotificationItem, t: TFunction): string {
@@ -145,6 +233,11 @@ export function describeNotificationType(type: string, t: TFunction): { name: st
   };
 }
 
+/** Waiting for the recipient's decision: no close button, kept by "Clear all". */
+export function isPendingDecision(notification: NotificationItem): boolean {
+  return Boolean(definitionOf(notification).decision && !notification.handled_at);
+}
+
 /** Everything a tile shows. */
 export function renderNotification(notification: NotificationItem, t: TFunction): RenderedNotification {
   const definition = definitionOf(notification);
@@ -155,9 +248,11 @@ export function renderNotification(notification: NotificationItem, t: TFunction)
     icon: definition.icon,
     category: definition.category,
     title: definition.title(notification, t),
+    subtitle: definition.subtitle?.(notification, t),
     body: definition.body(notification, t),
     link: definition.link(notification),
     actions: handled ? [] : definition.actions(notification, t),
     handledLabel: handled,
+    pendingDecision: isPendingDecision(notification),
   };
 }

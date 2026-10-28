@@ -1,0 +1,100 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border-radius: var(--radius-s);
+  background: var(--surface-container);
+  padding: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  color: var(--on-surface);
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+  padding: var(--spacing-s) var(--spacing-m);
+
+  & + & {
+    border-top: 1px solid var(--outline-variant);
+  }
+}
+
+/* Takes the room the actions leave; every line truncates instead of pushing them. */
+.text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.name,
+.meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name {
+  color: var(--on-surface);
+  font: var(--font-title-small);
+}
+
+.meta {
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
+}
+
+/* Two lines, as on the bell's tile. */
+.message {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  margin: 0;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--spacing-xs);
+}
+
+.status {
+  display: flex;
+  justify-content: center;
+  margin: 0;
+  padding: var(--spacing-l) var(--spacing-m);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}

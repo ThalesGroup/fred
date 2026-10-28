@@ -58,11 +58,13 @@
   padding-bottom: 0;
 }
 
+/* A title naming user content (a team, a file) can hold one unbreakable word. */
 .title {
   margin: 0;
   min-width: 0;
   color: var(--on-surface);
   font: var(--font-title-medium);
+  overflow-wrap: anywhere;
 }
 
 /* The title and the action bar stay put; only the body scrolls. `min-height:

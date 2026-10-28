@@ -3102,8 +3102,23 @@
     },
     "teamCard": {
       "join": "Join",
+      "joinFailed": "You could not join the team",
       "inviteOnly": "Invite only",
-      "memberCount": "{{count}} members"
+      "memberCount": "{{count}} members",
+      "askToJoin": "Ask to join",
+      "requestSent": "Request sent",
+      "cancelRequest": "Cancel request",
+      "cancelFailed": "Your request could not be cancelled",
+      "requestDeclined": "Request declined",
+      "askAgainAt": "Ask again from {{date}}",
+      "askDialog": {
+        "title": "Ask to join {{team}}",
+        "confirm": "Send the request",
+        "messageLabel": "Message (optional)",
+        "messageDescription": "Tell the team admins why you would like to join. Only they read it.",
+        "failed": "Your request could not be sent",
+        "failedDetail": "Try again in a moment."
+      }
     },
     "teamDescription": {
       "label": "Team description",
@@ -3133,6 +3148,13 @@
       "warnings": {
         "team_analyst": "Technical role: it also opens access to the limited conversation slices those evaluation datasets are built from. Grant it deliberately."
       }
+    },
+    "teamMemberGate": {
+      "title": "You are not a member of this team",
+      "message": "Only its members can open this team's pages.",
+      "pending": "Your request to join this team is waiting for an answer.",
+      "declined": "Your last request to join this team was declined. You can ask again from {{date}}.",
+      "browseTeams": "Browse teams"
     },
     "teamAdminCharter": {
       "accept": "Accept",
@@ -3191,7 +3213,21 @@
           "lastName": "Last name",
           "role": "Role"
         },
-        "title": "Team members"
+        "title": "Team members",
+        "tabs": {
+          "label": "Members and requests",
+          "members": "Members",
+          "requests": "Requests"
+        },
+        "joinRequests": {
+          "sentOn": "Asked on {{date}}",
+          "refusedOn": "Refused on {{date}}",
+          "accept": "Accept",
+          "refuse": "Refuse",
+          "acceptAnyway": "Accept anyway",
+          "empty": "No requests",
+          "loadError": "The join requests could not be loaded."
+        }
       },
       "navigation": {
         "leaveTeam": "Leave team",
@@ -3251,11 +3287,12 @@
         },
         "joiningMode": {
           "label": "Joining mode",
-          "support": "Users can join your team freely or by invitation only.",
+          "support": "Users can join your team freely, ask the team admins to let them in, or join by invitation only.",
           "open": "Open",
           "inviteOnly": "Invite only",
           "manual": "Manual only",
-          "privateSupport": "A private team is not listed on the marketplace: a team admin adds its members or shares an invite link."
+          "privateSupport": "A private team is not listed on the marketplace: a team admin adds its members or shares an invite link.",
+          "onRequest": "On request"
         },
         "visibility": {
           "label": "Team visibility",
@@ -4511,7 +4548,10 @@
       "unread": "Unread",
       "actions": {
         "view": "View",
-        "openAgent": "Open the agent"
+        "openAgent": "Open the agent",
+        "accept": "Accept",
+        "refuse": "Refuse",
+        "openTeam": "Open the team"
       },
       "types": {
         "republishNeeded": {
@@ -4531,8 +4571,22 @@
         },
         "unknown": {
           "title": "Notification"
+        },
+        "joinRequested": {
+          "name": "Request to join a team",
+          "description": "Sent to a team’s administrators when someone asks to join it; requests stay in Members > Join requests.",
+          "subtitle": "{{name}} asked to join.",
+          "acceptedBy": "Accepted by {{name}}",
+          "refusedBy": "Refused by {{name}}"
+        },
+        "joinRequestAnswered": {
+          "name": "Answer to a join request",
+          "description": "Sent to the person who asked to join a team once an administrator accepts or refuses.",
+          "acceptedBody": "A team admin accepted your request: you are now a member.",
+          "refusedBody": "A team admin declined your request. You can ask again in 24 hours."
         }
-      }
+      },
+      "actionFailed": "The action could not be completed."
     },
     "notificationSettings": {
       "title": "Notifications",

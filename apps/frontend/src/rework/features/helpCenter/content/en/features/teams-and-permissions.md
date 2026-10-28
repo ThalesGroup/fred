@@ -43,12 +43,48 @@ off later, the team's published agents leave the marketplace.
 ## Getting into a team
 
 The **marketplace** lists the teams visible in your organization. A **public**
-team appears there and is joined in one click if it is open; otherwise a team
-Admin has to add you or send you an invite link. A **private** team does not
-appear at all, and is never joined alone: ask one of its members.
+team appears there with the way it is joined:
 
-Note: a private team **cannot** be open to free joining. You get in when one of
-its Admins adds you or sends you an invite link.
+- **Open**: **Join** makes you a member in one click.
+- **On request**: **Ask to join** sends a request to the team's Admins.
+- **Invite only**: a team Admin has to add you or send you an invite link.
+
+A **private** team does not appear at all, and is never joined alone: ask one
+of its members.
+
+Note: a private team **cannot** be open to free joining or to requests. You get
+in when one of its Admins adds you or sends you an invite link.
+
+A team's pages open to its members only: following a link to a team you do not
+belong to (or no longer belong to) shows **You are not a member of this team**,
+with **Ask to join** when the team takes requests.
+
+### Asking to join a team
+
+On the card of an **On request** team, **Ask to join** opens a short form. You
+can add a message for the team's Admins (up to 280 characters, only they read
+it), then **Send the request**. The card then shows **Request sent**: **Cancel
+request** withdraws it while nobody has answered.
+
+The bell tells you the answer. If an Admin accepts, you become a **Member** and
+the team moves to **Your teams**. If they decline, the card shows **Request
+declined** and when you can ask again: 24 hours later. A request nobody
+answers is dropped after 30 days.
+
+### Handling join requests (Admins)
+
+To receive requests, a team Admin chooses **On request** in **Settings →
+Settings → Joining mode**. Only a public team offers it.
+
+Each request reaches the team's Admins in their notifications, with the
+person's message: **Refuse**, on the left, declines; **Accept**, on the right,
+makes them a **Member**. The first answer counts; the other Admins then see who answered. The same requests
+appear in **Settings → Members**, under the **Requests** tab, with the same
+buttons; **Members** next to it shows the team's members. A request refused in
+the last 7 days stays listed there with **Accept anyway**, in case of a mistake.
+
+Leaving **On request** (or making the team private) declines every pending
+request, and each person is told.
 
 ### Invite links
 
@@ -99,7 +135,8 @@ as soon as the description is saved.
 The **Settings** page gathers what governs the team. Access to each section
 depends on your role.
 
-- **Members** — add, remove, change roles, share invite links (**Admin**).
+- **Members** — add, remove, change roles, share invite links, answer join
+  requests (**Admin**).
 - **Settings** — the team's description, its marketplace visibility, how it is
   joined, and the **retention** period after which deleted conversations are
   permanently erased (**Admin**).

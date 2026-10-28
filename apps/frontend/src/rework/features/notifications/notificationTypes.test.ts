@@ -13,13 +13,34 @@
 // limitations under the License.
 
 // Pins each type's title, body and buttons from the payload, in the viewer's
-// locale; handled tiles and unknown types.
+// locale; handled tiles, unknown types and the join request decisions.
 
 import i18n, { type i18n as I18n } from "i18next";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import en from "../../../locales/en/translation.json";
 import fr from "../../../locales/fr/translation.json";
-import { describeNotificationType, renderNotification, type NotificationItem } from "./notificationTypes";
+import {
+  describeNotificationType,
+  isPendingDecision,
+  renderNotification,
+  type NotificationAction,
+  type NotificationDispatch,
+  type NotificationItem,
+} from "./notificationTypes";
+
+// The decision buttons dispatch the generated endpoints; each `initiate`
+// returns a marker the fake dispatch answers.
+const { initiate } = vi.hoisted(() => ({
+  initiate: (endpoint: string) => (arg: unknown) => ({ endpoint, arg }),
+}));
+vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  enhancedControlPlaneApi: {
+    endpoints: {
+      acceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPost: { initiate: initiate("accept") },
+      refuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePost: { initiate: initiate("refuse") },
+    },
+  },
+}));
 
 const instances: Record<string, I18n> = {};
 const missing: string[] = [];
@@ -70,6 +91,43 @@ const removed: NotificationItem = {
     reason: "removed_by_platform_admin",
     message: "Duplicate entry",
   },
+};
+
+const joinRequested: NotificationItem = {
+  ...base,
+  type: "team.join_requested",
+  payload: {
+    team_id: "team-1",
+    team_name: "Purchasing",
+    request_id: "req-1",
+    requester_id: "alice",
+    requester_name: "Alice Martin",
+    message: "I lead the RFP pipeline and would like to reuse your agents for the next three tenders.",
+  },
+};
+
+const answered = (outcome: "accepted" | "refused"): NotificationItem => ({
+  ...base,
+  team_id: null,
+  type: "team.join_request_answered",
+  payload: { team_id: "team-1", team_name: "Purchasing", outcome },
+});
+
+/** A dispatch whose endpoint calls answer `results[endpoint]` (an error rejects). */
+function fakeDispatch(results: Record<string, unknown> = {}) {
+  const calls: { endpoint: string; arg: unknown }[] = [];
+  const dispatch = vi.fn((action: { endpoint: string; arg: unknown }) => {
+    calls.push(action);
+    const result = results[action.endpoint];
+    const settled = result instanceof Error ? Promise.reject(result) : Promise.resolve(result);
+    return Object.assign(settled, { unwrap: () => settled });
+  });
+  return { calls, dispatch: dispatch as unknown as NotificationDispatch };
+}
+
+const callOf = (action: NotificationAction) => {
+  if (action.kind !== "call") throw new Error("not a call action");
+  return action.call;
 };
 
 describe("renderNotification", () => {
@@ -143,11 +201,85 @@ describe("renderNotification", () => {
   });
 
   it("renders an unknown type as a generic tile without link or buttons", () => {
-    const unknown = { ...base, type: "future.type", payload: {} } as unknown as NotificationItem;
+    const unknown = { ...base, type: "team.join_request", payload: {} } as unknown as NotificationItem;
 
     const rendered = renderNotification(unknown, instances.en.t);
 
     expect(rendered).toMatchObject({ icon: "notifications", title: "Notification", link: null, actions: [] });
+  });
+
+  it("renders a join request with the full message and Accept / Refuse calling the routes", async () => {
+    const rendered = renderNotification(joinRequested, instances.en.t);
+
+    expect(rendered.category).toBe("action_required");
+    // Team first, then who asks.
+    expect(rendered.title).toBe("Purchasing");
+    expect(rendered.subtitle).toBe("Alice Martin asked to join.");
+    expect(rendered.body).toBe(
+      "I lead the RFP pipeline and would like to reuse your agents for the next three tenders.",
+    );
+    expect(rendered.link).toBe("/team/team-1/settings/members");
+    expect(rendered.actions.map(({ label, primary, color }) => [label, primary ?? false, color])).toEqual([
+      ["Refuse", true, "error"],
+      ["Accept", true, "success"],
+    ]);
+
+    const { calls, dispatch } = fakeDispatch();
+    await callOf(rendered.actions[0])(dispatch);
+    await callOf(rendered.actions[1])(dispatch);
+    expect(calls).toEqual([
+      { endpoint: "refuse", arg: { teamId: "team-1", requestId: "req-1" } },
+      { endpoint: "accept", arg: { teamId: "team-1", requestId: "req-1" } },
+    ]);
+  });
+
+  it("marks only an open join request as a pending decision", () => {
+    expect(isPendingDecision(joinRequested)).toBe(true);
+    expect(renderNotification(joinRequested, instances.en.t).pendingDecision).toBe(true);
+    const handled = { ...joinRequested, handled_at: "2026-10-21T09:00:00Z", handled_by_name: "Bob" };
+    expect(isPendingDecision(handled as NotificationItem)).toBe(false);
+    expect(isPendingDecision(republish)).toBe(false);
+  });
+
+  it("renders a join request without a message with an empty body", () => {
+    const rendered = renderNotification(
+      { ...joinRequested, payload: { ...joinRequested.payload, message: null } } as NotificationItem,
+      instances.en.t,
+    );
+    expect(rendered.body).toBe("");
+  });
+
+  it("names the outcome on a join request handled by another admin", () => {
+    const handled = (outcome: string) =>
+      renderNotification(
+        { ...joinRequested, handled_at: "2026-10-22T09:00:00Z", handled_by_name: "Bob", handled_outcome: outcome },
+        instances.en.t,
+      );
+
+    expect(handled("accepted")).toMatchObject({ actions: [], handledLabel: "Accepted by Bob" });
+    expect(handled("refused").handledLabel).toBe("Refused by Bob");
+    expect(handled("something_else").handledLabel).toBe("Handled by Bob");
+  });
+
+  it("tells the requester they were accepted, with a button opening the team", () => {
+    const rendered = renderNotification(answered("accepted"), instances.en.t);
+
+    expect(rendered.category).toBe("information");
+    expect(rendered.title).toBe("Purchasing");
+    expect(rendered.body).toBe("A team admin accepted your request: you are now a member.");
+    expect(rendered.link).toBe("/team/team-1/agents");
+    expect(rendered.actions).toEqual([
+      expect.objectContaining({ kind: "navigate", to: "/team/team-1/agents", label: "Open the team" }),
+    ]);
+  });
+
+  it("tells the requester they were refused, with nothing to open", () => {
+    const rendered = renderNotification(answered("refused"), instances.en.t);
+
+    expect(rendered.title).toBe("Purchasing");
+    expect(rendered.body).toMatch(/^A team admin declined your request\./);
+    expect(rendered.link).toBeNull();
+    expect(rendered.actions).toEqual([]);
   });
 
   it("formats the bell's unseen count with the locale", () => {
@@ -164,8 +296,16 @@ describe("renderNotification", () => {
       renderNotification(removed, instances[lng].t);
       renderNotification({ ...republish, handled_at: "x", handled_by_name: "Bob" }, instances[lng].t);
       renderNotification({ ...republish, handled_at: "x", handled_outcome: "removed" }, instances[lng].t);
-      for (const item of [republish, removed]) {
+      renderNotification(joinRequested, instances[lng].t);
+      for (const item of [republish, removed, joinRequested, answered("accepted")]) {
         describeNotificationType(item.type, instances[lng].t);
+      }
+      for (const outcome of ["accepted", "refused"] as const) {
+        renderNotification(answered(outcome), instances[lng].t);
+        renderNotification(
+          { ...joinRequested, handled_at: "x", handled_by_name: "Bob", handled_outcome: outcome },
+          instances[lng].t,
+        );
       }
     }
 

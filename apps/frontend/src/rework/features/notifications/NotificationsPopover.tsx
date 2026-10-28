@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { useEffect, useRef, useState } from "react";
+import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
@@ -21,23 +22,35 @@ import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import NotificationTile from "@shared/molecules/NotificationTile/NotificationTile.tsx";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
 import { relativeTime } from "../tasks/taskLabels";
 import {
+  enhancedControlPlaneApi,
   useClearNotificationsMutation,
   useDeleteNotificationMutation,
   useMarkNotificationsSeenMutation,
   useNotificationsQuery,
 } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
-import { renderNotification, type NotificationItem } from "./notificationTypes";
+import {
+  isPendingDecision,
+  renderNotification,
+  type NotificationAction,
+  type NotificationDispatch,
+  type NotificationItem,
+} from "./notificationTypes";
 import styles from "./NotificationsPopover.module.scss";
 
 /** The backend's page size cap. */
 const NOTIFICATIONS_PAGE_SIZE = 50;
 
 interface TileHandlers {
-  /** The View button or an action. */
+  /** The View button or a navigate action. */
   interact: (notification: NotificationItem, to: string | null) => void;
+  onAction: (notification: NotificationItem, action: NotificationAction) => void;
   onDismiss: (notification: NotificationItem) => void;
+  /** True while one of the notification's actions is in flight. */
+  isBusy: (notification: NotificationItem) => boolean;
   isUnread: (notification: NotificationItem) => boolean;
 }
 
@@ -52,6 +65,7 @@ function NotificationListItem({ notification, handlers }: { notification: Notifi
       icon={rendered.icon}
       category={rendered.category}
       title={rendered.title}
+      subtitle={rendered.subtitle}
       body={rendered.body}
       time={relativeTime(new Date(notification.created_at).getTime(), t)}
       dateTime={notification.created_at}
@@ -66,9 +80,12 @@ function NotificationListItem({ notification, handlers }: { notification: Notifi
         id: action.id,
         label: action.label,
         primary: action.primary,
-        onClick: () => handlers.interact(notification, action.to),
+        color: action.color,
+        onClick: () => handlers.onAction(notification, action),
       }))}
+      busy={handlers.isBusy(notification)}
       dismissLabel={t("rework.notifications.dismiss")}
+      dismissible={!rendered.pendingDecision}
       viewLabel={showView ? t("rework.notifications.actions.view") : undefined}
       onView={() => handlers.interact(notification, rendered.link)}
       onDismiss={() => handlers.onDismiss(notification)}
@@ -134,11 +151,14 @@ interface NotificationsPopoverProps {
 export default function NotificationsPopover({ id, onClose }: NotificationsPopoverProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { showError } = useToast();
+  const dispatch = useDispatch<NotificationDispatch>();
   // Focus lands on the title on opening and whenever the focused tile goes away.
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [openedAt] = useState(() => Date.now());
   const [morePages, setMorePages] = useState(0);
   const seenPosted = useRef(false);
+  const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set());
 
   const firstPage = useNotificationsQuery({ limit: NOTIFICATIONS_PAGE_SIZE }, { refetchOnMountOrArgChange: true });
   const [markSeen] = useMarkNotificationsSeenMutation();
@@ -167,12 +187,41 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
   }, [fresh, items, markSeen]);
 
   const handlers: TileHandlers = {
-    // Acting on a tile is done with it.
+    // Acting on a tile is done with it, unless it still waits for a decision.
     interact: (notification, to) => {
-      handlers.onDismiss(notification);
+      if (!isPendingDecision(notification)) handlers.onDismiss(notification);
       if (!to) return;
       onClose(false);
       navigate(to);
+    },
+    onAction: (notification, action) => {
+      if (action.kind === "navigate") {
+        handlers.interact(notification, action.to);
+        return;
+      }
+      // On success the domain endpoint resolves the group and deletes the actor's
+      // own row. A 404 or 403 leaves nothing to act on, so the tile goes; any other
+      // failure keeps it usable and a toast says why.
+      if (busyIds.has(notification.id)) return;
+      const setBusy = (busy: boolean) =>
+        setBusyIds((ids) => {
+          const next = new Set(ids);
+          if (busy) next.add(notification.id);
+          else next.delete(notification.id);
+          return next;
+        });
+      setBusy(true);
+      void action
+        .call(dispatch)
+        .catch((error: unknown) => {
+          const { status, detail } = normalizeApiError(error);
+          if (status === 404 || status === 403) void deleteNotification({ notificationId: notification.id });
+          else showError({ summary: t("rework.notifications.actionFailed"), detail });
+        })
+        .finally(() => {
+          setBusy(false);
+          dispatch(enhancedControlPlaneApi.util.invalidateTags(["ControlPlaneNotification"]));
+        });
     },
     onDismiss: (notification) => {
       // The clicked button has focus; hand it to the neighbouring tile.
@@ -181,6 +230,7 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
       void deleteNotification({ notificationId: notification.id });
       (neighbour ?? titleRef.current)?.focus();
     },
+    isBusy: (notification) => busyIds.has(notification.id),
     isUnread: (notification) => !notification.seen_at || Boolean(unreadAtOpen?.has(notification.id)),
   };
 
@@ -194,7 +244,9 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
   };
 
   const loadMore = () => setMorePages((count) => count + 1);
-  const clearable = Boolean(items?.length);
+  // Pending decisions survive "Clear all": with nothing else listed, nothing to clear.
+  const clearable =
+    Boolean(firstPage.data?.next_cursor) || Boolean(items?.some((notification) => !isPendingDecision(notification)));
 
   let content;
   if (!items) {

@@ -47,14 +47,54 @@ la marketplace.
 ## Entrer dans une équipe
 
 La **marketplace** liste les équipes visibles de votre organisation. Une équipe
-**publique** y figure et se rejoint d'un clic si elle est ouverte ; sinon un
-Admin de l'équipe doit vous ajouter ou vous envoyer un lien d'invitation. Une
-équipe **privée** n'apparaît pas du tout, et ne se rejoint jamais seul :
+**publique** y figure avec sa façon d'y entrer :
+
+- **Ouverte** : **Rejoindre** vous en rend membre d'un clic.
+- **Sur demande** : **Demander à rejoindre** envoie une demande aux Admins de
+  l'équipe.
+- **Sur invitation** : un Admin de l'équipe doit vous ajouter ou vous envoyer
+  un lien d'invitation.
+
+Une équipe **privée** n'apparaît pas du tout, et ne se rejoint jamais seul :
 demandez à un de ses membres.
 
-À noter : une équipe privée **ne peut pas** être ouverte à l'adhésion libre.
-On y entre quand l'un de ses Admins vous ajoute ou vous envoie un lien
-d'invitation.
+À noter : une équipe privée **ne peut pas** être ouverte à l'adhésion libre ni
+aux demandes. On y entre quand l'un de ses Admins vous ajoute ou vous envoie un
+lien d'invitation.
+
+Les pages d'une équipe ne s'ouvrent qu'à ses membres : un lien vers une équipe
+dont vous n'êtes pas (ou plus) membre affiche **Vous n'êtes pas membre de cette
+équipe**, avec **Demander à rejoindre** si l'équipe accepte les demandes.
+
+### Demander à rejoindre une équipe
+
+Sur la carte d'une équipe **Sur demande**, **Demander à rejoindre** ouvre un
+court formulaire. Vous pouvez ajouter un message pour les Admins de l'équipe
+(280 caractères au plus, eux seuls le lisent), puis **Envoyer la demande**. La
+carte affiche alors **Demande envoyée** : **Annuler la demande** la retire tant
+que personne n'a répondu.
+
+La cloche vous donne la réponse. Si un Admin accepte, vous devenez **Membre**
+et l'équipe passe dans **Vos équipes**. S'il refuse, la carte affiche
+**Demande refusée** et le moment où vous pourrez la renouveler : 24 heures plus
+tard. Une demande restée sans réponse est abandonnée au bout de 30 jours.
+
+### Traiter les demandes (Admins)
+
+Pour recevoir des demandes, un Admin de l'équipe choisit **Sur demande** dans
+**Réglages → Paramètres → Mode d'adhésion**. Seule une équipe publique le
+propose.
+
+Chaque demande arrive dans les notifications des Admins de l'équipe, avec le
+message de la personne : **Refuser**, à gauche, la décline ; **Accepter**, à
+droite, en fait un **Membre**. La première réponse compte ; les autres Admins voient ensuite qui a
+répondu. Les mêmes demandes figurent dans **Réglages → Membres**, sous l'onglet
+**Demandes**, avec les mêmes boutons ; l'onglet **Membres**, à côté, liste les
+membres de l'équipe. Une demande refusée depuis moins de 7 jours y reste
+affichée avec **Accepter quand même**, en cas d'erreur.
+
+Quitter **Sur demande** (ou rendre l'équipe privée) refuse toutes les demandes
+en attente, et chaque personne en est prévenue.
 
 ### Liens d'invitation
 
@@ -107,7 +147,7 @@ La page **Réglages** rassemble ce qui gouverne l'équipe. L'accès à chaque
 section dépend de votre rôle.
 
 - **Membres** — ajouter, retirer, changer les rôles, partager des liens
-  d'invitation (**Admin**).
+  d'invitation, répondre aux demandes (**Admin**).
 - **Paramètres** — la description de l'équipe, sa visibilité sur la marketplace,
   son mode d'adhésion, et le délai de **rétention** après lequel les
   conversations supprimées sont définitivement effacées (**Admin**).

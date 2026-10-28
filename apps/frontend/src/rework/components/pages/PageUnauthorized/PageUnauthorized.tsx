@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useTranslation } from "react-i18next";
-import { PageError } from "@components/pages/PageError/PageError.tsx";
+import { PageError } from "@shared/molecules/PageError/PageError.tsx";
 
 export default function PageUnauthorized() {
   const { t } = useTranslation();
