@@ -402,7 +402,7 @@ make import-provisioning BUNDLE=target/demo-provisioning-bundle.zip TOKEN_FILE=/
 ZIP library and atomically replaces its output. `DEMO_PROVISIONING_FIXTURE_DIR`
 and `DEMO_BUNDLE_FILE` override source/output paths, including paths with spaces;
 no running service is needed. `make bundle-demo-zip` invokes the same builder.
-The ZIP contains the twelve accounts from the [example roster](00-introduction.md#conventions-used-throughout-this-dossier),
+The ZIP contains the twelve accounts from the [example roster](02-journeys.md#example-people-and-spaces),
 Acme/Research and Globex/Support, with no projects, platform grants or personal-space
 eligibility. Usernames are the lowercase first names; the demo password is
 `Azerty123_`. The `owner` account is created and bootstrapped separately and is

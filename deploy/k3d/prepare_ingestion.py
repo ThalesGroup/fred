@@ -167,7 +167,16 @@ def provision_search(
             "cluster:admin/search/pipeline/get",
         ],
         "index_permissions": [
-            {"index_patterns": [indexes[0]], "allowed_actions": ["read"]}
+            {
+                "index_patterns": [indexes[0]],
+                # The adapter checks the index and its mapping at startup.
+                "allowed_actions": [
+                    "read",
+                    "indices:admin/get",
+                    "indices:admin/mappings/get",
+                    "indices:monitor/settings/get",
+                ],
+            }
         ],
     }
     if api_indexes:

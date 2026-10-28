@@ -102,8 +102,8 @@ class VectorSearchClient(KfBaseClient):
         """Corpus search in the turn's Weaver space and its ancestors.
 
         Wire format (matches controller): POST /vector/search with
-        {"question", "top_k", "search_policy"?, "space_id"}. Knowledge Flow refuses
-        any other field, so a library or session selection can never widen silently.
+        {"question", "top_k", "search_policy"?, "space_id"}; the adapter refuses
+        library, document and session selections before calling.
         """
         payload: Dict[str, Any] = {
             "question": question,

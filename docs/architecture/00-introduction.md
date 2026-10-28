@@ -1,103 +1,55 @@
 # 0. Introduction
 
-Fred lets an organization offer AI assistants over its knowledge while keeping
-control of who can use them and which data they may access. Its document drive
-organizes shared work into teams and projects, alongside private personal spaces.
+Fred is an open-source platform that lets organizations use their knowledge
+with AI while retaining control over data and its use. It brings together data
+lifecycle management, access security and usage governance.
 
-## People, roles and rights
-
-Signing in establishes identity. A **role**, granted in a particular **space**,
-determines what that person may do. Administration and content access are separate:
-managing an organization does not automatically allow reading its documents.
-
-**Who authorizes what?** The organization permits agent use; the person's rights
-limit accessible data. This is a functional view.
+Fred provides a ready-to-use workspace for documents, AI assistants and
+administration. Its SDK lets teams extend the platform with agents, knowledge
+bases and complete business applications, including their own UI, backend
+services and data, with or without agents. The platform and its extensions
+follow a cloud-native deployment model based on Kubernetes.
 
 ```mermaid
 flowchart TB
-    alice["Alice<br/>Organization administrator"] -->|"Authorizes use"| agent["Agent available in Acme"]
-    bob["Bob<br/>Research editor"] -->|"Uses"| agent
-    agent -->|"Within Bob's data rights"| data["Documents accessible to Bob"]
+    ready["Ready to use<br/>Fred workspace<br/>Documents, assistants and administration"]
+
+    extend["Extend through the SDK<br/>Agents and knowledge bases<br/>Complete business applications<br/>Custom UI, backend services and data"]
+
+    foundation["Shared Fred foundation<br/>Governance and access rights<br/>Security and data lifecycle"]
+
+    k8s["Cloud-native deployment<br/>Kubernetes"]
+
+    ready --> foundation
+    extend --> foundation
+    foundation --> k8s
 
     classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
-    class alice,bob,agent,data neutral
+    class ready,extend,foundation,k8s neutral
 ```
 
-Bob's Research role in Acme grants no access to Globex's Support documents. Personal spaces
-inherit no content rights from the organization. Explicit role combinations and
-inheritance are explained in the [security chapter](03-security.md).
+## Spaces and access
+
+Resources are organized into organization, team, project or personal **spaces**.
+A **role** determines what a person may do within its scope. Administration and
+content access are separate: administering a space does not automatically grant
+access to its documents. See [Security](03-security.md) for access and inheritance
+rules.
 
 ## Agents, capabilities and models
 
-An **Agent Pod** is a logical runtime that supplies executable agent templates.
-Several deployment replicas can serve the same pod identity. A configured **instance**
-of a template belongs to a working space. A **capability** is a function embedded
-in that pod, such as Document Search. A **model** supplies inference; it can be
-hosted outside the pod. Control Plane maintains the model catalog and each
-organization's permitted choices; the Agent Pod calls the selected model.
+| Concept | Meaning |
+| --- | --- |
+| **Agent instance** | An assistant configured in a working space. |
+| **Capability** | A function available to an agent, such as document search. |
+| **Model** | An AI service used for inference. |
 
-**Where does a capability belong?** Each offering belongs to exactly one Agent
-Pod, with its own version and configuration. This diagram shows logical ownership;
-both pods reuse the same Python library.
+## Reading this dossier
 
-```mermaid
-flowchart TB
-    subgraph pa["Agent Pod A"]
-        aa["Agent template A"] -->|"Uses"| ca["Document Search<br/>Version 1"]
-    end
-    subgraph pb["Agent Pod B"]
-        ab["Agent template B"] -->|"Uses"| cb["Document Search<br/>Version 1"]
-    end
+- [System overview](01-system-overview.md): components, responsibilities and interactions.
+- [Journeys](02-journeys.md): access, document ingestion and conversations in practice.
+- [Security](03-security.md): identity, permissions and isolation boundaries.
+- [SDK documentation](../../libs/fred-sdk/README.md): authoring agents and Knowledge Bases.
 
-    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
-    class aa,ca,ab,cb neutral
-```
-
-Shared code supports **independent delivery**: each team can adopt a library
-release without waiting for other pods. Model sources and organization model
-permissions are managed separately from these pod-owned capabilities.
-
-An organization authorizes agents, restricts usable models and inspects each pod's
-capabilities. Capabilities have no separate user-permission matrix. Data access
-and approved external connections retain their own controls: enabling an agent
-neither grants document access nor approves a new destination for data.
-
-The [first-chat journey](02.3-agent-administration.md) follows Alice authorizing
-models for Acme and Bob choosing one for his assistant. It distinguishes a model
-being discovered, permitted and selected.
-
-## Conventions used throughout this dossier
-
-The following fictional people and spaces keep examples consistent. Acme contains
-Research; Globex contains Support. Each person belongs to only one organization.
-Names identify the examples; permissions come from explicit role grants.
-
-The platform account **`owner`** is created through the registration form and
-activates platform ownership with the bootstrap token. It governs organizations
-and appoints their owners and administrators, without automatic content access.
-**Dana** is the infrastructure operator in the model-service examples: she
-configures approved connections and credentials. This operational responsibility
-does not introduce another demo account or grant business content rights.
-
-| Function | Acme | Globex | Direct role at that scope |
-| --- | --- | --- | --- |
-| Organization owner | **Oscar** (`oscar`) | **Olivia** (`olivia`) | `organization_owner` on the organization |
-| Organization administrator | **Alice** (`alice`) | **Grace** (`grace`) | `admin` on the organization |
-| Team | **Research** | **Support** | - |
-| Team administrator | **Carl** (`carl`) | **Marc** (`marc`) | `admin` on the team |
-| Team analyst | **Elena** (`elena`) | **Nadia** (`nadia`) | `analyst` on the team |
-| Team member | **Carol** (`carol`) | **Phil** (`phil`) | `member` on the team |
-| Team editor | **Bob** (`bob`) | **Zoe** (`zoe`) | `editor` on the team |
-
-Each of the four team personas also holds `member` directly on their organization,
-the prerequisite for a team role. This parent role grants organization-level read
-access but does not descend into teams. Owners and organization administrators
-hold only their listed governance role; none of these twelve people holds a
-platform role. Carl can administer Research without reading its documents; Bob
-can read and contribute; Carol and Elena can read. Member stays local, whereas
-analyst also reaches descendant projects when a scenario introduces one.
-
-The demo bundle supplies these twelve organization accounts and two teams. The
-platform account is bootstrapped separately. Additional projects, role combinations
-and personal-space eligibility are stated explicitly in the relevant examples;
-the basic demo does not create projects or grant personal-space eligibility.
+The journeys use the fictional organizations Acme and Globex; their people,
+spaces and role grants are defined in the [example conventions](02-journeys.md#example-people-and-spaces).

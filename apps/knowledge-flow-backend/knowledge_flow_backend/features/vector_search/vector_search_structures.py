@@ -17,7 +17,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from fred_core.store import VectorSearchHit
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class DocumentSource(BaseModel):
@@ -60,11 +60,8 @@ class SearchPolicyName(str, Enum):
 class SearchRequest(BaseModel):
     """Corpus search in one Weaver space and its ancestors.
 
-    Unknown fields are refused: a Swift library, document or session selection
-    must fail rather than silently widen to the whole corpus.
+    The agent pod's delegation grant (person, run, agent) rides in the same body.
     """
-
-    model_config = ConfigDict(extra="forbid")
 
     question: str
     top_k: int = Field(default=10, ge=1, le=100, description="Number of results to return.")

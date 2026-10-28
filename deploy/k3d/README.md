@@ -86,8 +86,8 @@ shared KF configuration, so queries and chunks use the same vector space.
 
 The API reads with `fred-kf-api` and `fred-ingestion/kf-api-opensearch-password`,
 created by preparation without putting its value in Helm values. That identity
-can read the corpus and use the hybrid pipeline, but cannot modify corpus data or
-pipelines; its separate logs/KPI permissions keep writes there. Preparation rejects
+can read the corpus, its mapping and the hybrid pipeline, but cannot modify corpus
+data, mappings or pipelines; its separate logs/KPI permissions keep writes there. Preparation rejects
 an observability index equal to the corpus index.
 
 PostgreSQL remains `postgres:5432/fred`, user `fred`. The API reads the Control

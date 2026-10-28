@@ -188,6 +188,10 @@ applications:
     # It reads Control Plane tables and the published OpenFGA model; no KF migration.
     migration: {enabled: false}
     configuration:
+      security:
+        rebac:
+          # The store Control Plane publishes, like the agent pod.
+          store_name: control-plane
       storage:
         opensearch:
           username: fred-kf-api

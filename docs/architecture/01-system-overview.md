@@ -1,83 +1,181 @@
 # 1. System overview
 
-Fred separates governance from execution. Control Plane manages spaces, access
-and model choices. Knowledge Flow processes documents; Agent Pod runs assistants.
-The following views separate document ingestion from a conversation.
+The following views describe Fred's core platform, which supports both its
+ready-to-use workspace and SDK extensions, through document ingestion, agent
+access, governance and model use.
 
-## 1.1. Functional overview: the native document drive
+## 1.1. Six components and their responsibilities
 
-Users upload documents to their space and browse its folders and files.
-Their roles determine which content they can read and where they can contribute.
+The frontend provides the workspace for documents, conversations and
+administration. It calls Control Plane API for resource management and Agent Pods
+directly for chat. An Agent Pod is a runtime that hosts agents and their
+capabilities. Fred supplies `fred-agent` as its default Agent Pod.
 
-```mermaid
-flowchart TB
-    upload["Upload documents"] --> knowledge["Native document drive"]
-    knowledge --> browse["Browse folders<br/>and documents"]
-
-    classDef default fill:#F1F5F9,stroke:#64748B,color:#0F172A
-```
-
-## 1.2. Technical view: knowledge ingestion and storage
+Control Plane API governs spaces, access and document operations; its worker
+handles lifecycle cleanup, including space deletion. Knowledge Flow worker
+extracts and indexes document content, while Knowledge Flow API serves that
+knowledge to agent capabilities through internal endpoints.
 
 **Legend:** 🟦 Fred · 🟨 COTS · 🟪 Extensions · ⬜ Concepts
 
-**Control Plane** serves the document drive and receives ingestion requests.
-It starts processing through Temporal; **Knowledge Flow** is the worker that
-executes the pipelines and produces the stored results.
+```mermaid
+flowchart TB
+    ui["Frontend<br/>Documents, chat and administration"]
+    subgraph cp["Control Plane"]
+        api["Control Plane API<br/>Governance and document drive"]
+        worker["Control Plane worker<br/>Background lifecycle operations"]
+    end
+    pod["Agent Pod<br/>Assistant and capability execution<br/>Default: fred-agent"]
+    subgraph kf["Knowledge Flow"]
+        kfa["Knowledge Flow API<br/>Internal knowledge access"]
+        kfw["Knowledge Flow worker<br/>Extraction, embeddings and indexing"]
+    end
+    ui -->|"Documents / administration"| api
+    ui <-->|"Chat / streamed answers"| pod
+    pod -->|"Resolve authorized context"| api
+    pod -->|"Capabilities"| kfa
+    api -.->|"Processing via Temporal"| kfw
+
+    classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
+    class ui,api,worker,pod,kfa,kfw fred
+    class cp,kf neutral
+```
+
+These are six logical responsibilities. Control Plane API and its worker
+currently share a process. The dotted arrow represents asynchronous processing
+coordinated through Temporal, the workflow engine.
+
+## 1.2. Ingestion: the path from a document to knowledge
+
+A document enters Fred through Control Plane API, within a space where the user
+may contribute. Control Plane stores the original and starts processing through
+Temporal. Knowledge Flow worker extracts content, computes embeddings (numerical
+representations used for semantic search) and writes the processing results.
 
 ```mermaid
 flowchart TB
-    ui["Fred UI"] -->|"Browse / upload"| cp["Control Plane"]
-    cp -->|"Start processing"| temporal["Temporal"]
-    temporal -->|"Processing work"| kf["Knowledge Flow<br/>Worker"]
-    kf -->|"Write results"| stores[("Knowledge stores<br/>Object storage / SQL<br/>Vector index (e.g. OpenSearch)")]
-    cp <-->|"Document drive"| stores
+    ui["Frontend"]
+    api["Control Plane API<br/>Admission and publication"]
+    temporal["Temporal<br/>Durable processing"]
+    kfw["Knowledge Flow worker<br/>Extract, embed and index"]
+    artifacts[("Object storage / vector index<br/>Originals and processing results")]
+    facts[("PostgreSQL<br/>Placement and publication")]
+    ui -->|"Upload into a space"| api
+    api -->|"Store original"| artifacts
+    api -->|"Start processing"| temporal
+    temporal -->|"Run processing"| kfw
+    kfw -->|"Read original / submit result"| api
+    kfw -->|"Write extracted content and vectors"| artifacts
+    api -->|"Publish accepted result"| facts
 
     classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
     classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
-    class ui,cp,kf fred
-    class temporal,stores cots
+    class ui,api,kfw fred
+    class temporal,artifacts,facts cots
 ```
 
-## 1.3. Coordinating document writes
+<a id="13-coordinating-document-writes"></a>
 
-Control Plane decides when an original or a processing result becomes available.
-PostgreSQL holds its placement, lifecycle and publication state; OpenFGA holds
-permissions. Their changes do not share a single transaction. Control Plane
-coordinates authorization checks and publication with an organization-wide
-PostgreSQL lock and version guards in OpenFGA. The lock prevents participating
-mutations from interleaving between their checks and their commit; the guards
-also reject stale remote writes. Together with database constraints, this
-preserves current authority, lifecycle rules and shared quota reservations.
+Control Plane controls publication: producing an artifact does not by itself
+make it available. Document placement, lifecycle and publication state determine
+which results can be exposed. The
+[document journey](02.2-document-journey.md#concurrent-imports-and-publication)
+explains the coordination of concurrent imports and publication; the
+[open performance question](A10-open-issues.md#oi-1-document-write-concurrency)
+records the evidence needed to assess its cost under load.
 
-The organization lock is held for reservation and publication, including their
-authorization calls, not for file transfer, extraction or embedding computation.
-These sections run one at a time across the organization's teams and across all
-Control Plane replicas. Document reads and standalone permission checks do not
-take this write lock. Sections are intended to be short; their actual duration
-and accumulated waiting depend on load and dependency latency.
+## 1.3. Agents: accessing knowledge during a conversation
 
-The [document journey](02.2-document-journey.md#concurrent-imports-and-publication)
-illustrates the guarantee. [Open Issues](A10-open-issues.md#oi-1-document-write-concurrency)
-records the retained design and the evidence needed to assess its performance.
+The Agent Pod resolves the user's authorized execution context with Control
+Plane for each turn. When the assistant needs documents, it invokes a capability
+that calls Knowledge Flow API on the user's behalf, using their delegated
+identity and the space bound to that turn.
 
-## 1.4. Model governance and agent execution
-
-**Who checks Bob's choice, and who calls the model?** Control Plane owns the
-catalog, Acme's permissions and the chat's preparation check. Agent Pod executes
-the assistant using the context supplied by Control Plane.
+<a id="15-document-search-during-a-conversation"></a>
 
 ```mermaid
 flowchart TB
-    ui["Fred UI<br/>Bob's chat"]
-    cp["Control Plane<br/>Catalog and permissions"]
+    ui["Frontend<br/>Chat"]
+    subgraph pod["Agent Pod - default: fred-agent"]
+        agent["Assistant execution"]
+        capability["Document Search capability"]
+        agent -->|"Invoke tool"| capability
+    end
+    cp["Control Plane API"]
+    kfa["Knowledge Flow API<br/>Search and content retrieval"]
+    fga["OpenFGA<br/>Space read permission"]
+    stores[("Knowledge stores<br/>Index, publication facts and content")]
+    ui <-->|"Messages / streamed answers"| agent
+    agent -->|"Resolve authorized turn context"| cp
+    capability -->|"Delegated identity / bound space"| kfa
+    kfa -->|"Check user's access"| fga
+    kfa -->|"Search / verify visibility / retrieve"| stores
+
+    classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
+    classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
+    class ui,agent,capability,cp,kfa fred
+    class fga,stores cots
+    class pod neutral
+```
+
+Knowledge Flow API checks the user's access to the requested space, searches
+the index and verifies document visibility before returning content. The
+capability stays with the agent; knowledge retrieval and storage access stay
+with Knowledge Flow.
+
+## 1.4. Governance: administering resources by space
+
+Organization policies determine which agents, capabilities and models may be
+used. Within organization, team, project and personal spaces, a person's roles
+determine which resources they may read, contribute to or administer.
+
+```mermaid
+flowchart TB
+    admin["Organization administrator"]
+    policy["Organization policy<br/>Permitted agents, capabilities and models"]
+    person["Person"]
+    roles["Roles in a space<br/>Read / contribute / administer"]
+    space["Working space<br/>Organization, team, project or personal"]
+    documents["Space documents"]
+    assistants["Agent instances<br/>configured in the space"]
+    admin -->|"Sets"| policy
+    person -->|"Holds"| roles
+    roles -->|"Determine allowed actions"| space
+    space -->|"Contains"| documents
+    space -->|"Contains"| assistants
+    policy -->|"Constrains available choices"| assistants
+
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
+    class admin,policy,person,roles,space,documents,assistants neutral
+```
+
+An assistant must satisfy both controls: the organization's usage policy and
+the person's access rights in the working space. The [security chapter](03-security.md)
+defines inheritance and isolation rules.
+
+## 1.5. Models: authorization, selection and invocation
+
+<a id="14-model-governance-and-agent-execution"></a>
+
+**Assistant model: selection and execution**
+
+Control Plane maintains the model catalog and the organization's permitted
+choices. The user selects an available model; the Agent Pod resolves the
+authorized choice for the turn, calls the model service and streams the answer
+directly to the frontend.
+
+```mermaid
+flowchart TB
+    ui["Frontend<br/>Model selection"]
+    cp["Control Plane API<br/>Catalog and organization policy"]
     pod["Agent Pod<br/>Assistant execution"]
-    model["Model service"]
-    ui -->|"Prepare the selected model"| cp
-    ui <-->|"Message / streamed answer"| pod
-    pod -->|"Resolve Bob's authorized turn context"| cp
+    model["Generation model service"]
+    ui -->|"Prepare selected model"| cp
+    pod -->|"Resolve authorized model for the turn"| cp
     cp -->|"Discover model offerings"| model
-    pod -->|"Call the selected model"| model
+    pod -->|"Generate response"| model
 
     classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
     classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
@@ -85,42 +183,22 @@ flowchart TB
     class model cots
 ```
 
-Control Plane does not relay the model response. The pod still resolves the final
-selection and enforces it at execution, using the organization's policy rather
-than a separate pod-owned model catalog. An early preparation result is not an
-execution grant. See the [Acme journey](02.3-agent-administration.md) for the user
-view and [admission details](A2-manager-contracts.md#chat-model-preparation-and-turn-admission)
-for the technical boundary.
+**Knowledge embeddings: indexing and search**
 
-## 1.5. Document search during a conversation
-
-**Which components answer the assistant's document search?** Agent Pod performs
-it within the turn. Knowledge Flow only builds the index at ingestion; it is not
-called during a conversation.
+Knowledge Flow also uses models: its worker embeds document chunks during
+indexing, and its API embeds queries during search. This embedding configuration
+is separate from the generation model selected for a conversation.
 
 ```mermaid
 flowchart TB
-    pod["Agent Pod<br/>Document search"]
-    cp["Control Plane"]
-    embed["Embedding model"]
-    os[("OpenSearch<br/>Vector index")]
-    pg[("PostgreSQL<br/>Placement and publication")]
-    kf["Knowledge Flow<br/>Worker"]
-    cp -->|"1. Supplies Bob's<br/>turn context"| pod
-    pod -->|"2. Embed<br/>the question"| embed
-    pod -->|"3. Candidates<br/>in scope"| os
-    pod -->|"4. Keep live,<br/>published"| pg
-    kf -.->|"Indexes at<br/>ingestion"| os
+    kfa["Knowledge Flow API<br/>Document search"]
+    kfw["Knowledge Flow worker<br/>Document indexing"]
+    embed["Embedding model service"]
+    kfa -->|"Embed query"| embed
+    kfw -->|"Embed document chunks"| embed
 
     classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
     classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
-    class pod,cp,kf fred
-    class embed,os,pg cots
+    class kfa,kfw fred
+    class embed cots
 ```
-
-The space comes from the turn context resolved by Control Plane, never from the
-model's tool arguments. The scope is that space and its parents. The index only
-proposes candidates; PostgreSQL decides. A passage reaches the model only if its
-document is in scope, not deleted, retrievable, and part of the published
-processing result. The pod reads these stores with its infrastructure
-credentials; they authenticate the pod, not Bob's rights.
