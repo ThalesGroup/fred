@@ -556,10 +556,12 @@ export type WorkApiArg = {
 };
 export type ReceiptApiResponse = /** status 200 undefined */ UploadReceipt;
 export type ReceiptApiArg = {
+  /** The upload's `Idempotency-Key` */
   id: string;
 };
 export type AcknowledgeApiResponse = unknown;
 export type AcknowledgeApiArg = {
+  /** The upload's `Idempotency-Key` */
   id: string;
 };
 export type DeleteDocumentApiResponse = /** status 200 undefined */ Receipt | /** status 202 undefined */ Receipt;
@@ -579,11 +581,14 @@ export type PreviewApiArg = {
 export type HistoryApiResponse = /** status 200 undefined */ Summary[];
 export type HistoryApiArg = {
   id: string;
+  /** Cursor: `id` of the last attempt read. */
   before?: string | null;
 };
 export type StartApiResponse = /** status 200 undefined */ Summary;
 export type StartApiArg = {
+  /** Stored document */
   id: string;
+  /** Caller-chosen request UUID; replaying it is safe */
   "Idempotency-Key": string;
   start: Start;
 };
@@ -605,18 +610,23 @@ export type RenameFolderApiArg = {
   id: string;
   rename: Rename;
 };
-export type UploadApiResponse = /** status 200 undefined */ UploadReceipt | /** status 201 undefined */ UploadReceipt;
+export type UploadApiResponse = /** status 200 Replay of a stored request key */
+  | UploadReceipt
+  | /** status 201 Stored */ UploadReceipt;
 export type UploadApiArg = {
+  /** Destination folder */
   id: string;
-  /** Required request UUID */
+  /** Caller-chosen request UUID; replaying it is safe */
   "Idempotency-Key": string;
+  /** Request key of a failed upload of the same file to the same folder */
   retryOf?: string;
-  /** Omit for upload only */
+  /** Processing profile; omit to store only */
   profile?: Profile;
   fileUpload: FileUpload;
 };
 export type PreflightApiResponse = /** status 200 undefined */ PreflightResult;
 export type PreflightApiArg = {
+  /** Destination folder */
   id: string;
   preflight: Preflight;
 };
@@ -705,8 +715,11 @@ export type DeleteSpaceApiArg = {
 export type ReceiptsApiResponse = /** status 200 undefined */ UploadReceipt[];
 export type ReceiptsApiArg = {
   id: string;
+  /** Cursor: `created_at` of the last receipt read; requires `before_key` */
   before?: string;
+  /** Cursor: `request_key` of the last receipt read */
   beforeKey?: string;
+  /** 1..200, default 50 */
   limit?: number;
 };
 export type EntriesApiResponse = /** status 200 undefined */ Directory;
@@ -1027,18 +1040,26 @@ export type RetrievalConfirmation = {
 export type Stage = "queued" | "preparation" | "extraction" | "indexing" | "done";
 export type ProcessingStatus = "pending" | "running" | "succeeded" | "failed";
 export type Summary = {
+  /** Published text chunks; set on success. */
   chunks: number;
+  /** When the attempt became `succeeded` or `failed`. */
   completed_at?: string | null;
   created_at: string;
   document_id: string;
+  /** Last reported `FailureCode`; final once `failed`. */
   error_code?: string | null;
+  /** Attempt ID; pass it as `retry_of` to retry a failed attempt. */
   id: string;
   profile: Profile;
+  /** Failed attempt this one retries. */
   retry_of?: string | null;
+  /** Increases with every recorded change, so a poller can skip unchanged attempts. */
   revision: number;
+  /** Table rows, for a tabular document. */
   rows?: number | null;
   stage: Stage;
   status: ProcessingStatus;
+  /** Published search vectors; set on success. */
   vectors: number;
 };
 export type FailureCode =
@@ -1099,25 +1120,36 @@ export type VectorPlan = {
 };
 export type UploadStatus = "pending" | "stored" | "failed";
 export type UploadReceipt = {
+  /** When the receipt was dismissed or superseded. */
   acknowledged_at?: string | null;
+  /** When the upload became `stored` or `failed`. */
   completed_at?: string | null;
   created_at: string;
+  /** Set once `stored`. */
   document_id?: string | null;
+  /** Failure code when `failed`. */
   error_code?: string | null;
   folder_id: string;
+  /** MIME type reported by the client; metadata, not verified. */
   mime: string;
+  /** NFC-normalized filename. */
   name: string;
   processing?: Summary | null;
   processing_profile?: Profile | null;
+  /** The `Idempotency-Key` that identifies this receipt. */
   request_key: string;
+  /** Hex SHA-256 of the received bytes. */
   sha256: string;
+  /** Bytes received. */
   size: number;
   space_id: string;
   status: UploadStatus;
+  /** Request key of the retry that replaced this failed upload. */
   successor_key?: string | null;
 };
 export type Start = {
   profile: Profile;
+  /** Failed attempt to retry; required once the document has any attempt. */
   retry_of?: string | null;
 };
 export type Document = {
@@ -1154,33 +1186,47 @@ export type Rename = {
   name: string;
 };
 export type FileUpload = {
+  /** The file; its multipart filename becomes the document name. */
   file: Blob;
 };
 export type TypeUsage = {
   bytes: number;
   documents: number;
+  /** Reported MIME type, or `other`. */
   mime: string;
 };
 export type StorageSummary = {
+  /** Total size of those documents. */
   bytes: number;
+  /** Documents in this space alone. */
   documents: number;
+  /** Largest accepted file. */
   max_file_bytes: number;
+  /** Whether processing can be requested. */
   processing_enabled: boolean;
+  /** Quota shared by the space and, for a team, its projects. */
   quota_bytes: number;
+  /** Bytes reserved by uploads in progress, also counted against the quota. */
   reserved_bytes: number;
+  /** Usage by reported MIME type: the 20 largest, then `other`. */
   types: TypeUsage[];
   uploads_enabled: boolean;
+  /** Published bytes counted against that quota. */
   used_bytes: number;
 };
 export type PreflightResult = {
+  /** Requested names already stored or being uploaded in the folder. */
   conflicts: string[];
   storage: StorageSummary;
 };
 export type Candidate = {
+  /** Filename as it will be uploaded. */
   name: string;
+  /** Size in bytes. */
   size: number;
 };
 export type Preflight = {
+  /** 1..200 files to check. */
   files: Candidate[];
 };
 export type PublicAuth = {

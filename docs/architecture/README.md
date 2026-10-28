@@ -36,7 +36,7 @@ the annexes. Validation records live in each lot's PR; remaining work in GitHub 
 | What does each role mean, and where do current permissions differ? | [Roles and responsibility boundaries](A11-roles.md) | Role definitions, attribution and SSI comparison in the annex |
 | Who can enter a space or create a folder? | [Resources journey](02.1-user-journeys.md#bob-opens-resources), [Action/role matrix](A7-action-role-matrix.md), [Security](03-security.md) | Source map rows spaces, authorization, folders and roles |
 | Where are data and permissions stored? | [SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue), [OpenFGA model](A2-manager-contracts.md#openfga-model) | `migrations/`, `db.rs`, `openfga/model.fga` in the source map |
-| API endpoints and frontend bindings | [Generated routes](A2-manager-contracts.md#control-plane-http-surface) | Source map section contracts/generated code |
+| API endpoints and frontend bindings | [REST API reference](A12-control-plane-api.md), [HTTP surface rules](A2-manager-contracts.md#control-plane-http-surface) | Source map section contracts/generated code |
 | Startup, SQL migration or local deployment | [Operations](08-operations.md), [SQLx procedure](A3-manager-operations.md#sqlx-schema-evolution) | Source map rows startup/migrations and local profile |
 | Upload/process a PDF | [Document journey](02.2-document-journey.md), [Documents](05-documents.md) | Source map section beyond folder creation |
 | Assistant answering from a space's documents | [Journey](02.3-agent-administration.md#bobs-assistant-answers-from-researchs-documents), [Security](03-security.md#36-documents-used-by-an-assistant) | [Document search annex](A6-security.md#document-search-within-a-turn) |
@@ -47,21 +47,25 @@ persistence; record discrepancies rather than treating prose or a test name as p
 
 ## Technical references
 
-Exact implementation detail is available without making it the main reading path:
-[control-plane runtime](A1-manager-runtime.md), [schemas and contracts](A2-manager-contracts.md),
-the [SQL table catalogue](A2-manager-contracts.md#control-plane-sql-catalogue),
-[control-plane operations](A3-manager-operations.md), the
-[document journey trace and inspection](A4-document-journey.md), and
-[user journey contracts and implementation](A5-user-journeys.md),
-[security mechanisms](A6-security.md), the [action and role matrix](A7-action-role-matrix.md),
-[organization and provisioning contracts](A8-organizations.md),
-[document storage and processing](A9-documents.md), and
-[roles and responsibility boundaries](A11-roles.md).
-[Open Issues](A10-open-issues.md) records unresolved quality questions
-and the evidence needed to revisit retained choices, without committing to an
-implementation change.
-Generated blocks remain tied to
-source code; they are references, not another handwritten API specification.
+Exact implementation detail is available without making it the main reading path.
+
+| Annex | Reader's question |
+| --- | --- |
+| [A1. Control-plane runtime](A1-manager-runtime.md) | Which dependencies and runtime sequences does the Control Plane rely on? |
+| [A2. Schemas and contracts](A2-manager-contracts.md) | Which HTTP rules, [SQL tables](A2-manager-contracts.md#control-plane-sql-catalogue) and OpenFGA model back the domain? |
+| [A3. Control-plane operations](A3-manager-operations.md) | How is the Control Plane configured, logged and diagnosed? |
+| [A4. Document journey trace](A4-document-journey.md) | Which code and state does a document upload go through, and how do I inspect it? |
+| [A5. User journey contracts](A5-user-journeys.md) | Which admission, provisioning and folder contracts back the user journeys? |
+| [A6. Security mechanisms](A6-security.md) | How are authentication, consent, authorization and lifecycle enforced? |
+| [A7. Action and role matrix](A7-action-role-matrix.md) | Which role may perform which action, through which entry point? |
+| [A8. Organizations and provisioning](A8-organizations.md) | How are context, placement, membership and retirement resolved? |
+| [A9. Document storage and processing](A9-documents.md) | How are originals stored, processed, published and cleaned up? |
+| [A10. Open issues](A10-open-issues.md) | Which quality questions remain open, and what evidence would settle them? |
+| [A11. Roles](A11-roles.md) | What does each role mean, and where do current permissions differ? |
+| [A12. Control-plane REST API](A12-control-plane-api.md) | Which operations and JSON schemas does the Control Plane expose? |
+
+Generated blocks remain tied to source code; they are references, not another
+handwritten API specification.
 
 ## Convergence with the implementation
 

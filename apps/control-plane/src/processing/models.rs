@@ -8,27 +8,37 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 macro_rules! text_enum {
-    ($name:ident { $($variant:ident),+ }) => {
+    ($(#[$meta:meta])* $name:ident { $($variant:ident),+ }) => {
+        $(#[$meta])*
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema)]
         #[serde(rename_all="snake_case")]
         #[sqlx(type_name="text", rename_all="snake_case")]
         pub enum $name { $($variant),+ }
     };
 }
-text_enum!(Profile { Fast, Medium, Rich });
-text_enum!(ProcessingStatus {
-    Pending,
-    Running,
-    Succeeded,
-    Failed
-});
-text_enum!(Stage {
-    Queued,
-    Preparation,
-    Extraction,
-    Indexing,
-    Done
-});
+text_enum!(
+    /// Processing depth; its settings come from the Knowledge Flow worker's exported profiles.
+    Profile { Fast, Medium, Rich }
+);
+text_enum!(
+    /// `pending` until a worker claims the attempt, `running`, then `succeeded` or `failed`.
+    ProcessingStatus {
+        Pending,
+        Running,
+        Succeeded,
+        Failed
+    }
+);
+text_enum!(
+    /// Pipeline position: `queued`, `preparation`, `extraction`, `indexing`, then `done`.
+    Stage {
+        Queued,
+        Preparation,
+        Extraction,
+        Indexing,
+        Done
+    }
+);
 impl ProcessingStatus {
     pub fn terminal(self) -> bool {
         matches!(self, Self::Succeeded | Self::Failed)
@@ -46,20 +56,29 @@ impl Stage {
     }
 }
 
+/// One processing attempt of a document.
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct Summary {
+    /// Attempt ID; pass it as `retry_of` to retry a failed attempt.
     pub id: Uuid,
     pub document_id: Uuid,
     pub profile: Profile,
     pub status: ProcessingStatus,
     pub stage: Stage,
+    /// Increases with every recorded change, so a poller can skip unchanged attempts.
     pub revision: i64,
+    /// Last reported `FailureCode`; final once `failed`.
     pub error_code: Option<String>,
     pub created_at: DateTime<Utc>,
+    /// When the attempt became `succeeded` or `failed`.
     pub completed_at: Option<DateTime<Utc>>,
+    /// Failed attempt this one retries.
     pub retry_of: Option<Uuid>,
+    /// Published text chunks; set on success.
     pub chunks: i64,
+    /// Published search vectors; set on success.
     pub vectors: i64,
+    /// Table rows, for a tabular document.
     pub rows: Option<i64>,
 }
 
@@ -88,6 +107,7 @@ impl Work {
 #[serde(deny_unknown_fields)]
 pub struct Start {
     pub profile: Profile,
+    /// Failed attempt to retry; required once the document has any attempt.
     pub retry_of: Option<Uuid>,
 }
 

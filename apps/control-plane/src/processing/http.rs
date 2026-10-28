@@ -65,7 +65,9 @@ fn key(headers: &HeaderMap) -> AppResult<Uuid> {
     }
     Ok(key)
 }
-#[utoipa::path(post,path="/documents/{id}/processing",params(("id"=Uuid,Path),("Idempotency-Key"=Uuid,Header)),request_body=Start,responses((status=200,body=Summary),(status=409,body=crate::error::ErrorBody),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody),(status=429,body=crate::error::ErrorBody),(status=400,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody)))]
+/// Process a stored document for the first time, or retry its failed attempt.
+/// A document has at most one active or succeeded attempt; replaying `Idempotency-Key` returns it.
+#[utoipa::path(post,path="/documents/{id}/processing",params(("id"=Uuid,Path,description="Stored document"),("Idempotency-Key"=Uuid,Header,description="Caller-chosen request UUID; replaying it is safe")),request_body=Start,responses((status=200,body=Summary),(status=409,description="`processing_exists` (active or succeeded attempt), `retry_required` (set `retry_of`), `invalid_retry`, `retry_superseded` or `idempotency_conflict`",body=crate::error::ErrorBody),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=503,description="`processing_unavailable`",body=crate::error::ErrorBody),(status=429,description="`processing_capacity`: too many pending attempts; honour `Retry-After`",body=crate::error::ErrorBody),(status=400,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody)))]
 async fn start(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
@@ -82,9 +84,11 @@ async fn start(
 #[derive(Default, serde::Deserialize, utoipa::IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct History {
+    /// Cursor: `id` of the last attempt read.
     #[param(nullable)]
     pub before: Option<Uuid>,
 }
+/// The document's processing attempts, newest first, 50 per page.
 #[utoipa::path(get,path="/documents/{id}/processing",params(("id"=Uuid,Path),History),responses((status=200,body=Vec<Summary>),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
 async fn history(
     State(s): State<AppState>,

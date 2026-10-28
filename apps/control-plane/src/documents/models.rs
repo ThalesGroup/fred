@@ -6,6 +6,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// `pending` while the file is transferred and verified, then `stored` once published,
+/// or `failed` with an `error_code`.
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema,
 )]
@@ -17,23 +19,36 @@ pub enum UploadStatus {
     Failed,
 }
 
+/// Durable outcome of one upload request, readable by its request key.
 #[derive(Clone, Debug, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct UploadReceipt {
+    /// The `Idempotency-Key` that identifies this receipt.
     pub request_key: Uuid,
     pub space_id: Uuid,
     pub folder_id: Uuid,
+    /// NFC-normalized filename.
     pub name: String,
+    /// MIME type reported by the client; metadata, not verified.
     pub mime: String,
+    /// Bytes received.
     pub size: i64,
+    /// Hex SHA-256 of the received bytes.
     pub sha256: String,
     pub status: UploadStatus,
+    /// Set once `stored`.
     pub document_id: Option<Uuid>,
+    /// Failure code when `failed`.
     pub error_code: Option<String>,
     pub created_at: DateTime<Utc>,
+    /// When the upload became `stored` or `failed`.
     pub completed_at: Option<DateTime<Utc>>,
+    /// When the receipt was dismissed or superseded.
     pub acknowledged_at: Option<DateTime<Utc>>,
+    /// Request key of the retry that replaced this failed upload.
     pub successor_key: Option<Uuid>,
+    /// Profile requested with the upload, if any.
     pub processing_profile: Option<crate::processing::models::Profile>,
+    /// Latest processing attempt of the stored document.
     #[sqlx(skip)]
     pub processing: Option<crate::processing::models::Summary>,
 }
@@ -53,33 +68,47 @@ pub(super) struct UploadRow {
 #[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Preflight {
+    /// 1..200 files to check.
     pub files: Vec<Candidate>,
 }
 #[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Candidate {
+    /// Filename as it will be uploaded.
     pub name: String,
+    /// Size in bytes.
     pub size: u64,
 }
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct PreflightResult {
+    /// Requested names already stored or being uploaded in the folder.
     pub conflicts: Vec<String>,
     pub storage: StorageSummary,
 }
+/// Storage usage of a space; a project counts against its team's quota.
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct StorageSummary {
+    /// Quota shared by the space and, for a team, its projects.
     pub quota_bytes: i64,
+    /// Published bytes counted against that quota.
     pub used_bytes: i64,
+    /// Bytes reserved by uploads in progress, also counted against the quota.
     pub reserved_bytes: i64,
+    /// Largest accepted file.
     pub max_file_bytes: u64,
     pub uploads_enabled: bool,
+    /// Whether processing can be requested.
     pub processing_enabled: bool,
+    /// Documents in this space alone.
     pub documents: i64,
+    /// Total size of those documents.
     pub bytes: i64,
+    /// Usage by reported MIME type: the 20 largest, then `other`.
     pub types: Vec<TypeUsage>,
 }
 #[derive(Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct TypeUsage {
+    /// Reported MIME type, or `other`.
     pub mime: String,
     pub documents: i64,
     pub bytes: i64,

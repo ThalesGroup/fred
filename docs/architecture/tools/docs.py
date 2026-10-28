@@ -25,6 +25,7 @@ Directives:
     include <path> [lang]   the file, verbatim, in a fenced block
     mermaid <path>          a generated .mmd file as a mermaid block
     routes <path> <base>    the HTTP routes of an axum router
+    openapi <path>          operations and schemas of an OpenAPI 3.1 document
     invariants              each invariant of the dossier and the tests proving it
 
 `check` fails when a block differs from its sources, when an invariant has no test,
@@ -34,8 +35,10 @@ labels of a tbls mermaid output. Stdlib only.
 
 from __future__ import annotations
 
+import json
 import re
 import sys
+from itertools import takewhile
 from pathlib import Path
 
 DOSSIER = Path(__file__).resolve().parents[1]
@@ -75,6 +78,163 @@ def routes(path: str, base: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+METHODS = ["get", "post", "put", "patch", "delete"]
+LIMITS = {"minimum": ">=", "maximum": "<=", "minLength": "min length", "maxLength": "max length",
+          "minItems": "min items", "maxItems": "max items"}
+
+
+def anchor(heading: str) -> str:
+    """GitHub's heading anchor: lowercase, punctuation dropped, spaces as hyphens."""
+    return re.sub(r"[^\w\- ]", "", heading.lower()).replace(" ", "-")
+
+
+def prose(text: str | None) -> str:
+    return " ".join((text or "").split()).replace("|", "\\|")
+
+
+def type_of(schema: dict) -> str:
+    """One-line type expression; component references link to their schema section."""
+    if "$ref" in schema:
+        name = schema["$ref"].rsplit("/", 1)[1]
+        return f"[`{name}`](#{anchor(name)})"
+    for combinator in ("oneOf", "anyOf", "allOf"):
+        if combinator in schema:
+            return " or ".join(type_of(s) for s in schema[combinator])
+    if "enum" in schema:
+        return ", ".join(f"`{v}`" for v in schema["enum"])
+    kinds = schema.get("type", "any")
+    nullable = isinstance(kinds, list) and "null" in kinds
+    kind = next((k for k in kinds if k != "null"), "null") if isinstance(kinds, list) else kinds
+    if kind == "array":
+        text = f"array of {type_of(schema.get('items', {}))}"
+    elif kind == "object" and isinstance(schema.get("additionalProperties"), dict):
+        text = f"map of {type_of(schema['additionalProperties'])}"
+    else:
+        text = f"{kind} ({schema['format']})" if "format" in schema else kind
+    text += "".join(f", {label} {schema[key]}" for key, label in LIMITS.items() if key in schema)
+    return text + (" or null" if nullable else "")
+
+
+def row(*cells: str) -> str:
+    return "| " + " | ".join(cells) + " |"
+
+
+def fields(schema: dict) -> list[str]:
+    required = set(schema.get("required", []))
+    lines = [row("Field", "Type", "Required", "Description"), row(*["---"] * 4)]
+    lines += [
+        row(f"`{name}`", type_of(field), "yes" if name in required else "", prose(field.get("description")))
+        for name, field in sorted(schema["properties"].items())
+    ]
+    return lines + [""]
+
+
+def variant_label(schema: dict) -> str:
+    """Name a serde-tagged variant by its single-value discriminator, if it has one."""
+    for name, field in sorted(schema.get("properties", {}).items()):
+        if len(field.get("enum", [])) == 1:
+            return f"`{name}` = `{field['enum'][0]}`"
+    return type_of(schema)
+
+
+def schema_section(name: str, schema: dict) -> list[str]:
+    lines = [f"### {name}", ""]
+    if schema.get("description"):
+        lines += [prose(schema["description"]), ""]
+    if "properties" in schema:
+        return lines + fields(schema)
+    parts = schema.get("allOf", [])
+    if parts and all("$ref" in p or "properties" in p for p in parts):
+        bases = [type_of(p) for p in parts if "$ref" in p]
+        lines += [f"Extends {', '.join(bases)} with:", ""]
+        for part in parts:
+            if "properties" in part:
+                lines += fields(part)
+        return lines
+    variants = schema.get("oneOf", [])
+    if any("properties" in v for v in variants):
+        lines += ["One of:", ""]
+        for variant in variants:
+            lines += [f"- {variant_label(variant)}", ""]
+            if "properties" in variant:
+                lines += fields(variant)
+        return lines
+    return lines + [f"{'One of: ' if 'enum' in schema else 'Type: '}{type_of(schema)}.", ""]
+
+
+def body(content: dict) -> str:
+    rendered = []
+    for media, value in content.items():
+        text = type_of(value.get("schema", {}))
+        rendered.append(text if media == "application/json" else f"{text} (`{media}`)")
+    return " or ".join(rendered) or "no body"
+
+
+def summary_of(op: dict) -> str:
+    return prose(" ".join(filter(None, [op.get("summary"), op.get("description")])))
+
+
+def overview(operations: list[tuple[str, str, dict]]) -> list[str]:
+    """One row per operation, linking to its section, with its summary's first sentence."""
+    lines = [row("Method", "Path", "Summary"), row(*["---"] * 3)]
+    for path, method, op in operations:
+        first = summary_of(op).split(". ", 1)[0].rstrip(".")
+        lines.append(row(method.upper(), f"[{path}](#{anchor(f'{method.upper()} {path}')})", first))
+    return lines + [""]
+
+
+def operation_section(path: str, method: str, op: dict) -> list[str]:
+    lines = [f"### {method.upper()} {path}", ""]
+    summary = summary_of(op)
+    if summary:
+        lines += [summary, ""]
+    public = " · public, no bearer token" if op.get("security") == [{}] else ""
+    lines += [f"Operation `{op['operationId']}`{public}.", ""]
+    if op.get("parameters"):
+        lines += [row("Parameter", "In", "Type", "Required", "Description"), row(*["---"] * 5)]
+        lines += [
+            row(f"`{p['name']}`", p["in"], type_of(p.get("schema", {})),
+                "yes" if p.get("required") else "", prose(p.get("description")))
+            for p in op["parameters"]
+        ]
+        lines.append("")
+    if "requestBody" in op:
+        request = op["requestBody"]
+        optional = "" if request.get("required") else " (optional)"
+        lines += [f"Request{optional}: {body(request['content'])}.", ""]
+    # Group statuses sharing one body and meaning so the common error envelope reads once.
+    grouped: dict[str, list[str]] = {}
+    for status, response in sorted(op["responses"].items()):
+        meaning = prose(response.get("description"))
+        text = body(response.get("content", {})) + (f" — {meaning}" if meaning else "")
+        grouped.setdefault(text, []).append(status)
+    lines += [f"- {', '.join(statuses)}: {text}" for text, statuses in grouped.items()]
+    return lines + [""]
+
+
+def openapi(path: str) -> str:
+    spec = json.loads((ROOT / path).read_text())
+    paths = spec["paths"]
+    shared = takewhile(lambda s: len(set(s)) == 1, zip(*(p.split("/") for p in paths)))
+    prefix = "/".join(s[0] for s in shared)
+    groups: dict[str, list[tuple[str, str, dict]]] = {}
+    for route, item in sorted(paths.items()):
+        relative = route[len(prefix):]
+        for method in sorted(item, key=METHODS.index):
+            groups.setdefault(relative.split("/")[1], []).append((relative, method, item[method]))
+    contents = [f"[`/{g}`](#{anchor(f'/{g} routes')})" for g in sorted(groups)]
+    lines = [f"Paths are relative to `{prefix}`.", ""]
+    lines += [f"Operations: {' · '.join(contents)}. [Schemas](#schemas).", ""]
+    for group, operations in sorted(groups.items()):
+        lines += [f"## /{group} routes", ""] + overview(operations)
+        for relative, method, op in operations:
+            lines += operation_section(relative, method, op)
+    lines += ["## Schemas", ""]
+    for name, schema in sorted(spec["components"]["schemas"].items()):
+        lines += schema_section(name, schema)
+    return "\n".join(lines)
+
+
 def defined_invariants() -> list[str]:
     """Invariant ids defined in hand-written tables; generated blocks only cite them."""
     found: list[str] = []
@@ -111,6 +271,8 @@ def render(directive: str) -> str:
         return fenced("mermaid", (ROOT / args[0]).read_text())
     if kind == "routes":
         return routes(args[0], args[1])
+    if kind == "openapi":
+        return openapi(args[0])
     if kind == "invariants":
         return invariants()
     raise ValueError(f"unknown directive: {directive}")

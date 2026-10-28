@@ -24,16 +24,30 @@ use uuid::Uuid;
 fn storage(state: &AppState) -> AppResult<&Arc<Storage>> {
     state.content.as_ref().ok_or_else(unavailable)
 }
+/// Multipart body: exactly one `file` part.
 #[allow(dead_code)]
 #[derive(utoipa::ToSchema)]
 struct FileUpload {
+    /// The file; its multipart filename becomes the document name.
     #[schema(value_type=String,format=Binary)]
     file: Vec<u8>,
 }
 
-/// Create one immutable original; the request key is scoped to the authenticated actor.
-#[utoipa::path(post,path="/folders/{id}/documents",params(("id"=Uuid,Path),("Idempotency-Key"=Uuid,Header,description="Required request UUID"),("retry_of"=Option<Uuid>,Query),("profile"=Option<crate::processing::models::Profile>,Query,description="Omit for upload only")),request_body(content=FileUpload,content_type="multipart/form-data"),responses(
-(status=400,body=crate::error::ErrorBody),(status=201,body=UploadReceipt),(status=200,body=UploadReceipt),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=408,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=413,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=429,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)
+/// Store one file as an immutable original; with `profile`, also request its processing atomically.
+/// `Location` names the receipt; replaying a stored `Idempotency-Key` answers 200 with the same receipt.
+#[utoipa::path(post,path="/folders/{id}/documents",params(("id"=Uuid,Path,description="Destination folder"),("Idempotency-Key"=Uuid,Header,description="Caller-chosen request UUID; replaying it is safe"),("retry_of"=Option<Uuid>,Query,description="Request key of a failed upload of the same file to the same folder"),("profile"=Option<crate::processing::models::Profile>,Query,description="Processing profile; omit to store only")),request_body(content=FileUpload,content_type="multipart/form-data"),responses(
+(status=201,description="Stored",body=UploadReceipt),
+(status=200,description="Replay of a stored request key",body=UploadReceipt),
+(status=400,description="`invalid_multipart`: not one multipart `file` part",body=crate::error::ErrorBody),
+(status=401,description="Missing token, or `token_expired` during the transfer",body=crate::error::ErrorBody),
+(status=403,body=crate::error::ErrorBody),
+(status=404,body=crate::error::ErrorBody),
+(status=408,description="`upload_timeout`: the transfer stalled or exceeded its deadline",body=crate::error::ErrorBody),
+(status=409,description="`name_conflict`, `idempotency_conflict`, `upload_failed` (retry with `retry_of`), `invalid_retry`, `upload_expired`, `retry_superseded` (`Location` names the original receipt), or `upload_in_progress` (`Location` and `Retry-After`)",body=crate::error::ErrorBody),
+(status=413,description="`file_too_large`: above `max_file_bytes`",body=crate::error::ErrorBody),
+(status=422,description="`quota_exceeded`, or an invalid request key, filename or media type",body=crate::error::ErrorBody),
+(status=429,description="`transfer_capacity`: all transfer slots are busy; honour `Retry-After`",body=crate::error::ErrorBody),
+(status=503,description="`storage_unavailable`, or `processing_unavailable` when a profile is requested",body=crate::error::ErrorBody)
 ))]
 async fn upload(
     State(s): State<AppState>,
@@ -112,7 +126,9 @@ async fn upload(
     Ok(response)
 }
 
-#[utoipa::path(post,path="/folders/{id}/documents/preflight",params(("id"=Uuid,Path)),request_body=Preflight,responses((status=400,body=crate::error::ErrorBody),(status=200,body=PreflightResult),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=413,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
+/// Advisory check before uploading: names already taken in the folder and the current quota.
+/// The upload decides; a name free here can still conflict when the file arrives.
+#[utoipa::path(post,path="/folders/{id}/documents/preflight",params(("id"=Uuid,Path,description="Destination folder")),request_body=Preflight,responses((status=400,body=crate::error::ErrorBody),(status=200,body=PreflightResult),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=413,description="`file_too_large`: a file is above `max_file_bytes`",body=crate::error::ErrorBody),(status=422,description="Not 1..200 files, or an invalid filename",body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
 async fn preflight(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
@@ -147,7 +163,9 @@ async fn summary(
     Ok(Json(result))
 }
 
-#[utoipa::path(get,path="/spaces/{id}/document-uploads",params(("id"=Uuid,Path),("before"=Option<chrono::DateTime<chrono::Utc>>,Query),("before_key"=Option<Uuid>,Query),("limit"=Option<i64>,Query)),responses((status=200,body=Vec<UploadReceipt>),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
+/// The caller's upload receipts in the space, newest first, each with its latest processing attempt.
+/// Superseded receipts are omitted; acknowledged ones too, unless their document is still processing.
+#[utoipa::path(get,path="/spaces/{id}/document-uploads",params(("id"=Uuid,Path),("before"=Option<chrono::DateTime<chrono::Utc>>,Query,description="Cursor: `created_at` of the last receipt read; requires `before_key`"),("before_key"=Option<Uuid>,Query,description="Cursor: `request_key` of the last receipt read"),("limit"=Option<i64>,Query,description="1..200, default 50")),responses((status=200,body=Vec<UploadReceipt>),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
 async fn receipts(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
@@ -157,7 +175,8 @@ async fn receipts(
     Ok(Json(storage(&s)?.receipts(&user.uid, id, query).await?))
 }
 
-#[utoipa::path(get,path="/document-uploads/{id}",params(("id"=Uuid,Path)),responses((status=200,body=UploadReceipt),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
+/// One of the caller's upload receipts, with its latest processing attempt; poll it to follow an upload.
+#[utoipa::path(get,path="/document-uploads/{id}",params(("id"=Uuid,Path,description="The upload's `Idempotency-Key`")),responses((status=200,body=UploadReceipt),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
 async fn receipt(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
@@ -166,7 +185,9 @@ async fn receipt(
     Ok(Json(storage(&s)?.receipt(&user.uid, id).await?))
 }
 
-#[utoipa::path(put,path="/document-uploads/{id}/acknowledgment",params(("id"=Uuid,Path)),responses((status=204),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
+/// Dismiss a terminal receipt from the caller's list; repeating it is harmless.
+/// The receipt stays readable by key, so replaying its upload remains safe.
+#[utoipa::path(put,path="/document-uploads/{id}/acknowledgment",params(("id"=Uuid,Path,description="The upload's `Idempotency-Key`")),responses((status=204),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=409,description="`upload_in_progress` while pending, `processing_active` while its document is processing",body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
 async fn acknowledge(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,

@@ -31,12 +31,16 @@ er: ## Regenerate generated/<component>.er.mmd from each component's migrations
 		docker rm -f $$pg >/dev/null; echo "generated/$$c.er.mmd"; \
 	done
 
+.PHONY: openapi
+openapi: ## Regenerate apps/control-plane/openapi.json (unversioned) from the control-plane router
+	$(MAKE) --no-print-directory -C $(ROOT)/apps/control-plane generate-openapi
+
 .PHONY: generate
-generate: er ## Rewrite every generated block from its sources
+generate: er openapi ## Rewrite every generated block from its sources
 	$(PYTHON) tools/docs.py generate
 
 .PHONY: check
-check: er ## Fail if a generated block is stale, an invariant lacks a test, or a diagram does not render
+check: er openapi ## Fail if a generated block is stale, an invariant lacks a test, or a diagram does not render
 	$(PYTHON) tools/docs.py check
 	@set -e; out=$$(mktemp -d); trap 'rm -rf $$out' EXIT; cp *.md $$out/; \
 	for f in $$out/*.md; do \
