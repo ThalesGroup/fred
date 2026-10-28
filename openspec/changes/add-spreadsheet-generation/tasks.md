@@ -95,6 +95,48 @@ Tracking: GitHub issue #3208. Paths relative to the repository root.
 - [x] 4i.3 An identical repeat call returns the first success text, notes included
 - [x] 4i.4 Leaked-row check ignores text with a `[` before the `]` (`Écran 27", 2 ports [HDMI]`)
 
+## 6. Writer swap and cached values (D15, review fix; owner-approved 2026-10-28)
+
+- [ ] 6.1 Writer on XlsxWriter (`strings_to_formulas/numbers/urls` off, `use_future_functions` on, `num_format` 14, `quote_prefix`, freeze, auto filter, widths, header style, full recalculation on load); `xlsxwriter` runtime dependency, `openpyxl` to test dependencies; package and fred-agents `uv.lock` (only openpyxl and et-xmlfile leave)
+- [ ] 6.2 Cached `<v>` for totals and computed columns with today's evaluated values
+- [ ] 6.3 Tests: every existing read-back test passes unchanged on the new writer; cached values read with `openpyxl.load_workbook(data_only=True)` equal the preview for totals and each `compute` op (incl. empty `IFERROR` results); a `=1+1`, `@SUM(A1)` and URL text stay strings; LibreOffice headless opens the file without repair
+
+## 7. Formula parser, allow-list and references (D13, D14, D17; review fixes)
+
+- [ ] 7.1 `formulas.py` tokenizer and parser (A1 refs, ranges, sheet-qualified refs quoted or not, strings, numbers, booleans, errors, operators incl. `&` and `%`, function calls); canonical re-emission with sheet quoting and `''` escaping; `_xlfn.`/`_xlws.` prefixes stripped on input
+- [ ] 7.2 Validation: allow-list, security refusals (volatile, network/link, environment, XLM, external workbook, DDE `|`), unknown function, defined names, structured refs, R1C1, whole-column/row refs, unknown sheet (lists sheets), out-of-bounds column or row (gives the sheet's letters and row range), range spanning data and totals rows, French names and `;` (English form in the message), length 8 192, depth 32, 5 000 model formula cells, cycles
+- [ ] 7.3 `_FORMULA_LIKE` replaced by the parser: a plain string that parses as a formula with a function or reference (`='Données 2025'!B2`, `=Synthèse!B2`, `=[x.xlsx]S!A1`, `=cmd|…`) is refused with the formula-cell form or the security message; other trigger text stays literal
+- [ ] 7.4 Text cells, headers and sheet names with DDE or external-workbook patterns refused (D17), full-width signs included; `- point`, `+33 6…`, `a|b`, `=== x ===` kept
+- [ ] 7.5 Tests: one case per refusal (message names sheet, row, column and the fix), quoting matrix (`Données 2025`, `Synthèse`, `Q1`, `It's`, `Data_1`), accepted forms round-trip to canonical text
+
+## 8. Evaluator and formula surfaces (D13, D15, D16)
+
+- [ ] 8.1 Evaluator for the D14 allow-list with Excel semantics (empty cells, booleans, error propagation, criteria with wildcards, case-insensitive text, date serials, `ROUND` half away from zero), dependency order across sheets, range materialized once, per-range index for the `*IF(S)` family, 2 000 000 cell-read budget with a limit error
+- [ ] 8.2 Dynamic arrays `FILTER`/`SORT`/`UNIQUE`: evaluated spill, written with `write_dynamic_array_formula`; spill into a non-empty cell or past the sheet's columns or row limit refused
+- [ ] 8.3 Column `formula` (first data row, filled down with relative shift) and formula cells `{"formula": ...}` in the tool schema and `prepare`; rows send null for formula columns; column type gives the number format
+- [ ] 8.4 `compute` and `total` compiled to formula ASTs; delete `_formula`'s string building, `_evaluate`, `_apply`, `_operand_value` and the preview's own totals arithmetic; same formula text as before
+- [ ] 8.5 Cached values for every formula (errors as error values); preview cells from the evaluator, `cell_formulas` sparse map for formula cells; pane formula bar shows them (vitest)
+- [ ] 8.6 Tool description: formula forms, English names and commas, summary-sheet example with a quoted sheet name, `total`/`compute` first for simple cases; schema size measured before/after and recorded (target: under +40 %)
+- [ ] 8.7 Tests: each allowed function against hand-checked values (and LibreOffice headless on a sample workbook for the functions it supports); summary sheet with `SUM`/`SUMIFS`/`XLOOKUP` over two data sheets, cached values read back; `FILTER` spill and collision; prefixes in `xl/worksheets/sheet*.xml` (`_xlfn.XLOOKUP`, `_xlfn._xlws.FILTER`); budget error; 50 000-cell workbook with a `SUMIF` column builds in under 1 s
+
+## 9. Revisions (D10, D11, D12)
+
+- [ ] 9.1 `WorkbookSpecStore` (`Sql`/`Memory`, provider hook), `cap_spreadsheet_workbook` model, Alembic tree `spreadsheet_migrations/` with one initial revision, `manifest.tables` and `migrations_location()`; `alembic heads` = 1 and a real `python -m fred_runtime migrate` on a local database (with the owner's go-ahead: the dev database is shared with the running app)
+- [ ] 9.2 `changes` schema (flat change objects, nested parts validated in code), mutually exclusive with `sheets`; `file_name`/`language` default to the base's; tool description: a change the user asks for goes in `changes`, which keeps everything else as delivered (replaces "call it again with the complete corrected data")
+- [ ] 9.3 Apply on the base: ops of D10 resolved on base numbering and names, applied as one step; `where` matching; formula reference adjustment for row/column insert and removal, appended rows, sheet rename; dependent-formula refusals; all errors listed with change index and fix; no base, nothing changed, base too large
+- [ ] 9.4 Base read once per turn (closure), upsert after delivery, failures handled as D11; per-turn identical-call guard keyed with `changes` and base version; one-line structure summary in the success text (600 chars max)
+- [ ] 9.5 Versions: `workbook_id`/`version` rules, `-vN` visible names, part fields; frontend slice keeps the latest version per workbook, card chip "Latest version"/"Dernière version" and "Version n", pane header version; en/fr strings
+- [ ] 9.6 Tests (backend): one per op incl. computed column add, split by `where` into a new sheet, move to an existing sheet, rename with cross-sheet formulas rewritten, row insert inside a summed range, append after a range ending on the last data row, refused removal of a referenced column/sheet, each error message; base survives a new tool instance (next turn) through the memory store; Graph assembly with a `changes` call; spec size cap
+- [ ] 9.7 Tests (frontend): latest chip moves to a new card live and on history replay; older card still downloads its file
+- [ ] 9.8 `fred-performance-reviewer` on the tool call site (database read/write, evaluator budget, writer)
+
+## 10. Docs for the extension
+
+- [ ] 10.1 Help Center en/fr "Generate an Excel file" / "Générer un fichier Excel": ask for changes to the last file (versions, latest marker), formulas and a summary sheet, what is not available (non-technical wording)
+- [ ] 10.2 Package README, `docs/swift/capabilities/AUTHORING.md` row (owns a table), `docs/swift/ops/DATABASE_MIGRATIONS.md` row (`cap_spreadsheet_alembic_version`)
+- [ ] 10.3 Migration note `3208-spreadsheet-capability.md`: `impact: minor` (new Alembic revision, applied by the standard fred-agents migration hook), table and rollback (table left in place, unused by an older image), openpyxl removed from the image; `make migration-check`
+- [ ] 10.4 Live check on mistral-medium (ReAct, Deep, Graph): add a column, add rows, split into two sheets, summary sheet with cross-sheet formulas; file opens in Excel/LibreOffice without repair and a non-recalculating reader shows the values; record evidence
+
 ## 5. Docs and release
 
 - [x] 5.1 `docs/swift/capabilities/AUTHORING.md` one row; package README
