@@ -177,15 +177,16 @@ A text cell, header or sheet name whose text, after leading spaces, starts with 
 - Erasing a conversation leaves its `.xlsx` and `.preview.json` in workspace storage, as for PPT Filler outputs (#3212).
 - The card auto-opens the pane with the shared page-load heuristic of the other capability cards (#3214).
 
-## Open questions for the owner (2026-10-28)
+## Owner decisions (2026-10-28)
 
-The decisions above carry the recommended option. Confirm or pick another before implementation starts:
+The open questions of the scoping pass are closed; every recommended option was confirmed:
 
-1. **Where the base lives (D11).** (a) capability table + Alembic tree, like ppt_builder (recommended); (b) conversation filesystem text file, no migration but optional port, agent-visible; (c) rebuild from history, rejected by ppt D23.
-2. **Preview values (D15).** (a) own evaluator over the allow-list, cached values for every formula, XlsxWriter writer (recommended); (b) cached values only for `compute`/`total`, free formulas shown as formulas in the preview with no cached value (smallest); (c) LibreOffice Calc recalculation (image growth, no `XLOOKUP`/`FILTER` on Ubuntu 24.04, seconds per call).
-3. **Allow-list breadth (D14).** (a) narrow: aggregates, conditional aggregates, logical, rounding, cross-sheet references (summary sheets only); (b) medium: (a) + text, date and lookups without dynamic arrays; (c) (b) + `FILTER`/`SORT`/`UNIQUE` with spill checks (recommended, as asked; (b) is the cut if size matters).
-4. **`compute` and `total` (D16).** (a) keep as schema sugar compiled to the formula path, one implementation (recommended); (b) keep both implementations; (c) delete `compute`, keep `total`.
-5. **Formula surface (D13).** (a) explicit: column `formula` + formula cells, plain `=` strings still refused with the exact form (recommended); (b) implicit: any plain `=` string that validates becomes a formula (fewer rounds; text copied from a document can become live, bounded by the allow-list).
+1. Base storage (D11): capability-owned table `cap_spreadsheet_workbook` with its own Alembic tree.
+2. Preview values (D15): own evaluator over the allow-list, cached values for every formula, XlsxWriter writer.
+3. Allow-list breadth (D14): the broad list, `FILTER`/`SORT`/`UNIQUE` included with spill checks.
+4. `compute` and `total` (D16): kept in the schema, rebuilt on the formula path, the old implementation deleted.
+5. Formula surface (D13): explicit forms only (column `formula`, formula cells); plain `=` strings still refused with the exact form.
+6. `edit_column` is included in the revision ops (D10); the migration note moves to `impact: minor`.
 
 ## Deferred gaps
 
