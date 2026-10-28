@@ -502,3 +502,60 @@ async def test_versions_are_named_and_carried_on_the_card(store):
     assert other.ui_parts[0].version == 1
     assert other.ui_parts[0].workbook_id != parts[0].workbook_id
     assert any("/Budget-v2-" in w[0] for w in workspace.writes)
+
+
+COMPUTED: dict[str, Any] = {
+    "file_name": "Notes",
+    "sheets": [
+        {
+            "name": "Notes",
+            "columns": [
+                {"header": "Poste"},
+                {"header": "HT", "type": "currency"},
+                {"header": "TTC", "type": "currency", "formula": "=B2*1.2"},
+            ],
+            "rows": [["a", 10, None], ["b", 20, None], ["Total", None, None]],
+        }
+    ],
+}
+
+
+def test_edit_cell_with_a_formula_overrides_the_column_formula():
+    spec = _apply(
+        {
+            "op": "edit_cell",
+            "sheet": "Notes",
+            "cell": "C4",
+            "value": {"formula": "=SUM(C2:C3)"},
+        },
+        base=COMPUTED,
+    )
+    ws = load_workbook(
+        io.BytesIO(
+            build_workbook(prepare(CreateSpreadsheetInput.model_validate(spec)))
+        ),
+        data_only=True,
+    )["Notes"]
+    assert ws["C4"].value == pytest.approx(36)
+    # The override survives as the base of the next revision.
+    again = _apply(
+        {"op": "edit_cell", "sheet": "Notes", "cell": "B2", "value": 5}, base=spec
+    )
+    assert _cell_formula(again, "Notes", 2, 2) == "=SUM(C2:C3)"
+
+
+def test_edit_cell_with_a_value_in_a_formula_column_is_refused():
+    message = _refused(
+        {"op": "edit_cell", "sheet": "Notes", "cell": "C4", "value": 36}, base=COMPUTED
+    )
+    assert "column 'TTC', which its formula fills" in message
+    assert '{"formula": "=..."}' in message
+
+
+def test_a_row_wise_column_formula_stays_relative_after_a_revision():
+    base = json.loads(json.dumps(COMPUTED))
+    base["sheets"][0]["columns"][2]["formula"] = "=SUM(B2:B2)*1.2"
+    spec = _apply(
+        {"op": "add_rows", "sheet": "Notes", "rows": [["c", 30, None]]}, base=base
+    )
+    assert _sheets(spec)["Notes"]["columns"][2]["formula"] == "=SUM(B2:B2)*1.2"

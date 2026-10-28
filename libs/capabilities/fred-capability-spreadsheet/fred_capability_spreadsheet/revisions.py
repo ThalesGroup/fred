@@ -80,6 +80,10 @@ NO_BASE = (
 )
 
 
+def _is_formula(value: Any) -> bool:
+    return isinstance(value, dict) and "formula" in value
+
+
 class ChangeError(ValueError):
     """One or more changes cannot apply; the message lists each with its fix."""
 
@@ -104,8 +108,12 @@ def normalize_spec(spec: Spec) -> Spec:
             if len(row) != len(columns):
                 values = iter(row)
                 row = [None if hole else next(values, None) for hole in holes]
+            # A formula cell in a computed column overrides it, so it is kept.
             rows.append(
-                [None if hole else v for hole, v in zip(holes, row, strict=True)]
+                [
+                    None if hole and not _is_formula(v) else v
+                    for hole, v in zip(holes, row, strict=True)
+                ]
             )
         sheet["rows"] = rows
     return out
@@ -455,6 +463,15 @@ def _resolve(
             )
         if "value" not in change:
             raise ChangeError("give `value`, the new value (null to empty the cell)")
+        base = sheet.base_columns[column]
+        value = change["value"]
+        if (base.get("compute") or base.get("formula")) and not (
+            value is None or _is_formula(value)
+        ):
+            raise ChangeError(
+                f"{cell} is in column '{base.get('header')}', which its formula "
+                'fills; give {"formula": "=..."} to override this one cell'
+            )
         _claim(sheet, [row], "edited")
         sheet.edits.setdefault(row, {})[column] = change["value"]
         return

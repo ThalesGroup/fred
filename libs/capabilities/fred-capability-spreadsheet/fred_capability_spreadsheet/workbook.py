@@ -784,10 +784,11 @@ def _prepare_sheet(sheet: SheetSpec) -> _Draft:
             row = [None if hole else next(values) for hole in placeholder]
         converted: list[Converted] = []
         for index, (column, raw) in enumerate(zip(sheet.columns, row, strict=True)):
-            if placeholder[index]:
-                converted.append(None)
-            elif isinstance(raw, FormulaValue):
+            # A formula cell overrides its column's formula (a totals row under it).
+            if isinstance(raw, FormulaValue):
                 raw_cells[(r, index)] = raw.formula
+                converted.append(None)
+            elif placeholder[index]:
                 converted.append(None)
             else:
                 converted.append(
@@ -1048,7 +1049,7 @@ def _grid(draft: _Draft, language: Language) -> SheetGrid:
         if node is not None:
             for r in range(len(draft.rows)):
                 grid.formulas[(r + 2, c)] = FormulaCell(node, rows=r)
-    for (r, c), node in draft.cell_formulas.items():
+    for (r, c), node in draft.cell_formulas.items():  # overrides a column formula
         grid.formulas[(r + 2, c + 1)] = FormulaCell(node, may_spill=True)
     if has_totals:
         totals_row = last_data_row + 1
@@ -1146,7 +1147,8 @@ def _preview_cell_formulas(sheet: PreparedSheet, shown: int) -> dict[str, str]:
     for c, node in enumerate(sheet.column_formulas):
         if node is not None and row_template(node, ROW_PLACEHOLDER) is None:
             for r in range(min(shown, sheet.data_rows)):
-                out[f"{column_letters(c + 1)}{r + 2}"] = emit(node, rows=r)
+                if (r, c) not in sheet.cell_formulas:
+                    out[f"{column_letters(c + 1)}{r + 2}"] = emit(node, rows=r)
     return out
 
 
@@ -1319,10 +1321,10 @@ def _write_sheet(
             fmt = formats.get(sheet.formats[index])
             fill = fills[index] if r < sheet.data_rows else None
             cell = sheet.cell_formulas.get((r, index))
-            if fill is not None:
-                ws.write_formula(r + 1, index, fill(r), fmt, _cached(value))
-            elif cell is not None:
+            if cell is not None:
                 _write_cell_formula(ws, sheet, r, index, cell, value, fmt)
+            elif fill is not None:
+                ws.write_formula(r + 1, index, fill(r), fmt, _cached(value))
             elif value is not None:
                 _write_value(ws, r + 1, index, value, sheet.formats[index], formats)
             if value is not None:
