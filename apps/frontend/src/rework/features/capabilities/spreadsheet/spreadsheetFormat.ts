@@ -135,6 +135,8 @@ export function formulaBarText(
   if (row === sheet.row_count + 2 && formatted.totals) {
     return spec.total_formula ?? formatted.totals[column] ?? "";
   }
+  const own = sheet.cell_formulas?.[`${columnLetter(column)}${row}`];
+  if (own) return own;
   if (spec.formula) return spec.formula.replace(ROW_PLACEHOLDER, String(row));
   const value = sheet.rows[row - 2]?.[column] ?? null;
   if (typeof value !== "number") return formatted.rows[row - 2]?.[column] ?? "";

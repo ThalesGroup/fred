@@ -39,7 +39,7 @@ export interface SpreadsheetColumn {
   decimals?: number;
   currency?: string;
   total?: SpreadsheetTotalKind;
-  /** Computed column: its Excel formula, with `{row}` standing for the row number. */
+  /** Formula column: its Excel formula, with `{row}` standing for the row number. */
   formula?: string;
   /** The totals row's Excel formula for this column. */
   total_formula?: string;
@@ -54,6 +54,8 @@ export interface SpreadsheetSheet {
   row_count: number;
   /** Computed totals row (the label cell names its functions), or null. */
   totals: SpreadsheetCell[] | null;
+  /** Formulas of single cells (and of columns reading other rows), by A1 address. */
+  cell_formulas?: Record<string, string>;
 }
 
 export interface SpreadsheetPreview {

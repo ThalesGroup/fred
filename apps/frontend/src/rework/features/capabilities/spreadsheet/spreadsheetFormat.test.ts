@@ -135,4 +135,26 @@ describe("spreadsheetFormat", () => {
     expect(bar(4, 0)).toBe("=SUM(A2:A3)");
     expect(bar(4, 1)).toBe("");
   });
+
+  it("shows a cell's own formula and keeps error values as Excel shows them", () => {
+    const sheet: SpreadsheetSheet = {
+      name: "Synthèse",
+      columns: [
+        { header: "Label", type: "text" },
+        { header: "Value", type: "number", decimals: 2 },
+      ],
+      rows: [
+        ["CA", 6.5],
+        ["Ratio", "#DIV/0!"],
+      ],
+      row_count: 2,
+      totals: null,
+      cell_formulas: { B2: "=SUM(Commandes!E2:E3)", B3: "=B2/0" },
+    };
+    const formatted = formatSheet(sheet, "en");
+    expect(formulaBarText(sheet, formatted, 2, 1, "en")).toBe("=SUM(Commandes!E2:E3)");
+    expect(formulaBarText(sheet, formatted, 3, 1, "en")).toBe("=B2/0");
+    expect(formulaBarText(sheet, formatted, 2, 0, "en")).toBe("CA");
+    expect(formatted.rows[1][1]).toBe("#DIV/0!");
+  });
 });

@@ -800,6 +800,8 @@ def check(
     """
 
     by_name = {layout.name.casefold(): layout for layout in layouts}
+    if fill_rows:
+        node = anchor_ranges(node)
 
     for item in walk(node):
         if isinstance(item, Call):
@@ -815,11 +817,30 @@ def check(
             )
         sheet = None if ref.sheet is None or layout.name == here else layout.name
         canonical = replace(ref, sheet=sheet)
-        for offset in {0, fill_rows}:
-            _check_bounds(shift(canonical, offset), layout, here)
+        _check_bounds(canonical, layout, here)
+        if fill_rows:
+            try:
+                _check_bounds(shift(canonical, fill_rows), layout, here)
+            except FormulaError as exc:
+                raise FormulaError(
+                    f"{exc} at the last row: this column formula is filled down, so "
+                    "a cell every row reads must be written with $ (e.g. $B$2)"
+                ) from None
         return canonical
 
     return map_refs(node, resolve)
+
+
+def anchor_ranges(node: Node) -> Node:
+    """In a filled-down formula, a range written without any `$` is read whole by
+    every row (a lookup table, a total): anchor it instead of shifting it."""
+
+    def anchor(ref: Ref) -> Node:
+        if not ref.is_range or ref.abs_c1 or ref.abs_r1 or ref.abs_c2 or ref.abs_r2:
+            return ref
+        return replace(ref, abs_c1=True, abs_r1=True, abs_c2=True, abs_r2=True)
+
+    return map_refs(node, anchor)
 
 
 def _check_call(call: Call) -> None:
