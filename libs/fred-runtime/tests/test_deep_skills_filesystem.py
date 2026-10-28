@@ -3,15 +3,22 @@
 """Native filesystem routing, live reads and ReAct compatibility."""
 
 from pathlib import Path
-from typing import Literal
+from types import SimpleNamespace
+from typing import Any, Literal, cast
 
 import pytest
 from deepagents.backends import CompositeBackend, FilesystemBackend
-from deepagents.middleware.filesystem import FilesystemPermission
+from deepagents.middleware.filesystem import FilesystemMiddleware, FilesystemPermission
+from fred_runtime.deep.concat_files import ConcatFilesMiddleware
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.deep.deep_runtime import mount_skills
 from fred_runtime.skills.catalog import PlatformSkills
-from fred_sdk.contracts.runtime import ConversationFilesystemPermissionError
+from fred_sdk.contracts.runtime import (
+    ConversationFilesystemInterruptError,
+    ConversationFilesystemPermissionError,
+    ConversationScratchpadFileNotFoundError,
+    ConversationScratchpadStorageError,
+)
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from test_platform_skills import Model, binding, call, compiled, skill
 
@@ -25,6 +32,156 @@ def snapshot(tmp_path: Path) -> PlatformSkills:
     bad = skill(tmp_path, directory="bad", name="bad")
     (bad / "SKILL.md").write_text("---\nname: bad\n---\nMissing description")
     return PlatformSkills.from_directory(str(tmp_path))
+
+
+def alias_port(tmp_path: Path) -> DeepConversationFilesystemPort:
+    root = tmp_path / "catalog"
+    hidden = skill(root, directory="hidden", name="hidden")
+    (hidden / "SKILL.md").write_text(
+        "---\nname: hidden\ndescription: Hidden procedure\n"
+        "disable-model-invocation: true\n---\nHIDDEN BODY"
+    )
+    visible = skill(root, directory="visible", name="visible", body="VISIBLE BODY")
+    (visible / "alias.py").symlink_to("../hidden/SKILL.md")
+    (visible / "allowed.py").symlink_to("SKILL.md")
+    (visible / "missing.py").symlink_to("missing.txt")
+    (tmp_path / "outside.txt").write_text("OUTSIDE BODY")
+    (visible / "escape.py").symlink_to("../../outside.txt")
+    skills = PlatformSkills.from_directory(str(root)).for_execution()
+    assert [entry.name for entry in skills.catalog.skills] == ["visible"]
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    backend, rules = mount_skills(
+        FilesystemBackend(root_dir=workspace, virtual_mode=True), [], skills
+    )
+    return DeepConversationFilesystemPort(backend, rules)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("origin", ["agent", "system"])
+async def test_capability_alias_cannot_read_ineligible_skill(
+    tmp_path: Path, origin: Literal["agent", "system"]
+) -> None:
+    port = alias_port(tmp_path)
+    with pytest.raises(ConversationFilesystemPermissionError):
+        await port.read_text("/skills/visible/alias.py", origin=origin)
+
+
+@pytest.mark.asyncio
+async def test_concat_cannot_copy_ineligible_skill_through_alias(
+    tmp_path: Path,
+) -> None:
+    port = alias_port(tmp_path)
+    concat = ConcatFilesMiddleware(port).tools[0]
+    result = await concat.ainvoke(
+        {"paths": ["/skills/visible/alias.py"], "output_path": "/copied.md"}
+    )
+    assert "Permission denied" in str(result)
+    assert "HIDDEN BODY" not in str(result)
+    assert not await port.exists("/copied.md", origin="agent")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("alias", ["alias.py", "allowed.py", "missing.py", "escape.py"])
+async def test_native_and_capability_alias_reads_share_target_semantics(
+    tmp_path: Path, alias: str
+) -> None:
+    port = alias_port(tmp_path)
+    middleware = FilesystemMiddleware(
+        backend=port.backend, _permissions=port.permissions
+    )
+    reader = next(entry for entry in middleware.tools if entry.name == "read_file")
+    path = f"/skills/visible/{alias}"
+    result = await cast(Any, reader).coroutine(
+        file_path=path,
+        runtime=cast(Any, SimpleNamespace(tool_call_id="alias-read")),
+    )
+    assert isinstance(result, ToolMessage)
+    if alias == "allowed.py":
+        assert result.status == "success"
+        assert "VISIBLE BODY" in str(result.content)
+        assert "VISIBLE BODY" in await port.read_text(path, origin="agent")
+    else:
+        assert result.status == "error"
+        assert "HIDDEN BODY" not in str(result.content)
+        error = {
+            "alias.py": ConversationFilesystemPermissionError,
+            "missing.py": ConversationScratchpadFileNotFoundError,
+            "escape.py": ConversationScratchpadStorageError,
+        }[alias]
+        with pytest.raises(error):
+            await port.read_text(path, origin="agent")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("origin", ["agent", "system"])
+async def test_capability_permitted_alias_and_missing_file_keep_behavior(
+    tmp_path: Path, origin: Literal["agent", "system"]
+) -> None:
+    port = alias_port(tmp_path)
+    expected = await port.read_text("/skills/visible/SKILL.md", origin=origin)
+    assert await port.read_text("/skills/visible/allowed.py", origin=origin) == expected
+    for path in ("/skills/visible/missing.py", "/skills/visible/absent.txt"):
+        with pytest.raises(ConversationScratchpadFileNotFoundError):
+            await port.read_text(path, origin=origin)
+    concat = ConcatFilesMiddleware(port).tools[0]
+    result = await concat.ainvoke(
+        {"paths": ["/skills/visible/allowed.py"], "output_path": "/copied.md"}
+    )
+    assert "Concatenated 1 file(s)" in str(result)
+    assert await port.read_text("/copied.md", origin=origin) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("origin", ["agent", "system"])
+@pytest.mark.parametrize("mode", ["allow", "interrupt"])
+async def test_capability_alias_applies_ordered_target_permissions(
+    tmp_path: Path,
+    origin: Literal["agent", "system"],
+    mode: Literal["allow", "interrupt"],
+) -> None:
+    port = alias_port(tmp_path)
+    target = "/skills/visible/SKILL.md"
+    ordered = DeepConversationFilesystemPort(
+        port.backend,
+        [
+            FilesystemPermission(operations=["read"], paths=[target], mode=mode),
+            FilesystemPermission(operations=["read"], paths=[target], mode="deny"),
+            *port.permissions,
+        ],
+    )
+    if mode == "interrupt":
+        with pytest.raises(ConversationFilesystemInterruptError):
+            await ordered.read_text("/skills/visible/allowed.py", origin=origin)
+    else:
+        assert "VISIBLE BODY" in await ordered.read_text(
+            "/skills/visible/allowed.py", origin=origin
+        )
+
+
+@pytest.mark.asyncio
+async def test_non_skill_reads_keep_system_bypass_without_lookup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unittest.mock import Mock
+
+    backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+    (tmp_path / "notes.txt").write_text("notes")
+    (tmp_path / "notes-alias.txt").symlink_to("notes.txt")
+    resolver = Mock(side_effect=AssertionError("Non-skill read must not resolve again"))
+    monkeypatch.setattr(
+        "fred_runtime.deep.conversation_port._resolve_real_path", resolver
+    )
+    port = DeepConversationFilesystemPort(
+        backend,
+        [FilesystemPermission(operations=["read"], paths=["/**"], mode="interrupt")],
+    )
+    assert await port.read_text("/notes.txt", origin="system") == "notes"
+    with pytest.raises(ConversationFilesystemInterruptError):
+        await port.read_text("/notes.txt", origin="agent")
+    permitted = DeepConversationFilesystemPort(backend, [])
+    assert await permitted.read_text("/notes-alias.txt", origin="agent") == "notes"
+    resolver.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -179,8 +336,6 @@ def test_disabled_empty_mount_and_route_collisions(tmp_path: Path) -> None:
 async def test_app_mounts_before_capability_assembly_for_deep_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, deep: bool
 ) -> None:
-    from typing import Any, cast
-
     from fred_core.filesystem.local_filesystem import LocalFilesystem
     from fred_runtime.app import agent_app
     from fred_runtime.runtime_context import RuntimeConfig

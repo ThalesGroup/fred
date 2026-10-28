@@ -9,7 +9,7 @@ Fred supplies eligibility and identifies complete pins already in context.
 from collections.abc import Awaitable, Callable
 from typing import Any, NotRequired, cast
 
-from deepagents.middleware.skills import SKILLS_SYSTEM_PROMPT, SkillsState
+from deepagents.middleware.skills import SkillsState
 from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.prompt_utils import escape_reserved_prompt_tags
@@ -24,20 +24,30 @@ from langgraph.types import Command
 from fred_runtime.skills.catalog import PlatformSkills
 from fred_runtime.skills.tools import model_skill_context, record_skill_load
 
-NATIVE_SKILLS_SYSTEM_PROMPT = SKILLS_SYSTEM_PROMPT + (
-    "\n\nRequired skill selection: before answering or using any other tool, "
+NATIVE_SKILLS_SYSTEM_PROMPT = (
+    "## Skills System\n\n"
+    "Skills are procedures for you to follow using the declared tools.\n\n"
+    "{skills_locations}{skills_load_warnings}\n\n"
+    "Available skills:\n\n{skills_list}\n\n"
+    "Required skill selection: before answering or using any other tool, "
     "including task delegation, you MUST compare the request with the available "
     "skill descriptions and apply every matching skill. Read its complete "
     "instructions first with read_file at the catalog path (limit=1000; continue "
     "if truncated), unless the complete instructions are already in context. "
     "Reuse complete pinned instructions without rereading SKILL.md. Read any "
     "missing required references. Familiarity with the task does not replace "
-    "reading and following the skill procedure."
+    "reading and following the skill procedure. "
+    "Match skills to the requested output, including routine tasks: a request "
+    "for a diagram or chart calls for an available diagram/chart skill even "
+    "when the user names only the process to illustrate. Start by reading "
+    "that procedure, then its required references, before drafting the output "
+    "or calling a rendering tool."
 )
 
 
 class NativeSkillState(SkillsState):
     fred_pending_skill_names: NotRequired[list[str]]
+    fred_observed_pin_ids: NotRequired[list[str]]
 
 
 class NativeSkillPolicyMiddleware(AgentMiddleware[NativeSkillState, Any]):
@@ -62,6 +72,7 @@ class NativeSkillPolicyMiddleware(AgentMiddleware[NativeSkillState, Any]):
             "skills_metadata": self.skills.native_metadata,
             "skills_load_errors": [],
             "fred_pending_skill_names": [],
+            "fred_observed_pin_ids": [],
         }
 
     async def abefore_agent(
@@ -78,6 +89,7 @@ class NativeSkillPolicyMiddleware(AgentMiddleware[NativeSkillState, Any]):
             # Graph state isolates concurrent child/checkpoint namespaces. A
             # middleware instance can be shared by several native child calls.
             "fred_pending_skill_names": list(state.get("pinned_skills") or ()),
+            "fred_observed_pin_ids": [],
         }
 
     async def abefore_model(
@@ -94,6 +106,9 @@ class NativeSkillPolicyMiddleware(AgentMiddleware[NativeSkillState, Any]):
         summaries = {s.name: s for s in self.skills.catalog.skills}
         pending = tuple(
             cast(NativeSkillState, request.state).get("fred_pending_skill_names") or ()
+        )
+        observed = cast(NativeSkillState, request.state).setdefault(
+            "fred_observed_pin_ids", []
         )
         updates: list[HumanMessage] = []
         found: set[str] = set()
@@ -118,20 +133,19 @@ class NativeSkillPolicyMiddleware(AgentMiddleware[NativeSkillState, Any]):
             name = marker.get("name") if isinstance(marker, dict) else None
             if not isinstance(marker, dict) or not isinstance(name, str):
                 continue
+            message_id = str(message.id)
             if name in summaries:
                 loaded[name] = None
             # Sanitize every retained native pin, even after model failure or
             # policy changes. Native before_model checkpointed its raw message
             # before this wrapper; an LLM failure cannot be a safety boundary.
-            fresh = (
-                index > last_user
-                and name in pending
-                and name in summaries
-                and not message.additional_kwargs.get("fred_skill_observed")
-            )
-            if fresh:
+            requested_pin = index > last_user and name in pending and name in summaries
+            if requested_pin:
                 found.add(name)
-                actual.append((name, str(message.id)))
+                if message_id not in observed and not message.additional_kwargs.get(
+                    "fred_skill_observed"
+                ):
+                    actual.append((name, message_id))
             safe_content = escape_reserved_prompt_tags(str(message.content))
             updated = message.model_copy(
                 update={
@@ -143,13 +157,13 @@ class NativeSkillPolicyMiddleware(AgentMiddleware[NativeSkillState, Any]):
                                 "fred_skill_observed": True,
                                 "skill": {**marker, "builtin": summaries[name].builtin},
                             }
-                            if fresh
+                            if requested_pin
                             else {}
                         ),
                     },
                 }
             )
-            if fresh or safe_content != message.content:
+            if requested_pin or safe_content != message.content:
                 updates.append(updated)
         if set(pending) - found:
             raise ValueError("Selected skill could not be pinned by the native loader")
@@ -171,6 +185,9 @@ class NativeSkillPolicyMiddleware(AgentMiddleware[NativeSkillState, Any]):
             get_stream_writer()(
                 StatusRuntimeEvent(status="skill_loaded", skill_load=attribution)
             )
+            # Recovery reenters before Commands commit, sharing request.state.
+            # before_model resets this list for each graph model invocation.
+            observed.append(message_id)
         by_id = {m.id: m for m in updates}
         if updates:
             request = request.override(
@@ -203,7 +220,11 @@ class NativeSkillPolicyMiddleware(AgentMiddleware[NativeSkillState, Any]):
             ExtendedModelResponse(
                 model_response=response,
                 command=Command(
-                    update={"messages": updates, "fred_pending_skill_names": []}
+                    update={
+                        "messages": updates,
+                        "fred_pending_skill_names": [],
+                        "fred_observed_pin_ids": [],
+                    }
                 ),
             )
             if updates
