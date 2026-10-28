@@ -27,6 +27,16 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getOrganization: build.query<GetOrganizationApiResponse, GetOrganizationApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/admin/organizations/${queryArg.id}` }),
+    }),
+    updateOrganization: build.mutation<UpdateOrganizationApiResponse, UpdateOrganizationApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/organizations/${queryArg.id}`,
+        method: "PATCH",
+        body: queryArg.updateOrganization,
+      }),
+    }),
     teamRegistry: build.query<TeamRegistryApiResponse, TeamRegistryApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/admin/teams`,
@@ -493,6 +503,15 @@ export type SearchOrganizationCandidatesApiResponse = /** status 200 undefined *
 export type SearchOrganizationCandidatesApiArg = {
   query: string;
 };
+export type GetOrganizationApiResponse = /** status 200 undefined */ OrganizationDetail;
+export type GetOrganizationApiArg = {
+  id: string;
+};
+export type UpdateOrganizationApiResponse = /** status 200 undefined */ OrganizationDetail;
+export type UpdateOrganizationApiArg = {
+  id: string;
+  updateOrganization: UpdateOrganization;
+};
 export type TeamRegistryApiResponse = /** status 200 Success */ Space[];
 export type TeamRegistryApiArg = {
   /** Exclusive UUID cursor; at most 100 non-personal teams, ordered by ID. */
@@ -908,6 +927,16 @@ export type UserSummary = {
   id: string;
   last_name?: string | null;
   username?: string | null;
+};
+export type OrganizationDetail = {
+  admins: UserSummary[];
+  organization: Space;
+  owners: UserSummary[];
+};
+export type UpdateOrganization = {
+  admin_username?: string | null;
+  name?: string | null;
+  owner_username?: string | null;
 };
 export type RuntimeEvent =
   | {
@@ -1921,6 +1950,9 @@ export const {
   useCreateOrganizationMutation,
   useSearchOrganizationCandidatesQuery,
   useLazySearchOrganizationCandidatesQuery,
+  useGetOrganizationQuery,
+  useLazyGetOrganizationQuery,
+  useUpdateOrganizationMutation,
   useTeamRegistryQuery,
   useLazyTeamRegistryQuery,
   useExecuteStreamMutation,
