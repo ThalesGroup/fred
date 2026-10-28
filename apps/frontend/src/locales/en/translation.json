@@ -832,7 +832,7 @@
     "storageQuotaExceededMessage": "Adding these files will exceed the maximum storage capacity allowed for this team.",
     "storageQuotaExceededTitle": "Storage Quota Exceeded",
     "summary": "Summary",
-    "supportedFormats": "Supported files: PDF, DOCX, DOC, ODT, TXT, MD, PPTX, PPT, CSV, XLSX, XLS",
+    "supportedFormats": "Supported files: Documents PDF, DOCX, DOC, ODT, PPTX, PPT, TXT, MD · Spreadsheets CSV, XLSX, XLS, XLSM · Emails MSG, EML · Images PNG, JPG, JPEG, WEBP",
     "tooDeepRejected": "Nothing was added: the dropped folder would nest files deeper than {{max}} folder levels.",
     "tooDeepSkipped_one": "{{count}} file was skipped: it would end up nested deeper than {{max}} folder levels.",
     "tooDeepSkipped_other": "{{count}} files were skipped: they would end up nested deeper than {{max}} folder levels.",
