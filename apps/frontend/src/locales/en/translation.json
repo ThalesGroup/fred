@@ -688,7 +688,7 @@
         },
         "grill-me": {
           "title": "Challenge my thinking",
-          "description": "Clarify an idea or decision through a guided interview, one question at a time."
+          "description": "Clarify an idea or decision through a guided interview with concrete recommendations and explicit trade-offs."
         },
         "analyze-data": {
           "title": "Analyze data",
