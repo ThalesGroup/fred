@@ -125,9 +125,12 @@ maximum, count), and columns calculated row by row from other columns with
 real Excel formulas: add, subtract, multiply, divide or share of the total (for
 example "a Total incl. VAT column equal to Excl. VAT × 1.2"). It can also
 write other Excel formulas: lookups in another sheet, conditional sums,
-calculations on text or dates, or a summary sheet that reads the others ("add a
-Summary sheet with the total of each sheet"). The files keep their formulas and
-show their results even in a viewer that does not recalculate.
+statistics (standard deviation, percentiles, rank), loan and investment
+calculations, text formatting, working days and other dates, or a summary sheet
+that reads the others ("add a Summary sheet with the total of each sheet"). The
+files keep their formulas and show their results even in a viewer that does not
+recalculate. Today's date is the date the file was created, shown as
+**Calculated on** in the preview; Excel updates it when the file opens.
 
 **Changing the last file** — just ask for the change: "add a Variance column",
 "add a row with these values", "split this table into 2 sheets, with North in
@@ -143,7 +146,7 @@ beyond that, the agent tells you and suggests splitting the data. Charts are
 not available yet: add them in Excel from the data. No colors by value, no
 macros. Only the last file created in the conversation can be changed; the agent
 does not pick up a file you edited yourself in Excel. Some formulas are not
-available, such as today's date and links to websites or other files. Deleting the
+available, such as random numbers and links to websites or other files. Deleting the
 conversation does not yet delete the files it produced.
 
 **The preview** — the **Preview** button on the file card opens the workbook

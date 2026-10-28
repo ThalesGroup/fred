@@ -133,10 +133,13 @@ calculées ligne par ligne à partir d'autres colonnes, avec de vraies formules
 Excel : addition, soustraction, multiplication, division ou part du total (par
 exemple « une colonne TTC égale à HT × 1,2 »). Il peut aussi écrire d'autres
 formules Excel : recherches dans un autre onglet, sommes sous condition,
-calculs sur du texte ou des dates, ou un onglet de synthèse qui reprend les
-autres (« ajoute un onglet Synthèse avec le total de chaque onglet »). Les
-fichiers gardent leurs formules et affichent leurs résultats même dans une
-visionneuse qui ne recalcule pas.
+statistiques (écart type, centiles, rang), calculs de prêt et
+d'investissement, mise en forme de texte, jours ouvrés et autres dates, ou un
+onglet de synthèse qui reprend les autres (« ajoute un onglet Synthèse avec le
+total de chaque onglet »). Les fichiers gardent leurs formules et affichent
+leurs résultats même dans une visionneuse qui ne recalcule pas. La date du
+jour est celle de la création du fichier, indiquée par **Calculé le** dans
+l'aperçu ; Excel la met à jour à l'ouverture.
 
 **Modifier le dernier fichier** — demandez simplement le changement :
 « ajoute une colonne Écart », « ajoute une ligne avec ces valeurs », « sépare
@@ -155,7 +158,7 @@ données. Les graphiques ne sont pas encore disponibles : ajoutez-les dans Excel
 à partir des données. Pas de couleurs selon les valeurs, pas de macro. Seul le
 dernier fichier créé dans la conversation peut être modifié ; l'agent ne
 reprend pas un fichier que vous avez modifié vous-même dans Excel. Certaines
-formules ne sont pas disponibles, comme la date du jour, les liens vers des
+formules ne sont pas disponibles, comme les nombres aléatoires, les liens vers des
 sites ou vers d'autres fichiers. Supprimer la conversation ne
 supprime pas encore les fichiers qu'elle a produits.
 
