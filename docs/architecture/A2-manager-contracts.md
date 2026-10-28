@@ -380,6 +380,14 @@ erDiagram
 "document_processing" }o--|| "document" : "document_id"
 "document_processing" |o--o| "document_processing" : "retry_of"
 "agent_instance" }o--|| "space" : "space_id"
+"runtime_capability" }o--|| "runtime_catalog" : "runtime_id"
+"runtime_template_capability" }o--|| "runtime_capability" : "runtime_id, capability_id"
+"model_offer" }o--|| "model_source" : "source_id"
+"organization_model_policy" |o--|| "space" : "organization_id"
+"organization_model_policy" }o--|| "organization_model_permission" : "organization_id, default_source_id, default_upstream_model_id"
+"organization_model_policy" }o--|| "organization_model_permission" : "organization_id, fallback_source_id, fallback_upstream_model_id"
+"organization_model_permission" }o--|| "model_offer" : "source_id, upstream_model_id"
+"organization_model_permission" }o--|| "organization_model_policy" : "organization_id"
 
 "deletion" {
   uuid id
@@ -552,6 +560,85 @@ erDiagram
   text created_by
   text updated_by
   jsonb tuning
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone updated_at
+}
+"users_preferences" {
+  text user_id
+  text ui_theme_id
+  text theme_mode
+  text language
+  boolean sidebar_collapsed
+  text team_sort_mode
+  text agent_sort
+  timestamp_with_time_zone updated_at
+}
+"runtime_catalog" {
+  text runtime_id
+  boolean reachable
+  timestamp_with_time_zone checked_at
+  timestamp_with_time_zone observed_at
+}
+"runtime_capability" {
+  text runtime_id FK
+  text capability_id
+  text version
+  jsonb descriptor
+  boolean advertised
+}
+"runtime_template_capability" {
+  text runtime_id FK
+  text source_agent_id
+  text capability_id FK
+  boolean default_selected
+}
+"model_source" {
+  text source_id
+  jsonb configuration
+  uuid refresh_token
+  text state
+  text error_code
+  timestamp_with_time_zone checked_at
+  timestamp_with_time_zone last_success_at
+  bigint snapshot_revision
+  bigint snapshot_source_revision
+}
+"model_offer" {
+  text source_id FK
+  text upstream_model_id
+  jsonb metadata
+  timestamp_with_time_zone first_seen_at
+  timestamp_with_time_zone last_seen_at
+  boolean advertised
+  timestamp_with_time_zone withdrawn_at
+}
+"organization_model_policy" {
+  uuid organization_id FK
+  bigint revision
+  text default_source_id FK
+  text default_upstream_model_id FK
+  text fallback_source_id FK
+  text fallback_upstream_model_id FK
+  text created_by
+  timestamp_with_time_zone created_at
+  text updated_by
+  timestamp_with_time_zone updated_at
+}
+"organization_model_permission" {
+  uuid organization_id FK
+  text source_id FK
+  text upstream_model_id FK
+  boolean reasoning_enabled
+}
+"session_metadata" {
+  text session_id
+  text user_id
+  uuid space_id
+  uuid agent_instance_id
+  uuid template_id
+  text runtime_id
+  varchar_255_ agent_display_name
+  varchar_500_ title
   timestamp_with_time_zone created_at
   timestamp_with_time_zone updated_at
 }
