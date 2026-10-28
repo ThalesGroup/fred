@@ -332,10 +332,36 @@ class SheetSpec(BaseModel):
 class CreateSpreadsheetInput(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    file_name: str = Field(
-        description="Short file name without extension, e.g. 'Q3 budget'."
+    file_name: str | None = Field(
+        default=None,
+        description=(
+            "Short file name without extension, e.g. 'Q3 budget'. With changes, "
+            "leave it out to keep the name."
+        ),
     )
-    sheets: list[SheetSpec] = Field(description="One or more sheets (at most 10).")
+    sheets: list[SheetSpec] = Field(
+        default_factory=list,
+        description=(
+            "The whole workbook: one or more sheets (at most 10). Leave it out when "
+            "sending changes."
+        ),
+    )
+    changes: list[dict[str, Any]] | None = Field(
+        default=None,
+        description=(
+            "Instead of sheets: changes to the last file you created here; "
+            "everything else stays as delivered. Each is {op, sheet, ...}: "
+            "add_column {column, after?, values?}, remove_column {column}, "
+            "edit_column {column, header?, type?, total?, compute?, formula?}, "
+            "add_rows {rows, after?}, remove_rows {rows|where}, edit_rows "
+            "{rows|where, values: {header: value}}, edit_cell {cell: 'C5', value}, "
+            "rename_sheet {name}, add_sheet {sheet: {name, columns, rows}}, "
+            "remove_sheet, move_rows {rows|where, to_sheet} (a new to_sheet is "
+            "created with the same columns). column is a header; rows are row "
+            "numbers as in the file (first data row = 2); where is {column, "
+            "equals}. Names and numbers are those of the delivered file."
+        ),
+    )
     language: str | None = Field(
         default=None,
         description=(

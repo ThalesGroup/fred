@@ -151,8 +151,10 @@ def test_tool_schema_exposes_only_llm_arguments():
         "file_name",
         "sheets",
         "language",
+        "changes",
     }
-    assert schema["parameters"]["required"] == ["file_name", "sheets"]
+    # A new workbook sends sheets, a revision sends changes: neither is required.
+    assert not schema["parameters"].get("required")
     assert "$defs" not in str(schema)
     assert "never paste a Markdown table" in schema["description"]
     assert "as JSON numbers" in schema["description"]

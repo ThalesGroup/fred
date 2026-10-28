@@ -23,11 +23,13 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 from fred_sdk.contracts.capability import (
     AgentCapability,
@@ -45,9 +47,20 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.runtime import WorkspaceFsPort
 from langchain_core.tools import BaseTool, StructuredTool
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-from fred_capability_spreadsheet.store import WorkbookRow
+from fred_capability_spreadsheet.revisions import (
+    NO_BASE,
+    ChangeError,
+    apply_changes,
+    describe,
+    normalize_spec,
+)
+from fred_capability_spreadsheet.store import (
+    StoredWorkbook,
+    WorkbookRow,
+    get_workbook_spec_store,
+)
 from fred_capability_spreadsheet.workbook import (
     CreateSpreadsheetInput,
     SheetSpec,
@@ -71,6 +84,8 @@ PANE_WIDGET = "spreadsheet_pane"
 # Per-pod bound on concurrent workbook builds so a burst cannot exhaust the
 # shared to_thread pool; over the bound we fail fast, never queue (as PPT Filler).
 MAX_CONCURRENT_BUILDS = 4
+# A larger request is delivered but not kept as a base for changes.
+MAX_STORED_SPEC_BYTES = 4 * 1024 * 1024
 _active_builds = 0
 
 _TOOL_DESCRIPTION = (
@@ -115,8 +130,9 @@ _TOOL_DESCRIPTION = (
     "splitting the data; never drop rows silently. If the tool returns an error, "
     "fix the input it names and call it again.\n"
     "Call this tool once per file. After a successful creation, do not call it "
-    "again for the same file: answer the user. Call it again only to change the "
-    "file, with the complete corrected data.\n"
+    "again for the same file: answer the user. For a change the user asks to a "
+    "file you created (add a column or rows, edit values, split a sheet...), send "
+    "only changes: everything else stays as delivered.\n"
     "If you are a sub-agent working for another agent, do not call this tool: "
     "return the data (as a compact table or JSON) to the agent that delegated to "
     "you; that agent creates one workbook for the user.\n"
@@ -139,11 +155,24 @@ class SpreadsheetPreviewPart(BaseModel):
     preview_url: str
 
 
-def _build_outputs(
-    request: CreateSpreadsheetInput,
-) -> tuple[bytes, bytes | None, list[str], list[str]]:
+@dataclass(frozen=True)
+class _Outputs:
+    content: bytes
+    preview: bytes | None
+    hints: list[str]
+    totals: list[str]
+    summary: str
+
+
+def _build_outputs(request: CreateSpreadsheetInput) -> _Outputs:
     prepared = prepare(request)
     content = build_workbook(prepared)
+    summary = describe(
+        [
+            (s.name, s.headers, len(s.rows), s.totals is not None)
+            for s in prepared.sheets
+        ]
+    )
     try:
         hints = derived_column_hints(prepared)
     except Exception:
@@ -160,7 +189,7 @@ def _build_outputs(
         # The preview is a convenience: never lose the file over it.
         logger.exception("[SPREADSHEET] preview build failed")
         preview = None
-    return content, preview, hints, totals
+    return _Outputs(content, preview, hints, totals, summary)
 
 
 async def _preview_part(
@@ -207,6 +236,8 @@ def _created_text(
     hints: Sequence[str] = (),
     totals: Sequence[str] = (),
     charts_ignored: bool = False,
+    summary: str = "",
+    revisable: bool = True,
 ) -> str:
     note = (
         " Note: these columns hold values you computed, so the file has no formula "
@@ -225,39 +256,138 @@ def _created_text(
             " Note: charts are not supported yet; the workbook was created without "
             "the chart. Tell the user."
         )
+    later = (
+        " To change it later, call create_spreadsheet with changes (names and row "
+        f"numbers as in this file). {summary}."
+        if revisable
+        else " This file is too large to keep for later changes: to change it, send "
+        "the whole workbook in sheets."
+    )
     return (
         f"The Excel file '{output_file_name}' has a download button in the chat; "
-        f"do not write a download link.{note} File created and shown to the user. "
-        "Do not create it again; reply now."
+        f"do not write a download link.{note}{later} File created and shown to the "
+        "user. Do not create it again; reply now."
     )
+
+
+class _TurnState:
+    """Per-turn memory of the tool instance (tools are built per execution request)."""
+
+    def __init__(self) -> None:
+        # Request hashes to the first success text: no second copy of a repeat.
+        self.created: dict[str, str] = {}
+        self.base: StoredWorkbook | None = None
+        self.loaded = False
+        self.too_large = False
 
 
 def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
     session_id = ctx.identity.session_id
+    instance_id = ctx.identity.agent_instance_id
     services = ctx.services
-    # Tools are built per turn, so this maps the turn's request hashes to the first
-    # success text: a model repeating an identical call gets no second copy.
-    created: dict[str, str] = {}
+    turn = _TurnState()
+    durable = bool(session_id and instance_id)
+
+    async def load_base() -> StoredWorkbook | None:
+        if not turn.loaded:
+            turn.loaded = True
+            if durable:
+                turn.base = await get_workbook_spec_store().get(
+                    cast(str, session_id), cast(str, instance_id)
+                )
+        return turn.base
 
     async def create_spreadsheet(
-        file_name: str,
-        sheets: list[SheetSpec],
+        file_name: str | None = None,
+        sheets: list[SheetSpec] | None = None,
         language: str | None = None,
+        changes: list[dict[str, Any]] | None = None,
         charts_ignored: bool = False,
     ) -> tuple[str, ToolInvocationResult]:
-        request = CreateSpreadsheetInput.model_validate(
-            {"file_name": file_name, "sheets": sheets, "language": language}
+        if sheets and changes:
+            return _error(
+                "No file was written: send either sheets (the whole workbook) or "
+                "changes (to the last file), not both."
+            )
+        if not sheets and not changes:
+            return _error(
+                "No file was written: send sheets (the whole workbook), or changes "
+                "to change the last file you created in this conversation."
+            )
+        # A repeated `changes` call in a turn is the same request, never a second
+        # application on top of the first result.
+        change_key = (
+            hashlib.sha256(
+                json.dumps(
+                    {"changes": changes, "file_name": file_name, "language": language},
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    default=str,
+                ).encode()
+            ).hexdigest()
+            if changes
+            else None
+        )
+        if change_key in turn.created:
+            logger.info("[SPREADSHEET] identical repeat changes skipped")
+            return turn.created[change_key], ToolInvocationResult(tool_ref=TOOL_NAME)
+        try:
+            base = await load_base()
+        except Exception as exc:
+            logger.warning("[SPREADSHEET] base load failed", exc_info=True)
+            if changes:
+                return _error(
+                    f"No file was written: the previous workbook could not be loaded "
+                    f"[{type(exc).__name__}]. Send the whole workbook in sheets."
+                )
+            base = None
+        if changes:
+            if base is None:
+                return _error(
+                    "No file was written: the last file is too large to keep for "
+                    "changes. Send the whole workbook in sheets."
+                    if turn.too_large
+                    else NO_BASE
+                )
+            try:
+                spec = apply_changes(json.loads(base.spec_json), changes)
+            except ChangeError as exc:
+                logger.info("[SPREADSHEET] rejected changes: %s", exc)
+                return _error(str(exc))
+            if file_name:
+                spec["file_name"] = file_name
+            if language:
+                spec["language"] = language
+            try:
+                request = CreateSpreadsheetInput.model_validate(spec)
+            except ValidationError as exc:
+                return _error(
+                    "No file was written: the changed workbook is not valid: "
+                    + "; ".join(
+                        f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}"
+                        for e in exc.errors()[:5]
+                    )
+                )
+        else:
+            request = CreateSpreadsheetInput.model_validate(
+                {"file_name": file_name, "sheets": sheets, "language": language}
+            )
+        base_name = sanitize_file_name(request.file_name or "")
+        same_workbook = base is not None and (
+            bool(changes) or base_name == base.file_name
         )
         request_key = hashlib.sha256(
-            request.model_copy(
-                update={"file_name": sanitize_file_name(request.file_name)}
-            )
-            .model_dump_json()
-            .encode()
+            (
+                json.dumps(
+                    {**request_spec(request), "file_name": base_name},
+                    sort_keys=True,
+                    ensure_ascii=False,
+                )
+            ).encode()
         ).hexdigest()
-        if request_key in created:
+        if request_key in turn.created:
             logger.info("[SPREADSHEET] identical repeat call skipped")
-            return created[request_key], ToolInvocationResult(tool_ref=TOOL_NAME)
+            return turn.created[request_key], ToolInvocationResult(tool_ref=TOOL_NAME)
         workspace = services.workspace_fs
         if workspace is None:
             logger.error("[SPREADSHEET] workspace_fs is not available on this runtime")
@@ -273,22 +403,22 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
             )
         _active_builds += 1
         try:
-            content, preview, hints, totals = await asyncio.to_thread(
-                _build_outputs, request
-            )
+            outputs = await asyncio.to_thread(_build_outputs, request)
         except SpreadsheetInputError as exc:
             logger.info("[SPREADSHEET] rejected input: %s", exc)
             return _error(f"No file was written. {exc}")
         finally:
             _active_builds -= 1
 
-        base_name = sanitize_file_name(request.file_name)
         output_file_name = f"{base_name}.xlsx"
         folder = f"spreadsheets/{session_id}" if session_id else "spreadsheets"
         path = f"{folder}/{base_name}-{uuid.uuid4().hex[:8]}.xlsx"
         try:
             published = await workspace.write(
-                path, content, content_type=XLSX_CONTENT_TYPE, title=output_file_name
+                path,
+                outputs.content,
+                content_type=XLSX_CONTENT_TYPE,
+                title=output_file_name,
             )
         except Exception as exc:
             logger.exception("[SPREADSHEET] upload failed path=%s", path)
@@ -297,7 +427,9 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
                 f"[{type(exc).__name__}]. Tell the user to try again later."
             )
 
-        part = await _preview_part(workspace, preview, path, published, base_name)
+        part = await _preview_part(
+            workspace, outputs.preview, path, published, base_name
+        )
         if part is None:
             part = LinkPart(
                 href=published.href,
@@ -307,21 +439,39 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
                 document_uid=published.document_uid,
                 file_name=output_file_name,
             )
+        revisable = await _remember(
+            turn,
+            request,
+            base if same_workbook else None,
+            base_name,
+            cast(str, session_id) if durable else None,
+            cast(str, instance_id) if durable else None,
+        )
         logger.info(
-            "[SPREADSHEET] created session=%s key=%s sheets=%d bytes=%d",
+            "[SPREADSHEET] created session=%s key=%s sheets=%d bytes=%d revision=%s",
             session_id,
             published.key,
             len(request.sheets),
-            len(content),
+            len(outputs.content),
+            bool(changes),
         )
-        if hints:
-            logger.info("[SPREADSHEET] literal derived columns=%d", len(hints))
-        if totals:
-            logger.info("[SPREADSHEET] manual total rows=%d", len(totals))
+        if outputs.hints:
+            logger.info("[SPREADSHEET] literal derived columns=%d", len(outputs.hints))
+        if outputs.totals:
+            logger.info("[SPREADSHEET] manual total rows=%d", len(outputs.totals))
         if charts_ignored:
             logger.info("[SPREADSHEET] chart arguments ignored")
-        text = _created_text(output_file_name, hints, totals, charts_ignored)
-        created[request_key] = text
+        text = _created_text(
+            output_file_name,
+            outputs.hints,
+            outputs.totals,
+            charts_ignored,
+            outputs.summary,
+            revisable,
+        )
+        turn.created[request_key] = text
+        if change_key is not None:
+            turn.created[change_key] = text
         return text, ToolInvocationResult(tool_ref=TOOL_NAME, ui_parts=(part,))
 
     return StructuredTool.from_function(
@@ -331,6 +481,45 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
         args_schema=CreateSpreadsheetInput,
         response_format="content_and_artifact",
     )
+
+
+async def _remember(
+    turn: _TurnState,
+    request: CreateSpreadsheetInput,
+    lineage: StoredWorkbook | None,
+    base_name: str,
+    session_id: str | None,
+    instance_id: str | None,
+) -> bool:
+    """Keep the delivered request as the next base; False when too large to keep."""
+
+    spec_json = json.dumps(request_spec(request), ensure_ascii=False)
+    workbook = StoredWorkbook(
+        workbook_id=lineage.workbook_id if lineage else uuid.uuid4().hex[:12],
+        version=lineage.version + 1 if lineage else 1,
+        file_name=base_name,
+        spec_json=spec_json,
+    )
+    too_large = len(spec_json.encode()) > MAX_STORED_SPEC_BYTES
+    turn.base = None if too_large else workbook
+    turn.too_large = too_large
+    turn.loaded = True
+    if session_id is None or instance_id is None:
+        return not too_large
+    store = get_workbook_spec_store()
+    try:
+        if too_large:
+            await store.clear(session_id, instance_id)
+        else:
+            await store.put(session_id, instance_id, workbook)
+    except Exception:
+        # The file is delivered; the next turn's base is then the previous one.
+        logger.warning("[SPREADSHEET] base store failed", exc_info=True)
+    return not too_large
+
+
+def request_spec(request: CreateSpreadsheetInput) -> dict[str, Any]:
+    return normalize_spec(request.model_dump(mode="json"))
 
 
 class SpreadsheetCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel]):
