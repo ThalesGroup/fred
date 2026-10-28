@@ -17,12 +17,9 @@ Design: `openspec/changes/add-spreadsheet-generation/` (issue #3208).
   Nombre/Count.
   A data row labelled like a total ("Total", "Sous-total"...) that repeats
   or leaves empty the totals is kept, and the success result names it.
-- Computed columns: `compute: {op, left, right}` (`add`, `subtract`, `multiply`,
-  `divide`) or `{op: "share_of_total", column}`, operands by header name or
-  number, optional `round`; each row gets a formula (`=C2*1.2`,
-  `=IFERROR(B2/SUM($B$2:$B$4),"")`) and the preview shows the same values.
-  A literal column whose values match such a calculation of earlier columns is
-  kept, and the success result names the `compute` to use next time.
+- Derived columns use a column `formula` (row 2, filled down). A literal column
+  whose values match a difference, ratio or share of total of earlier columns is
+  kept, and the success result names the `formula` to use next time.
 - Invalid input or a size limit (10 sheets, 50 columns, 5000 rows per sheet,
   50000 cells) returns an error naming the sheet, row and column; no file is
   written, and a limit error asks the model to tell the user and suggest
@@ -30,10 +27,12 @@ Design: `openspec/changes/add-spreadsheet-generation/` (issue #3208).
   as JSON numbers.
 - Formulas: a column `formula` (written for row 2, filled down) and formula cells
   `{"formula": "=..."}`, checked against an allow-list (math, statistics,
-  logical, text, date, lookups, `FILTER`/`SORT`/`UNIQUE`) and against the
+  finance, logical, information, text, date, lookups, `LET`, dynamic arrays
+  `FILTER`/`SORT`/`UNIQUE`/`SEQUENCE`) and against the
   workbook's sheets and ranges (`formulas.py`); every formula is evaluated
   server-side (`evaluator.py`, pure Python, cell-read budget) and its value is
-  cached in the file. Volatile, network, link and environment functions,
+  cached in the file (`TODAY`/`NOW` with one build time, reported in the
+  preview and the success text). `RAND*`, `INDIRECT`/`OFFSET`, network, link and environment functions,
   external workbooks and DDE are refused; plain text starting with `=`, `+`, `-`
   or `@` stays literal, DDE-looking text is refused. No macros.
 - Revisions: `changes` (add/remove/edit columns, rows and cells, rename, add or
