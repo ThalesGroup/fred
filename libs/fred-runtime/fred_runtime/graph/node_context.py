@@ -79,7 +79,10 @@ from fred_runtime.runtime_support.tool_approval import (
     build_tool_approval_request,
     is_tool_approval_granted,
 )
-from fred_runtime.runtime_support.tool_execution import ToolExecution
+from fred_runtime.runtime_support.tool_execution import (
+    ToolExecution,
+    capability_id_of,
+)
 from fred_runtime.runtime_support.trace_payloads import (
     serialize_messages,
     serialize_model_output,
@@ -572,6 +575,7 @@ class NodeContext:
                     if isinstance(tool, ContextAwareTool)
                     else "capability",
                     span=obs.span,
+                    capability_id=capability_id_of(tool),
                 )
                 # A ToolCall envelope preserves MCP artifacts that plain args discard.
                 if isinstance(raw_result, ToolMessage):
