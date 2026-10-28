@@ -13,7 +13,15 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import { columnFormatter, columnLetter, formatSheet, formulaBarText, mayClip } from "./spreadsheetFormat";
+import {
+  cellFormula,
+  columnFormatter,
+  columnLetter,
+  formatSheet,
+  formulaBarText,
+  formulaReferences,
+  mayClip,
+} from "./spreadsheetFormat";
 import type { SpreadsheetColumn, SpreadsheetSheet } from "./types";
 
 const plain = (value: string) => value.replace(/[\u00a0\u202f]/g, " ");
@@ -156,5 +164,74 @@ describe("spreadsheetFormat", () => {
     expect(formulaBarText(sheet, formatted, 3, 1, "en")).toBe("=B2/0");
     expect(formulaBarText(sheet, formatted, 2, 0, "en")).toBe("CA");
     expect(formatted.rows[1][1]).toBe("#DIV/0!");
+  });
+
+  describe("formulaReferences", () => {
+    // Each reference as [text, sheet, top, bottom, left, right].
+    const refs = (formula: string) =>
+      formulaReferences(formula).map((ref) => [
+        formula.slice(ref.start, ref.end),
+        ref.sheet,
+        ref.top,
+        ref.bottom,
+        ref.left,
+        ref.right,
+      ]);
+
+    it("finds cells and ranges inside function calls, ignoring $ anchors", () => {
+      expect(refs("=SUM(B2:B7)/$A$1")).toEqual([
+        ["B2:B7", null, 2, 7, 1, 1],
+        ["$A$1", null, 1, 1, 0, 0],
+      ]);
+      expect(refs("=AVERAGE(C$3:$A2)")).toEqual([["C$3:$A2", null, 2, 3, 0, 2]]);
+      expect(refs("=AA10*2")).toEqual([["AA10", null, 10, 10, 26, 26]]);
+    });
+
+    it("reads whole columns and whole rows", () => {
+      expect(refs("=SUM(B:B)+SUM($2:3)")).toEqual([
+        ["B:B", null, 1, Infinity, 1, 1],
+        ["$2:3", null, 2, 3, 0, Infinity],
+      ]);
+    });
+
+    it("keeps the sheet of qualified references, quoted or not", () => {
+      expect(refs("='Synthèse'!B4+Data!C2:C3+'It''s'!A1")).toEqual([
+        ["'Synthèse'!B4", "Synthèse", 4, 4, 1, 1],
+        ["Data!C2:C3", "Data", 2, 3, 2, 2],
+        ["'It''s'!A1", "It's", 1, 1, 0, 0],
+      ]);
+    });
+
+    it("skips string literals, function names and plain numbers", () => {
+      expect(refs('=IF(A2="B2",LOG10(C3),"say ""D4""")')).toEqual([
+        ["A2", null, 2, 2, 0, 0],
+        ["C3", null, 3, 3, 2, 2],
+      ]);
+      expect(refs("=ROUND(1.5,2)+TRUE")).toEqual([]);
+      expect(refs("Total")).toEqual([]);
+    });
+  });
+
+  it("gives the formula of computed, own-formula and totals cells only", () => {
+    const sheet: SpreadsheetSheet = {
+      name: "S",
+      columns: [
+        { header: "A", type: "number", decimals: 0, total_formula: "=SUM(A2:A3)" },
+        { header: "B", type: "number", decimals: 0, formula: "=A{row}*2" },
+      ],
+      rows: [
+        [1, 2],
+        [3, 6],
+      ],
+      row_count: 2,
+      totals: [4, null],
+      cell_formulas: { A3: "=A2+2" },
+    };
+    expect(cellFormula(sheet, 1, 1)).toBeNull();
+    expect(cellFormula(sheet, 2, 0)).toBeNull();
+    expect(cellFormula(sheet, 3, 0)).toBe("=A2+2");
+    expect(cellFormula(sheet, 3, 1)).toBe("=A3*2");
+    expect(cellFormula(sheet, 4, 0)).toBe("=SUM(A2:A3)");
+    expect(cellFormula(sheet, 4, 1)).toBeNull();
   });
 });

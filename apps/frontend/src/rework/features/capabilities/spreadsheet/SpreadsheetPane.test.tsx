@@ -192,6 +192,47 @@ describe("SpreadsheetPane", () => {
     expect(focusable.map((el) => el.getAttribute("data-cell"))).toEqual(["4:0"]);
   });
 
+  it("scrolls the grid to keep the selected cell clear of the sticky headings", async () => {
+    await render();
+    const table = container.querySelector("table")!;
+    const scroller = table.parentElement!;
+    let scrollLeft = 0;
+    Object.defineProperty(scroller, "scrollLeft", {
+      configurable: true,
+      get: () => scrollLeft,
+      set: (v) => (scrollLeft = v),
+    });
+    Object.defineProperty(scroller, "clientWidth", { configurable: true, value: 300 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 200 });
+    // Fake layout: 40px row numbers, 50px of sticky heading rows, 100px columns, 20px rows.
+    const rect = (left: number, top: number, width: number, height: number) =>
+      ({ left, top, right: left + width, bottom: top + height, width, height }) as DOMRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this === scroller) return rect(0, 0, 300, 200);
+      if (this.tagName === "THEAD") return rect(0, 0, 440, 50);
+      if (this.getAttribute("scope") === "row") return rect(0, 0, 40, 20);
+      const [row, column] = (this.dataset.cell ?? "0:0").split(":").map(Number);
+      return rect(40 + column * 100 - scrollLeft, 30 + row * 20, 100, 20);
+    });
+    try {
+      const press = async (key: string) =>
+        act(async () => {
+          document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+        });
+      await act(async () => container.querySelector<HTMLElement>('[data-cell="2:0"]')!.click());
+      const seen: number[] = [];
+      for (const key of ["ArrowRight", "ArrowRight", "ArrowRight", "ArrowLeft", "ArrowLeft", "ArrowLeft"]) {
+        await press(key);
+        seen.push(scrollLeft);
+      }
+      // Right edge followed going right; the sticky row numbers cleared going back left.
+      expect(seen).toEqual([0, 40, 140, 140, 100, 0]);
+      expect(document.activeElement?.getAttribute("data-cell")).toBe("2:0");
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it("shows the formula of computed and totals cells like Excel's formula bar, the value in the cell", async () => {
     state.load = {
       status: "ready",
@@ -252,6 +293,28 @@ describe("SpreadsheetPane", () => {
     }
     expect(cells("output")).toEqual(["C2"]);
     expect(barText()).toBe('=IFERROR(ROUND(C2/B2,2),"")');
+  });
+
+  it("marks the cells the selected formula references, and none for a plain cell", async () => {
+    const [budget, detail] = preview.sheets;
+    const columns = budget.columns.map((column, index) =>
+      index === 1 ? { ...column, total_formula: "=SUM(B2:B3)+'Detail'!A2" } : column,
+    );
+    state.load = { status: "ready", preview: { ...preview, sheets: [{ ...budget, columns }, detail] } };
+    await render();
+    const marked = () =>
+      [...container.querySelectorAll('[data-cell][class*="referenced"]')].map((el) => el.getAttribute("data-cell"));
+    const total = container.querySelector<HTMLElement>('[data-cell="4:1"]')!;
+    await act(async () => total.click());
+    expect(barText()).toBe("=SUM(B2:B3)+'Detail'!A2");
+    // The other sheet's reference is coloured in the bar but marks nothing in this grid.
+    expect(marked()).toEqual(["2:1", "3:1"]);
+    expect(cells("output ~ span:last-child [class*='reference']")).toEqual(["B2:B3", "'Detail'!A2"]);
+    expect(total.className).not.toMatch(/referenced/);
+
+    await act(async () => container.querySelector<HTMLElement>('[data-cell="2:0"]')!.click());
+    expect(marked()).toEqual([]);
+    expect(container.querySelector("output ~ span:last-child [class*='reference']")).toBeNull();
   });
 
   it("gives cells that may be cut a title with their full text", async () => {

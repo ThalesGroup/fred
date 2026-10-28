@@ -118,6 +118,16 @@ export function mayClip(text: string, layout: ColumnLayout | undefined): boolean
 
 const ROW_PLACEHOLDER = /\{row\}/g;
 
+/** The formula of a computed, own-formula or totals cell, else null. */
+export function cellFormula(sheet: SpreadsheetSheet, row: number, column: number): string | null {
+  const spec = sheet.columns[column];
+  if (!spec || row === 1) return null;
+  if (row === sheet.row_count + 2 && sheet.totals) return spec.total_formula ?? null;
+  const own = sheet.cell_formulas?.[`${columnLetter(column)}${row}`];
+  if (own) return own;
+  return spec.formula ? spec.formula.replace(ROW_PLACEHOLDER, String(row)) : null;
+}
+
 /**
  * What Excel's formula bar shows for a cell: the formula of a computed or totals
  * cell, else the typed value unformatted (no grouping or symbol, percent as "15%").
@@ -132,14 +142,92 @@ export function formulaBarText(
   const spec = sheet.columns[column];
   if (!spec) return "";
   if (row === 1) return spec.header;
-  if (row === sheet.row_count + 2 && formatted.totals) {
-    return spec.total_formula ?? formatted.totals[column] ?? "";
-  }
-  const own = sheet.cell_formulas?.[`${columnLetter(column)}${row}`];
-  if (own) return own;
-  if (spec.formula) return spec.formula.replace(ROW_PLACEHOLDER, String(row));
+  const formula = cellFormula(sheet, row, column);
+  if (formula) return formula;
+  if (row === sheet.row_count + 2 && formatted.totals) return formatted.totals[column] ?? "";
   const value = sheet.rows[row - 2]?.[column] ?? null;
   if (typeof value !== "number") return formatted.rows[row - 2]?.[column] ?? "";
   const raw = new Intl.NumberFormat(locale, { useGrouping: false, maximumSignificantDigits: 15 });
   return spec.type === "percent" ? `${raw.format(value * 100)}%` : raw.format(value);
+}
+
+/** An A1 reference found in a formula: its text span and the cells it covers. */
+export interface FormulaReference {
+  start: number;
+  end: number;
+  /** Sheet named before "!", or null for the formula's own sheet. */
+  sheet: string | null;
+  /** Excel rows (1-based) and column indexes (0-based); whole columns or rows run to Infinity. */
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+// A cell or cell range, a whole-column range, or a whole-row range; "$" anchors allowed.
+const A1 =
+  /(?:\$?([A-Za-z]{1,3})\$?(\d+)(?::\$?([A-Za-z]{1,3})\$?(\d+))?|\$?([A-Za-z]{1,3}):\$?([A-Za-z]{1,3})|\$?(\d+):\$?(\d+))(?![\p{L}\p{N}_.(!])/uy;
+const NAME = /[\p{L}\p{N}_.]+/uy;
+const QUOTED_SHEET = /'((?:[^']|'')+)'!/y;
+
+const columnIndex = (letters: string) =>
+  [...letters.toUpperCase()].reduce((index, letter) => index * 26 + letter.charCodeAt(0) - 64, 0) - 1;
+
+function readA1(formula: string, at: number): Omit<FormulaReference, "start" | "sheet"> | null {
+  A1.lastIndex = at;
+  const m = A1.exec(formula);
+  if (!m) return null;
+  const end = A1.lastIndex;
+  const span = (a: number, b: number) => ({ low: Math.min(a, b), high: Math.max(a, b) });
+  if (m[1]) {
+    const cols = span(columnIndex(m[1]), columnIndex(m[3] ?? m[1]));
+    const rows = span(Number(m[2]), Number(m[4] ?? m[2]));
+    return { end, top: rows.low, bottom: rows.high, left: cols.low, right: cols.high };
+  }
+  if (m[5]) {
+    const cols = span(columnIndex(m[5]), columnIndex(m[6]));
+    return { end, top: 1, bottom: Infinity, left: cols.low, right: cols.high };
+  }
+  const rows = span(Number(m[7]), Number(m[8]));
+  return { end, top: rows.low, bottom: rows.high, left: 0, right: Infinity };
+}
+
+/** The A1 references of a formula, skipping string literals and function or other names. */
+export function formulaReferences(formula: string): FormulaReference[] {
+  const found: FormulaReference[] = [];
+  let i = 0;
+  while (i < formula.length) {
+    const char = formula[i];
+    if (char === '"') {
+      const close = formula.indexOf('"', i + 1);
+      i = close < 0 ? formula.length : close + 1; // "" escapes re-enter here as an empty literal
+      continue;
+    }
+    let sheet: string | null = null;
+    let at = i;
+    QUOTED_SHEET.lastIndex = i;
+    const quoted = char === "'" ? QUOTED_SHEET.exec(formula) : null;
+    if (quoted) {
+      sheet = quoted[1].replace(/''/g, "'");
+      at = QUOTED_SHEET.lastIndex;
+    } else if (char !== "$") {
+      NAME.lastIndex = i;
+      if (!NAME.exec(formula)) {
+        i += 1;
+        continue;
+      }
+      const nameEnd = NAME.lastIndex;
+      if (formula[nameEnd] === "!") {
+        sheet = formula.slice(i, nameEnd);
+        at = nameEnd + 1;
+      } else if (!readA1(formula, i)) {
+        i = nameEnd; // a function, a named range, a number or TRUE
+        continue;
+      }
+    }
+    const ref = readA1(formula, at);
+    if (ref) found.push({ start: i, sheet, ...ref });
+    i = ref ? ref.end : Math.max(at, i + 1);
+  }
+  return found;
 }
