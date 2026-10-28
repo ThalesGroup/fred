@@ -1802,7 +1802,10 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
         },
       }),
     }),
@@ -1815,33 +1818,10 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsActiveUsersOverTimeGet: build.query<
-      HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/active_users_over_time`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsUniqueUsersTotalGet: build.query<
-      HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/unique_users_total`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
         },
       }),
     }),
@@ -1854,124 +1834,10 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsMessagesOverTimeGet: build.query<
-      HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/messages_over_time`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsSessionsByScopeGet: build.query<
-      HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/sessions_by_scope`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsConversationsPerUserGet: build.query<
-      HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/conversations_per_user`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsConversationDepthGet: build.query<
-      HandlerControlPlaneV1KpiPresetsConversationDepthGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsConversationDepthGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/conversation_depth`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsAgentsPerUserGet: build.query<
-      HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/agents_per_user`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsConversationsPerUserTrendGet: build.query<
-      HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/conversations_per_user_trend`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsConversationDepthTrendGet: build.query<
-      HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/conversation_depth_trend`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsAgentsPerUserTrendGet: build.query<
-      HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/agents_per_user_trend`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsTopTeamsBySessionsGet: build.query<
-      HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/top_teams_by_sessions`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
         },
       }),
     }),
@@ -1984,7 +1850,10 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
         },
       }),
     }),
@@ -1997,33 +1866,10 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsTopAgentsByConversationsGet: build.query<
-      HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/top_agents_by_conversations`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsDocumentsTotalGet: build.query<
-      HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/documents_total`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
         },
       }),
     }),
@@ -2036,7 +1882,10 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
         },
       }),
     }),
@@ -2049,7 +1898,10 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
         },
       }),
     }),
@@ -2062,7 +1914,10 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
         },
       }),
     }),
@@ -2075,7 +1930,10 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
         },
       }),
     }),
@@ -2088,7 +1946,10 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
         },
       }),
     }),
@@ -2101,7 +1962,10 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
         },
       }),
     }),
@@ -2114,7 +1978,10 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
         },
       }),
     }),
@@ -2127,7 +1994,10 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
         },
       }),
     }),
@@ -2140,46 +2010,10 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsTokenUsageOverTimeGet: build.query<
-      HandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/token_usage_over_time`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsTokenUsageByAgentGet: build.query<
-      HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/token_usage_by_agent`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsTokenUsageByModelGet: build.query<
-      HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/token_usage_by_model`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
         },
       }),
     }),
@@ -2192,7 +2026,10 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
         },
       }),
     }),
@@ -2205,7 +2042,10 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
         },
       }),
     }),
@@ -2218,7 +2058,166 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/analytics_teams_catalog`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAnalyticsOverviewGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAnalyticsOverviewGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAnalyticsOverviewGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/analytics_overview`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/analytics_activity_over_time`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAnalyticsAdoptionGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAnalyticsAdoptionGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAnalyticsAdoptionGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/analytics_adoption`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAnalyticsUsageGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAnalyticsUsageGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAnalyticsUsageGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/analytics_usage`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAnalyticsTeamsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAnalyticsTeamsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAnalyticsTeamsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/analytics_teams`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAnalyticsAgentsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAnalyticsAgentsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAnalyticsAgentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/analytics_agents`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAnalyticsQualityCostGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAnalyticsQualityCostGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAnalyticsQualityCostGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/analytics_quality_cost`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+        },
+      }),
+    }),
+    getUserFilterSummaryControlPlaneV1KpiUserFilterGet: build.query<
+      GetUserFilterSummaryControlPlaneV1KpiUserFilterGetApiResponse,
+      GetUserFilterSummaryControlPlaneV1KpiUserFilterGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/user-filter`,
+        params: {
+          user_filter: queryArg.userFilter,
+        },
+      }),
+    }),
+    exportAnalyticsControlPlaneV1KpiAnalyticsExportGet: build.query<
+      ExportAnalyticsControlPlaneV1KpiAnalyticsExportGetApiResponse,
+      ExportAnalyticsControlPlaneV1KpiAnalyticsExportGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/analytics/export`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          lang: queryArg.lang,
+          user_filter: queryArg.userFilter,
         },
       }),
     }),
@@ -3403,8 +3402,14 @@ export type HandlerControlPlaneV1KpiPresetsSkillUsageGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiResponse =
   /** status 200 Successful Response */ SkillUsageResponse;
@@ -3413,28 +3418,14 @@ export type HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse =
-  /** status 200 Successful Response */ TimeSeriesResponse;
-export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiResponse =
-  /** status 200 Successful Response */ ScalarResponse;
-export type HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiResponse =
   /** status 200 Successful Response */ TimeSeriesResponse;
@@ -3443,98 +3434,14 @@ export type HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiResponse =
-  /** status 200 Successful Response */ TimeSeriesResponse;
-export type HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiResponse =
-  /** status 200 Successful Response */ LabelValueResponse;
-export type HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiResponse =
-  /** status 200 Successful Response */ DistributionResponse;
-export type HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsConversationDepthGetApiResponse =
-  /** status 200 Successful Response */ DistributionResponse;
-export type HandlerControlPlaneV1KpiPresetsConversationDepthGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiResponse =
-  /** status 200 Successful Response */ DistributionResponse;
-export type HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiResponse =
-  /** status 200 Successful Response */ TimeSeriesResponse;
-export type HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiResponse =
-  /** status 200 Successful Response */ TimeSeriesResponse;
-export type HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiResponse =
-  /** status 200 Successful Response */ TimeSeriesResponse;
-export type HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiResponse =
-  /** status 200 Successful Response */ LabelValueResponse;
-export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
@@ -3543,8 +3450,14 @@ export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
@@ -3553,28 +3466,14 @@ export type HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiAr
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiResponse =
-  /** status 200 Successful Response */ MultiSeriesTimeSeriesResponse;
-export type HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiResponse =
-  /** status 200 Successful Response */ ScalarWithDeltaResponse;
-export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
@@ -3583,8 +3482,14 @@ export type HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
@@ -3593,8 +3498,14 @@ export type HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
@@ -3603,8 +3514,14 @@ export type HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiResponse =
   /** status 200 Successful Response */ UserTopAgentsResponse;
@@ -3613,8 +3530,14 @@ export type HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
@@ -3623,8 +3546,14 @@ export type HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiResponse =
   /** status 200 Successful Response */ UserRecentAgentsResponse;
@@ -3633,8 +3562,14 @@ export type HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiResponse =
   /** status 200 Successful Response */ TimeSeriesResponse;
@@ -3643,8 +3578,14 @@ export type HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
@@ -3653,8 +3594,14 @@ export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
@@ -3663,38 +3610,14 @@ export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetApiResponse =
-  /** status 200 Successful Response */ TimeSeriesResponse;
-export type HandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiResponse =
-  /** status 200 Successful Response */ LabelValueResponse;
-export type HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiResponse =
-  /** status 200 Successful Response */ LabelValueResponse;
-export type HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiResponse =
   /** status 200 Successful Response */ CreationAssistantUsageResponse;
@@ -3703,8 +3626,14 @@ export type HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiResponse =
   /** status 200 Successful Response */ TeamStorageResponse;
@@ -3713,8 +3642,14 @@ export type HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
 };
 export type HandlerControlPlaneV1KpiPresetsWebResearchSummaryGetApiResponse =
   /** status 200 Successful Response */ WebResearchSummaryResponse;
@@ -3723,8 +3658,165 @@ export type HandlerControlPlaneV1KpiPresetsWebResearchSummaryGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGetApiResponse =
+  /** status 200 Successful Response */ AnalyticsTeamsCatalogResponse;
+export type HandlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAnalyticsOverviewGetApiResponse =
+  /** status 200 Successful Response */ AnalyticsOverviewResponse;
+export type HandlerControlPlaneV1KpiPresetsAnalyticsOverviewGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGetApiResponse =
+  /** status 200 Successful Response */ AnalyticsActivityResponse;
+export type HandlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAnalyticsAdoptionGetApiResponse =
+  /** status 200 Successful Response */ AnalyticsAdoptionResponse;
+export type HandlerControlPlaneV1KpiPresetsAnalyticsAdoptionGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAnalyticsUsageGetApiResponse =
+  /** status 200 Successful Response */ AnalyticsUsageResponse;
+export type HandlerControlPlaneV1KpiPresetsAnalyticsUsageGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAnalyticsTeamsGetApiResponse =
+  /** status 200 Successful Response */ AnalyticsTeamsResponse;
+export type HandlerControlPlaneV1KpiPresetsAnalyticsTeamsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAnalyticsAgentsGetApiResponse =
+  /** status 200 Successful Response */ AnalyticsAgentsResponse;
+export type HandlerControlPlaneV1KpiPresetsAnalyticsAgentsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAnalyticsQualityCostGetApiResponse =
+  /** status 200 Successful Response */ AnalyticsQualityCostResponse;
+export type HandlerControlPlaneV1KpiPresetsAnalyticsQualityCostGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+};
+export type GetUserFilterSummaryControlPlaneV1KpiUserFilterGetApiResponse =
+  /** status 200 Successful Response */ UserFilterSummary;
+export type GetUserFilterSummaryControlPlaneV1KpiUserFilterGetApiArg = {
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+};
+export type ExportAnalyticsControlPlaneV1KpiAnalyticsExportGetApiResponse = /** status 200 Successful Response */ Blob;
+export type ExportAnalyticsControlPlaneV1KpiAnalyticsExportGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the export to these teams (repeat the parameter); same rules as the presets. */
+  teamIds?: string[];
+  /** Calendar bucket of the Over time sheet. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of dates, calendar buckets and days. */
+  tz?: string;
+  /** Language of the workbook. */
+  lang?: "fr" | "en";
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
 };
 export type CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse =
   /** status 202 Successful Response */ CampaignCreatedResponse;
@@ -4067,6 +4159,7 @@ export type TeamPermission =
   | "can_update_resources"
   | "can_update_agents"
   | "can_read_members"
+  | "can_read_analytics"
   | "can_administer_members"
   | "can_administer_editors"
   | "can_administer_analysts"
@@ -5937,37 +6030,13 @@ export type TimeSeriesPoint = {
   value: number;
   co2e_grams?: number | null;
   kwh?: number | null;
-  cost_usd?: number | null;
+  cost_eur?: number | null;
 };
 export type TimeSeriesResponse = {
   rows: TimeSeriesPoint[];
   since: string;
   until: string;
   interval: string;
-  window?: string | null;
-};
-export type ScalarResponse = {
-  value: number;
-  since: string;
-  until: string;
-};
-export type LabelValuePoint = {
-  label: string;
-  value: number;
-  co2e_grams?: number | null;
-  kwh?: number | null;
-  cost_usd?: number | null;
-};
-export type LabelValueResponse = {
-  rows: LabelValuePoint[];
-  since: string;
-  until: string;
-};
-export type DistributionResponse = {
-  rows: LabelValuePoint[];
-  median?: number | null;
-  since: string;
-  until: string;
 };
 export type ScalarWithDeltaResponse = {
   value?: number | null;
@@ -5976,18 +6045,17 @@ export type ScalarWithDeltaResponse = {
   since: string;
   until: string;
 };
-export type MultiSeriesPoint = {
-  date: string;
-  values: {
-    [key: string]: number;
-  };
+export type LabelValuePoint = {
+  label: string;
+  value: number;
+  co2e_grams?: number | null;
+  kwh?: number | null;
+  cost_eur?: number | null;
 };
-export type MultiSeriesTimeSeriesResponse = {
-  rows: MultiSeriesPoint[];
-  series: string[];
+export type LabelValueResponse = {
+  rows: LabelValuePoint[];
   since: string;
   until: string;
-  interval: string;
 };
 export type UserTopAgentRow = {
   agent_instance_id: string;
@@ -6031,11 +6099,12 @@ export type TeamStorageResponse = {
   until: string;
 };
 export type WebResearchSummaryResponse = {
+  available?: boolean;
   tool_calls: number;
   searches: number;
   fetches: number;
   billable_searches: number;
-  estimated_cost_usd: number;
+  estimated_cost_eur: number;
   blocked: number;
   saturated: number;
   failed: number;
@@ -6044,6 +6113,168 @@ export type WebResearchSummaryResponse = {
   by_reason: LabelValuePoint[];
   since: string;
   until: string;
+};
+export type AnalyticsTeamRow = {
+  team_id: string;
+  name: string;
+  member_count: number;
+};
+export type AnalyticsTeamsCatalogResponse = {
+  rows: AnalyticsTeamRow[];
+};
+export type PeriodValue = {
+  current?: number | null;
+  previous?: number | null;
+};
+export type AnalyticsOverviewResponse = {
+  visitors: PeriodValue;
+  active_users: PeriodValue;
+  active_teams: PeriodValue;
+  conversations: PeriodValue;
+  messages: PeriodValue;
+  cost_eur: PeriodValue;
+  cost_eur_per_active_user: PeriodValue;
+  since: string;
+  until: string;
+  previous_since: string;
+};
+export type BucketPoint = {
+  start: string;
+  values: {
+    [key: string]: number;
+  };
+};
+export type AnalyticsActivityResponse = {
+  bucket: "hour" | "day" | "week" | "month";
+  series: string[];
+  points: BucketPoint[];
+  since: string;
+  until: string;
+};
+export type AnalyticsCohortRow = {
+  month: string;
+  size: number;
+  returns: (number | null)[];
+};
+export type AnalyticsAdoptionResponse = {
+  people_with_access?: number | null;
+  visitors: PeriodValue;
+  active_users: PeriodValue;
+  visit_rate: PeriodValue;
+  visitor_to_active_rate: PeriodValue;
+  adoption_rate: PeriodValue;
+  new_users: PeriodValue;
+  first_message_within_7_days_rate: PeriodValue;
+  median_days_to_first_message: PeriodValue;
+  next_month_return: PeriodValue;
+  cohorts: AnalyticsCohortRow[];
+  since: string;
+  until: string;
+  previous_since: string;
+};
+export type AnalyticsUsageResponse = {
+  conversations: PeriodValue;
+  messages: PeriodValue;
+  active_users: PeriodValue;
+  active_users_per_workday: PeriodValue;
+  daily_usage_share: PeriodValue;
+  days_per_week_median: PeriodValue;
+  conversations_per_user_median: PeriodValue;
+  messages_per_conversation_median: PeriodValue;
+  single_exchange_share: PeriodValue;
+  top_decile_conversation_share: PeriodValue;
+  conversation_distribution: LabelValuePoint[];
+  since: string;
+  until: string;
+  previous_since: string;
+};
+export type AnalyticsTeamUsageRow = {
+  team_id: string;
+  name: string;
+  active_members: number;
+  messages: number;
+  messages_previous: number;
+};
+export type AnalyticsTeamsResponse = {
+  team_conversations?: PeriodValue | null;
+  personal_conversations?: PeriodValue | null;
+  team_share?: PeriodValue | null;
+  active_teams: PeriodValue;
+  rows: AnalyticsTeamUsageRow[];
+  since: string;
+  until: string;
+  previous_since: string;
+};
+export type AnalyticsAgentRow = {
+  agent_instance_id: string;
+  label: string;
+  users: number;
+  conversations: number;
+  messages: number;
+};
+export type AnalyticsCapabilityRow = {
+  capability_id: string;
+  agents_equipped: number;
+  agents_used?: number;
+  calls?: number;
+  users?: number;
+  failed_calls?: number;
+};
+export type AnalyticsAgentsResponse = {
+  agents_used: PeriodValue;
+  agents_created: PeriodValue;
+  agents_created_published: PeriodValue;
+  documents_added: PeriodValue;
+  teams_feeding_corpus: PeriodValue;
+  corpus_searches?: PeriodValue | null;
+  top_agents: AnalyticsAgentRow[];
+  capabilities: AnalyticsCapabilityRow[];
+  since: string;
+  until: string;
+  previous_since: string;
+};
+export type AnalyticsModelRow = {
+  model: string;
+  message_share?: number | null;
+  input_tokens: number;
+  output_tokens: number;
+  cost_eur: number;
+  co2e_grams: number;
+};
+export type AnalyticsAgentCostRow = {
+  label: string;
+  tokens: number;
+  cost_eur: number;
+  users: number;
+  cost_eur_per_user?: number | null;
+};
+export type AnalyticsQualityCostResponse = {
+  failed_turn_rate: PeriodValue;
+  cost_eur: PeriodValue;
+  cost_eur_per_active_user: PeriodValue;
+  input_tokens: PeriodValue;
+  output_tokens: PeriodValue;
+  cached_input_tokens: PeriodValue;
+  co2e_grams: PeriodValue;
+  kwh: PeriodValue;
+  models: AnalyticsModelRow[];
+  agents: AnalyticsAgentCostRow[];
+  since: string;
+  until: string;
+  previous_since: string;
+};
+export type UserFilterField = {
+  claim: string[];
+  /** Users with a stored value for this path. */
+  users: number;
+  /** The current access rule uses this path. */
+  in_rule: boolean;
+};
+export type UserFilterSummary = {
+  fields: UserFilterField[];
+  known_users: number;
+  matched?: number | null;
+  no_data?: number | null;
 };
 export type CampaignCreatedResponse = {
   campaign_id: string;
@@ -6474,38 +6705,12 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsSkillUsageGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery,
-  useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
-  useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery,
   useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery,
-  useHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery,
-  useHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery,
-  useHandlerControlPlaneV1KpiPresetsConversationsPerUserGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsConversationsPerUserGetQuery,
-  useHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery,
-  useHandlerControlPlaneV1KpiPresetsAgentsPerUserGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsAgentsPerUserGetQuery,
-  useHandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetQuery,
-  useHandlerControlPlaneV1KpiPresetsConversationDepthTrendGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsConversationDepthTrendGetQuery,
-  useHandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetQuery,
-  useHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
   useHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,
   useHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery,
-  useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
-  useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery,
@@ -6524,18 +6729,32 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery,
-  useHandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetQuery,
-  useHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery,
-  useHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery,
   useHandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetQuery,
   useHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery,
   useHandlerControlPlaneV1KpiPresetsWebResearchSummaryGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsWebResearchSummaryGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsOverviewGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAnalyticsOverviewGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsAdoptionGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAnalyticsAdoptionGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsUsageGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAnalyticsUsageGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsTeamsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAnalyticsTeamsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsAgentsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAnalyticsAgentsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsQualityCostGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAnalyticsQualityCostGetQuery,
+  useGetUserFilterSummaryControlPlaneV1KpiUserFilterGetQuery,
+  useLazyGetUserFilterSummaryControlPlaneV1KpiUserFilterGetQuery,
+  useExportAnalyticsControlPlaneV1KpiAnalyticsExportGetQuery,
+  useLazyExportAnalyticsControlPlaneV1KpiAnalyticsExportGetQuery,
   useCreateCampaignControlPlaneV1EvaluationCampaignsPostMutation,
   useListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,
   useLazyListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,
