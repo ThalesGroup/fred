@@ -28,13 +28,9 @@ import re
 from dataclasses import dataclass, replace
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Context, Decimal
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
-from openpyxl import Workbook
-from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE, Cell
-from openpyxl.styles import Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
-from openpyxl.worksheet.worksheet import Worksheet
+import xlsxwriter
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
@@ -129,11 +125,24 @@ _LIMIT_HINT = (
     " Tell the user plainly about this limit and suggest splitting the data "
     "across several sheets or files."
 )
-_HEADER_FONT = Font(bold=True)
-_HEADER_FILL = PatternFill(
-    fill_type="solid", start_color="FFD9D9D9", end_color="FFD9D9D9"
-)
-_HEADER_BORDER = Border(bottom=Side(style="thin", color="FF808080"))
+_HEADER_STYLE: dict[str, object] = {
+    "bold": True,
+    "bg_color": "#D9D9D9",
+    "pattern": 1,
+    "bottom": 1,
+    "bottom_color": "#808080",
+}
+# Built-in numFmtId 14: Excel shows it as the reader's system short date.
+_DATE_FORMAT_ID = 14
+# Control characters (often pasted from PDFs) are invalid in the xlsx XML.
+ILLEGAL_CHARACTERS_RE = re.compile(r"[\000-\010]|[\013-\014]|[\016-\037]")
+# A string is always text: never a formula, number or link guessed from its content.
+_WORKBOOK_OPTIONS: dict[str, object] = {
+    "in_memory": True,
+    "strings_to_formulas": False,
+    "strings_to_numbers": False,
+    "strings_to_urls": False,
+}
 _TOTAL_FUNCTIONS = {
     "sum": "SUM",
     "average": "AVERAGE",
@@ -347,17 +356,28 @@ def prepare(request: CreateSpreadsheetInput) -> PreparedWorkbook:
     )
 
 
+def column_letter(index: int) -> str:
+    """Excel column letters of a 1-based column index (1 -> A, 27 -> AA)."""
+
+    letters = ""
+    while index:
+        index, rest = divmod(index - 1, 26)
+        letters = chr(65 + rest) + letters
+    return letters
+
+
 def build_workbook(prepared: PreparedWorkbook) -> bytes:
     """Return the `.xlsx` bytes of a prepared request."""
 
-    workbook = Workbook()
-    for default_sheet in workbook.worksheets:
-        workbook.remove(default_sheet)
-    workbook.properties.creator = "Fred"
-    for sheet in prepared.sheets:
-        _write_sheet(workbook.create_sheet(title=sheet.name), sheet, prepared.language)
     buffer = io.BytesIO()
-    workbook.save(buffer)
+    workbook = xlsxwriter.Workbook(buffer, _WORKBOOK_OPTIONS)
+    workbook.set_properties({"author": "Fred"})
+    formats = _Formats(workbook)
+    for sheet in prepared.sheets:
+        _write_sheet(
+            workbook.add_worksheet(sheet.name), sheet, prepared.language, formats
+        )
+    workbook.close()
     data = buffer.getvalue()
     if len(data) > MAX_OUTPUT_BYTES:
         raise SpreadsheetInputError(
@@ -777,13 +797,13 @@ def _operand_value(
 def _formula(plan: ComputePlan, row: int | str, last_row: int) -> str:
     def ref(operand: Operand) -> str:
         if operand.column is not None:
-            return f"{get_column_letter(operand.column + 1)}{row}"
+            return f"{column_letter(operand.column + 1)}{row}"
         number = operand.number
         text = str(int(number)) if number.is_integer() else repr(number).upper()
         return f"({text})" if number < 0 else text
 
     if plan.right is None:
-        letter = get_column_letter(cast(int, plan.left.column) + 1)
+        letter = column_letter(cast(int, plan.left.column) + 1)
         expr = f"{letter}{row}/SUM(${letter}$2:${letter}${last_row})"
     else:
         expr = f"{ref(plan.left)}{_OP_SYMBOLS[plan.op]}{ref(plan.right)}"
@@ -795,7 +815,7 @@ def _formula(plan: ComputePlan, row: int | str, last_row: int) -> str:
 
 
 def _total_formula(column: ColumnSpec, index: int, last_row: int) -> str:
-    letter = get_column_letter(index + 1)
+    letter = column_letter(index + 1)
     function = _TOTAL_FUNCTIONS[cast(str, column.total)]
     if column.total == "count" and column.type in ("text", "date"):
         function = "COUNTA" if column.type == "text" else "COUNT"
@@ -968,45 +988,77 @@ def _check_sheet_name(name: str, seen: set[str]) -> None:
     seen.add(name.lower())
 
 
-def _write_sheet(ws: Worksheet, sheet: PreparedSheet, language: Language) -> None:
+class _Formats:
+    """One XlsxWriter format per distinct style, created on first use."""
+
+    def __init__(self, workbook: Any) -> None:
+        self._workbook = workbook
+        self._cache: dict[tuple[object, ...], Any] = {}
+
+    def get(
+        self, number_format: str = "", *, bold: bool = False, quote: bool = False
+    ) -> Any:
+        key = (number_format, bold, quote)
+        if key not in self._cache:
+            props: dict[str, object] = {}
+            if number_format:
+                props["num_format"] = (
+                    _DATE_FORMAT_ID
+                    if number_format == NUMBER_FORMATS["date"]
+                    else number_format
+                )
+            if bold:
+                props["bold"] = True
+            if quote:
+                props["quote_prefix"] = True
+            self._cache[key] = self._workbook.add_format(props) if props else None
+        return self._cache[key]
+
+    def header(self, quote: bool) -> Any:
+        key: tuple[object, ...] = ("header", quote)
+        if key not in self._cache:
+            self._cache[key] = self._workbook.add_format(
+                {**_HEADER_STYLE, **({"quote_prefix": True} if quote else {})}
+            )
+        return self._cache[key]
+
+
+def _write_sheet(
+    ws: Any, sheet: PreparedSheet, language: Language, formats: _Formats
+) -> None:
     columns = sheet.columns
     widths = [len(header) for header in sheet.headers]
 
-    for index, header in enumerate(sheet.headers, start=1):
-        cell = _cell(ws, 1, index)
-        _set_text(cell, header)
-        cell.font = _HEADER_FONT
-        cell.fill = _HEADER_FILL
-        cell.border = _HEADER_BORDER
+    for index, header in enumerate(sheet.headers):
+        ws.write_string(0, index, header, formats.header(_is_trigger(header)))
 
     last_row = len(sheet.rows) + 1
     for row_number, row in enumerate(sheet.rows, start=2):
         for index, value in enumerate(row):
             plan = sheet.computes[index]
             if plan is not None:
-                cell = _cell(ws, row_number, index + 1)
-                cell.value = _formula(plan, row_number, last_row)
-                if sheet.formats[index]:
-                    cell.number_format = sheet.formats[index]
+                cached: object = "" if value is None else value
+                ws.write_formula(
+                    row_number - 1,
+                    index,
+                    _formula(plan, row_number, last_row),
+                    formats.get(sheet.formats[index]),
+                    cached,
+                )
                 if value is not None:
                     widths[index] = max(widths[index], _display_length(value))
                 continue
             if value is None:
                 continue
-            cell = _cell(ws, row_number, index + 1)
-            if isinstance(value, str):
-                _set_text(cell, value)
-            else:
-                cell.value = value
-                if sheet.formats[index]:
-                    cell.number_format = sheet.formats[index]
+            _write_value(
+                ws, row_number - 1, index, value, sheet.formats[index], formats
+            )
             widths[index] = max(widths[index], _display_length(value))
 
-    last_column = get_column_letter(len(columns))
-    ws.freeze_panes = "A2"
-    ws.auto_filter.ref = f"A1:{last_column}{last_row}"
+    ws.freeze_panes(1, 0)
+    ws.autofilter(0, 0, last_row - 1, len(columns) - 1)
     if sheet.rows and any(column.total for column in columns):
-        _write_totals(ws, sheet, last_row, language)
+        _write_totals(ws, sheet, last_row, language, formats)
 
     for index, column in enumerate(columns):
         width = (
@@ -1014,37 +1066,48 @@ def _write_sheet(ws: Worksheet, sheet: PreparedSheet, language: Language) -> Non
             if column.width is not None
             else min(widths[index] + 2, 60)
         )
-        ws.column_dimensions[get_column_letter(index + 1)].width = width
+        ws.set_column(index, index, width)
+
+
+def _write_value(
+    ws: Any, row: int, column: int, value: Converted, fmt: str, formats: _Formats
+) -> None:
+    if isinstance(value, str):
+        ws.write_string(row, column, value, formats.get(quote=_is_trigger(value)))
+    elif isinstance(value, date):
+        ws.write_datetime(row, column, value, formats.get(fmt))
+    elif value is not None:
+        ws.write_number(row, column, value, formats.get(fmt))
 
 
 def _write_totals(
-    ws: Worksheet, sheet: PreparedSheet, last_row: int, language: Language
+    ws: Any, sheet: PreparedSheet, last_row: int, language: Language, formats: _Formats
 ) -> None:
     columns = sheet.columns
-    total_row = last_row + 1
+    row = last_row  # 0-based index of the row after the data
     label_index = _label_index(columns)
     if label_index is not None:
-        label = ws.cell(
-            row=total_row,
-            column=label_index + 1,
-            value=_totals_label(columns, language),
+        ws.write_string(
+            row, label_index, _totals_label(columns, language), formats.get(bold=True)
         )
-        label.font = _HEADER_FONT
+    values = _preview_totals(sheet, language) or [None] * len(columns)
     for index, column in enumerate(columns):
         if not column.total:
             continue
-        cell = ws.cell(
-            row=total_row,
-            column=index + 1,
-            value=_total_formula(column, index, last_row),
-        )
-        cell.font = _HEADER_FONT
         if column.total == "count":
-            cell.number_format = NUMBER_FORMATS["integer"]
+            fmt = NUMBER_FORMATS["integer"]
         elif column.total == "average" and column.type == "integer":
-            cell.number_format = NUMBER_FORMATS["number"]
-        elif sheet.formats[index]:
-            cell.number_format = sheet.formats[index]
+            fmt = NUMBER_FORMATS["number"]
+        else:
+            fmt = sheet.formats[index]
+        value = values[index]
+        ws.write_formula(
+            row,
+            index,
+            _total_formula(column, index, last_row),
+            formats.get(fmt, bold=True),
+            "" if value is None else value,
+        )
 
 
 def _number_format(
@@ -1069,17 +1132,9 @@ def _decimals(value: float) -> int:
     return len(text.split(".")[1]) if "." in text else 0
 
 
-def _cell(ws: Worksheet, row: int, column: int) -> Cell:
-    # Never a MergedCell: this builder merges nothing.
-    return cast(Cell, ws.cell(row=row, column=column))
-
-
-def _set_text(cell: Cell, value: str) -> None:
-    cell.value = value
-    if value.startswith(_FORMULA_TRIGGERS):
-        # Stored as a literal string; the quote prefix keeps it text when edited.
-        cell.data_type = "s"
-        cell.quotePrefix = True
+def _is_trigger(value: str) -> bool:
+    # Stored as a literal string; the quote prefix keeps it text when edited.
+    return value.startswith(_FORMULA_TRIGGERS)
 
 
 def _display_length(value: object) -> int:
@@ -1092,7 +1147,6 @@ def _display_length(value: object) -> int:
 
 
 def _strip_illegal(text: str) -> str:
-    # Control characters (often pasted from PDFs) are invalid in the xlsx XML.
     return ILLEGAL_CHARACTERS_RE.sub("", text)
 
 

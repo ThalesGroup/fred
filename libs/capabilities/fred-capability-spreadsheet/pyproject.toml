@@ -11,7 +11,7 @@ dependencies = [
   "fred-sdk[agents]>=4.5.3",
   "pydantic>=2.7.0,<3.0.0",
   "langchain-core>=0.3.0",
-  "openpyxl>=3.1.5",
+  "xlsxwriter>=3.2.0",
 ]
 classifiers = [
   "License :: OSI Approved :: Apache Software License",
@@ -34,6 +34,8 @@ dev = [
   # fred-runtime supplies the capability registry the registration test drives
   # (`boot_capability_registry` / `registry.validate()`); a test-only dependency.
   "fred-runtime>=4.5.3",
+  # Tests read generated files back.
+  "openpyxl>=3.1.5",
   "pytest>=8.4.2",
   "pytest-asyncio>=1.2.0",
   "pytest-cov>=6.2.1",
@@ -69,6 +71,7 @@ dev = [
   "basedpyright==1.31.0",
   "detect-secrets>=1.5.0",
   "fred-runtime>=4.5.3",
+  "openpyxl>=3.1.5",
   "pytest>=8.4.2",
   "pytest-asyncio>=1.2.0",
   "pytest-cov>=6.2.1",
