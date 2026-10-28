@@ -24,6 +24,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, replace
+from typing import cast
 
 MAX_FORMULA_CHARS = 8_192
 MAX_DEPTH = 32
@@ -893,6 +894,17 @@ def _ref_text(ref: Ref, sheet: str | None) -> str:
     return (sheet_reference(sheet) + "!" if sheet else "") + text
 
 
+def _marked_text(ref: Ref) -> str:
+    def cell(column: int, row: int, abs_c: bool, abs_r: bool) -> str:
+        number = f"{_ROW_MARK}{-row if abs_r else row}{_ROW_MARK}"
+        return f"{'$' if abs_c else ''}{column_letters(column)}{'$' if abs_r else ''}{number}"
+
+    text = cell(ref.c1, ref.r1, ref.abs_c1, ref.abs_r1)
+    if ref.is_range:
+        text += ":" + cell(ref.c2, ref.r2, ref.abs_c2, ref.abs_r2)
+    return (sheet_reference(ref.sheet) + "!" if ref.sheet else "") + text
+
+
 def emit(node: Node, *, stored: bool = False, rows: int = 0) -> str:
     """Formula text with `=`; `stored` adds Excel's prefixes, `rows` fills down."""
 
@@ -912,6 +924,8 @@ def _emit(node: Node, stored: bool, rows: int) -> str:
         return ""
     if isinstance(node, Ref):
         return _ref_text(shift(node, rows), node.sheet)
+    if isinstance(node, _MarkedRef):
+        return _marked_text(node.ref)
     if isinstance(node, Unary):
         return node.op + _emit(node.operand, stored, rows)
     if isinstance(node, Percent):
@@ -925,6 +939,40 @@ def _emit(node: Node, stored: bool, rows: int) -> str:
     prefix = _STORED_PREFIX.get(node.name, "") if stored else ""
     args = ",".join(_emit(arg, stored, rows) for arg in node.args)
     return f"{prefix}{node.name}({args})"
+
+
+_ROW_MARK = "\x00"
+
+
+def fill_down(node: Node, *, stored: bool = False) -> Callable[[int], str]:
+    """Text of a column formula `rows` below its first data row, emitted once."""
+
+    def mark(ref: Ref) -> Node:
+        return cast(Node, _MarkedRef(ref))
+
+    text = "=" + _emit(map_refs(node, mark), stored, 0)
+    parts = text.split(_ROW_MARK)
+    if len(parts) == 1:
+        return lambda rows: text
+    pieces = parts[0::2]
+    bases = [int(x) for x in parts[1::2]]
+
+    def at(rows: int) -> str:
+        out = [pieces[0]]
+        for base, piece in zip(bases, pieces[1:], strict=True):
+            out.append(str(base + rows) if base > 0 else str(-base))
+            out.append(piece)
+        return "".join(out)
+
+    return at
+
+
+@dataclass(frozen=True, slots=True)
+class _MarkedRef:
+    """A reference whose relative rows are emitted as markers (positive base) and
+    absolute rows as negated numbers, so `fill_down` substitutes them as text."""
+
+    ref: Ref
 
 
 def uses_dynamic_arrays(node: Node) -> bool:
