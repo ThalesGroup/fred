@@ -513,7 +513,7 @@ def test_conversion_happens_once_for_file_and_preview(monkeypatch):
     assert calls == 2
 
 
-# --- computed columns ---------------------------------------------------------
+# --- formula columns ---------------------------------------------------------
 
 AMOUNTS = [
     {"header": "Poste"},
@@ -530,95 +530,14 @@ def _computed(*extra: dict[str, Any], rows=None, name: str = "Data") -> dict[str
     )
 
 
-@pytest.mark.parametrize(
-    ("compute", "formula", "values"),
-    [
-        (
-            {"op": "subtract", "left": "Réel", "right": "Budget"},
-            "=C2-B2",
-            [20.0, 30.0, 50.0],
-        ),
-        ({"op": "add", "left": "Budget", "right": 10}, "=B2+10", [110.0, 10.0, 10.0]),
-        (
-            {"op": "multiply", "left": "Réel", "right": 1.2},
-            "=C2*1.2",
-            [144.0, 36.0, 60.0],
-        ),
-        (
-            {"op": "multiply", "left": "Réel", "right": -2},
-            "=C2*(-2)",
-            [-240.0, -60.0, -100.0],
-        ),
-        (
-            {"op": "divide", "left": "Réel", "right": "Budget"},
-            '=IFERROR(C2/B2,"")',
-            [1.2, None, None],
-        ),
-        (
-            {"op": "divide", "left": "Réel", "right": 3, "round": 1},
-            '=IFERROR(ROUND(C2/3,1),"")',
-            [40.0, 10.0, 16.7],
-        ),
-        (
-            {"op": "share_of_total", "column": "Réel"},
-            '=IFERROR(C2/SUM($C$2:$C$4),"")',
-            [0.6, 0.15, 0.25],
-        ),
-        ({"op": "*", "left": "réel", "right": "2"}, "=C2*2", [240.0, 60.0, 100.0]),
-        (
-            {"op": "multiply", "left": "Réel", "right": "15%"},
-            "=C2*0.15",
-            [18.0, 4.5, 7.5],
-        ),
-    ],
-)
-def test_computed_column_formulas_and_preview_values(compute, formula, values):
-    sheet = _computed({"header": "Calc", "type": "number", "compute": compute})
-    assert _ws(sheet)["D2"].value == formula
-    computed = [row[3] for row in _preview(sheet)["sheets"][0]["rows"]]
-    assert computed == [pytest.approx(v) if v is not None else None for v in values]
-
-
-def test_computed_formulas_use_each_row_and_sheet_addresses():
-    first = _computed(
-        {
-            "header": "Écart",
-            "compute": {"op": "subtract", "left": "Réel", "right": "Budget"},
-        }
-    )
-    second = _sheet(
-        "Other",
-        [
-            {"header": "Qty", "type": "integer"},
-            {"header": "Share", "compute": {"op": "share_of_total", "column": "Qty"}},
-        ],
-        [[1], [3]],
-    )
-    book = _build(first, second)
-    ws1, ws2 = book["Data"], book["Other"]
-    assert [ws1[f"D{r}"].value for r in (2, 3, 4)] == ["=C2-B2", "=C3-B3", "=C4-B4"]
-    assert ws2["B2"].value == '=IFERROR(A2/SUM($A$2:$A$3),"")'
-    assert ws2["B3"].value == '=IFERROR(A3/SUM($A$2:$A$3),"")'
-    # Untyped computed columns are numeric; share_of_total defaults to percent.
-    assert ws1["D2"].number_format == "#,##0.00"
-    assert ws2["B2"].number_format == "0%"
-
-
-def test_totals_and_preview_totals_cover_computed_columns():
+def test_totals_and_preview_totals_cover_formula_columns():
     sheet = _computed(
-        {
-            "header": "Écart",
-            "compute": {"op": "subtract", "left": "Réel", "right": "Budget"},
-            "total": "sum",
-        },
-        {
-            "header": "Ratio",
-            "compute": {"op": "divide", "left": "Réel", "right": "Budget"},
-            "total": "count",
-        },
+        {"header": "Écart", "formula": "=C2-B2", "total": "sum"},
+        {"header": "Ratio", "formula": '=IFERROR(C2/B2,"")', "total": "count"},
         {
             "header": "Part",
-            "compute": {"op": "share_of_total", "column": "Réel"},
+            "type": "percent",
+            "formula": "=C2/SUM(C2:C4)",
             "total": "sum",
         },
     )
@@ -631,126 +550,23 @@ def test_totals_and_preview_totals_cover_computed_columns():
     assert preview["columns"][5]["type"] == "percent"
 
 
-def test_computed_columns_chain_and_propagate_empty_results():
-    sheet = _computed(
-        {
-            "header": "Ratio",
-            "compute": {"op": "divide", "left": "Réel", "right": "Budget"},
-        },
-        {
-            "header": "Double",
-            "compute": {"op": "multiply", "left": "Ratio", "right": 2},
-        },
-        {"header": "Plus", "compute": {"op": "add", "left": "Réel", "right": 1}},
-        {
-            "header": "Écart",
-            "compute": {"op": "subtract", "left": "Plus", "right": "Réel"},
-        },
-    )
-    ws = _ws(sheet)
-    # A failing source makes the dependent formula fail too, so it is wrapped.
-    assert ws["E2"].value == '=IFERROR(D2*2,"")'
-    assert ws["G2"].value == "=F2-C2"
-    rows = _preview(sheet)["sheets"][0]["rows"]
-    assert [row[4] for row in rows] == [2.4, None, None]
-    assert [row[6] for row in rows] == [1.0, 1.0, 1.0]
-
-
-def test_rows_may_send_null_placeholders_or_omit_computed_columns():
-    compute = {"op": "multiply", "left": "Réel", "right": 2}
-    column = {"header": "x2", "compute": compute}
+def test_rows_may_send_null_placeholders_or_omit_formula_columns():
+    column = {"header": "x2", "formula": "=C2*2"}
     with_nulls = _computed(column, rows=[["A", 1, 2, None]])
     without = _computed(column, rows=[["A", 1, 2]])
-    # A value sent for a computed column (even a formula) is ignored.
+    # A plain value sent for a formula column is ignored.
     stale = _computed(column, rows=[["A", 1, 2, "=C2*2"]])
     for sheet in (with_nulls, without, stale):
         assert _ws(sheet)["D2"].value == "=C2*2"
         assert _preview(sheet)["sheets"][0]["rows"] == [["A", 1, 2, 4.0]]
-    assert "null for an empty cell and for a computed column" in _error(
+    assert "null for an empty cell and for a formula column" in _error(
         _computed(column, rows=[["A", 1]])
     )
 
 
-def test_round_matches_excel_half_away_from_zero():
-    sheet = _sheet(
-        "Data",
-        [
-            {"header": "V", "type": "number"},
-            {
-                "header": "R",
-                "compute": {"op": "add", "left": "V", "right": 0, "round": 2},
-            },
-        ],
-        [[2.675], [-0.125], [1.005]],
-    )
-    assert _ws(sheet)["B2"].value == "=ROUND(A2+0,2)"
-    assert [row[1] for row in _preview(sheet)["sheets"][0]["rows"]] == [
-        2.68,
-        -0.13,
-        1.01,
-    ]
-
-
-@pytest.mark.parametrize(
-    ("compute", "fragment"),
-    [
-        (
-            {"op": "power", "left": "Réel", "right": 2},
-            "compute op 'power' is not supported",
-        ),
-        (
-            {"op": "add", "left": "Montant", "right": 1},
-            "'Montant', which is not a column header",
-        ),
-        ({"op": "add", "left": "Poste", "right": 1}, "'Poste', a text column"),
-        ({"op": "divide", "left": "Réel", "right": 0}, "divide by 0 is not possible"),
-        ({"op": "divide", "left": "Réel", "right": "0"}, "divide by 0 is not possible"),
-        ({"op": "add", "left": "Réel"}, "add needs `left` and `right`"),
-        ({"op": "add", "left": 1, "right": 2}, "at least one column header"),
-        ({"op": "share_of_total"}, "share_of_total needs `column`"),
-        ({"op": "share_of_total", "column": "12"}, "share_of_total needs `column`"),
-        ({"op": "add", "left": "Calc", "right": 1}, "refers to its own column"),
-        (
-            {"op": "add", "left": "Réel", "right": 1, "round": 11},
-            "round must be between 0 and 10",
-        ),
-    ],
-)
-def test_compute_errors_name_sheet_column_and_fix(compute, fragment):
-    message = _error(_computed({"header": "Calc", "compute": compute}))
-    assert message.startswith("Sheet 'Data', column 4 ('Calc'): ")
-    assert fragment in message
-
-
-def test_compute_rejects_forward_references_text_type_and_duplicate_headers():
-    forward = _computed(
-        {"header": "A2", "compute": {"op": "add", "left": "B2", "right": 1}},
-        {"header": "B2", "compute": {"op": "add", "left": "Réel", "right": 1}},
-    )
-    assert "'B2', a computed column placed after it" in _error(forward)
-    text = _computed(
-        {
-            "header": "T",
-            "type": "text",
-            "compute": {"op": "add", "left": "Réel", "right": 1},
-        }
-    )
-    assert "must be number, integer, percent or currency, not 'text'" in _error(text)
-    duplicate = _sheet(
-        "Data",
-        [
-            {"header": "V", "type": "number"},
-            {"header": "V", "type": "number"},
-            {"header": "W", "compute": {"op": "add", "left": "V", "right": 1}},
-        ],
-        [[1, 2]],
-    )
-    assert "used by several columns" in _error(duplicate)
-
-
-def test_free_formula_refusal_points_to_compute():
+def test_free_formula_refusal_points_to_formula_cells():
     message = _error(_sheet("Data", [{"header": "V", "type": "number"}], [["=B2*2"]]))
-    assert "set `compute` on the column for a per-row calculation" in message
+    assert 'send it as a formula cell {"formula": "=..."}' in message
 
 
 # Live case: a stray quote closed "Loyer" early, so this cell swallowed the rest
@@ -762,13 +578,7 @@ LEAKED_ROWS = [
 
 
 def test_a_text_cell_holding_leaked_row_json_is_rejected():
-    sheet = _computed(
-        {
-            "header": "Écart",
-            "compute": {"op": "subtract", "left": "Réel", "right": "Budget"},
-        },
-        rows=LEAKED_ROWS,
-    )
+    sheet = _computed({"header": "Écart", "formula": "=C2-B2"}, rows=LEAKED_ROWS)
     message = _error(sheet)
     assert "row 2, column 1 ('Poste')" in message
     assert LEAKED_ROW_REJECTED in message
@@ -805,10 +615,10 @@ def test_preview_carries_formula_templates_and_total_formulas():
         {
             "header": "Taux",
             "type": "percent",
-            "compute": {"op": "divide", "left": "Réel", "right": "Budget", "round": 2},
+            "formula": '=IFERROR(ROUND(C2/B2,4),"")',
             "total": "average",
         },
-        {"header": "Part", "compute": {"op": "share_of_total", "column": "Réel"}},
+        {"header": "Part", "formula": '=IFERROR(C2/SUM($C$2:$C$4),"")'},
     )
     columns = _preview(sheet)["sheets"][0]["columns"]
     ws = _ws(sheet)
@@ -816,7 +626,7 @@ def test_preview_carries_formula_templates_and_total_formulas():
         None,
         None,
         None,
-        '=IFERROR(ROUND(C{row}/B{row},2),"")',
+        '=IFERROR(ROUND(C{row}/B{row},4),"")',
         '=IFERROR(C{row}/SUM($C$2:$C$4),"")',
     ]
     # The template with the row number put in is exactly the file's formula.
@@ -864,17 +674,17 @@ def _hints(*sheets: dict[str, Any]) -> list[str]:
     return derived_column_hints(prepare(_request(*sheets)))
 
 
-def test_literal_difference_ratio_and_share_are_named_with_their_compute():
+def test_literal_difference_ratio_and_share_are_named_with_their_formula():
     hints = _hints(_sheet(columns=_BUDGET_COLUMNS, rows=_BUDGET_ROWS))
 
     assert hints == [
-        "'Écart' -> compute {op: 'subtract', left: 'Réel', right: 'Budget'}",
-        "'Taux de réalisation' -> compute {op: 'divide', left: 'Réel', right: 'Budget'}",
-        "'Part du total du réel' -> compute {op: 'share_of_total', column: 'Réel'}",
+        "'Écart' -> formula '=C2-B2'",
+        "'Taux de réalisation' -> formula '=C2/B2'",
+        "'Part du total du réel' -> formula '=C2/SUM($C$2:$C$4)'",
     ]
 
 
-def test_computed_and_independent_columns_get_no_hint():
+def test_formula_and_independent_columns_get_no_hint():
     columns = [
         {"header": "Item"},
         {"header": "Qty", "type": "integer"},
@@ -882,7 +692,7 @@ def test_computed_and_independent_columns_get_no_hint():
         {
             "header": "Amount",
             "type": "currency",
-            "compute": {"op": "*", "left": "Qty", "right": "Price"},
+            "formula": "=B2*C2",
         },
         {"header": "Weight", "type": "number"},
     ]
@@ -941,47 +751,14 @@ def test_a_total_row_with_other_values_or_without_total_columns_is_data():
     assert _totals(plain, [["Total", None], ["TotalEnergies", 5]]) == []
 
 
-def test_round_on_a_large_value_does_not_overflow():
-    sheet = _sheet(
-        "Data",
-        [
-            {"header": "V", "type": "number"},
-            {
-                "header": "R",
-                "compute": {"op": "multiply", "left": "V", "right": 2, "round": 10},
-            },
-        ],
-        [[1e20]],
-    )
-    assert _preview(sheet)["sheets"][0]["rows"] == [[1e20, 2e20]]
-
-
-@pytest.mark.parametrize(("decimals", "fmt"), [(0, "#,##0"), (3, "#,##0.000")])
-def test_a_rounded_number_column_shows_its_decimals(decimals, fmt):
-    sheet = _computed(
-        {
-            "header": "Calc",
-            "compute": {"op": "divide", "left": "Réel", "right": 7, "round": decimals},
-        }
-    )
-    assert _ws(sheet)["D2"].number_format == fmt
-    assert _preview(sheet)["sheets"][0]["columns"][3]["decimals"] == decimals
-
-
 def test_formulas_carry_cached_values_for_viewers_that_do_not_recalculate():
     sheet = _sheet(
         columns=[
             {"header": "Item"},
             {"header": "Budget", "type": "number", "total": "sum"},
             {"header": "Real", "type": "number", "total": "average"},
-            {
-                "header": "Rate",
-                "compute": {"op": "divide", "left": "Real", "right": "Budget"},
-            },
-            {
-                "header": "Gap",
-                "compute": {"op": "subtract", "left": "Real", "right": "Budget"},
-            },
+            {"header": "Rate", "formula": '=IFERROR(C2/B2,"")'},
+            {"header": "Gap", "formula": "=C2-B2"},
         ],
         rows=[["a", 100, 120, None, None], ["b", 0, 50, None, None]],
     )
@@ -1233,29 +1010,6 @@ def test_formula_column_with_text_results_becomes_text():
     assert prepared.sheets[0].rows[0][1] == "A"
 
 
-def test_compute_and_formula_on_one_column_is_refused():
-    column = {
-        "header": "X",
-        "formula": "=1",
-        "compute": {"op": "add", "left": 1, "right": "Y"},
-    }
-    message = _error(_sheet(columns=[{"header": "Y", "type": "number"}, column]))
-    assert "either `compute` or `formula`" in message
-
-
-def test_compute_on_a_formula_column_is_protected_from_empty_results():
-    sheet = _sheet(
-        columns=[
-            {"header": "A", "type": "number"},
-            {"header": "B", "formula": '=IF(A2>0,A2,"")'},
-            {"header": "C", "compute": {"op": "multiply", "left": "B", "right": 2}},
-        ],
-        rows=[[1, None, None], [-1, None, None]],
-    )
-    ws = _ws(sheet)
-    assert ws["C2"].value == '=IFERROR(B2*2,"")'
-
-
 def test_model_formula_count_is_bounded():
     rows = [[{"formula": "=1"}] for _ in range(5001)]
     message = _error(_sheet(columns=[{"header": "V", "type": "number"}], rows=rows))
@@ -1347,3 +1101,33 @@ def test_a_formula_cell_overrides_its_column_formula():
     preview = json.loads(build_preview(prepare(_request(sheet))))["sheets"][0]
     assert preview["rows"][2][2] == pytest.approx(36)
     assert preview["cell_formulas"]["C4"] == "=SUM(C2:C3)"
+
+
+def _with_sheet_total(total: object) -> dict[str, Any]:
+    columns = [{"header": "Poste"}, {"header": "Budget", "type": "currency"}]
+    columns.append({"header": "Réel", "type": "currency", "total": "sum"})
+    sheet = _sheet("Data", columns, [["A", 100, 120], ["B", 0, 30], ["C", None, 50]])
+    return {**sheet, "total": total}
+
+
+def test_a_sheet_level_total_map_is_applied_to_its_columns():
+    request = _request(_with_sheet_total({"budget": "Sum", "Réel": "sum"}))
+    assert [c.total for c in request.sheets[0].columns] == [None, "sum", "sum"]
+    ws = load_workbook(io.BytesIO(build_workbook(prepare(request))))["Data"]
+    assert (ws["B5"].value, ws["C5"].value) == ("=SUM(B2:B4)", "=SUM(C2:C4)")
+    dumped = request.model_dump(mode="json")["sheets"][0]
+    assert "total_errors" not in dumped and "total" not in dumped
+
+
+@pytest.mark.parametrize(
+    ("total", "fragment"),
+    [
+        ({"Montant": "sum"}, "'Montant' is not a column header"),
+        ({"Budget": "total"}, "'Budget': 'total' is not sum, average, min, max, count"),
+        ({"Réel": "average"}, "'Réel' already sets total 'sum'"),
+        (True, "`total` on the sheet is True"),
+    ],
+)
+def test_a_sheet_level_total_that_cannot_apply_is_refused(total, fragment):
+    message = _error(_with_sheet_total(total))
+    assert fragment in message and "Set total on each column instead" in message

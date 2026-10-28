@@ -28,7 +28,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any, Literal, cast
+from typing import Any, Literal, cast, get_args
 
 import xlsxwriter
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -45,16 +45,11 @@ from fred_capability_spreadsheet.evaluator import (
     to_serial,
 )
 from fred_capability_spreadsheet.formulas import (
-    Binary,
     Call,
     FormulaError,
-    Group,
     Node,
-    Num,
     Ref,
     SheetLayout,
-    Str,
-    Unary,
     check,
     column_letters,
     emit,
@@ -75,6 +70,7 @@ MAX_PREVIEW_ROWS = 500
 
 ColumnType = Literal["text", "number", "integer", "percent", "currency", "date"]
 TotalKind = Literal["sum", "average", "min", "max", "count"]
+TOTAL_KINDS = get_args(TotalKind)
 CurrencyCode = Literal["EUR", "USD", "GBP", "CHF", "JPY", "CNY", "CAD", "AUD"]
 Language = Literal["fr", "en"]
 CellValue = str | int | float | bool | None
@@ -136,9 +132,8 @@ LINK_TEXT_REJECTED = (
 MAX_MODEL_FORMULAS = 5_000
 FORMULA_REJECTED = (
     "a formula is not accepted as a plain value: send it as a formula cell "
-    '{"formula": "=..."} (or set `formula` on the column for every row), set '
-    "`compute` on the column for a per-row calculation (add, subtract, multiply, "
-    "divide, share_of_total), and set `total` on the column for sums/averages."
+    '{"formula": "=..."} (or set `formula` on the column for every row), and set '
+    "`total` on the column for sums/averages."
 )
 # A `"` inside a text value that closed it early: the rest of the row (and often
 # the next row's start) lands in this cell, e.g. 'Loyer", 1200, null], ['. No `[`
@@ -153,11 +148,8 @@ LEAKED_ROW_REJECTED = (
 )
 # Placeholder for the Excel row number in the preview's per-column formula.
 ROW_PLACEHOLDER = "{row}"
-COMPUTE_OPS = ("add", "subtract", "multiply", "divide", "share_of_total")
-_OP_ALIASES = {"+": "add", "-": "subtract", "*": "multiply", "/": "divide"}
 _OP_SYMBOLS = {"add": "+", "subtract": "-", "multiply": "*", "divide": "/"}
 NUMERIC_TYPES = ("number", "integer", "percent", "currency")
-MAX_ROUND_DECIMALS = 10
 _NUMERIC_JUNK = re.compile(r"[\s  _$€£¥]")
 # "1,234" reads as 1234 in English and 1.234 in French: refuse to guess.
 _AMBIGUOUS_COMMA = re.compile(r"^[+-]?\d{1,3},\d{3}$")
@@ -204,34 +196,6 @@ def _lower(value: object) -> object:
     return value.strip().lower() if isinstance(value, str) else value
 
 
-class ComputeSpec(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    op: str = Field(
-        description=(
-            "add, subtract, multiply or divide (left op right), or share_of_total "
-            "(each value of `column` divided by that column's total)."
-        )
-    )
-    left: str | float | None = Field(
-        default=None, description="Another column's header, or a number."
-    )
-    right: str | float | None = Field(
-        default=None, description="Another column's header, or a number."
-    )
-    column: str | None = Field(
-        default=None, description="For share_of_total: the column's header."
-    )
-    round: int | None = Field(
-        default=None, description="Optional: decimals to round the result to."
-    )
-
-    @field_validator("op", mode="before")
-    @classmethod
-    def _lowercase(cls, value: object) -> object:
-        return _lower(value)
-
-
 class ColumnSpec(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -254,13 +218,6 @@ class ColumnSpec(BaseModel):
         default=None,
         description="Add a totals row computing this column with an Excel formula.",
     )
-    compute: ComputeSpec | None = Field(
-        default=None,
-        description=(
-            "Per-row calculation from other columns, written as an Excel formula "
-            "on every row; send null for this column in rows."
-        ),
-    )
     formula: str | None = Field(
         default=None,
         description=(
@@ -281,17 +238,11 @@ class ColumnSpec(BaseModel):
         return value.strip().upper() if isinstance(value, str) else value
 
     @model_validator(mode="after")
-    def _computed_type_defaults_to_numeric(self) -> ColumnSpec:
-        # A computed column without an explicit type is numeric, never text; a
-        # formula column's type follows its results unless it is given.
-        if "type" not in self.model_fields_set:
-            if self.compute is not None:
-                self.type = (
-                    "percent" if self.compute.op == "share_of_total" else "number"
-                )
-            elif self.formula is not None:
-                self.type = "number"
-                self.type_inferred = True
+    def _formula_type_follows_results(self) -> ColumnSpec:
+        # A formula column's type follows its results unless it is given.
+        if "type" not in self.model_fields_set and self.formula is not None:
+            self.type = "number"
+            self.type_inferred = True
         return self
 
     # Set when a formula column's type was not given (it becomes text if the
@@ -323,10 +274,53 @@ class SheetSpec(BaseModel):
         default_factory=list,
         description=(
             "Data rows; each row has exactly one value per column (null for "
-            "empty, and null for a compute or formula column). A cell formula "
+            "empty, and null for a formula column). A cell formula "
             "is an object {formula: '=...'}, never a plain string."
         ),
     )
+    # A sheet-level `total` map the model sent, applied to its columns; what could
+    # not be applied is refused by `_check_structure`. Hidden and never stored.
+    total_errors: SkipJsonSchema[list[str]] = Field(default_factory=list, exclude=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _apply_sheet_level_total(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        raw = cast(dict[str, Any], data)
+        key = next((k for k in ("total", "totals") if k in raw), None)
+        if key is None:
+            return data
+        spec = raw[key]
+        columns = raw.get("columns")
+        if not isinstance(columns, list):
+            return data
+        columns = [dict(c) if isinstance(c, dict) else c for c in columns]
+        by_header = {
+            str(c.get("header", "")).strip().casefold(): c
+            for c in columns
+            if isinstance(c, dict)
+        }
+        errors: list[str] = []
+        if not isinstance(spec, dict) or not spec:
+            errors.append(f"`{key}` on the sheet is {spec!r}")
+        else:
+            for header, kind in cast(dict[str, object], spec).items():
+                column = by_header.get(str(header).strip().casefold())
+                value = _lower(kind)
+                if column is None:
+                    errors.append(f"'{header}' is not a column header")
+                elif value not in TOTAL_KINDS:
+                    errors.append(
+                        f"'{header}': {kind!r} is not {', '.join(TOTAL_KINDS)}"
+                    )
+                elif column.get("total") in (None, value):
+                    column["total"] = value
+                else:
+                    errors.append(
+                        f"'{header}' already sets total '{column.get('total')}'"
+                    )
+        return {**raw, "columns": columns, "total_errors": errors}
 
 
 class CreateSpreadsheetInput(BaseModel):
@@ -352,7 +346,7 @@ class CreateSpreadsheetInput(BaseModel):
             "Instead of sheets: changes to the last file you created here; "
             "everything else stays as delivered. Each is {op, sheet, ...}: "
             "add_column {column, after?, values?}, remove_column {column}, "
-            "edit_column {column, header?, type?, total?, compute?, formula?}, "
+            "edit_column {column, header?, type?, total?, formula?}, "
             "add_rows {rows, after?}, remove_rows {rows|where}, edit_rows "
             "{rows|where, values: {header: value}}, edit_cell {cell: 'C5', value}, "
             "rename_sheet {name}, add_sheet {sheet: {name, columns, rows}}, "
@@ -485,8 +479,8 @@ def _check_model_formulas(drafts: list[_Draft]) -> None:
     if count > MAX_MODEL_FORMULAS:
         raise SpreadsheetInputError(
             f"The workbook holds {count} formula cells; the limit is "
-            f"{MAX_MODEL_FORMULAS}. Use `total` and `compute` where they fit, or "
-            "fewer formula columns." + _LIMIT_HINT
+            f"{MAX_MODEL_FORMULAS}. Use `total` where it fits, or fewer formula "
+            "columns." + _LIMIT_HINT
         )
     for draft in drafts:
         for index, text in draft.raw_column_formulas.items():
@@ -574,7 +568,7 @@ _HINT_MAX = 3
 def derived_column_hints(prepared: PreparedWorkbook) -> list[str]:
     """Name literal columns whose values the model computed from other columns.
 
-    The file is kept; the hint asks for `compute` so Excel holds a live formula.
+    The file is kept; the hint gives the column `formula` so Excel holds a live one.
     Bounded: few numeric columns, first rows only, the first mismatch moves on.
     """
 
@@ -590,14 +584,13 @@ def derived_column_hints(prepared: PreparedWorkbook) -> list[str]:
             if found is None:
                 continue
             op, left, right = found
+            a = column_letters(left + 1)
             if right is None:
-                spec = f"{{op: 'share_of_total', column: '{sheet.headers[left]}'}}"
+                last = sheet.data_rows + 1
+                text = f"={a}2/SUM(${a}$2:${a}${last})"
             else:
-                spec = (
-                    f"{{op: '{op}', left: '{sheet.headers[left]}', "
-                    f"right: '{sheet.headers[right]}'}}"
-                )
-            hints.append(f"'{sheet.headers[target]}' -> compute {spec}")
+                text = f"={a}2{_OP_SYMBOLS[op]}{column_letters(right + 1)}2"
+            hints.append(f"'{sheet.headers[target]}' -> formula '{text}'")
     return hints[:_HINT_MAX]
 
 
@@ -760,26 +753,18 @@ def _prepare_sheet(sheet: SheetSpec) -> _Draft:
             )
         headers.append(header)
     last_row = len(sheet.rows) + 1
-    raw_column_formulas: dict[int, str] = {}
-    for index, column in enumerate(sheet.columns):
-        if column.formula is None:
-            continue
-        if column.compute is not None:
-            raise SpreadsheetInputError(
-                f"Sheet '{sheet.name}', column {index + 1} ('{headers[index]}'): set "
-                "either `compute` or `formula` on a column, not both."
-            )
-        raw_column_formulas[index] = column.formula
-    column_formulas = _compile_computes(sheet, headers, last_row)
-    placeholder = [
-        node is not None or index in raw_column_formulas
-        for index, node in enumerate(column_formulas)
-    ]
+    raw_column_formulas = {
+        index: column.formula
+        for index, column in enumerate(sheet.columns)
+        if column.formula is not None
+    }
+    column_formulas: list[Node | None] = [None] * len(sheet.columns)
+    placeholder = [index in raw_column_formulas for index in range(len(sheet.columns))]
     raw_cells: dict[tuple[int, int], str] = {}
     rows: list[list[Converted]] = []
     for r, row in enumerate(sheet.rows):
         if len(row) != len(sheet.columns):
-            # Rows that leave computed columns out get their placeholders back.
+            # Rows that leave formula columns out get their placeholders back.
             values = iter(row)
             row = [None if hole else next(values) for hole in placeholder]
         converted: list[Converted] = []
@@ -814,146 +799,6 @@ def _prepare_sheet(sheet: SheetSpec) -> _Draft:
         raw_column_formulas=raw_column_formulas,
         raw_cells=raw_cells,
     )
-
-
-def _compile_computes(
-    sheet: SheetSpec, headers: list[str], last_row: int
-) -> list[Node | None]:
-    """Each `compute` as the formula of its first data row; only earlier computed
-    columns may be referenced, so there is no cycle."""
-
-    nodes: list[Node | None] = [None] * len(sheet.columns)
-    # A model formula can give "" (IFERROR), so computing on it can fail.
-    may_fail = [column.formula is not None for column in sheet.columns]
-    for index, column in enumerate(sheet.columns):
-        spec = column.compute
-        if spec is None:
-            continue
-        where = f"Sheet '{sheet.name}', column {index + 1} ('{headers[index]}')"
-        op = _OP_ALIASES.get(spec.op, spec.op)
-        if op not in COMPUTE_OPS:
-            raise SpreadsheetInputError(
-                f"{where}: compute op {spec.op!r} is not supported; use add, "
-                "subtract, multiply, divide or share_of_total."
-            )
-        if column.type not in NUMERIC_TYPES:
-            raise SpreadsheetInputError(
-                f"{where}: a computed column must be number, integer, percent or "
-                f"currency, not '{column.type}'."
-            )
-        if spec.round is not None and not 0 <= spec.round <= MAX_ROUND_DECIMALS:
-            raise SpreadsheetInputError(
-                f"{where}: round must be between 0 and {MAX_ROUND_DECIMALS} decimals."
-            )
-        if op == "share_of_total":
-            target = spec.column if spec.column is not None else spec.left
-            left = (
-                _operand(target, sheet, headers, index, where)
-                if target is not None
-                else None
-            )
-            if left is None or isinstance(left, float):
-                raise SpreadsheetInputError(
-                    f"{where}: share_of_total needs `column`, the header of the "
-                    "column whose values are divided by its total."
-                )
-            whole = Ref(
-                None, left + 1, 2, left + 1, last_row, True, True, True, True, True
-            )
-            expr: Node = Binary("/", _cell_ref(left), Call("SUM", (whole,)))
-            failing = True
-        else:
-            if spec.left is None or spec.right is None:
-                raise SpreadsheetInputError(
-                    f"{where}: {op} needs `left` and `right`, each a column header "
-                    "or a number."
-                )
-            left = _operand(spec.left, sheet, headers, index, where)
-            right = _operand(spec.right, sheet, headers, index, where)
-            if isinstance(left, float) and isinstance(right, float):
-                raise SpreadsheetInputError(
-                    f"{where}: compute needs at least one column header; with two "
-                    "numbers, send the result as a value instead."
-                )
-            if op == "divide" and isinstance(right, float) and right == 0:
-                raise SpreadsheetInputError(
-                    f"{where}: divide by 0 is not possible; fix `right`."
-                )
-            expr = Binary(_OP_SYMBOLS[op], _operand_node(left), _operand_node(right))
-            failing = op == "divide" or any(
-                not isinstance(x, float) and may_fail[x] for x in (left, right)
-            )
-        if spec.round is not None:
-            expr = Call("ROUND", (expr, Num(float(spec.round))))
-        if failing:
-            # An empty result would otherwise give #VALUE! in later formulas.
-            expr = Call("IFERROR", (expr, Str("")))
-        nodes[index] = expr
-        may_fail[index] = failing
-    return nodes
-
-
-def _cell_ref(index: int) -> Ref:
-    return Ref(None, index + 1, 2, index + 1, 2)
-
-
-def _operand_node(operand: int | float) -> Node:
-    if isinstance(operand, float):
-        if operand < 0:
-            return Group(Unary("-", Num(-operand)))
-        return Num(operand)
-    return _cell_ref(operand)
-
-
-def _operand(
-    raw: str | float, sheet: SheetSpec, headers: list[str], index: int, where: str
-) -> int | float:
-    """A column index, or a number (always a float)."""
-
-    if not isinstance(raw, str):
-        if isinstance(raw, bool) or not math.isfinite(raw):
-            raise SpreadsheetInputError(
-                f"{where}: compute operand {raw!r} must be a column header or a "
-                "finite number."
-            )
-        return float(raw)
-    name = raw.strip()
-    matches = [i for i, h in enumerate(headers) if h.strip() == name] or [
-        i for i, h in enumerate(headers) if h.strip().casefold() == name.casefold()
-    ]
-    if not matches:
-        try:
-            if name.endswith("%"):
-                return float(_to_number(name[:-1])) / 100
-            return float(_to_number(name))
-        except (TypeError, ValueError):
-            known = ", ".join(f"'{h}'" for h in headers)
-            raise SpreadsheetInputError(
-                f"{where}: compute refers to '{raw}', which is not a column header "
-                f"of this sheet. Use one of: {known}."
-            ) from None
-    if len(matches) > 1:
-        raise SpreadsheetInputError(
-            f"{where}: compute refers to '{raw}', a header used by several "
-            "columns; give the columns distinct headers."
-        )
-    ref = matches[0]
-    target = sheet.columns[ref]
-    if ref == index:
-        raise SpreadsheetInputError(
-            f"{where}: compute refers to its own column; use other columns."
-        )
-    if target.compute is not None and ref > index:
-        raise SpreadsheetInputError(
-            f"{where}: compute refers to '{headers[ref]}', a computed column placed "
-            "after it. Move this column after it, or compute from source columns."
-        )
-    if target.type not in NUMERIC_TYPES:
-        raise SpreadsheetInputError(
-            f"{where}: compute refers to '{headers[ref]}', a {target.type} column; "
-            "only number, integer, percent and currency columns can be computed on."
-        )
-    return ref
 
 
 def _total_node(column: ColumnSpec, index: int, last_row: int) -> Node:
@@ -1199,6 +1044,12 @@ def _check_structure(request: CreateSpreadsheetInput) -> None:
     total_cells = 0
     for sheet in sheets:
         _check_sheet_name(sheet.name, seen)
+        if sheet.total_errors:
+            raise SpreadsheetInputError(
+                f"Sheet '{sheet.name}': {'; '.join(sheet.total_errors)}. Set total "
+                "on each column instead, e.g. {header: 'HT', type: 'currency', "
+                "total: 'sum'}. No file was written."
+            )
         where = f"Sheet '{sheet.name}'"
         if not sheet.columns:
             raise SpreadsheetInputError(f"{where} has no columns.")
@@ -1221,17 +1072,13 @@ def _check_structure(request: CreateSpreadsheetInput) -> None:
                     f"{where}, column {index} ('{column.header}'): a '{column.total}' "
                     f"total needs a numeric column, not '{column.type}'."
                 )
-        computed = sum(
-            1
-            for column in sheet.columns
-            if column.compute is not None or column.formula is not None
-        )
+        computed = sum(1 for column in sheet.columns if column.formula is not None)
         for row_number, row in enumerate(sheet.rows, start=2):
             if len(row) not in (len(sheet.columns), len(sheet.columns) - computed):
                 raise SpreadsheetInputError(
                     f"{where}, row {row_number}: expected {len(sheet.columns)} "
                     f"values (one per column), got {len(row)}. Use null for an "
-                    "empty cell" + (" and for a computed column." if computed else ".")
+                    "empty cell" + (" and for a formula column." if computed else ".")
                 )
         total_cells += len(sheet.columns) * (len(sheet.rows) + 1)
     if total_cells > MAX_CELLS:
@@ -1422,10 +1269,6 @@ def _write_totals(
 
 
 def _number_format(column: ColumnSpec, values: list[Converted]) -> str:
-    decimals = column.compute.round if column.compute is not None else None
-    if column.type == "number" and decimals is not None:
-        # Show the decimals `round` keeps, not the default two.
-        return "#,##0" + ("." + "0" * decimals if decimals else "")
     if column.type == "currency" and column.currency:
         return CURRENCY_FORMATS[column.currency]
     if column.type == "percent":

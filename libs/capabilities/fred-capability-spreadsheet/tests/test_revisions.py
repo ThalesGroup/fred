@@ -96,7 +96,7 @@ def _cell_formula(spec: dict[str, Any], sheet: str, row: int, column: int) -> st
     return _sheets(spec)[sheet]["rows"][row][column]["formula"]
 
 
-def test_add_a_computed_column_keeps_everything_else():
+def test_add_a_formula_column_keeps_everything_else():
     spec = _apply(
         {
             "op": "add_column",
@@ -104,7 +104,7 @@ def test_add_a_computed_column_keeps_everything_else():
             "column": {
                 "header": "Écart",
                 "type": "currency",
-                "compute": {"op": "subtract", "left": "Réel", "right": "Budget"},
+                "formula": "=C2-B2",
             },
         }
     )
@@ -237,15 +237,12 @@ def test_removing_a_referenced_cell_names_the_formula():
     assert _cell_formula(spec, "Synthèse", 0, 1) == "=SUM(Budget!B2:B3)"
 
 
-def test_removing_a_column_a_computed_column_uses_is_refused():
+def test_removing_a_column_a_formula_column_reads_is_refused():
     base = _apply(
         {
             "op": "add_column",
             "sheet": "Budget",
-            "column": {
-                "header": "Écart",
-                "compute": {"op": "subtract", "left": "Réel", "right": "Budget"},
-            },
+            "column": {"header": "Écart", "formula": "=C2-B2"},
         }
     )
     message = _refused(
@@ -253,25 +250,7 @@ def test_removing_a_column_a_computed_column_uses_is_refused():
         {"op": "remove_column", "sheet": "Budget", "column": "Réel"},
         base=base,
     )
-    assert "computed column 'Écart'" in message
-
-
-def test_renaming_a_header_follows_compute_operands():
-    base = _apply(
-        {
-            "op": "add_column",
-            "sheet": "Budget",
-            "column": {
-                "header": "Écart",
-                "compute": {"op": "subtract", "left": "Réel", "right": "Budget"},
-            },
-        }
-    )
-    spec = _apply(
-        {"op": "edit_column", "sheet": "Budget", "column": "Réel", "header": "Réalisé"},
-        base=base,
-    )
-    assert _sheets(spec)["Budget"]["columns"][3]["compute"]["left"] == "Réalisé"
+    assert "column 'Écart'" in message and "which these changes remove" in message
 
 
 def test_errors_are_listed_at_once_with_the_fix():
