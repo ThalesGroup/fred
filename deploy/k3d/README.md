@@ -21,6 +21,71 @@ URLs, its shared base values and the generic build/import/sync sequence. Its
 `APP=fred DIR=...` command selects the checkout's Helmfile when present.
 No Rust-specific profile is added to the factory.
 
+## First start on k3d
+
+The path a new contributor follows, from an empty cluster to an assistant that
+answers from a team's documents. Weaver runs on k3d only; the factory's Docker
+Compose setup does not support it yet.
+
+**Prerequisites.** Sibling checkouts of `fred` (branch `weaver`) and
+`fred-deployment-factory`, the tools listed in the factory README, the line
+`127.0.0.1 keycloak-secondary secondary.localhost` in `/etc/hosts`, and a Mistral
+API key.
+
+**1. Cluster and Fred.** From the factory checkout:
+
+```sh
+export ENV=secondary
+make k3d-up
+kubectl --context k3d-fred-secondary -n fred create secret generic fred-model-credentials \
+  --from-literal=OPENAI_API_KEY=<mistral key>   # once per cluster
+make k3d-app APP=fred DIR=../fred              # rerun after every code change
+kubectl --context k3d-fred-secondary -n fred get deploy
+```
+
+`control-plane-backend`, `knowledge-flow-backend`, `knowledge-flow-worker`,
+`fred-agents` and `frontend` must be `1/1`. `make k3d-app` ends by printing the
+command that reads the bootstrap token.
+
+**2. Platform owner.** Open <http://secondary.localhost:18088>, register an
+`owner` account, accept the terms of use and activate platform ownership with the
+bootstrap token ([journey](../../docs/architecture/02.1-user-journeys.md#from-an-empty-platform-to-an-organizations-first-user)).
+
+**3. Example people and spaces.** Build the demo bundle, then import it as the
+owner in **Provisioning**:
+
+```sh
+make -C apps/control-plane build-demo-bundle   # -> apps/control-plane/target/demo-provisioning-bundle.zip
+```
+
+It creates Acme (team Research) and Globex (team Support) with the twelve
+accounts of the [example table](../../docs/architecture/02-journeys.md#example-people-and-spaces);
+each account's password is `Azerty123_`.
+
+**4. Models and assistant template.** As `alice`, authorize
+`mistral-small-latest` and `mistral-medium-latest` in **Models** and choose a
+default, then activate `fred.github.assistant` in the organization's **Agents**
+([journey](../../docs/architecture/02.3-agent-administration.md)).
+
+**5. First answer from documents.** As `bob`, in Research: upload a text PDF in
+**Resources** with profile `fast` and wait until it is processed
+([journey](../../docs/architecture/02.2-document-journey.md)). Create a Custom
+assistant with **Team documents** enabled and ask about the PDF: the answer cites
+it and its sources are visible
+([journey](../../docs/architecture/02.3-agent-administration.md#bobs-assistant-answers-from-researchs-documents)).
+
+**What does not work yet.** Screens still calling the retired Python control plane
+(`slices/legacyControlPlane`) fail: parts of Home, Prompts, Wiki, knowledge bases,
+applications, marketplace and most platform administration pages. Among agent
+capabilities, only document search is wired. [AGENTS.md](../../AGENTS.md#weaver-fred-5x-current-state-versus-target)
+states the current and target state of each component.
+
+**Day to day.** `make k3d-app-validate APP=fred DIR=../fred` renders and lints
+without building. Read a component's logs with
+`kubectl --context k3d-fred-secondary -n fred logs deploy/<name>`. The root
+`make test` needs network access: it installs each component's dependencies and
+the frontend packages' consumer caches before running offline tests.
+
 ## Python agent catalog on secondary
 
 The profile enables the real `fred-agents` Python deployment and its runtime /
@@ -74,8 +139,7 @@ organization default in Models, then create a Custom assistant without active
 capabilities. A blank recommended model on the form uses the organization
 default when no model is chosen in the chat. Validate a normal text exchange,
 a second turn and history after reload before testing reasoning or capabilities.
-These are deployment prerequisites, not evidence of a working end-to-end chat;
-Dimi owns functional validation and the cluster rollout.
+These are deployment prerequisites, not evidence of a working end-to-end chat.
 
 ## Corpus search configuration on secondary
 

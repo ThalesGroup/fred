@@ -23,7 +23,7 @@ follow the relevant domain chapter.
 Chapter 2 follows people through access, document ingestion and a first assistant
 exchange. The main chapters explain who acts, which component is responsible and
 what the user experiences. Technical contracts and source references belong in
-the annexes. Validation records and remaining work stay in the working journal.
+the annexes. Validation records live in each lot's PR; remaining work in GitHub issues.
 
 ## Find a function
 
@@ -45,13 +45,6 @@ Follow this map before searching historical OpenSpec changes or Swift documentat
 For an audit, trace the named UI consumer through the handler, authorization and
 persistence; record discrepancies rather than treating prose or a test name as proof.
 
-## Separate work history
-
-Outside this dossier, the internal [working journal](../WORKING-JOURNAL.md) indexes the functions explored
-with Dimi, observed failures, focused changes, explicit manual validation and
-pending architecture updates. Read it when resuming this work. It records work
-in progress, not verified architecture.
-
 ## Technical references
 
 Exact implementation detail is available without making it the main reading path:
@@ -70,15 +63,12 @@ implementation change.
 Generated blocks remain tied to
 source code; they are references, not another handwritten API specification.
 
-## Reconstruction method
+## Convergence with the implementation
 
-The [reconstruction method](../../.agents/skills/fred-reconstruction-method/SKILL.md)
-defines how this dossier converges with the implementation: current journeys and
-schemas and key design decisions. A feature overview describes Fred's product
-capabilities; implementation plans belong in RFCs or OpenSpec, outside this dossier. Superseded RFC/OpenSpec prose leaves the
-active corpus only after its useful information and consumers are reconciled.
-The [review prompt](../../.agents/skills/fred-reconstruction-method/references/review-prompt.md)
-provides a bounded, independent audit request.
+The dossier converges with the implementation through current journeys, schemas
+and key design decisions. Implementation plans belong in GitHub issues, RFCs or
+OpenSpec, outside this dossier. Superseded RFC/OpenSpec prose leaves the active
+corpus only after its useful information and consumers are reconciled.
 
 ## Keeping one useful account
 

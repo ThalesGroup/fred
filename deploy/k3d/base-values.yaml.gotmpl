@@ -12,6 +12,10 @@ The control-plane configuration is owned by values.yaml.gotmpl, not the factory.
 {{- $worker := index $base.applications "knowledge-flow-worker" -}}
 {{- $_ := unset $worker.configuration "content_storage" -}}
 {{- $_ := unset $worker.configuration "filesystem" -}}
+{{- /* Weaver retired Knowledge Flow's OpenSearch ops tools; the factory still enables them. */ -}}
+{{- range $name := list "knowledge-flow-backend" "knowledge-flow-worker" -}}
+  {{- $_ := unset (index $base.applications $name).configuration.mcp "opensearch_ops_enabled" -}}
+{{- end -}}
 {{- range $name := list "control-plane-backend" "control-plane-worker" -}}
   {{- $_ := unset (index $base.applications $name) "configuration" -}}
 {{- end -}}

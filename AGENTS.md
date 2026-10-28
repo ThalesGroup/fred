@@ -71,6 +71,10 @@ review and close-out requirements below and in legacy guidance or skills.
 
 ## Weaver (Fred 5.x): current state versus target
 
+New on the branch? Start Fred with [First start on k3d](deploy/k3d/README.md#first-start-on-k3d),
+read the [architecture dossier](docs/architecture/README.md), then this section and
+[Weaver: lots](#weaver-lots).
+
 Branch `weaver` carries Fred 5.x. It changes Fred's architecture, not what Fred
 does: one Control Plane concentrates permissions, documents and user/organization
 administration, which Swift (Fred 4.x, branch `swift`) spread across Python
@@ -94,8 +98,9 @@ Keep the two columns apart in every audit, review, plan and report:
 - Label each claim **current** (observed in `weaver` code, with evidence),
   **target** (this section, the security section below, an OpenSpec change) or
   **Swift** (4.x behavior, comparison material only). Code present in the tree
-  is not a wired Weaver journey; only Dimi's validation recorded in
-  `docs/WORKING-JOURNAL.md` makes a journey validated.
+  is not a wired Weaver journey; only the lot owner's end-to-end validation
+  (local k3d and the integration platform), recorded in the lot's PR, makes a
+  journey validated.
 - A gap between current and target is migration distance, not a defect, unless
   the lot under review claims to close it. Report it as such, briefly.
 - Do not invest in what the target removes (the legacy control-plane client,
@@ -105,37 +110,39 @@ Keep the two columns apart in every audit, review, plan and report:
   (Python control plane, Alembic) describe 4.x. `docs/architecture/` describes
   only the current validated state, per the fred-architecture skill.
 
-Codex and Claude both work on this branch, in separate lots:
+Several developers and their assistants work on this branch, in separate lots:
 
 - State the lot's scope (components, files) before editing and stay inside it.
-- Uncommitted changes you did not make belong to Dimi or the other assistant:
-  never revert, reformat, stage or commit them. If your lot must touch such a
-  file, stop and ask. Stage explicit paths, never `git add -A` or `git add .`.
+- Uncommitted changes you did not make belong to someone else: never revert,
+  reformat, stage or commit them. If your lot must touch such a file, stop and
+  ask. Stage explicit paths, never `git add -A` or `git add .`.
 - Re-check shared sequences just before creating an entry: next SQL migration
-  number, OpenFGA model, generated clients. In the journal, edit only your
-  lot's record.
+  number, OpenFGA model, generated clients.
+- Each lot has one GitHub issue naming its owner. The issue holds the brief;
+  the PR records decisions, divergences and the end-to-end validation.
 
-## Weaver: capability lots
+## Weaver: lots
 
-Dimi's direction (2026-10-27): every capability installed on the native agent
-pod becomes enableable, selectable and working from the existing UI, one
-targeted lot at a time. Dimi leads; each lot runs in a fresh assistant from a
-lot brief. The plan and lot list are in the journal record `CAP`.
+Weaver rebuilds Fred's existing features on the new architecture, one targeted
+lot at a time: capabilities, models, third-party applications, organization and
+project screens. Each lot has an owner and runs from a lot brief. For
+capabilities, the goal is that every capability installed on the native agent
+pod becomes enableable, selectable and working from the existing UI.
 
-- **No OpenSpec** for these lots unless Dimi asks: the brief and its journal
-  record are the agreement. For lots Dimi launches, this supersedes the
+- **No OpenSpec** for these lots unless the team decides otherwise: the issue
+  brief is the agreement. For capability lots, this supersedes the
   capability exclusions of OpenSpec `simplify-weaver-runtime-authorization`
   (decision 5a, task 2.2). Its security decisions (M4 turn boundary, pod-owned
   offers 5b-5d, document visibility 5) and the security section below still apply.
-- **No invention.** A lot rewires an existing Swift feature: same capability
-  package, manifest, tools, UI packs and panels. Adapt only what Weaver's ReBAC
+- **No invention.** A lot rewires an existing Swift feature; for a capability,
+  the same package, manifest, tools, UI packs and panels. Adapt only what Weaver's ReBAC
   boundary requires: canonical space context instead of `team_id`, Rust Control
   Plane owners instead of the Python control plane, Knowledge Flow API endpoints
   reading Weaver documents under space permissions instead of the Swift catalog
   and per-document tuples. Do not move Knowledge Flow functions into the pod.
-  A new contract, endpoint or store needs Dimi's decision, recorded in the
-  brief, before code.
-- **Responsibilities.** A capability is a public library linked into one agent
+  A new contract, endpoint or store needs an explicit team decision, recorded
+  in the issue, before code.
+- **Capability responsibilities.** A capability is a public library linked into one agent
   pod; its offer is (pod, capability). A model is a network service reachable by
   any pod. Control Plane is a gateway and configuration manager: it checks
   inventory membership, the organization's authorization and the person's
@@ -149,20 +156,19 @@ lot brief. The plan and lot list are in the journal record `CAP`.
   path, compatibility shim or legacy branch for earlier `weaver` states.
 - **Brief, required before editing:** goal; Swift reference (behavior, files);
   Weaver adaptation and the guarantee it preserves; in-scope files; out of
-  scope; decisions already taken; manual cases Dimi will play; arc42 chapters
+  scope; decisions already taken; manual cases the owner will play; arc42 chapters
   expected to change. If the brief is ambiguous or the work exceeds it, stop and ask.
-- **Cycle:** implement in incremental mode (formatter and `make code-quality`,
-  no test campaign, no commit) -> Dimi validates in the UI -> journal record with
-  that validation -> arc42 update of the validated journey (functional view,
-  then technical view, code references in annexes) -> Dimi commits. Until Dimi
-  validates, a lot updates the journal only, never arc42.
-- Not applicable to these lots: CLAUDE.md lifecycle steps 1-6, GitHub issue and
-  close-out statement; the per-step tests, independent review and commit of
-  the control-plane section below. Run them only when Dimi asks.
+- **Cycle:** implement in incremental mode (formatter and `make code-quality`)
+  -> the owner validates the journey end to end on local k3d, then on the
+  integration platform -> arc42 update of the validated journey in the same PR
+  (functional view, then technical view, code references in annexes) -> review
+  and merge. An unvalidated journey stays out of arc42.
+- Not applicable to these lots: CLAUDE.md lifecycle steps 1-6 and its close-out
+  statement.
 
 ## Weaver: preserve Swift's security model while simplifying ReBAC
 
-This is Dimi's explicit Weaver direction. Weaver reinvents the ReBAC data model
+This is Weaver's explicit direction. Weaver reinvents the ReBAC data model
 and consolidates its implementation; it does not authorize a departure from
 Swift's security model, trust principles or guarantees. Preserve the guarantees,
 not the scattered checks, legacy tables, endpoint layout or per-document tuples.
@@ -177,10 +183,10 @@ preserve security guarantees and useful shared mechanisms, not legacy code.
 Optimize for the fewest concepts and least owned production code consistent with
 clear, robust behavior. Do not weaken controls or compress code to claim savings.
 
-- Dimi clarified departure semantics: no reversible suspension or automatic
-  restoration of former access/context on return; treat return as newcomer
-  admission. Dimi's 2026-10-26 M4 arbitration supersedes the earlier next-operation
-  rechecks and five-minute revocation bound for agent turns: one complete trusted
+- Departure semantics: no reversible suspension or automatic restoration of
+  former access/context on return; treat return as newcomer admission. The M4
+  decision (2026-10-26) supersedes the earlier next-operation rechecks and
+  five-minute revocation bound for agent turns: one complete trusted
   Control Plane resolution per turn, then local enforcement of that fixed context
   for every LLM call, retry and descendant. No additional HTTP/SQL/OpenFGA reads to
   refresh turn authority during the turn; revocation/decommissioning is observed at
@@ -210,13 +216,12 @@ clear, robust behavior. Do not weaken controls or compress code to claim savings
   replace all Python authorization with REST calls or to introduce a new signed
   execution grant. The accepted M4 freshness boundary is one complete resolution
   at turn admission; do not reintroduce per-invocation authority reads.
-- Knowledge Flow API stays (Dimi, 2026-10-27, reversing the morning's removal
-  decision). Capabilities reach knowledge through its endpoints; only Knowledge
-  Flow holds storage credentials. Each endpoint must establish, for the person
-  the call acts for, read access to the requested space before exposing data,
-  then apply the shared visibility primitive (`fred_core.documents.access`).
-  Decision K1 (Dimi, 2026-10-27): Knowledge Flow validates the person's
-  (delegated) identity as in Swift, then makes one OpenFGA `can_read` check on
+- Knowledge Flow API stays. Capabilities reach knowledge through its endpoints;
+  only Knowledge Flow holds storage credentials. Each endpoint must establish,
+  for the person the call acts for, read access to the requested space before
+  exposing data, then apply the shared visibility primitive
+  (`fred_core.documents.access`). Decision K1: Knowledge Flow validates the
+  person's (delegated) identity as in Swift, then makes one OpenFGA `can_read` check on
   the requested space against the published Weaver model. It neither asks
   Control Plane nor trusts a pod-asserted space. The pod sends the space from
   its turn binding, never from model arguments. This per-request check is a
@@ -300,17 +305,6 @@ no external prompt collection is required. Keep the incremental workflow above.
   is not a successful build. Follow the incremental mode for running checks and
   report exactly which compilation, lint and tests were or were not performed.
 
-## Dimi's reconstruction method
-
-Use [fred-reconstruction-method](.agents/skills/fred-reconstruction-method/SKILL.md)
-for an explicitly requested reconstruction convergence or corpus review. It defines
-bounded completeness, independent review, the committed reference and the canonical
-arc42/source maps. The mandatory fred-architecture skill governs the dossier:
-current human-readable architecture and technical annexes, with no feature plan
-or proposed decisions. Scoped, authorized consolidation retires superseded prose
-only after preserving useful contracts and resolving consumers. It does not
-authorize unrequested tests, commits, publication, resets or unrelated deletion.
-
 ## Architecture maintenance
 
 Apply [fred-architecture](.agents/skills/fred-architecture/SKILL.md) when adding or
@@ -328,17 +322,6 @@ For a question about the reconstructed user journey, start with the
 current UI consumers, Rust owners, SQL migrations and focused evidence. Historical
 OpenSpec changes and Swift documents are comparison material, not proof of current
 Rust behavior. Do not describe an API-only operation as an available UI journey.
-
-## Functional reconstruction continuity
-
-When continuing Dimi's incremental Rust reconstruction, first read
-[`docs/WORKING-JOURNAL.md`](docs/WORKING-JOURNAL.md).
-Update its indexed feature records after each meaningful step: observations,
-focused changes, explicit user validation, pending architecture updates and next
-step. Preserve the existing frontend, including nonfunctional screens, unless
-Dimi requests a specific adaptation. Keep affected architecture chapters current
-as part of feature work under fred-architecture;
-do not confuse an implemented change with a validated user journey.
 
 ## OpenSpec - team choice, under evaluation
 

@@ -7,7 +7,7 @@ argument-hint: [optional: module name to focus report on]
 
 # Quality Root Skill
 
-Run `make code-quality` from the **monorepo root** (`/home/dimi/Work/swift`), which covers all
+Run `make code-quality` from the **monorepo root** (`git rev-parse --show-toplevel`), which covers all
 modules in dependency order: `libs/fred-core`, `libs/fred-sdk`, `libs/fred-runtime`,
 `libs/fred-agents`, `apps/control-plane-backend`, `apps/knowledge-flow-backend`, `apps/frontend`.
 

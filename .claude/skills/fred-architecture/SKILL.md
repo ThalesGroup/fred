@@ -12,24 +12,18 @@ older instructions to put feature plans or proposed decisions in that dossier.
 
 ## Weaver validation boundary
 
-The dossier follows the integrated Weaver scope validated by Dimi, not the union
-of features found in the repository, Swift documentation or SDKs. Before adding
-behavior, read `docs/WORKING-JOURNAL.md` and the current user instructions. Code
+The dossier follows the integrated Weaver scope validated end to end, not the
+union of features found in the repository, Swift documentation or SDKs. Code
 presence, isolated CLI discovery and runtime documentation do not prove that the
 feature is wired into Weaver or validated end to end.
 
-The documented scope is the set of journeys whose validation by Dimi is recorded
-in the journal: native knowledge-base document ingestion, the first agent
-conversation with explicit model selection, and each capability journey closed by
-a validated capability lot (AGENTS.md, "Weaver: capability lots"). At the end of
-such a lot, document its journey in the existing chapters; an implemented but
-unvalidated capability stays out. Additional Knowledge Bases and application
-extensions remain outside until integrated and validated. Do not expand an
-overview or fill empty chapters from SDK features. Keep the same boundary in
-annexes; moving a claim there does not validate it.
-
-When the journal and the current instruction differ on validation, clarify the
-specific boundary. Do not infer completed validation from "we are finishing".
+The documented scope is the set of journeys a lot owner validated end to end, on
+local k3d and the integration platform, as recorded in the lot's PR
+(AGENTS.md, "Weaver: lots"). Update the existing chapters in that PR; an
+implemented but unvalidated journey stays out. Additional Knowledge Bases and
+application extensions remain outside until integrated and validated. Do not
+expand an overview or fill empty chapters from SDK features. Keep the same
+boundary in annexes; moving a claim there does not validate it.
 
 ## Audience and purpose
 

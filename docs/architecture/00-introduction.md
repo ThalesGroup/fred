@@ -5,7 +5,7 @@ with AI while retaining control over data and its use. It brings together data
 lifecycle management, access security and usage governance.
 
 Fred provides a ready-to-use workspace for documents, AI assistants and
-administration. Its SDK lets teams extend the platform with agents, knowledge
+administration. Its [SDK](../../libs/fred-sdk/README.md) lets teams extend the platform with agents, knowledge
 bases and complete business applications, including their own UI, backend
 services and data, with or without agents. The platform and its extensions
 follow a cloud-native deployment model based on Kubernetes.
@@ -28,28 +28,51 @@ flowchart TB
     class ready,extend,foundation,k8s neutral
 ```
 
-## Spaces and access
+## A shared foundation for collaboration
 
-Resources are organized into organization, team, project or personal **spaces**.
-An **admin** manages business activity; an **owner** has a limited institutional
-mandate. Access to content is a separate responsibility. The [security chapter](03-security.md)
-explains these boundaries; the [roles annex](A11-roles.md) distinguishes agreed
-responsibilities from current permissions.
+This shared foundation organizes collaboration into three levels: **organization,
+team and project**. Each provides a **space** for shared knowledge, assistants and
+business resources. This structure supports both Fred's native workspace and
+applications built on its foundation.
 
-## Agents, capabilities and models
+The organization holds common resources. Teams organize their own work; projects
+focus collaboration within a team. Subject to [access rights](03-security.md),
+a team can use organization resources, and a project can use resources from both
+its team and organization.
 
-| Concept | Meaning |
-| --- | --- |
-| **Agent instance** | An assistant configured in a working space. |
-| **Capability** | A function available to an agent, such as document search. |
-| **Model** | An AI service used for inference. |
+The same [four roles](A11-roles.md#reference-roles) apply at every level:
+**admins** manage the workspace and its community, **analysts** evaluate agents
+and their use, **editors** contribute content, and **members** consult it.
+Management and content access remain separate permissions; a person can combine
+roles.
 
-## Reading this dossier
+```mermaid
+flowchart TB
+    subgraph organization["Organization space"]
+        direction TB
+        common["Common knowledge<br/>Assistants and resources<br/>Admin / Analyst<br/>Editor / Member"]
 
-- [System overview](01-system-overview.md): components, responsibilities and interactions.
-- [Journeys](02-journeys.md): access, document ingestion and conversations in practice.
-- [Security](03-security.md): identity, permissions and isolation boundaries.
-- [SDK documentation](../../libs/fred-sdk/README.md): authoring agents and Knowledge Bases.
+        subgraph team["Team space"]
+            direction TB
+            shared["Team knowledge<br/>Assistants and resources<br/>Admin / Analyst<br/>Editor / Member"]
 
-The journeys use the fictional organizations Acme and Globex; their people,
-spaces and role grants are defined in the [example conventions](02-journeys.md#example-people-and-spaces).
+            subgraph project["Project space"]
+                focused["Resources for a shared objective<br/>Admin / Analyst<br/>Editor / Member"]
+            end
+        end
+
+        common -->|"Available according to access rights"| team
+        shared -->|"Available according to access rights"| project
+    end
+
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
+    class common,shared,focused,organization,team,project neutral
+```
+
+Each project belongs to a team; each team belongs to an organization. The nested
+spaces show where collaboration happens; the arrows show how shared resources
+support it.
+
+The [system overview](01-system-overview.md) explains how Fred's components deliver
+this foundation. The [journeys](02-journeys.md), with their
+[example people and spaces](02-journeys.md#example-people-and-spaces), show it in use.
