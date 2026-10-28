@@ -672,8 +672,7 @@ _LANGFUSE_TRACER: TracerPort | None | bool = False
 class _LangfuseSpanLike(Protocol):
     id: str
 
-    def start_observation(self, **kwargs: Any) -> _LangfuseSpanLike:
-        ...
+    def start_observation(self, **kwargs: Any) -> _LangfuseSpanLike: ...
 
     # Kept fully open (`**kwargs`) because the adapter flushes a span in one
     # call whose keys depend on what the caller recorded — metadata, input,

@@ -1310,11 +1310,11 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
     )
     definition = DeepDefinition() if deep else _PingAgent()
     app = create_agent_app(registry={definition.agent_id: definition}, config=config)
-    selections = [{"name": "meeting-minutes"}, {"name": "mermaid"}]
+    selections = [{"name": "meeting-minutes"}, {"name": "graph"}]
     command = {
         "command": "summary",
         "prompt_id": "prompt",
-        "draft_text": "Before /summary /meeting-minutes /mermaid after",
+        "draft_text": "Before /summary /meeting-minutes /graph after",
         "draft_command_offset": 7,
     }
     with TestClient(app) as client:
@@ -1322,7 +1322,7 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
             "/pod/v1/agents/execute",
             json={
                 "agent_id": definition.agent_id,
-                "input": "Before\n\nPrompt instructions\n\n/meeting-minutes /mermaid after",
+                "input": "Before\n\nPrompt instructions\n\n/meeting-minutes /graph after",
                 "runtime_context": {
                     "session_id": "multiple-history",
                     "skills": selections + selections[:1],
@@ -1361,7 +1361,7 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
             json={
                 "agent_id": definition.agent_id,
                 "input": "notes",
-                "runtime_context": {"skills": [{"name": "mermaid", "body": "FORGED"}]},
+                "runtime_context": {"skills": [{"name": "graph", "body": "FORGED"}]},
             },
         )
         assert forged.status_code == 422
@@ -1409,9 +1409,9 @@ def test_multiple_skills_reject_unsupported_runtime_configuration(
             "/pod/v1/agents/execute",
             json={
                 "agent_id": definition.agent_id,
-                "input": "/meeting-minutes /mermaid notes",
+                "input": "/meeting-minutes /graph notes",
                 "runtime_context": {
-                    "skills": [{"name": "meeting-minutes"}, {"name": "mermaid"}]
+                    "skills": [{"name": "meeting-minutes"}, {"name": "graph"}]
                 },
             },
         )

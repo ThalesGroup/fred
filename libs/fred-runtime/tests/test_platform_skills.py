@@ -829,6 +829,66 @@ async def test_packaged_graph_loads_through_shared_paths(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_deep_keeps_prior_turn_and_adds_one_canonical_skill_request(
+    streaming: bool,
+) -> None:
+    skills = PlatformSkills.from_directory("package")
+    bound = binding()
+    model = Model(
+        script=[
+            AIMessage(content="previous answer"),
+            AIMessage(content="current answer"),
+        ]
+    )
+    executor = _TransportBackedReActExecutor(
+        compiled_agent=compiled(model, skills, bound, True),
+        binding=bound,
+        services=RuntimeServices(skills=skills),
+        runtime_class_name="DeepAgentRuntime",
+        preload_selected_skill=False,
+    )
+    config = ExecutionConfig(session_id="canonical-skill-history")
+    question = "Draw the same workflow"
+    for selected in (False, True):
+        bound.runtime_context.skills = (
+            [SkillInvocation(name="graph")] if selected else []
+        )
+        request = ReActInput(
+            messages=(
+                ReActMessage(
+                    role=ReActMessageRole.USER,
+                    content=f"/graph {question}" if selected else question,
+                ),
+            )
+        )
+        if streaming:
+            _ = [event async for event in executor.stream(request, config)]
+        else:
+            await executor.invoke(request, config)
+
+    assert len(model.calls) == 2
+    messages = model.calls[-1]
+    user_requests = [
+        message.content
+        for message in messages
+        if isinstance(message, HumanMessage)
+        and message.additional_kwargs.get("lc_source") != "pinned_skill"
+    ]
+    assert user_requests == [question, f"/graph {question}"]
+    pins = [
+        message
+        for message in messages
+        if message.additional_kwargs.get("lc_source") == "pinned_skill"
+    ]
+    assert len(pins) == 1
+    assert str(pins[0].content).startswith('<skill name="graph" ')
+    assert [
+        message.content for message in messages if isinstance(message, AIMessage)
+    ] == ["previous answer"]
+
+
+@pytest.mark.asyncio
 async def test_native_child_load_has_attribution() -> None:
     skills = PlatformSkills.from_directory("package")
     model = Model(
