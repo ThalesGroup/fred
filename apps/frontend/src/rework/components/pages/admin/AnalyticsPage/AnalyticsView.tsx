@@ -21,13 +21,17 @@ import TimeRangeSelector from "@shared/molecules/TimeRangeSelector/TimeRangeSele
 import { resolvePreset, type TimeRange } from "@shared/molecules/TimeRangeSelector/timeRange.types";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { InfoIcon } from "./AnalyticsSection";
+import AnalyticsDaysSettings from "./AnalyticsDaysSettings";
 import AnalyticsScopeSelector, { AnalyticsScopeSummary } from "./AnalyticsScopeSelector";
 import AnalyticsUserFilter, { AnalyticsUserFilterSummary } from "./AnalyticsUserFilter";
 import {
   ANALYTICS_PRESETS,
+  type AnalyticsDays,
   type AnalyticsMode,
   type AnalyticsTabProps,
   type AnalyticsUserFilterValue,
+  loadAnalyticsDays,
+  saveAnalyticsDays,
   userFilterParam,
   zonedKpiArgs,
 } from "./analyticsQuery";
@@ -73,6 +77,11 @@ export default function AnalyticsView({ title, mode, teamIds: fixedTeamIds, extr
   const [exporting, setExporting] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRange>(() => resolvePreset("last30d"));
   const [selectedTeamIds, setTeamIds] = useState<string[]>([]);
+  const [days, setDays] = useState<AnalyticsDays>(loadAnalyticsDays);
+  const changeDays = (next: AnalyticsDays) => {
+    setDays(next);
+    saveAnalyticsDays(next);
+  };
   const teamIds = fixedTeamIds ?? selectedTeamIds;
   // Account attributes are platform data: never filtered on a team's page.
   const [selectedUserFilter, setUserFilter] = useState<AnalyticsUserFilterValue | null>(null);
@@ -86,7 +95,7 @@ export default function AnalyticsView({ title, mode, teamIds: fixedTeamIds, extr
     setExporting(true);
     try {
       const lang = i18n.language.startsWith("fr") ? "fr" : "en";
-      await exportAnalytics({ ...zonedKpiArgs(timeRange, teamIds, userFilter), lang });
+      await exportAnalytics({ ...zonedKpiArgs(timeRange, teamIds, userFilter, days), lang });
     } catch {
       showError({ summary: t("rework.analytics.exportError") });
     } finally {
@@ -114,6 +123,7 @@ export default function AnalyticsView({ title, mode, teamIds: fixedTeamIds, extr
                 </>
               )}
               <TimeRangeSelector value={timeRange} onChange={setTimeRange} presetKeys={ANALYTICS_PRESETS} />
+              <AnalyticsDaysSettings value={days} onChange={changeDays} />
               <Button
                 variant="filled"
                 color="primary"
@@ -151,7 +161,7 @@ export default function AnalyticsView({ title, mode, teamIds: fixedTeamIds, extr
         {tab === EXTRA_TAB ? (
           extraTab!.render(timeRange)
         ) : (
-          <Content timeRange={timeRange} teamIds={teamIds} mode={mode} userFilter={userFilter} />
+          <Content timeRange={timeRange} teamIds={teamIds} mode={mode} userFilter={userFilter} days={days} />
         )}
       </div>
     </div>

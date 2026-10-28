@@ -32,11 +32,11 @@ import { bucketSeries, formatValue, NO_VALUE, type ValueFormat } from "../analyt
 import { allFailed, type AnalyticsTabProps, KPI_CACHE, kpiArgs, zonedKpiArgs } from "../analyticsQuery";
 import styles from "../AnalyticsPage.module.css";
 
-export default function QualityCostTab({ timeRange, teamIds, userFilter }: AnalyticsTabProps) {
+export default function QualityCostTab({ timeRange, teamIds, userFilter, days }: AnalyticsTabProps) {
   const { t, i18n } = useTranslation();
   const lng = i18n.language;
-  const quality = useAnalyticsQualityCostQuery(kpiArgs(timeRange, teamIds, userFilter), KPI_CACHE);
-  const zoned = zonedKpiArgs(timeRange, teamIds, userFilter);
+  const quality = useAnalyticsQualityCostQuery(kpiArgs(timeRange, teamIds, userFilter, days), KPI_CACHE);
+  const zoned = zonedKpiArgs(timeRange, teamIds, userFilter, days);
   const usage = useAnalyticsUsageQuery(zoned, KPI_CACHE);
   const activity = useAnalyticsActivityOverTimeQuery(zoned, KPI_CACHE);
   const data = quality.data;

@@ -23,10 +23,13 @@ import styles from "./AnalyticsPage.module.css";
 
 /** Web research volume, estimated provider cost and refusals. Absent while the capability is
  *  enabled nowhere on the platform. */
-export default function WebResearchSection({ timeRange, teamIds, userFilter }: AnalyticsTabProps) {
+export default function WebResearchSection({ timeRange, teamIds, userFilter, days }: AnalyticsTabProps) {
   const { t, i18n } = useTranslation();
   const lng = i18n.language;
-  const { data, isLoading, isError } = useWebResearchSummaryQuery(kpiArgs(timeRange, teamIds, userFilter), KPI_CACHE);
+  const { data, isLoading, isError } = useWebResearchSummaryQuery(
+    kpiArgs(timeRange, teamIds, userFilter, days),
+    KPI_CACHE,
+  );
   const card = (key: string, value: number | null | undefined, displayValue?: string, caption?: string) => (
     <KpiStatCard
       label={t(`rework.analytics.webResearch.${key}`)}
