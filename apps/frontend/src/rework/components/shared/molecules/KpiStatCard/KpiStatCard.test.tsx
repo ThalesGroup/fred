@@ -16,7 +16,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import KpiStatCard from "./KpiStatCard";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -141,4 +141,30 @@ it("sizes the value as asked, medium by default", () => {
     renderToStaticMarkup(<KpiStatCard label="Users" value={3} size={size} isLoading={false} isError={false} />);
   expect(html()).toContain('data-size="medium"');
   expect(html("large")).toContain('data-size="large"');
+});
+
+it("shows a trend button only when the caller gives one", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const onClick = vi.fn();
+  try {
+    act(() => root.render(<KpiStatCard label="Runs" value={4} isLoading={false} isError={false} />));
+    expect(container.querySelector("button")).toBeNull();
+    act(() =>
+      root.render(
+        <KpiStatCard
+          label="Runs"
+          value={4}
+          trendAction={{ label: "Show trend", onClick }}
+          isLoading={false}
+          isError={false}
+        />,
+      ),
+    );
+    const button = container.querySelector<HTMLButtonElement>('button[aria-label="Show trend - Runs"]')!;
+    act(() => button.click());
+    expect(onClick).toHaveBeenCalledOnce();
+  } finally {
+    act(() => root.unmount());
+  }
 });
