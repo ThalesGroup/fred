@@ -227,7 +227,8 @@ d'habitude. Après une modification, les éditeurs et l'admin de l'équipe voien
 **Marketplace à mettre à jour** : la marketplace montre encore la version
 précédente. Un Éditeur qui enregistre une modification peut choisir
 **Mettre à jour** pour remplacer la version publiée ; **Ignorer** la laisse
-en ligne.
+en ligne. Quand la modification vient de quelqu'un d'autre, la personne qui a
+publié l'agent reçoit aussi une [notification](/help/fr/features/notifications).
 
 ### Retrait de la marketplace
 
@@ -246,7 +247,8 @@ Après un retrait automatique, la carte affiche **Retiré de la marketplace**.
 Cliquez dessus pour voir pourquoi, quand, et le message de l'administrateur
 s'il y en a un. Les éditeurs et l'admin de l'équipe peuvent **Masquer** cette
 mention pour toute l'équipe. Publier l'agent à nouveau le remet dans la
-marketplace.
+marketplace. La personne qui a publié l'agent reçoit aussi une
+[notification](/help/fr/features/notifications).
 
 ### Les j'aime
 

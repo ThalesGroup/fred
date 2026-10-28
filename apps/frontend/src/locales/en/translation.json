@@ -2431,7 +2431,10 @@
       "home": "Home",
       "marketplace": "Marketplace",
       "helpCenter": "Help Center",
-      "adminConsole": "Technical console"
+      "adminConsole": "Technical console",
+      "notifications": "Notifications",
+      "notificationsUnseen_one": "Notifications, {{count, number}} unseen",
+      "notificationsUnseen_other": "Notifications, {{count, number}} unseen"
     },
     "profileMenu": {
       "contactSupport": "Contact support",
@@ -2721,7 +2724,8 @@
           "platformPrompt": "Platform prompts",
           "announcements": "Announcements",
           "uiSettings": "User interface",
-          "marketplaces": "Marketplaces"
+          "marketplaces": "Marketplaces",
+          "notifications": "Notifications"
         },
         "title": "Administration spaces"
       },
@@ -4489,6 +4493,58 @@
         "marketplace_entry_not_found": "This agent is not published.",
         "marketplace_runtime_unavailable": "The service running this agent cannot be reached. The published version is unchanged; try again later.",
         "marketplace_capability_not_exportable": "The capability \"{{capability}}\" cannot be prepared for the marketplace. The published version is unchanged."
+      }
+    },
+    "notifications": {
+      "title": "Notifications",
+      "clearAll": "Clear all",
+      "close": "Close notifications",
+      "loadMore": "Show more",
+      "loadError": "Your notifications could not be loaded.",
+      "dismiss": "Dismiss notification",
+      "empty": {
+        "title": "No notifications",
+        "description": "You will be told here when something needs you."
+      },
+      "handled": "Handled",
+      "handledBy": "Handled by {{name}}",
+      "unread": "Unread",
+      "actions": {
+        "view": "View",
+        "openAgent": "Open the agent"
+      },
+      "types": {
+        "republishNeeded": {
+          "name": "Published agent changed",
+          "description": "Sent to the person who published an agent to the marketplace when another editor changes it, so they can republish it.",
+          "title": "Published agent changed",
+          "body": "{{editor}} changed “{{agent}}” in {{team}}. Republish it to update the marketplace version.",
+          "bodyNoTeam": "{{editor}} changed “{{agent}}”. Republish it to update the marketplace version.",
+          "handledRemoved": "Resolved: the agent left the marketplace"
+        },
+        "marketplaceRemoved": {
+          "name": "Agent removed from the marketplace",
+          "description": "Sent to the person who published an agent when it leaves the marketplace without their action.",
+          "title": "Agent removed from the marketplace",
+          "body": "“{{agent}}” ({{team}}) is no longer on the marketplace. {{reason}}",
+          "bodyNoTeam": "“{{agent}}” is no longer on the marketplace. {{reason}}"
+        },
+        "unknown": {
+          "title": "Notification"
+        }
+      }
+    },
+    "notificationSettings": {
+      "title": "Notifications",
+      "subtitle": "Choose which notifications the platform sends. The choice applies to every team and every user.",
+      "hint": "Turning a type off hides the notifications of that type for everyone, until it is turned back on.",
+      "loadFailed": "The notification settings could not be loaded.",
+      "saveFailed": "The notification setting could not be saved.",
+      "toggleLabel": "Send “{{name}}” notifications",
+      "turnOff": {
+        "title": "Turn off “{{name}}”?",
+        "message": "The notifications of this type will be hidden for everyone until the type is turned back on. Nothing is deleted.",
+        "confirm": "Turn off"
       }
     }
   },
