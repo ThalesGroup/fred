@@ -31,6 +31,7 @@ import json
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from control_plane_backend.import_export.bundle import (
@@ -41,6 +42,7 @@ from control_plane_backend.import_export.exporter import run_export
 from control_plane_backend.import_export.importer import MigrationReport, run_import
 from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.models.task_models import TASK_TABLES
+from control_plane_backend.notifications.service import NotificationService
 from fred_core.common import TeamId
 from fred_core.documents.document_models import DocumentMetadataRow
 from fred_core.models import Base as CoreBase
@@ -277,7 +279,9 @@ async def test_old_bundle_with_retired_reasoning_keys_still_imports(
         )
 
         assert report.agents_imported == 1
-        record = await AgentInstanceStore(dest).get("i1")
+        record = await AgentInstanceStore(
+            dest, notifications=AsyncMock(spec=NotificationService)
+        ).get("i1")
         assert record is not None
         assert record.tuning.role == "r"
         assert "reasoning_enabled" not in record.tuning.model_dump()

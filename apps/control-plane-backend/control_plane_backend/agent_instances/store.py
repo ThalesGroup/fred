@@ -28,6 +28,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_plane_backend.agent_instances.names import is_agent_name_violation
+from control_plane_backend.agent_marketplace.notifications import notify_unpublished
 from control_plane_backend.agent_marketplace.store import (
     RemovalReason,
     RemovedEntry,
@@ -39,6 +40,7 @@ from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.routing_policy_models import TeamRoutingPolicyRow
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.routing_policy.schemas import ModelDisabledForTeamError
 
 logger = logging.getLogger(__name__)
@@ -216,8 +218,9 @@ async def _require_model_enabled_for_team(
 
 
 class AgentInstanceStore:
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(self, engine: AsyncEngine, notifications: NotificationService) -> None:
         self._sessions = make_session_factory(engine)
+        self._notifications = notifications
 
     async def create(
         self,
@@ -435,6 +438,7 @@ class AgentInstanceStore:
                 raise AgentNameAlreadyExistsError(team_id, display_name) from exc
             raise
         emit_unpublished(removed, actor_uid=updated_by)
+        await notify_unpublished(self._notifications, removed, actor_uid=updated_by)
         return await self.get(agent_instance_id)
 
     async def set_suspension(
@@ -486,6 +490,7 @@ class AgentInstanceStore:
                 else []
             )
         emit_unpublished(removed)
+        await notify_unpublished(self._notifications, removed, actor_uid=None)
         return await self.get(agent_instance_id)
 
     async def delete(
@@ -531,6 +536,7 @@ class AgentInstanceStore:
                 )
             )
         emit_unpublished(unpublished, actor_uid=actor_uid)
+        await notify_unpublished(self._notifications, unpublished, actor_uid=actor_uid)
         return result.rowcount > 0
 
     async def delete_by_team(

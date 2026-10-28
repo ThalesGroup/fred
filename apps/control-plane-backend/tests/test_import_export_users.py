@@ -76,6 +76,7 @@ from control_plane_backend.import_export.importer import (
 from control_plane_backend.import_export.schemas import BundleUserEntry
 from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.models.task_models import TASK_TABLES
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.scheduler.policies.policy_models import (
     ConversationPolicyCatalog,
 )
@@ -423,6 +424,7 @@ def _team_deps(engine: AsyncEngine, rebac: _FakeTeamRebac) -> TeamServiceDepende
     config.app.default_team_max_resources_storage_size = 5368709120
     store = TeamMetadataStore(engine)
     return TeamServiceDependencies(
+        get_notification_service=lambda: AsyncMock(spec=NotificationService),
         configuration=config,
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, SchedulerBackend.MEMORY),

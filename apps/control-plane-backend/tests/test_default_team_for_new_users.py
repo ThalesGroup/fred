@@ -22,9 +22,11 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
 import pytest
 from control_plane_backend.models.base import Base
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.teams.default_team_store import PlatformDefaultTeamStore
 from control_plane_backend.teams.schemas import (
     DefaultTeamForNewUsers,
@@ -147,6 +149,7 @@ def _team_deps(rebac: _FakeRebac, default_store: _FakeDefaultTeamStore) -> Any:
             rebac=rebac,
             get_default_team_store=lambda: default_store,
             get_team_metadata_store=lambda: metadata_store,
+            get_notification_service=lambda: AsyncMock(spec=NotificationService),
         ),
     )
 

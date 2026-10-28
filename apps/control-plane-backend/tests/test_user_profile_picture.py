@@ -459,6 +459,9 @@ def _delete_user_app(content_store: _FakeContentStore, calls: list[str]) -> Fast
     async def no_seen(_user_id: str) -> None:
         calls.append("delete_patch_note_seen")
 
+    async def no_notifications(_user_id: str) -> None:
+        return None
+
     class _Identity:
         async def a_delete_user(self, _user_id: str) -> dict:
             calls.append("delete_identity_account")
@@ -475,6 +478,9 @@ def _delete_user_app(content_store: _FakeContentStore, calls: list[str]) -> Fast
             delete_favorites_for_user=no_favorites
         ),
         get_announcement_store=lambda: SimpleNamespace(delete_seen_for_user=no_seen),
+        get_notification_service=lambda: SimpleNamespace(
+            delete_for_user=no_notifications
+        ),
     )
     app = FastAPI()
     app.include_router(users_api.router)

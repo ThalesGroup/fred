@@ -15,7 +15,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any, cast
 
+from sqlalchemy import CursorResult
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -45,3 +47,14 @@ def utcnow() -> datetime:
     """
 
     return datetime.now(timezone.utc)
+
+
+def as_utc(value: datetime) -> datetime:
+    """`value` as read back from the database, timezone-aware: SQLite hands
+    timestamps back naive, and they were written in UTC."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+def rowcount(result: object) -> int:
+    """The rows an UPDATE or DELETE result touched."""
+    return cast(CursorResult[Any], result).rowcount
