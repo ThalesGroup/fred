@@ -20,6 +20,7 @@
 import {
   type KeyboardEvent,
   type MouseEvent,
+  type ReactNode,
   memo,
   useEffect,
   useId,
@@ -36,9 +37,12 @@ import type { CapabilitySidePanelProps } from "../types";
 import SpreadsheetDownloadButton from "./SpreadsheetDownloadButton";
 import {
   type ColumnLayout,
+  cellFormula,
   columnLetter,
+  type FormulaReference,
   formatSheet,
   formulaBarText,
+  formulaReferences,
   isRightAligned,
   mayClip,
 } from "./spreadsheetFormat";
@@ -61,6 +65,40 @@ const MOVES: Record<string, [number, number]> = {
   ArrowRight: [0, 1],
 };
 
+// Offset that brings [start, end] inside [min, max], aligning the start when it cannot fit.
+const nearest = (start: number, end: number, min: number, max: number) =>
+  start < min ? start - min : end > max ? Math.min(end - max, start - min) : 0;
+
+// Scroll only the grid (not its ancestors) so the cell clears the sticky
+// heading rows above it and the sticky row numbers on its left.
+function revealCell(scroller: HTMLElement, cell: HTMLElement) {
+  const view = scroller.getBoundingClientRect();
+  const box = cell.getBoundingClientRect();
+  const head = cell.closest("table")?.tHead;
+  const rowHead = cell.parentElement?.firstElementChild;
+  const top = view.top + (head && !head.contains(cell) ? head.getBoundingClientRect().height : 0);
+  const left = view.left + (rowHead && rowHead !== cell ? rowHead.getBoundingClientRect().width : 0);
+  scroller.scrollLeft += nearest(box.left, box.right, left, view.left + scroller.clientWidth);
+  scroller.scrollTop += nearest(box.top, box.bottom, top, view.top + scroller.clientHeight);
+}
+
+// The formula bar text with its A1 references (any sheet) wrapped for colouring.
+function FormulaText({ text, references }: { text: string; references: FormulaReference[] }) {
+  const parts: ReactNode[] = [];
+  let at = 0;
+  for (const ref of references) {
+    parts.push(text.slice(at, ref.start));
+    parts.push(
+      <span key={ref.start} className={styles.reference}>
+        {text.slice(ref.start, ref.end)}
+      </span>,
+    );
+    at = ref.end;
+  }
+  parts.push(text.slice(at));
+  return <>{parts}</>;
+}
+
 interface GridRowProps {
   /** Excel row number. */
   row: number;
@@ -69,6 +107,8 @@ interface GridRowProps {
   layouts: ColumnLayout[];
   /** Selected column in this row, or -1: rows without the selection skip re-rendering. */
   selectedColumn: number;
+  /** Columns of this row the selected formula references (visual only). */
+  referenced?: Set<number>;
   header?: boolean;
   className?: string;
 }
@@ -79,6 +119,7 @@ const GridRow = memo(function GridRow({
   classes,
   layouts,
   selectedColumn,
+  referenced,
   header = false,
   className,
 }: GridRowProps) {
@@ -96,7 +137,10 @@ const GridRow = memo(function GridRow({
           // Roving focus: only the selected cell is a tab stop.
           tabIndex={selectedColumn === index ? 0 : undefined}
           title={mayClip(text, layouts[index]) ? text : undefined}
-          className={cx(classes[index], selectedColumn === index && styles.selected)}
+          className={cx(
+            classes[index],
+            selectedColumn === index ? styles.selected : referenced?.has(index) && styles.referenced,
+          )}
         >
           {text}
         </Cell>
@@ -119,6 +163,7 @@ function SheetGrid({
   const { t } = useTranslation();
   const [selected, setSelected] = useState<CellAddress>({ row: 1, column: 0 });
   const tableRef = useRef<HTMLTableElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const focusPending = useRef(false);
   const formatted = useMemo(() => formatSheet(sheet, locale), [sheet, locale]);
   const { rows, totals, layouts } = formatted;
@@ -163,10 +208,34 @@ function SheetGrid({
   useLayoutEffect(() => {
     if (!focusPending.current) return;
     focusPending.current = false;
-    tableRef.current?.querySelector<HTMLElement>(`[data-cell="${selected.row}:${selected.column}"]`)?.focus();
+    const cell = tableRef.current?.querySelector<HTMLElement>(`[data-cell="${selected.row}:${selected.column}"]`);
+    if (!cell) return;
+    if (scrollRef.current) revealCell(scrollRef.current, cell);
+    cell.focus({ preventScroll: true });
   }, [selected]);
 
   const value = formulaBarText(sheet, formatted, selected.row, selected.column, locale);
+  const references = useMemo(() => {
+    const formula = cellFormula(sheet, selected.row, selected.column);
+    return formula ? formulaReferences(formula) : [];
+  }, [sheet, selected]);
+  // Rendered row -> referenced columns; rows left out of the preview are not rendered.
+  const referencedCells = useMemo(() => {
+    const byRow = new Map<number, Set<number>>();
+    const shown = [1, ...rows.map((_, index) => index + 2), ...(totals ? [totalsRow] : [])];
+    for (const ref of references) {
+      if (ref.sheet !== null && ref.sheet !== sheet.name) continue;
+      for (const row of shown) {
+        if (row < ref.top || row > ref.bottom) continue;
+        const columns = byRow.get(row) ?? new Set<number>();
+        for (let column = ref.left; column <= Math.min(ref.right, sheet.columns.length - 1); column++) {
+          columns.add(column);
+        }
+        byRow.set(row, columns);
+      }
+    }
+    return byRow;
+  }, [references, rows, totals, totalsRow, sheet]);
   const hidden = sheet.row_count - sheet.rows.length;
 
   return (
@@ -179,10 +248,10 @@ function SheetGrid({
           fx
         </span>
         <span className={styles.cellValue} title={value}>
-          {value}
+          <FormulaText text={value} references={references} />
         </span>
       </div>
-      <div className={styles.gridScroll}>
+      <div ref={scrollRef} className={styles.gridScroll}>
         <table
           ref={tableRef}
           className={styles.grid}
@@ -212,6 +281,7 @@ function SheetGrid({
               classes={classes}
               layouts={layouts}
               selectedColumn={selectedIn(1)}
+              referenced={referencedCells.get(1)}
               header
               className={styles.headerRow}
             />
@@ -225,6 +295,7 @@ function SheetGrid({
                 classes={classes}
                 layouts={layouts}
                 selectedColumn={selectedIn(index + 2)}
+                referenced={referencedCells.get(index + 2)}
               />
             ))}
           </tbody>
@@ -236,6 +307,7 @@ function SheetGrid({
                 classes={classes}
                 layouts={layouts}
                 selectedColumn={selectedIn(totalsRow)}
+                referenced={referencedCells.get(totalsRow)}
                 className={styles.totals}
               />
             </tfoot>
@@ -412,9 +484,7 @@ export function SpreadsheetPane({ onClose }: CapabilitySidePanelProps) {
         <span className={styles.title} title={current?.file_name}>
           {current?.file_name ?? t("capability.spreadsheet.untitled")}
         </span>
-        {current && (
-          <SpreadsheetDownloadButton href={current.xlsx_download_url} fileName={current.file_name} labelled />
-        )}
+        {current && <SpreadsheetDownloadButton href={current.xlsx_download_url} fileName={current.file_name} />}
         <IconButton
           variant="icon"
           size="medium"

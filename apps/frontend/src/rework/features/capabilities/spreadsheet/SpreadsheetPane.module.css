@@ -103,6 +103,10 @@
   white-space: nowrap;
 }
 
+.reference {
+  color: var(--tertiary);
+}
+
 /* The only scroll area: headings and the workbook header row stay frozen in it. */
 .gridScroll {
   flex: 1;
@@ -145,6 +149,14 @@
 
 .grid .selected {
   box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+/* Cells the selected formula references, like Excel's coloured precedents. */
+.grid .referenced,
+.grid .headerRow .referenced {
+  box-shadow: inset 0 0 0 1px var(--tertiary);
+  background-color: var(--tertiary-container);
+  color: var(--on-tertiary-container);
 }
 
 /* The selection ring is the focus indicator of the one focusable cell. */

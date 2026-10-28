@@ -18,7 +18,6 @@
 
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import Button from "@shared/atoms/Button/Button";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
@@ -27,14 +26,9 @@ import { downloadAuthed } from "../../../../utils/downloadUtils";
 interface SpreadsheetDownloadButtonProps {
   href: string;
   fileName: string;
-  labelled?: boolean;
 }
 
-export default function SpreadsheetDownloadButton({
-  href,
-  fileName,
-  labelled = false,
-}: SpreadsheetDownloadButtonProps) {
+export default function SpreadsheetDownloadButton({ href, fileName }: SpreadsheetDownloadButtonProps) {
   const { t } = useTranslation();
   const { showError } = useToast();
   const [busy, setBusy] = useState(false);
@@ -55,16 +49,17 @@ export default function SpreadsheetDownloadButton({
   };
 
   const icon = { category: "outlined", type: "download" } as const;
-  if (labelled) {
-    return (
-      <Button color="primary" variant="text" size="small" icon={icon} onClick={download} disabled={busy}>
-        {label}
-      </Button>
-    );
-  }
   return (
     <Tooltip text={label}>
-      <IconButton variant="icon" size="medium" icon={icon} onClick={download} disabled={busy} aria-label={label} />
+      <IconButton
+        variant="icon"
+        size="medium"
+        color="on-surface-retreat"
+        icon={icon}
+        onClick={download}
+        disabled={busy}
+        aria-label={label}
+      />
     </Tooltip>
   );
 }
