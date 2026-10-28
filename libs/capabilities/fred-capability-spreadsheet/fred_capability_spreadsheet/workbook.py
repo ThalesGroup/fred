@@ -679,7 +679,16 @@ def manual_total_hints(prepared: PreparedWorkbook) -> list[str]:
     its total-column cells are all empty or equal what the totals row computes.
     """
 
-    hints: list[str] = []
+    return [
+        f"sheet '{sheet.name}', row {index + 2} ('{label}')"
+        for sheet, index, label in _manual_total_rows(prepared)
+    ]
+
+
+def _manual_total_rows(
+    prepared: PreparedWorkbook,
+) -> list[tuple[PreparedSheet, int, str]]:
+    found: list[tuple[PreparedSheet, int, str]] = []
     for sheet in prepared.sheets:
         kept = [
             i for i, c in enumerate(sheet.columns) if c.total and c.total != "count"
@@ -706,9 +715,82 @@ def manual_total_hints(prepared: PreparedWorkbook) -> list[str]:
             if all(v is None for v in cells) or _matches(
                 cells, [_number(expected[i]) for i in kept]
             ):
-                hints.append(f"sheet '{sheet.name}', row {index + 2} ('{label}')")
+                found.append((sheet, index, label))
                 break
-    return hints
+    return found
+
+
+_STAT_FUNCTIONS = {
+    "moyenne": "AVERAGE",
+    "average": "AVERAGE",
+    "min": "MIN",
+    "minimum": "MIN",
+    "max": "MAX",
+    "maximum": "MAX",
+    "total": "SUM",
+}
+_STAT_LABELS = frozenset(_STAT_FUNCTIONS)
+
+
+def total_notes(prepared: PreparedWorkbook) -> list[str]:
+    """Warnings, never refusals: stat rows ending the data, percent averages."""
+
+    notes: list[str] = []
+    reported = {(id(s), i) for s, i, _ in _manual_total_rows(prepared)}
+    for sheet in prepared.sheets:
+        totals = [i for i, c in enumerate(sheet.columns) if c.total]
+        stats: list[tuple[int, str]] = []
+        for index in range(sheet.data_rows - 1, -1, -1):
+            label = next((v for v in sheet.rows[index] if isinstance(v, str)), None)
+            # The first word counts: "Moyenne par mois", "Total général".
+            words = label.casefold().split() if label else []
+            if label is None or not words or words[0].rstrip(":") not in _STAT_LABELS:
+                break
+            if (id(sheet), index) not in reported:
+                stats.append((index, label.strip()))
+        stats.reverse()
+        empty = [label for index, label in stats if _stat_row_empty(sheet, index)]
+        filled = [label for index, label in stats if label not in empty]
+        if empty:
+            names = ", ".join(f"'{x}'" for x in empty)
+            word = empty[0].casefold().split()[0].rstrip(":")
+            function = _STAT_FUNCTIONS[word]
+            notes.append(
+                f"sheet '{sheet.name}': the data rows {names} are empty; give "
+                f"them {{formula}} cells, e.g. ={function}(B2:B{stats[0][0] + 1})."
+            )
+        if filled and totals:
+            first = sheet.columns[totals[0]]
+            letter = column_letters(totals[0] + 1)
+            notes.append(
+                f"column '{first.header}' has total {first.total} and a "
+                f"'{filled[0]}' data row: it is included in the total. If not "
+                "intended, drop total on these columns and write the totals row "
+                f"as {{formula}} cells too (=SUM({letter}2:{letter}{stats[0][0] + 1}))."
+            )
+        totals_row = sheet.data_rows + 2
+        for column in sheet.columns:
+            if column.type == "percent" and column.total == "average":
+                notes.append(
+                    f"column '{column.header}' averages row percentages. If it is "
+                    "an evolution or a ratio, compute its total from the column "
+                    f"totals (row {totals_row}) instead: drop its total and use a "
+                    f"{{formula}} cell, e.g. =(C{totals_row}-B{totals_row})/"
+                    f"B{totals_row}."
+                )
+    return notes
+
+
+def _stat_row_empty(sheet: PreparedSheet, index: int) -> bool:
+    row = sheet.rows[index]
+    label = next(i for i, v in enumerate(row) if isinstance(v, str))
+    if any((index, c) in sheet.cell_formulas for c in range(len(row))):
+        return False
+    return all(
+        value is None
+        for c, value in enumerate(row)
+        if c != label and sheet.column_formulas[c] is None
+    )
 
 
 def _total_label(row: list[Converted]) -> str | None:

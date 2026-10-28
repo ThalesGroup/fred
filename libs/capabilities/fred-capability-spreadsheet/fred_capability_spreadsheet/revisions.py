@@ -269,6 +269,12 @@ def _rows(sheet: _Sheet, change: dict[str, Any]) -> list[int]:
 
     numbers = change.get("rows", change.get("row"))
     where = change.get("where")
+    if isinstance(numbers, list) and any(isinstance(x, dict) for x in numbers):
+        raise ChangeError(
+            "`rows` holds row numbers, not row objects, e.g. {op: 'edit_rows', "
+            "sheet: 'Ventes', rows: [8], values: {'Janvier': {formula: "
+            "'=SUM(B2:B7)'}}}"
+        )
     if (numbers is None) == (where is None):
         raise ChangeError(
             "select rows with `rows` (row numbers as in the file, the first data "

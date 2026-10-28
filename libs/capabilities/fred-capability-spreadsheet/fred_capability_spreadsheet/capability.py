@@ -71,6 +71,7 @@ from fred_capability_spreadsheet.workbook import (
     manual_total_hints,
     prepare,
     sanitize_file_name,
+    total_notes,
 )
 
 logger = logging.getLogger(__name__)
@@ -126,7 +127,8 @@ _TOOL_DESCRIPTION = (
     "splitting the data; never drop rows silently. If the tool returns an error, "
     "fix the input it names and call it again.\n"
     "Call this tool once per file. After a successful creation, do not call it "
-    "again for the same file: answer the user. For a change the user asks to a "
+    "again for the same file unless its result notes something to fix: answer "
+    "the user. For a change the user asks to a "
     "file you created (add a column or rows, edit values, split a sheet...), send "
     "only changes: everything else stays as delivered.\n"
     "If you are a sub-agent working for another agent, do not call this tool: "
@@ -160,6 +162,7 @@ class _Outputs:
     preview: bytes | None
     hints: list[str]
     totals: list[str]
+    notes: list[str]
     summary: str
     computed_at: str | None = None
 
@@ -180,9 +183,10 @@ def _build_outputs(request: CreateSpreadsheetInput) -> _Outputs:
         hints = []
     try:
         totals = manual_total_hints(prepared)
+        notes = total_notes(prepared)
     except Exception:
         logger.exception("[SPREADSHEET] manual-total check failed")
-        totals = []
+        totals, notes = [], []
     try:
         preview = build_preview(prepared)
     except Exception:
@@ -192,7 +196,7 @@ def _build_outputs(request: CreateSpreadsheetInput) -> _Outputs:
     computed_at = (
         prepared.computed_at.date().isoformat() if prepared.computed_at else None
     )
-    return _Outputs(content, preview, hints, totals, summary, computed_at)
+    return _Outputs(content, preview, hints, totals, notes, summary, computed_at)
 
 
 async def _preview_part(
@@ -246,6 +250,7 @@ def _created_text(
     summary: str = "",
     revisable: bool = True,
     computed_at: str | None = None,
+    notes: Sequence[str] = (),
 ) -> str:
     note = (
         " Note: these columns hold values you computed, so the file has no formula "
@@ -259,6 +264,7 @@ def _created_text(
             f" Note: {'; '.join(totals)} looks like a manual total next to the "
             "automatic totals row; next time, leave totals to total."
         )
+    note += "".join(f" Note: {text}" for text in notes)
     if charts_ignored:
         note += (
             " Note: charts are not supported yet; the workbook was created without "
@@ -276,10 +282,16 @@ def _created_text(
         else " This file is too large to keep for later changes: to change it, send "
         "the whole workbook in sheets."
     )
+    # With a note the model may send a fix (as changes) or just reply.
+    ending = (
+        " If a note applies, you may send the fix as changes; otherwise reply now."
+        if note
+        else " Do not create it again; reply now."
+    )
     return (
         f"The Excel file '{output_file_name}' has a download button in the chat; "
         f"do not write a download link.{note}{later} File created and shown to the "
-        "user. Do not create it again; reply now."
+        f"user.{ending}"
     )
 
 
@@ -320,7 +332,9 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
         if sheets and changes:
             return _error(
                 "No file was written: send either sheets (the whole workbook) or "
-                "changes (to the last file), not both."
+                "changes (to the last file), not both. To fix the last file, send "
+                "only changes, e.g. {changes: [{op: 'edit_cell', sheet: 'Ventes', "
+                "cell: 'B8', value: {formula: '=SUM(B2:B7)'}}]}."
             )
         if not sheets and not changes:
             return _error(
@@ -471,6 +485,7 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
             outputs.summary,
             revisable,
             outputs.computed_at,
+            outputs.notes,
         )
         turn.created[request_key] = text
         if change_key is not None:

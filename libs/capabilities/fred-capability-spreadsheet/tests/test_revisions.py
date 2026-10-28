@@ -375,6 +375,7 @@ async def test_no_base_and_both_modes_are_refused(store):
     assert artifact.is_error and text == NO_BASE
     text, artifact = await _tool(FakeWorkspace())(**BUDGET, changes=[{"op": "x"}])
     assert artifact.is_error and "not both" in text
+    assert "send only changes, e.g. {changes: [{op: 'edit_cell'" in text
 
 
 @pytest.mark.asyncio
@@ -538,3 +539,11 @@ def test_a_row_wise_column_formula_stays_relative_after_a_revision():
         {"op": "add_rows", "sheet": "Notes", "rows": [["c", 30, None]]}, base=base
     )
     assert _sheets(spec)["Notes"]["columns"][2]["formula"] == "=SUM(B2:B2)*1.2"
+
+
+def test_edit_rows_with_row_objects_shows_the_expected_shape():
+    message = _refused(
+        {"op": "edit_rows", "sheet": "Budget", "rows": [{"values": {"Réel": 1}}]}
+    )
+    assert "`rows` holds row numbers, not row objects" in message
+    assert "rows: [8], values:" in message
