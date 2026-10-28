@@ -56,7 +56,7 @@ it("updates packaged presentation with the interface language while preserving i
   render(true);
   const button = container.querySelector("button")!;
   expect(button.textContent).toContain("Compte rendu de réunion");
-  expect(button.title).toContain("décisions confirmées");
+  expect(button.title).toBe(`Compte rendu de réunion: ${fr.chatbot.skills.catalog["meeting-minutes"].description}`);
   act(() => button.click());
   expect(onOpen).toHaveBeenCalledWith("meeting-minutes");
   const range = document.createRange();
@@ -67,13 +67,13 @@ it("updates packaged presentation with the interface language while preserving i
   expect(selectedSkillText(range, container)).toBe("/meeting-minutes");
   await act(() => language.changeLanguage("en"));
   expect(button.textContent).toContain("Meeting minutes");
-  expect(button.title).toContain("confirmed decisions");
+  expect(button.title).toBe(`Meeting minutes: ${en.chatbot.skills.catalog["meeting-minutes"].description}`);
 });
 
 it("preserves authored custom skills and histories without packaged provenance", () => {
   for (const builtin of [false, undefined]) {
     render(builtin);
-    expect(container.querySelector("button")?.textContent).toContain("/meeting-minutes");
+    expect(container.querySelector("button")?.textContent).toBe("meeting-minutes");
     expect(container.querySelector("button")?.title).toContain("Authored description");
   }
 });
@@ -83,7 +83,7 @@ it("falls back to English, then authored metadata for an untranslated packaged s
   render(true);
   expect(container.textContent).toContain("Meeting minutes");
   render(true, "future-skill");
-  expect(container.textContent).toContain("/future-skill");
+  expect(container.textContent).toBe("future-skill");
   expect(container.querySelector("button")?.title).toContain("Authored description");
 });
 

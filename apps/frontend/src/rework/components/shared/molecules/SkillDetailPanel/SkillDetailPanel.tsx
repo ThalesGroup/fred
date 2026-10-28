@@ -69,16 +69,16 @@ export default function SkillDetailPanel({
             <p role="status">{t("chatbot.skills.loading")}</p>
           ) : available && detail ? (
             <>
+              <p className={styles.description}>
+                <span className={styles.metadataLabel}>{t("chatbot.skills.description")}</span>{" "}
+                <em>{display.description}</em>
+              </p>
               {detail.skill.argument_hint && (
                 <p className={styles.arguments}>
                   <span className={styles.metadataLabel}>{t("chatbot.skills.arguments")}</span>{" "}
                   <code>{detail.skill.argument_hint}</code>
                 </p>
               )}
-              <p className={styles.description}>
-                <span className={styles.metadataLabel}>{t("chatbot.skills.description")}</span>{" "}
-                <em>{display.description}</em>
-              </p>
               <div className={styles.instructions}>
                 <MarkdownRenderer text={instructions} fullWidth localLinksAsText />
               </div>

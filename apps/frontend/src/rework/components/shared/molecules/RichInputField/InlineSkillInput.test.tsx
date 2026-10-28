@@ -127,9 +127,9 @@ afterEach(() => {
 it("keeps canonical text in the editor while placing the clickable token between surrounding words", () => {
   expect(editor().state.doc.toString()).toBe("Before /meeting-minutes after\nAction");
   expect(editor().contentDOM.getAttribute("aria-label")).toBe("chatbot.composerPlaceholder");
-  expect(container.querySelector(".cm-line")?.textContent).toBe("Before /meeting-minutes after");
+  expect(container.querySelector(".cm-line")?.textContent).toBe("Before meeting-minutes after");
   const badge = container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]')!;
-  expect(badge.title).toBe("chatbot.skills.platformProvided\nMeeting minutes");
+  expect(badge.title).toBe("meeting-minutes: Meeting minutes");
   // A skill container; the hairline is for sent messages only.
   expect(badge.dataset).toMatchObject({ kind: "skill" });
   expect(badge.dataset.surface).toBeUndefined();

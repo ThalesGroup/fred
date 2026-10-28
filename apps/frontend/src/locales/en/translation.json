@@ -645,7 +645,6 @@
     },
     "skills": {
       "badge": "Skill: {{name}}",
-      "platformProvided": "Skill provided by the platform",
       "requestPlaceholder": "Your request (optional)",
       "usage": "Use /<skill-name> [request]. Select a skill; the request is optional.",
       "errorTitle": "Skill could not be used",
@@ -684,8 +683,8 @@
           "description": "Check an answer against available evidence, correct unsupported claims and explain verification limits."
         },
         "mermaid": {
-          "title": "Mermaid diagrams",
-          "description": "Create or repair workflow and architecture diagrams using reliable Mermaid syntax."
+          "title": "Graphs",
+          "description": "Create or repair diagrams and charts suited to the question, with a clear and reliable result."
         },
         "grill-me": {
           "title": "Challenge my thinking",
@@ -704,7 +703,8 @@
   },
   "mermaid": {
     "title": "Diagram",
-    "diagram": "Mermaid diagram",
+    "diagram": "Diagram",
+    "generating": "Generating diagram...",
     "copySource": "Copy diagram source",
     "download": "Download diagram as SVG",
     "downloadError": "The diagram could not be downloaded. Please try again.",

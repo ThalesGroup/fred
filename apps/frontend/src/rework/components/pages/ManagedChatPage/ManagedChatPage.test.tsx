@@ -1207,7 +1207,7 @@ describe("ManagedChatPage skill preview", () => {
       );
       const skill = container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]');
       expect(skill).not.toBeNull();
-      expect(skill?.title).toBe("chatbot.skills.platformProvided\nCompare");
+      expect(skill?.title).toBe("compare-options: Compare");
       expect(container.querySelector('[data-testid="composer"]')?.getAttribute("data-placeholder")).toBe("[options]");
       act(() => skill!.click());
       expect(skillPreviewQuery).toHaveBeenLastCalledWith(

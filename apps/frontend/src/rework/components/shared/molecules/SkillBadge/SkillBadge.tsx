@@ -5,7 +5,7 @@
 
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
-import { skillPresentation } from "@rework/utils/skillPresentation";
+import { skillPresentation, skillTooltip } from "@rework/utils/skillPresentation";
 import styles from "./SkillBadge.module.css";
 
 interface SkillBadgeProps {
@@ -18,18 +18,12 @@ interface SkillBadgeProps {
 export function SkillBadge({ name, description, builtin, onOpen }: SkillBadgeProps) {
   const { t } = useTranslation();
   const display = skillPresentation(t, { name, description, builtin });
-  const hint = [
-    t("chatbot.skills.platformProvided"),
-    display.title !== name ? `/${name}` : null,
-    display.description.trim(),
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const hint = skillTooltip(display.title, display.description);
   const content = (
     <>
       <Icon category="outlined" type="customPlatformSkill" />
       <span className={styles.name} data-skill-name={name}>
-        {display.title === name ? `/${name}` : display.title}
+        {display.title}
       </span>
     </>
   );

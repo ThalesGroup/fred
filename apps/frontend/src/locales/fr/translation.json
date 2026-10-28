@@ -645,7 +645,6 @@
     },
     "skills": {
       "badge": "Skill : {{name}}",
-      "platformProvided": "Skill fourni par la plateforme",
       "requestPlaceholder": "Votre demande (facultative)",
       "usage": "Utilisez /<nom-du-skill> [demande]. Sélectionnez un skill ; la demande est facultative.",
       "errorTitle": "Le skill ne peut pas être utilisé",
@@ -684,8 +683,8 @@
           "description": "Vérifier une réponse à partir des sources disponibles, corriger les affirmations non étayées et expliquer les limites de la vérification."
         },
         "mermaid": {
-          "title": "Diagrammes Mermaid",
-          "description": "Créer ou corriger des diagrammes de processus et d'architecture avec une syntaxe Mermaid fiable."
+          "title": "Graphiques",
+          "description": "Créer ou corriger des schémas et graphiques adaptés au besoin, avec un rendu clair et fiable."
         },
         "grill-me": {
           "title": "Mettre mon idée à l'épreuve",
@@ -704,7 +703,8 @@
   },
   "mermaid": {
     "title": "Diagramme",
-    "diagram": "Diagramme Mermaid",
+    "diagram": "Diagramme",
+    "generating": "Génération du diagramme...",
     "copySource": "Copier le code du diagramme",
     "download": "Télécharger le diagramme en SVG",
     "downloadError": "Le diagramme n'a pas pu être téléchargé. Réessayez.",

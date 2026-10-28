@@ -63,7 +63,7 @@ Every ReAct agent with skills configured SHALL receive validated catalog names, 
 
 ### Requirement: Mermaid guidance uses progressive skill loading
 
-The packaged catalog SHALL include an English `mermaid` skill with an advisory argument hint and the existing conservative diagram syntax rules. Mermaid instructions SHALL be loaded only through the shared skill workflow; runtime prompt assembly SHALL NOT inject the former SDK output contract automatically. The existing frontend Mermaid renderer and sanitization SHALL remain available.
+The packaged catalog SHALL include an English `mermaid` skill, presented as Graphs, with an advisory argument hint. Its procedure SHALL choose a representation suited to the question and source facts, with type-specific syntax and examples available as shared references. It SHALL cover flowcharts, sequence, state, class and entity relationship diagrams, mindmaps, timelines, Gantt charts, pie and XY charts, user journeys and Git graphs. Quantitative data, relationships, dates and scores SHALL come from supplied facts or actual tool results. Mermaid instructions SHALL be loaded only through the shared skill workflow; runtime prompt assembly SHALL NOT inject the former SDK output contract automatically. The existing frontend Mermaid renderer and sanitization SHALL remain available.
 
 #### Scenario: Mermaid catalog metadata before loading
 
@@ -79,6 +79,14 @@ The packaged catalog SHALL include an English `mermaid` skill with an advisory a
 - **AND** no tool named `mermaid` is registered
 - **AND** complete returned Mermaid diagrams continue to use the existing frontend renderer
 - **AND** Mermaid instructions direct output to a fenced Markdown block in chat, rather than sending Mermaid source to the static HTML artifact viewer
+- **AND** display labels and captions use the user's language without introducing the rendering engine unless requested
+
+#### Scenario: The chosen diagram has type-specific guidance
+
+- **WHEN** the graph procedure selects a representation
+- **THEN** its syntax reference is available through both the ReAct skill loader and the Deep native filesystem
+- **AND** the procedure directs the model to consult the selected type's guidance before drafting
+- **AND** compatibility guidance describes the installed renderer version and fallback behavior without claiming unperformed validation
 
 ### Requirement: Agents can load and combine skills through shared tools
 
@@ -190,8 +198,9 @@ Managed web chat SHALL accept `/<name> [request]` at the invocation position and
 - **AND** a prefix such as `/comp` filters those skill names without requiring `/skill` first
 - **AND** selecting a skill completes the canonical invocation without sending a turn or losing existing request text
 - **AND** prompt and skill entries sharing a name remain independently selectable
-- **AND** no standalone `/skill` dispatcher row is shown; named skills use a distinct platform pictogram and localized origin hint
-- **AND** hovering the selected or sent skill name shows its description from the current runtime catalog when available, with its platform origin
+- **AND** no standalone `/skill` dispatcher row is shown; named skills use a distinct pictogram and a tooltip containing their localized title and description, without a platform-origin label
+- **AND** hovering the selected or sent skill name shows its localized title followed by a colon and its current description when available, without platform-origin or slash-command text
+- **AND** skill suggestions display the English canonical name without a slash, in parentheses after a different localized title, while insertion and copying preserve canonical slash commands
 
 #### Scenario: Named invocation without arguments
 
@@ -430,7 +439,7 @@ Managed web chat SHALL make an explicitly selected inline skill name clickable i
 - **GIVEN** a successful skill-load step requested by the user or chosen by an agent or child
 - **WHEN** the user activates its row by pointer, Enter or Space
 - **THEN** the current skill instructions open in the existing right-hand panel, replacing any other push panel
-- **AND** arguments, when supplied, are labeled and shown above the description, without dispatching a turn or editing the draft
+- **AND** the localized description precedes the labeled arguments, when supplied, followed by the authored instructions, without dispatching a turn or editing the draft
 
 #### Scenario: Toggle the same skill preview
 

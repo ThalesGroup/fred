@@ -3,6 +3,11 @@
 import type { TFunction } from "i18next";
 import type { SkillSummary } from "../../slices/controlPlane/controlPlaneOpenApi";
 
+export function skillTooltip(title: string, description?: string | null): string {
+  const summary = description?.trim();
+  return summary ? `${title}: ${summary}` : title;
+}
+
 /** Presentation never changes the canonical identity or the model's instructions. */
 export function skillPresentation(
   t: TFunction,

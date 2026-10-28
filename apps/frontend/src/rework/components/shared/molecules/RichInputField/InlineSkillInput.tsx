@@ -7,7 +7,7 @@ import { Annotation, Compartment, EditorState, StateEffect, StateField, Transact
 import { defaultKeymap, history, historyKeymap, invertedEffects } from "@codemirror/commands";
 import { Decoration, EditorView, keymap, WidgetType } from "@codemirror/view";
 import type { CommandChoice, CommandKeyEvent, CommandTriggerBinding, DraftEdit } from "./RichInputField";
-import { skillPresentation } from "@rework/utils/skillPresentation";
+import { skillPresentation, skillTooltip } from "@rework/utils/skillPresentation";
 import badgeStyles from "../SkillBadge/SkillBadge.module.css";
 import iconStyles from "../../atoms/Icon/Icon.module.scss";
 import styles from "./InlineSkillInput.module.css";
@@ -70,7 +70,7 @@ class SkillWidget extends WidgetType {
     icon.setAttribute("aria-hidden", "true");
     const name = document.createElement("span");
     name.className = badgeStyles.name;
-    name.textContent = this.title === this.token.name ? `/${this.token.name}` : this.title;
+    name.textContent = this.title;
     button.append(icon, name);
     button.onclick = () => this.token.onOpen(this.token.name);
     return button;
@@ -349,13 +349,7 @@ export function InlineSkillInput(props: Props) {
           Decoration.replace({
             widget: new SkillWidget(
               token,
-              [
-                t("chatbot.skills.platformProvided"),
-                token.builtin ? `/${token.name}` : null,
-                skillPresentation(t, token).description.trim(),
-              ]
-                .filter(Boolean)
-                .join("\n"),
+              skillTooltip(skillPresentation(t, token).title, skillPresentation(t, token).description),
               t("chatbot.skills.open", { name: skillPresentation(t, token).title }),
               skillPresentation(t, token).title,
             ),
