@@ -72,6 +72,7 @@ from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_
     FastTextOptions,
     FastTextResult,
 )
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_email_processor import FastEmailProcessor
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_csv_processor import (
     FastLiteCsvProcessor,
 )
@@ -583,6 +584,8 @@ class IngestionController:
             registry[".svg"] = FastLiteImageProcessor
             registry[".webp"] = FastLiteImageProcessor
             registry[".ico"] = FastLiteImageProcessor
+            registry[".msg"] = FastEmailProcessor
+            registry[".eml"] = FastEmailProcessor
         logger.info(f"[INGESTION][FAST TEXT] Fast text processor registry: {registry}")
         return registry
 
