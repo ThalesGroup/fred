@@ -58,6 +58,9 @@ libs/fred-core/fred_core/security/rebac/weaver-model.json
 **/target/
 **/configuration.yaml
 **/configuration_*.yaml
+# Local models from `make` downloads; the image fetches its own, so copying
+# these would only duplicate ~550 MB in the application layer.
+apps/knowledge-flow-backend/models/
 
 # Byte-compiled files
 **/__pycache__/
