@@ -2,7 +2,9 @@
 
 The guarantees below apply to the named manager mechanisms and first-user journey.
 They do not certify every Fred component. Invariant IDs remain stable when the
-explanations move between chapters.
+explanations move between chapters. These are current implementation guarantees;
+the [owner/admin comparison](A11-roles.md#responsibility-boundaries-and-current-enforcement) separately
+records the agreed responsibilities and enforcement gaps.
 
 ## Invariants
 
@@ -16,11 +18,11 @@ explanations move between chapters.
 | I6 | A personal space never gains a member, and its organization can always remove its owner. | `spaces::grant`, `spaces::revoke` |
 | I7 | A space's search scope is its ancestors and itself, never its descendants; a personal space's scope is itself; levels only remove spaces. | `spaces::scope` |
 | I8 | Space admin, organization owner and platform owner roles read no content. | OpenFGA `can_read = member or effective_editor or effective_analyst` |
-| I9 | Root bootstrap promotes one caller, once; it never reopens, not even for its own admin after removal. | `bootstrap::grant_root`, marker |
+| I9 | Root bootstrap promotes one caller, once; it never reopens, not even for its original owner after removal. | `bootstrap::grant_root`, marker |
 | I10 | Only an RS256 token signed by the realm, issued by a configured realm for the configured audience, unexpired, with an integer past `iat` and a lifetime within the ceiling, authenticates. | `auth` |
 | I11 | Log lines never carry credential- or content-named fields; dependencies never log their own text. | `logging` |
 | I13 | Every line of a request carries its request id, and the request ends with one `http` event. | `logging::request_logging` |
-| I14 | Every non-personal space retains at least one administrator, and every organization at least one owner, after role revocation. | `spaces::revoke`, organization lock |
+| I14 | Every non-personal space retains at least one admin, and every organization at least one owner, after role revocation. | `spaces::revoke`, organization lock |
 | I15 | Platform owners change platform grants and the platform always retains an owner. New platform grants target an existing Keycloak subject. | `platform`, platform lock, directory lookup |
 | I16 | Every acknowledged role mutation emits exactly one security audit event before SQL commit, independently of application severity and text/JSON format; revoking a role that is not held emits none. | `logging::audit_relation`, mutation services |
 | I17 | Provisioning replay preserves existing identities, committed space IDs and undeclared grants, and repairs requested grants without reusing rolled-back space IDs. | `provisioning`, exact directory lookup, SQL uniqueness |

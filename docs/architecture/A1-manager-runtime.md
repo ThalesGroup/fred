@@ -10,7 +10,7 @@ all Fred components. Start with [User journeys](02.1-user-journeys.md) and
 ```mermaid
 flowchart LR
     client["Client<br/>browser application"]
-    operator["Platform administrator<br/>CLI or HTTP ZIP import"]
+    operator["Platform owner<br/>CLI or HTTP ZIP import"]
     caller["Service acting for a user<br/>with the user's token"]
     manager["control-plane<br/>CLI and REST /control-plane/v1"]
     keycloak["Keycloak<br/>realm app"]
@@ -329,12 +329,14 @@ sequenceDiagram
 Revocation also reads the target's roles and the space's children under the lock
 (and, for an organization, the personal spaces it manages), and refuses with 409
 when the target would keep a role there without direct content here, or retain
-personal creation eligibility without organization content membership. Removing the last administrator of a non-personal space is refused with 409 (I14).
+personal creation eligibility without organization content membership. Removing the last admin of a non-personal space is refused with 409 (I14).
 Removing a role never grants a replacement content role. A personal space is managed from its organization: an organization admin may
 revoke its owner's roles, nobody may grant any (I6).
 
 
-## Root platform-admin bootstrap
+<a id="root-platform-admin-bootstrap"></a>
+
+## Platform owner bootstrap
 
 Two proofs: the caller's verified bearer and the deploy-time secret
 (`app.bootstrap_token_env_var`, compared in constant time). Two transactions under one
@@ -480,7 +482,7 @@ with both guards, audits and commits. Failed publication leaves no committed row
 orphan tuples on an uncommitted UUID confer no effective attachment or access.
 
 Team creation requires management of the parent organization, project creation
-management of the parent team. The nominated administrator must hold a direct content
+management of the parent team. The nominated admin must hold a direct content
 role on the parent, and no sibling may have the same name. The caller receives no
 implicit role.
 
@@ -584,7 +586,7 @@ held SQL connection. No workflow is dispatched by the API.
 | D9 | Configuration, secrets and log output follow Fred's service conventions. | One way to operate every Fred service. | `sourceLocation.function` holds the module path. |
 | D10 | Shared infrastructure, own OpenFGA store. | No dedicated infrastructure to run. | Table names are unique in `fred`; `control-plane` is the logical store name; SQL pins its active store/model IDs. |
 | D11 | Deployed with fred's chart as a separate release. | One chart for every Fred service. | The release references the chart without its `values.schema.json` ([operations reference](A3-manager-operations.md)). |
-| D12 | Owner is technical, on the platform and on organizations; admin, editor, analyst and member are business roles on every space. Admin and content roles remain orthogonal; a child role requires a direct parent content role. | Technical and business administration were confused under one word. | An organization owner names admins and reads nothing; analyst is a content role; revocation never adds a fallback role. |
+| D12 | Owner names a limited institutional responsibility; admin, editor, analyst and member are business roles at organization, team and project scope. Admin and content roles remain orthogonal. | Institutional operations and business management need distinct vocabulary. | Current owner permissions, cumulative-role behavior and mandate gaps are recorded in the [permission comparison](A11-roles.md#responsibility-boundaries-and-current-enforcement); this wording does not change the model. |
 | D13 | Platform mutations, all direct space-role changes, organization creation and import share the platform lock/guard, before organization locks. | Different organization locks cannot prevent competing person assignments; stale remote writes also need a shared fence. | Attachments remain unique, at the cost of serializing role mutations across unrelated organizations. |
 | D14 | Directory operations use a dedicated service client and raw Keycloak subjects in the same realm as callers. | Caller tokens do not carry directory administration privileges. | Grants validate identity existence; revocation tolerates deleted identities. |
 | D15 | Import uses authenticated, read-only initialization and a distinct Keycloak service identity. | Service-client credentials must not substitute for Fred operator authority. | Bootstrap and compatible schema/model initialization precede import; Temporal is not involved. |

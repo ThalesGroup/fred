@@ -67,7 +67,17 @@ format-fix: ## Rewrite formatting in place
 code-quality-fix: format-fix ## Auto-fix what code-quality flags (prettier formatting)
 	@echo "Producer auto-fix tasks completed"
 
-test: ## Run offline producer unit tests
+# Lockfile-pinned consumer caches, provisioned like node_modules: once, then
+# again only when a fixture lockfile changes. The tests themselves stay offline.
+target/react-consumer-cache: fixtures/react-consumer/package-lock.json | node_modules
+	npm run consumer:provision:ui
+	@touch $@
+
+target/iframe-sdk-consumer-cache: fixtures/iframe-sdk-consumer/package-lock.json | node_modules
+	npm run consumer:provision:iframe-sdk
+	@touch $@
+
+test: node_modules target/react-consumer-cache target/iframe-sdk-consumer-cache ## Run offline producer unit tests
 	npm test
 
 pack: ## Build and create all package tarballs

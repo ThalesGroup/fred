@@ -28,7 +28,7 @@ of OpenFGA evaluation depth.
 
 Every request requires personal admission, the caller's unique organization and
 current space authority. Members and effective editors/analysts read; effective
-editors write. Administrator and owner titles confer no content access. Personal
+editors write. Admin and owner titles confer no content access. Personal
 spaces inherit no organization or team authority. The
 [action/role matrix](A7-action-role-matrix.md) defines these distinctions.
 

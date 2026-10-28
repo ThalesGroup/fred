@@ -31,10 +31,10 @@ flowchart TB
 ## Spaces and access
 
 Resources are organized into organization, team, project or personal **spaces**.
-A **role** determines what a person may do within its scope. Administration and
-content access are separate: administering a space does not automatically grant
-access to its documents. See [Security](03-security.md) for access and inheritance
-rules.
+An **admin** manages business activity; an **owner** has a limited institutional
+mandate. Access to content is a separate responsibility. The [security chapter](03-security.md)
+explains these boundaries; the [roles annex](A11-roles.md) distinguishes agreed
+responsibilities from current permissions.
 
 ## Agents, capabilities and models
 

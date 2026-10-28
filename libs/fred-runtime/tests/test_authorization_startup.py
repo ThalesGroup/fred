@@ -45,6 +45,8 @@ def startup(monkeypatch, minimal_config, restore_pod_security):
         dialect=SimpleNamespace(name="postgresql"), dispose=AsyncMock()
     )
     monkeypatch.setattr(container, "_sql_engine", sql)
+    # The fake engine runs no SQL; steering cleanup has its own tests.
+    monkeypatch.setattr(agent_app.turn_steering_mailbox, "cleanup_expired", AsyncMock())
     monkeypatch.setattr(container, "initialize_sql", AsyncMock())
     monkeypatch.setattr(container, "initialize_filesystem", AsyncMock())
     monkeypatch.setattr(container, "get_filesystem", lambda: SimpleNamespace())

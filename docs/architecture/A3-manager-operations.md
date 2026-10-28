@@ -74,10 +74,10 @@ or roles/spaces error and existing acknowledgment counters.
 
 Inspect the subject's direct OpenFGA roles and the committed SQL spaces, including
 personal links and governance-only roles. Agree the intended organization, then
-have administrators authorized in each affected organization revoke its unwanted
+have admins authorized in each affected organization revoke its unwanted
 grants bottom-up:
-projects, teams/personal spaces, then organization. Keep the required administrator
-and owner in every non-personal space. Platform owners can correct organization
+projects, teams/personal spaces, then organization. Keep the required admin
+in every non-personal space and an owner in every organization. Platform owners can correct organization
 owner grants through their independent platform authority. Revocation does not
 require the target to have a valid unique context; it still checks the caller.
 No role or content is deleted automatically, and granting platform ownership does
@@ -224,7 +224,7 @@ credentials or raw transport diagnostics. User lookup encodes the subject as a p
 ## Import boundary and feedback
 
 The CLI reads the operator bearer from a file, separately from the service-client
-secret. HTTP accepts exactly one multipart `file` after verified platform-admin
+secret. HTTP accepts exactly one multipart `file` after verified platform-owner
 authority. The ZIP parser accepts stored/deflated entries without extraction,
 checks actual expanded bytes and rejects duplicate/path-bearing entries, inconsistent
 headers, symlinks, encryption and corrupt data. Archive size is 50 MiB; expanded

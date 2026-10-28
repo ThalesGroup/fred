@@ -46,7 +46,7 @@ including concurrent attempts. Business reads, authorization probes and mutation
 check context as well as OpenFGA permissions. Unattached people receive no business
 access; platform-only people retain their authorized administration paths.
 Contradictory existing grants cause a conflict, not an arbitrary tenant choice.
-Administrators can remove unwanted grants using the existing revocation rules;
+Admins can remove unwanted grants using the existing revocation rules;
 no data or roles are automatically removed. See [operations](A3-manager-operations.md#organization-conflict-recovery).
 
 ## Spaces and memberships
@@ -72,8 +72,8 @@ declarations are rejected before external writes. Existing names are not rewritt
 
 Editor, admin and analyst reach every descendant space; member stays local. An
 analyst of an organization therefore sees all its teams and projects, and a
-project cannot be hidden from its team's editors, administrators or analysts.
-Management and content roles remain separate: an administrator manages the space
+project cannot be hidden from its team's editors, admins or analysts.
+Management and content roles remain separate: an admin manages the space
 and its descendants and reads none of their content without a content role.
 
 A role on a child requires a direct content role on its parent: a person is a
@@ -81,7 +81,7 @@ member of a team before holding a project role, even when an ancestor role alrea
 lets them read the team. A personal space accepts no additional member and inherits
 nothing; its organization can revoke its owner's access, and the owner leaves the
 organization only after leaving the personal space and removing creation eligibility. Every non-personal space
-retains an administrator.
+retains an admin.
 
 Personal-space creation is an explicit organization entitlement. The basic demo
 grants none. First activation creates one private workspace; further activations

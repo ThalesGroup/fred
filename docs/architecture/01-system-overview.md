@@ -127,13 +127,14 @@ with Knowledge Flow.
 
 ## 1.4. Governance: administering resources by space
 
-Organization policies determine which agents, capabilities and models may be
-used. Within organization, team, project and personal spaces, a person's roles
-determine which resources they may read, contribute to or administer.
+The organization admin sets business choices, including permitted agents,
+capabilities and models. Each person's space roles determine what they may
+manage, contribute to or read. The owner's separate institutional mandate and
+the precise role boundaries are defined in the [roles annex](A11-roles.md).
 
 ```mermaid
 flowchart TB
-    admin["Organization administrator"]
+    admin["Organization admin"]
     policy["Organization policy<br/>Permitted agents, capabilities and models"]
     person["Person"]
     roles["Roles in a space<br/>Read / contribute / administer"]

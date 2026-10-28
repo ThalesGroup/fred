@@ -8,6 +8,10 @@ The [managed chat section](#model-administration-and-the-first-managed-chat)
 connects these permissions to the Agent Pod admission boundary; other Python
 surfaces are not inferred to share the same contract.
 
+The [roles annex](A11-roles.md) defines responsibilities, scope, inheritance,
+attribution and the differences between the agreed mandate and current permissions.
+This annex is organized by action and retains the actual permission answers.
+
 ## How to read the matrices
 
 Each role column describes what that role grants **by itself**. Roles are cumulative.
@@ -25,28 +29,6 @@ OpenFGA direct grants, never selected by a request URL or a token group.
 
 The HTTP prefix below is `/control-plane/v1`. Route registration is generated in
 [manager contracts](A2-manager-contracts.md#control-plane-http-surface).
-
-## Role scope and inheritance
-
-| Role | Legal grant location | Applies to | Content authority by itself |
-| --- | --- | --- | --- |
-| `member` | Organization, team, project; personal at creation | That space only | Read |
-| `editor` | Organization, team, project; personal at creation | That space and all non-personal descendants | Read and write |
-| `admin` | Organization, team, project | That space and all non-personal descendants | None |
-| `analyst` | Organization, team, project | That space and all non-personal descendants | Read |
-| `organization_owner` | Organization only | That organization only | None |
-| `personal_space_creator` | Organization only | Eligibility for that person's personal space in that organization | None |
-| `platform_owner` | Platform | Platform governance | None directly |
-| `platform_observer` | Platform | Platform observation permission | None |
-| `feature_manager` | Platform | Team registry and capability-management permission | None |
-| `prompt_editor` | Platform | Platform-prompt permission | None |
-
-An editor/admin/analyst on an organization applies to every team and project below
-it. The same role on a team applies to its projects, not to its parent or siblings.
-A member never descends. A personal space has **no parent link**: its organization
-link identifies governance and supplies no inherited permission. Its SQL
-`personal_owner` is an identity, not the FGA `organization_owner` role. Initial personal grants
-are `member` and `editor`, not `admin` or `organization_owner`.
 
 ## Content actions
 
@@ -82,11 +64,11 @@ The ordinary admission and organization-isolation conditions above still apply.
 | Action | Required authority | Example / additional conditions |
 | --- | --- | --- |
 | Configure model sources and inference destinations | Platform deployment access | Dana provisions approved connections; no business content rights follow. |
-| Read model inventory/policy, refresh an approved source, change permitted models/default/fallback | `Manage` on the organization | Alice's Acme administrator role qualifies. A team administrator, editor or organization owner alone does not. |
+| Read model inventory/policy, refresh an approved source, change permitted models/default/fallback | `Manage` on the organization | Alice's Acme admin role qualifies. A team admin, editor or organization owner alone does not. |
 | Create or edit an agent instance | `Write` on its supported space, plus template-use permission | Bob's Research editor role qualifies when the template is authorized. |
 | Prepare a chat and see its model offers | `Read` on its supported space, plus template-use permission | The instance must be executable; a supplied session must belong to the person and instance. Browser offers contain no inference credentials. |
 | Resolve execution for an admitted turn | The person's `Read` and template-use permission, plus trusted delegation for a workload | A service token alone does not authorize Bob's turn; model policy and conversation binding remain enforced. |
-| Search documents through an assistant | An admitted turn, hence the person's `Read` on the space | Results are limited to that space and its ancestors, and to live, published, retrievable documents. Carl's administrator role alone does not qualify. |
+| Search documents through an assistant | An admitted turn, hence the person's `Read` on the space | Results are limited to that space and its ancestors, and to live, published, retrievable documents. Carl's admin role alone does not qualify. |
 
 Sources: [`model_catalog/http.rs`](../../apps/control-plane/src/model_catalog/http.rs),
 [`agent_instances/http.rs`](../../apps/control-plane/src/agent_instances/http.rs),
@@ -126,17 +108,11 @@ Conditions are part of these rights:
 - For team/project creation, the nominated initial admin holds a direct content
   role (`member`, `editor` or `analyst`) on the parent. The creator gains no implicit
   content role. A project cannot be created under a personal space.
-- Every direct role on a team/project requires a direct content role on its parent;
-  inherited permission alone is insufficient. The recipient cannot be attached to
-  another organization. Owner-only/admin-only attachment is still an attachment.
-- Personal-space eligibility is organization-only and also requires a direct
-  organization content role. First creation additionally checks effective
-  organization read. Existing-space reuse requires both organization read and
-  personal read; eligibility need not still be held. Reuse restores no removed role.
-- A non-personal space keeps at least one admin; an organization keeps at least one
-  owner. Removing a person's last direct content role is refused while dependent
-  child roles or personal-space eligibility remain. No replacement member grant is
-  synthesized. Personal roles are removed from their organization, not self-managed.
+- Role attribution, parent-membership requirements, eligibility, accumulation and
+  last-owner/admin safeguards are defined in the
+  [roles annex](A11-roles.md#attribution-accumulation-and-removal).
+- Personal-space creation requires eligibility and organization read; reuse needs
+  organization and personal read, without restoring removed roles.
 - Every grant names a subject usable as an OpenFGA user and known to the configured
   user directory, checked after authorization; otherwise 422 (I27).
 - Owner changes are platform operations and do not require the actor to belong to
@@ -145,13 +121,6 @@ Conditions are part of these rights:
   actor's matching organization context.
 - Mutation checks occur after the organization lock and before the OpenFGA fence
   and write. A previous UI permission response does not reserve a future right.
-
-The ordinary role routes do not forbid naming oneself as the recipient. An admin
-can grant themselves `editor` where the target-role and parent-membership conditions
-above are satisfied; an organization owner can grant themselves organization admin.
-Thus the separation between management and content read is a distinction between
-current permissions, not a prohibition on self-assignment through governance.
-Personal-space role additions remain forbidden, including for organization admins.
 
 ## Platform operations
 
@@ -169,10 +138,8 @@ Space roles grant none of these operations.
 | List global team registry - `GET /admin/teams` | Yes | No | Yes | No | Non-personal team metadata only; no content access |
 | Read or write space content directly | No | No | No | No | Requires an independently held space content role |
 
-**Provisioning authority is powerful.** Import can add space and platform grants
-without the importing platform owner's local `can_manage`. Thus no automatic
-content access does not mean an inability to grant content access. Import is
-additive; its global authority is distinct from the ordinary space-role routes.
+Import is additive. Its broader role-assignment authority is described in
+[A11](A11-roles.md#attribution-accumulation-and-removal).
 
 ## Entry points with no role prerequisite
 

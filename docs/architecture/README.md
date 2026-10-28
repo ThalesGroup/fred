@@ -33,6 +33,7 @@ the annexes. Validation records and remaining work stay in the working journal.
 | Organization owner/admin selection and creation | [Organization creation](02.1-user-journeys.md#a-platform-owner-creates-an-organization), [Organizations](04-organizations.md#platform-organization-administration) | Source map rows directory and organizations |
 | Organization totals, team detail and their disclosure boundary | [Overview](04-organizations.md#organization-supervision), [Supervision contract](A8-organizations.md#organization-supervision), [Read budget](09-quality.md#organization-supervision-read-budget) | [Implementation trace](A8-organizations.md#pagination-freshness-and-implementation-trace); organization supervision page |
 | Import accounts, teams and roles | [Provisioning journey](02.1-user-journeys.md#provisioning-the-business-account), [ZIP contract](A2-manager-contracts.md#provisioning-declarations) | Source map row ZIP import |
+| What does each role mean, and where do current permissions differ? | [Roles and responsibility boundaries](A11-roles.md) | Role definitions, attribution and SSI comparison in the annex |
 | Who can enter a space or create a folder? | [Resources journey](02.1-user-journeys.md#bob-opens-resources), [Action/role matrix](A7-action-role-matrix.md), [Security](03-security.md) | Source map rows spaces, authorization, folders and roles |
 | Where are data and permissions stored? | [SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue), [OpenFGA model](A2-manager-contracts.md#openfga-model) | `migrations/`, `db.rs`, `openfga/model.fga` in the source map |
 | API endpoints and frontend bindings | [Generated routes](A2-manager-contracts.md#control-plane-http-surface) | Source map section contracts/generated code |
@@ -60,8 +61,9 @@ the [SQL table catalogue](A2-manager-contracts.md#control-plane-sql-catalogue),
 [document journey trace and inspection](A4-document-journey.md), and
 [user journey contracts and implementation](A5-user-journeys.md),
 [security mechanisms](A6-security.md), the [action and role matrix](A7-action-role-matrix.md),
-[organization and provisioning contracts](A8-organizations.md), and
-[document storage and processing](A9-documents.md).
+[organization and provisioning contracts](A8-organizations.md),
+[document storage and processing](A9-documents.md), and
+[roles and responsibility boundaries](A11-roles.md).
 [Open Issues](A10-open-issues.md) records unresolved quality questions
 and the evidence needed to revisit retained choices, without committing to an
 implementation change.

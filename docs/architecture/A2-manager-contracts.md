@@ -289,9 +289,10 @@ not a model-readiness guarantee, and creation does not require a recommendation.
 defines platform-approved discovery and inference destinations separately.
 Control Plane uses the configured discovery authentication; the inference
 connection contains a binding reference that the pod resolves locally, not a secret
-value. Alice may refresh an approved source and change Acme's policy, but her
-organization role cannot rewrite platform connections. Dana must provision both
-discovery and inference access; discovering an offer proves neither permission nor
+value. Alice, Acme's organization admin, may refresh an approved source and
+change Acme's model policy; this is business responsibility, not Oscar's owner
+mandate. Her organization role cannot rewrite platform connections. Dana must
+provision both discovery and inference access; discovering an offer proves neither permission nor
 a successful model call.
 
 <!-- generated: routes apps/control-plane/src/model_catalog/http.rs /control-plane/v1 -->
@@ -615,6 +616,10 @@ revisions with `on_missing: error` and inserts fresh revisions together with the
 role delta. Missing revisions roll back the complete Write. Unknown outcomes end
 the attempt; replay captures fresh revisions and reauthorizes. Role insertions
 remain idempotent. Guard relations imply no permission.
+
+This literal source extract preserves code identifiers and comments. The
+[responsibility comparison](A11-roles.md#responsibility-boundaries-and-current-enforcement) distinguishes
+the agreed owner/admin vocabulary from the permissions currently encoded below.
 
 <!-- generated: include apps/control-plane/openfga/model.fga text -->
 ```text

@@ -25,7 +25,7 @@ a loading or unavailable admission response is not treated as permission.
 
 The platform owner has governance authority, not implicit content access. The
 current frontend directs platform owners to Organizations, including accounts
-that also carry business roles. An organization administrator also has the
+that also carry business roles. An organization admin also has the
 existing Features entry, governed by that organization role: its Agents tab reads
 Rust template discovery and organization defaults without global legacy catalog
 calls. Its existing default switch and withdrawal confirmation write only the
@@ -41,8 +41,10 @@ An alternative to declaring an organization in the ZIP is the Organizations form
 
 1. Enter the organization name.
 2. Search the Owner field by entering at least two characters, then select a
-   proposed account. Repeat for Administrator. The same account can be selected
-   for both roles; removing one selection does not clear the other.
+   proposed account. Repeat for the field currently labelled Organization administrator
+   (organization admin). The same account can be selected for both roles;
+   removing one selection does not clear the other. This current behavior does
+   not enforce [owner/business separation](A11-roles.md#responsibility-boundaries-and-current-enforcement).
 3. Submit. The form prevents duplicate submission while the request is pending.
 4. On success, Fred clears the form and refreshes the organization registry.
    On failure it displays the error and does not automatically replay creation.
@@ -82,7 +84,7 @@ The current importer requires compatible Keycloak authentication and its service
 directory. It can create declared accounts; existing accounts keep their profile
 and password. Generic OIDC/local directory support for candidate search and
 organization creation does not extend to ZIP import. Direct roles
-are explicit: an administrator alone cannot read or write documents. Import never
+are explicit: an admin alone cannot read or write documents. Import never
 accepts another person's terms or creates their personal space implicitly.
 
 A successful import reports reconciled spaces and acknowledged grants. A failure

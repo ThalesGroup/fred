@@ -103,42 +103,24 @@ always keeps one (I15).
 The [action/role matrix](A7-action-role-matrix.md) enumerates every manager HTTP
 action, operator entry point and evaluable permission, including additional gates. The following explains the security model.
 
-Roles are cumulative and granted on one space. Member grants content read; editor
-grants content read and write. Analyst grants content read and the capabilities
-`run_evaluations`, `manage_evaluation_corpus` and `read_conversations_for_evaluation`.
-Admin grants space management and the first two evaluation capabilities, without
-content read or evaluation-conversation read.
-Editor, admin and analyst also apply to every descendant space; member applies to
-its own space only (I20). A personal space has no parent and inherits nothing.
-No platform role reaches a space.
+The [roles annex](A11-roles.md) defines the complete role inventory, inheritance
+(I20), owner/content separation (I21), required organization owners and admins
+(I14), and attribution constraints. It distinguishes the agreed responsibilities
+from the permissions currently enforced. Teams and projects have no owner role.
 
-The organization-only `personal_space_creator` role grants
-`can_create_personal_space`, with no content access or inheritance. Organization
-administrators manage it through existing role routes. Its recipient must hold a
-direct content role on that organization; the last such role cannot be removed
-while eligibility remains. Bundles enforce this dependency and publish content
-before eligibility across batches. Creation requires eligibility and organization
-read; reuse requires current organization and personal read, with no role writes.
-
-Administration is business, ownership is technical. Each organization also has an
-`organization_owner` role: it names and removes the organization's admins and holds no content,
-management or descending permission (I21). Platform owners name organization owners,
-and an organization always keeps one (I14). Every direct space-role grant checks,
-after authorization, that its subject is usable as an OpenFGA user (1..255 characters
+Every direct space-role grant checks, after authorization, that its subject is
+usable as an OpenFGA user (1..255 characters
 without whitespace, `:` or `#`) and known to the configured user directory: Keycloak by
 subject, or the local directory of observed profiles. Otherwise it answers 422; an
 unavailable directory prevents the grant (I27). Owner grants additionally require
 Keycloak subjects in the configured realm, which import also verifies. Revocation accepts a
 deleted identity so stale grants can be removed. The check proves existence at
-lookup time; external IAM deletion is not transactional with OpenFGA. Teams and
-projects have no owner.
+lookup time; external IAM deletion is not transactional with OpenFGA.
 
-Platform owner implies all platform capabilities. Feature manager grants
-`manage_capabilities` and team registry listing; prompt editor grants
-`edit_platform_prompt`; observer grants `observe_platform`. These grants do not imply
-space membership or content access: a platform owner provisions organizations through authenticated import and names
-their owners, and creates teams through ordinary space routes only with an organization
-admin role.
+Personal-space eligibility is checked against direct organization content
+membership. Provisioning publishes content grants before eligibility across batches;
+reuse of a personal space writes no new role. See the
+[role-attribution rules](A11-roles.md#attribution-accumulation-and-removal).
 
 Direct role tuples and the links evaluated for permission remain canonical in OpenFGA.
 SQL records each space's immutable `organization_id` and optional `parent_id` at
@@ -173,7 +155,7 @@ HTTP organization creation and import share this platform serialization and
 guard, preventing competing assignments in different organizations. Team/personal
 creation and content mutations retain their organization lock and guard. Role revocation cannot silently leave a child role,
 or a personal space role in an organization, without a direct parent content role,
-nor remove a non-personal space's last administrator.
+nor remove a non-personal space's last admin.
 
 I5 orders role publication and SQL commits, not HTTP response arrival. Keycloak
 creation is authorized at dispatch; cancellation or later
@@ -201,7 +183,7 @@ An upload checks space write permission before consuming its body, then checks
 current organization, permission, token expiry and CGU under the organization lock
 at reservation and publication. A revocation committed during object IO prevents
 publication. Receipts belong to the initiating actor and also require current space
-read authority; an administrator receives no implicit receipt access.
+read authority; an admin receives no implicit receipt access.
 
 Object keys use document UUIDs and a validated filename, not user-supplied paths. Downloads
 use manager authentication and attachment/octet-stream/nosniff headers. MIME and

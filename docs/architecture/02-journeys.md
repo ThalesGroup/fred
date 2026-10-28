@@ -20,20 +20,23 @@ The following fictional people and spaces keep examples consistent. Acme contain
 Research; Globex contains Support. Each person belongs to only one organization.
 Names identify the examples; permissions come from explicit role grants.
 
+The [roles annex](A11-roles.md) defines the responsibilities and current permissions
+behind these examples.
+
 | Function | Acme | Globex | Direct role at that scope |
 | --- | --- | --- | --- |
 | Organization owner | **Oscar** (`oscar`) | **Olivia** (`olivia`) | `organization_owner` on the organization |
-| Organization administrator | **Alice** (`alice`) | **Grace** (`grace`) | `admin` on the organization |
+| Organization admin | **Alice** (`alice`) | **Grace** (`grace`) | `admin` on the organization |
 | Team | **Research** | **Support** | - |
-| Team administrator | **Carl** (`carl`) | **Marc** (`marc`) | `admin` on the team |
+| Team admin | **Carl** (`carl`) | **Marc** (`marc`) | `admin` on the team |
 | Team analyst | **Elena** (`elena`) | **Nadia** (`nadia`) | `analyst` on the team |
 | Team member | **Carol** (`carol`) | **Phil** (`phil`) | `member` on the team |
 | Team editor | **Bob** (`bob`) | **Zoe** (`zoe`) | `editor` on the team |
 
 Each of the four team personas also holds `member` directly on their organization,
 the prerequisite for a team role. This parent role grants organization-level read
-access but does not descend into teams. Owners and organization administrators
-hold only their listed governance role; none of these twelve people holds a
+access but does not descend into teams. Owners and organization admins
+hold only their listed roles; none of these twelve people holds a
 platform role. Carl can administer Research without reading its documents; Bob
 can read and contribute; Carol and Elena can read. Member stays local, whereas
 analyst also reaches descendant projects when a scenario introduces one.
