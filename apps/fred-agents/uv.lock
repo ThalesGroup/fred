@@ -1118,6 +1118,7 @@ dependencies = [
     { name = "fred-sdk", extra = ["agents"] },
     { name = "langchain-core" },
     { name = "pydantic" },
+    { name = "sqlalchemy" },
     { name = "xlsxwriter" },
 ]
 
@@ -1137,6 +1138,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
     { name = "pytest-socket", marker = "extra == 'dev'", specifier = ">=0.7.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
+    { name = "sqlalchemy", specifier = ">=2.0" },
     { name = "xlsxwriter", specifier = ">=3.2.0" },
 ]
 provides-extras = ["dev"]

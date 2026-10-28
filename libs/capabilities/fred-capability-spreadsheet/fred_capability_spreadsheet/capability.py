@@ -26,6 +26,7 @@ import hashlib
 import logging
 import uuid
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Literal, cast
 
 from fred_sdk.contracts.capability import (
@@ -46,6 +47,7 @@ from fred_sdk.contracts.runtime import WorkspaceFsPort
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel
 
+from fred_capability_spreadsheet.store import WorkbookRow
 from fred_capability_spreadsheet.workbook import (
     CreateSpreadsheetInput,
     SheetSpec,
@@ -342,8 +344,16 @@ class SpreadsheetCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel])
         icon="table_chart",
         chat_parts=[SpreadsheetPreviewPart],
         side_panels=[SidePanelSpec(widget=PANE_WIDGET)],
+        tables=[WorkbookRow],
     )
     ConfigModel = EmptyModel
+
+    @classmethod
+    def migrations_location(cls) -> str:
+        """The capability's own Alembic tree, applied under
+        `cap_spreadsheet_alembic_version` by `python -m fred_runtime migrate`."""
+
+        return str(Path(__file__).resolve().parent / "spreadsheet_migrations")
 
     def tools(
         self, ctx: CapabilityContext[EmptyModel, EmptyModel]

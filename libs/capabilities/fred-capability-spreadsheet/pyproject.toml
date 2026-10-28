@@ -12,6 +12,7 @@ dependencies = [
   "pydantic>=2.7.0,<3.0.0",
   "langchain-core>=0.3.0",
   "xlsxwriter>=3.2.0",
+  "sqlalchemy>=2.0",
 ]
 classifiers = [
   "License :: OSI Approved :: Apache Software License",
@@ -64,6 +65,12 @@ fred-pod = { path = "../../fred-pod", editable = true }
 fred-core = { path = "../../fred-core", editable = true }
 fred-sdk = { path = "../../fred-sdk", editable = true }
 fred-runtime = { path = "../../fred-runtime", editable = true }
+
+[tool.alembic]
+# The capability's own migration tree: `python -m fred_runtime migrate` finds it
+# by entry point; this block lets the `alembic` CLI and the combined checks reach it.
+script_location = "%(here)s/fred_capability_spreadsheet/spreadsheet_migrations"
+prepend_sys_path = ["."]
 
 [dependency-groups]
 dev = [

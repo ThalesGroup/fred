@@ -21,6 +21,7 @@ import io
 import json
 import threading
 from importlib.metadata import entry_points
+from pathlib import Path
 
 import pytest
 from fred_capability_spreadsheet import capability
@@ -31,6 +32,7 @@ from fred_capability_spreadsheet.capability import (
     SpreadsheetCapability,
     SpreadsheetPreviewPart,
 )
+from fred_capability_spreadsheet.store import WorkbookRow
 from fred_runtime.capabilities.assembly import build_capability_agent_block
 from fred_runtime.capabilities.registry import CapabilityRegistry
 from fred_sdk.contracts.capability import (
@@ -134,9 +136,10 @@ def test_manifest_is_admin_gated_graph_compatible_with_a_preview_pane():
     assert manifest.chat_parts == [SpreadsheetPreviewPart]
     assert [panel.widget for panel in manifest.side_panels] == ["spreadsheet_pane"]
     assert manifest.router is None
-    assert manifest.tables == []
+    assert manifest.tables == [WorkbookRow]
     assert manifest.config_fields == []
-    assert SpreadsheetCapability.migrations_location() is None
+    location = Path(SpreadsheetCapability.migrations_location())
+    assert (location / "env.py").is_file() and (location / "versions").is_dir()
 
 
 def test_tool_schema_exposes_only_llm_arguments():
