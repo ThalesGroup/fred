@@ -128,6 +128,10 @@ rule started using that attribute. A few configuration figures (agents
 existing, team members, storage) are not filtered; the filter's info icon
 lists them.
 
+The **Days counted** button (gear icon) chooses whether weekends and French
+public holidays count. By default they are left out of every figure and the
+export; your choice is remembered.
+
 **Export** downloads the current period and scope as a workbook, with
 the same figures and explanations. It contains no names, emails or messages.
 

@@ -5803,7 +5803,7 @@ Invitation history filtering and cleanup (2026-10-09): the shared Select filters
 ## Admin Analytics page (2026-10-28)
 
 `AnalyticsPage` (`AnalyticsView`, shared with the team usage page): a fixed header card with the
-title, `PageHeader`'s `filters` slot (scope, user filter, `TimeRangeSelector`, **Export**) and a
+title, `PageHeader`'s `filters` slot (scope, user filter, `TimeRangeSelector`, counted days, **Export**) and a
 seven-tab `ButtonGroup`; only the tab body scrolls (at 900px and below the header scrolls too).
 Each section is one `surface-container` card; tiles, funnel and ranked lists nest on
 `surface-container-high` (`KpiStatCard` `nested`); charts and tables sit flat on the card. Info

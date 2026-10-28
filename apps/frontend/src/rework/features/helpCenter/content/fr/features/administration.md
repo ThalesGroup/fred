@@ -142,6 +142,10 @@ sont pas connectées depuis que la règle utilise cet attribut. Quelques
 chiffres de configuration (agents existants, membres des équipes, stockage)
 ne sont pas filtrés ; l'icône d'information du filtre les liste.
 
+Le bouton **Jours comptés** (roue crantée) choisit si les week-ends et les jours
+fériés français comptent. Par défaut, ils sont exclus de tous les chiffres et de
+l'export ; ce choix est gardé pour vous.
+
 **Exporter** télécharge la période et le périmètre affichés dans un
 classeur, avec les mêmes chiffres et explications. Il ne contient ni noms, ni
 adresses e-mail, ni messages.

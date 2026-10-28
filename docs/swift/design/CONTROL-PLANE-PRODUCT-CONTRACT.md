@@ -5231,3 +5231,11 @@ storage, prompt length).
 **Team usage page.** `team/:teamId/usage` shows a team admin the analytics
 tabs without Technical, fixed to that team; everyone else sees only their
 own usage.
+
+**Counted days (2026-10-28).** Day-filterable presets
+(`PresetDef.day_filterable`) and the export take `exclude_weekends` and
+`exclude_holidays` (default `false`). Holidays are the eleven French public
+holidays (`kpi/counted_days.py`), days are local days in `tz`; excluded days
+leave every search as merged `must_not` ranges and per-day figures divide by
+counted days. State presets ignore them; more than four years with
+exclusions is 400. The export's About sheet states the counted days.

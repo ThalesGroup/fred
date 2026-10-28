@@ -1656,6 +1656,13 @@
       "export": "Exporter",
       "exporting": "Export en cours…",
       "exportError": "L'export n'a pas abouti. Réessayez dans un instant.",
+      "days": {
+        "open": "Jours comptés",
+        "title": "Jours comptés",
+        "intro": "Les jours exclus ne comptent dans aucun indicateur, ni dans l'export.",
+        "excludeWeekends": "Exclure les weekends",
+        "excludeHolidays": "Exclure les jours fériés français"
+      },
       "howToRead": "Comment le lire :",
       "moreInfo": "Plus d'informations : {{label}}",
       "tabsLabel": "Thèmes",
@@ -1848,8 +1855,8 @@
         },
         "activeUsersPerWorkday": {
           "label": "Utilisateurs actifs par jour",
-          "caption": "moyenne des jours ouvrés",
-          "def": "Nombre moyen de personnes qui envoient au moins un message un jour ouvré donné. Les week-ends sont exclus pour ne pas tirer la moyenne vers le bas."
+          "caption": "moyenne des jours comptés",
+          "def": "Nombre moyen de personnes qui envoient au moins un message, par jour compté. Les jours exclus dans les réglages des jours comptés ne tirent pas la moyenne vers le bas."
         },
         "daysPerWeek": {
           "label": "Jours d'usage par semaine",

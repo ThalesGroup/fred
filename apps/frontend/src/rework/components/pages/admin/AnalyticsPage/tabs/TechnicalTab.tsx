@@ -33,13 +33,13 @@ import { allFailed, type AnalyticsTabProps, KPI_CACHE, kpiArgs, platformOnly } f
 import styles from "../AnalyticsPage.module.css";
 
 /** Platform operations: web research, storage quotas, how agents are built, model governance. */
-export default function TechnicalTab({ timeRange, teamIds, userFilter }: AnalyticsTabProps) {
+export default function TechnicalTab({ timeRange, teamIds, userFilter, days }: AnalyticsTabProps) {
   const { t, i18n } = useTranslation();
   const args = kpiArgs(timeRange, teamIds);
   const storage = useStorageByTeamQuery(args, KPI_CACHE);
   const promptLength = useAgentPromptLengthDistributionQuery(args, platformOnly(teamIds));
   const creationAssistant = useCreationAssistantUsageQuery(
-    kpiArgs(timeRange, teamIds, userFilter),
+    kpiArgs(timeRange, teamIds, userFilter, days),
     platformOnly(teamIds),
   );
   const teamScoped = teamIds.length > 0;
@@ -94,7 +94,7 @@ export default function TechnicalTab({ timeRange, teamIds, userFilter }: Analyti
 
   return (
     <div className={styles.tabContent}>
-      <WebResearchSection timeRange={timeRange} teamIds={teamIds} userFilter={userFilter} />
+      <WebResearchSection timeRange={timeRange} teamIds={teamIds} userFilter={userFilter} days={days} />
 
       <AnalyticsSection id="storage">
         <AnalyticsTable

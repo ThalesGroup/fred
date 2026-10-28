@@ -62,7 +62,12 @@ class _Instances:
         return [r for r in self.rows if r.team_id == team_id]
 
     async def count_published_created(
-        self, windows: list[Any], team_ids: list[str], *, created_by: Any = None
+        self,
+        windows: list[Any],
+        team_ids: list[str],
+        *,
+        created_by: Any = None,
+        excluded: Any = (),
     ) -> list[int]:
         self.published_args = (windows, team_ids)
         self.created_by = created_by

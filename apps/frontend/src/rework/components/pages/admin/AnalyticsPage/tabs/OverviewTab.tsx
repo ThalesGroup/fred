@@ -26,12 +26,12 @@ import { bucketSeries, formatValue } from "../analyticsFormat";
 import { allFailed, type AnalyticsTabProps, KPI_CACHE, kpiArgs, zonedKpiArgs } from "../analyticsQuery";
 import styles from "../AnalyticsPage.module.css";
 
-export default function OverviewTab({ timeRange, teamIds, mode = "platform", userFilter }: AnalyticsTabProps) {
+export default function OverviewTab({ timeRange, teamIds, mode = "platform", userFilter, days }: AnalyticsTabProps) {
   const { t, i18n } = useTranslation();
-  const overview = useAnalyticsOverviewQuery(kpiArgs(timeRange, teamIds, userFilter), KPI_CACHE);
-  const activity = useAnalyticsActivityOverTimeQuery(zonedKpiArgs(timeRange, teamIds, userFilter), KPI_CACHE);
+  const overview = useAnalyticsOverviewQuery(kpiArgs(timeRange, teamIds, userFilter, days), KPI_CACHE);
+  const activity = useAnalyticsActivityOverTimeQuery(zonedKpiArgs(timeRange, teamIds, userFilter, days), KPI_CACHE);
   // Same arguments as the Adoption tab: one cached read serves both.
-  const adoption = useAnalyticsAdoptionQuery(zonedKpiArgs(timeRange, teamIds, userFilter), KPI_CACHE);
+  const adoption = useAnalyticsAdoptionQuery(zonedKpiArgs(timeRange, teamIds, userFilter, days), KPI_CACHE);
   // Active teams out of all teams is a platform figure: a team's page neither shows nor reads it.
   const crossTeam = mode === "platform";
   const catalog = useAnalyticsTeamsCatalogQuery({}, { ...KPI_CACHE, skip: !crossTeam });

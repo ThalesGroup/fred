@@ -1656,6 +1656,13 @@
       "export": "Export",
       "exporting": "Exporting…",
       "exportError": "The export did not complete. Try again in a moment.",
+      "days": {
+        "open": "Days counted",
+        "title": "Days counted",
+        "intro": "Excluded days count in no indicator, nor in the export.",
+        "excludeWeekends": "Exclude weekends",
+        "excludeHolidays": "Exclude French public holidays"
+      },
       "howToRead": "How to read it:",
       "moreInfo": "More information: {{label}}",
       "tabsLabel": "Topics",
@@ -1848,8 +1855,8 @@
         },
         "activeUsersPerWorkday": {
           "label": "Active users per day",
-          "caption": "working-day average",
-          "def": "Average number of people who send at least one message on a given working day. Weekends are left out so they do not pull the average down."
+          "caption": "average over counted days",
+          "def": "Average number of people who send at least one message, per counted day. Days left out in the counted days settings do not pull the average down."
         },
         "daysPerWeek": {
           "label": "Days of use per week",

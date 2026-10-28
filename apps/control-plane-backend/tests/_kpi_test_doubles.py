@@ -19,6 +19,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from control_plane_backend.kpi.presets import (
+    analytics_adoption,
+    analytics_agents,
+    analytics_quality_cost,
+    analytics_teams,
+    web_research_summary,
+)
+from control_plane_backend.kpi.presets.analytics_common import PeriodValue
 from fred_core import KeycloakUser
 
 SINCE = datetime(2026, 10, 1, tzinfo=timezone.utc)
@@ -74,3 +82,34 @@ def model(
         "cached": value(0),
         **extra,
     }
+
+
+def stub_side_reads(monkeypatch: Any) -> None:
+    """Section presets' reads outside OpenSearch, answered empty."""
+
+    async def _people(*args: Any) -> int:
+        return 0
+
+    async def _names(_request: Any, team_ids: list[str]) -> dict[str, str]:
+        return {}
+
+    async def _labels(*args: Any) -> dict[str, str]:
+        return {}
+
+    async def _equipped(*args: Any) -> list[Any]:
+        return []
+
+    async def _published(*args: Any) -> PeriodValue:
+        return PeriodValue(current=0, previous=0)
+
+    async def _enabled(_request: Any) -> bool:
+        return True
+
+    monkeypatch.setattr(analytics_adoption, "people_with_access", _people)
+    monkeypatch.setattr(analytics_teams, "resolve_team_names", _names)
+    monkeypatch.setattr(analytics_quality_cost, "agent_labels", _labels)
+    monkeypatch.setattr(analytics_agents, "agent_labels", _labels)
+    monkeypatch.setattr(analytics_agents, "equipped_capabilities", _equipped)
+    monkeypatch.setattr(analytics_agents, "agents_created_published", _published)
+    monkeypatch.setattr(analytics_agents, "web_research_enabled", _enabled)
+    monkeypatch.setattr(web_research_summary, "web_research_enabled", _enabled)

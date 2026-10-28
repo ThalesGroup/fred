@@ -29,6 +29,7 @@ from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 from pydantic import AwareDatetime, BaseModel
 
+from control_plane_backend.kpi.counted_days import ALL_DAYS, CountedDays
 from control_plane_backend.kpi.presets.analytics_common import (
     SESSIONS,
     TEAM_SPACE,
@@ -114,10 +115,11 @@ async def query_analytics_teams(
     request: Request,
     team_ids: Sequence[TeamId] = (),
     user_ids: Sequence[str] | None = None,
+    days: CountedDays = ALL_DAYS,
 ) -> AnalyticsTeamsResponse:
     # Authorization already resolved by the router (kpi/api.py, KpiScope).
     del user
-    windows = Windows.of(since, until)
+    windows = Windows.of(since, until, days)
     response = await search(store, teams_body(windows, team_ids, user_ids))
     current, previous = period_buckets(response)
 
@@ -174,4 +176,5 @@ ANALYTICS_TEAMS_PRESET = PresetDef(
     summary="Team vs personal conversations and activity per team space, with the previous period",
     team_scopable=True,
     user_filterable=True,
+    day_filterable=True,
 )
