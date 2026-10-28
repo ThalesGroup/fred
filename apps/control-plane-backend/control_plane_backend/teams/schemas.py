@@ -399,3 +399,75 @@ class RemoveTeamMemberResponse(BaseModel):
     policy_mode: str
     retention_seconds: int
     matched_rule_id: str | None = None
+
+
+class TeamJoinRequestError(Exception):
+    """A join request call the team's state refuses; `code` is stable for the UI."""
+
+    def __init__(self, code: str, http_status: int, detail: str) -> None:
+        self.code = code
+        self.http_status = http_status
+        super().__init__(detail)
+
+    @classmethod
+    def not_found(cls) -> TeamJoinRequestError:
+        return cls("join_request_not_found", 404, "No such join request.")
+
+    @classmethod
+    def not_on_request(cls) -> TeamJoinRequestError:
+        return cls("team_not_on_request", 409, "This team does not take requests.")
+
+    @classmethod
+    def already_member(cls) -> TeamJoinRequestError:
+        return cls("already_team_member", 409, "You are already a member.")
+
+    @classmethod
+    def refused(cls) -> TeamJoinRequestError:
+        return cls(
+            "join_request_refused",
+            409,
+            "Your last request was refused less than 24 hours ago.",
+        )
+
+
+class CreateTeamJoinRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str | None = Field(
+        default=None,
+        max_length=280,
+        description="Plain text shown to the team admins only.",
+    )
+
+    @field_validator("message")
+    @classmethod
+    def _blank_is_none(cls, value: str | None) -> str | None:
+        return value.strip() or None if value is not None else None
+
+
+class MyTeamJoinRequest(BaseModel):
+    """The caller's own request to one team, for its card."""
+
+    id: str
+    team_id: str
+    status: Literal["pending", "refused"]
+    created_at: datetime
+    decided_at: datetime | None = None
+    can_ask_again_at: datetime | None = Field(
+        default=None,
+        description="Set on a refused request: when asking is allowed again.",
+    )
+
+
+class TeamJoinRequest(BaseModel):
+    """One request in a team's Members tab: pending, or refused and still acceptable."""
+
+    id: str
+    team_id: str
+    requester_id: str
+    requester_name: str
+    message: str | None = None
+    status: Literal["pending", "refused"]
+    created_at: datetime
+    decided_at: datetime | None = None
+    expires_at: datetime

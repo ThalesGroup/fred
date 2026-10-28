@@ -38,12 +38,12 @@ class WikiProposalLifecycleResult(BaseModel):
     dry_run_actions: int = 0
 
 
-#: Most rows one lifecycle tick deletes; the next tick continues.
+#: Most rows of each table one lifecycle tick deletes; the next tick continues.
 NOTIFICATION_EXPIRY_BATCH_SIZE = 1000
 
 
 class NotificationExpiryResult(BaseModel):
-    """Expired notifications one lifecycle tick deleted."""
+    """Expired notifications and join requests one lifecycle tick deleted."""
 
     deleted: int = 0
 

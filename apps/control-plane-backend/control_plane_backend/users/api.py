@@ -58,6 +58,10 @@ from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
     get_team_service_dependencies,
 )
+from control_plane_backend.teams.join_request_store import (
+    TeamJoinRequestStore,
+    request_group,
+)
 from control_plane_backend.teams.schemas import (
     TeamWithPermissions,
 )
@@ -162,6 +166,10 @@ def _get_user_preferences_store(request: Request) -> UserPreferencesStore:
     return UserPreferencesStore(
         get_application_container(request).get_pg_async_engine()
     )
+
+
+def _get_team_join_request_store(request: Request) -> TeamJoinRequestStore:
+    return get_application_container(request).get_team_join_request_store()
 
 
 def _parse_user_uuid(user: KeycloakUser) -> UUID:
@@ -452,6 +460,9 @@ async def delete_user(
         UserPreferencesStore, Depends(_get_user_preferences_store)
     ],
     notifications: Annotated[NotificationService, Depends(get_notification_service)],
+    join_request_store: Annotated[
+        TeamJoinRequestStore, Depends(_get_team_join_request_store)
+    ],
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
     await rebac.check_user_permission_or_raise(
@@ -482,6 +493,9 @@ async def delete_user(
     await announcement_store.delete_seen_for_user(user_id)
     await preferences_store.delete(user_id)
     await notifications.delete_for_user(user_id)
+    # The admins' open notifications about this person's requests go too.
+    request_ids = await join_request_store.delete_for_requester(user_id)
+    await notifications.delete_groups([request_group(i) for i in request_ids])
     await remove_user_avatar(user_id, deps)
     try:
         await delete_user_from_service(admin, user_id)

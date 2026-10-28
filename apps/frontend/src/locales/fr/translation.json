@@ -3102,8 +3102,23 @@
     },
     "teamCard": {
       "join": "Rejoindre",
+      "joinFailed": "Impossible de rejoindre l'équipe",
       "inviteOnly": "Sur invitation",
-      "memberCount": "{{count}} membres"
+      "memberCount": "{{count}} membres",
+      "askToJoin": "Demander à rejoindre",
+      "requestSent": "Demande envoyée",
+      "cancelRequest": "Annuler la demande",
+      "cancelFailed": "Votre demande n'a pas pu être annulée",
+      "requestDeclined": "Demande refusée",
+      "askAgainAt": "Nouvelle demande possible le {{date}}",
+      "askDialog": {
+        "title": "Demander à rejoindre {{team}}",
+        "confirm": "Envoyer la demande",
+        "messageLabel": "Message (facultatif)",
+        "messageDescription": "Expliquez aux administrateurs de l'équipe pourquoi vous souhaitez la rejoindre. Eux seuls le lisent.",
+        "failed": "Votre demande n'a pas pu être envoyée",
+        "failedDetail": "Réessayez dans un instant."
+      }
     },
     "teamDescription": {
       "label": "Description de l'équipe",
@@ -3133,6 +3148,13 @@
       "warnings": {
         "team_analyst": "Rôle technique : il ouvre aussi l'accès aux extraits de conversation limités sur lesquels ces jeux d'évaluation sont construits. À accorder en connaissance de cause."
       }
+    },
+    "teamMemberGate": {
+      "title": "Vous n'êtes pas membre de cette équipe",
+      "message": "Seuls ses membres peuvent ouvrir les pages de cette équipe.",
+      "pending": "Votre demande pour rejoindre cette équipe attend une réponse.",
+      "declined": "Votre dernière demande pour rejoindre cette équipe a été refusée. Nouvelle demande possible le {{date}}.",
+      "browseTeams": "Parcourir les équipes"
     },
     "teamAdminCharter": {
       "accept": "Accepter",
@@ -3191,7 +3213,21 @@
           "lastName": "Nom",
           "role": "Rôle"
         },
-        "title": "Membres de l'équipe"
+        "title": "Membres de l'équipe",
+        "tabs": {
+          "label": "Membres et demandes",
+          "members": "Membres",
+          "requests": "Demandes"
+        },
+        "joinRequests": {
+          "sentOn": "Demandé le {{date}}",
+          "refusedOn": "Refusé le {{date}}",
+          "accept": "Accepter",
+          "refuse": "Refuser",
+          "acceptAnyway": "Accepter quand même",
+          "empty": "Aucune demande",
+          "loadError": "Impossible de charger les demandes d'adhésion."
+        }
       },
       "navigation": {
         "leaveTeam": "Quitter l'équipe",
@@ -3251,11 +3287,12 @@
         },
         "joiningMode": {
           "label": "Mode d'adhésion",
-          "support": "Les utilisateurs peuvent rejoindre votre équipe librement ou uniquement sur invitation.",
+          "support": "Les utilisateurs peuvent rejoindre votre équipe librement, demander aux administrateurs de les accepter, ou uniquement sur invitation.",
           "open": "Ouverte",
           "inviteOnly": "Sur invitation",
           "manual": "Ajout manuel",
-          "privateSupport": "Une équipe privée n'apparaît pas sur la marketplace : un administrateur de l'équipe ajoute ses membres ou partage un lien d'invitation."
+          "privateSupport": "Une équipe privée n'apparaît pas sur la marketplace : un administrateur de l'équipe ajoute ses membres ou partage un lien d'invitation.",
+          "onRequest": "Sur demande"
         },
         "visibility": {
           "label": "Visibilité de l'équipe",
@@ -4511,7 +4548,10 @@
       "unread": "Non lue",
       "actions": {
         "view": "Voir",
-        "openAgent": "Ouvrir l'agent"
+        "openAgent": "Ouvrir l'agent",
+        "accept": "Accepter",
+        "refuse": "Refuser",
+        "openTeam": "Ouvrir l'équipe"
       },
       "types": {
         "republishNeeded": {
@@ -4531,8 +4571,22 @@
         },
         "unknown": {
           "title": "Notification"
+        },
+        "joinRequested": {
+          "name": "Demande pour rejoindre une équipe",
+          "description": "Envoyée aux administrateurs d'une équipe quand quelqu'un demande à la rejoindre ; les demandes restent dans Membres > Demandes d'adhésion.",
+          "subtitle": "{{name}} demande à rejoindre.",
+          "acceptedBy": "Acceptée par {{name}}",
+          "refusedBy": "Refusée par {{name}}"
+        },
+        "joinRequestAnswered": {
+          "name": "Réponse à une demande d'adhésion",
+          "description": "Envoyée à la personne qui a demandé à rejoindre une équipe dès qu'un administrateur accepte ou refuse.",
+          "acceptedBody": "Un administrateur de l'équipe a accepté votre demande : vous en êtes maintenant membre.",
+          "refusedBody": "Un administrateur de l'équipe a refusé votre demande. Vous pourrez la renouveler dans 24 heures."
         }
-      }
+      },
+      "actionFailed": "L'action n'a pas pu aboutir."
     },
     "notificationSettings": {
       "title": "Notifications",

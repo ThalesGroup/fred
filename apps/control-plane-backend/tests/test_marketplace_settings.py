@@ -40,6 +40,7 @@ from control_plane_backend.marketplace_settings.store import (
 )
 from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from fred_core import (
     AuthorizationError,
     KeycloakUser,
@@ -100,6 +101,7 @@ def _deps(
     unused = cast(Any, object)
     return TeamServiceDependencies(
         get_notification_service=lambda: AsyncMock(spec=NotificationService),
+        get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
         configuration=unused,
         rebac=cast(Any, rebac),
         scheduler_backend=unused,

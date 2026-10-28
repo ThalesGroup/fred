@@ -9,7 +9,8 @@ icon: notifications
 
 The **bell** in the app bar, on the far left under the other entries, tells you
 when something concerns you: an agent you published was changed by someone
-else or left the marketplace. A number on the bell counts the notifications
+else or left the marketplace, someone asks to join your team, or a team
+answered your request. A number on the bell counts the notifications
 you have not seen yet.
 
 ## Open your notifications
@@ -26,7 +27,8 @@ whole screen, with a back arrow.
   list is open still counts on the bell afterwards.
 - **Handled**: as soon as you click **View** or one of its other buttons, it
   takes you where it points (usually the team's **Agents** page) and leaves your
-  list.
+  list. **Accept** and **Refuse** remove it only once the answer is saved: if
+  it fails, the notification stays.
 
 The bell refreshes on its own every few seconds while the platform is open; no
 need to reload the page.
@@ -37,6 +39,11 @@ The cross at the top right of each notification dismisses it: it goes away
 without opening anything. **Clear all**, at the top, deletes every notification at once.
 Deleting a notification only removes it from your list: it changes nothing on
 the agent.
+
+A request to join your team is the exception: it has no cross and stays in
+your list until someone answers it, even when you choose **Clear all**.
+**View** opens the team's members without removing it. Once you or another
+Admin has answered, the cross comes back.
 
 Notifications are deleted on their own **30 days** after they arrive.
 
@@ -61,3 +68,16 @@ Both concern an agent you published on the
 > Only agents published or updated since notifications exist know who
 > published them. An agent published earlier notifies nobody until someone
 > updates its published version.
+
+## Join request notifications
+
+Both start with the team's name, so requests for several teams are easy to
+tell apart.
+
+- **… asked to join.**: sent to a team's Admins when someone asks to join it,
+  with their message (hover a line to read it whole). **Refuse**, on the left, declines; **Accept**, on
+  the right, makes the person a member. The notification then goes away for you, and shows **Accepted by**
+  or **Refused by** followed by your name for the other Admins. If the request
+  was withdrawn or already answered, the notification simply disappears.
+- **Request accepted** or **declined**: the answer to your own request. When you are accepted, **Open the team** takes you to it. See
+  [Asking to join a team](/help/en/features/teams-and-permissions#asking-to-join-a-team).
