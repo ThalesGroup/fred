@@ -21,13 +21,22 @@ use per-range indexes, so a column of SUMIFs stays linear (design.md D15).
 
 from __future__ import annotations
 
+import bisect
 import calendar
 import math
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import date, timedelta
-from decimal import ROUND_DOWN, ROUND_HALF_UP, ROUND_UP, Context, Decimal
+from datetime import date, datetime, timedelta
+from decimal import (
+    ROUND_CEILING,
+    ROUND_DOWN,
+    ROUND_FLOOR,
+    ROUND_HALF_UP,
+    ROUND_UP,
+    Context,
+    Decimal,
+)
 from typing import cast
 
 from fred_capability_spreadsheet.formulas import (
@@ -38,6 +47,7 @@ from fred_capability_spreadsheet.formulas import (
     FormulaError,
     Group,
     Missing,
+    Name,
     Node,
     Num,
     Percent,
@@ -50,6 +60,8 @@ from fred_capability_spreadsheet.formulas import (
 MAX_CELL_READS = 2_000_000
 # Formulas waiting on later formulas (a reversed running total) nest the evaluation.
 MAX_CHAIN = 64
+# Newton steps of IRR and RATE; each step is charged to the cell-read budget.
+MAX_SOLVER_ITERATIONS = 50
 _ROUND_CONTEXT = Context(prec=400)
 _EPOCH = date(1899, 12, 30)
 _MAX_SERIAL = 2_958_465  # 9999-12-31
@@ -136,7 +148,17 @@ class Spill:
 class Evaluator:
     """Evaluates every formula of a workbook; results keyed by (sheet, row, col)."""
 
-    def __init__(self, sheets: Sequence[SheetGrid], max_rows: int) -> None:
+    def __init__(
+        self,
+        sheets: Sequence[SheetGrid],
+        max_rows: int,
+        now: datetime | None = None,
+    ) -> None:
+        # TODAY and NOW read one frozen build time, so every cell agrees.
+        self.now = now
+        self.clock_read = False
+        self._env: list[dict[str, Value]] = []
+        self._sorted: dict[tuple[object, ...], list[float]] = {}
         self.sheets = {s.name.casefold(): s for s in sheets}
         self.order = list(sheets)
         self.max_rows = max_rows
@@ -195,6 +217,8 @@ class Evaluator:
             )
         self._active.add(key)
         self._stack.append(key)
+        # LET names are local to the formula being evaluated.
+        outer_env, self._env = self._env, []
         try:
             value = self.evaluate(cell.node, sheet, cell.rows, top=True)
             result = self._place(sheet, row, col, cell, value)
@@ -206,6 +230,7 @@ class Evaluator:
                 budget=isinstance(exc, BudgetExceededError),
             ) from None
         finally:
+            self._env = outer_env
             self._active.discard(key)
             self._stack.pop()
         self.results[key] = result
@@ -273,6 +298,13 @@ class Evaluator:
             return None
         if isinstance(node, Ref):
             return self.reference(node, sheet, rows, as_array=False)
+        if isinstance(node, Name):
+            value = self.bound(node)
+            # A name bound to one cell reads as that cell's value.
+            if isinstance(value, Array) and value.key is not None:
+                if value.height * value.width == 1:
+                    return value.rows[0][0]
+            return value
         if isinstance(node, Group):
             return self.evaluate(node.inner, sheet, rows)
         if isinstance(node, Unary):
@@ -319,7 +351,35 @@ class Evaluator:
         # Excel: SUM(A1) ignores text in A1, SUM("x") does not.
         if isinstance(node, Ref):
             return self.reference(node, sheet, rows, as_array=True)
+        if isinstance(node, Name):
+            return self.bound(node)
         return self.evaluate(node, sheet, rows)
+
+    def bound(self, node: Name) -> Value:
+        for scope in reversed(self._env):
+            if node.name in scope:
+                return scope[node.name]
+        raise FormulaError(f"'{node.name.lower()}' is not defined by a LET")
+
+    def clock(self) -> datetime:
+        self.clock_read = True
+        if self.now is None:
+            self.now = datetime.now().astimezone()
+        return self.now
+
+    def sorted_numbers(self, value: Value) -> list[float]:
+        """The numbers of a range, sorted once per range (RANK, LARGE...)."""
+
+        if not isinstance(value, Array):
+            return [_num(value)]
+        cached = self._sorted.get(value.key) if value.key is not None else None
+        if cached is None:
+            self.charge(value.height * value.width)
+            cached = sorted(_numbers([value]))
+            if value.key is not None:
+                self._sorted[value.key] = cached
+        self.charge(1)
+        return cached
 
     def call(self, node: Call, sheet: SheetGrid, rows: int) -> Value:
         lazy = _LAZY.get(node.name)
@@ -1312,7 +1372,7 @@ def _approximate(values: list[Scalar], needle: Scalar, name: str) -> int | None:
     if not _sorted_ascending(values):
         raise FormulaError(
             f"{name} with an approximate match needs its lookup values sorted "
-            "ascending; add FALSE (VLOOKUP) or 0 (MATCH) for an exact match, or "
+            "ascending; add FALSE (VLOOKUP, HLOOKUP) or 0 (MATCH) for an exact match, or "
             "use XLOOKUP"
         )
     best = None
@@ -1523,6 +1583,671 @@ def _unique(_: Evaluator, args: list[Value]) -> Value:
     return Array([list(item) for item in kept])
 
 
+# --- information and text (added) -------------------------------------------------
+
+
+def _is_number(v: Scalar) -> Scalar:
+    return isinstance(v, float | int) and not isinstance(v, bool)
+
+
+def _find_text(find: Scalar, within: Scalar, start: Scalar, fold: bool) -> Scalar:
+    needle, hay = _text(find), _text(within)
+    begin = 1 if start is None else int(_num(start))
+    if begin < 1 or begin > len(hay) + 1:
+        return VALUE
+    if not needle:
+        return float(begin)
+    if fold:
+        pattern = _wildcard(needle)
+        if pattern is not None:
+            match = pattern.search(hay, begin - 1)
+            return VALUE if match is None else float(match.start() + 1)
+        needle = re.sub(r"~([*?~])", r"\1", needle).lower()
+        hay = hay.lower()
+    position = hay.find(needle, begin - 1)
+    return VALUE if position < 0 else float(position + 1)
+
+
+def _rept(text: Scalar, times: Scalar) -> Scalar:
+    count = int(_num(times))
+    value = _text(text)
+    if count < 0 or len(value) * count > 32_767:
+        return VALUE
+    return value * count
+
+
+# English names, as Excel en-US (the calendar module's follow the server locale).
+_MONTH_NAMES = (
+    ", January February March April May June July August September October "
+    "November December"
+).split(" ")
+_DAY_NAMES = "Sunday Monday Tuesday Wednesday Thursday Friday Saturday".split()
+_DATE_TOKEN_RE = re.compile(r"y+|m+|d+|h+|s+|[/\-.:, ]", re.IGNORECASE)
+_NUMBER_FORMAT_RE = re.compile(
+    r"(?P<pre>[$€£]?)(?P<int>[#0](?:[#0, ]*[#0])?)?"
+    r"(?:\.(?P<dec>0*#*))?(?P<suf>%| ?[€$£])?"
+)
+TEXT_FORMATS_HINT = (
+    "use 0, 0.00, #,##0, # ##0, 0%, 0.0%, dd/mm/yyyy, mmm yyyy or hh:mm, or a "
+    "typed column instead"
+)
+
+
+def _text_function(value: Scalar, format_text: Scalar) -> Scalar:
+    """TEXT with Excel's (en-US) reading of the common format codes."""
+
+    fmt = _text(format_text)
+    _err(value)
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, str):
+        converted = text_to_number(value)
+        if converted is None:
+            return value
+        value = converted
+    number = _num(value)
+    if not fmt:
+        return ""
+    if fmt.strip().upper() == "GENERAL":
+        return general(number)
+    if re.search(r"[dmyhs]", fmt, re.IGNORECASE):
+        return _format_date(number, fmt)
+    return _format_number(number, fmt)
+
+
+def _refuse_format(fmt: str) -> FormulaError:
+    return FormulaError(f"TEXT format {fmt!r} is not supported; {TEXT_FORMATS_HINT}")
+
+
+def _format_number(number: float, fmt: str) -> str:
+    match = _NUMBER_FORMAT_RE.fullmatch(fmt)
+    if match is None or (match["int"] is None and match["dec"] is None):
+        raise _refuse_format(fmt)
+    pattern, decimals = match["int"] or "", match["dec"] or ""
+    grouped = "," in pattern
+    if grouped and " " in pattern:
+        raise _refuse_format(fmt)
+    suffix = match["suf"] or ""
+    scaled = abs(number) * (100 if suffix == "%" else 1)
+    rounded = Decimal(repr(scaled)).quantize(
+        Decimal(1).scaleb(-len(decimals)),
+        rounding=ROUND_HALF_UP,
+        context=_ROUND_CONTEXT,
+    )
+    whole, _, fraction = f"{rounded:f}".partition(".")
+    fraction = fraction[: len(decimals)]
+    keep = len(decimals.rstrip("#"))
+    while len(fraction) > keep and fraction.endswith("0"):
+        fraction = fraction[:-1]
+    slots = pattern.replace(",", "")
+    zero = slots.find("0")
+    minimum = len(slots[zero:].replace(" ", "")) if zero >= 0 else 0
+    digits = whole.lstrip("0").rjust(minimum, "0")
+    if grouped:
+        body = f"{int(digits):,}" if digits else ""
+    else:
+        # Literal spaces sit at fixed places from the right; extra digits go left.
+        out: list[str] = []
+        rest = digits
+        for char in reversed(slots):
+            if char == " ":
+                out.append(" ")
+            elif rest:
+                out.append(rest[-1])
+                rest = rest[:-1]
+        body = rest + "".join(reversed(out))
+    text = body + ("." + fraction if decimals else "")
+    sign = "-" if number < 0 else ""
+    return f"{sign}{match['pre']}{text}{suffix}"
+
+
+def _format_date(number: float, fmt: str) -> str:
+    if number < 0 or number >= _MAX_SERIAL + 1:
+        raise _Raise(VALUE)
+    whole = int(math.floor(number))
+    seconds = round((number - whole) * 86_400)
+    if seconds == 86_400:
+        whole, seconds = whole + 1, 0
+    if whole == 0:  # Excel shows serial 0 as 00/01/1900
+        year, month, day, weekday = 1900, 1, 0, 6
+    else:
+        when = from_serial(whole)
+        year, month, day = when.year, when.month, when.day
+        weekday = (whole - 1) % 7  # Excel's serial 1 is a Sunday
+    tokens: list[str] = []
+    position = 0
+    while position < len(fmt):
+        match = _DATE_TOKEN_RE.match(fmt, position)
+        if match is None:
+            raise _refuse_format(fmt)
+        tokens.append(match.group(0))
+        position = match.end()
+    codes = [t.lower() for t in tokens]
+
+    def near(index: int, step: int, letter: str) -> bool:
+        index += step
+        while 0 <= index < len(codes) and not codes[index][0].isalpha():
+            index += step
+        return 0 <= index < len(codes) and codes[index][0] == letter
+
+    out: list[str] = []
+    for index, code in enumerate(codes):
+        size = len(code)
+        kind = code[0]
+        if not kind.isalpha():
+            out.append(code)
+        elif kind == "y":
+            out.append(f"{year:04d}" if size > 2 else f"{year % 100:02d}")
+        elif (
+            kind == "m" and size <= 2 and (near(index, -1, "h") or near(index, 1, "s"))
+        ):
+            out.append(f"{seconds // 60 % 60:0{size}d}")
+        elif kind == "m":
+            names = _MONTH_NAMES[month]
+            out.append(
+                f"{month:0{size}d}"
+                if size <= 2
+                else names[:3]
+                if size == 3
+                else names[0]
+                if size == 5
+                else names
+            )
+        elif kind == "d":
+            out.append(
+                f"{day:0{size}d}"
+                if size <= 2
+                else _DAY_NAMES[weekday][:3]
+                if size == 3
+                else _DAY_NAMES[weekday]
+            )
+        elif kind == "h" and size <= 2:
+            out.append(f"{seconds // 3600:0{size}d}")
+        elif kind == "s" and size <= 2:
+            out.append(f"{seconds % 60:0{size}d}")
+        else:
+            raise _refuse_format(fmt)
+    return "".join(out)
+
+
+# --- statistics (added) -------------------------------------------------------------
+
+
+def _variance(sample: bool, root: bool) -> Callable[[Evaluator, list[Value]], Value]:
+    def apply(_: Evaluator, args: list[Value]) -> Value:
+        numbers = _numbers(args)
+        count = len(numbers)
+        if count < (2 if sample else 1):
+            return DIV0
+        mean = math.fsum(numbers) / count
+        spread = math.fsum((x - mean) ** 2 for x in numbers) / (
+            count - 1 if sample else count
+        )
+        return math.sqrt(spread) if root else spread
+
+    return apply
+
+
+def _averagea(_: Evaluator, args: list[Value]) -> Value:
+    numbers: list[float] = []
+    for arg in args:
+        if isinstance(arg, Array):
+            for value in arg.flat():
+                _err(value)
+                if value is None:
+                    continue
+                numbers.append(0.0 if isinstance(value, str) else _num(value))
+        elif arg is not None:
+            numbers.append(_num(arg))
+    return math.fsum(numbers) / len(numbers) if numbers else DIV0
+
+
+def _over(value: Value, fn: Callable[[Scalar], Scalar]) -> Value:
+    """Apply `fn` to one value, or to each value of a multi-cell array."""
+
+    if isinstance(value, Array) and value.height * value.width != 1:
+        return _lift1(value, fn)
+    return fn(_scalar(value))
+
+
+def _percentile_of(numbers: list[float], k: float) -> Scalar:
+    if not numbers or not 0 <= k <= 1:
+        return NUM
+    rank = k * (len(numbers) - 1)
+    low = int(math.floor(rank))
+    if low + 1 >= len(numbers):
+        return numbers[low]
+    return numbers[low] + (rank - low) * (numbers[low + 1] - numbers[low])
+
+
+def _percentile(ev: Evaluator, args: list[Value]) -> Value:
+    numbers = ev.sorted_numbers(args[0])
+    return _over(args[1], lambda k: _percentile_of(numbers, _num(k)))
+
+
+def _quartile(ev: Evaluator, args: list[Value]) -> Value:
+    numbers = ev.sorted_numbers(args[0])
+
+    def at(q: Scalar) -> Scalar:
+        quart = int(_num(q))
+        return NUM if not 0 <= quart <= 4 else _percentile_of(numbers, quart / 4)
+
+    return _over(args[1], at)
+
+
+def _nth(largest: bool) -> Callable[[Evaluator, list[Value]], Value]:
+    def apply(ev: Evaluator, args: list[Value]) -> Value:
+        numbers = ev.sorted_numbers(args[0])
+
+        def at(k: Scalar) -> Scalar:
+            n = math.ceil(_num(k))
+            if not 1 <= n <= len(numbers):
+                return NUM
+            return numbers[-n] if largest else numbers[n - 1]
+
+        return _over(args[1], at)
+
+    return apply
+
+
+def _rank_eq(ev: Evaluator, args: list[Value]) -> Value:
+    if not isinstance(args[1], Array):
+        return VALUE
+    numbers = ev.sorted_numbers(args[1])
+    ascending = len(args) > 2 and args[2] is not None and _num(args[2]) != 0
+
+    def at(v: Scalar) -> Scalar:
+        x = _num(v)
+        low = bisect.bisect_left(numbers, x)
+        if low == len(numbers) or numbers[low] != x:
+            return NA
+        if ascending:
+            return float(low + 1)
+        return float(len(numbers) - bisect.bisect_right(numbers, x) + 1)
+
+    return _over(args[0], at)
+
+
+# --- finance -------------------------------------------------------------------------
+
+
+def _growth(rate: float, periods: float) -> float:
+    try:
+        result = (1 + rate) ** periods
+    except (OverflowError, ZeroDivisionError):
+        raise _Raise(NUM) from None
+    if isinstance(result, complex) or not math.isfinite(result):
+        raise _Raise(NUM)
+    return result
+
+
+def _due(kind: Scalar) -> float:
+    return 1.0 if _num(kind) != 0 else 0.0
+
+
+def _pmt(
+    rate: Scalar, nper: Scalar, pv: Scalar, fv: Scalar = None, kind: Scalar = None
+) -> Scalar:
+    r, n, p, f, t = _num(rate), _num(nper), _num(pv), _num(fv), _due(kind)
+    if n == 0:
+        return NUM
+    if r == 0:
+        return -(p + f) / n
+    g = _growth(r, n)
+    if g == 1:
+        return DIV0
+    return _finite(-(r * (f + p * g)) / ((1 + r * t) * (g - 1)))
+
+
+def _fv(
+    rate: Scalar, nper: Scalar, pmt: Scalar, pv: Scalar = None, kind: Scalar = None
+) -> Scalar:
+    r, n, a, p, t = _num(rate), _num(nper), _num(pmt), _num(pv), _due(kind)
+    if r == 0:
+        return -(p + a * n)
+    g = _growth(r, n)
+    return _finite(-(p * g + a * (1 + r * t) * (g - 1) / r))
+
+
+def _pv(
+    rate: Scalar, nper: Scalar, pmt: Scalar, fv: Scalar = None, kind: Scalar = None
+) -> Scalar:
+    r, n, a, f, t = _num(rate), _num(nper), _num(pmt), _num(fv), _due(kind)
+    if r == 0:
+        return -(f + a * n)
+    g = _growth(r, n)
+    return _finite(-(f + a * (1 + r * t) * (g - 1) / r) / g)
+
+
+def _npv(_: Evaluator, args: list[Value]) -> Value:
+    rate = _num(args[0])
+    if rate == -1:
+        return DIV0
+    values = _numbers(args[1:])
+    return _finite(math.fsum(v / _growth(rate, i + 1) for i, v in enumerate(values)))
+
+
+def _solve(
+    ev: Evaluator, f: Callable[[float], float], guess: float, cost: int
+) -> float:
+    """Newton's method from `guess`; #NUM! when it does not converge."""
+
+    rate = guess
+    for _ in range(MAX_SOLVER_ITERATIONS):
+        ev.charge(cost)
+        step_size = 1e-7 * max(1.0, abs(rate))
+        try:
+            value = f(rate)
+            slope = (f(rate + step_size) - f(rate - step_size)) / (2 * step_size)
+            step = value / slope
+        except (OverflowError, ZeroDivisionError, _Raise):
+            raise _Raise(NUM) from None
+        if not math.isfinite(step):
+            raise _Raise(NUM)
+        rate -= step
+        if rate <= -1:
+            raise _Raise(NUM)
+        if abs(step) < 1e-12 * max(1.0, abs(rate)):
+            return rate
+    raise _Raise(NUM)
+
+
+def _irr(ev: Evaluator, args: list[Value]) -> Value:
+    if not isinstance(args[0], Array):
+        return VALUE
+    flows = _numbers(args[:1])
+    if not any(v > 0 for v in flows) or not any(v < 0 for v in flows):
+        return NUM
+    guess = _num(args[1]) if len(args) > 1 and args[1] is not None else 0.1
+
+    def npv(rate: float) -> float:
+        return math.fsum(v / _growth(rate, i) for i, v in enumerate(flows))
+
+    return _solve(ev, npv, guess, 3 * len(flows))
+
+
+def _rate(ev: Evaluator, args: list[Value]) -> Value:
+    def opt(i: int, default: float) -> float:
+        return _num(args[i]) if len(args) > i and args[i] is not None else default
+
+    n, a, p = _num(args[0]), _num(args[1]), _num(args[2])
+    f, t, guess = opt(3, 0.0), (1.0 if opt(4, 0.0) != 0 else 0.0), opt(5, 0.1)
+    if n <= 0:
+        return NUM
+
+    def balance(r: float) -> float:
+        if abs(r) < 1e-12:
+            return p + a * n + f
+        g = _growth(r, n)
+        return p * g + a * (1 + r * t) * (g - 1) / r + f
+
+    return _solve(ev, balance, guess, 3)
+
+
+# --- lookup (added) -----------------------------------------------------------------
+
+
+def _hlookup(ev: Evaluator, args: list[Value]) -> Value:
+    needle = _scalar(args[0])
+    table = _as_array(args[1])
+    row = int(_num(args[2]))
+    if row < 1:
+        return VALUE
+    if row > table.height:
+        return REF
+    exact = len(args) > 3 and args[3] is not None and not _bool(args[3])
+    values = _vector(table, 0, by_row=False)
+    if exact:
+        found = _find(ev, table, values, needle, 0, by_row=False)
+    else:
+        _err(needle)
+        ev.charge(len(values))
+        found = _approximate(values, needle, "HLOOKUP")
+    return NA if found is None else table.rows[row - 1][found]
+
+
+def _choose(
+    ev: Evaluator, args: tuple[Node, ...], sheet: SheetGrid, rows: int
+) -> Value:
+    index = ev.evaluate(args[0], sheet, rows)
+    if isinstance(index, Array) and index.height * index.width != 1:
+        options = [ev.evaluate(a, sheet, rows) for a in args[1:]]
+
+        def pick(i: Scalar, *values: Scalar) -> Scalar:
+            n = int(_num(i))
+            return values[n - 1] if 1 <= n <= len(values) else VALUE
+
+        return _scalar_function(pick)(ev, [index, *options])
+    n = int(_num(index))
+    if not 1 <= n < len(args):
+        return VALUE
+    chosen = args[n]
+    return 0.0 if isinstance(chosen, Missing) else ev.arg(chosen, sheet, rows)
+
+
+def _let(ev: Evaluator, args: tuple[Node, ...], sheet: SheetGrid, rows: int) -> Value:
+    scope: dict[str, Value] = {}
+    ev._env.append(scope)
+    try:
+        for i in range(0, len(args) - 1, 2):
+            scope[cast(Name, args[i]).name] = ev.arg(args[i + 1], sheet, rows)
+        return ev.evaluate(args[-1], sheet, rows)
+    finally:
+        ev._env.pop()
+
+
+def _sequence(ev: Evaluator, args: list[Value]) -> Value:
+    def opt(i: int, default: float) -> float:
+        return _num(args[i]) if len(args) > i and args[i] is not None else default
+
+    height, width = int(opt(0, 1)), int(opt(1, 1))
+    start, step = opt(2, 1), opt(3, 1)
+    if height < 0 or width < 0:
+        return VALUE
+    if height == 0 or width == 0:
+        return CALC
+    ev.charge(height * width)
+    return Array(
+        [[start + (r * width + c) * step for c in range(width)] for r in range(height)]
+    )
+
+
+# --- dates (added) ----------------------------------------------------------------------
+
+
+def _day_serial(value: Value) -> int:
+    serial = int(math.floor(_num(value)))
+    if not 0 <= serial <= _MAX_SERIAL:
+        raise _Raise(NUM)
+    return serial
+
+
+def _is_workday(serial: int) -> bool:
+    return (serial - 1) % 7 not in (0, 6)  # Excel's serial 1 is a Sunday
+
+
+def _holidays(args: list[Value], index: int) -> set[int]:
+    if len(args) <= index or args[index] is None:
+        return set()
+    days: set[int] = set()
+    for value in _as_array(args[index]).flat():
+        _err(value)
+        if value is None:
+            continue
+        if isinstance(value, bool | str):
+            raise _Raise(VALUE)
+        days.add(_day_serial(value))
+    return days
+
+
+def _days(end: Scalar, start: Scalar) -> Scalar:
+    return float(_day_serial(end) - _day_serial(start))
+
+
+def _networkdays(ev: Evaluator, args: list[Value]) -> Value:
+    a, b = _day_serial(_scalar(args[0])), _day_serial(_scalar(args[1]))
+    holidays = _holidays(args, 2)
+    ev.charge(len(holidays))
+    sign = 1
+    if a > b:
+        a, b, sign = b, a, -1
+    span = b - a + 1
+    count = span // 7 * 5
+    count += sum(1 for d in range(a + span // 7 * 7, b + 1) if _is_workday(d))
+    count -= sum(1 for d in holidays if a <= d <= b and _is_workday(d))
+    return float(sign * count)
+
+
+def _workday(ev: Evaluator, args: list[Value]) -> Value:
+    current = _day_serial(_scalar(args[0]))
+    remaining = int(_num(_scalar(args[1])))
+    holidays = _holidays(args, 2)
+    step = 1 if remaining > 0 else -1
+    remaining = abs(remaining)
+    if remaining > _MAX_SERIAL:
+        return NUM
+    # Any 7 days hold 5 weekdays: jump whole weeks, then walk the rest.
+    while remaining > 5:
+        ev.charge(len(holidays) + 1)
+        weeks = (remaining - 1) // 5
+        target = current + step * 7 * weeks
+        low, high = sorted((current + step, target))
+        off = sum(1 for d in holidays if low <= d <= high and _is_workday(d))
+        remaining -= 5 * weeks - off
+        current = target
+        if not 0 <= current <= _MAX_SERIAL:
+            return NUM
+    while remaining:
+        ev.charge(1)
+        current += step
+        if not 0 < current <= _MAX_SERIAL:
+            return NUM
+        if _is_workday(current) and current not in holidays:
+            remaining -= 1
+    return float(current)
+
+
+def _yearfrac(start: Scalar, end: Scalar, basis: Scalar = None) -> Scalar:
+    kind = 0 if basis is None else int(_num(basis))
+    if not 0 <= kind <= 4:
+        return NUM
+    a, b = _day_serial(start), _day_serial(end)
+    if a > b:
+        a, b = b, a
+    if a == b:
+        return 0.0
+    if kind == 2:
+        return (b - a) / 360
+    if kind == 3:
+        return (b - a) / 365
+    first, last = from_serial(a), from_serial(b)
+    if kind == 1:
+        return _actual_actual(first, last, b - a)
+    d1, d2 = first.day, last.day
+    if kind == 4:
+        d1, d2 = min(d1, 30), min(d2, 30)
+    else:  # US (NASD) 30/360, as Excel applies it
+        end_of_feb1 = first.month == 2 and d1 == calendar.monthrange(first.year, 2)[1]
+        end_of_feb2 = last.month == 2 and d2 == calendar.monthrange(last.year, 2)[1]
+        if d1 == 31 and d2 == 31:
+            d1 = d2 = 30
+        elif d1 == 31:
+            d1 = 30
+        elif d1 == 30 and d2 == 31:
+            d2 = 30
+        elif end_of_feb1 and end_of_feb2:
+            d1 = d2 = 30
+        elif end_of_feb1:
+            d1 = 30
+    days = (last.year - first.year) * 360 + (last.month - first.month) * 30 + d2 - d1
+    return days / 360
+
+
+def _actual_actual(first: date, last: date, days: int) -> float:
+    within_year = first.year == last.year or (
+        last.year == first.year + 1
+        and (first.month, first.day) >= (last.month, last.day)
+    )
+    if within_year:
+        leap = calendar.isleap(first.year) and first.year == last.year
+        for year in {first.year, last.year}:
+            if calendar.isleap(year) and first <= date(year, 2, 29) <= last:
+                leap = True
+        return days / (366 if leap else 365)
+    years = last.year - first.year + 1
+    span = (date(last.year + 1, 1, 1) - date(first.year, 1, 1)).days
+    return days / (span / years)
+
+
+# --- rounding (added) ------------------------------------------------------------------
+
+
+def _to_multiple(value: float, multiple: float, mode: str) -> float:
+    quotient = _ROUND_CONTEXT.divide(Decimal(repr(value)), Decimal(repr(multiple)))
+    steps = quotient.to_integral_value(rounding=mode)
+    return float(steps * Decimal(repr(multiple)))
+
+
+def _ceiling(number: Scalar, significance: Scalar) -> Scalar:
+    x, s = _num(number), _num(significance)
+    if s == 0 or x == 0:
+        return 0.0
+    if x > 0 and s < 0:
+        return NUM
+    return _to_multiple(x, s, ROUND_CEILING)
+
+
+def _floor(number: Scalar, significance: Scalar) -> Scalar:
+    x, s = _num(number), _num(significance)
+    if s == 0:
+        return 0.0 if x == 0 else DIV0
+    if x > 0 and s < 0:
+        return NUM
+    return _to_multiple(x, s, ROUND_FLOOR)
+
+
+def _math_rounding(up: bool) -> Callable[..., Scalar]:
+    def apply(
+        number: Scalar, significance: Scalar = None, mode: Scalar = None
+    ) -> Scalar:
+        x = _num(number)
+        s = 1.0 if significance is None else abs(_num(significance))
+        if s == 0 or x == 0:
+            return 0.0
+        away = mode is not None and _num(mode) != 0
+        if x < 0 and away:
+            direction = ROUND_FLOOR if up else ROUND_CEILING
+        else:
+            direction = ROUND_CEILING if up else ROUND_FLOOR
+        return _to_multiple(x, s, direction)
+
+    return apply
+
+
+def _mround(number: Scalar, multiple: Scalar) -> Scalar:
+    x, m = _num(number), _num(multiple)
+    if m == 0 or x == 0:
+        return 0.0
+    if (x > 0) != (m > 0):
+        return NUM
+    return _to_multiple(x, m, ROUND_HALF_UP)
+
+
+def _trunc(number: Scalar, digits: Scalar = None) -> Scalar:
+    return _round_with(ROUND_DOWN)(number, 0.0 if digits is None else digits)
+
+
+def _clock(date_only: bool) -> Callable[[Evaluator, list[Value]], Value]:
+    def apply(ev: Evaluator, _: list[Value]) -> Value:
+        now = ev.clock()
+        serial = to_serial(now.date())
+        if date_only:
+            return serial
+        return serial + (now.hour * 3600 + now.minute * 60 + now.second) / 86_400
+
+    return apply
+
+
 # These scan through indexes or count their own reads.
 _SELF_CHARGING = frozenset(
     {
@@ -1539,6 +2264,16 @@ _SELF_CHARGING = frozenset(
         "XLOOKUP",
         "XMATCH",
         "INDEX",
+        "HLOOKUP",
+        "PERCENTILE.INC",
+        "QUARTILE.INC",
+        "RANK.EQ",
+        "RANK",
+        "LARGE",
+        "SMALL",
+        "WORKDAY",
+        "NETWORKDAYS",
+        "SEQUENCE",
     }
 )
 
@@ -1548,6 +2283,8 @@ _LAZY: dict[str, Callable[[Evaluator, tuple[Node, ...], SheetGrid, int], Value]]
     "IFNA": _ifna,
     "IFS": _ifs,
     "SWITCH": _switch,
+    "CHOOSE": _choose,
+    "LET": _let,
 }
 
 _FUNCTIONS: dict[str, Callable[[Evaluator, list[Value]], Value]] = {
@@ -1611,4 +2348,46 @@ _FUNCTIONS: dict[str, Callable[[Evaluator, list[Value]], Value]] = {
     "FILTER": _filter,
     "SORT": _sort,
     "UNIQUE": _unique,
+    "SEQUENCE": _sequence,
+    "HLOOKUP": _hlookup,
+    "TRUNC": _scalar_function(_trunc),
+    "MROUND": _scalar_function(_mround),
+    "CEILING": _scalar_function(_ceiling),
+    "FLOOR": _scalar_function(_floor),
+    "CEILING.MATH": _scalar_function(_math_rounding(up=True)),
+    "FLOOR.MATH": _scalar_function(_math_rounding(up=False)),
+    "AVERAGEA": _averagea,
+    "STDEV.S": _variance(sample=True, root=True),
+    "STDEV": _variance(sample=True, root=True),
+    "STDEV.P": _variance(sample=False, root=True),
+    "VAR.S": _variance(sample=True, root=False),
+    "VAR.P": _variance(sample=False, root=False),
+    "PERCENTILE.INC": _percentile,
+    "QUARTILE.INC": _quartile,
+    "RANK.EQ": _rank_eq,
+    "RANK": _rank_eq,
+    "LARGE": _nth(largest=True),
+    "SMALL": _nth(largest=False),
+    "PMT": _scalar_function(_pmt),
+    "FV": _scalar_function(_fv),
+    "PV": _scalar_function(_pv),
+    "NPV": _npv,
+    "IRR": _irr,
+    "RATE": _rate,
+    "ISBLANK": _scalar_function(lambda v: v is None),
+    "ISNUMBER": _scalar_function(_is_number),
+    "ISTEXT": _scalar_function(lambda v: isinstance(v, str)),
+    "ISERROR": _scalar_function(lambda v: isinstance(v, XLError)),
+    "ISNA": _scalar_function(lambda v: v == NA),
+    "TEXT": _scalar_function(_text_function),
+    "FIND": _scalar_function(lambda f, w, s=None: _find_text(f, w, s, fold=False)),
+    "SEARCH": _scalar_function(lambda f, w, s=None: _find_text(f, w, s, fold=True)),
+    "REPT": _scalar_function(_rept),
+    "EXACT": _scalar_function(lambda a, b: _text(a) == _text(b)),
+    "DAYS": _scalar_function(_days),
+    "WORKDAY": _workday,
+    "NETWORKDAYS": _networkdays,
+    "YEARFRAC": _scalar_function(_yearfrac),
+    "TODAY": _clock(date_only=True),
+    "NOW": _clock(date_only=False),
 }

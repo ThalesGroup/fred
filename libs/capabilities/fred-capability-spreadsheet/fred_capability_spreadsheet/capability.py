@@ -110,12 +110,13 @@ _TOOL_DESCRIPTION = (
     "right: 1.2}}, {header: 'Part', type: 'percent', compute: {op: "
     "'share_of_total', column: 'HT'}}], rows [[100, null, null]].\n"
     "Other formulas: prefer compute and total. For lookups, conditions, text, "
+    "statistics, finance (PMT, IRR...), "
     "dates or a summary sheet reading other sheets, set formula on a column (the "
     "formula of row 2, filled down; null for it in rows; $ on a cell every row "
     "reads) or send a cell as {formula: '=...'}. Excel syntax, English names, "
     "commas; another sheet is 'Sheet name'!B2:B20 (row 1 is the header). Never "
-    "send a formula as a plain string. Not available: TODAY, NOW, INDIRECT, "
-    "OFFSET, HYPERLINK, TEXT, links to other files.\n"
+    "send a formula as a plain string. Not available: RAND, INDIRECT, OFFSET, "
+    "HYPERLINK, LAMBDA, links to other files.\n"
     "Send numbers and amounts as JSON "
     "numbers (1234.5), never as text with thousands separators or currency "
     "symbols. Percents go in a percent column as fractions (0.15) or '15%'. "
@@ -165,6 +166,7 @@ class _Outputs:
     hints: list[str]
     totals: list[str]
     summary: str
+    computed_at: str | None = None
 
 
 def _build_outputs(request: CreateSpreadsheetInput) -> _Outputs:
@@ -192,7 +194,10 @@ def _build_outputs(request: CreateSpreadsheetInput) -> _Outputs:
         # The preview is a convenience: never lose the file over it.
         logger.exception("[SPREADSHEET] preview build failed")
         preview = None
-    return _Outputs(content, preview, hints, totals, summary)
+    computed_at = (
+        prepared.computed_at.date().isoformat() if prepared.computed_at else None
+    )
+    return _Outputs(content, preview, hints, totals, summary, computed_at)
 
 
 async def _preview_part(
@@ -245,6 +250,7 @@ def _created_text(
     charts_ignored: bool = False,
     summary: str = "",
     revisable: bool = True,
+    computed_at: str | None = None,
 ) -> str:
     note = (
         " Note: these columns hold values you computed, so the file has no formula "
@@ -262,6 +268,11 @@ def _created_text(
         note += (
             " Note: charts are not supported yet; the workbook was created without "
             "the chart. Tell the user."
+        )
+    if computed_at:
+        note += (
+            f" Note: TODAY/NOW values were computed at build time ({computed_at}); "
+            "Excel updates them when the file opens."
         )
     later = (
         " To change it later, call create_spreadsheet with changes (names and row "
@@ -464,6 +475,7 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
             charts_ignored,
             outputs.summary,
             revisable,
+            outputs.computed_at,
         )
         turn.created[request_key] = text
         if change_key is not None:

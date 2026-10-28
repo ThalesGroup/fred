@@ -19,7 +19,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import pytest
@@ -1138,6 +1138,41 @@ def test_filter_spills_as_a_dynamic_array():
     assert '<f t="array" ref="A2:B2"' in xml
     preview = json.loads(build_preview(prepare(_request(ORDERS, PRICES, sheet))))
     assert preview["sheets"][2]["rows"] == [["Beta", "Clou"]]
+
+
+def test_sequence_spills_and_let_names_are_stored_with_their_prefix():
+    sheet = _sheet(
+        "Calc",
+        columns=[{"header": "N", "type": "number"}, {"header": "M", "type": "number"}],
+        rows=[
+            [{"formula": "=SEQUENCE(2,1,10)"}, {"formula": "=LET(x,A2,x*2)"}],
+            [None, None],
+        ],
+    )
+    data = _xlsx(sheet)
+    xml = _sheet_xml(data, 1)
+    assert "_xlfn.SEQUENCE(2,1,10)" in xml and '<f t="array" ref="A2:A3"' in xml
+    assert "_xlfn.LET(_xlpm.x,A2,_xlpm.x*2)" in xml
+    values = load_workbook(io.BytesIO(data), data_only=True)["Calc"]
+    assert [values["A2"].value, values["A3"].value, values["B2"].value] == [10, 11, 20]
+
+
+def test_today_uses_one_build_time_reported_in_the_preview():
+    sheet = _sheet(
+        "Suivi",
+        columns=[
+            {"header": "Jour", "type": "date"},
+            {"header": "Age", "type": "integer"},
+        ],
+        rows=[[{"formula": "=TODAY()"}, {"formula": "=DAYS(TODAY(),DATE(2026,10,1))"}]],
+    )
+    prepared = prepare(_request(sheet), now=datetime(2026, 10, 28, 9, 0))
+    assert prepared.computed_at == datetime(2026, 10, 28, 9, 0)
+    assert prepared.sheets[0].rows[0] == [date(2026, 10, 28), 27]
+    assert json.loads(build_preview(prepared))["computed_at"] == "2026-10-28"
+    plain = prepare(_request(_sheet(rows=[[{"formula": '=TEXT(45000,"yyyy")'}]])))
+    assert plain.computed_at is None
+    assert "computed_at" not in json.loads(build_preview(plain))
 
 
 def test_spill_into_a_filled_cell_names_the_cell():

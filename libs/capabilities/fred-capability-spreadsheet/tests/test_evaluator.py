@@ -16,11 +16,12 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 from fred_capability_spreadsheet.evaluator import (
     MAX_CELL_READS,
+    MAX_SOLVER_ITERATIONS,
     Evaluator,
     FormulaCell,
     LocatedFormulaError,
@@ -29,7 +30,9 @@ from fred_capability_spreadsheet.evaluator import (
     from_serial,
     to_serial,
 )
-from fred_capability_spreadsheet.formulas import FUNCTIONS, parse
+from fred_capability_spreadsheet.formulas import FUNCTIONS, FormulaError, parse
+
+NOW = datetime(2026, 10, 28, 14, 30)
 
 # Sheet "D": A = category, B = amount, C = date; rows 2..6.
 DATA = [
@@ -55,7 +58,7 @@ def _eval(text: str) -> object:
     data = _grid()
     out = SheetGrid("S", 5)
     out.formulas[(2, 1)] = FormulaCell(parse(text, ["D", "S"]), may_spill=True)
-    evaluator = Evaluator([data, out], max_rows=5002)
+    evaluator = Evaluator([data, out], max_rows=5002, now=NOW)
     evaluator.run()
     return evaluator.results[("S", 2, 1)]
 
@@ -64,7 +67,7 @@ def _spill(text: str) -> list[list[object]]:
     data = _grid()
     out = SheetGrid("S", 5)
     out.formulas[(2, 1)] = FormulaCell(parse(text, ["D", "S"]), may_spill=True)
-    evaluator = Evaluator([data, out], max_rows=5002)
+    evaluator = Evaluator([data, out], max_rows=5002, now=NOW)
     evaluator.run()
     spill = evaluator.spills[("S", 2, 1)]
     spilled = evaluator.spilled()
@@ -167,6 +170,104 @@ CASES = [
     ('=1<"a"', True),
     ('=0.1+0.2&""', "0.3"),
     ('=1E+20&""', "1E+20"),
+    # text and information
+    ('=TEXT(1234.567,"#,##0.00")', "1,234.57"),
+    ('=TEXT(1234567,"# ##0")', "1234 567"),  # en-US: the space is a literal
+    ('=TEXT(-0.5,"0")', "-1"),
+    ('=TEXT(0.256,"0.0%")', "25.6%"),
+    ('=TEXT(D!C2,"dd/mm/yyyy")', "31/01/2026"),
+    ('=TEXT(D!C2,"mmm yyyy")', "Jan 2026"),
+    ('=TEXT(0.5+1/1440,"hh:mm")', "12:01"),
+    ('=TEXT("abc","0")', "abc"),
+    ('=FIND("b","abcb",3)', 4.0),
+    ('=FIND("B","abc")', XLError("#VALUE!")),
+    ('=SEARCH("B*","aab")', 3.0),
+    ('=SEARCH("z","a")', XLError("#VALUE!")),
+    ('=REPT("ab",3)', "ababab"),
+    ('=REPT("a",-1)', XLError("#VALUE!")),
+    ('=EXACT("a","A")', False),
+    ("=ISBLANK(D!A6)", True),
+    ('=ISBLANK("")', False),
+    ("=ISNUMBER(D!B2)", True),
+    ("=ISNUMBER(D!B6)", False),
+    ("=ISTEXT(D!B6)", True),
+    ("=ISERROR(1/0)", True),
+    ("=ISNA(1/0)", False),
+    ('=ISNA(XLOOKUP("q",D!A2:A6,D!B2:B6))', True),
+    # statistics (numbers only from ranges: B6 "x" is skipped)
+    ("=STDEV.S(D!B2:B6)", 5.446711546122731),
+    ("=STDEV(D!B2:B6)", 5.446711546122731),
+    ("=STDEV.S(1)", XLError("#DIV/0!")),
+    ("=STDEV.P(D!B2:B6)", 4.716990566028302),
+    ("=VAR.S(D!B2:B6)", 29.666666666666668),
+    ("=VAR.P(D!B2:B6)", 22.25),
+    ("=PERCENTILE.INC(D!B2:B6,0.3)", 1.5),
+    ("=PERCENTILE.INC(D!B2:B6,2)", XLError("#NUM!")),
+    ("=QUARTILE.INC(D!B2:B6,1)", 0.75),
+    ("=QUARTILE.INC(D!B2:B6,5)", XLError("#NUM!")),
+    ("=RANK.EQ(D!B3,D!B2:B6)", 2.0),
+    ("=RANK(D!B3,D!B2:B6,1)", 3.0),
+    ("=RANK(7,D!B2:B6)", XLError("#N/A")),
+    ("=LARGE(D!B2:B6,2)", 5.0),
+    ("=SMALL(D!B2:B6,1)", -3.0),
+    ("=SMALL(D!B2:B6,5)", XLError("#NUM!")),
+    ("=AVERAGEA(D!A2:B6)", 1.5555555555555556),
+    ("=AVERAGEA(D!C4:C5)", XLError("#DIV/0!")),
+    # finance
+    ("=PMT(0.05/12,60,10000)", -188.7123364401099),
+    ("=PMT(0,10,1000)", -100.0),
+    ("=PMT(0.05,0,100)", XLError("#NUM!")),
+    ("=FV(0.05/12,60,-200)", 13601.216568168567),
+    ("=FV(0.05,10,-100,-1000,1)", 2949.57334301007),
+    ("=PV(0.05/12,60,-200)", 10598.14126478543),
+    ("=NPV(0.1,-1000,300,400,500)", -19.124376750222126),
+    ("=NPV(-1,1)", XLError("#DIV/0!")),
+    ("=IRR(D!B2:B3)", XLError("#NUM!")),  # no negative flow
+    ("=RATE(60,-200,10000)", 0.006183413161253943),
+    # lookup
+    ('=HLOOKUP("Amt",D!A1:C3,3,FALSE)', 5.0),
+    ('=HLOOKUP("zz",D!A1:C3,2,FALSE)', XLError("#N/A")),
+    ('=HLOOKUP("Amt",D!A1:C3,9,FALSE)', XLError("#REF!")),
+    ('=CHOOSE(2,"a","b")', "b"),
+    ("=SUM(CHOOSE(1,D!B2:B3,D!B4))", 15.0),
+    ("=CHOOSE(4,1,2)", XLError("#VALUE!")),
+    # dates (2026-01-31 is a Saturday)
+    ("=DAYS(D!C3,D!C2)", 15.0),
+    ("=DAYS(-1,1)", XLError("#NUM!")),
+    ("=WORKDAY(D!C2,5)", to_serial(date(2026, 2, 6))),
+    ("=WORKDAY(D!C2,-1)", to_serial(date(2026, 1, 30))),
+    ("=WORKDAY(DATE(2026,1,2),10,D!C2:C3)", to_serial(date(2026, 1, 16))),
+    ("=WORKDAY(DATE(2026,2,13),1,D!C2:C3)", to_serial(date(2026, 2, 16))),
+    ("=NETWORKDAYS(D!C2,D!C3)", 10.0),
+    ("=NETWORKDAYS(D!C3,D!C2)", -10.0),
+    ("=NETWORKDAYS(DATE(2026,2,9),DATE(2026,2,20),DATE(2026,2,13))", 9.0),
+    ("=YEARFRAC(DATE(2024,1,1),DATE(2025,3,1),1)", 1.1627906976744187),
+    ("=YEARFRAC(DATE(2024,1,31),DATE(2024,3,31))", 0.16666666666666666),
+    ("=YEARFRAC(DATE(2024,2,29),DATE(2025,2,28),4)", 0.9972222222222222),
+    ("=YEARFRAC(1,2,5)", XLError("#NUM!")),
+    ("=TODAY()", to_serial(date(2026, 10, 28))),
+    ("=NOW()-TODAY()", 14.5 / 24),
+    # rounding
+    ("=TRUNC(-8.97,1)", -8.9),
+    ("=TRUNC(8.97)", 8.0),
+    ("=MROUND(10,3)", 9.0),
+    ("=MROUND(-5,-2)", -6.0),
+    ("=MROUND(5,-2)", XLError("#NUM!")),
+    ("=CEILING(2.2,0.1)", 2.2),
+    ("=CEILING(-2.5,2)", -2.0),
+    ("=CEILING(2.5,-2)", XLError("#NUM!")),
+    ("=FLOOR(-2.5,2)", -4.0),
+    ("=FLOOR(2.5,0)", XLError("#DIV/0!")),
+    ("=CEILING.MATH(-5.5)", -5.0),
+    ("=CEILING.MATH(-5.5,2,1)", -6.0),
+    ("=FLOOR.MATH(-5.5)", -6.0),
+    ("=FLOOR.MATH(5.5,2)", 4.0),
+    # arrays and names
+    ("=SUM(SEQUENCE(4,1,10,5))", 70.0),
+    ("=SEQUENCE(0)", XLError("#CALC!")),
+    ("=LET(x,D!B2,y,x*2,y+1)", 21.0),
+    ("=LET(rng,D!B2:B6,SUM(rng)/COUNT(rng))", 3.5),
+    ("=LET(x,1,LET(y,x+1,y*10))", 20.0),
 ]
 
 
@@ -182,6 +283,81 @@ def test_functions_follow_excel(text, expected):
 def test_every_allowed_function_is_exercised():
     used = {name for text, _ in CASES for name in FUNCTIONS if f"{name}(" in text}
     assert used | {"FILTER", "SORT", "UNIQUE"} == set(FUNCTIONS)
+
+
+def test_irr_converges_and_charges_its_iterations():
+    data = _grid()
+    data.values.update({(2, 4): -1000.0, (3, 4): 300.0, (4, 4): 400.0, (5, 4): 500.0})
+    # 1, -3, 3 has no rate that zeroes it: the solver stops at its cap.
+    data.values.update({(2, 5): 1.0, (3, 5): -3.0, (4, 5): 3.0})
+    data.columns = 5
+    out = SheetGrid("S", 2)
+    out.formulas[(2, 1)] = FormulaCell(parse("=IRR(D!D2:D5)", ["D"]))
+    out.formulas[(2, 2)] = FormulaCell(parse("=IRR(D!E2:E4)", ["D"]))
+    evaluator = Evaluator([data, out], max_rows=10)
+    evaluator.run()
+    assert evaluator.results[("S", 2, 1)] == pytest.approx(0.08896, abs=1e-5)
+    assert evaluator.results[("S", 2, 2)] == XLError("#NUM!")
+    assert evaluator.reads < 3 * 4 * MAX_SOLVER_ITERATIONS * 2 + 100
+
+
+def test_rank_column_sorts_the_range_once():
+    rows = 5000
+    data = SheetGrid("D", 2)
+    for r in range(2, rows + 2):
+        data.values[(r, 1)] = float(r % 977)
+    template = parse(f"=RANK.EQ(A2,$A$2:$A${rows + 1})")
+    for offset in range(rows):
+        data.formulas[(offset + 2, 2)] = FormulaCell(template, rows=offset)
+    evaluator = Evaluator([data], max_rows=rows + 1)
+    evaluator.run()
+    values = [r % 977 for r in range(2, rows + 2)]
+    assert evaluator.results[("D", 2, 2)] == 1 + sum(v > 2 for v in values)
+    assert evaluator.reads < MAX_CELL_READS // 20
+
+
+def test_sequence_spills_and_is_charged_before_it_is_built():
+    assert _spill("=SEQUENCE(2,3,0,2)") == [[0.0, 2.0, 4.0], [6.0, 8.0, 10.0]]
+    with pytest.raises(LocatedFormulaError, match="too many cells"):
+        _eval("=SUM(SEQUENCE(100000,100))")
+
+
+def test_workday_jumps_whole_weeks():
+    assert _eval("=WORKDAY(DATE(2026,1,1),100000)") == pytest.approx(
+        to_serial(date(2026, 1, 1)) + 140_000
+    )
+
+
+def test_text_refuses_exotic_formats():
+    for code in ("0.0E+00", "[h]:mm", "0;-0", "hh:mm AM/PM", "#,##0,"):
+        with pytest.raises(LocatedFormulaError, match="TEXT format"):
+            _eval(f'=TEXT(1,"{code}")')
+
+
+def test_let_names_are_checked_at_parse_time():
+    for text, message in (
+        ("=LET(x,1)", "name, value pairs"),
+        ("=LET(a1,1,a1)", "must not look like a cell"),
+        ("=LET(x,1,y)", "defined names"),
+        ("=LET(x,y,1,x)", "name, value pairs"),
+        ("=LET(x,1,LET(x,2,x))", "already defined"),
+        ("=LET(x,1,x,2,x)", "already defined"),
+    ):
+        with pytest.raises(FormulaError, match=message):
+            parse(text)
+
+
+def test_clock_is_frozen_and_reported():
+    out = SheetGrid("S", 2)
+    out.formulas[(2, 1)] = FormulaCell(parse("=NOW()"))
+    out.formulas[(2, 2)] = FormulaCell(parse("=NOW()"))
+    evaluator = Evaluator([out], max_rows=10)
+    evaluator.run()
+    assert evaluator.clock_read and evaluator.now is not None
+    assert evaluator.results[("S", 2, 1)] == evaluator.results[("S", 2, 2)]
+    quiet = Evaluator([SheetGrid("S", 1)], max_rows=10)
+    quiet.run()
+    assert not quiet.clock_read
 
 
 def test_dynamic_arrays_spill():

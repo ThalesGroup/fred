@@ -85,6 +85,13 @@ class Ref:
 
 
 @dataclass(frozen=True, slots=True)
+class Name:
+    """A name bound by LET, upper-cased; stored as `_xlpm.name`."""
+
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
 class Unary:
     op: str
     operand: Node
@@ -113,7 +120,20 @@ class Group:
     inner: Node
 
 
-Node = Num | Str | Bool | Err | Missing | Ref | Unary | Percent | Binary | Call | Group
+Node = (
+    Num
+    | Str
+    | Bool
+    | Err
+    | Missing
+    | Ref
+    | Name
+    | Unary
+    | Percent
+    | Binary
+    | Call
+    | Group
+)
 
 
 # --- Allow-list ----------------------------------------------------------------
@@ -132,6 +152,12 @@ FUNCTIONS: dict[str, tuple[int, int | None]] = {
     "MOD": (2, 2),
     "POWER": (2, 2),
     "SQRT": (1, 1),
+    "TRUNC": (1, 2),
+    "MROUND": (2, 2),
+    "CEILING": (2, 2),
+    "FLOOR": (2, 2),
+    "CEILING.MATH": (1, 3),
+    "FLOOR.MATH": (1, 3),
     # statistics
     "AVERAGE": (1, None),
     "MEDIAN": (1, None),
@@ -148,7 +174,26 @@ FUNCTIONS: dict[str, tuple[int, int | None]] = {
     "AVERAGEIFS": (3, None),
     "MINIFS": (3, None),
     "MAXIFS": (3, None),
-    # logical
+    "AVERAGEA": (1, None),
+    "STDEV.S": (1, None),
+    "STDEV.P": (1, None),
+    "STDEV": (1, None),
+    "VAR.S": (1, None),
+    "VAR.P": (1, None),
+    "PERCENTILE.INC": (2, 2),
+    "QUARTILE.INC": (2, 2),
+    "RANK.EQ": (2, 3),
+    "RANK": (2, 3),
+    "LARGE": (2, 2),
+    "SMALL": (2, 2),
+    # finance
+    "PMT": (3, 5),
+    "FV": (3, 5),
+    "PV": (3, 5),
+    "NPV": (2, None),
+    "IRR": (1, 2),
+    "RATE": (3, 6),
+    # logical and information
     "IF": (1, 3),
     "IFS": (2, None),
     "IFERROR": (2, 2),
@@ -159,6 +204,12 @@ FUNCTIONS: dict[str, tuple[int, int | None]] = {
     "SWITCH": (3, None),
     "TRUE": (0, 0),
     "FALSE": (0, 0),
+    "ISBLANK": (1, 1),
+    "ISNUMBER": (1, 1),
+    "ISTEXT": (1, 1),
+    "ISERROR": (1, 1),
+    "ISNA": (1, 1),
+    "LET": (3, None),
     # text
     "CONCAT": (1, None),
     "CONCATENATE": (1, None),
@@ -173,6 +224,11 @@ FUNCTIONS: dict[str, tuple[int, int | None]] = {
     "TRIM": (1, 1),
     "SUBSTITUTE": (3, 4),
     "VALUE": (1, 1),
+    "TEXT": (2, 2),
+    "FIND": (2, 3),
+    "SEARCH": (2, 3),
+    "REPT": (2, 2),
+    "EXACT": (2, 2),
     # date
     "DATE": (3, 3),
     "YEAR": (1, 1),
@@ -182,8 +238,16 @@ FUNCTIONS: dict[str, tuple[int, int | None]] = {
     "EDATE": (2, 2),
     "EOMONTH": (2, 2),
     "DATEDIF": (3, 3),
+    "DAYS": (2, 2),
+    "WORKDAY": (2, 3),
+    "NETWORKDAYS": (2, 3),
+    "YEARFRAC": (2, 3),
+    "TODAY": (0, 0),
+    "NOW": (0, 0),
     # lookup and dynamic arrays
     "VLOOKUP": (3, 4),
+    "HLOOKUP": (3, 4),
+    "CHOOSE": (2, None),
     "INDEX": (2, 3),
     "MATCH": (2, 3),
     "XLOOKUP": (3, 6),
@@ -191,8 +255,11 @@ FUNCTIONS: dict[str, tuple[int, int | None]] = {
     "FILTER": (2, 3),
     "SORT": (1, 4),
     "UNIQUE": (1, 3),
+    "SEQUENCE": (1, 4),
 }
-DYNAMIC_ARRAY_FUNCTIONS = frozenset({"FILTER", "SORT", "UNIQUE"})
+DYNAMIC_ARRAY_FUNCTIONS = frozenset({"FILTER", "SORT", "UNIQUE", "SEQUENCE"})
+# Evaluated with the build time; Excel recomputes them on open.
+CLOCK_FUNCTIONS = frozenset({"TODAY", "NOW"})
 # The stored form Excel expects for functions newer than the 2007 file format.
 _STORED_PREFIX = {
     "XLOOKUP": "_xlfn.",
@@ -205,6 +272,18 @@ _STORED_PREFIX = {
     "MINIFS": "_xlfn.",
     "MAXIFS": "_xlfn.",
     "UNIQUE": "_xlfn.",
+    "SEQUENCE": "_xlfn.",
+    "LET": "_xlfn.",
+    "STDEV.S": "_xlfn.",
+    "STDEV.P": "_xlfn.",
+    "VAR.S": "_xlfn.",
+    "VAR.P": "_xlfn.",
+    "PERCENTILE.INC": "_xlfn.",
+    "QUARTILE.INC": "_xlfn.",
+    "RANK.EQ": "_xlfn.",
+    "DAYS": "_xlfn.",
+    "CEILING.MATH": "_xlfn.",
+    "FLOOR.MATH": "_xlfn.",
     "FILTER": "_xlfn._xlws.",
     "SORT": "_xlfn._xlws.",
 }
@@ -212,8 +291,6 @@ _VOLATILE = "its value changes each time the file opens"
 DENIED_FUNCTIONS: dict[str, str] = {
     "INDIRECT": "it builds references from text, which hides them from the check; write the reference itself",
     "OFFSET": f"{_VOLATILE}; write the range itself",
-    "NOW": _VOLATILE,
-    "TODAY": f"{_VOLATILE}; write the date as a value",
     "RAND": _VOLATILE,
     "RANDBETWEEN": _VOLATILE,
     "RANDARRAY": _VOLATILE,
@@ -276,14 +353,56 @@ _FRENCH_NAMES = {
     "PRODUIT": "PRODUCT",
     "RACINE": "SQRT",
     "PUISSANCE": "POWER",
+    "TEXTE": "TEXT",
+    "TROUVE": "FIND",
+    "CHERCHE": "SEARCH",
+    "ESTVIDE": "ISBLANK",
+    "ESTNUM": "ISNUMBER",
+    "ESTTEXTE": "ISTEXT",
+    "ESTERREUR": "ISERROR",
+    "ESTNA": "ISNA",
+    "ECARTYPE.STANDARD": "STDEV.S",
+    "ECARTYPE.PEARSON": "STDEV.P",
+    "ECARTYPE": "STDEV",
+    "VAR.P.N": "VAR.P",
+    "CENTILE.INCLURE": "PERCENTILE.INC",
+    "QUARTILE.INCLURE": "QUARTILE.INC",
+    "EQUATION.RANG": "RANK.EQ",
+    "RANG": "RANK",
+    "GRANDE.VALEUR": "LARGE",
+    "PETITE.VALEUR": "SMALL",
+    "VPM": "PMT",
+    "VC": "FV",
+    "VA": "PV",
+    "VAN": "NPV",
+    "TRI": "IRR",
+    "TAUX": "RATE",
+    "RECHERCHEH": "HLOOKUP",
+    "CHOISIR": "CHOOSE",
+    "SERIE.JOUR.OUVRE": "WORKDAY",
+    "NB.JOURS.OUVRES": "NETWORKDAYS",
+    "FRACTION.ANNEE": "YEARFRAC",
+    "JOURS": "DAYS",
+    "AUJOURDHUI": "TODAY",
+    "MAINTENANT": "NOW",
+    "PLAFOND.MATH": "CEILING.MATH",
+    "PLANCHER.MATH": "FLOOR.MATH",
+    "PLAFOND": "CEILING",
+    "PLANCHER": "FLOOR",
+    "ARRONDI.AU.MULTIPLE": "MROUND",
+    "TRONQUE": "TRUNC",
 }
 FUNCTION_FAMILIES = (
-    "math (SUM, ROUND, ABS, MOD, SUMPRODUCT...), statistics (AVERAGE, MEDIAN, MIN, "
-    "MAX, COUNT, COUNTA, COUNTIF(S), SUMIF(S), AVERAGEIF(S), MINIFS, MAXIFS), logical "
-    "(IF, IFS, IFERROR, IFNA, AND, OR, NOT, SWITCH), text (CONCAT, TEXTJOIN, LEFT, "
-    "RIGHT, MID, LEN, UPPER, LOWER, PROPER, TRIM, SUBSTITUTE, VALUE, &), date (DATE, "
-    "YEAR, MONTH, DAY, WEEKDAY, EDATE, EOMONTH, DATEDIF), lookup (VLOOKUP, INDEX, "
-    "MATCH, XLOOKUP, XMATCH, FILTER, SORT, UNIQUE)"
+    "math (SUM, ROUND, TRUNC, MROUND, CEILING(.MATH), FLOOR(.MATH), ABS, MOD, "
+    "SUMPRODUCT...), statistics (AVERAGE(A), MEDIAN, MIN, MAX, COUNT(A), COUNTIF(S), "
+    "SUMIF(S), AVERAGEIF(S), MINIFS, MAXIFS, STDEV(.S/.P), VAR.S/.P, PERCENTILE.INC, "
+    "QUARTILE.INC, RANK(.EQ), LARGE, SMALL), finance (PMT, FV, PV, NPV, IRR, RATE), "
+    "logical and information (IF, IFS, IFERROR, IFNA, AND, OR, NOT, SWITCH, LET, "
+    "ISBLANK, ISNUMBER, ISTEXT, ISERROR, ISNA), text (CONCAT, TEXTJOIN, LEFT, RIGHT, "
+    "MID, LEN, UPPER, LOWER, PROPER, TRIM, SUBSTITUTE, VALUE, TEXT, FIND, SEARCH, "
+    "REPT, EXACT, &), date (DATE, TODAY, NOW, YEAR, MONTH, DAY, WEEKDAY, EDATE, "
+    "EOMONTH, DATEDIF, DAYS, WORKDAY, NETWORKDAYS, YEARFRAC), lookup (VLOOKUP, "
+    "HLOOKUP, INDEX, MATCH, XLOOKUP, XMATCH, CHOOSE, FILTER, SORT, UNIQUE, SEQUENCE)"
 )
 
 
@@ -304,6 +423,7 @@ _R1C1_RE = re.compile(r"^R(\[?-?\d*\]?)C(\[?-?\d*\]?)$", re.IGNORECASE)
 _PATH_RE = re.compile(r"[\\/]|^[A-Za-z]:|https?:|file:", re.IGNORECASE)
 _STRING_RE = re.compile(r'"(?:[^"]|"")*"')
 _PREFIX_RE = re.compile(r"^(?:_xlfn\.)?(?:_xlws\.)?", re.IGNORECASE)
+_PARAM_PREFIX_RE = re.compile(r"^_xlpm\.", re.IGNORECASE)
 _SIMPLE_SHEET_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*")
 _CELL_LIKE_NAME_RE = re.compile(r"[A-Za-z]{1,3}[0-9]+|R[0-9]*C?[0-9]*|C[0-9]*", re.I)
 
@@ -447,12 +567,18 @@ def _tokenize(text: str, sheet_names: Sequence[str] | None) -> list[_Token]:
             raise FormulaReferenceError(
                 f"R1C1 references ({name}) are not supported; use A1 references"
             )
-        raise FormulaError(
-            f"'{name}' is not a function, a cell or a sheet of this workbook; "
-            "defined names are not supported (use a cell reference, or quote a "
-            "text value)"
-        )
+        # A name; parse() refuses it unless a LET binds it.
+        tokens.append(_Token("NAME", _PARAM_PREFIX_RE.sub("", name), i))
+        i = ident.end()
     return tokens
+
+
+def _unknown_name(name: str) -> FormulaError:
+    return FormulaError(
+        f"'{name}' is not a function, a cell or a sheet of this workbook; "
+        "defined names are not supported (use a cell reference, or quote a "
+        "text value)"
+    )
 
 
 _WHOLE_REFUSED = (
@@ -638,6 +764,8 @@ class _Parser:
             return Group(inner)
         if token.kind == "FUNC":
             return self.call(str(token.value))
+        if token.kind == "NAME":
+            return Name(str(token.value).upper())
         raise FormulaError(f"unexpected {token.value!r} in the formula")
 
     def call(self, raw_name: str) -> Node:
@@ -697,7 +825,49 @@ def parse(text: str, sheet_names: Sequence[str] | None = None) -> Node:
     node = parser.expression()
     if parser.peek() is not None:
         raise FormulaError(f"unexpected {parser.peek().value!r} in the formula")  # type: ignore[union-attr]
+    _check_names(node, frozenset())
     return node
+
+
+_LET_SHAPE = "LET takes name, value pairs then a calculation, as in LET(x,B2*2,x+1)"
+
+
+def _check_names(node: Node, scope: frozenset[str]) -> None:
+    """Every name must be bound by an enclosing LET, before its use."""
+
+    if isinstance(node, Name):
+        if node.name not in scope:
+            raise _unknown_name(node.name.lower())
+        return
+    if isinstance(node, Call) and node.name == "LET":
+        args = node.args
+        if len(args) < 3 or len(args) % 2 == 0:
+            raise FormulaError(_LET_SHAPE)
+        for i in range(0, len(args) - 1, 2):
+            name = args[i]
+            if not isinstance(name, Name) or _CELL_LIKE_NAME_RE.fullmatch(name.name):
+                raise FormulaError(
+                    f"{_LET_SHAPE}; a name must not look like a cell (A1, R, C)"
+                )
+            if name.name in scope:
+                # Excel and LibreOffice disagree on a shadowed name: refuse it.
+                raise FormulaError(
+                    f"LET name '{name.name.lower()}' is already defined; use another name"
+                )
+            _check_names(args[i + 1], scope)
+            scope = scope | {name.name}
+        _check_names(args[-1], scope)
+        return
+    if isinstance(node, Unary | Percent):
+        _check_names(node.operand, scope)
+    elif isinstance(node, Binary):
+        _check_names(node.left, scope)
+        _check_names(node.right, scope)
+    elif isinstance(node, Call):
+        for arg in node.args:
+            _check_names(arg, scope)
+    elif isinstance(node, Group):
+        _check_names(node.inner, scope)
 
 
 def walk(node: Node) -> Iterator[Node]:
@@ -943,6 +1113,8 @@ def _emit(node: Node, stored: bool, rows: int) -> str:
         return node.code
     if isinstance(node, Missing):
         return ""
+    if isinstance(node, Name):
+        return ("_xlpm." if stored else "") + node.name.lower()
     if isinstance(node, Ref):
         return _ref_text(shift(node, rows), node.sheet)
     if isinstance(node, _MarkedRef):
@@ -994,6 +1166,10 @@ class _MarkedRef:
     absolute rows as negated numbers, so `fill_down` substitutes them as text."""
 
     ref: Ref
+
+
+def uses_clock(node: Node) -> bool:
+    return any(isinstance(n, Call) and n.name in CLOCK_FUNCTIONS for n in walk(node))
 
 
 def uses_dynamic_arrays(node: Node) -> bool:
