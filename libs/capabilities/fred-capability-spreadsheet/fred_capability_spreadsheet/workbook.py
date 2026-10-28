@@ -52,12 +52,15 @@ from fred_capability_spreadsheet.formulas import (
     Node,
     Num,
     Ref,
+    SheetLayout,
     Str,
     Unary,
+    check,
     column_letters,
     emit,
     fill_down,
     is_formula_like,
+    parse,
     row_template,
     uses_dynamic_arrays,
 )
@@ -130,10 +133,12 @@ LINK_TEXT_REJECTED = (
     "this text looks like a link to another program or file (DDE or an external "
     "workbook) and is not accepted, even as text. Drop the leading sign or rephrase."
 )
+MAX_MODEL_FORMULAS = 5_000
 FORMULA_REJECTED = (
-    "formulas are not accepted in cells: send the computed value, set `compute` "
-    "on the column for a per-row calculation (add, subtract, multiply, divide, "
-    "share_of_total), and set `total` on the column for sums/averages."
+    "a formula is not accepted as a plain value: send it as a formula cell "
+    '{"formula": "=..."} (or set `formula` on the column for every row), set '
+    "`compute` on the column for a per-row calculation (add, subtract, multiply, "
+    "divide, share_of_total), and set `total` on the column for sums/averages."
 )
 # A `"` inside a text value that closed it early: the rest of the row (and often
 # the next row's start) lands in this cell, e.g. 'Loyer", 1200, null], ['. No `[`
@@ -256,6 +261,14 @@ class ColumnSpec(BaseModel):
             "on every row; send null for this column in rows."
         ),
     )
+    formula: str | None = Field(
+        default=None,
+        description=(
+            "Excel formula of the first data row (row 2), filled down like Excel, "
+            "e.g. '=XLOOKUP(A2,Prices!A2:A40,Prices!B2:B40,\"\")'; send null for "
+            "this column in rows."
+        ),
+    )
 
     @field_validator("type", "total", mode="before")
     @classmethod
@@ -269,10 +282,29 @@ class ColumnSpec(BaseModel):
 
     @model_validator(mode="after")
     def _computed_type_defaults_to_numeric(self) -> ColumnSpec:
-        # A computed column without an explicit type is numeric, never text.
-        if self.compute is not None and "type" not in self.model_fields_set:
-            self.type = "percent" if self.compute.op == "share_of_total" else "number"
+        # A computed column without an explicit type is numeric, never text; a
+        # formula column's type follows its results unless it is given.
+        if "type" not in self.model_fields_set:
+            if self.compute is not None:
+                self.type = (
+                    "percent" if self.compute.op == "share_of_total" else "number"
+                )
+            elif self.formula is not None:
+                self.type = "number"
+                self.type_inferred = True
         return self
+
+    # Set when a formula column's type was not given (it becomes text if the
+    # results are text); hidden from the model.
+    type_inferred: SkipJsonSchema[bool] = False
+
+
+class FormulaValue(BaseModel):
+    """A cell holding an Excel formula, e.g. a summary cell reading other sheets."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    formula: str = Field(description="The Excel formula, starting with '='.")
 
 
 _CHART_KEYS = frozenset({"chart", "charts", "graph", "graphs", "plot", "plots"})
@@ -287,12 +319,12 @@ class SheetSpec(BaseModel):
 
     name: str = Field(description="Sheet tab name, at most 31 characters.")
     columns: list[ColumnSpec] = Field(description="The sheet's columns, in order.")
-    rows: list[list[CellValue]] = Field(
+    rows: list[list[CellValue | FormulaValue]] = Field(
         default_factory=list,
         description=(
-            "Data rows; each row has exactly one literal value per column (null "
-            "for empty, and null for a computed column). No formulas: send "
-            "computed values."
+            "Data rows; each row has exactly one value per column (null for "
+            "empty, and null for a compute or formula column). A cell formula "
+            "is an object {formula: '=...'}, never a plain string."
         ),
     )
 
@@ -363,6 +395,9 @@ class _Draft:
     column_formulas: list[Node | None]
     total_formulas: list[Node | None]
     cell_formulas: dict[tuple[int, int], Node] = field(default_factory=dict)
+    # The model's formula texts, parsed once every sheet's layout is known.
+    raw_column_formulas: dict[int, str] = field(default_factory=dict)
+    raw_cells: dict[tuple[int, int], str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -392,7 +427,64 @@ def prepare(request: CreateSpreadsheetInput) -> PreparedWorkbook:
     _check_structure(request)
     language = normalize_language(request.language)
     drafts = [_prepare_sheet(sheet) for sheet in request.sheets]
+    _check_model_formulas(drafts)
     return PreparedWorkbook(sheets=_evaluate(drafts, language), language=language)
+
+
+def _check_model_formulas(drafts: list[_Draft]) -> None:
+    """Parse and check the model's formulas against the whole workbook's layout."""
+
+    layouts = [
+        SheetLayout(
+            d.name,
+            len(d.columns),
+            len(d.rows),
+            any(t is not None for t in d.total_formulas),
+        )
+        for d in drafts
+    ]
+    names = [d.name for d in drafts]
+    count = sum(
+        len(d.rows) * len(d.raw_column_formulas) + len(d.raw_cells) for d in drafts
+    )
+    if count > MAX_MODEL_FORMULAS:
+        raise SpreadsheetInputError(
+            f"The workbook holds {count} formula cells; the limit is "
+            f"{MAX_MODEL_FORMULAS}. Use `total` and `compute` where they fit, or "
+            "fewer formula columns." + _LIMIT_HINT
+        )
+    for draft in drafts:
+        for index, text in draft.raw_column_formulas.items():
+            where = (
+                f"Sheet '{draft.name}', column {index + 1} ('{draft.headers[index]}')"
+            )
+            draft.column_formulas[index] = _checked(
+                text, names, layouts, draft.name, where, max(len(draft.rows) - 1, 0)
+            )
+        for (r, c), text in sorted(draft.raw_cells.items()):
+            where = (
+                f"Sheet '{draft.name}', row {r + 2}, column {c + 1} "
+                f"('{draft.headers[c]}')"
+            )
+            draft.cell_formulas[(r, c)] = _checked(
+                text, names, layouts, draft.name, where, 0
+            )
+
+
+def _checked(
+    text: str,
+    names: list[str],
+    layouts: list[SheetLayout],
+    here: str,
+    where: str,
+    fill_rows: int,
+) -> Node:
+    try:
+        return check(parse(text, names), layouts, here, fill_rows=fill_rows)
+    except FormulaError as exc:
+        raise SpreadsheetInputError(
+            f"{where}: formula {text.strip()!r}: {exc}."
+        ) from None
 
 
 def _stored_formula(formula: str, expand_future_functions: bool = False) -> str:
@@ -631,28 +723,45 @@ def _prepare_sheet(sheet: SheetSpec) -> _Draft:
             )
         headers.append(header)
     last_row = len(sheet.rows) + 1
+    raw_column_formulas: dict[int, str] = {}
+    for index, column in enumerate(sheet.columns):
+        if column.formula is None:
+            continue
+        if column.compute is not None:
+            raise SpreadsheetInputError(
+                f"Sheet '{sheet.name}', column {index + 1} ('{headers[index]}'): set "
+                "either `compute` or `formula` on a column, not both."
+            )
+        raw_column_formulas[index] = column.formula
     column_formulas = _compile_computes(sheet, headers, last_row)
+    placeholder = [
+        node is not None or index in raw_column_formulas
+        for index, node in enumerate(column_formulas)
+    ]
+    raw_cells: dict[tuple[int, int], str] = {}
     rows: list[list[Converted]] = []
-    for row_number, row in enumerate(sheet.rows, start=2):
+    for r, row in enumerate(sheet.rows):
         if len(row) != len(sheet.columns):
             # Rows that leave computed columns out get their placeholders back.
             values = iter(row)
-            row = [None if node else next(values) for node in column_formulas]
-        rows.append(
-            [
-                None
-                if column_formulas[index]
-                else _convert(
-                    raw,
-                    column.type,
-                    f"Sheet '{sheet.name}', row {row_number}, column {index + 1} "
-                    f"('{headers[index]}')",
+            row = [None if hole else next(values) for hole in placeholder]
+        converted: list[Converted] = []
+        for index, (column, raw) in enumerate(zip(sheet.columns, row, strict=True)):
+            if placeholder[index]:
+                converted.append(None)
+            elif isinstance(raw, FormulaValue):
+                raw_cells[(r, index)] = raw.formula
+                converted.append(None)
+            else:
+                converted.append(
+                    _convert(
+                        raw,
+                        column.type,
+                        f"Sheet '{sheet.name}', row {r + 2}, column {index + 1} "
+                        f"('{headers[index]}')",
+                    )
                 )
-                for index, (column, raw) in enumerate(
-                    zip(sheet.columns, row, strict=True)
-                )
-            ]
-        )
+        rows.append(converted)
     total_formulas: list[Node | None] = [
         _total_node(column, index, last_row) if column.total and sheet.rows else None
         for index, column in enumerate(sheet.columns)
@@ -664,6 +773,8 @@ def _prepare_sheet(sheet: SheetSpec) -> _Draft:
         rows=rows,
         column_formulas=column_formulas,
         total_formulas=total_formulas,
+        raw_column_formulas=raw_column_formulas,
+        raw_cells=raw_cells,
     )
 
 
@@ -674,7 +785,8 @@ def _compile_computes(
     columns may be referenced, so there is no cycle."""
 
     nodes: list[Node | None] = [None] * len(sheet.columns)
-    may_fail = [False] * len(sheet.columns)
+    # A model formula can give "" (IFERROR), so computing on it can fail.
+    may_fail = [column.formula is not None for column in sheet.columns]
     for index, column in enumerate(sheet.columns):
         spec = column.compute
         if spec is None:
@@ -849,15 +961,22 @@ def _evaluate(drafts: list[_Draft], language: Language) -> list[PreparedSheet]:
                 results[(draft.name, r + 2, c + 1)], draft.columns[c].type
             )
         totals = _totals_values(draft, results, language)
+        columns = [
+            column.model_copy(update={"type": "text"})
+            if column.type_inferred
+            and any(isinstance(row[i], str) for row in rows[: len(draft.rows)])
+            else column
+            for i, column in enumerate(draft.columns)
+        ]
         sheets.append(
             PreparedSheet(
                 name=draft.name,
-                columns=draft.columns,
+                columns=columns,
                 headers=draft.headers,
                 rows=rows,
                 formats=[
                     _number_format(column, [row[i] for row in rows])
-                    for i, column in enumerate(draft.columns)
+                    for i, column in enumerate(columns)
                 ],
                 column_formulas=draft.column_formulas,
                 total_formulas=draft.total_formulas,
@@ -1063,7 +1182,11 @@ def _check_structure(request: CreateSpreadsheetInput) -> None:
                     f"{where}, column {index} ('{column.header}'): a '{column.total}' "
                     f"total needs a numeric column, not '{column.type}'."
                 )
-        computed = sum(1 for column in sheet.columns if column.compute is not None)
+        computed = sum(
+            1
+            for column in sheet.columns
+            if column.compute is not None or column.formula is not None
+        )
         for row_number, row in enumerate(sheet.rows, start=2):
             if len(row) not in (len(sheet.columns), len(sheet.columns) - computed):
                 raise SpreadsheetInputError(
@@ -1329,7 +1452,10 @@ def _convert(raw: CellValue, column_type: str, where: str) -> Converted:
         and raw.lstrip().startswith("=")
         and (column_type != "text" or is_formula_like(raw.strip()))
     ):
-        raise SpreadsheetInputError(f"{where}: {raw!r}: {FORMULA_REJECTED}")
+        cell = json.dumps({"formula": raw.strip()}, ensure_ascii=False)
+        raise SpreadsheetInputError(
+            f"{where}: {raw!r}: {FORMULA_REJECTED} For this cell: {cell}."
+        )
     if isinstance(raw, str) and _LEAKED_ROW.search(raw):
         raise SpreadsheetInputError(f"{where}: {raw!r}: {LEAKED_ROW_REJECTED}")
     try:
