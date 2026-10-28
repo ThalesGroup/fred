@@ -30,6 +30,7 @@ from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 from pydantic import AwareDatetime, BaseModel
 
+from control_plane_backend.kpi.counted_days import ALL_DAYS, CountedDays
 from control_plane_backend.kpi.presets.analytics_agents import (
     LATEST_AGENT_DIMS,
     agent_labels,
@@ -123,6 +124,7 @@ def agent_cost_body(
     until: datetime,
     team_ids: Sequence[str],
     user_ids: Sequence[str] | None = None,
+    days: CountedDays = ALL_DAYS,
 ) -> dict[str, Any]:
     by_model = token_aggs()["aggs"]["by_model"]
     return {
@@ -134,6 +136,7 @@ def agent_cost_body(
                     TOKEN_USAGE_FILTER,
                     BY_AGENT_SCOPE_FILTER,
                     *scope_filter(team_ids, user_ids),
+                    *days.query_filter(since, until),
                 ]
             }
         },
@@ -213,13 +216,14 @@ async def query_analytics_quality_cost(
     request: Request,
     team_ids: Sequence[TeamId] = (),
     user_ids: Sequence[str] | None = None,
+    days: CountedDays = ALL_DAYS,
 ) -> AnalyticsQualityCostResponse:
     # Authorization already resolved by the router (kpi/api.py, KpiScope).
     del user
-    windows = Windows.of(since, until)
+    windows = Windows.of(since, until, days)
     periods, by_agent = await asyncio.gather(
         search(store, quality_body(windows, team_ids, user_ids)),
-        search(store, agent_cost_body(since, until, team_ids, user_ids)),
+        search(store, agent_cost_body(since, until, team_ids, user_ids, days)),
     )
 
     current, previous = period_buckets(periods)
@@ -262,4 +266,5 @@ ANALYTICS_QUALITY_COST_PRESET = PresetDef(
     summary="Failed answers, cost in EUR, tokens and footprint, by model and by agent, with the previous period",
     team_scopable=True,
     user_filterable=True,
+    day_filterable=True,
 )

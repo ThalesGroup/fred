@@ -27,6 +27,7 @@ from fastapi import Request
 from fred_core import KeycloakUser
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
+from control_plane_backend.kpi.counted_days import ALL_DAYS, CountedDays
 from control_plane_backend.kpi.presets.base import PresetDef
 from control_plane_backend.kpi.presets.common import (
     CREATION_ASSISTANT_ANSWERED_FILTER,
@@ -43,6 +44,7 @@ async def query_creation_assistant_usage(
     until: datetime,
     request: Request,
     user_ids: Sequence[str] | None = None,
+    days: CountedDays = ALL_DAYS,
 ) -> CreationAssistantUsageResponse:
     # Authorization already resolved by the router (kpi/api.py, KpiScope).
     del user, request
@@ -63,6 +65,7 @@ async def query_creation_assistant_usage(
                     },
                     CREATION_ASSISTANT_ANSWERED_FILTER,
                     *user_filter(user_ids),
+                    *days.query_filter(since, until),
                 ]
             }
         },
@@ -94,4 +97,5 @@ CREATION_ASSISTANT_USAGE_PRESET = PresetDef(
     handler=query_creation_assistant_usage,
     summary="Creation assistant token consumption and number of drafts, platform-wide",
     user_filterable=True,
+    day_filterable=True,
 )

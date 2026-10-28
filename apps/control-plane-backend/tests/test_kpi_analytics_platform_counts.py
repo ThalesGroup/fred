@@ -361,6 +361,12 @@ async def test_published_agents_of_filtered_creators(engine: AsyncEngine) -> Non
         windows, ["a"], created_by=["u1", "u2"]
     ) == [2, 0]
     assert await store.count_published_created(windows, created_by=[]) == [0, 0]
+    # Agents created on an excluded day are left out, with or without creators.
+    excluded = [(T0 + timedelta(days=2), T0 + timedelta(days=3))]
+    assert await store.count_published_created(windows, excluded=excluded) == [2, 1]
+    assert await store.count_published_created(
+        windows, created_by=["u1"], excluded=excluded
+    ) == [0, 1]
 
 
 @pytest.mark.asyncio

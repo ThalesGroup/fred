@@ -287,15 +287,20 @@ class AgentInstanceStore:
         team_ids: Collection[str] = (),
         *,
         created_by: Collection[str] | None = None,
+        excluded: Sequence[tuple[datetime, datetime]] = (),
     ) -> list[int]:
         """Agents created in each `[start, end)` window that were published to the
         marketplace at least once (the entry outlives a removal). One statement.
-        `created_by` keeps the agents those users created."""
+        `created_by` keeps the agents those users created; agents created in an
+        `excluded` `[start, end)` range are left out."""
         if not windows:
             return []
-        if created_by is not None:
-            return await self._count_published_created_by(
-                windows, team_ids, set(created_by)
+        if created_by is not None or excluded:
+            return await self._count_published_created_in_python(
+                windows,
+                team_ids,
+                None if created_by is None else set(created_by),
+                excluded,
             )
         created = AgentInstanceRow.created_at
         statement = select(
@@ -317,11 +322,12 @@ class AgentInstanceStore:
             row = (await s.execute(statement)).one()
         return [int(value or 0) for value in row]
 
-    async def _count_published_created_by(
+    async def _count_published_created_in_python(
         self,
         windows: Sequence[tuple[datetime, datetime]],
         team_ids: Collection[str],
-        creators: set[str],
+        creators: set[str] | None,
+        excluded: Sequence[tuple[datetime, datetime]],
     ) -> list[int]:
         # Counted in Python: a filter can hold tens of thousands of ids, above
         # driver bind limits, while published agents of the windows stay few.
@@ -337,7 +343,12 @@ class AgentInstanceStore:
             statement = statement.where(AgentInstanceRow.team_id.in_(list(team_ids)))
         async with use_session(self._sessions) as s:
             rows = (await s.execute(statement)).all()
-        mine = [_aware(at) for at, creator in rows if creator in creators]
+        mine = [
+            at
+            for at, creator in ((_aware(at), creator) for at, creator in rows)
+            if (creators is None or creator in creators)
+            and not any(low <= at < high for low, high in excluded)
+        ]
         return [sum(1 for at in mine if start <= at < end) for start, end in windows]
 
     async def list_by_team(

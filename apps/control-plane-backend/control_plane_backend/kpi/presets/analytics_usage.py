@@ -17,9 +17,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date, datetime, timedelta
+from dataclasses import replace
+from datetime import date, datetime
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from fastapi import Request
 from fred_core import KeycloakUser
@@ -27,6 +27,7 @@ from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 from pydantic import AwareDatetime, BaseModel
 
+from control_plane_backend.kpi.counted_days import ALL_DAYS, CountedDays
 from control_plane_backend.kpi.presets.analytics_common import (
     SESSIONS,
     TURNS,
@@ -119,16 +120,8 @@ def usage_aggs(tz: str) -> dict[str, Any]:
     }
 
 
-def workdays(start: datetime, end: datetime, tz: str) -> list[date]:
-    """Monday-to-Friday local dates touched by [start, end)."""
-    zone = ZoneInfo(tz)
-    first = start.astimezone(zone).date()
-    last = (end - timedelta(microseconds=1)).astimezone(zone).date()
-    days = [first + timedelta(days=i) for i in range((last - first).days + 1)]
-    return [d for d in days if d.weekday() < 5]
-
-
-def mean_per_workday(turns: dict[str, Any], days: list[date]) -> float | None:
+def mean_per_day(turns: dict[str, Any], days: list[date]) -> float | None:
+    """Mean daily active users over the counted days."""
     if not days:
         return None
     wanted = {d.isoformat() for d in days}
@@ -138,6 +131,11 @@ def mean_per_workday(turns: dict[str, Any], days: list[date]) -> float | None:
         if str(b.get("key_as_string")) in wanted
     )
     return total / len(days)
+
+
+def weeks_of(days: CountedDays, counted: int) -> float:
+    """Weeks of counted days: a week holds five of them when weekends are left out."""
+    return max(1.0, counted / (5 if days.exclude_weekends else 7))
 
 
 def days_per_week(turns: dict[str, Any], weeks: float) -> float | None:
@@ -163,16 +161,17 @@ async def query_analytics_usage(
     team_ids: Sequence[TeamId] = (),
     user_ids: Sequence[str] | None = None,
     tz: str = "Europe/Paris",
+    days: CountedDays = ALL_DAYS,
 ) -> AnalyticsUsageResponse:
     # Authorization already resolved by the router (kpi/api.py, KpiScope).
     del user, request
-    windows = Windows.of(since, until)
+    days = replace(days, tz=tz)
+    windows = Windows.of(since, until, days)
     # Up to three 10 000-term aggs per period: one search per period.
     response = await search_by_period(
         store, windows, team_ids, [TURNS, SESSIONS], usage_aggs(tz), user_ids
     )
     current, previous = period_buckets(response)
-    weeks = max(1.0, (until - since).total_seconds() / (7 * 86400))
 
     def both(read: Any) -> PeriodValue:
         return PeriodValue(
@@ -184,9 +183,7 @@ async def query_analytics_usage(
 
     active_users = per_period(response, sub_value("turns", "users"))
     per_workday = both(
-        lambda b, start, end: mean_per_workday(
-            b.get("turns", {}), workdays(start, end, tz)
-        )
+        lambda b, start, end: mean_per_day(b.get("turns", {}), days.days(start, end))
     )
     return AnalyticsUsageResponse(
         conversations=per_period(response, doc_count("sessions")),
@@ -194,8 +191,10 @@ async def query_analytics_usage(
         active_users=active_users,
         active_users_per_workday=per_workday,
         daily_usage_share=ratio(per_workday, active_users),
-        days_per_week_median=per_period(
-            response, lambda b: days_per_week(b.get("turns", {}), weeks)
+        days_per_week_median=both(
+            lambda b, start, end: days_per_week(
+                b.get("turns", {}), weeks_of(days, len(days.days(start, end)))
+            )
         ),
         conversations_per_user_median=per_period(
             response,
@@ -229,4 +228,5 @@ ANALYTICS_USAGE_PRESET = PresetDef(
     team_scopable=True,
     user_filterable=True,
     zoned=True,
+    day_filterable=True,
 )

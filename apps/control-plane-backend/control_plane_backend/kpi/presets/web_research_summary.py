@@ -33,6 +33,7 @@ from fred_core.security.rebac.capability_authz import CapabilityEnablementFacts
 from pydantic import AwareDatetime, BaseModel
 
 from control_plane_backend.app.dependencies import get_application_container
+from control_plane_backend.kpi.counted_days import ALL_DAYS, CountedDays
 from control_plane_backend.kpi.presets.base import PresetDef
 from control_plane_backend.kpi.presets.common import LabelValuePoint, scope_filter
 
@@ -94,6 +95,7 @@ async def query_web_research_summary(
     request: Request,
     team_ids: Sequence[TeamId] = (),
     user_ids: Sequence[str] | None = None,
+    days: CountedDays = ALL_DAYS,
 ) -> WebResearchSummaryResponse:
     # Authorization already resolved by the router (kpi/api.py, KpiScope).
     del user
@@ -120,6 +122,7 @@ async def query_web_research_summary(
         {"term": {"metric.name": "web_research.request"}},
     ]
     filters.extend(scope_filter(team_ids, user_ids))
+    filters.extend(days.query_filter(since, until))
 
     body: dict[str, Any] = {
         "size": 0,
@@ -176,4 +179,5 @@ WEB_RESEARCH_SUMMARY_PRESET = PresetDef(
     summary="Web research volume, estimated provider cost, refusals and latency",
     team_scopable=True,
     user_filterable=True,
+    day_filterable=True,
 )

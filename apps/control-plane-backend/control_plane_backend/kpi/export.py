@@ -24,13 +24,18 @@ import asyncio
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fred_core import KeycloakUser, get_current_user
 from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
+from control_plane_backend.kpi.counted_days import (
+    EXCLUDE_HOLIDAYS_QUERY,
+    EXCLUDE_WEEKENDS_QUERY,
+    check_time_zone,
+    counted_days,
+)
 from control_plane_backend.kpi.export_workbook import (
     XLSX_MEDIA_TYPE,
     ExportData,
@@ -83,15 +88,12 @@ def add_export_route(
             default="fr", description="Language of the workbook."
         ),
         user_filter: UserFilterParam = None,
+        exclude_weekends: bool = EXCLUDE_WEEKENDS_QUERY,
+        exclude_holidays: bool = EXCLUDE_HOLIDAYS_QUERY,
         user: KeycloakUser = Depends(get_current_user),
         store: OpenSearchKPIStore = Depends(get_store),
     ) -> Response:
-        try:
-            ZoneInfo(tz)
-        except (ZoneInfoNotFoundError, ValueError, OSError):
-            raise HTTPException(
-                status_code=400, detail=f"unknown time zone {tz!r}"
-            ) from None
+        check_time_zone(tz)
         scope = await resolve_kpi_scope(
             request, user, team_ids, user_filter=parse_user_filter(user_filter)
         )
@@ -99,6 +101,9 @@ def add_export_route(
         now = datetime.now(tz=timezone.utc)
         resolved_since = since or (now - timedelta(days=30))
         resolved_until = until or now
+        days = counted_days(
+            exclude_weekends, exclude_holidays, tz, resolved_until - resolved_since
+        )
         common: dict[str, Any] = dict(
             user=user,
             since=resolved_since,
@@ -106,6 +111,7 @@ def add_export_route(
             request=request,
             team_ids=scope.team_ids,
             user_ids=scope.user_ids,
+            days=days,
         )
         sections, catalog = await asyncio.gather(
             asyncio.gather(
@@ -136,6 +142,7 @@ def add_export_route(
             activity=activity,
             catalog=catalog,
             user_filter=scope.user_filter,
+            days=days,
         )
         # openpyxl is CPU-bound and synchronous: keep it off the event loop.
         content = await asyncio.to_thread(build_workbook, data, lang)

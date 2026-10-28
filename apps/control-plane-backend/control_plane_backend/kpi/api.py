@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fred_core import (
@@ -29,6 +28,12 @@ from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.app.dependencies import get_application_container
+from control_plane_backend.kpi.counted_days import (
+    EXCLUDE_HOLIDAYS_QUERY,
+    EXCLUDE_WEEKENDS_QUERY,
+    check_time_zone,
+    counted_days,
+)
 from control_plane_backend.kpi.export import add_export_route
 from control_plane_backend.kpi.presets import PRESETS
 from control_plane_backend.kpi.scope import resolve_kpi_scope
@@ -83,6 +88,8 @@ def build_kpi_router() -> APIRouter:
                     description="IANA time zone of calendar buckets and days (over-time presets).",
                 ),
                 user_filter: UserFilterParam = None,
+                exclude_weekends: bool = EXCLUDE_WEEKENDS_QUERY,
+                exclude_holidays: bool = EXCLUDE_HOLIDAYS_QUERY,
                 user: KeycloakUser = Depends(get_current_user),
                 store: OpenSearchKPIStore = Depends(get_kpi_store),
             ):
@@ -119,14 +126,17 @@ def build_kpi_router() -> APIRouter:
                     kwargs["team_ids"] = scope.team_ids
                 if p.user_filterable:
                     kwargs["user_ids"] = scope.user_ids
+                if p.bucketable or p.zoned or p.day_filterable:
+                    check_time_zone(tz)
                 if p.bucketable or p.zoned:
-                    try:
-                        ZoneInfo(tz)
-                    except (ZoneInfoNotFoundError, ValueError, OSError):
-                        raise HTTPException(
-                            status_code=400, detail=f"unknown time zone {tz!r}"
-                        ) from None
                     kwargs["tz"] = tz
+                if p.day_filterable:
+                    kwargs["days"] = counted_days(
+                        exclude_weekends,
+                        exclude_holidays,
+                        tz,
+                        resolved_until - resolved_since,
+                    )
                 if p.bucketable:
                     kwargs["bucket"] = bucket
                 return await p.handler(store, **kwargs)

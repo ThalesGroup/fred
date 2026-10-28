@@ -45,3 +45,6 @@ class PresetDef:
     # The router passes `user_ids` (platform user filter) and the handler MUST
     # apply `user_filter()` to every search; otherwise the router rejects one.
     user_filterable: bool = False
+    # The router passes `days` (CountedDays) and the handler MUST leave its
+    # excluded days out of every search and per-day denominator.
+    day_filterable: bool = False
