@@ -27,7 +27,7 @@ import json
 import logging
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -348,50 +348,31 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
                     f"[{type(exc).__name__}]. Send the whole workbook in sheets."
                 )
             base = None
-        if changes:
-            if base is None:
-                return _error(
-                    "No file was written: the last file is too large to keep for "
-                    "changes. Send the whole workbook in sheets."
-                    if turn.too_large
-                    else NO_BASE
-                )
-            try:
-                spec = apply_changes(json.loads(base.spec_json), changes)
-            except ChangeError as exc:
-                logger.info("[SPREADSHEET] rejected changes: %s", exc)
-                return _error(str(exc))
-            if file_name:
-                spec["file_name"] = file_name
-            if language:
-                spec["language"] = language
-            try:
-                request = CreateSpreadsheetInput.model_validate(spec)
-            except ValidationError as exc:
-                return _error(
-                    "No file was written: the changed workbook is not valid: "
-                    + "; ".join(
-                        f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}"
-                        for e in exc.errors()[:5]
-                    )
-                )
-        else:
-            request = CreateSpreadsheetInput.model_validate(
-                {"file_name": file_name, "sheets": sheets, "language": language}
+        if changes and base is None:
+            return _error(
+                "No file was written: the last file is too large to keep for "
+                "changes. Send the whole workbook in sheets."
+                if turn.too_large
+                else NO_BASE
             )
+        # Applying changes and serializing a request are CPU work proportional to
+        # the workbook (~0.2 s at the cell limit): off the event loop.
+        try:
+            request, request_key, spec_json = await asyncio.to_thread(
+                _resolve_request,
+                base.spec_json if changes and base else None,
+                changes,
+                file_name,
+                sheets,
+                language,
+            )
+        except ChangeError as exc:
+            logger.info("[SPREADSHEET] rejected changes: %s", exc)
+            return _error(str(exc))
         base_name = sanitize_file_name(request.file_name or "")
         same_workbook = base is not None and (
             bool(changes) or base_name == base.file_name
         )
-        request_key = hashlib.sha256(
-            (
-                json.dumps(
-                    {**request_spec(request), "file_name": base_name},
-                    sort_keys=True,
-                    ensure_ascii=False,
-                )
-            ).encode()
-        ).hexdigest()
         if request_key in turn.created:
             logger.info("[SPREADSHEET] identical repeat call skipped")
             return turn.created[request_key], ToolInvocationResult(tool_ref=TOOL_NAME)
@@ -458,8 +439,7 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
             )
         revisable = await _remember(
             turn,
-            request,
-            StoredWorkbook(workbook_id, version, base_name, ""),
+            StoredWorkbook(workbook_id, version, base_name, spec_json),
             cast(str, session_id) if durable else None,
             cast(str, instance_id) if durable else None,
         )
@@ -501,15 +481,13 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
 
 async def _remember(
     turn: _TurnState,
-    request: CreateSpreadsheetInput,
-    delivered: StoredWorkbook,
+    workbook: StoredWorkbook,
     session_id: str | None,
     instance_id: str | None,
 ) -> bool:
     """Keep the delivered request as the next base; False when too large to keep."""
 
-    spec_json = json.dumps(request_spec(request), ensure_ascii=False)
-    workbook = replace(delivered, spec_json=spec_json)
+    spec_json = workbook.spec_json
     too_large = len(spec_json.encode()) > MAX_STORED_SPEC_BYTES
     turn.base = None if too_large else workbook
     turn.too_large = too_large
@@ -526,6 +504,43 @@ async def _remember(
         # The file is delivered; the next turn's base is then the previous one.
         logger.warning("[SPREADSHEET] base store failed", exc_info=True)
     return not too_large
+
+
+def _resolve_request(
+    base_json: str | None,
+    changes: list[dict[str, Any]] | None,
+    file_name: str | None,
+    sheets: list[SheetSpec] | None,
+    language: str | None,
+) -> tuple[CreateSpreadsheetInput, str, str]:
+    """The request to build, its per-turn dedupe key and its stored JSON."""
+
+    if base_json is not None and changes:
+        spec = apply_changes(json.loads(base_json), changes)
+        if file_name:
+            spec["file_name"] = file_name
+        if language:
+            spec["language"] = language
+        try:
+            request = CreateSpreadsheetInput.model_validate(spec)
+        except ValidationError as exc:
+            raise ChangeError(
+                "No file was written: the changed workbook is not valid: "
+                + "; ".join(
+                    f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}"
+                    for e in exc.errors()[:5]
+                )
+            ) from None
+    else:
+        request = CreateSpreadsheetInput.model_validate(
+            {"file_name": file_name, "sheets": sheets, "language": language}
+        )
+    spec = request_spec(request)
+    key_spec = {**spec, "file_name": sanitize_file_name(request.file_name or "")}
+    key = hashlib.sha256(
+        json.dumps(key_spec, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()
+    return request, key, json.dumps(spec, ensure_ascii=False)
 
 
 def request_spec(request: CreateSpreadsheetInput) -> dict[str, Any]:
