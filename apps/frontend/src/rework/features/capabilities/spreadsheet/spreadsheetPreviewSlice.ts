@@ -23,13 +23,20 @@ export interface SpreadsheetPreviewState {
   /** The conversation this state belongs to; a write from another one resets it. */
   sessionId: string | null;
   current: SpreadsheetPreviewPartData | null;
+  /** Highest version seen per workbook, so the chat marks the latest card. */
+  latest: Record<string, number>;
 }
 
 interface SpreadsheetPreviewRootState {
   spreadsheetPreview: SpreadsheetPreviewState;
 }
 
-const initialState: SpreadsheetPreviewState = { sessionId: null, current: null };
+const initialState: SpreadsheetPreviewState = { sessionId: null, current: null, latest: {} };
+
+function noteVersion(state: SpreadsheetPreviewState, preview: SpreadsheetPreviewPartData) {
+  if (!preview.workbook_id || !preview.version) return;
+  state.latest[preview.workbook_id] = Math.max(state.latest[preview.workbook_id] ?? 0, preview.version);
+}
 
 type Payload = PayloadAction<{ sessionId: string; preview: SpreadsheetPreviewPartData }>;
 
@@ -42,13 +49,17 @@ export const spreadsheetPreviewSlice = createSlice({
       if (state.sessionId !== action.payload.sessionId) {
         state.sessionId = action.payload.sessionId;
         state.current = null;
+        state.latest = {};
       }
       state.current ??= action.payload.preview;
+      noteVersion(state, action.payload.preview);
     },
     /** Show this file in the pane: a card's preview button, or a live creation. */
     openSpreadsheet(state, action: Payload) {
+      if (state.sessionId !== action.payload.sessionId) state.latest = {};
       state.sessionId = action.payload.sessionId;
       state.current = action.payload.preview;
+      noteVersion(state, action.payload.preview);
     },
   },
 });
@@ -56,5 +67,8 @@ export const spreadsheetPreviewSlice = createSlice({
 export const { registerSpreadsheet, openSpreadsheet } = spreadsheetPreviewSlice.actions;
 
 export const selectSpreadsheetPreview = (state: SpreadsheetPreviewRootState) => state.spreadsheetPreview;
+
+export const selectLatestVersion = (state: SpreadsheetPreviewRootState, workbookId: string | undefined) =>
+  workbookId ? state.spreadsheetPreview.latest[workbookId] : undefined;
 
 export default spreadsheetPreviewSlice.reducer;

@@ -288,7 +288,9 @@
       "moreRows_other": "{{formatted}} lignes de plus ne sont pas affichées. Téléchargez le fichier pour tout voir.",
       "card": {
         "aria": "Fichier Excel",
-        "open": "Aperçu"
+        "open": "Aperçu",
+        "latest": "Dernière version",
+        "version": "Version {{version}}"
       }
     },
     "html_artifact": {

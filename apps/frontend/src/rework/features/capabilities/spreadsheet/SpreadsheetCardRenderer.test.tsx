@@ -21,14 +21,24 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SpreadsheetPreviewPartData } from "./types";
 
-const state = vi.hoisted(() => ({ session: "s-1", now: 1_000_000, dispatched: [] as { type: string }[] }));
+const state = vi.hoisted(() => ({
+  session: "s-1",
+  now: 1_000_000,
+  dispatched: [] as { type: string }[],
+  latest: {} as Record<string, number>,
+}));
 
 vi.mock("react-redux", () => ({
   useDispatch: () => (action: { type: string }) => state.dispatched.push(action),
+  useSelector: (select: (root: unknown) => unknown) => select({ spreadsheetPreview: { latest: state.latest } }),
 }));
 vi.mock("../useOpenSessionId", () => ({ useMountSessionId: () => state.session }));
 vi.mock("./SpreadsheetDownloadButton", () => ({ default: () => <button type="button">download</button> }));
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string, options?: { version?: number }) => (options?.version ? `${key}:${options.version}` : key),
+  }),
+}));
 
 // The page-load stamp is taken at import: freeze it before loading the module.
 vi.spyOn(Date, "now").mockImplementation(() => state.now);
@@ -51,8 +61,8 @@ const part = (id: string): SpreadsheetPreviewPartData => ({
   preview_url: `/fs/download/${id}.preview.json`,
 });
 
-async function mount(id: string) {
-  await act(async () => root.render(<SpreadsheetCardRenderer part={part(id) as never} />));
+async function mount(id: string, extra: Partial<SpreadsheetPreviewPartData> = {}) {
+  await act(async () => root.render(<SpreadsheetCardRenderer part={{ ...part(id), ...extra } as never} />));
 }
 
 const types = () => state.dispatched.map((action) => action.type);
@@ -60,6 +70,7 @@ const types = () => state.dispatched.map((action) => action.type);
 beforeEach(() => {
   state.dispatched = [];
   state.session = "s-1";
+  state.latest = {};
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -103,5 +114,33 @@ describe("SpreadsheetCardRenderer", () => {
     const open = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("card.open"))!;
     await act(async () => open.click());
     expect(types()).toEqual(OPEN);
+  });
+
+  it("marks the latest version of a workbook and keeps older cards usable", async () => {
+    state.now = PAGE_LOADED_AT + 1000;
+    state.latest = { w1: 2 };
+    await mount("v2", { workbook_id: "w1", version: 2 });
+    expect(container.textContent).toContain("capability.spreadsheet.card.latest");
+
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount("v1", { workbook_id: "w1", version: 1 });
+    expect(container.textContent).toContain("capability.spreadsheet.card.version:1");
+    expect(container.textContent).toContain("download");
+
+    // A live v3 moves the marker: the v1 card now reads "Version 1" still, v3 is latest.
+    state.latest = { w1: 3 };
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount("v3", { workbook_id: "w1", version: 3 });
+    expect(container.textContent).toContain("capability.spreadsheet.card.latest");
+  });
+
+  it("shows no version marker for a single-version workbook", async () => {
+    state.now = PAGE_LOADED_AT + 1000;
+    state.latest = { w1: 1 };
+    await mount("only", { workbook_id: "w1", version: 1 });
+    expect(container.textContent).not.toContain("card.latest");
+    expect(container.textContent).not.toContain("card.version");
   });
 });

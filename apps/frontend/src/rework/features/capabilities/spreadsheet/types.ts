@@ -26,6 +26,9 @@ export interface SpreadsheetPreviewPartData {
   /** Bearer-protected `/fs/download` hrefs: fetch them with the Authorization header. */
   xlsx_download_url: string;
   preview_url: string;
+  /** Versions of one workbook share this id; absent on files created before versions. */
+  workbook_id?: string;
+  version?: number;
 }
 
 export type SpreadsheetColumnType = "text" | "number" | "integer" | "percent" | "currency" | "date";
