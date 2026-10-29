@@ -186,26 +186,34 @@ async def test_known_uuid_and_multi_dataset_cannot_escape_selection(published, o
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("inventory", ["list_documents", "list_datasets"])
 @pytest.mark.parametrize("field,value", [("generation_id", None), ("deletion_id", D3), ("space_deletion_id", D3), ("space_id", OTHER_SPACE), ("retrievable", False), ("retrievable_pending", True)])
-async def test_each_read_rechecks_publication_lifecycle_and_space(published, field, value):
+async def test_each_read_rechecks_publication_lifecycle_and_space(published, field, value, inventory):
     service = published.service(DocumentScope.from_ids(document_ids=[str(D1)]))
-    assert len(await service.list_documents(PERSON)) == 1
+    list_inventory = getattr(service, inventory)
+    assert len(await list_inventory(PERSON)) == 1
     for row in published.facts:
         if row["id"] == D1:
             row[field] = value
     published.reads.clear()
-    assert await service.list_documents(PERSON) == []
+    assert await list_inventory(PERSON) == []
     assert published.reads == []
     with pytest.raises(PermissionError):
         await service.read_dataset_frame(PERSON, str(D1))
 
 
 @pytest.mark.asyncio
-async def test_space_denial_precedes_artifact_access(published):
-    published.permission.side_effect = PermissionError("space refused")
-    with pytest.raises(PermissionError):
-        await published.service().list_documents(PERSON)
+@pytest.mark.parametrize("inventory", ["list_documents", "list_datasets"])
+@pytest.mark.parametrize("error", [PermissionError, RuntimeError])
+async def test_each_inventory_rechecks_space_before_artifact_access(published, inventory, error):
+    list_inventory = getattr(published.service(), inventory)
+    assert len(await list_inventory(PERSON)) == 3
+    published.reads.clear()
+    published.permission.side_effect = error("space authorization unavailable")
+    with pytest.raises(error, match="space authorization unavailable"):
+        await list_inventory(PERSON)
     assert not published.reads
+    assert published.permission.await_count == 2
 
 
 @pytest.mark.parametrize("key", ["document_scope", "space_id", "owner_filter", "attachment_uids", "corpus_document_uids"])

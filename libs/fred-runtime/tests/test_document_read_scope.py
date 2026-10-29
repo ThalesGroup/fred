@@ -29,6 +29,7 @@ from uuid import UUID
 
 import fred_runtime.integrations.v2_runtime.adapters as adapters_module
 import pytest
+import pytest_asyncio
 from fred_core.documents.selection import DocumentScope
 from fred_runtime.model_routing.turn import TurnAuthority
 from fred_runtime.runtime_support.run_scope import RunScope
@@ -121,8 +122,8 @@ def _binding(**runtime_kwargs: Any) -> BoundRuntimeContext:
     )
 
 
-@pytest.fixture(autouse=True)
-def _patch_client(monkeypatch: pytest.MonkeyPatch):
+@pytest_asyncio.fixture(autouse=True)
+async def _patch_client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(adapters_module, "KfDocumentClient", _RecordingKfClient)
     _RecordingKfClient.calls = []
     authority = TurnAuthority(turn_binding("agent-1", session="s-1"), None)

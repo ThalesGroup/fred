@@ -1073,7 +1073,7 @@ async def test_hitl_resume_two_sequential_prompts_get_different_interrupt_ids() 
 
 @dataclass(frozen=True)
 class _ToolCallTextIncident:
-    """Redacted evidence plus a reconstructed completed model message."""
+    """Redacted incident shape replayed with current canonical tool names."""
 
     name: str
     session_id: str
@@ -1109,8 +1109,8 @@ _TOOL_CALL_TEXT_INCIDENTS = (
         observation_id="73d1e5558f82c3b6",
         reconstructed_content=[
             *_redacted_thinking_blocks(37),
-            {"type": "text", "text": "read"},
-            {"type": "text", "text": "_query"},
+            {"type": "text", "text": "query"},
+            {"type": "text", "text": "_tabular_documents"},
             _RECONSTRUCTED_REFERENCE_BLOCK,
             {
                 "type": "text",
@@ -1122,7 +1122,7 @@ _TOOL_CALL_TEXT_INCIDENTS = (
             },
         ],
         observed_history_projection=(
-            "read\n_query\n{'type': 'reference', 'reference_ids': []}\n"
+            "query\n_tabular_documents\n{'type': 'reference', 'reference_ids': []}\n"
             '{"sql": "SELECT * FROM <redacted_table> LIMIT 5", '
             '"dataset_uids": ["<redacted_dataset>"]} list_tabular_documents{}'
         ),
@@ -1421,8 +1421,8 @@ async def test_mixed_mistral_fragments_execute_and_pair_two_calls() -> None:
     invocations: list[dict[str, Any]] = []
     content: list[str | dict[str, Any]] = [
         {"type": "thinking", "thinking": "<redacted>"},
-        {"type": "text", "text": "read"},
-        "_query",
+        {"type": "text", "text": "query"},
+        "_tabular_documents",
         {"type": "reference", "reference_ids": []},
         {"type": "text", "text": '{"sql":"'},
         'SELECT COUNT(*) FROM fake_fleet","dataset_uids":["fake"]} '

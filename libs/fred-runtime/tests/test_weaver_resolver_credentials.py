@@ -276,7 +276,10 @@ async def test_configuration_conflict_is_preserved_before_execution(
         with pytest.raises(HTTPException) as error:
             await admission.resolve(client)
     assert error.value.status_code == 409
-    assert error.value.detail["code"] == "agent_configuration_changed"
+    assert error.value.detail == {
+        "code": "agent_configuration_changed",
+        "message": "This agent has changed since this conversation started. Start a new conversation to use its new configuration.",
+    }
     assert len(calls) == 1
     assert calls[0].url.params["conversation"] == "conversation"
     assert admission.request._turn_authority is None

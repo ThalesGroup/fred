@@ -485,8 +485,8 @@ def _cte_query_node(cte_entry: dict[str, Any]) -> dict[str, Any] | None:
     Return the parsed query node stored inside one CTE entry.
 
     Why this exists:
-    - DuckDB nests each CTE definition under `value.query.node`, and relation
-      validation needs one reusable extractor for that shape.
+    - DuckDB 2.x stores definitions under `value.query_node`; supported 1.x
+      versions use `value.query.node`.
 
     How to use:
     - Pass one mapping from `_cte_entries(...)`.
@@ -495,6 +495,10 @@ def _cte_query_node(cte_entry: dict[str, Any]) -> dict[str, Any] | None:
     cte_value = cte_entry.get("value")
     if not isinstance(cte_value, dict):
         return None
+
+    node = cte_value.get("query_node")
+    if isinstance(node, dict):
+        return node
 
     query = cte_value.get("query")
     if not isinstance(query, dict):

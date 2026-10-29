@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The native Agent Pod sends its server-bound scope outside MCP arguments."""
 
+from collections.abc import Sequence
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -20,9 +21,17 @@ from fred_sdk.contracts.context import (
     PortableEnvironment,
     RuntimeContext,
 )
+from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from weaver_fixtures import INSTANCE_ID, SPACE_ID, turn_binding
 
 A, D1, OUTSIDE = [str(UUID(int=i)) for i in (201, 101, 999)]
+
+
+class _Settings:
+    id = "agent-1"
+    team_id: str | None = "team-1"
+    tuning: AgentTuning | None = None
+    active_mcp_servers: Sequence[MCPServerRef] = ()
 
 
 def binding(documents=None):
@@ -53,7 +62,7 @@ async def test_refresh_and_rebind_do_not_widen_server_agent_scope():
         authority.start(run)
         shim = _McpRuntimeAgentShim(
             binding=binding([D1]),
-            settings=SimpleNamespace(),
+            settings=_Settings(),
             document_scope=DocumentScope.from_ids([A]),
         )
         provider = admitted_provider(StaticWorkloadTokens())
@@ -131,13 +140,15 @@ async def test_document_pack_mcp_activation_carries_scope_before_any_tool_call(
             return []
 
     monkeypatch.setattr(mcp_utils, "MCPAdapter", Adapter)
-    server = MCPServerConfiguration(
-        id="mcp-knowledge-flow-mcp-tabular",
-        name="tabular",
-        transport="streamable_http",
-        url="https://kf.invalid/mcp/tabular",
-        auth_mode="delegated",
-        enabled=True,
+    server = MCPServerConfiguration.model_validate(
+        {
+            "id": "mcp-knowledge-flow-mcp-tabular",
+            "name": "tabular",
+            "transport": "streamable_http",
+            "url": "https://kf.invalid/mcp/tabular",
+            "auth_mode": "delegated",
+            "enabled": True,
+        }
     )
     await mcp_utils.get_connected_mcp_client_for_agent(
         "agent-a",

@@ -150,6 +150,7 @@ def _runtime_binding(request: httpx.Request, template_id: str) -> WeaverRuntimeB
                 "runtime_id": "fred-agents",
                 "template_id": "00000000-0000-0000-0000-000000000004",
                 "template_key": template_id,
+                "configuration_revision": 1,
                 "configuration_updated_at": "2026-10-26T00:00:00Z",
                 "configuration": tuning.model_dump(mode="json"),
             },

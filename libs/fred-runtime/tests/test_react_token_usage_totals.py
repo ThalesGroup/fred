@@ -335,11 +335,16 @@ async def test_split_tool_name_is_held_without_streaming_recovered_syntax() -> N
     events = [
         (
             "messages",
-            (AIMessageChunk(content=[{"type": "text", "text": "read"}]), {}),
+            (AIMessageChunk(content=[{"type": "text", "text": "query"}]), {}),
         ),
         (
             "messages",
-            (AIMessageChunk(content=[{"type": "text", "text": "_query"}]), {}),
+            (
+                AIMessageChunk(
+                    content=[{"type": "text", "text": "_tabular_documents"}]
+                ),
+                {},
+            ),
         ),
         (
             "messages",
@@ -374,8 +379,8 @@ async def test_split_tool_name_is_held_without_streaming_recovered_syntax() -> N
         for event in collected
         if isinstance(event, (AssistantDeltaRuntimeEvent, ThoughtDeltaEvent))
     )
-    assert "read" not in streamed
-    assert "_query" not in streamed
+    assert "query" not in streamed
+    assert "_tabular_documents" not in streamed
     assert '"sql"' not in streamed
     assert [
         event.tool_name
@@ -503,8 +508,8 @@ async def test_payloadless_blocks_do_not_break_streamed_call_recovery(
     [
         (
             [
-                {"type": "text", "text": "read"},
-                "_query",
+                {"type": "text", "text": "query"},
+                "_tabular_documents",
                 {"type": "reference", "reference_ids": []},
                 {"type": "text", "text": '{"sql":"'},
                 'SELECT COUNT(*) FROM fake_fleet","dataset_uids":["fake"]}',
@@ -515,7 +520,7 @@ async def test_payloadless_blocks_do_not_break_streamed_call_recovery(
         (
             [
                 {"type": "text", "text": "search"},
-                "_documents_using_vectorization",
+                "_documents",
                 {"type": "reference", "reference_ids": []},
                 {"type": "text", "text": '{"question":"'},
                 'fleet size","top_k":5}',
@@ -558,8 +563,8 @@ async def test_mixed_reference_chunk_is_withheld_from_react_stream(
 @pytest.mark.asyncio
 async def test_repeated_markers_are_withheld_until_completed_recovery() -> None:
     content: list[str | dict[str, object]] = [
-        {"type": "text", "text": "read"},
-        "_query",
+        {"type": "text", "text": "query"},
+        "_tabular_documents",
         {"type": "reference", "reference_ids": []},
         {
             "type": "text",
@@ -846,8 +851,8 @@ async def test_non_mistral_mixed_reference_chunk_loses_no_text() -> None:
 @pytest.mark.asyncio
 async def test_mixed_reference_with_unknown_block_remains_visible() -> None:
     content: list[str | dict[str, object]] = [
-        {"type": "text", "text": "read"},
-        "_query",
+        {"type": "text", "text": "query"},
+        "_tabular_documents",
         {"type": "reference", "reference_ids": []},
         {"type": "metadata", "value": "keep this block"},
     ]
@@ -865,7 +870,7 @@ async def test_mixed_reference_with_unknown_block_remains_visible() -> None:
         for event in collected
         if isinstance(event, AssistantDeltaRuntimeEvent)
     )
-    assert "read" in streamed
+    assert "query" in streamed
     assert "keep this block" in streamed
     assert "reference_ids" not in streamed
     assert not [event for event in collected if isinstance(event, ToolCallRuntimeEvent)]

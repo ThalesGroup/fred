@@ -591,8 +591,8 @@ async def test_recovery_caps_reject_before_creating_calls(
         (
             [
                 {"type": "thinking", "thinking": "<redacted>"},
-                {"type": "text", "text": "read"},
-                {"type": "text", "text": "_query"},
+                {"type": "text", "text": "query"},
+                {"type": "text", "text": "_tabular_documents"},
                 {"type": "reference", "reference_ids": []},
                 {
                     "type": "text",
@@ -710,8 +710,8 @@ async def test_reconstructed_incidents_recover_every_complete_call_once(
         (
             [
                 {"type": "thinking", "thinking": "<redacted>"},
-                {"type": "text", "text": "read"},
-                "_query",
+                {"type": "text", "text": "query"},
+                "_tabular_documents",
                 {"type": "reference", "reference_ids": []},
                 {"type": "text", "text": '{"sql": "'},
                 'SELECT COUNT(*) FROM fake_fleet", "dataset_uids": ["fake-dataset"]} '
@@ -739,7 +739,7 @@ async def test_reconstructed_incidents_recover_every_complete_call_once(
             [
                 {"type": "thinking", "thinking": "<redacted>"},
                 {"type": "text", "text": "search"},
-                "_documents_using_vectorization",
+                "_documents",
                 {"type": "reference", "reference_ids": []},
                 {"type": "text", "text": '{"question": "'},
                 'fleet size", "top_k": 5} '
@@ -912,8 +912,8 @@ async def test_repeated_exact_markers_recover_four_valid_calls() -> None:
     ]
     content: list[str | dict[str, Any]] = [
         {"type": "thinking", "thinking": "<redacted>"},
-        {"type": "text", "text": "read"},
-        "_query",
+        {"type": "text", "text": "query"},
+        "_tabular_documents",
         {"type": "reference", "reference_ids": []},
         {"type": "text", "text": json.dumps(args[0])},
         f" query_tabular_documents{json.dumps(args[1])} query_tabular_documents",
@@ -1020,8 +1020,8 @@ async def test_invalid_later_marker_rejects_all_calls(
     [
         (
             [
-                {"type": "text", "text": "read"},
-                "_query",
+                {"type": "text", "text": "query"},
+                "_tabular_documents",
                 {"type": "reference", "reference_ids": [], "title": "example"},
                 {"type": "text", "text": '{"sql":"SELECT 1","dataset_uids":["fake"]}'},
             ],
@@ -1029,8 +1029,8 @@ async def test_invalid_later_marker_rejects_all_calls(
         ),
         (
             [
-                {"type": "text", "text": "read"},
-                "_query",
+                {"type": "text", "text": "query"},
+                "_tabular_documents",
                 {"type": "reference", "reference_ids": []},
                 {"type": "text", "text": '{"sql":'},
                 ',"dataset_uids":["fake"]}',
@@ -1039,8 +1039,8 @@ async def test_invalid_later_marker_rejects_all_calls(
         ),
         (
             [
-                {"type": "text", "text": "read"},
-                "_query",
+                {"type": "text", "text": "query"},
+                "_tabular_documents",
                 {"type": "reference", "reference_ids": []},
                 {"type": "text", "text": '{"sql":"SELECT 1",'},
                 '"dataset_uids":["fake"],"unexpected":1}',
@@ -1049,15 +1049,15 @@ async def test_invalid_later_marker_rejects_all_calls(
         ),
         (
             [
-                {"type": "text", "text": "Example: read"},
-                '_query{"sql":"SELECT 1","dataset_uids":["fake"]}',
+                {"type": "text", "text": "Example: query"},
+                '_tabular_documents{"sql":"SELECT 1","dataset_uids":["fake"]}',
             ],
             "mistral-medium-latest",
         ),
         (
             [
-                {"type": "text", "text": "read"},
-                "_query",
+                {"type": "text", "text": "query"},
+                "_tabular_documents",
                 {"type": "reference", "reference_ids": []},
                 {"type": "text", "text": '{"sql":"SELECT 1","dataset_uids":["fake"]}'},
             ],
@@ -1160,8 +1160,8 @@ async def test_native_duplicate_calls_are_preserved_after_the_text_call() -> Non
     ]
     original = AIMessage(
         content=[
-            {"type": "text", "text": "read"},
-            "_query",
+            {"type": "text", "text": "query"},
+            "_tabular_documents",
             {"type": "reference", "reference_ids": []},
             {"type": "text", "text": '{"sql":"SELECT 1","dataset_uids":["fake"]}'},
         ],

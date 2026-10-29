@@ -16,10 +16,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import AsyncIterator, Sequence
 
 import httpx
 import pytest
+import pytest_asyncio
 from conftest import MockIdentityProvider, admitted_provider
 from fred_core.documents.selection import DocumentScope
 from fred_core.documents.transport import DOCUMENT_CONTEXT_HEADER, DocumentAccessContext
@@ -53,8 +54,8 @@ class _Settings:
     active_mcp_servers: Sequence[MCPServerRef] = ()
 
 
-@pytest.fixture(autouse=True)
-def _runtime_context() -> Iterator[None]:
+@pytest_asyncio.fixture(autouse=True)
+async def _runtime_context() -> AsyncIterator[None]:
     set_runtime_context(
         FredRuntimeContext(RuntimeConfig(knowledge_flow_url="http://kf.invalid/kf/v1"))
     )

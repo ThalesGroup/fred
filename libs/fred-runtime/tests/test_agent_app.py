@@ -5842,6 +5842,7 @@ def test_document_ceiling_is_shared_by_all_services_and_child_invoker(
         services.agent_invoker,
     ):
         assert getattr(port, "_document_scope") == expected
+    assert isinstance(services.tool_provider, agent_app_module.FredMcpToolProvider)
     assert services.tool_provider._agent._document_scope == expected
     # The builtin must not add a folder-only ceiling excluding explicit documents.
     invoker = services.tool_invoker

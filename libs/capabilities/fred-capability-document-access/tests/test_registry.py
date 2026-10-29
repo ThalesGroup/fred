@@ -35,6 +35,7 @@ from fred_sdk.contracts.capability import AgentCapability
 from fred_sdk.contracts.models import TeamScopePolicy
 
 _CAPABILITY_ID = "document_access"
+_FOLDER_ID = "00000000-0000-0000-0000-000000000201"
 
 
 def _declared_entry_points():
@@ -87,36 +88,60 @@ def test_stored_library_binding_reaches_the_server_side_ceiling() -> None:
     # scope fred-runtime enforces on `knowledge.search`.
     registry = _registry()
     stored = {
-        _CAPABILITY_ID: _envelope({"bind_libraries": True, "library_tag_ids": ["A"]})
+        _CAPABILITY_ID: _envelope(
+            {"bind_libraries": True, "library_tag_ids": [_FOLDER_ID]}
+        )
     }
 
+    result = evaluate_capability_chat_controls(
+        registry,
+        capability_id=_CAPABILITY_ID,
+        config_envelope=stored[_CAPABILITY_ID],
+    )
+    assert result.error is None
     scope = next(
-        control
-        for control in evaluate_capability_chat_controls(
-            registry,
-            capability_id=_CAPABILITY_ID,
-            config_envelope=stored[_CAPABILITY_ID],
-        ).controls
-        if control.widget == "document_scope"
+        control for control in result.controls if control.widget == "document_scope"
     )
     assert scope.params is not None
-    assert scope.params["bound_library_ids"] == ["A"]
+    assert scope.params["bound_library_ids"] == [_FOLDER_ID]
     assert resolve_bound_library_ids(
         registry, capability_ids=[_CAPABILITY_ID], capability_config=stored
-    ) == ["A"]
+    ) == [_FOLDER_ID]
 
 
 def test_inert_library_binding_sets_no_ceiling() -> None:
     registry = _registry()
-    for config in (
-        {"bind_libraries": False, "library_tag_ids": ["A"]},
-        {"bind_libraries": True, "library_tag_ids": ["A"], "team_documents": False},
-    ):
-        assert (
-            resolve_bound_library_ids(
-                registry,
-                capability_ids=[_CAPABILITY_ID],
-                capability_config={_CAPABILITY_ID: _envelope(config)},
-            )
-            is None
+    stored = {
+        _CAPABILITY_ID: _envelope(
+            {"bind_libraries": False, "library_tag_ids": [_FOLDER_ID]}
         )
+    }
+    result = evaluate_capability_chat_controls(
+        registry,
+        capability_id=_CAPABILITY_ID,
+        config_envelope=stored[_CAPABILITY_ID],
+    )
+    assert result.error is None
+    assert (
+        resolve_bound_library_ids(
+            registry, capability_ids=[_CAPABILITY_ID], capability_config=stored
+        )
+        is None
+    )
+
+
+def test_config_without_a_document_source_is_rejected() -> None:
+    result = evaluate_capability_chat_controls(
+        _registry(),
+        capability_id=_CAPABILITY_ID,
+        config_envelope=_envelope(
+            {
+                "bind_libraries": True,
+                "library_tag_ids": [_FOLDER_ID],
+                "team_documents": False,
+            }
+        ),
+    )
+    assert result.error is not None
+    assert "needs at least one source" in result.error
+    assert result.controls == []

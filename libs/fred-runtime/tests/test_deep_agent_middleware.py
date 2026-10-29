@@ -766,8 +766,8 @@ async def test_compiled_deep_parent_executes_mixed_mistral_calls() -> None:
         return "one fake row"
 
     content: list[str | dict[str, object]] = [
-        {"type": "text", "text": "read"},
-        "_query",
+        {"type": "text", "text": "query"},
+        "_tabular_documents",
         {"type": "reference", "reference_ids": []},
         {"type": "text", "text": '{"sql":"'},
         'SELECT COUNT(*) FROM fake_fleet","dataset_uids":["fake"]} '
