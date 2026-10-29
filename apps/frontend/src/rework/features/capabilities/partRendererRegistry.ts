@@ -25,9 +25,10 @@
 // kind, so a collision here means the plugin index itself is wrong — the
 // frontend mirror keeps the FIRST registration (builtins win) and warns.
 
-import { builtinPartRenderers } from "./builtinPartRenderers";
+import type { RawUiPart } from "@rework/types/parts";
+import { builtinPartIdentities, builtinPartRenderers } from "./builtinPartRenderers";
 import { capabilityUiPlugins } from "./index";
-import type { CapabilityUiPlugin, UiPartRenderer } from "./types";
+import type { CapabilityUiPlugin, UiPartIdentity, UiPartRenderer } from "./types";
 
 export function buildPartRendererRegistry(
   builtins: Record<string, UiPartRenderer> = builtinPartRenderers,
@@ -53,4 +54,34 @@ const partRendererRegistry = buildPartRendererRegistry();
 /** The renderer for a part kind, or undefined — undefined means skip. */
 export function rendererForPartKind(kind: string): UiPartRenderer | undefined {
   return partRendererRegistry.get(kind);
+}
+
+const partIdentities = new Map<string, UiPartIdentity>(Object.entries(builtinPartIdentities));
+for (const plugin of capabilityUiPlugins) {
+  for (const [kind, identity] of Object.entries(plugin.partIdentities ?? {})) {
+    if (!partIdentities.has(kind)) partIdentities.set(kind, identity);
+  }
+}
+
+/**
+ * The parts of one message to show: for parts showing the same object, only the
+ * last (its latest version) is kept. Parts without an identity always stay.
+ */
+export function latestPartPerObject<T extends RawUiPart>(
+  parts: readonly T[],
+  identities: ReadonlyMap<string, UiPartIdentity> = partIdentities,
+): T[] {
+  const objectOf = (part: T) => {
+    const id = identities.get(part.type)?.(part);
+    return id === undefined ? undefined : `${part.type}\u0000${id}`;
+  };
+  const lastIndex = new Map<string, number>();
+  parts.forEach((part, index) => {
+    const object = objectOf(part);
+    if (object !== undefined) lastIndex.set(object, index);
+  });
+  return parts.filter((part, index) => {
+    const object = objectOf(part);
+    return object === undefined || lastIndex.get(object) === index;
+  });
 }
