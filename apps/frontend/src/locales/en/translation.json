@@ -2395,7 +2395,8 @@
         }
       },
       "recentAgents": {
-        "title": "Recently used agents"
+        "title": "Recently used agents",
+        "suggestedTitle": "Agents available to you"
       },
       "topAgents": {
         "title": "Your most-used agents",
