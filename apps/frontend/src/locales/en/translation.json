@@ -74,8 +74,8 @@
   },
   "app": {
     "loading": {
-      "router": "Fred is starting...",
-      "ui": "Fred is getting the UI ready...",
+      "router": "The platform is starting...",
+      "ui": "The platform is getting the UI ready...",
       "generic": "Loading, please wait..."
     }
   },
@@ -2462,7 +2462,7 @@
       }
     },
     "releaseNotes": {
-      "baseRelease": "Base Fred release",
+      "baseRelease": "Base platform release",
       "brandRelease": "{{brand}} release",
       "copied": "Copied!",
       "copy": "Copy",
@@ -4525,9 +4525,9 @@
       "catalog-loading": "Loading application…",
       "connecting": "Connecting to the application…",
       "unavailable": "This application is unavailable.",
-      "protocol-mismatch": "This application speaks a Fred application protocol this deployment does not support.",
+      "protocol-mismatch": "This application speaks a platform application protocol this deployment does not support.",
       "unreachable": "The application did not respond. It may be starting up or misconfigured.",
-      "render": "The application stopped unexpectedly. Fred is still available."
+      "render": "The application stopped unexpectedly. The platform is still available."
     }
   },
   "unauthorized": {
