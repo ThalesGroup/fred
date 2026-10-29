@@ -89,6 +89,17 @@ export function adminLandingPath(capabilities: ProtectedCapabilities): string {
   return ADMIN_LANDING.find(([requires]) => isProtectedAllowed(requires, capabilities))?.[1] ?? "/unauthorized";
 }
 
+/** Admin opens the person's organization space first; the platform space is one switch away. */
+export function adminIndexPath(access: {
+  capabilities: ProtectedCapabilities;
+  supervision: boolean;
+  platformOwner: boolean;
+}): string {
+  if (canEnterAdminSection(access.capabilities)) return adminLandingPath(access.capabilities);
+  if (access.supervision) return "/admin/supervision";
+  return access.platformOwner ? "/admin/organizations" : "/unauthorized";
+}
+
 interface ProtectedProps {
   requires: ProtectedRequirement;
   children: React.ReactNode;

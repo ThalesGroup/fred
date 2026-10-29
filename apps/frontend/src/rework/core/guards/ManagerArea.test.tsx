@@ -15,6 +15,17 @@ const h = vi.hoisted(() => ({
     currentData: {} as object | undefined,
     refetch: vi.fn(),
   },
+  spaces: {
+    currentData: [] as object[] | undefined,
+    isLoading: false,
+    isFetching: false,
+    isError: false,
+    error: undefined as unknown,
+  },
+}));
+// RTK keeps the last successful `data` when a refetch fails.
+vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useMySpacesQuery: () => ({ ...h.spaces, data: h.spaces.currentData }),
 }));
 vi.mock("@core/hooks/useOrganizationAdmin", () => ({
   useOrganizationAdmin: () => ({ isAdmin: false }),
@@ -46,6 +57,7 @@ beforeEach(() => {
     error: undefined,
     currentData: {},
   });
+  Object.assign(h.spaces, { currentData: [], isLoading: false, isFetching: false, isError: false, error: undefined });
   vi.clearAllMocks();
   host = document.createElement("div");
   document.body.append(host);
@@ -67,9 +79,11 @@ function render(path = "/home") {
           <Route
             element={
               <ManagerArea>
-                <div data-business>
-                  <Outlet />
-                </div>
+                {(business) => (
+                  <div data-business={business || undefined}>
+                    <Outlet />
+                  </div>
+                )}
               </ManagerArea>
             }
           >
@@ -92,14 +106,54 @@ function render(path = "/home") {
     ),
   );
 }
+const member = () => {
+  h.spaces.currentData = [{ id: "org-1", kind: "organization", name: "Acme", roles: ["admin"] }];
+};
 it.each(["/home", "/team/existing-membership/agents"])(
-  "keeps a mixed-role owner in the platform area from %s",
+  "keeps a platform owner without an organization in the platform area from %s",
   (path) => {
     render(path);
     expect(host.textContent).toContain("Organizations");
     expect(host.querySelector("[data-business]")).toBeNull();
   },
 );
+it.each(["/home", "/team/existing-membership/agents", "/settings"])(
+  "opens a member platform owner's own page %s without bouncing to the platform area",
+  (path) => {
+    member();
+    render(path);
+    expect(host.textContent).not.toContain("Organizations");
+    expect(host.querySelector("[data-business]")).not.toBeNull();
+  },
+);
+it("keeps platform pages out of the business area for a member platform owner", () => {
+  member();
+  render("/admin/organizations");
+  expect(host.textContent).toContain("Organizations");
+  expect(host.querySelector("[data-business]")).toBeNull();
+});
+it("waits for the membership before deciding a platform owner's area", () => {
+  h.spaces.isLoading = true;
+  h.spaces.currentData = undefined;
+  render("/home");
+  expect(host.querySelector('[role="status"]')).not.toBeNull();
+  expect(host.textContent).not.toContain("Organizations");
+});
+it("keeps a member platform owner on their page when a membership refetch fails", () => {
+  member();
+  render("/home");
+  h.spaces.isError = true;
+  h.spaces.error = { status: 503 };
+  render("/home");
+  expect(host.textContent).not.toContain("Organizations");
+  expect(host.querySelector("[data-business]")).not.toBeNull();
+});
+it("keeps a platform owner in the platform area when the membership cannot be read", () => {
+  h.spaces.isError = true;
+  h.spaces.currentData = undefined;
+  render("/home");
+  expect(host.textContent).toContain("Organizations");
+});
 it.each(["/settings", "/admin/provisioning"])("retains shared and provisioning destinations: %s", (path) => {
   render(path);
   expect(host.textContent).not.toContain("Organizations");
@@ -131,7 +185,7 @@ it("does not mount platform business navigation or its bootstrap hooks", () => {
   act(() =>
     root.render(
       <MemoryRouter initialEntries={["/admin/organizations"]}>
-        <MainNavBar platformArea />
+        <MainNavBar platformOnly />
         <AdminNavbar platformArea />
       </MemoryRouter>,
     ),

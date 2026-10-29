@@ -14,6 +14,7 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  adminIndexPath,
   adminLandingPath,
   canEnterAdminSection,
   isProtectedAllowed,
@@ -89,5 +90,24 @@ describe("adminLandingPath", () => {
 
   it("keeps the platform administrator landing on teams", () => {
     expect(adminLandingPath(caps({ canAdmin: true }))).toBe("/admin/teams");
+  });
+});
+
+describe("adminIndexPath", () => {
+  it("opens the organization space before the platform space", () => {
+    expect(adminIndexPath({ capabilities: NONE, supervision: true, platformOwner: true })).toBe("/admin/supervision");
+    expect(adminIndexPath({ capabilities: caps({ canAdmin: true }), supervision: false, platformOwner: true })).toBe(
+      "/admin/teams",
+    );
+  });
+
+  it("opens the platform space for a platform owner with no organization page", () => {
+    expect(adminIndexPath({ capabilities: NONE, supervision: false, platformOwner: true })).toBe(
+      "/admin/organizations",
+    );
+  });
+
+  it("keeps everyone else out", () => {
+    expect(adminIndexPath({ capabilities: NONE, supervision: false, platformOwner: false })).toBe("/unauthorized");
   });
 });
