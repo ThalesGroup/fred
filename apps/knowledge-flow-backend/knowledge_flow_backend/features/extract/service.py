@@ -12,30 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-On-demand exhaustive document extraction (DOCREAD-01 Phase 2).
-
-The server-side counterpart to the agent's `extract_from_document` tool: instead
-of the agent paging the whole document into its own context (many token-heavy
-model calls, the original client-side 429 cause), it makes ONE call here and the
-map-reduce over every chunk — with bounded concurrency and 429 backoff — runs
-server-side. Document text is resolved through `ContentService`, which owns
-the corpus/session-attachment resolution for every reader.
-"""
+"""On-demand extraction over published markdown using Swift map-reduce."""
 
 import logging
 import time
+from uuid import UUID
 
-from fred_core import KeycloakUser
-from pydantic import BaseModel, Field
+from fred_core.security.delegation import AssertedUser
+from pydantic import BaseModel, ConfigDict, Field
 
-from knowledge_flow_backend.features.content.content_service import ContentService
+from knowledge_flow_backend.features.content.published_markdown import published_markdown
 from knowledge_flow_backend.features.extract.extractor import DocumentExtractor
 
 logger = logging.getLogger(__name__)
 
 
 class ExtractDocumentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    space_id: UUID
+
     instruction: str = Field(
         min_length=1,
         description="What to extract exhaustively, e.g. 'every functional requirement', 'all deadlines and their context'.",
@@ -51,15 +46,12 @@ class ExtractDocumentResponse(BaseModel):
 
 
 class ExtractService:
-    def __init__(self) -> None:
-        self._content = ContentService()
-
     def _build_extractor(self) -> DocumentExtractor:
         return DocumentExtractor()
 
-    async def extract_document(self, user: KeycloakUser, document_uid: str, request: ExtractDocumentRequest) -> ExtractDocumentResponse:
+    async def extract_document(self, user: AssertedUser, document_uid: str, request: ExtractDocumentRequest) -> ExtractDocumentResponse:
         started = time.monotonic()
-        text = await self._content.get_markdown_preview(user, document_uid)
+        text = await published_markdown(user, request.space_id, document_uid)
         extractor = self._build_extractor()
         result = await extractor.extract(text=text, instruction=request.instruction)
         logger.info(

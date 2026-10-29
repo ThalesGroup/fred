@@ -16,7 +16,7 @@ import logging
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from fred_core.documents.access import SpaceNotFoundError, SpacePendingDeletionError
 from fred_core.kpi import phase_timer
 from fred_core.security.delegation import AssertedUser
@@ -25,15 +25,9 @@ from fred_core.store import VectorSearchHit
 from knowledge_flow_backend.application_context import get_kpi_writer
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchRequest
-from knowledge_flow_backend.security.weaver_admission import delegated_person, require_space_read
+from knowledge_flow_backend.security.weaver_admission import _space_error, delegated_person, require_space_read
 
 logger = logging.getLogger(__name__)
-
-
-def _space_error(exc: Exception) -> HTTPException:
-    if isinstance(exc, SpacePendingDeletionError):
-        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail="space_pending_deletion")
-    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="space_not_found")
 
 
 class VectorSearchController:

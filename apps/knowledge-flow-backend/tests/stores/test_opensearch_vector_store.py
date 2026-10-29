@@ -1051,3 +1051,80 @@ def test_search_diagnostics_do_not_expose_unchecked_candidates(monkeypatch, capl
     assert "PRIVATE_CONTENT_SENTINEL" not in caplog.text
     assert "PRIVATE_TITLE_SENTINEL" not in caplog.text
     assert "built hits count=1" in caplog.text
+
+
+@pytest.mark.parametrize("worker_first", [False, True])
+def test_corpus_startup_is_independent_of_replica_order(monkeypatch, worker_first):
+    client = FakeOpenSearchClient(index_name="fred-vectors", pipeline_exists=False)
+    monkeypatch.setattr(ovs, "OpenSearch", lambda *args, **kwargs: client)
+
+    def start(*, read_only):
+        return ovs.OpenSearchVectorStoreAdapter(
+            embedding_model=DummyEmbeddings(size=8),
+            embedding_model_name="custom-model",
+            kpi=None,
+            host="http://localhost:9200",
+            index="fred-vectors",
+            username="reader" if read_only else "writer",
+            password=TEST_OPENSEARCH_PASSWORD,
+            read_only=read_only,
+        )
+
+    if worker_first:
+        start(read_only=False)
+    reader = start(read_only=True)
+    if not worker_first:
+        with pytest.raises(RuntimeError, match="pipeline is not initialized"):
+            reader.ensure_ready()
+        assert client.search_pipeline.put_calls == []
+        client.search_pipeline.exists = True
+        with pytest.raises(RuntimeError, match="index is not initialized"):
+            reader.ensure_ready()
+        assert client.indices.create_calls == []
+        start(read_only=False)
+    reader.ensure_ready()
+    reader.ensure_ready()
+    start(read_only=False)
+    assert len(client.indices.create_calls) == 1
+    assert client.indices.put_mapping_calls == []
+
+
+def test_concurrent_worker_creation_validates_winning_index(monkeypatch):
+    client = FakeOpenSearchClient(index_name="fred-vectors")
+    monkeypatch.setattr(ovs, "OpenSearch", lambda *args, **kwargs: client)
+
+    def competing_create(index, body):
+        client.indices._store_index(index, body)
+        raise ovs.RequestError(400, "resource_already_exists_exception", {})
+
+    monkeypatch.setattr(client.indices, "create", competing_create)
+    ovs.OpenSearchVectorStoreAdapter(
+        embedding_model=DummyEmbeddings(size=8),
+        embedding_model_name="custom-model",
+        kpi=None,
+        host="http://localhost:9200",
+        index="fred-vectors",
+        username="writer",
+        password=TEST_OPENSEARCH_PASSWORD,
+    )
+    assert client.indices.exists("fred-vectors")
+
+
+def test_reader_rejects_incompatible_index_without_writing(monkeypatch):
+    client = FakeOpenSearchClient(index_name="fred-vectors", index_body=ovs.build_vector_index_mapping(4))
+    monkeypatch.setattr(ovs, "OpenSearch", lambda *args, **kwargs: client)
+    reader = ovs.OpenSearchVectorStoreAdapter(
+        embedding_model=DummyEmbeddings(size=8),
+        embedding_model_name="custom-model",
+        kpi=None,
+        host="http://localhost:9200",
+        index="fred-vectors",
+        username="reader",
+        password=TEST_OPENSEARCH_PASSWORD,
+        read_only=True,
+    )
+    with pytest.raises(ValueError, match="Dimension mismatch"):
+        reader.ensure_ready()
+    assert client.indices.create_calls == []
+    assert client.indices.put_mapping_calls == []
+    assert client.search_pipeline.put_calls == []

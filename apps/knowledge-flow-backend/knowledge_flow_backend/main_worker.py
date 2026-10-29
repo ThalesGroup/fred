@@ -106,7 +106,10 @@ async def main() -> None:
         raise ValueError(f"Scheduler backend '{scheduler_backend}' not supported; expected 'temporal'.")
 
     manager_processing = bool(configuration.manager_processing and configuration.manager_processing.enabled)
-    if not manager_processing:
+    if manager_processing:
+        # Initialize the corpus before ingestion; API replicas only validate it.
+        await asyncio.to_thread(app_context.get_manager_vector_store)
+    else:
         from knowledge_flow_backend.models.table_ownership import REQUIRED_TABLES
 
         # Legacy activities own SQL metadata/tasks; manager activities use its API.

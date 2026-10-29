@@ -175,10 +175,8 @@ applications:
           limits:
             pending: 100
             output_bytes: 536870912
-            derived_bytes: 5368709120
             artifacts: 2000
             chunks: 100000
-            generations: 32
 
   control-plane-worker:
     enabled: false
@@ -188,6 +186,12 @@ applications:
     # It reads Control Plane tables and the published OpenFGA model; no KF migration.
     migration: {enabled: false}
     configuration:
+      published_artifacts:
+        endpoint: http://seaweedfs:8333
+        bucket: app-content-documents
+        access_key_env: KF_ARTIFACT_ACCESS_KEY
+        secret_key_env: KF_ARTIFACT_SECRET_KEY
+        allow_insecure: true
       security:
         rebac:
           # The store Control Plane publishes, like the agent pod.

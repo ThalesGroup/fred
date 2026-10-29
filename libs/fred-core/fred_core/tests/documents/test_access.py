@@ -20,15 +20,18 @@ The SQL schema belongs to the Control Plane migrations; no database is used here
 from __future__ import annotations
 
 from typing import Any, cast
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4, uuid5
 
 import pytest
 from fred_core.documents.access import (
     Candidate,
+    PublishedArtifact,
     SearchScope,
     SpaceNotFoundError,
     SpacePendingDeletionError,
     filter_candidates,
+    published_artifact,
     scope_from_space,
     verify_candidates,
 )
@@ -169,3 +172,64 @@ async def test_no_valid_document_reads_nothing() -> None:
     assert (
         await verify_candidates(conn, SCOPE, [Candidate("not-a-uuid", chunk(0))]) == []
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("space_id", [ORG, TEAM])
+async def test_published_artifact_uses_one_query(space_id: UUID) -> None:
+    row = document(
+        space_id=space_id, prefix="org/doc/output/generation/", size=42, sha256="a" * 64
+    )
+    conn = MagicMock(spec=AsyncConnection)
+    conn.execute = AsyncMock(return_value=MagicMock())
+    conn.execute.return_value.mappings.return_value.first.return_value = row
+    artifact = await published_artifact(conn, SCOPE, row["id"], "output.md")
+    assert artifact == PublishedArtifact(row["prefix"], 42, "a" * 64)
+    conn.execute.assert_awaited_once()
+    statement, params = conn.execute.call_args.args
+    assert params == {"document_id": row["id"], "path": "output.md"}
+    sql = str(statement)
+    assert "g.id = d.published_generation" in sql
+    assert "a.generation_id = g.id AND a.path = :path" in sql
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "row",
+    [
+        None,
+        document(space_id=PROJECT),
+        document(space_id=PERSONAL),
+        document(deletion_id=uuid4()),
+        document(space_deletion_id=uuid4()),
+        document(retrievable=False),
+        document(retrievable_pending=True),
+        document(retrievable_pending=None),
+    ],
+    ids=[
+        "missing-document-generation-or-path",
+        "out-of-scope",
+        "personal",
+        "retired",
+        "space-deleting",
+        "not-retrievable",
+        "pending",
+        "unknown-pending",
+    ],
+)
+async def test_published_artifact_refuses_invisible_or_absent_rows(
+    row: dict[str, Any] | None,
+) -> None:
+    conn = MagicMock(spec=AsyncConnection)
+    conn.execute = AsyncMock(return_value=MagicMock())
+    conn.execute.return_value.mappings.return_value.first.return_value = row
+    assert await published_artifact(conn, SCOPE, uuid4(), "output.md") is None
+    conn.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_published_artifact_propagates_database_failure() -> None:
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        await published_artifact(
+            cast(AsyncConnection, FailingConnection()), SCOPE, uuid4(), "output.md"
+        )

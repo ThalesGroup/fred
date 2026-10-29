@@ -28,6 +28,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 
 from knowledge_flow_backend.core.monitoring.monitoring_controller import MonitoringController
+from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 
 
 class _AsyncCM:
@@ -62,6 +63,7 @@ def _healthy_context() -> SimpleNamespace:
     return SimpleNamespace(
         get_pg_async_engine=lambda: engine,
         get_opensearch_client=lambda: opensearch,
+        get_vector_store=lambda: object(),
         get_rebac_engine=lambda: rebac,
         get_filesystem=lambda: gcs_fs,
         get_content_store=lambda: gcs_content,
@@ -128,3 +130,17 @@ def test_ready_skips_non_gcs_backend() -> None:
 
 if __name__ == "__main__":  # pragma: no cover
     pytest.main([__file__, "-v"])
+
+
+def test_api_stays_live_and_becomes_ready_after_corpus_initialization():
+    ctx = _healthy_context()
+    store = MagicMock(spec=OpenSearchVectorStoreAdapter)
+    store.ensure_ready.side_effect = [RuntimeError("Corpus index is not initialized"), None]
+    ctx.get_vector_store = lambda: store
+    with _client(ctx) as client:
+        assert client.get("/knowledge-flow/v1/healthz").status_code == 200
+        response = client.get("/knowledge-flow/v1/ready")
+        assert response.status_code == 503
+        assert response.json()["checks"]["opensearch"]["ok"] is False
+        assert client.get("/knowledge-flow/v1/healthz").status_code == 200
+        assert client.get("/knowledge-flow/v1/ready").status_code == 200

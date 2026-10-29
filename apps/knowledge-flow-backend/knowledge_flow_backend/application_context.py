@@ -91,6 +91,7 @@ from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVect
 from knowledge_flow_backend.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from knowledge_flow_backend.core.stores.vector.pgvector_store import PgVectorStoreAdapter
+from knowledge_flow_backend.features.manager_processing.artifacts import ArtifactReader
 
 # Union of supported processor base classes
 BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
@@ -319,6 +320,7 @@ class ApplicationContext:
             return
 
         self.configuration = configuration
+        self._published_artifact_reader: ArtifactReader | None = None
         if isinstance(configuration.storage.vector_store, ChromaVectorStorageConfig) and importlib.util.find_spec("chromadb") is None:
             raise ImportError(
                 "Chroma vector storage is configured but the optional 'chromadb' dependency is missing. "
@@ -510,6 +512,14 @@ class ApplicationContext:
         module = importlib.import_module(module_path)
         cls = getattr(module, class_name)
         return cls
+
+    def get_published_artifact_reader(self) -> ArtifactReader:
+        if self._published_artifact_reader is None:
+            config = self.configuration.published_artifacts
+            if config is None:
+                raise RuntimeError("published_artifacts is not configured")
+            self._published_artifact_reader = ArtifactReader(config)
+        return self._published_artifact_reader
 
     def get_pg_async_engine(self):
         """
@@ -725,13 +735,13 @@ class ApplicationContext:
             return self._vector_store_instance
         raise ValueError("Vector store is not initialized. Use get_create_vector_store() instead.")
 
-    def get_create_vector_store(self, embedding_model: Embeddings) -> BaseVectorStore:
+    def get_create_vector_store(self, embedding_model: Embeddings, *, read_only: bool = False) -> BaseVectorStore:
         """
         Vector Store Factory
         """
         if self._vector_store_instance is not None:
             return self._vector_store_instance
-        self._vector_store_instance = self.build_vector_store(embedding_model, self.configuration.storage.vector_store)
+        self._vector_store_instance = self.build_vector_store(embedding_model, self.configuration.storage.vector_store, read_only=read_only)
         return self._vector_store_instance
 
     def get_manager_vector_store(self):
@@ -745,7 +755,7 @@ class ApplicationContext:
                 self._manager_vector_store = instance
             return self._manager_vector_store
 
-    def build_vector_store(self, embedding_model: Embeddings, store) -> BaseVectorStore:
+    def build_vector_store(self, embedding_model: Embeddings, store, *, read_only: bool = False) -> BaseVectorStore:
         """Construct an explicitly selected namespace without changing the legacy singleton."""
         embedding_model_name = self.configuration.embedding_model.name or "unknown"
 
@@ -768,6 +778,7 @@ class ApplicationContext:
                 secure=opensearch_config.secure,
                 verify_certs=opensearch_config.verify_certs,
                 bulk_size=store.bulk_size,
+                read_only=read_only,
             )
             return instance
         elif isinstance(store, ChromaVectorStorageConfig):

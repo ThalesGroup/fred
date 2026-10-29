@@ -645,6 +645,7 @@ Operation `my_spaces`.
 | GET | [/organizations/{organization_id}/capabilities](#get-organizationsorganization_idcapabilities) |  |
 | POST | [/organizations/{organization_id}/capabilities/{runtime_id}/refresh](#post-organizationsorganization_idcapabilitiesruntime_idrefresh) |  |
 | PUT | [/organizations/{organization_id}/capabilities/{runtime_id}/{capability_id}/default-on](#put-organizationsorganization_idcapabilitiesruntime_idcapability_iddefault-on) |  |
+| GET | [/organizations/{organization_id}/capabilities/{runtime_id}/{capability_id}/revoke-impact](#get-organizationsorganization_idcapabilitiesruntime_idcapability_idrevoke-impact) |  |
 | GET | [/organizations/{organization_id}/model-policy](#get-organizationsorganization_idmodel-policy) |  |
 | PUT | [/organizations/{organization_id}/model-policy](#put-organizationsorganization_idmodel-policy) |  |
 | POST | [/organizations/{organization_id}/model-sources/{source_id}/refresh](#post-organizationsorganization_idmodel-sourcessource_idrefresh) |  |
@@ -722,6 +723,21 @@ Request: [`SetDefaultOnRequest`](#setdefaultonrequest).
 - 401, 403, 500, 503: [`ErrorBody`](#errorbody)
 - 404: [`ErrorBody`](#errorbody) — Unknown organization, pod source or offer
 - 409: [`ErrorBody`](#errorbody) — Enabling an offer the pod no longer advertises
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### GET /organizations/{organization_id}/capabilities/{runtime_id}/{capability_id}/revoke-impact
+
+Operation `organization_capability_revoke_impact`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `organization_id` | path | string (uuid) | yes |  |
+| `runtime_id` | path | string | yes |  |
+| `capability_id` | path | string | yes |  |
+
+- 200: array of [`AffectedAgentInstance`](#affectedagentinstance) — Instances usable now that disabling this offer would stop
+- 401, 403, 500, 503: [`ErrorBody`](#errorbody)
+- 404: [`ErrorBody`](#errorbody) — Unknown organization, pod source or offer
 - 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
 
 ### GET /organizations/{organization_id}/model-policy
@@ -1163,6 +1179,19 @@ Operation `revoke_platform_role`.
 | `accepted_at` | string (date-time) | yes |  |
 | `version` | string | yes |  |
 
+### AffectedAgentInstance
+
+An agent instance an offer's authorization affects, with its space for display.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agent_instance_id` | string (uuid) | yes |  |
+| `display_name` | string | yes |  |
+| `owner_name` | string or null | yes | Display name of a personal space's owner; null for other spaces. |
+| `space_id` | string (uuid) | yes |  |
+| `space_kind` | [`SpaceKind`](#spacekind) | yes |  |
+| `space_name` | string | yes |  |
+
 ### AgentCapabilityKind
 
 One of: `agent`.
@@ -1315,6 +1344,7 @@ One of: `string`, `text`, `text-multiline`, `number`, `integer`, `boolean`, `sel
 | `default_on` | boolean | yes | Enabled for every space of this organization. |
 | `descriptor` | [`PodCapabilityDescriptor`](#podcapabilitydescriptor) | yes |  |
 | `runtime_id` | string | yes |  |
+| `unusable_instances` | array of [`AffectedAgentInstance`](#affectedagentinstance) | yes | Instances that select this offer and may no longer use it. |
 | `version` | string | yes |  |
 
 ### CatalogObservationState
@@ -1449,7 +1479,7 @@ One of: `source_guarantee`, `api_metadata`.
 | `name` | string | yes |  |
 | `organization_id` | string (uuid) | yes |  |
 | `output_prefix` | string | yes |  |
-| `predecessor` | [`Manifest`](#manifest) or null |  |  |
+| `predecessor` | [`Predecessor`](#predecessor) or null |  |  |
 | `profile_settings` | any | yes |  |
 | `size` | integer (int64) | yes |  |
 | `space_id` | string (uuid) | yes |  |
@@ -1873,6 +1903,15 @@ One of: `tool`.
 | `default_selected` | boolean | yes |  |
 | `source_agent_id` | string | yes |  |
 
+### Predecessor
+
+The previous stage's result and the stored prefix that holds its artifacts.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `manifest` | [`Manifest`](#manifest) | yes |  |
+| `prefix` | string | yes |  |
+
 ### Preflight
 
 | Field | Type | Required | Description |
@@ -1932,7 +1971,7 @@ One of: `fast`, `medium`, `rich`.
 
 ### ProjectionPhase
 
-One of: `uncertain`, `ready`, `writing`, `applied`.
+One of: `ready`, `writing`, `applied`.
 
 ### ProvisioningUpload
 
@@ -2014,7 +2053,7 @@ One of: `uncertain`, `ready`, `writing`, `applied`.
 | --- | --- | --- | --- |
 | `operation_id` | string (uuid) | yes |  |
 | `retrievable` | boolean | yes |  |
-| `step` | [`RetrievalStep`](#retrievalstep) |  |  |
+| `step` | [`RetrievalStep`](#retrievalstep) | yes |  |
 
 ### RetrievalStep
 
@@ -2029,7 +2068,6 @@ One of: `claim`, `applied`, `confirm`.
 | `manifest` | [`Manifest`](#manifest) | yes |  |
 | `operation_id` | string (uuid) | yes |  |
 | `phase` | [`ProjectionPhase`](#projectionphase) | yes |  |
-| `restore` | boolean | yes |  |
 | `retrievable` | boolean | yes |  |
 
 ### Role
@@ -2165,7 +2203,7 @@ Organization "enabled for all" decision, shared by agents and capability offers.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `retrievable` | boolean or null | yes | null restores an untouched legacy publication from its verified metadata and chunks. |
+| `retrievable` | boolean | yes |  |
 
 ### Space
 

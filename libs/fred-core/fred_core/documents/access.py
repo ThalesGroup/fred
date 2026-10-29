@@ -47,6 +47,24 @@ _DOCUMENTS = text(
 ).bindparams(bindparam("document_ids", type_=ARRAY(Uuid)))
 
 
+_PUBLISHED_ARTIFACT = text(
+    "SELECT d.space_id, d.deletion_id, s.deletion_id AS space_deletion_id,"
+    " d.retrievable, d.retrievable_pending, g.prefix, a.size, a.sha256"
+    " FROM document d"
+    " JOIN space s ON s.id = d.space_id"
+    " JOIN generation g ON g.id = d.published_generation"
+    " JOIN artifact a ON a.generation_id = g.id AND a.path = :path"
+    " WHERE d.id = :document_id"
+).bindparams(bindparam("document_id", type_=Uuid))
+
+
+@dataclass(frozen=True)
+class PublishedArtifact:
+    prefix: str
+    size: int
+    sha256: str
+
+
 class SpaceNotFoundError(LookupError):
     pass
 
@@ -223,3 +241,18 @@ async def verify_candidates(
         },
     )
     return kept
+
+
+async def published_artifact(
+    conn: AsyncConnection, scope: SearchScope, document_id: UUID, path: str
+) -> PublishedArtifact | None:
+    """Read the published artifact and its visibility facts in one query."""
+    result = await conn.execute(
+        _PUBLISHED_ARTIFACT, {"document_id": document_id, "path": path}
+    )
+    row = result.mappings().first()
+    if row is None or not is_live_document(row, scope.space_ids):
+        return None
+    return PublishedArtifact(
+        prefix=row["prefix"], size=row["size"], sha256=row["sha256"]
+    )

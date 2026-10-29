@@ -32,6 +32,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,9 @@ class MonitoringController:
         ok = await asyncio.to_thread(client.ping)
         if not ok:
             raise RuntimeError("OpenSearch ping returned False")
+        store = self._context.get_vector_store()
+        if isinstance(store, OpenSearchVectorStoreAdapter):
+            await asyncio.to_thread(store.ensure_ready)
 
     async def _check_openfga(self) -> None:
         from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine

@@ -41,6 +41,9 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.config_loader import load_configuration
 from knowledge_flow_backend.common.structures import Configuration
 from knowledge_flow_backend.core.monitoring.monitoring_controller import MonitoringController
+from knowledge_flow_backend.features.content.published_markdown import MarkdownController
+from knowledge_flow_backend.features.extract.controller import ExtractController
+from knowledge_flow_backend.features.summarize.controller import SummarizeController
 from knowledge_flow_backend.features.vector_search.vector_search_controller import VectorSearchController
 
 logging.basicConfig(level=logging.INFO)
@@ -135,6 +138,9 @@ def create_app() -> FastAPI:
     )
     MonitoringController(monitoring_router, application_context)
     VectorSearchController(router)
+    MarkdownController(router)
+    SummarizeController(router)
+    ExtractController(router)
     app.include_router(monitoring_router)
     app.include_router(router)
     return app

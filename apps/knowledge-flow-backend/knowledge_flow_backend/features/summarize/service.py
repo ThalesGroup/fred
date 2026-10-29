@@ -16,18 +16,23 @@ import asyncio
 import logging
 import time
 from typing import List, Optional
+from uuid import UUID
 
-from fred_core import KeycloakUser
+from fred_core.security.delegation import AssertedUser
 from langchain_core.documents import Document
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.summarizer.smart_llm_summarizer import SmartDocSummarizer
+from knowledge_flow_backend.features.content.published_markdown import published_markdown
 
 logger = logging.getLogger(__name__)
 
 
 class SummarizeDocumentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    space_id: UUID
+
     instruction: Optional[str] = Field(
         default=None,
         description="Free-text instruction steering the summary: focus area, audience, what to look for, desired length/tone.",
@@ -60,9 +65,6 @@ class SummarizeService:
     """
 
     def __init__(self):
-        from knowledge_flow_backend.features.content.content_service import ContentService
-
-        self.content_service = ContentService()
         self.context = ApplicationContext.get_instance()
 
     def _build_summarizer(self) -> SmartDocSummarizer:
@@ -71,12 +73,9 @@ class SummarizeService:
             splitter=self.context.get_text_splitter(),
         )
 
-    async def summarize_document(self, user: KeycloakUser, document_uid: str, request: SummarizeDocumentRequest) -> SummarizeDocumentResponse:
+    async def summarize_document(self, user: AssertedUser, document_uid: str, request: SummarizeDocumentRequest) -> SummarizeDocumentResponse:
         started = time.monotonic()
-        # ContentService resolves both document sources under one uid (corpus
-        # preview, or a session attachment rebuilt from its vectors), so the
-        # agent never has to know which one it named.
-        markdown = await self.content_service.get_markdown_preview(user, document_uid)
+        markdown = await published_markdown(user, request.space_id, document_uid)
         fetch_ms = (time.monotonic() - started) * 1000
         document = Document(page_content=markdown, metadata={})
 

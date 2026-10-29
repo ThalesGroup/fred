@@ -87,6 +87,7 @@ erDiagram
   boolean retrievable_pending
   uuid published_generation FK
   timestamp_with_time_zone purged_at
+  timestamp_with_time_zone purge_after
   uuid deletion_id FK
 }
 "platform_bootstrap" {
@@ -200,6 +201,7 @@ erDiagram
   integer__ vector_ordinals
   bigint rows
   integer cleanup_cursor
+  timestamp_with_time_zone cleanup_after
   timestamp_with_time_zone cleaned_at
 }
 "artifact" {

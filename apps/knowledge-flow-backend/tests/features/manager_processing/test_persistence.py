@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from uuid import uuid4, uuid5
+from uuid import UUID, uuid4, uuid5
 
 import pytest
 from langchain_core.documents import Document
@@ -288,8 +288,11 @@ def test_cleanup_preserves_published_ordinals_and_does_not_ack_remote_failure(mo
     monkeypatch.setattr(cleanup, "Artifacts", lambda _: SimpleNamespace())
     context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace(enabled=True)), get_manager_vector_store=lambda: vectors)
     if failure:
-        with pytest.raises(RuntimeError):
-            cleanup.sweep(context)
+        if failure == "authority":
+            with pytest.raises(RuntimeError):
+                cleanup.sweep(context)
+        else:
+            cleanup.sweep(context)  # The failing candidate is logged; the sweep goes on.
         assert not acknowledgments
         if failure == "authority":
             assert not deleted
@@ -302,6 +305,42 @@ def test_cleanup_preserves_published_ordinals_and_does_not_ack_remote_failure(mo
         assert deleted == [str(uuid5(descriptor.generation, str(i))) for i in (0, 2, 0, 2)]
         assert len(acknowledgments) == 2
         assert all(not ack.objects_empty for ack in acknowledgments)
+
+
+def test_cleanup_failing_candidate_does_not_block_the_next(monkeypatch, descriptor):
+    from knowledge_flow_backend.features.manager_processing import cleanup
+
+    failing, later = (
+        {"work": descriptor.work.model_dump(mode="json"), "generation": str(uuid4()), "cursor": 0, "chunks": 1, "batch": 200, "preserve_objects": True, "protected_ordinals": []} for _ in range(2)
+    )
+    acknowledgments = []
+
+    class Client:
+        def __init__(self, *_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def get(self, _):
+            return [failing, later]
+
+        def post(self, _, body):
+            acknowledgments.append(body)
+
+    def delete(_, identifier):
+        if identifier == str(uuid5(UUID(failing["generation"]), "0")):
+            raise RuntimeError("store unavailable")
+
+    vectors = SimpleNamespace(delete_chunk=delete, get_chunk=lambda *_: {})
+    monkeypatch.setattr(cleanup, "ManagerClient", Client)
+    monkeypatch.setattr(cleanup, "Artifacts", lambda _: SimpleNamespace())
+    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace(enabled=True)), get_manager_vector_store=lambda: vectors)
+    cleanup.sweep(context)
+    assert [str(ack.generation) for ack in acknowledgments] == [later["generation"]]
 
 
 @pytest.mark.parametrize("remaining", [0, 1])

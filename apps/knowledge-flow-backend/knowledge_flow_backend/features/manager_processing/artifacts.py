@@ -5,14 +5,16 @@
 import hashlib
 import os
 from datetime import timedelta
+from io import BytesIO
 from pathlib import Path
+from typing import BinaryIO
 from urllib.parse import urlsplit
 
 import requests
 import urllib3
 from minio import Minio
 
-from knowledge_flow_backend.common.structures import ManagerProcessingConfig
+from knowledge_flow_backend.common.structures import ArtifactStorageConfig
 from knowledge_flow_backend.features.manager_processing.client import ManagerError
 from knowledge_flow_backend.features.manager_processing.contracts import Artifact, Descriptor, Manifest
 
@@ -49,8 +51,8 @@ def adopt_output(descriptor: Descriptor, directory: Path, source: Path, name: st
     return target
 
 
-class Artifacts:
-    def __init__(self, config: ManagerProcessingConfig):
+class ArtifactReader:
+    def __init__(self, config: ArtifactStorageConfig):
         endpoint = urlsplit(config.endpoint)
         self.bucket = config.bucket
         self.client = Minio(
@@ -62,6 +64,33 @@ class Artifacts:
             http_client=urllib3.PoolManager(timeout=urllib3.Timeout(connect=5, read=30), retries=False),
         )
 
+    def read_verified(self, prefix: str, artifact: Artifact, output: BinaryIO | None = None) -> None:
+        if not safe_path(artifact.path):
+            raise ManagerError("integrity_failure", permanent=True)
+        response = self.client.get_object(self.bucket, prefix + artifact.path)
+        try:
+            total = 0
+            digest = hashlib.sha256()
+            for chunk in response.stream(64 * 1024):
+                total += len(chunk)
+                if total > artifact.size:
+                    raise ManagerError("integrity_failure", permanent=True)
+                digest.update(chunk)
+                if output:
+                    output.write(chunk)
+            if total != artifact.size or digest.hexdigest() != artifact.sha256:
+                raise ManagerError("integrity_failure", permanent=True)
+        finally:
+            response.close()
+            response.release_conn()
+
+    def read_bytes(self, prefix: str, artifact: Artifact) -> bytes:
+        with BytesIO() as output:
+            self.read_verified(prefix, artifact, output)
+            return output.getvalue()
+
+
+class Artifacts(ArtifactReader):
     def put(self, prefix: str, path: Path, artifact: Artifact):
         # A retried write can only confirm identical bytes, never overwrite a published object.
         url = self.client.presigned_put_object(self.bucket, prefix + artifact.path, expires=timedelta(minutes=5))
@@ -75,30 +104,12 @@ class Artifacts:
         self.read(prefix, artifact)
 
     def read(self, prefix: str, artifact: Artifact, destination: Path | None = None):
-        if not safe_path(artifact.path):
-            raise ManagerError("integrity_failure", permanent=True)
-        response = self.client.get_object(self.bucket, prefix + artifact.path)
-        output = None
-        try:
-            if destination is not None:
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                output = destination.open("xb")
-            total = 0
-            digest = hashlib.sha256()
-            for chunk in response.stream(64 * 1024):
-                total += len(chunk)
-                if total > artifact.size:
-                    raise ManagerError("integrity_failure", permanent=True)
-                digest.update(chunk)
-                if output:
-                    output.write(chunk)
-            if total != artifact.size or digest.hexdigest() != artifact.sha256:
-                raise ManagerError("integrity_failure", permanent=True)
-        finally:
-            if output:
-                output.close()
-            response.close()
-            response.release_conn()
+        if destination is None:
+            self.read_verified(prefix, artifact)
+        else:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with destination.open("xb") as output:
+                self.read_verified(prefix, artifact, output)
 
     def publish(self, descriptor: Descriptor, directory: Path, *, chunks: int = 0, vectors: int = 0, rows: int | None = None) -> Manifest:
         files = sorted(path for path in directory.rglob("*") if path.is_file() or path.is_symlink())

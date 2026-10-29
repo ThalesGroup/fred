@@ -522,13 +522,6 @@ async fn set_organization_agent_default(
         .iter()
         .find(|item| item.id == agent_id)
         .ok_or(AppError::NotFound)?;
-    if body.default_on && !item.default_capability_ids.is_empty() {
-        return Err(AppError::problem(
-            axum::http::StatusCode::CONFLICT,
-            "agent_dependencies_unavailable",
-            "Template tool dependencies are not enabled in this organization.",
-        ));
-    }
     let (mut tx, mut guard) = spaces::lock_for(&s.pool, &s.fga, &organization).await?;
     spaces::authorize_locked(
         &mut tx,
@@ -538,6 +531,21 @@ async fn set_organization_agent_default(
         Permission::Manage,
     )
     .await?;
+    if body.default_on {
+        // Read under the organization lock, which offer default-off also takes.
+        let policy = enablement::Policy::load(&mut *tx, organization_id).await?;
+        if let Some(missing) = item
+            .default_capability_ids
+            .iter()
+            .find(|id| !policy.default_on(&item.runtime_id, id))
+        {
+            return Err(AppError::problem(
+                axum::http::StatusCode::CONFLICT,
+                "agent_dependencies_unavailable",
+                format!("Tool dependency {missing} is not enabled in this organization."),
+            ));
+        }
+    }
     let changed = s
         .fga
         .set_agent_default_on(&mut guard, organization_id, agent_id, body.default_on)

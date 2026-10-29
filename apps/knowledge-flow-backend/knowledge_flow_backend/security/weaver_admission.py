@@ -16,7 +16,8 @@
 
 from uuid import UUID
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, status
+from fred_core.documents.access import SpacePendingDeletionError
 from fred_core.security import oidc
 from fred_core.security.delegation import AssertedUser
 from fred_core.security.models import Resource
@@ -45,3 +46,9 @@ async def require_space_read(person: AssertedUser, space_id: UUID) -> None:
         SpacePermission.CAN_READ,
         RebacReference(Resource.SPACE, str(space_id)),
     )
+
+
+def _space_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, SpacePendingDeletionError):
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail="space_pending_deletion")
+    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="space_not_found")

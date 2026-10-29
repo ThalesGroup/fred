@@ -6707,6 +6707,34 @@
                       "additionalProperties": false,
                       "description": "Workload identity and isolated persistence for manager-owned documents.",
                       "properties": {
+                        "endpoint": {
+                          "title": "Endpoint",
+                          "type": "string"
+                        },
+                        "bucket": {
+                          "title": "Bucket",
+                          "type": "string"
+                        },
+                        "region": {
+                          "default": "us-east-1",
+                          "title": "Region",
+                          "type": "string"
+                        },
+                        "access_key_env": {
+                          "default": "MANAGER_DERIVED_ACCESS_KEY",
+                          "title": "Access Key Env",
+                          "type": "string"
+                        },
+                        "secret_key_env": {
+                          "default": "MANAGER_DERIVED_SECRET_KEY",
+                          "title": "Secret Key Env",
+                          "type": "string"
+                        },
+                        "allow_insecure": {
+                          "default": false,
+                          "title": "Allow Insecure",
+                          "type": "boolean"
+                        },
                         "enabled": {
                           "default": false,
                           "title": "Enabled",
@@ -6733,29 +6761,6 @@
                         "client_secret_env": {
                           "default": "MANAGER_WORKER_CLIENT_SECRET",
                           "title": "Client Secret Env",
-                          "type": "string"
-                        },
-                        "endpoint": {
-                          "title": "Endpoint",
-                          "type": "string"
-                        },
-                        "bucket": {
-                          "title": "Bucket",
-                          "type": "string"
-                        },
-                        "region": {
-                          "default": "us-east-1",
-                          "title": "Region",
-                          "type": "string"
-                        },
-                        "access_key_env": {
-                          "default": "MANAGER_DERIVED_ACCESS_KEY",
-                          "title": "Access Key Env",
-                          "type": "string"
-                        },
-                        "secret_key_env": {
-                          "default": "MANAGER_DERIVED_SECRET_KEY",
-                          "title": "Secret Key Env",
                           "type": "string"
                         },
                         "vector_store": {
@@ -6904,11 +6909,6 @@
                           ],
                           "title": "Vector Store"
                         },
-                        "allow_insecure": {
-                          "default": false,
-                          "title": "Allow Insecure",
-                          "type": "boolean"
-                        },
                         "temporary_bytes": {
                           "default": 1073741824,
                           "description": "Per-activity original plus output byte budget; size the worker volume for concurrent activities.",
@@ -6919,13 +6919,61 @@
                         }
                       },
                       "required": [
-                        "url",
-                        "issuer",
                         "endpoint",
                         "bucket",
+                        "url",
+                        "issuer",
                         "vector_store"
                       ],
                       "title": "ManagerProcessingConfig",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "published_artifacts": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "S3 connection for generation artifacts, independent of worker settings.",
+                      "properties": {
+                        "endpoint": {
+                          "title": "Endpoint",
+                          "type": "string"
+                        },
+                        "bucket": {
+                          "title": "Bucket",
+                          "type": "string"
+                        },
+                        "region": {
+                          "default": "us-east-1",
+                          "title": "Region",
+                          "type": "string"
+                        },
+                        "access_key_env": {
+                          "title": "Access Key Env",
+                          "type": "string"
+                        },
+                        "secret_key_env": {
+                          "title": "Secret Key Env",
+                          "type": "string"
+                        },
+                        "allow_insecure": {
+                          "default": false,
+                          "title": "Allow Insecure",
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "endpoint",
+                        "bucket",
+                        "access_key_env",
+                        "secret_key_env"
+                      ],
+                      "title": "ArtifactStorageConfig",
                       "type": "object"
                     },
                     {
@@ -11994,6 +12042,34 @@
                       "additionalProperties": false,
                       "description": "Workload identity and isolated persistence for manager-owned documents.",
                       "properties": {
+                        "endpoint": {
+                          "title": "Endpoint",
+                          "type": "string"
+                        },
+                        "bucket": {
+                          "title": "Bucket",
+                          "type": "string"
+                        },
+                        "region": {
+                          "default": "us-east-1",
+                          "title": "Region",
+                          "type": "string"
+                        },
+                        "access_key_env": {
+                          "default": "MANAGER_DERIVED_ACCESS_KEY",
+                          "title": "Access Key Env",
+                          "type": "string"
+                        },
+                        "secret_key_env": {
+                          "default": "MANAGER_DERIVED_SECRET_KEY",
+                          "title": "Secret Key Env",
+                          "type": "string"
+                        },
+                        "allow_insecure": {
+                          "default": false,
+                          "title": "Allow Insecure",
+                          "type": "boolean"
+                        },
                         "enabled": {
                           "default": false,
                           "title": "Enabled",
@@ -12020,29 +12096,6 @@
                         "client_secret_env": {
                           "default": "MANAGER_WORKER_CLIENT_SECRET",
                           "title": "Client Secret Env",
-                          "type": "string"
-                        },
-                        "endpoint": {
-                          "title": "Endpoint",
-                          "type": "string"
-                        },
-                        "bucket": {
-                          "title": "Bucket",
-                          "type": "string"
-                        },
-                        "region": {
-                          "default": "us-east-1",
-                          "title": "Region",
-                          "type": "string"
-                        },
-                        "access_key_env": {
-                          "default": "MANAGER_DERIVED_ACCESS_KEY",
-                          "title": "Access Key Env",
-                          "type": "string"
-                        },
-                        "secret_key_env": {
-                          "default": "MANAGER_DERIVED_SECRET_KEY",
-                          "title": "Secret Key Env",
                           "type": "string"
                         },
                         "vector_store": {
@@ -12191,11 +12244,6 @@
                           ],
                           "title": "Vector Store"
                         },
-                        "allow_insecure": {
-                          "default": false,
-                          "title": "Allow Insecure",
-                          "type": "boolean"
-                        },
                         "temporary_bytes": {
                           "default": 1073741824,
                           "description": "Per-activity original plus output byte budget; size the worker volume for concurrent activities.",
@@ -12206,13 +12254,61 @@
                         }
                       },
                       "required": [
-                        "url",
-                        "issuer",
                         "endpoint",
                         "bucket",
+                        "url",
+                        "issuer",
                         "vector_store"
                       ],
                       "title": "ManagerProcessingConfig",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "published_artifacts": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "S3 connection for generation artifacts, independent of worker settings.",
+                      "properties": {
+                        "endpoint": {
+                          "title": "Endpoint",
+                          "type": "string"
+                        },
+                        "bucket": {
+                          "title": "Bucket",
+                          "type": "string"
+                        },
+                        "region": {
+                          "default": "us-east-1",
+                          "title": "Region",
+                          "type": "string"
+                        },
+                        "access_key_env": {
+                          "title": "Access Key Env",
+                          "type": "string"
+                        },
+                        "secret_key_env": {
+                          "title": "Secret Key Env",
+                          "type": "string"
+                        },
+                        "allow_insecure": {
+                          "default": false,
+                          "title": "Allow Insecure",
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "endpoint",
+                        "bucket",
+                        "access_key_env",
+                        "secret_key_env"
+                      ],
+                      "title": "ArtifactStorageConfig",
                       "type": "object"
                     },
                     {
@@ -17223,6 +17319,34 @@
                       "additionalProperties": false,
                       "description": "Workload identity and isolated persistence for manager-owned documents.",
                       "properties": {
+                        "endpoint": {
+                          "title": "Endpoint",
+                          "type": "string"
+                        },
+                        "bucket": {
+                          "title": "Bucket",
+                          "type": "string"
+                        },
+                        "region": {
+                          "default": "us-east-1",
+                          "title": "Region",
+                          "type": "string"
+                        },
+                        "access_key_env": {
+                          "default": "MANAGER_DERIVED_ACCESS_KEY",
+                          "title": "Access Key Env",
+                          "type": "string"
+                        },
+                        "secret_key_env": {
+                          "default": "MANAGER_DERIVED_SECRET_KEY",
+                          "title": "Secret Key Env",
+                          "type": "string"
+                        },
+                        "allow_insecure": {
+                          "default": false,
+                          "title": "Allow Insecure",
+                          "type": "boolean"
+                        },
                         "enabled": {
                           "default": false,
                           "title": "Enabled",
@@ -17249,29 +17373,6 @@
                         "client_secret_env": {
                           "default": "MANAGER_WORKER_CLIENT_SECRET",
                           "title": "Client Secret Env",
-                          "type": "string"
-                        },
-                        "endpoint": {
-                          "title": "Endpoint",
-                          "type": "string"
-                        },
-                        "bucket": {
-                          "title": "Bucket",
-                          "type": "string"
-                        },
-                        "region": {
-                          "default": "us-east-1",
-                          "title": "Region",
-                          "type": "string"
-                        },
-                        "access_key_env": {
-                          "default": "MANAGER_DERIVED_ACCESS_KEY",
-                          "title": "Access Key Env",
-                          "type": "string"
-                        },
-                        "secret_key_env": {
-                          "default": "MANAGER_DERIVED_SECRET_KEY",
-                          "title": "Secret Key Env",
                           "type": "string"
                         },
                         "vector_store": {
@@ -17404,11 +17505,6 @@
                           ],
                           "title": "Vector Store"
                         },
-                        "allow_insecure": {
-                          "default": false,
-                          "title": "Allow Insecure",
-                          "type": "boolean"
-                        },
                         "temporary_bytes": {
                           "default": 1073741824,
                           "description": "Per-activity original plus output byte budget; size the worker volume for concurrent activities.",
@@ -17419,6 +17515,48 @@
                         }
                       },
                       "title": "ManagerProcessingConfig",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "published_artifacts": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "S3 connection for generation artifacts, independent of worker settings.",
+                      "properties": {
+                        "endpoint": {
+                          "title": "Endpoint",
+                          "type": "string"
+                        },
+                        "bucket": {
+                          "title": "Bucket",
+                          "type": "string"
+                        },
+                        "region": {
+                          "default": "us-east-1",
+                          "title": "Region",
+                          "type": "string"
+                        },
+                        "access_key_env": {
+                          "title": "Access Key Env",
+                          "type": "string"
+                        },
+                        "secret_key_env": {
+                          "title": "Secret Key Env",
+                          "type": "string"
+                        },
+                        "allow_insecure": {
+                          "default": false,
+                          "title": "Allow Insecure",
+                          "type": "boolean"
+                        }
+                      },
+                      "title": "ArtifactStorageConfig",
                       "type": "object"
                     },
                     {
@@ -22277,6 +22415,34 @@
                       "additionalProperties": false,
                       "description": "Workload identity and isolated persistence for manager-owned documents.",
                       "properties": {
+                        "endpoint": {
+                          "title": "Endpoint",
+                          "type": "string"
+                        },
+                        "bucket": {
+                          "title": "Bucket",
+                          "type": "string"
+                        },
+                        "region": {
+                          "default": "us-east-1",
+                          "title": "Region",
+                          "type": "string"
+                        },
+                        "access_key_env": {
+                          "default": "MANAGER_DERIVED_ACCESS_KEY",
+                          "title": "Access Key Env",
+                          "type": "string"
+                        },
+                        "secret_key_env": {
+                          "default": "MANAGER_DERIVED_SECRET_KEY",
+                          "title": "Secret Key Env",
+                          "type": "string"
+                        },
+                        "allow_insecure": {
+                          "default": false,
+                          "title": "Allow Insecure",
+                          "type": "boolean"
+                        },
                         "enabled": {
                           "default": false,
                           "title": "Enabled",
@@ -22303,29 +22469,6 @@
                         "client_secret_env": {
                           "default": "MANAGER_WORKER_CLIENT_SECRET",
                           "title": "Client Secret Env",
-                          "type": "string"
-                        },
-                        "endpoint": {
-                          "title": "Endpoint",
-                          "type": "string"
-                        },
-                        "bucket": {
-                          "title": "Bucket",
-                          "type": "string"
-                        },
-                        "region": {
-                          "default": "us-east-1",
-                          "title": "Region",
-                          "type": "string"
-                        },
-                        "access_key_env": {
-                          "default": "MANAGER_DERIVED_ACCESS_KEY",
-                          "title": "Access Key Env",
-                          "type": "string"
-                        },
-                        "secret_key_env": {
-                          "default": "MANAGER_DERIVED_SECRET_KEY",
-                          "title": "Secret Key Env",
                           "type": "string"
                         },
                         "vector_store": {
@@ -22458,11 +22601,6 @@
                           ],
                           "title": "Vector Store"
                         },
-                        "allow_insecure": {
-                          "default": false,
-                          "title": "Allow Insecure",
-                          "type": "boolean"
-                        },
                         "temporary_bytes": {
                           "default": 1073741824,
                           "description": "Per-activity original plus output byte budget; size the worker volume for concurrent activities.",
@@ -22473,6 +22611,48 @@
                         }
                       },
                       "title": "ManagerProcessingConfig",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "published_artifacts": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "S3 connection for generation artifacts, independent of worker settings.",
+                      "properties": {
+                        "endpoint": {
+                          "title": "Endpoint",
+                          "type": "string"
+                        },
+                        "bucket": {
+                          "title": "Bucket",
+                          "type": "string"
+                        },
+                        "region": {
+                          "default": "us-east-1",
+                          "title": "Region",
+                          "type": "string"
+                        },
+                        "access_key_env": {
+                          "title": "Access Key Env",
+                          "type": "string"
+                        },
+                        "secret_key_env": {
+                          "title": "Secret Key Env",
+                          "type": "string"
+                        },
+                        "allow_insecure": {
+                          "default": false,
+                          "title": "Allow Insecure",
+                          "type": "boolean"
+                        }
+                      },
+                      "title": "ArtifactStorageConfig",
                       "type": "object"
                     },
                     {
@@ -27331,6 +27511,34 @@
                       "additionalProperties": false,
                       "description": "Workload identity and isolated persistence for manager-owned documents.",
                       "properties": {
+                        "endpoint": {
+                          "title": "Endpoint",
+                          "type": "string"
+                        },
+                        "bucket": {
+                          "title": "Bucket",
+                          "type": "string"
+                        },
+                        "region": {
+                          "default": "us-east-1",
+                          "title": "Region",
+                          "type": "string"
+                        },
+                        "access_key_env": {
+                          "default": "MANAGER_DERIVED_ACCESS_KEY",
+                          "title": "Access Key Env",
+                          "type": "string"
+                        },
+                        "secret_key_env": {
+                          "default": "MANAGER_DERIVED_SECRET_KEY",
+                          "title": "Secret Key Env",
+                          "type": "string"
+                        },
+                        "allow_insecure": {
+                          "default": false,
+                          "title": "Allow Insecure",
+                          "type": "boolean"
+                        },
                         "enabled": {
                           "default": false,
                           "title": "Enabled",
@@ -27357,29 +27565,6 @@
                         "client_secret_env": {
                           "default": "MANAGER_WORKER_CLIENT_SECRET",
                           "title": "Client Secret Env",
-                          "type": "string"
-                        },
-                        "endpoint": {
-                          "title": "Endpoint",
-                          "type": "string"
-                        },
-                        "bucket": {
-                          "title": "Bucket",
-                          "type": "string"
-                        },
-                        "region": {
-                          "default": "us-east-1",
-                          "title": "Region",
-                          "type": "string"
-                        },
-                        "access_key_env": {
-                          "default": "MANAGER_DERIVED_ACCESS_KEY",
-                          "title": "Access Key Env",
-                          "type": "string"
-                        },
-                        "secret_key_env": {
-                          "default": "MANAGER_DERIVED_SECRET_KEY",
-                          "title": "Secret Key Env",
                           "type": "string"
                         },
                         "vector_store": {
@@ -27512,11 +27697,6 @@
                           ],
                           "title": "Vector Store"
                         },
-                        "allow_insecure": {
-                          "default": false,
-                          "title": "Allow Insecure",
-                          "type": "boolean"
-                        },
                         "temporary_bytes": {
                           "default": 1073741824,
                           "description": "Per-activity original plus output byte budget; size the worker volume for concurrent activities.",
@@ -27527,6 +27707,48 @@
                         }
                       },
                       "title": "ManagerProcessingConfig",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "published_artifacts": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "S3 connection for generation artifacts, independent of worker settings.",
+                      "properties": {
+                        "endpoint": {
+                          "title": "Endpoint",
+                          "type": "string"
+                        },
+                        "bucket": {
+                          "title": "Bucket",
+                          "type": "string"
+                        },
+                        "region": {
+                          "default": "us-east-1",
+                          "title": "Region",
+                          "type": "string"
+                        },
+                        "access_key_env": {
+                          "title": "Access Key Env",
+                          "type": "string"
+                        },
+                        "secret_key_env": {
+                          "title": "Secret Key Env",
+                          "type": "string"
+                        },
+                        "allow_insecure": {
+                          "default": false,
+                          "title": "Allow Insecure",
+                          "type": "boolean"
+                        }
+                      },
+                      "title": "ArtifactStorageConfig",
                       "type": "object"
                     },
                     {

@@ -19,6 +19,7 @@ from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Any, Dict, List, Optional, Sequence, Type, TypeVar
 
 from fred_core.kpi import BaseKPIWriter, KPIActor
@@ -300,6 +301,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         secure: bool = False,
         verify_certs: bool = False,
         bulk_size: int = 1000,
+        read_only: bool = False,
     ):
         self._index = index
         self._embedding_model = embedding_model
@@ -321,6 +323,8 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         self._vs: OpenSearchVectorSearch | None = None
         self._expected_dim: int | None = None
         self._ready = False
+        self._read_only = read_only
+        self._ready_lock = Lock()
         self.client = OpenSearch(
             host,
             http_auth=(username, password),
@@ -330,7 +334,8 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             ssl_show_warn=False,
         )
 
-        self.ensure_ready()
+        if not read_only:
+            self.ensure_ready()
         logger.info("[VECTOR][OPENSEARCH] initialized index=%r host=%r bulk=%s", self._index, self._host, self._bulk_size)
 
     def _phase_timer(self, phase: str):
@@ -367,37 +372,39 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
     def ensure_ready(self) -> None:
         if self._ready:
             return
-
-        expected_dim = self._get_embedding_dimension()
-        self._expected_dim = expected_dim
-        expected_mapping = build_vector_index_mapping(expected_dim)
-
+        # A slow embedding probe must not accumulate waiting readiness threads.
+        if not self._ready_lock.acquire(blocking=False):
+            raise RuntimeError("Corpus validation is in progress")
         try:
+            if self._ready:
+                return
             if not self.pipeline_exists(pipeline_name=HYBRID_SEARCH_PIPELINE_NAME):
-                self.create_pipeline(
-                    pipeline_name=HYBRID_SEARCH_PIPELINE_NAME,
-                    pipeline_config=HYBRID_SEARCH_PIPELINE_CONFIG,
-                )
+                if self._read_only:
+                    raise RuntimeError("Corpus search pipeline is not initialized")
+                self.create_pipeline(pipeline_name=HYBRID_SEARCH_PIPELINE_NAME, pipeline_config=HYBRID_SEARCH_PIPELINE_CONFIG)
+            exists = self._client.indices.exists(index=self._index)
+            if not exists and self._read_only:
+                raise RuntimeError("Corpus index is not initialized")
 
-            if not self._client.indices.exists(index=self._index):
-                self._client.indices.create(index=self._index, body=expected_mapping)
-                logger.info(
-                    "[VECTOR][OPENSEARCH] created index '%s' with dimension=%s",
-                    self._index,
-                    expected_dim,
-                )
-            else:
-                logger.info(
-                    "[VECTOR][OPENSEARCH] index '%s' already exists; validating mapping",
-                    self._index,
-                )
-                self._validate_index_compatibility(expected_dim)
-                validate_index_mapping(self._client, self._index, expected_mapping)
-        except OpenSearchException as e:
-            logger.error("[VECTOR][OPENSEARCH] ensure_ready failed for index '%s': %s", self._index, e)
+            expected_dim = self._get_embedding_dimension()
+            self._expected_dim = expected_dim
+            expected_mapping = build_vector_index_mapping(expected_dim)
+            if not exists:
+                try:
+                    self._client.indices.create(index=self._index, body=expected_mapping)
+                except RequestError as exc:
+                    # Another worker replica may have created the same index first.
+                    if exc.error != "resource_already_exists_exception":
+                        raise
+                logger.info("[VECTOR][OPENSEARCH] initialized index '%s' with dimension=%s", self._index, expected_dim)
+            self._validate_index_compatibility(expected_dim, allow_metadata_mapping_update=not self._read_only)
+            validate_index_mapping(self._client, self._index, expected_mapping)
+            self._ready = True
+        except OpenSearchException as exc:
+            logger.error("[VECTOR][OPENSEARCH] ensure_ready failed for index '%s': %s", self._index, exc)
             raise
-
-        self._ready = True
+        finally:
+            self._ready_lock.release()
 
     def validate_index_or_fail(self) -> None:
         """

@@ -62,3 +62,16 @@
         StringLike:
           s3:prefix:
           - '*/output/*'
+- name: kf-read
+  content:
+    Version: '2012-10-17'
+    Statement:
+    - Effect: Allow
+      Action:
+      - s3:GetObject
+      Resource:
+      - arn:aws:s3:::app-content-documents/*/output/*
+      Condition:
+        'Null':
+          s3:prefix:
+          - 'true'

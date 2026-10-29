@@ -9,6 +9,11 @@ The control-plane configuration is owned by values.yaml.gotmpl, not the factory.
     {{- $_ := set . "valueFrom" (dict "secretKeyRef" (dict "name" "fred-ingestion" "key" "kf-api-opensearch-password")) -}}
   {{- end -}}
 {{- end -}}
+{{- $api := index $base.applications "knowledge-flow-backend" -}}
+{{- $_ := set $api "extraEnvVars" (concat $api.extraEnvVars (list
+  (dict "name" "KF_ARTIFACT_ACCESS_KEY" "value" "fred-document-reader")
+  (dict "name" "KF_ARTIFACT_SECRET_KEY" "valueFrom" (dict "secretKeyRef" (dict "name" "fred-ingestion" "key" "kf-api-s3-secret")))
+)) -}}
 {{- $worker := index $base.applications "knowledge-flow-worker" -}}
 {{- $_ := unset $worker.configuration "content_storage" -}}
 {{- $_ := unset $worker.configuration "filesystem" -}}

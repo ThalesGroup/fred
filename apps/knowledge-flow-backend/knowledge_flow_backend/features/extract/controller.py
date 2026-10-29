@@ -14,27 +14,23 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, FastAPI
-from fred_core import KeycloakUser, get_current_user
+from fastapi import APIRouter, Depends
+from fred_core.security.delegation import AssertedUser
 
 from knowledge_flow_backend.features.extract.service import (
     ExtractDocumentRequest,
     ExtractDocumentResponse,
     ExtractService,
 )
+from knowledge_flow_backend.security.weaver_admission import delegated_person
 
 logger = logging.getLogger(__name__)
 
 
 class ExtractController:
-    """Controller exposing on-demand exhaustive document extraction (DOCREAD-01).
+    """On-demand extraction for delegated callers in a readable space."""
 
-    Reuses the FileNotFoundError/ValueError handlers registered by
-    `SummarizeController` (same document-resolution failure modes), so it only
-    registers its route.
-    """
-
-    def __init__(self, app: FastAPI, router: APIRouter):
+    def __init__(self, router: APIRouter):
         self.service = ExtractService()
         self._register_routes(router)
 
@@ -56,6 +52,6 @@ class ExtractController:
         async def extract_document(
             document_uid: str,
             request: ExtractDocumentRequest,
-            user: KeycloakUser = Depends(get_current_user),
+            user: AssertedUser = Depends(delegated_person),
         ):
             return await self.service.extract_document(user, document_uid, request)

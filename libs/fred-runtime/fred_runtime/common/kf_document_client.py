@@ -165,21 +165,22 @@ class KfDocumentClient(KfBaseClient):
             size=len(content),
         )
 
-    async def fetch_markdown(self, *, document_uid: str) -> str:
+    async def fetch_markdown(self, *, document_uid: str, space_id: str) -> str:
         """Fetch a document's FULL parsed markdown (``output.md``) by uid.
 
         Wire format (matches controller):
-          GET /markdown/{document_uid}
+          GET /markdown/{document_uid}?space_id=...
           -> {"content": "<full markdown text>"}
 
         Returns the whole document verbatim; the adapter owns pagination (this
-        client stays wire-format only). Knowledge Flow's per-document ReBAC
-        gates the read.
+        client stays wire-format only). Knowledge Flow checks the space permission
+        and published document visibility.
         """
         r = await self._request_with_token_refresh(
             method="GET",
             path=f"/markdown/{document_uid}",
             phase_name="kf_document_markdown_fetch",
+            params={"space_id": space_id},
             # Only a single document segment may opt in: model-supplied path
             # syntax must not extend recovery to another endpoint.
             recover_permission_refusal=(
@@ -274,6 +275,7 @@ class KfDocumentClient(KfBaseClient):
         self,
         *,
         document_uid: str,
+        space_id: str,
         instruction: Optional[str] = None,
         max_chars: int = 2000,
     ) -> SummarizeDocumentResult:
@@ -281,11 +283,12 @@ class KfDocumentClient(KfBaseClient):
         Wire format (matches controller):
           POST /documents/{document_uid}/summarize
           {
+            "space_id": str,
             "instruction": str?,
             "max_chars": int
           }
         """
-        payload: Dict[str, Any] = {"max_chars": max_chars}
+        payload: Dict[str, Any] = {"space_id": space_id, "max_chars": max_chars}
         if instruction:
             payload["instruction"] = instruction
 
@@ -306,12 +309,13 @@ class KfDocumentClient(KfBaseClient):
         self,
         *,
         document_uid: str,
+        space_id: str,
         instruction: str,
     ) -> ExtractDocumentResult:
         """
         Wire format (matches controller):
           POST /documents/{document_uid}/extract
-          { "instruction": str }
+          { "space_id": str, "instruction": str }
 
         Exhaustive server-side map-reduce over the whole document — long-running,
         so it uses the same extended read timeout as summarize.
@@ -320,7 +324,7 @@ class KfDocumentClient(KfBaseClient):
             method="POST",
             path=f"/documents/{document_uid}/extract",
             phase_name="kf_document_extract",
-            json={"instruction": instruction},
+            json={"space_id": space_id, "instruction": instruction},
             read_timeout=self._summarize_read_timeout,
         )
         r.raise_for_status()

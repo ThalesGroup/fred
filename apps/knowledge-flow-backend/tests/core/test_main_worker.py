@@ -14,6 +14,7 @@
 
 import asyncio
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -22,8 +23,9 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import IngestionWorkerRole
 
 
+@pytest.mark.parametrize("manager_processing", [False, True])
 @pytest.mark.asyncio
-async def test_main_worker_enables_observability_from_configuration(app_context, monkeypatch, capsys) -> None:
+async def test_main_worker_enables_observability_from_configuration(app_context, monkeypatch, capsys, manager_processing) -> None:
     """
     Verify worker startup honors metrics and KPI settings from configuration.
 
@@ -35,6 +37,8 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
         metrics server, schedules KPI emitters, runs Temporal, and shuts down cleanly.
     """
     config = app_context.configuration.model_copy(deep=True)
+    if manager_processing:
+        config = config.model_copy(update={"manager_processing": SimpleNamespace(enabled=True)})
     config.observability = config.observability.model_copy(deep=True)
     config.observability.kpi = config.observability.kpi.model_copy(
         update={
@@ -71,6 +75,8 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
         manager_processing: bool = False,
     ) -> None:
         """Capture the Temporal config passed to the worker and yield once."""
+        if manager_processing:
+            assert observed["corpus_initialized"] is True
         observed["temporal_config"] = temporal_config
         observed["manager_processing"] = manager_processing
         observed["roles"] = roles
@@ -107,6 +113,7 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
     monkeypatch.setattr(main_worker_module, "run_worker", fake_run_worker)
     monkeypatch.setattr(main_worker_module, "emit_process_kpis", fake_emit_process_kpis)
     monkeypatch.setattr(main_worker_module, "emit_sql_pool_kpis", fake_emit_sql_pool_kpis)
+    monkeypatch.setattr(ApplicationContext, "get_manager_vector_store", lambda self: observed.setdefault("corpus_initialized", True))
     monkeypatch.setattr(ApplicationContext, "get_kpi_writer", lambda self: writer_sentinel)
     monkeypatch.setattr(ApplicationContext, "get_pg_async_engine", lambda self: engine_sentinel)
     monkeypatch.setattr(ApplicationContext, "shutdown", fake_shutdown)
@@ -129,20 +136,26 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
     # the full required set) before polling Temporal.
     from knowledge_flow_backend.models.table_ownership import REQUIRED_TABLES
 
-    assert observed["require_tables"] == (
-        engine_sentinel,
-        set(REQUIRED_TABLES),
-        "knowledge-flow-worker",
-        "alembic_version_knowledge_flow",
-    )
+    if manager_processing:
+        assert "require_tables" not in observed
+    else:
+        assert observed["require_tables"] == (
+            engine_sentinel,
+            set(REQUIRED_TABLES),
+            "knowledge-flow-worker",
+            "alembic_version_knowledge_flow",
+        )
     assert observed["metrics_server"] == (prom_cfg.port, prom_cfg.address)
     assert observed["process_kpi"] == (10.0, writer_sentinel)
-    assert observed["sql_pool_kpi"] == (10.0, writer_sentinel, engine_sentinel, "knowledge-flow-postgres")
+    if manager_processing:
+        assert "sql_pool_kpi" not in observed
+    else:
+        assert observed["sql_pool_kpi"] == (10.0, writer_sentinel, engine_sentinel, "knowledge-flow-postgres")
     assert observed["temporal_config"] == config.scheduler.temporal
     assert observed["max_concurrent_workflow_tasks"] == 4
     assert observed["max_concurrent_activities"] == 6
     assert observed["pdf_render_ttl_days"] == 45
-    assert observed["manager_processing"] is False
+    assert observed["manager_processing"] is manager_processing
     # The role is what decides the queue polled and the registrations; the worker
     # derives both from it, so nothing here spells a queue name out.
     assert observed["roles"] == [IngestionWorkerRole.extraction_rich]

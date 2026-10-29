@@ -320,7 +320,25 @@ VectorStorageConfig = Annotated[
 ]
 
 
-class ManagerProcessingConfig(BaseModel):
+class ArtifactStorageConfig(BaseModel):
+    """S3 connection for generation artifacts, independent of worker settings."""
+
+    model_config = ConfigDict(extra="forbid")
+    endpoint: str
+    bucket: str
+    region: str = "us-east-1"
+    access_key_env: str
+    secret_key_env: str
+    allow_insecure: bool = False
+
+    @model_validator(mode="after")
+    def validate_endpoint(self):
+        if not self.endpoint.startswith("https://") and not (self.allow_insecure and self.endpoint.startswith("http://")):
+            raise ValueError("artifact storage endpoint requires HTTPS")
+        return self
+
+
+class ManagerProcessingConfig(ArtifactStorageConfig):
     """Workload identity and isolated persistence for manager-owned documents."""
 
     model_config = ConfigDict(extra="forbid")
@@ -331,18 +349,14 @@ class ManagerProcessingConfig(BaseModel):
     audience: str = "control-plane"
     client_id: str = "knowledge-flow-worker"
     client_secret_env: str = "MANAGER_WORKER_CLIENT_SECRET"
-    endpoint: str
-    bucket: str
-    region: str = "us-east-1"
     access_key_env: str = "MANAGER_DERIVED_ACCESS_KEY"
     secret_key_env: str = "MANAGER_DERIVED_SECRET_KEY"
     vector_store: VectorStorageConfig
-    allow_insecure: bool = False
     temporary_bytes: int = Field(default=1_073_741_824, ge=1_048_576, le=21_474_836_480, description="Per-activity original plus output byte budget; size the worker volume for concurrent activities.")
 
     @model_validator(mode="after")
     def validate_transport(self):
-        for url in (self.url, self.issuer, self.endpoint):
+        for url in (self.url, self.issuer):
             if not url.startswith("https://") and not (self.allow_insecure and url.startswith("http://")):
                 raise ValueError("manager processing endpoints require HTTPS")
         if self.vector_store.type == "in_memory":
@@ -1152,6 +1166,7 @@ class Configuration(BaseModel):
     scheduler: SchedulerConfig
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig, description="A collection of feature flags to enable or disable optional functionality.")
     manager_processing: ManagerProcessingConfig | None = None
+    published_artifacts: ArtifactStorageConfig | None = None
     document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")
     storage: StorageConfig
     mcp: MCPConfig = Field(default_factory=MCPConfig, description="Feature toggles for MCP-only endpoints and servers.")

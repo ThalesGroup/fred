@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional, Protocol, cast, runtime_checkable
 from uuid import UUID
 
+from fastapi import HTTPException
 from fred_core import KeycloakUser
 from fred_core.documents.access import Candidate, SearchScope, resolve_scope, verify_candidates
 from fred_core.kpi import BaseKPIWriter, KPIActor
@@ -30,6 +31,7 @@ from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.vector.base_vector_store import AnnHit, BaseVectorHit, FullTextHit, HybridHit, SearchFilter
+from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName
 
 logger = logging.getLogger(__name__)
@@ -83,9 +85,17 @@ class VectorSearchService:
     def __init__(self):
         ctx = ApplicationContext.get_instance()
         self.embedder = ctx.get_embedder()
-        self.vector_store = ctx.get_create_vector_store(self.embedder)
+        self.vector_store = ctx.get_create_vector_store(self.embedder, read_only=True)
         self.kpi: BaseKPIWriter = ctx.get_kpi_writer()
         self._crossencoder_model: Optional[Any] = None
+
+    async def _require_corpus_ready(self) -> None:
+        if isinstance(self.vector_store, OpenSearchVectorStoreAdapter):
+            try:
+                await asyncio.to_thread(self.vector_store.ensure_ready)
+            except Exception:
+                logger.warning("[VECTOR] corpus is not ready", exc_info=True)
+                raise HTTPException(status_code=503, detail="corpus_not_ready") from None
 
     @property
     def crossencoder_model(self) -> Any:
@@ -467,6 +477,7 @@ class VectorSearchService:
         The index only proposes candidates. A chunk is returned only if the Control
         Plane facts keep it: live document in scope, retrievable, published generation.
         """
+        await self._require_corpus_ready()
         engine = ApplicationContext.get_instance().get_pg_async_engine()
         async with engine.connect() as conn:
             scope = await resolve_scope(conn, space_id)
@@ -566,6 +577,7 @@ class VectorSearchService:
         every row of a large table comes back. The caller checked the space read;
         staged or retired chunks are dropped before the limit applies.
         """
+        await self._require_corpus_ready()
         try:
             raw_chunks = await asyncio.to_thread(self.vector_store.get_chunks_for_document, document_uid)
         except NotImplementedError:

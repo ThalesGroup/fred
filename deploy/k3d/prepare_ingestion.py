@@ -219,6 +219,7 @@ def provision_storage(kube: list[str], foundation: dict, here: Path, image: str)
     for key in (
         "manager-s3-secret",
         "processor-s3-secret",
+        "kf-api-s3-secret",
         "opensearch-password",
         "kf-api-opensearch-password",
     ):
@@ -226,22 +227,49 @@ def provision_storage(kube: list[str], foundation: dict, here: Path, image: str)
     apply(kube, {"apiVersion": "v1", "kind": "Secret", "metadata": {"name": "fred-ingestion"},
                  "type": "Opaque", "stringData": credentials})
 
-    # Preserve the factory's identities. Add the profile's two scoped S3 identities.
-    base = json.loads(run([*kube, "get", "configmap", "fred-seaweedfs-config", "-o", "json"]))
+    # Preserve the factory's identities. Add the profile's scoped S3 identities.
+    base = json.loads(
+        run([*kube, "get", "configmap", "fred-seaweedfs-config", "-o", "json"])
+    )
     config = json.loads(base["data"]["s3.json"])
-    names = {"fred-document-manager", "fred-document-processor"}
-    config["identities"] = [item for item in config["identities"] if item["name"] not in names]
-    for name, key, policy in [("fred-document-manager", "manager-s3-secret", "manager"),
-                              ("fred-document-processor", "processor-s3-secret", "kf")]:
-        config["identities"].append({"name": name,
-            "credentials": [{"accessKey": name, "secretKey": credentials[key]}],
-            "actions": [], "policyNames": [policy]})
+    names = {"fred-document-manager", "fred-document-processor", "fred-document-reader"}
+    config["identities"] = [
+        item for item in config["identities"] if item["name"] not in names
+    ]
+    for name, key, policy in [
+        ("fred-document-manager", "manager-s3-secret", "manager"),
+        ("fred-document-processor", "processor-s3-secret", "kf"),
+        ("fred-document-reader", "kf-api-s3-secret", "kf-read"),
+    ]:
+        config["identities"].append(
+            {
+                "name": name,
+                "credentials": [{"accessKey": name, "secretKey": credentials[key]}],
+                "actions": [],
+                "policyNames": [policy],
+            }
+        )
     policies = yaml.safe_load((here / "ingestion-policies.yaml").read_text())
-    config["policies"] = [item for item in config.get("policies", []) if item["name"] not in {"manager", "kf"}]
-    config["policies"] += [{"name": item["name"], "content": json.dumps(item["content"])} for item in policies]
+    config["policies"] = [
+        item
+        for item in config.get("policies", [])
+        if item["name"] not in {"manager", "kf", "kf-read"}
+    ]
+    config["policies"] += [
+        {"name": item["name"], "content": json.dumps(item["content"])}
+        for item in policies
+    ]
     encoded = json.dumps(config, sort_keys=True)
-    apply(kube, {"apiVersion": "v1", "kind": "Secret", "metadata": {"name": "control-plane-s3-config"},
-                 "type": "Opaque", "stringData": {"s3.json": encoded}})
+    apply(
+        kube,
+        {
+            "apiVersion": "v1",
+            "kind": "Secret",
+            "metadata": {"name": "control-plane-s3-config"},
+            "type": "Opaque",
+            "stringData": {"s3.json": encoded},
+        },
+    )
     # Explicit local infrastructure adaptation, restored by each app deployment after k3d-up.
     patch = {"spec": {"template": {
         "metadata": {"annotations": {"fred/manager-s3-config": hashlib.sha256(encoded.encode()).hexdigest()}},

@@ -14,15 +14,15 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, FastAPI, Request
-from fastapi.responses import JSONResponse
-from fred_core import KeycloakUser, get_current_user
+from fastapi import APIRouter, Depends
+from fred_core.security.delegation import AssertedUser
 
 from knowledge_flow_backend.features.summarize.service import (
     SummarizeDocumentRequest,
     SummarizeDocumentResponse,
     SummarizeService,
 )
+from knowledge_flow_backend.security.weaver_admission import delegated_person
 
 logger = logging.getLogger(__name__)
 
@@ -32,21 +32,9 @@ class SummarizeController:
     Controller exposing on-demand, steerable document summarization.
     """
 
-    def __init__(self, app: FastAPI, router: APIRouter):
+    def __init__(self, router: APIRouter):
         self.service = SummarizeService()
-        self._register_exception_handlers(app)
         self._register_routes(router)
-
-    def _register_exception_handlers(self, app: FastAPI):
-        """Register specific exception handlers for summarize-related exceptions."""
-
-        @app.exception_handler(FileNotFoundError)
-        async def file_not_found_handler(request: Request, exc: FileNotFoundError) -> JSONResponse:
-            return JSONResponse(status_code=404, content={"detail": str(exc)})
-
-        @app.exception_handler(ValueError)
-        async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
-            return JSONResponse(status_code=400, content={"detail": str(exc)})
 
     def _register_routes(self, router: APIRouter):
         @router.post(
@@ -68,6 +56,6 @@ class SummarizeController:
         async def summarize_document(
             document_uid: str,
             request: SummarizeDocumentRequest,
-            user: KeycloakUser = Depends(get_current_user),
+            user: AssertedUser = Depends(delegated_person),
         ):
             return await self.service.summarize_document(user, document_uid, request)

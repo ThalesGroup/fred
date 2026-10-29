@@ -1354,25 +1354,12 @@ def _matches_nothing(
 def _ensure_uid_in_turn_scope(
     runtime_context: RuntimeContext | None, document_uid: str
 ) -> None:
-    """Refuse a model-named uid that the turn's document selection excludes.
-
-    The uid comes from the MODEL - a search hit, the tree, or a turn taken
-    before the user narrowed the scope - so this seam is the only thing keeping
-    a document the user took out of the conversation out of the answer.
-
-    It refuses only what it can prove is out of scope, because a false refusal
-    is worse here than a missed one: the model reports a document the user
-    picked as unreachable. Two cases it cannot prove, and therefore lets
-    through:
-
-    - a library is part of the selection. Library and document picks UNION (the
-      rule search and the tree apply), and resolving a library to its documents
-      needs a tag store this pod has none of - so every document of that
-      library would be refused;
-    - the uid is one of the conversation's attached files. The picker lists the
-      corpus, so an attachment is never part of the selection, while the
-      attachment prompt tells the model to read those files by uid.
-    """
+    """Apply the turn's selection; attachments are unavailable on Weaver."""
+    if document_uid in get_attachment_uids(runtime_context):
+        raise DocumentScopeRefusedError(
+            "attachments are not supported on Weaver",
+            requested_uids=[document_uid],
+        )
 
     selected = get_document_uids(runtime_context)
     if not selected:
@@ -1380,8 +1367,6 @@ def _ensure_uid_in_turn_scope(
     if get_document_library_tags_ids(runtime_context):
         return
     if document_uid in selected:
-        return
-    if document_uid in get_attachment_uids(runtime_context):
         return
     raise DocumentScopeRefusedError(
         "the requested document is not part of this conversation's scope",
@@ -1869,15 +1854,7 @@ class DocumentTreeAdapter(DocumentTreePort):
 
 
 class DocumentSummarizeAdapter(DocumentSummarizePort):
-    """
-    Runtime adapter behind `RuntimeServices.document_summarize`.
-
-    The uid is model-supplied, so `_ensure_uid_in_turn_scope` bounds it by the
-    turn's document selection before anything is fetched; Knowledge Flow's own
-    per-document ReBAC remains the authorization gate underneath. The
-    binding/token stay private; `KfDocumentClient` applies the extended
-    summarize read timeout.
-    """
+    """Summarize within the turn selection; KF checks space and publication."""
 
     def __init__(
         self,
@@ -1911,6 +1888,7 @@ class DocumentSummarizeAdapter(DocumentSummarizePort):
         try:
             result = await self._client.summarize(
                 document_uid=document_uid,
+                space_id=str(current_turn().binding.space.id),
                 instruction=instruction,
                 max_chars=max_chars,
             )
@@ -1977,23 +1955,7 @@ def paginate_markdown(
 
 
 class DocumentMarkdownAdapter(DocumentMarkdownPort):
-    """
-    Runtime adapter behind `RuntimeServices.document_markdown` (DOCREAD-01).
-
-    Fetches a document's FULL text by uid (corpus markdown or a session
-    attachment, resolved Knowledge Flow-side) and returns it one bounded page
-    at a time. Same doctrine as `DocumentSummarizeAdapter`: the model-supplied
-    uid is bounded by the turn's document selection here, and KF is the
-    authorization gate underneath - per-document ReBAC for corpus, chunk-level
-    session ownership for an attachment. The per-turn binding/token stay
-    private (through `_VectorSearchAgentShim` + `KfDocumentClient`).
-
-    Pagination is done adapter-side because Knowledge Flow's markdown endpoint
-    has no page parameter today (the KF client stays wire-format only). To avoid
-    re-fetching the whole document on every page within one turn, the full
-    markdown is memoised per uid on this per-turn adapter instance and cleared
-    on `rebind` (a new turn).
-    """
+    """Read published markdown in the turn space; cache pages until rebind."""
 
     def __init__(
         self,
@@ -2028,7 +1990,10 @@ class DocumentMarkdownAdapter(DocumentMarkdownPort):
         full = self._cache.get(document_uid)
         if full is None:
             try:
-                full = await self._client.fetch_markdown(document_uid=document_uid)
+                full = await self._client.fetch_markdown(
+                    document_uid=document_uid,
+                    space_id=str(current_turn().binding.space.id),
+                )
             except httpx.HTTPError as exc:
                 raise _wrap_document_port_error(exc) from exc
             self._cache[document_uid] = full
@@ -2041,13 +2006,7 @@ class DocumentMarkdownAdapter(DocumentMarkdownPort):
 
 
 class DocumentExtractionAdapter(DocumentExtractionPort):
-    """
-    Runtime adapter behind `RuntimeServices.document_extraction` (DOCREAD-01
-    Phase 2). Delegates the whole exhaustive map-reduce to Knowledge Flow in one
-    call (`KfDocumentClient.extract`, extended read timeout). Same doctrine as
-    `DocumentSummarizeAdapter`: the model-supplied uid is bounded by the turn's
-    document selection, binding/token stay private.
-    """
+    """Extract within the turn selection; KF owns the exhaustive map-reduce."""
 
     def __init__(
         self,
@@ -2076,7 +2035,9 @@ class DocumentExtractionAdapter(DocumentExtractionPort):
         _ensure_uid_in_turn_scope(self._binding.runtime_context, document_uid)
         try:
             result = await self._client.extract(
-                document_uid=document_uid, instruction=instruction
+                document_uid=document_uid,
+                space_id=str(current_turn().binding.space.id),
+                instruction=instruction,
             )
         except httpx.HTTPError as exc:
             raise _wrap_document_port_error(exc) from exc
