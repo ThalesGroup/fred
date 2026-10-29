@@ -184,7 +184,10 @@ function CatalogContent({ content: fullContent, documentName }: { content: strin
   const { t } = useTranslation();
   const [showAll, setShowAll] = useState(false);
   const lines = useMemo(() => {
-    const result = fullContent.split(/\r?\n/);
+    // Extraction catalogs include SQL aliases for the model, not for the trace reader.
+    const result = fullContent
+      .replace(/[ \t]+query_alias="[^"\r\n]*"(?=[ \t]+(?:parquet=|range=))/g, "")
+      .split(/\r?\n/);
     if (result[result.length - 1] === "") result.pop();
     return result;
   }, [fullContent]);
