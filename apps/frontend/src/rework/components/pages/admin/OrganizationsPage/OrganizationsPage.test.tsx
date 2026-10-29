@@ -159,13 +159,23 @@ it("creates from the dialog, closes it and resets to the first page", async () =
   openAndFill();
   await act(async () => button(SUBMIT)!.click());
   expect(h.submit).toHaveBeenCalledExactlyOnceWith({
-    createOrganization: { name: "New Org", owner_username: "owner", admin_username: "admin" },
+    createOrganization: { name: "New Org", owner_username: "owner", admin_usernames: ["admin"] },
   });
   expect(h.query).toHaveBeenLastCalledWith({ after: undefined }, expect.anything());
   expect(h.showSuccess).toHaveBeenCalledWith({
     summary: "rework.organizations.createOrganization.successSummary New Org",
   });
   expect(dialog()).toBeNull();
+});
+it("creates with several administrators", async () => {
+  render();
+  openAndFill();
+  act(() => type(dialog()!.querySelector<HTMLInputElement>('input[aria-label="rework.organizations.admin"]')!, "zoe"));
+  act(() => button("Select zoe")!.click());
+  await act(async () => button(SUBMIT)!.click());
+  expect(h.submit).toHaveBeenCalledExactlyOnceWith({
+    createOrganization: { name: "New Org", owner_username: "owner", admin_usernames: ["admin", "zoe"] },
+  });
 });
 it("keeps submit disabled until every field is set and while a creation runs", () => {
   render();
@@ -232,13 +242,42 @@ it("sends only the changed fields, then closes without reloading the list", asyn
   await act(async () => button(SAVE)!.click());
   expect(h.update).toHaveBeenCalledExactlyOnceWith({
     id: "a",
-    updateOrganization: { name: "Renamed", admin_username: "zoe" },
+    updateOrganization: { name: "Renamed", admin_usernames: ["zoe"] },
   });
   expect(h.showSuccess).toHaveBeenCalledWith({
     summary: "rework.organizations.editOrganization.successSummary Renamed",
   });
   expect(h.registry.refetch).not.toHaveBeenCalled();
   expect(dialog()).toBeNull();
+});
+const adminField = () => dialog()!.querySelector<HTMLInputElement>('input[aria-label="rework.organizations.admin"]')!;
+const removeAdam = () =>
+  act(() =>
+    [...dialog()!.querySelectorAll("button")].find((b) => b.getAttribute("aria-label")?.includes("adam"))!.click(),
+  );
+it("adds an administrator next to the current one and sends the complete list", async () => {
+  render();
+  openEdit();
+  act(() => type(adminField(), "zoe"));
+  act(() => button("Select zoe")!.click());
+  // A chosen account is not offered again.
+  act(() => type(adminField(), "adam"));
+  expect(button("Select adam")).toBeUndefined();
+  await act(async () => button(SAVE)!.click());
+  expect(h.update).toHaveBeenCalledExactlyOnceWith({
+    id: "a",
+    updateOrganization: { admin_usernames: ["adam", "zoe"] },
+  });
+});
+it("cannot save an organization without an administrator", () => {
+  render();
+  openEdit();
+  act(() => type(nameInput(), "Renamed"));
+  removeAdam();
+  expect(button(SAVE)!.disabled).toBe(true);
+  act(() => type(adminField(), "adam"));
+  act(() => button("Select adam")!.click());
+  expect(button(SAVE)!.disabled).toBe(false);
 });
 it("keeps the edit open and explains a refusal in plain words", async () => {
   const error = { status: 409, data: { detail: "the user already belongs to another organization", code: "conflict" } };

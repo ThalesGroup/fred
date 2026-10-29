@@ -4551,7 +4551,7 @@
       "loadFailed": "Unable to load organizations.",
       "name": "Organization name",
       "owner": "Organization owner",
-      "admin": "Organization administrator",
+      "admin": "Organization administrators",
       "searchFailed": "User search failed.",
       "accountsHint": "Choose people who already have an account. One person can hold both roles. These roles give no access to content.",
       "editOrganization": {
@@ -4561,14 +4561,14 @@
         "successSummary": "Organization {{name}} updated",
         "loadFailed": "Unable to load this organization. Close and try again.",
         "severalOwners": "This organization currently has several owners: {{names}}. Choosing a new owner replaces all of them.",
-        "severalAdmins": "This organization currently has several administrators: {{names}}. Choosing a new administrator replaces all of them.",
+        "unnamedAdmins": "Some administrators no longer have an account. Remove them before changing the list.",
         "errors": {
           "summary": "Failed to update the organization",
           "fallbackDetail": "Could not update the organization. Please try again.",
           "notFoundDetail": "This organization no longer exists.",
           "conflictDetail": "This name is already taken, or one of the people already belongs to another organization.",
           "retiredDetail": "This organization is being deleted and can no longer be changed.",
-          "validationDetail": "Check the name and make sure both people still have an account.",
+          "validationDetail": "Check the name and make sure every person chosen still has an account.",
           "forbiddenDetail": "You are not allowed to edit organizations."
         }
       },
@@ -4582,7 +4582,7 @@
           "summary": "Failed to create organization",
           "fallbackDetail": "Could not create the organization. Please try again.",
           "conflictDetail": "This name is already taken, or one of the people already belongs to another organization.",
-          "validationDetail": "Check the name and make sure both people still have an account.",
+          "validationDetail": "Check the name and make sure every person chosen still has an account.",
           "forbiddenDetail": "You are not allowed to create organizations."
         }
       }
