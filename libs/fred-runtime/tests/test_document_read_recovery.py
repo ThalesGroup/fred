@@ -34,6 +34,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from fred_sdk.contracts.runtime import DocumentPortCallError
+from weaver_fixtures import active_turn
 
 UID = "test-document-uid"
 NAME = "02-technical-requirements.md"
@@ -76,6 +77,11 @@ def _reader(provider: DelegatedCredentialProvider) -> DocumentMarkdownAdapter:
     )
 
 
+def _turn():
+    """Markdown reads take their space from the open turn, as in a real run."""
+    return active_turn("agent-a", user="alice", session="s-1")
+
+
 @pytest.mark.asyncio
 async def test_wrong_name_can_be_corrected_without_token_renewal(
     monkeypatch: pytest.MonkeyPatch,
@@ -97,12 +103,13 @@ async def test_wrong_name_can_be_corrected_without_token_renewal(
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(receive)) as client:
         reader._client.client = client
-        for incorrect in (NAME, "another-inaccessible-opaque-id"):
-            with pytest.raises(DocumentPortCallError) as failure:
-                await reader.fetch_markdown(incorrect)
-            assert failure.value.status_code == 403
-            assert MARKER not in str(failure.value)
-        result = await reader.fetch_markdown(UID)
+        with _turn():
+            for incorrect in (NAME, "another-inaccessible-opaque-id"):
+                with pytest.raises(DocumentPortCallError) as failure:
+                    await reader.fetch_markdown(incorrect)
+                assert failure.value.status_code == 403
+                assert MARKER not in str(failure.value)
+            result = await reader.fetch_markdown(UID)
 
     assert result.text == "Authorized document text"
     assert len(seen) == 3  # Each explicit call made exactly one request.
@@ -144,7 +151,7 @@ async def test_document_reader_preserves_terminal_authority_refusals(
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(receive)) as client:
         reader._client.client = client
-        with pytest.raises(AuthorityLostError) as failure:
+        with _turn(), pytest.raises(AuthorityLostError) as failure:
             await reader.fetch_markdown(UID)
     assert MARKER not in str(failure.value)
     assert len(seen) == requests
@@ -183,7 +190,7 @@ async def test_path_shaped_identifiers_do_not_extend_recovery(
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(receive)) as client:
         reader._client.client = client
-        with pytest.raises(AuthorityLostError):
+        with _turn(), pytest.raises(AuthorityLostError):
             await reader.fetch_markdown(document_uid)
     assert len(seen) == 1
 

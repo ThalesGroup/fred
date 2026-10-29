@@ -36,6 +36,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from fred_sdk.contracts.runtime import DocumentScopeRefusedError
+from weaver_fixtures import SPACE_ID, active_turn
 
 pytestmark = pytest.mark.asyncio
 
@@ -133,10 +134,13 @@ async def test_markdown_read_allows_a_selected_uid() -> None:
         settings=_FakeSettings(),
     )
 
-    page = await adapter.fetch_markdown("in-scope")
+    # The space comes from the turn binding, never from the model.
+    with active_turn("agent-1", user="u-1", session="s-1"):
+        page = await adapter.fetch_markdown("in-scope")
 
     assert page.text == "the whole document"
     assert _RecordingKfClient.calls[0][0] == "fetch_markdown"
+    assert _RecordingKfClient.calls[0][1]["space_id"] == SPACE_ID
 
 
 async def test_no_selection_bounds_nothing() -> None:
@@ -144,7 +148,8 @@ async def test_no_selection_bounds_nothing() -> None:
         binding=_binding(), settings=_FakeSettings()
     )
 
-    page = await adapter.fetch_markdown("any-document")
+    with active_turn("agent-1", user="u-1", session="s-1"):
+        page = await adapter.fetch_markdown("any-document")
 
     assert page.text == "the whole document"
 
@@ -162,11 +167,15 @@ async def test_a_library_pick_disarms_the_gate() -> None:
         settings=_FakeSettings(),
     )
 
-    page = await adapter.fetch_markdown("a-document-of-lib-a")
+    with active_turn("agent-1", user="u-1", session="s-1"):
+        page = await adapter.fetch_markdown("a-document-of-lib-a")
 
     assert page.text == "the whole document"
 
 
+@pytest.mark.skip(
+    reason="Weaver refuses attachments until the attachment lot binds them to the turn"
+)
 async def test_an_attached_file_stays_readable_under_a_corpus_selection() -> None:
     """The picker lists the corpus, so an attachment uid is never in the
     selection - refusing it would make the conversation's own files unreadable

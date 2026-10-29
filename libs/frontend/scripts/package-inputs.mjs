@@ -96,6 +96,7 @@ export const UI_COMPONENT_SOURCE_PATHS = [
   "apps/frontend/src/rework/components/shared/molecules/Dialog/DialogPrimitive.tsx",
   "apps/frontend/src/rework/components/shared/molecules/Dialog/Dialog.module.css",
   "apps/frontend/src/rework/components/shared/utils/Portal.tsx",
+  "apps/frontend/src/rework/components/shared/utils/useFocusHandoff.ts",
   "apps/frontend/src/rework/components/shared/utils/viewport.ts",
 ];
 
