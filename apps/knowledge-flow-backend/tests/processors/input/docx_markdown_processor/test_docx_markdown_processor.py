@@ -132,8 +132,13 @@ def test_invalid_docx_fails_with_logged_actionable_error(processor, tmp_path, ca
     assert str(tmp_path) not in message
     assert "PDF" in message
     assert "encrypted" in message if kind == "ole" else "damaged" in message
-    assert caught.value.__cause__ is not None
-    assert any("DOCX metadata extraction failed" in record.message for record in caplog.records)
+    cause = caught.value.__cause__
+    assert cause is not None
+    record = next(record for record in caplog.records if record.message == "DOCX metadata extraction failed")
+    assert record.exc_info is not None
+    assert record.exc_info[1] is cause
+    assert record.file_type == "docx"
+    assert record.error_type == type(cause).__name__
 
 
 def test_docx_memory_error_is_reported_without_retry(processor, tmp_path, monkeypatch):

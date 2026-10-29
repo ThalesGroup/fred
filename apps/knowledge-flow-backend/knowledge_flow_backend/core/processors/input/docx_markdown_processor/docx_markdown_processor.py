@@ -314,7 +314,13 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
                 },
             }
         except Exception as exc:
-            logger.error("DOCX metadata extraction failed (%s).", type(exc).__name__)
+            logger.exception(
+                "DOCX metadata extraction failed",
+                extra={
+                    "file_type": "docx",
+                    "error_type": type(exc).__name__,
+                },
+            )
             if isinstance(exc, MemoryError):
                 reason = "There is not enough memory to read this document. Split it into smaller documents and try again."
             elif isinstance(exc, OSError):

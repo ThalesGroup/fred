@@ -25,14 +25,6 @@ Each document takes **one** extraction path, selected by its profile.
 Indexing includes chunking and embeddings. Extraction stays a single activity:
 we do not distribute individual PDF pages or OCR calls across Temporal workers.
 
-DOCX validation happens during metadata extraction, with one `python-docx` parse
-for both operations. The main document part is resolved by the parser rather
-than requiring a literal `word/document.xml` entry. Read failures stop ingestion
-with recovery guidance in the upload progress stream. No parsed document is
-cached on the shared processor. Optional classification guardrails still perform
-their existing separate read; Pandoc later performs conversion. A single large
-DOCX can still exceed the process memory limit.
-
 **Example:** two rich PDFs and five fast documents arrive. With one rich slot,
 the second rich waits; the fast worker can continue. When the first rich finishes
 extraction, its indexing goes to common while the second rich starts extraction.
