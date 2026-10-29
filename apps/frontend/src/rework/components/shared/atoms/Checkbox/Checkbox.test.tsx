@@ -15,7 +15,7 @@
 
 import { act, createRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import Checkbox from "./Checkbox.tsx";
 
 declare global {
@@ -64,6 +64,18 @@ describe("Checkbox indeterminate", () => {
       root.render(<Checkbox indeterminate={false} onChange={() => {}} />);
     });
     expect(input().indeterminate).toBe(false);
+  });
+
+  it("preserves the controlled mixed state after a click while the parent keeps the selection", () => {
+    const onChange = vi.fn();
+    render(<Checkbox checked={false} indeterminate onChange={(event) => onChange(event.target.checked)} />);
+
+    act(() => input().click());
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(true);
+    expect(input().checked).toBe(false);
+    expect(input().indeterminate).toBe(true);
+    expect(input().getAttribute("aria-checked")).toBe("mixed");
   });
 
   it("still forwards a caller-supplied ref to the underlying input", () => {
