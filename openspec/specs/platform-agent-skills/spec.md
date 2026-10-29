@@ -825,13 +825,13 @@ A completed prompt command token in the composer SHALL be a control that opens a
 
 ### Requirement: Invoked prompts and skills are shown as small containers
 
-A completed prompt command or platform skill SHALL be shown as a small filled container holding its icon and its name, in the composer and in sent or reopened user messages. A command name SHALL always be displayed with its leading `/`, for prompts and platform skills alike, in the command menu rows, in composer tokens and in sent-message badges; the slash SHALL NOT be doubled, and the legacy `/skill <name>` form SHALL be displayed as `/<name>`. Displaying the slash SHALL NOT change the stored text, what is copied, or how a command is recognised. Every container SHALL use the same colour pair, the secondary container one, for a platform skill and for a prompt whether it comes from the team or from the personal space, so that a prompt and a skill differ by their icon only; icon and name SHALL take the container's content colour. The container SHALL have a small corner radius and light horizontal padding and SHALL NOT change the height of the line it sits on. In the user's sent message, whose bubble has the same colour as the container, the container SHALL carry a thin outline that keeps it distinguishable without changing its size. Clickable containers SHALL keep their hover and keyboard-focus indication.
+A completed prompt command or platform skill SHALL be shown as a small filled container holding its icon and its name, in the composer and in sent or reopened user messages. Prompt command names SHALL retain their leading `/` in command menu rows, composer tokens and sent-message badges. Platform skills, including legacy `/skill <name>` invocations, SHALL display their localized title without a leading slash, falling back to the canonical name. Presentation SHALL NOT change stored or copied canonical invocations or how a command is recognised. Every container SHALL use the same colour pair, the secondary container one, for a platform skill and for a prompt whether it comes from the team or from the personal space; icon and name SHALL take the container's content colour, with distinct prompt and skill icons. The container SHALL have a small corner radius and light horizontal padding and SHALL NOT change the height of the line it sits on. In the user's sent message, whose bubble has the same colour as the container, the container SHALL carry a thin outline that keeps it distinguishable without changing its size. Clickable containers SHALL keep their hover and keyboard-focus indication.
 
 #### Scenario: Tokens in the composer
 
 - **GIVEN** a draft holding a completed prompt command and a completed platform skill among ordinary text
 - **WHEN** the composer shows the draft
-- **THEN** the prompt and the skill each appear in a container of the same colour, with their own icon and their name preceded by `/`
+- **THEN** the prompt and the skill each appear in a container of the same colour with their own icon, the prompt command preceded by `/` and the skill title without a slash
 - **AND** the line is exactly as tall as a line of plain text
 
 #### Scenario: Badges in a sent message
@@ -841,11 +841,11 @@ A completed prompt command or platform skill SHALL be shown as a small filled co
 - **THEN** both appear as containers with the same colours as in the composer
 - **AND** each container is visibly outlined against the message bubble, whose height per line is unchanged
 
-#### Scenario: Every command name shows its slash
+#### Scenario: Prompt slashes and skill titles remain distinct
 
 - **GIVEN** a prompt command `summary` and a platform skill `review`
 - **WHEN** they are listed in the command menu, completed in the composer and shown in a sent message
-- **THEN** they read `/summary` and `/review` in all three places
+- **THEN** the prompt reads `/summary` and the skill shows its localized title, or `review` when no localized title exists, in all three places
 - **AND** copying a sent message that invoked the skill gives `/review` once, not `//review`
 
 #### Scenario: Team and personal prompts look the same
@@ -1313,3 +1313,54 @@ Imported material SHALL record its exact upstream revision and retain required l
 #### Scenario: Packaged interview license
 - **WHEN** the runtime distribution includes the adapted Matt Pocock interview
 - **THEN** the MIT notice and upstream revision accompany the procedure
+
+### Requirement: Native skill read guidance requests complete instructions explicitly
+
+Deep parent and native-child guidance SHALL require explicitly requesting 1000
+lines when reading a skill's main instructions. It SHALL explain that an omitted
+limit can return only 100 lines, require checking the returned window and
+truncation information, and direct continuation before applying the procedure.
+Complete instructions already present in context SHALL remain reusable.
+
+#### Scenario: Autonomous main-instruction read
+
+- **WHEN** a Deep parent or native child receives its available skill guidance
+- **THEN** it is explicitly directed to pass a limit of 1000 for the main skill file
+- **AND** it is directed to retrieve remaining instructions before applying them
+- **AND** native tool defaults, explicit windows and reference pagination are unchanged
+
+### Requirement: Skill activity discloses partial instruction reads
+
+A successful native first-page skill read SHALL disclose whether its actual
+returned window is partial through existing load attribution and activity.
+Pagination, size truncation or unproven full coverage SHALL NOT appear as a
+confirmed full-file read. French activity SHALL say "Skill partiellement chargé"
+and English activity SHALL say "Skill partially loaded" for partial reads.
+The flag SHALL survive streaming and history reload with the existing trusted
+origin and parent/child attribution. Existing successful-read counting and
+continuation/reference exclusions SHALL remain unchanged. This disclosure SHALL
+describe the individual read and SHALL NOT assert cumulative page coverage.
+
+#### Scenario: First 100 lines of a longer skill
+
+- **WHEN** a successful native read returns lines 1-100 of a 222-line main skill file
+- **THEN** its activity is marked partial in the selected UI language
+- **AND** its accessible name and trace label convey the same partial status
+- **AND** reloading history preserves that disclosure
+
+#### Scenario: Size-clipped output despite a large requested window
+
+- **WHEN** the requested window could cover the whole skill but the actual output is clipped by size, including inside one source line
+- **THEN** the activity is partial regardless of the requested line limit
+- **AND** unknown or missing coverage information cannot establish completeness
+
+#### Scenario: Complete and legacy loads
+
+- **WHEN** a native read proves full-file coverage without truncation, a native full pin or ReAct load succeeds, or an older stored activity lacks the new flag
+- **THEN** the existing complete-load presentation is retained
+
+#### Scenario: Parent and child windows are independent
+
+- **WHEN** concurrent Deep parent and native-child main-file reads return different coverage
+- **THEN** each activity retains its own partial flag and trusted execution identity
+- **AND** continuation pages, references, empty windows and failed reads do not add load counts
