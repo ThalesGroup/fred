@@ -265,6 +265,97 @@
         "plainText": "Texte brut"
       }
     },
+    "word_template": {
+      "name": "Rédaction sur modèle Word",
+      "description": "L'agent remplit et rédige vos propres modèles Word (.docx) depuis la conversation, en conservant leur mise en page, leurs styles et leur texte fixe.",
+      "fields": {
+        "template_library": {
+          "title": "Modèles Word",
+          "description": "Les modèles .docx que l'agent remplit et rédige. Avec plusieurs modèles, l'agent choisit le bon dans chaque conversation."
+        }
+      },
+      "form": {
+        "title": "Modèles Word",
+        "description": "Les modèles .docx que l'agent remplit et rédige. Avec plusieurs modèles, l'agent choisit le bon dans chaque conversation.",
+        "labelField": "Nom du modèle",
+        "storedFile": "Enregistré",
+        "removeAria": "Retirer le modèle {{label}}",
+        "dropHint": "Déposez des modèles .docx ici ou cliquez pour parcourir",
+        "dropSubHint": "Un ou plusieurs fichiers Word",
+        "missingLabel": "Chaque modèle doit avoir un nom.",
+        "duplicateLabel": "Deux modèles portent le même nom.",
+        "row": {
+          "missingLabel": "Nom obligatoire",
+          "duplicateLabel": "Nom déjà utilisé"
+        }
+      },
+      "panel": {
+        "word_template_pane": {
+          "title": "Document Word"
+        }
+      },
+      "preview": {
+        "title": "Aperçu du document",
+        "loading": "Génération de l'aperçu...",
+        "refreshing": "Mise à jour...",
+        "empty": "Pas encore de document dans cette conversation. Il apparaît ici dès que l'agent commence à rédiger.",
+        "noSession": "Ouvrez une conversation pour voir son document.",
+        "download": "Télécharger le .docx",
+        "downloadError": "Échec du téléchargement",
+        "attachedBase": "D'après le fichier joint {{filename}}",
+        "error": {
+          "noDocument": "Pas encore de document dans cette conversation.",
+          "templateUnavailable": "Le modèle Word de cette conversation est introuvable.",
+          "editsNotApplicable": "Les modifications de l'agent n'ont pas pu être appliquées au modèle.",
+          "conversion": "L'aperçu PDF n'a pas pu être généré. Le téléchargement .docx reste disponible.",
+          "generic": "L'aperçu n'a pas pu être chargé."
+        }
+      },
+      "tabs": {
+        "write": "Rédaction",
+        "preview": "Aperçu"
+      },
+      "editor": {
+        "loading": "Chargement du document...",
+        "nothingToEdit": "Ce document n'a rien à modifier ici.",
+        "undo": "Annuler la dernière modification",
+        "saving": "Enregistrement...",
+        "save": "Enregistrer",
+        "cancel": "Annuler",
+        "dismiss": "Fermer",
+        "stale": "Le document a changé, rechargement...",
+        "saveError": "La modification n'a pas pu être enregistrée",
+        "rejected": "Cette modification n'a pas pu être appliquée, rien n'a été changé :",
+        "remove": "Retirer",
+        "duplicateTable": "Dupliquer le tableau",
+        "duplicateOne": "Dupliquer : {{label}}",
+        "duplicateRow": "Dupliquer la ligne",
+        "removeRow": "Retirer la ligne",
+        "rowGroup": "Lignes répétables : {{label}}",
+        "confirmRemoveTitle": "Retirer du document ?",
+        "confirmRemoveChapter": "Le chapitre \"{{title}}\" et ses sous-chapitres seront retirés du document. Vous pourrez revenir en arrière avec \"Annuler la dernière modification\".",
+        "confirmRemoveTable": "Ce tableau sera retiré du document. Vous pourrez revenir en arrière avec \"Annuler la dernière modification\".",
+        "confirmRemoveRow": "Cette ligne sera retirée du tableau. Vous pourrez revenir en arrière avec \"Annuler la dernière modification\".",
+        "confirmRemoveGroup": "\"{{label}}\" sera retiré du document. Vous pourrez revenir en arrière avec \"Annuler la dernière modification\".",
+        "untitledChapter": "Chapitre sans titre",
+        "beforeHeadings": "Début du document",
+        "headersFooters": "En-têtes et pieds de page",
+        "editText": "Modifier ce texte",
+        "emptyText": "Rien d'écrit ici pour l'instant - cliquez pour écrire.",
+        "placeAria": "Texte du document",
+        "unsaved": "Non enregistré.",
+        "discardDraft": "Abandonner",
+        "remoteChange": "L'assistant a aussi modifié ce passage. Votre texte est conservé ; l'enregistrer remplacera sa version.",
+        "takeTheirs": "Reprendre sa version",
+        "story": {
+          "header": "En-tête",
+          "footer": "Pied de page",
+          "textbox": "Zone de texte",
+          "first": "première page",
+          "even": "pages paires"
+        }
+      }
+    },
     "html_artifact": {
       "name": "Générer une page web (HTML/CSS)",
       "description": "Capacité de produire du HTML/CSS statique rendu dans un aperçu à côté du chat.",
@@ -3365,6 +3456,10 @@
             "wordDocument": {
               "title": "Générer un document Word",
               "description": "Capacité d'éditer et de générer un document texte téléchargeable."
+            },
+            "wordTemplate": {
+              "title": "Remplir vos modèles Word",
+              "description": "Capacité de remplir et rédiger vos propres modèles Word en conservant leur mise en page."
             },
             "powerpointDocument": {
               "title": "Remplir un document PowerPoint",

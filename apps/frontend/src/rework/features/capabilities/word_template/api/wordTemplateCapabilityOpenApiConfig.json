@@ -1,0 +1,8 @@
+{
+  "schemaFile": "./openapi.json",
+  "apiFile": "./wordTemplateCapabilityApi.ts",
+  "apiImport": "wordTemplateCapabilityApi",
+  "outputFile": "wordTemplateCapabilityOpenApi.ts",
+  "exportName": "wordTemplateCapabilityApi",
+  "hooks": { "queries": true, "lazyQueries": true, "mutations": true }
+}

@@ -39,6 +39,7 @@ import {
   CAP_DOCUMENT_ACCESS,
   CAP_PPT_FILLER,
   CAP_TEAM_WIKI,
+  CAP_WORD_TEMPLATE,
   DOC_ACCESS_TEAM_DOCUMENTS,
   type ToolPack,
 } from "./toolPacks.ts";
@@ -374,6 +375,13 @@ export function AgentFormBody({
           onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(CAP_PPT_FILLER, message)}
         />
       );
+    }
+    // Word template -> its template library, through the capability's own config
+    // widget (the same form the Advanced card renders), so a library can be
+    // managed without leaving the Simple view.
+    if (pack.enablesCapabilityIds.includes(CAP_WORD_TEMPLATE) && availableCapabilityIds.has(CAP_WORD_TEMPLATE)) {
+      const capability = capabilities.find((entry) => entry.id === CAP_WORD_TEMPLATE);
+      return capability ? renderConfigForm(capability) || undefined : undefined;
     }
     return undefined;
   };

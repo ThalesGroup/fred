@@ -265,6 +265,97 @@
         "plainText": "Plain text"
       }
     },
+    "word_template": {
+      "name": "Word template drafting",
+      "description": "The agent fills and writes your own Word (.docx) templates from the conversation, keeping their layout, styles and fixed text.",
+      "fields": {
+        "template_library": {
+          "title": "Word templates",
+          "description": "The .docx templates this agent fills and writes. With several templates, the agent picks the right one in each conversation."
+        }
+      },
+      "form": {
+        "title": "Word templates",
+        "description": "The .docx templates this agent fills and writes. With several templates, the agent picks the right one in each conversation.",
+        "labelField": "Template name",
+        "storedFile": "Stored",
+        "removeAria": "Remove the template {{label}}",
+        "dropHint": "Drop .docx templates here or click to browse",
+        "dropSubHint": "One or more Word files",
+        "missingLabel": "Every template needs a name.",
+        "duplicateLabel": "Two templates have the same name.",
+        "row": {
+          "missingLabel": "Name required",
+          "duplicateLabel": "Name already used"
+        }
+      },
+      "panel": {
+        "word_template_pane": {
+          "title": "Word document"
+        }
+      },
+      "preview": {
+        "title": "Document preview",
+        "loading": "Generating the preview...",
+        "refreshing": "Updating...",
+        "empty": "No document yet in this conversation. It appears here as soon as the agent starts writing.",
+        "noSession": "Open a conversation to see its document.",
+        "download": "Download .docx",
+        "downloadError": "Download failed",
+        "attachedBase": "From the attached file {{filename}}",
+        "error": {
+          "noDocument": "No document yet in this conversation.",
+          "templateUnavailable": "The Word template of this conversation could not be retrieved.",
+          "editsNotApplicable": "The agent's edits could not be applied to the template.",
+          "conversion": "The PDF preview could not be generated. The .docx download still works.",
+          "generic": "The preview could not be loaded."
+        }
+      },
+      "tabs": {
+        "write": "Writing",
+        "preview": "Preview"
+      },
+      "editor": {
+        "loading": "Loading the document...",
+        "nothingToEdit": "There is nothing to edit in this document here.",
+        "undo": "Undo the last change",
+        "saving": "Saving...",
+        "save": "Save",
+        "cancel": "Cancel",
+        "dismiss": "Close",
+        "stale": "The document changed, reloading...",
+        "saveError": "The change could not be saved",
+        "rejected": "This change could not be applied, nothing was changed:",
+        "remove": "Remove",
+        "duplicateTable": "Duplicate the table",
+        "duplicateOne": "Duplicate: {{label}}",
+        "duplicateRow": "Duplicate the row",
+        "removeRow": "Remove the row",
+        "rowGroup": "Repeatable rows: {{label}}",
+        "confirmRemoveTitle": "Remove from the document?",
+        "confirmRemoveChapter": "The chapter \"{{title}}\" and its sub-chapters will be removed from the document. You can go back with \"Undo the last change\".",
+        "confirmRemoveTable": "This table will be removed from the document. You can go back with \"Undo the last change\".",
+        "confirmRemoveRow": "This row will be removed from the table. You can go back with \"Undo the last change\".",
+        "confirmRemoveGroup": "\"{{label}}\" will be removed from the document. You can go back with \"Undo the last change\".",
+        "untitledChapter": "Untitled chapter",
+        "beforeHeadings": "Start of the document",
+        "headersFooters": "Headers and footers",
+        "editText": "Edit this text",
+        "emptyText": "Nothing written here yet - click to write.",
+        "placeAria": "Document text",
+        "unsaved": "Not saved.",
+        "discardDraft": "Discard",
+        "remoteChange": "The assistant also changed this passage. Your text is kept; saving it will replace their version.",
+        "takeTheirs": "Use their version",
+        "story": {
+          "header": "Header",
+          "footer": "Footer",
+          "textbox": "Text box",
+          "first": "first page",
+          "even": "even pages"
+        }
+      }
+    },
     "html_artifact": {
       "name": "Generate a web page (HTML/CSS)",
       "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat.",
@@ -3365,6 +3456,10 @@
             "wordDocument": {
               "title": "Generate a Word document",
               "description": "Ability to edit and generate a downloadable text document."
+            },
+            "wordTemplate": {
+              "title": "Fill in your Word templates",
+              "description": "Ability to fill and write your own Word templates, keeping their layout."
             },
             "powerpointDocument": {
               "title": "Fill in a PowerPoint document",
