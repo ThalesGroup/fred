@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-import { controlPlaneApi } from "./controlPlaneOpenApi";
+import { controlPlaneApi, type Space } from "./controlPlaneOpenApi";
 
 // The generator types binary fields as Blob, but sends the enclosing object as
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
@@ -152,6 +152,28 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       };
     },
     createOrganization: { extraOptions: { retryUnauthorized: false } },
+    updateOrganization: {
+      extraOptions: { retryUnauthorized: false },
+      // Patch the cached registry pages in place: a refetch would replace the rows, and the
+      // edit button that opened the dialog with them, so focus could not return to it.
+      async onQueryStarted(_args, { dispatch, getState, queryFulfilled }) {
+        let saved: Space;
+        try {
+          saved = (await queryFulfilled).data.organization;
+        } catch {
+          return;
+        }
+        const state = getState() as Parameters<typeof controlPlaneApi.util.selectCachedArgsForQuery>[0];
+        for (const args of controlPlaneApi.util.selectCachedArgsForQuery(state, "organizationRegistry")) {
+          dispatch(
+            controlPlaneApi.util.updateQueryData("organizationRegistry", args, (draft) => {
+              const index = draft.items.findIndex((item) => item.id === saved.id);
+              if (index >= 0) draft.items[index] = saved;
+            }),
+          );
+        }
+      },
+    },
     createFolder: { extraOptions: { retryUnauthorized: false }, invalidatesTags: ["Folders"] },
     renameFolder: { extraOptions: { retryUnauthorized: false }, invalidatesTags: ["Folders"] },
     deleteDocument: { extraOptions: { retryUnauthorized: false }, invalidatesTags: ["Documents"] },
@@ -211,6 +233,8 @@ export const {
   useOrganizationRegistryQuery,
   useSearchOrganizationCandidatesQuery,
   useCreateOrganizationMutation,
+  useGetOrganizationQuery,
+  useUpdateOrganizationMutation,
   useCreateFolderMutation,
   useRenameFolderMutation,
   useDeleteFolderMutation,

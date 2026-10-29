@@ -4,10 +4,12 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
 import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
 import { useOrganizationRegistryQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { Space } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import OrganizationFormDialog from "./OrganizationFormDialog";
 import styles from "../AdminTeamsPage/AdminTeamsPage.module.css";
 
@@ -17,11 +19,14 @@ export default function OrganizationsPage() {
   const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
   const after = cursors[cursors.length - 1];
   const registry = useOrganizationRegistryQuery({ after }, { skip: !access.isAdmin, refetchOnMountOrArgChange: true });
-  const [creating, setCreating] = useState(false);
+  // `null`: closed; `"create"`: a new organization; an organization: its edit.
+  const [form, setForm] = useState<Space | "create" | null>(null);
   const page = !registry.isError && !registry.isFetching ? registry.currentData : undefined;
 
-  // A new organization can land on any page: go back to the first one.
-  const handleCreated = () => {
+  // A new organization can land on any page: go back to the first one. An edit patches
+  // the cached rows itself.
+  const handleSaved = () => {
+    if (form !== "create") return;
     setCursors([undefined]);
     if (!after) void registry.refetch();
   };
@@ -37,7 +42,7 @@ export default function OrganizationsPage() {
               variant="filled"
               size="medium"
               icon={{ category: "outlined", type: "add" }}
-              onClick={() => setCreating(true)}
+              onClick={() => setForm("create")}
             >
               {t("rework.organizations.createOrganization.open")}
             </Button>
@@ -77,6 +82,21 @@ export default function OrganizationsPage() {
                   label: t("rework.organizations.name"),
                   cellRenderer: (organization) => <span>{organization.name}</span>,
                 },
+                {
+                  label: "",
+                  // Cell padding plus the 40px medium button: narrower squeezes it into an oval.
+                  size: "4rem",
+                  cellRenderer: (organization) => (
+                    <IconButton
+                      variant="icon"
+                      size="medium"
+                      color="on-surface-retreat"
+                      icon={{ category: "outlined", type: "edit" }}
+                      aria-label={t("rework.organizations.editOrganization.openAria", { name: organization.name })}
+                      onClick={() => setForm(organization)}
+                    />
+                  ),
+                },
               ]}
             />
           )}
@@ -104,7 +124,13 @@ export default function OrganizationsPage() {
           </div>
         </section>
       )}
-      {creating && <OrganizationFormDialog onCreated={handleCreated} onClose={() => setCreating(false)} />}
+      {form && (
+        <OrganizationFormDialog
+          organization={form === "create" ? undefined : form}
+          onSaved={handleSaved}
+          onClose={() => setForm(null)}
+        />
+      )}
     </div>
   );
 }

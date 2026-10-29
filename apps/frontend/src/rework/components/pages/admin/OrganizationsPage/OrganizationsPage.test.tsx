@@ -14,6 +14,10 @@ const h = vi.hoisted(() => ({
   },
   result: { isLoading: false },
   submit: vi.fn(),
+  update: vi.fn(),
+  detail: { currentData: undefined as unknown, isError: false, error: undefined as unknown },
+  detailQuery: vi.fn(),
+  showError: vi.fn(),
   query: vi.fn(),
   showSuccess: vi.fn(),
   notifyApiError: vi.fn(),
@@ -22,7 +26,9 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string, args?: { name: string }) => (args?.name ? `${key} ${args.name}` : key) }),
 }));
 vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({ useManagerPlatformAdmin: () => h.access }));
-vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showSuccess: h.showSuccess }) }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({ showSuccess: h.showSuccess, showError: h.showError }),
+}));
 vi.mock("@core/hooks/useApiErrorToast", () => ({ useApiErrorToast: () => ({ notifyApiError: h.notifyApiError }) }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useOrganizationRegistryQuery: (args, options) => {
@@ -30,6 +36,11 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
     return h.registry;
   },
   useCreateOrganizationMutation: () => [h.submit, h.result],
+  useUpdateOrganizationMutation: () => [h.update, { isLoading: false }],
+  useGetOrganizationQuery: (args, options) => {
+    h.detailQuery(args, options);
+    return options.skip ? { currentData: undefined, isError: false } : h.detail;
+  },
   useSearchOrganizationCandidatesQuery: ({ query }, { skip }) => ({
     currentData: skip ? undefined : [{ id: query, username: query, first_name: query, last_name: "" }],
     isFetching: false,
@@ -68,6 +79,9 @@ let root: Root;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const OPEN = "rework.organizations.createOrganization.open";
 const SUBMIT = "rework.organizations.createOrganization.submit";
+const SAVE = "rework.organizations.editOrganization.submit";
+const user = (name: string) => ({ id: name, username: name, first_name: name, last_name: "" });
+const DETAIL = { organization: { id: "a", name: "Demo" }, owners: [user("olivia")], admins: [user("adam")] };
 beforeEach(() => {
   vi.clearAllMocks();
   Object.assign(h.access, { isAdmin: true, isLoading: false, isFetching: false, isError: false });
@@ -77,6 +91,10 @@ beforeEach(() => {
     isFetching: false,
   });
   h.result.isLoading = false;
+  Object.assign(h.detail, { currentData: DETAIL, isError: false, error: undefined });
+  h.update.mockReturnValue({
+    unwrap: () => Promise.resolve({ ...DETAIL, organization: { id: "a", name: "Renamed" } }),
+  });
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -165,6 +183,69 @@ it("reports failure through the error toast and keeps the dialog open", async ()
     error,
     expect.objectContaining({ conflictDetail: "rework.organizations.createOrganization.errors.conflictDetail" }),
   );
+  expect(h.showSuccess).not.toHaveBeenCalled();
+  expect(dialog()).not.toBeNull();
+});
+const openEdit = () =>
+  act(() =>
+    host
+      .querySelector<HTMLButtonElement>('[aria-label="rework.organizations.editOrganization.openAria Demo"]')!
+      .click(),
+  );
+const nameInput = () => dialog()!.querySelector<HTMLInputElement>("input")!;
+it("opens the edit pre-filled from the organization's detail, with nothing to save yet", () => {
+  render();
+  openEdit();
+  expect(h.detailQuery).toHaveBeenLastCalledWith({ id: "a" }, expect.objectContaining({ skip: false }));
+  expect(nameInput().value).toBe("Demo");
+  expect(dialog()!.textContent).toContain("(olivia)");
+  expect(dialog()!.textContent).toContain("(adam)");
+  expect(button(SAVE)!.disabled).toBe(true);
+  act(() => type(nameInput(), " Demo "));
+  expect(button(SAVE)!.disabled).toBe(true);
+});
+it("shows a loading state until the detail arrives", () => {
+  h.detail.currentData = undefined;
+  render();
+  openEdit();
+  expect(dialog()!.textContent).toContain("common.loading");
+  expect(button(SAVE)!.disabled).toBe(true);
+  h.detail.error = { status: 404, data: { detail: "not found" } };
+  h.detail.isError = true;
+  render();
+  expect(dialog()!.textContent).toContain("rework.organizations.editOrganization.errors.notFoundDetail");
+});
+it("sends only the changed fields, then closes without reloading the list", async () => {
+  render();
+  openEdit();
+  act(() => type(nameInput(), "Renamed"));
+  act(() =>
+    [...dialog()!.querySelectorAll("button")].find((b) => b.getAttribute("aria-label")?.includes("adam"))!.click(),
+  );
+  act(() => type(dialog()!.querySelector<HTMLInputElement>('input[aria-label="rework.organizations.admin"]')!, "zoe"));
+  act(() => button("Select zoe")!.click());
+  await act(async () => button(SAVE)!.click());
+  expect(h.update).toHaveBeenCalledExactlyOnceWith({
+    id: "a",
+    updateOrganization: { name: "Renamed", admin_username: "zoe" },
+  });
+  expect(h.showSuccess).toHaveBeenCalledWith({
+    summary: "rework.organizations.editOrganization.successSummary Renamed",
+  });
+  expect(h.registry.refetch).not.toHaveBeenCalled();
+  expect(dialog()).toBeNull();
+});
+it("keeps the edit open and explains a refusal in plain words", async () => {
+  const error = { status: 409, data: { detail: "the user already belongs to another organization", code: "conflict" } };
+  h.update.mockReturnValue({ unwrap: () => Promise.reject(error) });
+  render();
+  openEdit();
+  act(() => type(nameInput(), "Renamed"));
+  await act(async () => button(SAVE)!.click());
+  expect(h.showError).toHaveBeenCalledWith({
+    summary: "rework.organizations.editOrganization.errors.summary",
+    detail: "rework.organizations.editOrganization.errors.conflictDetail",
+  });
   expect(h.showSuccess).not.toHaveBeenCalled();
   expect(dialog()).not.toBeNull();
 });

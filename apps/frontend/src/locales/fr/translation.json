@@ -4540,6 +4540,22 @@
       "admin": "Administrateur de l'organisation",
       "searchFailed": "La recherche d'utilisateurs a échoué.",
       "accountsHint": "Choisissez des personnes qui ont déjà un compte. Une même personne peut tenir les deux rôles. Ces rôles ne donnent accès à aucun contenu.",
+      "editOrganization": {
+        "openAria": "Modifier {{name}}",
+        "title": "Modifier l'organisation",
+        "submit": "Enregistrer",
+        "successSummary": "Organisation {{name}} modifiée",
+        "loadFailed": "Impossible de charger cette organisation. Fermez et réessayez.",
+        "errors": {
+          "summary": "Échec de la modification de l'organisation",
+          "fallbackDetail": "Impossible de modifier l'organisation. Veuillez réessayer.",
+          "notFoundDetail": "Cette organisation n'existe plus.",
+          "conflictDetail": "Ce nom est déjà pris, ou l'une des personnes appartient déjà à une autre organisation.",
+          "retiredDetail": "Cette organisation est en cours de suppression et ne peut plus être modifiée.",
+          "validationDetail": "Vérifiez le nom et que les deux personnes ont toujours un compte.",
+          "forbiddenDetail": "Vous n'êtes pas autorisé à modifier des organisations."
+        }
+      },
       "createOrganization": {
         "open": "Créer une organisation",
         "title": "Créer une organisation",

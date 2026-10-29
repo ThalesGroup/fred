@@ -4540,6 +4540,22 @@
       "admin": "Organization administrator",
       "searchFailed": "User search failed.",
       "accountsHint": "Choose people who already have an account. One person can hold both roles. These roles give no access to content.",
+      "editOrganization": {
+        "openAria": "Edit {{name}}",
+        "title": "Edit organization",
+        "submit": "Save",
+        "successSummary": "Organization {{name}} updated",
+        "loadFailed": "Unable to load this organization. Close and try again.",
+        "errors": {
+          "summary": "Failed to update the organization",
+          "fallbackDetail": "Could not update the organization. Please try again.",
+          "notFoundDetail": "This organization no longer exists.",
+          "conflictDetail": "This name is already taken, or one of the people already belongs to another organization.",
+          "retiredDetail": "This organization is being deleted and can no longer be changed.",
+          "validationDetail": "Check the name and make sure both people still have an account.",
+          "forbiddenDetail": "You are not allowed to edit organizations."
+        }
+      },
       "createOrganization": {
         "open": "Create organization",
         "title": "Create organization",
