@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.12.*"
 
 [[package]]
@@ -974,7 +974,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "4.5.9"
+version = "4.5.10"
 source = { editable = "../../fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -1051,7 +1051,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.5.9"
+version = "4.5.10"
 source = { editable = "../../fred-sdk" }
 dependencies = [
     { name = "fred-pod" },
