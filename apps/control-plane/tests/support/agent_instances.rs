@@ -142,6 +142,23 @@ async fn enable(e: &Env, org: Uuid, key: &str, on: bool) -> Uuid {
         .unwrap();
     id
 }
+/// Offers are denied by default; seed one observed offer enabled for `org`.
+async fn enable_capability(e: &Env, org: Uuid, capability_id: &str) {
+    for statement in [
+        "insert into runtime_catalog (runtime_id, reachable) values ('fixture', true) on conflict do nothing",
+        "insert into runtime_capability (runtime_id, capability_id, version, descriptor, advertised)
+         values ('fixture', $2, '1', '{}', true)",
+        "insert into organization_capability (organization_id, runtime_id, capability_id, enabled_by)
+         values ($1, 'fixture', $2, 'fixture')",
+    ] {
+        sqlx::query(statement)
+            .bind(org)
+            .bind(capability_id)
+            .execute(&e.pool)
+            .await
+            .unwrap();
+    }
+}
 fn collection(space: Uuid) -> String {
     format!("/spaces/{space}/agent-instances")
 }
@@ -194,6 +211,7 @@ async fn instances_round_trip_validation_and_saved_snapshot() {
     let catalog = Catalog::start().await;
     let app = app(&e, &identity, &catalog, e.fga.clone()).await;
     let template = enable(&e, org.id, "custom", true).await;
+    enable_capability(&e, org.id, "tool").await;
     let (status, templates) = request(
         &app,
         &identity,
@@ -604,7 +622,7 @@ async fn instances_capabilities_and_profiles_fail_explicitly() {
         let code = if patch.get("capability_ids").is_some() {
             "agent_capability_unavailable"
         } else {
-            "agent_chat_profile_not_connected"
+            "legacy_model_reselection_required"
         };
         let mut body = creation(template, "Rejected");
         body.as_object_mut()
