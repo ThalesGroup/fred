@@ -38,13 +38,13 @@ export default function MainLayout({ children, navigation = true }: PropsWithChi
   const organizationArea = ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, ""));
   return (
     <div className={styles.mainLayout}>
-      <nav className={styles.sidebar}>
+      <div className={styles.sidebar}>
         <Sidebar
           navigation={navigation}
           platformArea={isAdmin && !organizationArea}
           organizationArea={organizationArea}
         />
-      </nav>
+      </div>
       <main className={styles.content}>
         {navigation ? (
           isAdmin || organizationArea || isAgentManagementRoute(pathname) ? (

@@ -57,7 +57,7 @@ export default function Sidebar({
         </div>
       </div>
       {navigation && (
-        <div className={styles["nav-panel-card"]}>
+        <div className={styles["nav-panel-card"]} data-nav-panel>
           {sidebarMode === "HOME" && <HomeNavPanel />}
           {sidebarMode === "TEAM" && <TeamContentNavbar />}
           {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}

@@ -14,17 +14,13 @@
  * limitations under the License.
  */
 
+/* Fills the card's content box: header and filters stay put, the prompt grid scrolls. */
 .pageContainer {
   display: flex;
   flex-direction: column;
+  gap: var(--spacing-m);
   height: 100%;
   min-height: 0;
-}
-
-/* Only the inset the header sits in: PageHeader owns its type, colour and the
-   right-alignment of the controls. */
-.pageTitle {
-  padding: var(--spacing-m);
 }
 
 /* Search field + category-management button, grouped at the far right of the
@@ -41,7 +37,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
-  padding: 0 var(--spacing-m) var(--spacing-m);
 }
 
 /* The favorites toggle leads; the category chips wrap beside it. */
@@ -65,7 +60,6 @@
   grid-auto-rows: auto;
   align-items: stretch;
   gap: var(--spacing-s);
-  padding: 0 var(--spacing-m) var(--spacing-m);
   overflow: auto;
 }
 
@@ -128,10 +122,4 @@
   display: flex;
   gap: var(--spacing-xs);
   margin-left: auto;
-}
-
-@media (max-width: 720px) {
-  .pageTitle {
-    flex-direction: column;
-  }
 }

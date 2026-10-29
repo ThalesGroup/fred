@@ -19,7 +19,6 @@
   flex-direction: column;
   gap: var(--spacing-l);
   margin: 0 auto;
-  padding: var(--spacing-xl);
   width: 100%;
   max-width: 1080px;
   /* DataTable's own root sets height:100%/overflow:auto so its sticky column

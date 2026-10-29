@@ -181,50 +181,48 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
   const names = new Set([...takenAgentNames(managedInstances, editingId), ...refusedNames]);
   return (
     <div className={styles.teamAgentContainer}>
-      <div className={styles.title}>
-        <PageHeader
-          title={t(space.kind === "personal" ? "rework.teams.agents.titlePersonal" : "rework.teams.agents.title")}
-          actions={
-            <>
-              {canManageAgents && (
-                <Button
-                  color="primary"
-                  variant="filled"
-                  size="small"
-                  icon={{ category: "outlined", type: "add" }}
-                  disabled={!canCreate}
-                  onClick={() => setIsEnrollOpen(true)}
-                >
-                  {t("rework.teams.agents.create", { agentsNicknameSingular })}
-                </Button>
-              )}
-              <div className={styles.searchBar}>
-                <SearchInput
-                  value={search}
-                  onChange={setSearch}
-                  placeholder={t("rework.teams.agents.searchPlaceholder", { agentsNicknamePlural })}
-                  clearAriaLabel={t("rework.teams.agents.clearSearch")}
-                  size="xs"
-                />
-              </div>
-              <div className={styles.sortSelect}>
-                <Select<AgentSortValue>
-                  size="xs"
-                  compact
-                  value={sort}
-                  onChange={storeAgentSort}
-                  ariaLabel={t("rework.teams.agents.sortLabel")}
-                  options={[
-                    { value: "name", key: "name", label: t("rework.teams.agents.sort.name") },
-                    { value: "created_at:desc", key: "created", label: t("rework.teams.agents.sort.created") },
-                    { value: "updated_at:desc", key: "updated", label: t("rework.teams.agents.sort.updated") },
-                  ]}
-                />
-              </div>
-            </>
-          }
-        />
-      </div>
+      <PageHeader
+        title={t(space.kind === "personal" ? "rework.teams.agents.titlePersonal" : "rework.teams.agents.title")}
+        actions={
+          <>
+            {canManageAgents && (
+              <Button
+                color="primary"
+                variant="filled"
+                size="small"
+                icon={{ category: "outlined", type: "add" }}
+                disabled={!canCreate}
+                onClick={() => setIsEnrollOpen(true)}
+              >
+                {t("rework.teams.agents.create", { agentsNicknameSingular })}
+              </Button>
+            )}
+            <div className={styles.searchBar}>
+              <SearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder={t("rework.teams.agents.searchPlaceholder", { agentsNicknamePlural })}
+                clearAriaLabel={t("rework.teams.agents.clearSearch")}
+                size="xs"
+              />
+            </div>
+            <div className={styles.sortSelect}>
+              <Select<AgentSortValue>
+                size="xs"
+                compact
+                value={sort}
+                onChange={storeAgentSort}
+                ariaLabel={t("rework.teams.agents.sortLabel")}
+                options={[
+                  { value: "name", key: "name", label: t("rework.teams.agents.sort.name") },
+                  { value: "created_at:desc", key: "created", label: t("rework.teams.agents.sort.created") },
+                  { value: "updated_at:desc", key: "updated", label: t("rework.teams.agents.sort.updated") },
+                ]}
+              />
+            </div>
+          </>
+        }
+      />
       {access?.error != null && <AgentNotice error={access.error} />}
       {canManageAgents && catalog.isError && <AgentNotice error={catalog.error} />}
       {canManageAgents && !catalog.isFetching && !catalog.isError && catalog.currentData?.length === 0 && (
