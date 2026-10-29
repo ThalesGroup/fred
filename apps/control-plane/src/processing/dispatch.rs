@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! SQL is the delivery outbox. No Temporal RPC runs in an admission transaction.
-use super::{config::ProcessingConfig, store::Row};
+use super::{config::ProcessingConfig, models::Stage};
 use anyhow::{Context, Result};
+use chrono::DateTime;
 use chrono::Utc;
 use futures::{TryStreamExt, stream};
-use sqlx::{PgPool, postgres::PgListener};
+use sqlx::{PgPool, postgres::PgListener, types::Json};
 use std::time::Duration;
 use temporalio_client::{
     Client, ClientOptions, ConnectionOptions, Url,
@@ -21,6 +22,20 @@ use temporalio_common::protos::temporal::api::{
     },
 };
 use uuid::Uuid;
+
+/// The outbox fields of a request; its submission is forwarded unread.
+#[derive(sqlx::FromRow)]
+struct Delivery {
+    id: Uuid,
+    stage: Stage,
+    created_at: DateTime<Utc>,
+    workflow_id: String,
+    submission: Json<serde_json::Value>,
+    run_id: Option<String>,
+    first_dispatch_at: Option<DateTime<Utc>>,
+    delivered_at: Option<DateTime<Utc>>,
+    deadline_at: DateTime<Utc>,
+}
 
 /// Admission notifies this channel in its transaction; Postgres delivers it only on commit.
 pub const WAKE_CHANNEL: &str = "document_processing_due";
@@ -76,7 +91,7 @@ pub async fn expire(pool: &PgPool, config: &ProcessingConfig) -> Result<()> {
 pub async fn tick(pool: &PgPool, config: &ProcessingConfig, client: &Client) -> Result<usize> {
     expire(pool, config).await?;
     let owner = Uuid::new_v4();
-    let rows:Vec<Row>=sqlx::query_as("with candidates as (select id from document_processing where status in ('pending','running') and delivery_due_at<=clock_timestamp() and (dispatch_until is null or dispatch_until<clock_timestamp()) order by first_dispatch_at is not null,delivery_due_at,id for update skip locked limit $1) update document_processing p set dispatch_owner=$2,dispatch_until=clock_timestamp()+make_interval(secs=>$3),first_dispatch_at=coalesce(first_dispatch_at,clock_timestamp()),delivery_attempts=delivery_attempts+1 from candidates c where p.id=c.id returning p.*")
+    let rows:Vec<Delivery>=sqlx::query_as("with candidates as (select id from document_processing where status in ('pending','running') and delivery_due_at<=clock_timestamp() and (dispatch_until is null or dispatch_until<clock_timestamp()) order by first_dispatch_at is not null,delivery_due_at,id for update skip locked limit $1) update document_processing p set dispatch_owner=$2,dispatch_until=clock_timestamp()+make_interval(secs=>$3),first_dispatch_at=coalesce(first_dispatch_at,clock_timestamp()),delivery_attempts=delivery_attempts+1 from candidates c where p.id=c.id returning p.id,p.stage,p.created_at,p.workflow_id,p.submission,p.run_id,p.first_dispatch_at,p.delivered_at,p.deadline_at")
         .bind(config.limits.batch as i64).bind(owner).bind((config.temporal.rpc_timeout_seconds*config.limits.batch as u64+30) as f64).fetch_all(pool).await?;
     let leased = rows.len();
     stream::iter(rows.into_iter().map(Ok::<_, anyhow::Error>))
@@ -91,7 +106,7 @@ async fn settle(
     config: &ProcessingConfig,
     mut client: Client,
     owner: Uuid,
-    row: Row,
+    row: Delivery,
 ) -> Result<()> {
     let result = tokio::time::timeout(
         Duration::from_secs(config.temporal.rpc_timeout_seconds),
@@ -102,12 +117,12 @@ async fn settle(
         Ok(Ok((run_id, closed))) => {
             // A closed workflow with no committed result cannot be silently restarted.
             sqlx::query("update document_processing set run_id=$3,delivered_at=coalesce(delivered_at,clock_timestamp()),dispatch_until=null,delivery_due_at=clock_timestamp()+make_interval(secs=>$5),status=case when $4 then 'failed' else status end,error_code=case when $4 then coalesce(error_code,'worker_failed') else error_code end,completed_at=case when $4 then clock_timestamp() else completed_at end,revision=revision+case when $4 then 1 else 0 end where id=$1 and dispatch_owner=$2 and status in ('pending','running')")
-                .bind(row.summary.id).bind(owner).bind(run_id).bind(closed).bind(RECONCILE_INTERVAL.as_secs_f64()).execute(pool).await?;
+                .bind(row.id).bind(owner).bind(run_id).bind(closed).bind(RECONCILE_INTERVAL.as_secs_f64()).execute(pool).await?;
         }
         _ => {
             sqlx::query("update document_processing set dispatch_until=null,delivery_due_at=clock_timestamp()+make_interval(secs=>$3) where id=$1 and dispatch_owner=$2")
-                .bind(row.summary.id).bind(owner).bind(RETRY_DELAY.as_secs_f64()).execute(pool).await?;
-            tracing::warn!(operation_id=%row.summary.id,error_code="temporal_delivery_uncertain","Processing delivery will be reconciled");
+                .bind(row.id).bind(owner).bind(RETRY_DELAY.as_secs_f64()).execute(pool).await?;
+            tracing::warn!(operation_id=%row.id,error_code="temporal_delivery_uncertain","Processing delivery will be reconciled");
         }
     }
     Ok(())
@@ -120,7 +135,7 @@ async fn drain(pool: &PgPool, config: &ProcessingConfig, client: &Client) -> Res
 async fn deliver(
     client: &mut Client,
     config: &ProcessingConfig,
-    row: &Row,
+    row: &Delivery,
 ) -> Result<(String, bool)> {
     // On subsequent attempts describe first: even history expiry must not create a second run.
     if row.first_dispatch_at.is_some() || row.run_id.is_some() {
@@ -129,16 +144,14 @@ async fn deliver(
             Err(error)
                 if error.code() == Code::NotFound
                     && row.delivered_at.is_none()
-                    && row.summary.stage == super::models::Stage::Queued => {}
+                    && row.stage == Stage::Queued => {}
             Err(_) => anyhow::bail!("processing history unavailable"),
         }
     }
     let now = Utc::now();
     anyhow::ensure!(
         row.deadline_at > now
-            && row.summary.created_at
-                + chrono::Duration::seconds(config.limits.queue_seconds as i64)
-                > now,
+            && row.created_at + chrono::Duration::seconds(config.limits.queue_seconds as i64) > now,
         "processing admission horizon expired"
     );
     let payload = Payload {
@@ -161,7 +174,7 @@ async fn deliver(
             payloads: vec![payload],
         }),
         identity: "control-plane-processing".into(),
-        request_id: row.summary.id.to_string(),
+        request_id: row.id.to_string(),
         workflow_id_reuse_policy: 3, // WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, including closed runs.
         workflow_id_conflict_policy: 1, // FAIL for a running run; reconcile below.
         workflow_execution_timeout: Some(Duration::from_secs(seconds).try_into()?),
@@ -178,7 +191,7 @@ async fn deliver(
 async fn describe(
     client: &mut Client,
     config: &ProcessingConfig,
-    row: &Row,
+    row: &Delivery,
 ) -> std::result::Result<(String, bool), temporalio_client::tonic::Status> {
     let result = client
         .describe_workflow_execution(Request::new(DescribeWorkflowExecutionRequest {

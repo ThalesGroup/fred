@@ -1,6 +1,6 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
-use super::{models::*, store, unavailable};
+use super::{models::*, unavailable};
 use crate::{
     api::AppState,
     db,
@@ -66,13 +66,6 @@ pub async fn preview(
         .await;
     }
     let processing = state.processing.as_ref().ok_or_else(unavailable)?;
-    let row: store::Row = sqlx::query_as(
-        "select * from document_processing where document_id=$1 and status='succeeded'",
-    )
-    .bind(id)
-    .fetch_one(&state.pool)
-    .await?;
-    let manifest = row.manifest.as_ref().ok_or(AppError::NotFound)?;
     let path = match query.artifact.as_str() {
         "raw" => "output.md",
         "native" => "native.pdf",
@@ -82,10 +75,11 @@ pub async fn preview(
     if !artifact_path(path) {
         return Err(AppError::NotFound);
     }
-    let artifact = manifest
-        .artifacts
-        .iter()
-        .find(|a| a.path == path)
+    let (prefix, size): (String, i64) = sqlx::query_as("select g.prefix, a.size from document d join generation g on g.id = d.published_generation join artifact a on a.generation_id = g.id and a.path = $2 where d.id = $1 and d.deletion_id is null")
+        .bind(id)
+        .bind(path)
+        .fetch_optional(&state.pool)
+        .await?
         .ok_or(AppError::NotFound)?;
     let mime = match path.rsplit('.').next().unwrap_or("") {
         "md" | "txt" => "text/plain; charset=utf-8",
@@ -97,16 +91,11 @@ pub async fn preview(
         "gif" => "image/gif",
         _ => "application/octet-stream",
     };
-    let key = format!(
-        "{}{}",
-        row.prefix(&processing.config.derived.prefix, manifest.generation),
-        path
-    );
     stream(
         storage,
         &processing.derived,
-        &key,
-        artifact.size,
+        &format!("{prefix}{path}"),
+        size,
         mime,
         headers,
     )

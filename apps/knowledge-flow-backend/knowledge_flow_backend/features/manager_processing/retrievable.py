@@ -49,10 +49,9 @@ def set_document_retrievable(command: dict) -> bool:
             raise ManagerError("retrieval_projection_uncertain", permanent=True)
         # Claim is deliberately not replayable: a lost claim response cannot admit a writer.
         callback(client, path, work, "claim")
-        if not work.restore:
-            if not ids:
-                raise ManagerError("indexing_failed", permanent=True)
-            context.get_manager_vector_store().set_chunks_retrievable(document_uid=str(work.document_id), chunk_ids=ids, value=work.retrievable)
+        if not ids:
+            raise ManagerError("indexing_failed", permanent=True)
+        context.get_manager_vector_store().set_chunks_retrievable(document_uid=str(work.document_id), chunk_ids=ids, value=work.retrievable)
         return True
 
 

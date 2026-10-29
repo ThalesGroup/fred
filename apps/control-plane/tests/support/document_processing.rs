@@ -81,6 +81,21 @@ fn claim(work: &Work, stage: Stage, activity: Uuid, attempt: u32) -> Claim {
         attempt,
     }
 }
+async fn published(pool: &sqlx::PgPool, document: Uuid) -> (store::Generation, Manifest) {
+    let g: store::Generation = sqlx::query_as(
+        "select g.* from document d join generation g on g.id=d.published_generation where d.id=$1",
+    )
+    .bind(document)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let manifest = store::manifest(pool, &g).await.unwrap();
+    (g, manifest)
+}
+async fn expire_generations(pool: &sqlx::PgPool, processing: Uuid) {
+    sqlx::query("update generation set expires_at=clock_timestamp()-interval '2 minutes' where processing_id=$1")
+        .bind(processing).execute(pool).await.unwrap();
+}
 async fn commit(p: &Processing, d: &Descriptor, files: &[(&str, &[u8])], chunks: i64) -> Summary {
     let mut artifacts = vec![];
     for (name, bytes) in files {
@@ -124,12 +139,7 @@ async fn commit(p: &Processing, d: &Descriptor, files: &[(&str, &[u8])], chunks:
 }
 
 async fn verify_terminal_replay(d: &Documents, p: &Processing, work: &Work, done: &Summary) {
-    let saved = store::row(&d.e.pool, work.processing_id)
-        .await
-        .unwrap()
-        .manifest
-        .unwrap()
-        .0;
+    let (published_generation, saved) = published(&d.e.pool, work.document_id).await;
     let generation = saved.generation;
     let mut restarted = Processing {
         pool: sqlx::PgPool::connect_with(p.pool.connect_options().as_ref().clone())
@@ -148,14 +158,20 @@ async fn verify_terminal_replay(d: &Documents, p: &Processing, work: &Work, done
     let row = store::row(&d.e.pool, work.processing_id).await.unwrap();
     let mut inconsistent = saved.clone();
     inconsistent.vectors = 0;
-    assert!(p.published_retrievable(&row, &inconsistent).await.is_err());
+    assert!(
+        p.published_retrievable(
+            work.document_id,
+            &published_generation.prefix,
+            &inconsistent
+        )
+        .await
+        .is_err()
+    );
     assert!(
         p.set_retrievable(
             "unknown-user",
             work.document_id,
-            SetRetrievable {
-                retrievable: Some(false)
-            }
+            SetRetrievable { retrievable: false }
         )
         .await
         .is_err()
@@ -170,28 +186,22 @@ async fn verify_terminal_replay(d: &Documents, p: &Processing, work: &Work, done
             .set_retrievable(
                 &row.actor,
                 work.document_id,
-                SetRetrievable {
-                    retrievable: Some(false)
-                }
+                SetRetrievable { retrievable: false }
             )
             .await
             .is_err()
     );
-    let command: serde_json::Value =
-        sqlx::query_scalar("select retrieval_command from document where id=$1")
-            .bind(work.document_id)
-            .fetch_one(&d.e.pool)
-            .await
-            .unwrap();
-    let operation: Uuid = command["id"].as_str().unwrap().parse().unwrap();
+    let operation: Uuid = sqlx::query_scalar("select retrieval_id from document where id=$1")
+        .bind(work.document_id)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
     assert!(
         restarted
             .set_retrievable(
                 &row.actor,
                 work.document_id,
-                SetRetrievable {
-                    retrievable: Some(false)
-                }
+                SetRetrievable { retrievable: false }
             )
             .await
             .is_err()
@@ -231,9 +241,7 @@ async fn verify_terminal_replay(d: &Documents, p: &Processing, work: &Work, done
         p.set_retrievable(
             &row.actor,
             work.document_id,
-            SetRetrievable {
-                retrievable: Some(true)
-            }
+            SetRetrievable { retrievable: true }
         )
         .await
         .is_err()
@@ -277,9 +285,7 @@ async fn verify_terminal_replay(d: &Documents, p: &Processing, work: &Work, done
         .set_retrievable(
             &row.actor,
             work.document_id,
-            SetRetrievable {
-                retrievable: Some(false),
-            },
+            SetRetrievable { retrievable: false },
         )
         .await
         .unwrap();
@@ -293,9 +299,7 @@ async fn verify_terminal_replay(d: &Documents, p: &Processing, work: &Work, done
             .set_retrievable(
                 &row.actor,
                 work.document_id,
-                SetRetrievable {
-                    retrievable: Some(true)
-                }
+                SetRetrievable { retrievable: true }
             )
             .await
             .is_err()
@@ -401,7 +405,7 @@ async fn processing_admission_fences_publication_and_original_survival() {
         .is_err()
     );
     let row = store::row(&d.e.pool, a.id).await.unwrap();
-    let work = row.work();
+    let work = row.work(p.installation);
     let activity = Uuid::new_v4();
     let c = claim(&work, Stage::Preparation, activity, 1);
     let first = p.claim(c.clone()).await.unwrap();
@@ -438,10 +442,29 @@ async fn processing_admission_fences_publication_and_original_survival() {
         .unwrap();
     assert!(replay.committed.is_some());
     assert_eq!(replay.generation, current.generation);
+    // The next stage restores from the stored prefix, never one rebuilt from identifiers.
+    let relocated = format!("{}relocated/", current.output_prefix);
+    sqlx::query("update generation set prefix=$2 where id=$1")
+        .bind(current.generation)
+        .bind(&relocated)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
     let extracted = p
         .claim(claim(&work, Stage::Extraction, Uuid::new_v4(), 1))
         .await
         .unwrap();
+    let predecessor = extracted.predecessor.as_ref().unwrap();
+    assert_eq!(predecessor.prefix, relocated);
+    assert_eq!(predecessor.manifest.generation, current.generation);
+    assert_eq!(
+        extracted.output_prefix,
+        format!(
+            "{}{}/",
+            store::document_output(&p.config.derived.prefix, work.document_id),
+            extracted.generation
+        )
+    );
     commit(
         &p,
         &extracted,
@@ -472,6 +495,13 @@ async fn processing_admission_fences_publication_and_original_survival() {
         ready,
     ));
     rx.await.unwrap();
+    let pointer = "select published_generation from document where id=$1";
+    let unpublished: Option<Uuid> = sqlx::query_scalar(pointer)
+        .bind(work.document_id)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert!(unpublished.is_none());
     let done = commit(
         &p,
         &indexed,
@@ -484,6 +514,13 @@ async fn processing_admission_fences_publication_and_original_survival() {
     )
     .await;
     assert_eq!(done.status, ProcessingStatus::Succeeded);
+    assert_eq!((done.chunks, done.vectors), (1, 1));
+    let pointer: Option<Uuid> = sqlx::query_scalar(pointer)
+        .bind(work.document_id)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(pointer, Some(indexed.generation));
     assert!(
         control_plane::db::document(&d.e.pool, work.document_id)
             .await
@@ -503,25 +540,33 @@ async fn processing_admission_fences_publication_and_original_survival() {
     );
     drop(observed);
     Box::pin(verify_terminal_replay(&d, &p, &work, &done)).await;
+    // A fenced attempt writes only below its own prefix and cannot replace published bytes.
+    assert_ne!(first.output_prefix, indexed.output_prefix);
+    let zombie = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(zombie.path(), b"zombie text").unwrap();
+    assert!(
+        Box::pin(p.derived.put_verified(
+            &format!("{}output.md", indexed.output_prefix),
+            zombie.path(),
+            11,
+            &Sha256::digest(b"zombie text").into(),
+        ))
+        .await
+        .is_err()
+    );
     // Cleanup releases abandoned stages, and protects the published ordinal even
     // when adaptive indexing planned more identifiers than it ultimately used.
-    let mut completed = store::row(&d.e.pool, work.processing_id).await.unwrap();
-    for generation in completed.generations.iter_mut() {
-        generation.expires_at = chrono::Utc::now() - chrono::Duration::minutes(2);
-    }
-    sqlx::query("update document_processing set generations=$2,cleanup_due_at=clock_timestamp() where id=$1")
-        .bind(work.processing_id).bind(&completed.generations).execute(&d.e.pool).await.unwrap();
-    let mut seen = std::collections::HashSet::new();
-    for _ in 0..completed.generations.len() * 2 {
-        sqlx::query("update document_processing set cleanup_due_at=clock_timestamp() where id=$1")
-            .bind(work.processing_id)
-            .execute(&d.e.pool)
-            .await
-            .unwrap();
-        let candidates = p.cleanup_candidates().await.unwrap();
-        assert_eq!(candidates.len(), 1);
-        let candidate = &candidates[0];
-        seen.insert(candidate.generation);
+    expire_generations(&d.e.pool, work.processing_id).await;
+    let all = store::generations(&d.e.pool, work.processing_id)
+        .await
+        .unwrap();
+    assert_eq!(all.len(), 4);
+    let candidates = p.cleanup_candidates().await.unwrap();
+    assert_eq!(candidates.len(), all.len());
+    for candidate in candidates {
+        let stored = all.iter().find(|g| g.id == candidate.generation).unwrap();
+        assert_eq!(candidate.output_prefix, stored.prefix);
+        assert!(!candidate.purge_document);
         if candidate.generation == indexed.generation {
             assert!(candidate.preserve_objects);
             assert_eq!(candidate.protected_ordinals, vec![0]);
@@ -539,17 +584,14 @@ async fn processing_admission_fences_publication_and_original_survival() {
         .await
         .unwrap();
     }
-    assert_eq!(seen.len(), completed.generations.len());
+    // Every generation is finished: the queue no longer returns it.
+    assert!(p.cleanup_candidates().await.unwrap().is_empty());
     assert!(
-        store::row(&d.e.pool, work.processing_id)
+        store::generations(&d.e.pool, work.processing_id)
             .await
             .unwrap()
-            .generations
             .iter()
-            .find(|g| g.id == indexed.generation)
-            .unwrap()
-            .reserved_bytes
-            > 0
+            .all(|g| g.cleaned_at.is_some())
     );
 
     assert!(p.start("writer", Uuid::new_v4(), id, start).await.is_err());
@@ -568,6 +610,47 @@ async fn processing_admission_fences_publication_and_original_survival() {
         to_bytes(preview.into_body(), 100).await.unwrap(),
         "Hello world"
     );
+    // Preview reads the stored prefix: relocating it in SQL relocates the read.
+    let relocated = format!("{}relocated/", indexed.output_prefix);
+    let moved = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(moved.path(), b"HELLO WORLD").unwrap();
+    Box::pin(p.derived.put_verified(
+        &format!("{relocated}output.md"),
+        moved.path(),
+        11,
+        &Sha256::digest(b"HELLO WORLD").into(),
+    ))
+    .await
+    .unwrap();
+    sqlx::query("update generation set prefix=$2 where id=$1")
+        .bind(indexed.generation)
+        .bind(&relocated)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    let preview = d
+        .request(
+            "reader",
+            "GET",
+            &format!("/documents/{id}/preview?artifact=raw"),
+            Body::empty(),
+            "",
+            None,
+        )
+        .await;
+    assert_eq!(
+        to_bytes(preview.into_body(), 100).await.unwrap(),
+        "HELLO WORLD"
+    );
+    let (status, error) = d
+        .json(
+            "writer",
+            "PUT",
+            &format!("/documents/{id}/retrievable"),
+            json!({"retrievable": null}),
+        )
+        .await;
+    assert_eq!(status, 422, "{error}");
     assert_eq!(
         d.request(
             "reader",
@@ -1396,9 +1479,14 @@ async fn processing_upload_atomic_intent_and_retry_without_new_original() {
             .is_err()
     );
     assert!(
-        p.claim(claim(&failed.work(), Stage::Preparation, Uuid::new_v4(), 1))
-            .await
-            .is_err()
+        p.claim(claim(
+            &failed.work(p.installation),
+            Stage::Preparation,
+            Uuid::new_v4(),
+            1
+        ))
+        .await
+        .is_err()
     );
     let (_, usage) = d
         .json(
@@ -1484,7 +1572,10 @@ async fn processing_workload_identity_and_revoked_publication() {
         .status(),
         403
     );
-    let work = store::row(&d.e.pool, summary.id).await.unwrap().work();
+    let work = store::row(&d.e.pool, summary.id)
+        .await
+        .unwrap()
+        .work(p.installation);
     let prepared = p
         .claim(claim(&work, Stage::Preparation, Uuid::new_v4(), 1))
         .await
@@ -1505,16 +1596,12 @@ async fn processing_workload_identity_and_revoked_publication() {
         .claim(claim(&work, Stage::Indexing, Uuid::new_v4(), 1))
         .await
         .unwrap();
-    let mut manifest = store::row(&d.e.pool, summary.id)
+    let extraction: store::Generation = sqlx::query_as("select * from generation where id=$1")
+        .bind(extracted.generation)
+        .fetch_one(&d.e.pool)
         .await
-        .unwrap()
-        .generations
-        .iter()
-        .find(|g| g.id == extracted.generation)
-        .unwrap()
-        .manifest
-        .clone()
         .unwrap();
+    let mut manifest = store::manifest(&d.e.pool, &extraction).await.unwrap();
     manifest.generation = indexed.generation;
     let metadata = json!({"identity":{"document_uid":work.document_id},"source":{"retrievable":false},"processing":{"stages":{}}}).to_string();
     for (name, bytes) in [
@@ -1540,12 +1627,11 @@ async fn processing_workload_identity_and_revoked_publication() {
         read_page_size: Some(1),
         ..Default::default()
     };
-    let org: Uuid =
-        sqlx::query_scalar("select organization_id from document_processing where id=$1")
-            .bind(summary.id)
-            .fetch_one(&d.e.pool)
-            .await
-            .unwrap();
+    let org: Uuid = sqlx::query_scalar("select s.organization_id from document_processing p join document d on d.id=p.document_id join space s on s.id=d.space_id where p.id=$1")
+        .bind(summary.id)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
     let held = crate::hold_organization_lock(&d.e, org).await;
     let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let (ready, rx) = tokio::sync::oneshot::channel();
@@ -1609,7 +1695,7 @@ async fn processing_workload_identity_and_revoked_publication() {
         store::row(&d.e.pool, summary.id)
             .await
             .unwrap()
-            .manifest
+            .published_generation
             .is_none()
     );
     assert_eq!(
@@ -1700,6 +1786,38 @@ async fn processing_admission_request_budget_at_one_and_one_hundred_documents() 
                 .unwrap();
         }
     }
+}
+
+#[tokio::test]
+#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+async fn stage_claims_lock_only_their_own_processing() {
+    let (d, p) = Box::pin(setup()).await;
+    let busy = admit(&d, &p, "busy.txt").await;
+    let free = admit(&d, &p, "free.txt").await;
+    // Hold the former global budget lock and another document's processing row.
+    let mut held = d.e.pool.begin().await.unwrap();
+    sqlx::query("select singleton from document_storage where singleton for update")
+        .execute(&mut *held)
+        .await
+        .unwrap();
+    sqlx::query("select id from document_processing where id=$1 for update")
+        .bind(busy)
+        .execute(&mut *held)
+        .await
+        .unwrap();
+    let work = store::row(&d.e.pool, free)
+        .await
+        .unwrap()
+        .work(p.installation);
+    let claimed = tokio::time::timeout(
+        Duration::from_secs(5),
+        p.claim(claim(&work, Stage::Preparation, Uuid::new_v4(), 1)),
+    )
+    .await
+    .expect("a claim must not wait for another document")
+    .unwrap();
+    assert_eq!(claimed.work.processing_id, free);
+    held.rollback().await.unwrap();
 }
 
 // Proves: I25, I26
@@ -2203,6 +2321,7 @@ async fn mark_document_team(d: &Documents) -> Uuid {
     id
 }
 
+// Proves: I25, I26
 #[tokio::test]
 #[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
 async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
@@ -2212,7 +2331,10 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
     use control_plane::spaces;
     let (mut d, p) = Box::pin(setup()).await;
     let processing = admit(&d, &p, "D1.txt").await;
-    let work = store::row(&d.e.pool, processing).await.unwrap().work();
+    let work = store::row(&d.e.pool, processing)
+        .await
+        .unwrap()
+        .work(p.installation);
     let preparation = p
         .claim(claim(&work, Stage::Preparation, Uuid::new_v4(), 1))
         .await
@@ -2304,16 +2426,9 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
         .await
         .unwrap();
     d.folder = target.clone();
-    let mut row = store::row(&d.e.pool, processing).await.unwrap();
-    for generation in row.generations.iter_mut() {
-        generation.expires_at = chrono::Utc::now() - chrono::Duration::minutes(2);
-        if generation.id == indexing.generation {
-            generation.cleanup_cursor = 200;
-        }
-    }
-    sqlx::query("update document_processing set generations=$2 where id=$1")
-        .bind(processing)
-        .bind(&row.generations)
+    expire_generations(&d.e.pool, processing).await;
+    sqlx::query("update generation set cleanup_cursor=200 where id=$1")
+        .bind(indexing.generation)
         .execute(&d.e.pool)
         .await
         .unwrap();
@@ -2348,14 +2463,13 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
             ..
         })
     ));
-    assert!(
-        store::row(&d.e.pool, processing)
-            .await
-            .unwrap()
-            .generations
-            .iter()
-            .all(|g| !g.cleaned)
-    );
+    let (cursor, purged): (i32, bool) = sqlx::query_as("select g.cleanup_cursor, d.purged_at is not null from generation g, document d where g.id=$1 and d.id=$2")
+        .bind(indexing.generation)
+        .bind(work.document_id)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!((cursor, purged), (200, false));
 
     cleanup::batch(&d.e.pool, &d.e.fga, operation)
         .await
@@ -2386,11 +2500,6 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
     assert_eq!(receipt.documents_deleted, 1);
     assert!(receipt.error_code.is_none());
 
-    sqlx::query("update document_processing set cleanup_due_at=clock_timestamp() where id=$1")
-        .bind(processing)
-        .execute(&d.e.pool)
-        .await
-        .unwrap();
     let candidates = p.cleanup_candidates().await.unwrap();
     assert_eq!(candidates.len(), 1);
     let candidate = candidates.into_iter().next().unwrap();
@@ -2398,7 +2507,7 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
     assert_eq!(candidate.generation, indexing.generation);
     assert_eq!(
         candidate.output_prefix,
-        row.document_prefix(&p.config.derived.prefix)
+        store::document_output(&p.config.derived.prefix, work.document_id)
     );
     assert_eq!(
         (candidate.chunks, candidate.cursor, candidate.batch),
@@ -2412,8 +2521,13 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
         .await
         .unwrap();
     assert!(objects.next.is_none());
+    assert!(!objects.objects.is_empty());
     for (key, _, _) in objects.objects {
         p.derived.delete(&key).await.unwrap();
+    }
+    // The purge sweeps `{document}/output/` only; the original below `input/` remains.
+    for key in &originals {
+        assert!(d.storage.objects.get(key).await.is_ok());
     }
     p.cleaned(control_plane::processing::cleanup::Cleaned {
         work: candidate.work,
@@ -2425,13 +2539,13 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
     })
     .await
     .unwrap();
-    let cleaned = store::row(&d.e.pool, processing).await.unwrap();
-    assert!(
-        cleaned
-            .generations
-            .iter()
-            .all(|g| g.cleaned && g.reserved_bytes == 0 && g.cleanup_cursor == 0)
-    );
+    let purged: bool = sqlx::query_scalar("select purged_at is not null from document where id=$1")
+        .bind(work.document_id)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert!(purged);
+    assert!(p.cleanup_candidates().await.unwrap().is_empty());
     for _ in 0..20 {
         cleanup::batch(&d.e.pool, &d.e.fga, operation)
             .await
@@ -2455,7 +2569,7 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
     assert_eq!(receipt.folders_deleted, 1);
     assert_eq!(receipt.spaces_deleted, 1);
     assert!(receipt.error_code.is_none());
-    let leftovers: bool = sqlx::query_scalar("select exists(select 1 from document where id=any($1)) or exists(select 1 from document_processing where document_id=any($1)) or exists(select 1 from document_upload where document_id=any($1)) or exists(select 1 from folder where id=$2) or exists(select 1 from space where id=$3)")
+    let leftovers: bool = sqlx::query_scalar("select exists(select 1 from document where id=any($1)) or exists(select 1 from document_processing where document_id=any($1)) or exists(select 1 from document_upload where id=any($1)) or exists(select 1 from folder where id=$2) or exists(select 1 from space where id=$3)")
         .bind(&[work.document_id, d2][..]).bind(target.id).bind(target.space_id).fetch_one(&d.e.pool).await.unwrap();
     assert!(!leftovers);
     d.storage.cleanup_tick().await.unwrap();
@@ -2486,19 +2600,18 @@ async fn lifecycle_waits_for_running_retired_document() {
     use control_plane::lifecycle::{Receipt, Status, cleanup};
     let (d, p) = Box::pin(setup()).await;
     let processing = admit(&d, &p, "running.txt").await;
-    let work = store::row(&d.e.pool, processing).await.unwrap().work();
+    let work = store::row(&d.e.pool, processing)
+        .await
+        .unwrap()
+        .work(p.installation);
     p.claim(claim(&work, Stage::Preparation, Uuid::new_v4(), 1))
         .await
         .unwrap();
     let operation = mark_document_team(&d).await;
-    let mut row = store::row(&d.e.pool, processing).await.unwrap();
+    let row = store::row(&d.e.pool, processing).await.unwrap();
     assert_eq!(row.summary.status, ProcessingStatus::Running);
-    for generation in row.generations.iter_mut() {
-        generation.expires_at = chrono::Utc::now() - chrono::Duration::minutes(2);
-        generation.cleaned = true;
-    }
-    sqlx::query("update document_processing set generations=$2,cleanup_due_at=clock_timestamp() where id=$1")
-        .bind(processing).bind(&row.generations).execute(&d.e.pool).await.unwrap();
+    sqlx::query("update generation set expires_at=clock_timestamp()-interval '2 minutes',cleaned_at=clock_timestamp() where processing_id=$1")
+        .bind(processing).execute(&d.e.pool).await.unwrap();
     assert!(p.cleanup_candidates().await.unwrap().is_empty());
     for _ in 0..2 {
         cleanup::batch(&d.e.pool, &d.e.fga, operation)
@@ -2542,7 +2655,10 @@ async fn editor_deletes_document_without_retiring_its_folder() {
         .await
         .unwrap();
     let processing = admit(&d, &p, "D1.txt").await;
-    let work = store::row(&d.e.pool, processing).await.unwrap().work();
+    let work = store::row(&d.e.pool, processing)
+        .await
+        .unwrap()
+        .work(p.installation);
     let preparation = p
         .claim(claim(&work, Stage::Preparation, Uuid::new_v4(), 1))
         .await
@@ -2696,7 +2812,10 @@ async fn editor_deletes_document_without_retiring_its_folder() {
     );
 
     let active = admit(&d, &p, "running.txt").await;
-    let active_work = store::row(&d.e.pool, active).await.unwrap().work();
+    let active_work = store::row(&d.e.pool, active)
+        .await
+        .unwrap()
+        .work(p.installation);
     p.claim(claim(&active_work, Stage::Preparation, Uuid::new_v4(), 1))
         .await
         .unwrap();
@@ -2733,12 +2852,7 @@ async fn editor_deletes_document_without_retiring_its_folder() {
     assert_eq!(waiting.status, Status::Running);
     assert_eq!(waiting.documents_deleted, 0);
     assert!(waiting.error_code.is_none());
-    let mut row = store::row(&d.e.pool, processing).await.unwrap();
-    for generation in row.generations.iter_mut() {
-        generation.expires_at = chrono::Utc::now() - chrono::Duration::minutes(2);
-    }
-    sqlx::query("update document_processing set generations=$2,cleanup_due_at=clock_timestamp() where id=$1")
-        .bind(processing).bind(&row.generations).execute(&d.e.pool).await.unwrap();
+    expire_generations(&d.e.pool, processing).await;
     let candidates = p.cleanup_candidates().await.unwrap();
     let candidate = candidates
         .into_iter()
@@ -2779,7 +2893,7 @@ async fn editor_deletes_document_without_retiring_its_folder() {
         (completed.folders_deleted, completed.spaces_deleted),
         (0, 0)
     );
-    let remains: bool = sqlx::query_scalar("select exists(select 1 from document where id=$1) or exists(select 1 from document_processing where document_id=$1) or exists(select 1 from document_upload where document_id=$1)")
+    let remains: bool = sqlx::query_scalar("select exists(select 1 from document where id=$1) or exists(select 1 from document_processing where document_id=$1) or exists(select 1 from document_upload where id=$1)")
         .bind(work.document_id).fetch_one(&d.e.pool).await.unwrap();
     assert!(!remains);
     assert!(db::folder(&d.e.pool, d.folder.id).await.is_ok());

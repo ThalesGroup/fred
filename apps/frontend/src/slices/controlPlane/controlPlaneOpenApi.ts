@@ -1053,14 +1053,13 @@ export type Manifest = {
   vector_ordinals: number[];
   vectors: number;
 };
-export type ProjectionPhase = "uncertain" | "ready" | "writing" | "applied";
+export type ProjectionPhase = "ready" | "writing" | "applied";
 export type RetrievalWork = {
   confirmed: boolean;
   document_id: string;
   manifest: Manifest;
   operation_id: string;
   phase: ProjectionPhase;
-  restore: boolean;
   retrievable: boolean;
 };
 export type RetrievalStep = "claim" | "applied" | "confirm";
@@ -1111,6 +1110,10 @@ export type Failure = {
   stage: Stage;
   work: Work;
 };
+export type Predecessor = {
+  manifest: Manifest;
+  prefix: string;
+};
 export type Descriptor = {
   actor: string;
   committed?: Manifest | null;
@@ -1126,7 +1129,7 @@ export type Descriptor = {
   name: string;
   organization_id: string;
   output_prefix: string;
-  predecessor?: Manifest | null;
+  predecessor?: Predecessor | null;
   profile_settings: any;
   size: number;
   space_id: string;
@@ -1198,8 +1201,7 @@ export type Document = {
   space_id: string;
 };
 export type SetRetrievable = {
-  /** null restores an untouched legacy publication from its verified metadata and chunks. */
-  retrievable: boolean | null;
+  retrievable: boolean;
 };
 export type Folder = {
   created_at: string;

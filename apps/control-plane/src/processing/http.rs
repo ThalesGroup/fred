@@ -105,11 +105,7 @@ async fn work(
     ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<Json<Work>> {
     let p = service(&s)?;
-    let row = store::row(&p.pool, id).await?;
-    if row.installation_id != p.installation {
-        return Err(AppError::NotFound);
-    }
-    Ok(Json(row.work()))
+    Ok(Json(store::row(&p.pool, id).await?.work(p.installation)))
 }
 #[utoipa::path(post,path="/document-processing/{id}/claim",params(("id"=Uuid,Path)),request_body=Claim,responses((status=200,body=Descriptor),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody),(status=429,body=crate::error::ErrorBody),(status=400,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody)))]
 async fn claim(
@@ -161,10 +157,9 @@ async fn original(
 ) -> AppResult<Response> {
     let p = service(&s)?;
     let r = store::row(&p.pool, id).await?;
-    if r.installation_id != p.installation
-        || r.summary.status.terminal()
-        || r.generations.last().is_none_or(|g| {
-            g.id != q.generation || g.expires_at <= chrono::Utc::now() || g.manifest.is_some()
+    if r.summary.status.terminal()
+        || store::latest(&p.pool, id).await?.is_none_or(|g| {
+            g.id != q.generation || g.expires_at <= chrono::Utc::now() || g.committed_at.is_some()
         })
     {
         return Err(super::conflict("stale_generation"));

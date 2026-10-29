@@ -3,11 +3,10 @@
 use super::{
     Processing, conflict,
     models::*,
-    store::{Row, row},
+    store::{self, generations, latest, row},
 };
 use crate::{error::AppResult, onboarding, spaces};
 use chrono::Utc;
-use sqlx::types::Json;
 
 impl Processing {
     /// Verify immutable staged bytes before acquiring the short publication lock.
@@ -17,53 +16,49 @@ impl Processing {
             self.config.limits.artifacts,
             self.config.limits.chunks,
         )?;
+        let mut manifest = commit.manifest;
+        manifest.artifacts.sort_by(|a, b| a.path.cmp(&b.path));
         let r = row(&self.pool, commit.work.processing_id).await?;
-        r.bind(&commit.work)?;
-        let generation = r
-            .generations
+        r.bind(self.installation, &commit.work)?;
+        let all = generations(&self.pool, r.summary.id).await?;
+        let generation = all
             .iter()
-            .find(|g| g.id == commit.manifest.generation && g.stage == commit.stage)
+            .find(|g| g.id == manifest.generation && g.stage == commit.stage)
             .ok_or_else(|| conflict("stale_generation"))?;
-        if let Some(saved) = &generation.manifest {
-            if saved != &commit.manifest {
+        if generation.committed_at.is_some() {
+            if store::manifest(&self.pool, generation).await? != manifest {
                 return Err(conflict("manifest_conflict"));
             }
             return Ok(r.summary);
         }
         if r.summary.status.terminal()
             || generation.expires_at <= Utc::now()
-            || r.generations.last().map(|g| g.id) != Some(generation.id)
+            || all.last().map(|g| g.id) != Some(generation.id)
         {
             return Err(conflict("stale_generation"));
         }
-        let prefix = r.prefix(&self.config.derived.prefix, generation.id);
-        for artifact in &commit.manifest.artifacts {
+        for artifact in &manifest.artifacts {
             let hash = decode_digest(&artifact.sha256)?;
             self.derived
-                .verify(&format!("{prefix}{}", artifact.path), artifact.size, &hash)
+                .verify(
+                    &format!("{}{}", generation.prefix, artifact.path),
+                    artifact.size,
+                    &hash,
+                )
                 .await
                 .map_err(|_| super::unavailable())?;
         }
+        let planned = generation.chunks as u32;
         if commit.stage == Stage::Indexing {
             let document = crate::db::document(&self.pool, r.summary.document_id).await?;
-            let names: std::collections::HashSet<&str> = commit
-                .manifest
-                .artifacts
-                .iter()
-                .map(|a| a.path.as_str())
-                .collect();
-            if commit.manifest.vectors > generation.chunks as i64
-                || commit
-                    .manifest
-                    .vector_ordinals
-                    .iter()
-                    .any(|v| *v >= generation.chunks)
-                || (commit.manifest.chunks > 0 && !names.contains("chunks.jsonl"))
+            let names: std::collections::HashSet<&str> =
+                manifest.artifacts.iter().map(|a| a.path.as_str()).collect();
+            if manifest.vectors > i64::from(planned)
+                || manifest.vector_ordinals.iter().any(|v| *v >= planned)
+                || (manifest.chunks > 0 && !names.contains("chunks.jsonl"))
                 || !names.contains("metadata.json")
                 || !names.contains("output.md")
-                || (commit.manifest.rows.is_none()
-                    && ((generation.chunks > 0 && commit.manifest.chunks == 0)
-                        || commit.manifest.vectors != commit.manifest.chunks))
+                || (manifest.rows.is_none() && planned > 0 && manifest.chunks == 0)
             {
                 return Err(invalid());
             }
@@ -80,7 +75,10 @@ impl Processing {
             }
         }
         let retrievable = if commit.stage == Stage::Indexing {
-            Some(self.published_retrievable(&r, &commit.manifest).await?)
+            Some(
+                self.published_retrievable(r.summary.document_id, &generation.prefix, &manifest)
+                    .await?,
+            )
         } else {
             None
         };
@@ -92,20 +90,15 @@ impl Processing {
         } else {
             self.pool.begin().await?
         };
-        let mut current: Row =
-            sqlx::query_as("select * from document_processing where id=$1 for update")
-                .bind(r.summary.id)
-                .fetch_one(&mut *tx)
-                .await?;
-        let g = current
-            .generations
-            .last_mut()
+        let current = store::locked(&mut tx, r.summary.id).await?;
+        let g = latest(&mut *tx, r.summary.id)
+            .await?
             .ok_or_else(|| conflict("stale_generation"))?;
-        if g.id != commit.manifest.generation || g.stage != commit.stage {
+        if g.id != manifest.generation || g.stage != commit.stage {
             return Err(conflict("stale_generation"));
         }
-        if let Some(saved) = &g.manifest {
-            return if saved == &commit.manifest {
+        if g.committed_at.is_some() {
+            return if store::manifest(&mut *tx, &g).await? == manifest {
                 Ok(current.summary)
             } else {
                 Err(conflict("manifest_conflict"))
@@ -117,25 +110,31 @@ impl Processing {
         {
             return Err(conflict("stale_generation"));
         }
-        g.reserved_bytes = commit.manifest.artifacts.iter().map(|a| a.size).sum();
-        g.manifest = Some(commit.manifest.clone());
-        let reserved: i64 = current.generations.iter().map(|g| g.reserved_bytes).sum();
-        let summary = if commit.stage == Stage::Indexing {
-            sqlx::query_as("update document_processing set generations=$2,reserved_bytes=$3,status='succeeded',stage='done',error_code=null,revision=revision+1,completed_at=clock_timestamp(),manifest=$4,chunks=$5,vectors=$6,rows=$7 where id=$1 returning *")
-                .bind(r.summary.id).bind(&current.generations).bind(reserved).bind(Json(&commit.manifest)).bind(commit.manifest.chunks).bind(commit.manifest.vectors).bind(commit.manifest.rows).fetch_one(&mut *tx).await?
-        } else {
-            sqlx::query_as("update document_processing set generations=$2,reserved_bytes=$3,revision=revision+1 where id=$1 returning *")
-                .bind(r.summary.id).bind(&current.generations).bind(reserved).fetch_one(&mut *tx).await?
-        };
+        let (paths, (sizes, digests)): (Vec<&str>, (Vec<i64>, Vec<&str>)) = manifest
+            .artifacts
+            .iter()
+            .map(|a| (a.path.as_str(), (a.size, a.sha256.as_str())))
+            .unzip();
+        sqlx::query("insert into artifact(generation_id,path,size,sha256) select $1,* from unnest($2::text[],$3::bigint[],$4::text[])")
+            .bind(g.id).bind(&paths).bind(&sizes).bind(&digests).execute(&mut *tx).await?;
+        let ordinals: Vec<i32> = manifest.vector_ordinals.iter().map(|v| *v as i32).collect();
+        sqlx::query("update generation set committed_at=clock_timestamp(),vector_ordinals=$2,rows=$3 where id=$1")
+            .bind(g.id).bind(&ordinals).bind(manifest.rows).execute(&mut *tx).await?;
         if let Some(value) = retrievable {
-            sqlx::query(
-                "update document set retrievable=$2 where id=$1 and retrieval_command is null",
-            )
-            .bind(r.summary.document_id)
-            .bind(value)
-            .execute(&mut *tx)
-            .await?;
+            // No ordinal beyond the published ones means nothing is left for cleanup to sweep.
+            sqlx::query("update generation set cleaned_at=clock_timestamp() where id=$1 and cardinality(vector_ordinals)=chunks")
+                .bind(g.id).execute(&mut *tx).await?;
+            sqlx::query("update document_processing set status='succeeded',stage='done',error_code=null,revision=revision+1,completed_at=clock_timestamp() where id=$1")
+                .bind(r.summary.id).execute(&mut *tx).await?;
+            sqlx::query("update document set published_generation=$2,retrievable=case when retrieval_id is null then $3 else retrievable end where id=$1")
+                .bind(r.summary.document_id).bind(g.id).bind(value).execute(&mut *tx).await?;
+        } else {
+            sqlx::query("update document_processing set revision=revision+1 where id=$1")
+                .bind(r.summary.id)
+                .execute(&mut *tx)
+                .await?;
         }
+        let summary = store::summary(&mut *tx, r.summary.id).await?;
         tx.commit().await?;
         tracing::info!(operation_id=%r.summary.id,document_id=%r.summary.document_id,stage=?commit.stage,outcome="committed","Document processing output committed");
         Ok(summary)

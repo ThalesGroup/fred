@@ -648,7 +648,7 @@ Python backend is no longer shipped.
 
 `Document.retrievable` is the last confirmed inclusion state, separate from processing
 success and caller permissions. Publication reads and verifies `metadata.json` before
-persisting it in the same transaction as the final manifest. The vector worker checks
+persisting it in the same transaction that sets `document.published_generation`. The vector worker checks
 the flag on written chunks. Existing listing and content permissions are unchanged.
 
 `PUT /documents/{id}/retrievable` with `{"retrievable": false}` or `true` requires the
@@ -656,9 +656,10 @@ existing space write permission and a published vector generation. KF updates on
 its published chunk IDs and reads them back before confirming SQL. The response is
 200 only after confirmation. `retrievable_pending` drives the existing UI refresh;
 503 means the outcome is not confirmed, not that the operation was rolled back.
-Repeating an already confirmed request returns its durable result without delivery or
-mutation. While pending, the same actor can repeat the same request; an opposite
-request is rejected. The command and its phase live in `document.retrieval_command`:
+A request matching the recorded state, whether set by publication or by a confirmed
+command, returns it without delivery or mutation. While pending, the same actor can
+repeat the same request; an opposite request is rejected. `null` is rejected. The
+command and its phase live in the `document.retrieval_*` columns:
 
 - `ready`: the worker must atomically claim `writing` before touching OpenSearch.
   Only one claim succeeds, including after an API restart or Temporal history expiry.
@@ -684,9 +685,8 @@ For diagnosis, use the authenticated internal GET
 `manager-retrievable-{installation}-{operation_id}` Temporal history. If the phase is
 `applied`, repeat the original PUT to retry verification/confirmation. If it is
 `writing`, inspect whether the completion-recording activity is still retrying; it
-can finish without reapplying the mutation. A closed run with `writing`, a partial
-projection, or an old command without a phase (`uncertain`) requires investigation
-of the activity and remote write. There is **no automatic repair or operator reset
+can finish without reapplying the mutation. A closed run with `writing` or a partial
+projection requires investigation of the activity and remote write. There is **no automatic repair or operator reset
 endpoint** for that case. Keep pending, do not clear the command or submit the opposite
 value; any repair must first establish that the old writer and remote operations
 have stopped and be separately scoped. A read matching the target alone is not proof
@@ -702,11 +702,4 @@ retry before SQL succeeds can repeat this read cost; a confirmed replay performs
 vector reads. No latency or throughput measurement is claimed. Unsupported vector
 backends explicitly reject both generation-scoped mutation and verification.
 
-Retrievability state is never adopted from pre-existing
-vector data. Before considering an old document's indicator repaired, an authorized
-writer must explicitly call the same route with `{"retrievable": null}`. This restores
-only a document with no prior inclusion command, using the verified published
-metadata and checking every published chunk; it does not rewrite vectors or ingest
-again. A mismatch fails instead of guessing from counts. Apply it per selected ID,
-not as an automatic startup sweep. This action was prepared but not run for the
-reported PDF. The manager index remains isolated from legacy search/chat.
+The manager index remains isolated from legacy search/chat.

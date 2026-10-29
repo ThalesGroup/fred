@@ -39,6 +39,15 @@ text_enum!(
         Done
     }
 );
+impl Profile {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Fast => "fast",
+            Self::Medium => "medium",
+            Self::Rich => "rich",
+        }
+    }
+}
 impl ProcessingStatus {
     pub fn terminal(self) -> bool {
         matches!(self, Self::Succeeded | Self::Failed)
@@ -82,7 +91,7 @@ pub struct Summary {
     pub rows: Option<i64>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Work {
     #[schema(minimum = 1, maximum = 1)]
@@ -141,11 +150,18 @@ pub struct Descriptor {
     pub max_chunks: u32,
     pub file: serde_json::Value,
     pub profile_settings: serde_json::Value,
-    pub predecessor: Option<Manifest>,
+    pub predecessor: Option<Predecessor>,
     pub committed: Option<Manifest>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+/// The previous stage's result and the stored prefix that holds its artifacts.
+#[derive(Clone, Debug, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct Predecessor {
+    pub prefix: String,
+    pub manifest: Manifest,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::FromRow, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Artifact {
     pub path: String,
@@ -170,8 +186,7 @@ impl Manifest {
             || self.artifacts.len() > max_artifacts as usize
             || self.chunks < 0
             || self.chunks > max_chunks as i64
-            || self.vectors < 0
-            || self.vectors > self.chunks
+            || self.vectors != self.chunks
             || self.rows.is_some_and(|v| v < 0)
         {
             return Err(invalid());
@@ -255,6 +270,7 @@ pub fn schema() -> serde_json::Value {
         Work,
         Claim,
         Descriptor,
+        Predecessor,
         Commit,
         Failure,
         Summary,

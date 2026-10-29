@@ -54,6 +54,11 @@ class Manifest(Contract):
     rows: int | None = None
 
 
+class Predecessor(Contract):
+    prefix: str
+    manifest: Manifest
+
+
 class Descriptor(Contract):
     work: Work
     organization_id: UUID
@@ -73,7 +78,7 @@ class Descriptor(Contract):
     max_chunks: int
     file: dict
     profile_settings: dict
-    predecessor: Manifest | None
+    predecessor: Predecessor | None
     committed: Manifest | None
 
 
@@ -118,9 +123,8 @@ class RetrievalWork(Contract):
     operation_id: UUID
     manifest: Manifest
     retrievable: bool
-    restore: bool
     confirmed: bool
-    phase: Literal["uncertain", "ready", "writing", "applied"] = "uncertain"
+    phase: Literal["ready", "writing", "applied"]
 
 
 class RetrievalConfirmation(Contract):

@@ -10,11 +10,12 @@ erDiagram
 "document" }o--|| "space" : "quota_owner"
 "document" }o--|| "space" : "space_id"
 "document" }o--|| "folder" : "folder_id, space_id"
-"document_upload" |o--o| "document" : "document_id"
+"document" }o--o| "generation" : "published_generation"
 "document_upload" |o--o| "document_upload" : "retry_of"
-"document_processing" }o--|| "space" : "space_id"
 "document_processing" }o--|| "document" : "document_id"
 "document_processing" |o--o| "document_processing" : "retry_of"
+"generation" }o--|| "document_processing" : "processing_id"
+"artifact" }o--|| "generation" : "generation_id"
 "agent_instance" }o--|| "space" : "space_id"
 "runtime_capability" }o--|| "runtime_catalog" : "runtime_id"
 "runtime_template_capability" }o--|| "runtime_capability" : "runtime_id, capability_id"
@@ -78,8 +79,14 @@ erDiagram
   text object_key
   uuid quota_owner FK
   boolean retrievable
-  jsonb retrieval_command
+  uuid retrieval_id
+  text retrieval_actor
+  boolean retrieval_target
+  text retrieval_phase
+  boolean retrieval_confirmed
   boolean retrievable_pending
+  uuid published_generation FK
+  timestamp_with_time_zone purged_at
   uuid deletion_id FK
 }
 "platform_bootstrap" {
@@ -138,7 +145,6 @@ erDiagram
   text sha256
   text object_key
   text status
-  uuid document_id FK
   text error_code
   timestamp_with_time_zone created_at
   timestamp_with_time_zone expires_at
@@ -155,11 +161,7 @@ erDiagram
   uuid id
   uuid request_key
   text actor
-  uuid installation_id
   uuid document_id FK
-  uuid organization_id
-  uuid space_id FK
-  text original_sha256
   text profile
   text status
   text stage
@@ -179,13 +181,32 @@ erDiagram
   text error_code
   uuid retry_of FK
   jsonb profile_settings
-  jsonb generations
-  jsonb manifest
-  bigint chunks
-  bigint vectors
+  integer preparation_seconds
+  integer extraction_seconds
+  integer indexing_seconds
+}
+"generation" {
+  uuid id
+  uuid processing_id FK
+  text stage
+  uuid execution_id
+  uuid activity_id
+  integer attempt
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone expires_at
+  text prefix
+  timestamp_with_time_zone committed_at
+  integer chunks
+  integer__ vector_ordinals
   bigint rows
-  bigint reserved_bytes
-  timestamp_with_time_zone cleanup_due_at
+  integer cleanup_cursor
+  timestamp_with_time_zone cleaned_at
+}
+"artifact" {
+  uuid generation_id FK
+  text path
+  bigint size
+  text sha256
 }
 "agent_instance" {
   uuid agent_instance_id

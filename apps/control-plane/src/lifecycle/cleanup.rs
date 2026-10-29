@@ -94,33 +94,30 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
         let ready: Vec<Uuid> = sqlx::query_scalar(
             "select d.id from document d
              where d.deletion_id = $1
-               and not exists (
+               and (d.purged_at is not null or not exists (
                    select 1 from document_processing p
+                   left join generation g on g.processing_id = p.id
                    where p.document_id = d.id
-                     and (p.status in ('pending', 'running') or exists (
-                         select 1 from jsonb_array_elements(p.generations) g
-                         where (g->>'cleaned')::boolean is distinct from true
-                     ))
-               )
+                     and (p.status in ('pending', 'running') or g.id is not null)
+               ))
              order by d.id limit 100 for update of d skip locked",
         )
         .bind(id)
         .fetch_all(&mut *tx)
         .await?;
         if ready.is_empty() {
-            tracing::info!(remaining, "waiting for derived cleanup");
+            tracing::info!(remaining, "waiting for derived purge");
         } else {
-            // Delete all attempts together so retry_of references disappear in the same statement.
+            // Delete all attempts together so retry_of references disappear in the same
+            // statement; their generations cascade before the deferred publication check.
             sqlx::query("delete from document_processing where document_id = any($1)")
                 .bind(&ready)
                 .execute(&mut *tx)
                 .await?;
-            sqlx::query(
-                "delete from document_upload where document_id = any($1) and status = 'stored'",
-            )
-            .bind(&ready)
-            .execute(&mut *tx)
-            .await?;
+            sqlx::query("delete from document_upload where id = any($1) and status = 'stored'")
+                .bind(&ready)
+                .execute(&mut *tx)
+                .await?;
             let deleted =
                 sqlx::query("delete from document where id = any($1) and deletion_id = $2")
                     .bind(&ready)

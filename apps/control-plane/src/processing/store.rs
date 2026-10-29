@@ -1,5 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
+//! Processing requests and their generations. A generation's stored prefix is the only
+//! location any reader uses for its artifacts.
 use super::{Processing, conflict, models::*};
 use crate::{
     db,
@@ -8,103 +10,180 @@ use crate::{
     onboarding, spaces,
 };
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Transaction, types::Json};
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/// Published counts come from the document's official generation, never a failed attempt.
+macro_rules! summary_from {
+    () => {
+        "p.id, p.document_id, p.profile, p.status, p.stage, p.revision, p.error_code, p.created_at, p.completed_at, p.retry_of, coalesce(cardinality(g.vector_ordinals), 0)::bigint as chunks, coalesce(cardinality(g.vector_ordinals), 0)::bigint as vectors, g.rows from document_processing p join document d on d.id = p.document_id left join generation g on g.id = d.published_generation and g.processing_id = p.id"
+    };
+}
+macro_rules! row {
+    () => {
+        "select p.*, p.submission->'files'->0 as file, d.sha256 as original_sha256, d.space_id, s.organization_id, d.published_generation, d.deletion_id is not null as retired, coalesce(cardinality(g.vector_ordinals), 0)::bigint as chunks, coalesce(cardinality(g.vector_ordinals), 0)::bigint as vectors, g.rows from document_processing p join document d on d.id = p.document_id join space s on s.id = d.space_id left join generation g on g.id = d.published_generation and g.processing_id = p.id"
+    };
+}
+
+#[derive(Clone, Debug, sqlx::FromRow)]
 pub struct Generation {
     pub id: Uuid,
+    pub processing_id: Uuid,
+    pub stage: Stage,
     pub execution_id: Uuid,
     pub activity_id: Uuid,
-    pub attempt: u32,
-    pub stage: Stage,
+    pub attempt: i32,
     pub expires_at: DateTime<Utc>,
-    pub manifest: Option<Manifest>,
-    pub reserved_bytes: i64,
-    pub cleaned: bool,
-    #[serde(default)]
-    pub chunks: u32,
-    #[serde(default)]
-    pub cleanup_cursor: u32,
-    pub cleanup_at: Option<DateTime<Utc>>,
+    pub prefix: String,
+    pub committed_at: Option<DateTime<Utc>>,
+    /// Vector ordinals this attempt may write, journaled before each write.
+    pub chunks: i32,
+    pub vector_ordinals: Option<Vec<i32>>,
+    pub rows: Option<i64>,
+    pub cleanup_cursor: i32,
+    pub cleaned_at: Option<DateTime<Utc>>,
 }
+
+/// A request joined with its document. The submission is forwarded unread; only its
+/// file entry is projected for the worker descriptor.
 #[derive(Clone, sqlx::FromRow)]
 pub struct Row {
     #[sqlx(flatten)]
     pub summary: Summary,
-    pub request_key: Uuid,
     pub actor: String,
-    pub installation_id: Uuid,
-    pub organization_id: Uuid,
-    pub space_id: Uuid,
     pub original_sha256: String,
+    pub space_id: Uuid,
+    pub organization_id: Uuid,
     pub workflow_id: String,
-    pub submission: Json<serde_json::Value>,
     pub run_id: Option<String>,
-    pub first_dispatch_at: Option<DateTime<Utc>>,
-    pub delivered_at: Option<DateTime<Utc>>,
     pub deadline_at: DateTime<Utc>,
+    pub file: Json<serde_json::Value>,
     pub profile_settings: Json<serde_json::Value>,
-    pub generations: Json<Vec<Generation>>,
-    pub manifest: Option<Json<Manifest>>,
+    pub preparation_seconds: i32,
+    pub extraction_seconds: i32,
+    pub indexing_seconds: i32,
+    pub published_generation: Option<Uuid>,
+    pub retired: bool,
 }
 impl Row {
-    pub fn work(&self) -> Work {
+    pub fn work(&self, installation: Uuid) -> Work {
         Work {
             contract_version: 1,
-            installation_id: self.installation_id,
+            installation_id: installation,
             processing_id: self.summary.id,
             document_id: self.summary.document_id,
             original_sha256: self.original_sha256.clone(),
             profile: self.summary.profile,
         }
     }
-    pub fn bind(&self, work: &Work) -> AppResult<()> {
+    pub fn bind(&self, installation: Uuid, work: &Work) -> AppResult<()> {
         work.validate()?;
-        if serde_json::to_value(self.work()).ok() != serde_json::to_value(work).ok() {
+        if self.work(installation) != *work {
             return Err(AppError::NotFound);
         }
         Ok(())
     }
-    pub fn document_prefix(&self, root: &str) -> String {
-        format!(
-            "{}{}/output/{}/",
-            if root.is_empty() {
-                String::new()
-            } else {
-                format!("{root}/")
-            },
-            self.summary.document_id,
-            self.installation_id,
-        )
+    fn lease(&self, stage: Stage) -> AppResult<i64> {
+        Ok(i64::from(match stage {
+            Stage::Preparation => self.preparation_seconds,
+            Stage::Extraction => self.extraction_seconds,
+            Stage::Indexing => self.indexing_seconds,
+            Stage::Queued | Stage::Done => return Err(invalid()),
+        }))
     }
-    pub fn prefix(&self, root: &str, generation: Uuid) -> String {
-        format!(
-            "{}{}/{generation}/",
-            self.document_prefix(root),
-            self.summary.id
-        )
+    /// Cleanup removed this generation's objects; the published one always keeps them.
+    pub fn objects_gone(&self, g: &Generation) -> bool {
+        g.cleaned_at.is_some() && self.published_generation != Some(g.id)
     }
 }
-pub async fn row(pool: &sqlx::PgPool, id: Uuid) -> AppResult<Row> {
+
+/// `{root}/{document_id}/output/`: every derived object of a document, never its input.
+pub fn document_output(root: &str, document: Uuid) -> String {
+    if root.is_empty() {
+        format!("{document}/output/")
+    } else {
+        format!("{root}/{document}/output/")
+    }
+}
+
+pub async fn row<'e>(ex: impl sqlx::PgExecutor<'e>, id: Uuid) -> AppResult<Row> {
+    Ok(sqlx::query_as(concat!(row!(), " where p.id = $1"))
+        .bind(id)
+        .fetch_one(ex)
+        .await?)
+}
+/// Every generation change is ordered by this lock on its processing row.
+pub(crate) async fn locked(tx: &mut Transaction<'_, Postgres>, id: Uuid) -> AppResult<Row> {
     Ok(
-        sqlx::query_as("select * from document_processing where id=$1")
+        sqlx::query_as(concat!(row!(), " where p.id = $1 for update of p"))
             .bind(id)
-            .fetch_one(pool)
+            .fetch_one(&mut **tx)
             .await?,
     )
 }
-pub async fn summaries<'e, E>(
-    executor: E,
+pub async fn summary<'e>(ex: impl sqlx::PgExecutor<'e>, id: Uuid) -> AppResult<Summary> {
+    Ok(
+        sqlx::query_as(concat!("select ", summary_from!(), " where p.id = $1"))
+            .bind(id)
+            .fetch_one(ex)
+            .await?,
+    )
+}
+pub async fn summaries<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
     ids: &[Uuid],
-) -> AppResult<std::collections::HashMap<Uuid, Summary>>
-where
-    E: sqlx::Executor<'e, Database = Postgres>,
-{
-    let rows:Vec<Summary>=sqlx::query_as("select distinct on(document_id) * from document_processing where document_id=any($1) order by document_id,created_at desc,id desc").bind(ids).fetch_all(executor).await?;
+) -> AppResult<std::collections::HashMap<Uuid, Summary>> {
+    let rows: Vec<Summary> = sqlx::query_as(concat!(
+        "select distinct on (p.document_id) ",
+        summary_from!(),
+        " where p.document_id = any($1) order by p.document_id, p.created_at desc, p.id desc"
+    ))
+    .bind(ids)
+    .fetch_all(ex)
+    .await?;
     Ok(rows.into_iter().map(|s| (s.document_id, s)).collect())
 }
+pub async fn generations<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    processing: Uuid,
+) -> AppResult<Vec<Generation>> {
+    Ok(
+        sqlx::query_as("select * from generation where processing_id = $1 order by created_at, id")
+            .bind(processing)
+            .fetch_all(ex)
+            .await?,
+    )
+}
+pub async fn latest<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    processing: Uuid,
+) -> AppResult<Option<Generation>> {
+    Ok(sqlx::query_as(
+        "select * from generation where processing_id = $1 order by created_at desc, id desc limit 1",
+    )
+    .bind(processing)
+    .fetch_optional(ex)
+    .await?)
+}
+/// The committed result of a generation, artifacts sorted by path.
+pub async fn manifest<'e>(ex: impl sqlx::PgExecutor<'e>, g: &Generation) -> AppResult<Manifest> {
+    let ordinals = g.vector_ordinals.as_ref().ok_or_else(invalid)?;
+    let mut artifacts: Vec<Artifact> =
+        sqlx::query_as("select path, size, sha256 from artifact where generation_id = $1")
+            .bind(g.id)
+            .fetch_all(ex)
+            .await?;
+    artifacts.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(Manifest {
+        generation: g.id,
+        artifacts,
+        chunks: ordinals.len() as i64,
+        vectors: ordinals.len() as i64,
+        vector_ordinals: ordinals.iter().map(|v| *v as u32).collect(),
+        rows: g.rows,
+    })
+}
+
 impl Processing {
     /// Called in the original's guarded publication transaction, or an explicit writer transaction.
     pub async fn admit(
@@ -113,7 +192,6 @@ impl Processing {
         actor: &str,
         key: Uuid,
         document_id: Uuid,
-        org: Uuid,
         start: &Start,
     ) -> AppResult<Summary> {
         if !self.config.enabled {
@@ -123,49 +201,51 @@ impl Processing {
             .bind(document_id.to_string())
             .execute(&mut **tx)
             .await?;
-        let document = db::document(&mut **tx, document_id).await?;
+        db::document(&mut **tx, document_id).await?;
+        // Serializes admissions so the pending-attempt cap stays exact.
         sqlx::query("select singleton from document_storage where singleton for update")
             .execute(&mut **tx)
             .await?;
-        if let Some(existing) = sqlx::query_as::<_, Row>(
-            "select * from document_processing where actor=$1 and request_key=$2",
-        )
+        if let Some(existing) = sqlx::query_as::<_, Summary>(concat!(
+            "select ",
+            summary_from!(),
+            " where p.actor = $1 and p.request_key = $2"
+        ))
         .bind(actor)
         .bind(key)
         .fetch_optional(&mut **tx)
         .await?
         {
-            if existing.summary.document_id != document_id
-                || existing.summary.profile != start.profile
-                || existing.summary.retry_of != start.retry_of
+            if existing.document_id != document_id
+                || existing.profile != start.profile
+                || existing.retry_of != start.retry_of
             {
                 return Err(conflict("idempotency_conflict"));
             }
-            return Ok(existing.summary);
+            return Ok(existing);
         }
         if let Some(previous) = start.retry_of {
-            let old: Row =
-                sqlx::query_as("select * from document_processing where id=$1 for update")
-                    .bind(previous)
-                    .fetch_one(&mut **tx)
-                    .await?;
-            if old.summary.document_id != document_id
-                || old.summary.status != ProcessingStatus::Failed
-            {
+            let (old_document, old_status): (Uuid, ProcessingStatus) = sqlx::query_as(
+                "select document_id, status from document_processing where id=$1 for update",
+            )
+            .bind(previous)
+            .fetch_one(&mut **tx)
+            .await?;
+            if old_document != document_id || old_status != ProcessingStatus::Failed {
                 return Err(conflict("invalid_retry"));
             }
-            if let Some(next) =
-                sqlx::query_as::<_, Summary>("select * from document_processing where retry_of=$1")
-                    .bind(previous)
-                    .fetch_optional(&mut **tx)
-                    .await?
+            if sqlx::query_scalar::<_, bool>(
+                "select exists(select 1 from document_processing where retry_of=$1)",
+            )
+            .bind(previous)
+            .fetch_one(&mut **tx)
+            .await?
             {
-                let _ = next;
                 return Err(conflict("retry_superseded"));
             }
         }
-        if let Some(active)=sqlx::query_as::<_,Summary>("select * from document_processing where document_id=$1 and status in ('pending','running','succeeded')").bind(document_id).fetch_optional(&mut **tx).await? {
-            let _=active; return Err(conflict("processing_exists"));
+        if sqlx::query_scalar::<_, bool>("select exists(select 1 from document_processing where document_id=$1 and status in ('pending','running','succeeded'))").bind(document_id).fetch_one(&mut **tx).await? {
+            return Err(conflict("processing_exists"));
         }
         if start.retry_of.is_none()
             && sqlx::query_scalar::<_, bool>(
@@ -187,21 +267,22 @@ impl Processing {
         }
         let id = Uuid::new_v4();
         let workflow = format!("manager-document-{}-{id}", self.installation);
-        let summary=sqlx::query_as("insert into document_processing(id,request_key,actor,installation_id,document_id,organization_id,space_id,original_sha256,profile,workflow_id,deadline_at,retry_of,submission,profile_settings) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,clock_timestamp()+make_interval(secs=>$11),$12,$13,$14) returning *")
-            .bind(id).bind(key).bind(actor).bind(self.installation).bind(document_id).bind(org).bind(document.space_id).bind(document.sha256).bind(start.profile).bind(&workflow).bind(self.config.limits.execution_seconds as f64).bind(start.retry_of).bind(Json(self.contract.submission(self.installation,id,document_id,actor,start.profile,&workflow))).bind(Json(&self.contract.processor_profiles[serde_json::to_value(start.profile).unwrap().as_str().unwrap()])).fetch_one(&mut **tx).await?;
+        let [preparation, extraction, indexing] = self.contract.leases(start.profile);
+        sqlx::query("insert into document_processing(id,request_key,actor,document_id,profile,workflow_id,deadline_at,retry_of,submission,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds) values($1,$2,$3,$4,$5,$6,clock_timestamp()+make_interval(secs=>$7),$8,$9,$10,$11,$12,$13)")
+            .bind(id).bind(key).bind(actor).bind(document_id).bind(start.profile).bind(&workflow).bind(self.config.limits.execution_seconds as f64).bind(start.retry_of).bind(Json(self.contract.submission(self.installation,id,document_id,actor,start.profile,&workflow))).bind(Json(&self.contract.processor_profiles[start.profile.as_str()])).bind(preparation).bind(extraction).bind(indexing).execute(&mut **tx).await?;
         // Sent only if this transaction commits; the dispatcher's poll covers a missed wake-up.
         sqlx::query("select pg_notify($1, '')")
             .bind(super::dispatch::WAKE_CHANNEL)
             .execute(&mut **tx)
             .await?;
         sqlx::query(
-            "update document_upload set acknowledged_at=null where document_id=$1 and actor=$2",
+            "update document_upload set acknowledged_at=null where id=$1 and status='stored' and actor=$2",
         )
         .bind(document_id)
         .bind(actor)
         .execute(&mut **tx)
         .await?;
-        Ok(summary)
+        summary(&mut **tx, id).await
     }
     pub async fn start(
         &self,
@@ -217,12 +298,9 @@ impl Processing {
             .await
             .map_err(|_| super::unavailable())?;
         let d = db::document(&self.pool, id).await?;
-        let space = spaces::load(&self.pool, d.space_id).await?;
         let mut tx = spaces::authorized_write(&self.pool, &self.fga, actor, d.space_id).await?;
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), actor).await?;
-        let summary = self
-            .admit(&mut tx, actor, key, id, space.organization, &start)
-            .await?;
+        let summary = self.admit(&mut tx, actor, key, id, &start).await?;
         tx.commit().await?;
         tracing::info!(target:"fred.security.audit",audit_event="document.processing.accepted",actor_uid=actor,document_id=%id,operation_id=%summary.id,outcome="accepted","Document processing accepted");
         Ok(summary)
@@ -250,127 +328,114 @@ impl Processing {
         crate::spaces::authorize(&self.pool, &self.fga, actor, d.space_id, Permission::Read)
             .await
             .map_err(crate::documents::dependency_error)?;
-        Ok(sqlx::query_as("select * from document_processing where document_id=$1 and ($2::uuid is null or (created_at,id)<(select created_at,id from document_processing where id=$2 and document_id=$1)) order by created_at desc,id desc limit 50").bind(id).bind(before).fetch_all(&self.pool).await?)
+        Ok(sqlx::query_as(concat!("select ", summary_from!(), " where p.document_id=$1 and ($2::uuid is null or (p.created_at,p.id)<(select created_at,id from document_processing where id=$2 and document_id=$1)) order by p.created_at desc,p.id desc limit 50")).bind(id).bind(before).fetch_all(&self.pool).await?)
     }
     pub async fn claim(&self, c: Claim) -> AppResult<Descriptor> {
         c.work.validate()?;
-        if c.attempt == 0 {
-            return Err(invalid());
-        }
+        let attempt = i32::try_from(c.attempt)
+            .ok()
+            .filter(|a| *a > 0)
+            .ok_or_else(invalid)?;
         if matches!(c.stage, Stage::Queued | Stage::Done) {
             return Err(invalid());
         }
         let r = row(&self.pool, c.work.processing_id).await?;
-        r.bind(&c.work)?;
+        r.bind(self.installation, &c.work)?;
         if c.stage == Stage::Preparation {
             self.authorize_actor(&r).await?;
         }
+        // Only this processing row is locked: claims of different documents never wait.
         let mut tx = self.pool.begin().await?;
-        sqlx::query("select singleton from document_storage where singleton for update")
-            .execute(&mut *tx)
-            .await?;
-        let mut r: Row = sqlx::query_as("select * from document_processing where id=$1 for update")
-            .bind(c.work.processing_id)
-            .fetch_one(&mut *tx)
-            .await?;
-        r.bind(&c.work)?;
-        if r.installation_id != self.installation {
-            return Err(crate::error::AppError::NotFound);
-        }
-        if let Some(g) = r
-            .generations
+        let r = locked(&mut tx, c.work.processing_id).await?;
+        r.bind(self.installation, &c.work)?;
+        let generations = generations(&mut *tx, r.summary.id).await?;
+        let now = Utc::now();
+        if let Some(g) = generations
             .iter()
             .find(|g| g.execution_id == c.execution_id && g.stage == c.stage)
-            .cloned()
         {
-            if g.cleaned
-                || (g.manifest.is_none() && g.expires_at <= Utc::now())
+            if r.objects_gone(g)
+                || (g.committed_at.is_none() && g.expires_at <= now)
                 || r.summary.status == ProcessingStatus::Failed
             {
                 return Err(conflict("stale_generation"));
             }
             tx.commit().await?;
-            return self.descriptor(&r, &g).await;
+            return self.descriptor(&r, &generations, g).await;
         }
         if r.summary.status != ProcessingStatus::Failed
-            && let Some(g) = r
-                .generations
+            && let Some(g) = generations
                 .iter()
-                .find(|g| g.stage == c.stage && g.manifest.is_some() && !g.cleaned)
-                .cloned()
+                .find(|g| g.stage == c.stage && g.committed_at.is_some() && !r.objects_gone(g))
         {
             tx.commit().await?;
-            return self.descriptor(&r, &g).await;
+            return self.descriptor(&r, &generations, g).await;
         }
-        if r.summary.status.terminal() || r.deadline_at <= Utc::now() {
+        if r.summary.status.terminal() || r.deadline_at <= now {
             return Err(conflict("processing_terminal"));
         }
-        if r.generations
+        if generations
             .iter()
-            .any(|g| g.stage == c.stage && g.manifest.is_some())
+            .any(|g| g.stage == c.stage && g.committed_at.is_some())
         {
             return Err(conflict("stage_committed"));
         }
-        if let Some(g) = r.generations.last_mut().filter(|g| g.manifest.is_none()) {
+        if let Some(g) = generations.last().filter(|g| g.committed_at.is_none()) {
             // Temporal owns the attempt ordinal; a newer attempt fences late callbacks immediately.
-            if g.activity_id == c.activity_id && g.stage == c.stage && c.attempt > g.attempt {
-                g.expires_at = Utc::now();
-            } else if g.expires_at > Utc::now()
-                || (g.activity_id == c.activity_id && c.attempt <= g.attempt)
+            if g.activity_id == c.activity_id && g.stage == c.stage && attempt > g.attempt {
+                sqlx::query("update generation set expires_at=least(expires_at,$2) where id=$1")
+                    .bind(g.id)
+                    .bind(now)
+                    .execute(&mut *tx)
+                    .await?;
+            } else if g.expires_at > now || (g.activity_id == c.activity_id && attempt <= g.attempt)
             {
                 return Err(conflict("stale_generation"));
             }
         }
-        let predecessor = r.generations.iter().rev().find(|g| g.manifest.is_some());
+        let predecessor = generations.iter().rev().find(|g| g.committed_at.is_some());
         let expected = predecessor.map_or(1, |g| g.stage.ordinal() + 1);
         if c.stage.ordinal() != expected {
             return Err(conflict("stage_order"));
         }
-        if r.generations.len() >= self.config.limits.generations as usize {
-            return Err(super::capacity());
-        }
-        let used: i64 = sqlx::query_scalar(
-            "select coalesce(sum(reserved_bytes),0)::bigint from document_processing",
-        )
-        .fetch_one(&mut *tx)
-        .await?;
-        if used > self.config.limits.derived_bytes - self.config.limits.output_bytes {
-            return Err(super::capacity());
-        }
-        let field = match c.stage {
-            Stage::Preparation => "push_metadata_activity_timeout_seconds",
-            Stage::Extraction => "input_activity_timeout_seconds",
-            Stage::Indexing => "output_activity_timeout_seconds",
-            _ => unreachable!(),
-        };
-        let seconds = r.submission["files"][0][field]
-            .as_i64()
-            .ok_or_else(invalid)?;
-        let g = Generation {
-            id: Uuid::new_v4(),
-            execution_id: c.execution_id,
-            activity_id: c.activity_id,
-            attempt: c.attempt,
-            stage: c.stage,
-            expires_at: (Utc::now() + chrono::Duration::seconds(seconds as i64)).min(r.deadline_at),
-            manifest: None,
-            reserved_bytes: self.config.limits.output_bytes,
-            cleaned: false,
-            chunks: 0,
-            cleanup_cursor: 0,
-            cleanup_at: None,
-        };
-        r.generations.push(g.clone());
-        sqlx::query("update document_processing set status='running',stage=$2,error_code=null,revision=revision+1,generations=$3,reserved_bytes=reserved_bytes+$4 where id=$1")
-            .bind(r.summary.id).bind(c.stage).bind(&r.generations).bind(g.reserved_bytes).execute(&mut *tx).await?;
+        let id = Uuid::new_v4();
+        let expires = (now + chrono::Duration::seconds(r.lease(c.stage)?)).min(r.deadline_at);
+        let prefix = format!(
+            "{}{id}/",
+            document_output(&self.config.derived.prefix, r.summary.document_id)
+        );
+        let g: Generation = sqlx::query_as("insert into generation(id,processing_id,stage,execution_id,activity_id,attempt,expires_at,prefix) values($1,$2,$3,$4,$5,$6,$7,$8) returning *")
+            .bind(id).bind(r.summary.id).bind(c.stage).bind(c.execution_id).bind(c.activity_id).bind(attempt).bind(expires).bind(prefix).fetch_one(&mut *tx).await?;
+        sqlx::query("update document_processing set status='running',stage=$2,error_code=null,revision=revision+1 where id=$1")
+            .bind(r.summary.id).bind(c.stage).execute(&mut *tx).await?;
         tx.commit().await?;
-        self.descriptor(&r, &g).await
+        self.descriptor(&r, &generations, &g).await
     }
-    async fn descriptor(&self, r: &Row, g: &Generation) -> AppResult<Descriptor> {
+    async fn descriptor(
+        &self,
+        r: &Row,
+        generations: &[Generation],
+        g: &Generation,
+    ) -> AppResult<Descriptor> {
         let d = db::document(&self.pool, r.summary.document_id).await?;
         let folder = db::folder(&self.pool, d.folder_id.ok_or_else(invalid)?).await?;
+        let predecessor = match generations
+            .iter()
+            .rev()
+            .find(|p| p.stage.ordinal() + 1 == g.stage.ordinal() && p.committed_at.is_some())
+        {
+            Some(p) => Some(Predecessor {
+                prefix: p.prefix.clone(),
+                manifest: manifest(&self.pool, p).await?,
+            }),
+            None => None,
+        };
+        let committed = match g.committed_at {
+            Some(_) => Some(manifest(&self.pool, g).await?),
+            None => None,
+        };
         Ok(Descriptor {
-            work: r.work(),
+            work: r.work(self.installation),
             organization_id: r.organization_id,
             space_id: r.space_id,
             folder_id: folder.id,
@@ -382,44 +447,43 @@ impl Processing {
             stage: g.stage,
             generation: g.id,
             expires_at: g.expires_at,
-            output_prefix: r.prefix(&self.config.derived.prefix, g.id),
+            output_prefix: g.prefix.clone(),
             max_output_bytes: self.config.limits.output_bytes,
             max_artifacts: self.config.limits.artifacts,
             max_chunks: self.config.limits.chunks,
-            file: r.submission["files"][0].clone(),
+            file: r.file.0.clone(),
             profile_settings: r.profile_settings.0.clone(),
-            predecessor: r
-                .generations
-                .iter()
-                .rev()
-                .find(|p| p.stage.ordinal() + 1 == g.stage.ordinal() && p.manifest.is_some())
-                .and_then(|p| p.manifest.clone()),
-            committed: g.manifest.clone(),
+            predecessor,
+            committed,
         })
     }
     /// Release only this failed activity generation; Temporal retains its retry budget.
     pub async fn abandon(&self, f: Failure) -> AppResult<Summary> {
         let mut tx = self.pool.begin().await?;
-        let mut r: Row = sqlx::query_as("select * from document_processing where id=$1 for update")
-            .bind(f.work.processing_id)
-            .fetch_one(&mut *tx)
-            .await?;
-        r.bind(&f.work)?;
-        let g = r
-            .generations
-            .last_mut()
+        let r = locked(&mut tx, f.work.processing_id).await?;
+        r.bind(self.installation, &f.work)?;
+        let g = latest(&mut *tx, r.summary.id)
+            .await?
             .ok_or_else(|| conflict("stale_generation"))?;
         if r.summary.status.terminal()
             || Some(g.id) != f.generation
             || g.stage != f.stage
-            || g.manifest.is_some()
+            || g.committed_at.is_some()
         {
             return Err(conflict("stale_generation"));
         }
-        g.expires_at = Utc::now();
+        sqlx::query("update generation set expires_at=least(expires_at,$2) where id=$1")
+            .bind(g.id)
+            .bind(Utc::now())
+            .execute(&mut *tx)
+            .await?;
         let code = serde_json::to_value(f.code).map_err(|e| AppError::Internal(e.into()))?;
-        let summary=sqlx::query_as("update document_processing set generations=$2,error_code=$3,revision=revision+1 where id=$1 returning *")
-            .bind(r.summary.id).bind(&r.generations).bind(code.as_str().ok_or_else(invalid)?).fetch_one(&mut *tx).await?;
+        sqlx::query("update document_processing set error_code=$2,revision=revision+1 where id=$1")
+            .bind(r.summary.id)
+            .bind(code.as_str().ok_or_else(invalid)?)
+            .execute(&mut *tx)
+            .await?;
+        let summary = summary(&mut *tx, r.summary.id).await?;
         tx.commit().await?;
         Ok(summary)
     }

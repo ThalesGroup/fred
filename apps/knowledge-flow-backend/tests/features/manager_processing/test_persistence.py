@@ -29,7 +29,7 @@ def descriptor():
         stage="indexing",
         generation=uuid4(),
         expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
-        output_prefix="installation/generation/",
+        output_prefix="document/output/generation/",
         max_output_bytes=100000,
         max_artifacts=100,
         max_chunks=100,
@@ -309,7 +309,7 @@ def test_cleanup_preserves_published_ordinals_and_does_not_ack_remote_failure(mo
 def test_cleanup_purges_document_and_does_not_ack_remaining_vectors(monkeypatch, descriptor, remaining, object_count):
     from knowledge_flow_backend.features.manager_processing import cleanup
 
-    prefix = f"derived/{descriptor.work.document_id}/output/{descriptor.work.installation_id}/"
+    prefix = f"derived/{descriptor.work.document_id}/output/"
     candidate = {
         "work": descriptor.work.model_dump(mode="json"),
         "generation": str(descriptor.generation),
@@ -322,7 +322,7 @@ def test_cleanup_purges_document_and_does_not_ack_remaining_vectors(monkeypatch,
         "purge_document": True,
     }
     second_document = str(uuid4())
-    second_prefix = f"derived/{second_document}/output/{descriptor.work.installation_id}/"
+    second_prefix = f"derived/{second_document}/output/"
     second = {
         **candidate,
         "work": {**candidate["work"], "document_id": second_document, "processing_id": str(uuid4())},
@@ -397,6 +397,20 @@ def test_cleanup_purges_document_and_does_not_ack_remaining_vectors(monkeypatch,
         assert ack.generation == descriptor.generation
         assert ack.cursor == ack.next_cursor == 0
         assert ack.objects_empty == (object_count <= 200)
+
+
+def test_restore_reads_the_predecessor_stored_prefix(descriptor, tmp_path):
+    from knowledge_flow_backend.features.manager_processing.artifacts import Artifacts
+    from knowledge_flow_backend.features.manager_processing.contracts import Artifact, Manifest, Predecessor
+
+    artifact = Artifact(path="output.md", size=4, sha256="b" * 64)
+    # Deliberately unrelated to output_prefix: the worker never rebuilds a location.
+    descriptor.predecessor = Predecessor(prefix="relocated/elsewhere/", manifest=Manifest(generation=uuid4(), artifacts=[artifact], chunks=0, vectors=0))
+    reads = []
+    artifacts = Artifacts.__new__(Artifacts)
+    artifacts.read = lambda prefix, item, destination: reads.append((prefix, item, destination))
+    artifacts.restore(descriptor, tmp_path)
+    assert reads == [("relocated/elsewhere/", artifact, tmp_path / "output.md")]
 
 
 @pytest.mark.parametrize("rendered", [True, False])

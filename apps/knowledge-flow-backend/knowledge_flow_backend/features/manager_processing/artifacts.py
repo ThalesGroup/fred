@@ -115,6 +115,5 @@ class Artifacts:
         predecessor = descriptor.predecessor
         if predecessor is None:
             raise ManagerError("integrity_failure", permanent=True)
-        prefix = descriptor.output_prefix.rsplit("/", 2)[0] + f"/{predecessor.generation}/"
-        for artifact in predecessor.artifacts:
-            self.read(prefix, artifact, directory / artifact.path)
+        for artifact in predecessor.manifest.artifacts:
+            self.read(predecessor.prefix, artifact, directory / artifact.path)

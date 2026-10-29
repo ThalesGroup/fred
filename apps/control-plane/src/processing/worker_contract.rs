@@ -88,6 +88,16 @@ impl WorkerContract {
         }
         Ok(contract)
     }
+    /// Stage leases in seconds (preparation, extraction, indexing), validated at load.
+    pub fn leases(&self, profile: Profile) -> [i32; 3] {
+        let policy = &self.profiles[profile.as_str()];
+        [
+            "push_metadata_activity_timeout_seconds",
+            "input_activity_timeout_seconds",
+            "output_activity_timeout_seconds",
+        ]
+        .map(|key| policy[key].as_i64().map_or(0, |v| v as i32))
+    }
     pub fn submission(
         &self,
         installation: Uuid,

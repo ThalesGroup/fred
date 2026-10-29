@@ -30837,19 +30837,8 @@
                                   "minimum": 0,
                                   "type": "integer"
                                 },
-                                "derived_bytes": {
-                                  "default": 21474836480,
-                                  "format": "int64",
-                                  "type": "integer"
-                                },
                                 "execution_seconds": {
                                   "default": 86400,
-                                  "format": "int32",
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                "generations": {
-                                  "default": 32,
                                   "format": "int32",
                                   "minimum": 0,
                                   "type": "integer"
@@ -32784,19 +32773,8 @@
                                   "minimum": 0,
                                   "type": "integer"
                                 },
-                                "derived_bytes": {
-                                  "default": 21474836480,
-                                  "format": "int64",
-                                  "type": "integer"
-                                },
                                 "execution_seconds": {
                                   "default": 86400,
-                                  "format": "int32",
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                "generations": {
-                                  "default": 32,
                                   "format": "int32",
                                   "minimum": 0,
                                   "type": "integer"

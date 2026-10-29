@@ -635,45 +635,56 @@ async fn supervision_team_pagination_preserves_full_totals() {
 /// selection contract fixture, not a claim that admit permits reprocessing success.
 async fn supervision_attempt(
     e: &Env,
-    org: Uuid,
     doc: &Document,
     status: &str,
     parquet_paths: Option<&[&str]>,
     rows: Option<i64>,
 ) {
     let id = Uuid::new_v4();
-    let manifest = parquet_paths.map(|paths| {
-        json!({
-            "generation":Uuid::new_v4(), "chunks":7, "vectors":3,
-            "vector_ordinals":[0,1,2], "rows":rows,
-            "artifacts":paths.iter().map(|path| json!({
-                "path":path, "size":1, "sha256":"a".repeat(64)
-            })).collect::<Vec<_>>()
-        })
-    });
     sqlx::query(
         "insert into document_processing(
-        id,request_key,actor,installation_id,document_id,organization_id,space_id,
-        original_sha256,profile,workflow_id,submission,profile_settings,deadline_at,
-        status,stage,completed_at,manifest,chunks,vectors,rows)
-        values($1,$1,'alice',$1,$2,$3,$4,$5,'fast',$6,'{}','{}',now()+interval '1 hour',
-        $7,case when $7='pending' then 'queued' else 'done' end,
-        case when $7 in ('failed','succeeded') then now() end,$8,$9,$10,$11)",
+        id,request_key,actor,document_id,profile,workflow_id,submission,profile_settings,
+        deadline_at,status,stage,completed_at,preparation_seconds,extraction_seconds,indexing_seconds)
+        values($1,$1,'alice',$2,'fast',$3,'{}','{}',now()+interval '1 hour',
+        $4,case when $4='pending' then 'queued' else 'done' end,
+        case when $4 in ('failed','succeeded') then now() end,60,60,60)",
     )
     .bind(id)
     .bind(doc.id)
-    .bind(org)
-    .bind(doc.space_id)
-    .bind(&doc.sha256)
     .bind(id.to_string())
     .bind(status)
-    .bind(manifest)
-    .bind(if parquet_paths.is_some() { 7_i64 } else { 0 })
-    .bind(if parquet_paths.is_some() { 3_i64 } else { 0 })
+    .execute(&e.pool)
+    .await
+    .unwrap();
+    let Some(paths) = parquet_paths else {
+        return;
+    };
+    let generation = Uuid::new_v4();
+    sqlx::query(
+        "insert into generation(id,processing_id,stage,execution_id,activity_id,attempt,
+        expires_at,prefix,committed_at,chunks,vector_ordinals,rows)
+        values($1,$2,'indexing',$1,$1,1,now(),'fixture/',now(),7,'{0,1,2}',$3)",
+    )
+    .bind(generation)
+    .bind(id)
     .bind(rows)
     .execute(&e.pool)
     .await
     .unwrap();
+    sqlx::query(
+        "insert into artifact select $1, path, 1, repeat('a', 64) from unnest($2::text[]) path",
+    )
+    .bind(generation)
+    .bind(paths)
+    .execute(&e.pool)
+    .await
+    .unwrap();
+    sqlx::query("update document set published_generation=$2 where id=$1")
+        .bind(doc.id)
+        .bind(generation)
+        .execute(&e.pool)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -693,22 +704,21 @@ async fn supervision_separates_attempts_publications_unknown_rows_and_purge() {
     ] {
         let doc = document(team.id, None, name);
         environment::insert_document(&e.pool, &doc).await.unwrap();
-        supervision_attempt(&e, org.id, &doc, "succeeded", Some(&paths), rows).await;
+        supervision_attempt(&e, &doc, "succeeded", Some(&paths), rows).await;
         if name == "published" {
-            supervision_attempt(&e, org.id, &doc, "failed", None, None).await;
+            supervision_attempt(&e, &doc, "failed", None, None).await;
         }
     }
     let retry = document(team.id, None, "retry");
     environment::insert_document(&e.pool, &retry).await.unwrap();
-    supervision_attempt(&e, org.id, &retry, "failed", None, None).await;
-    supervision_attempt(&e, org.id, &retry, "pending", None, None).await;
+    supervision_attempt(&e, &retry, "failed", None, None).await;
+    supervision_attempt(&e, &retry, "pending", None, None).await;
     let retired = document(team.id, None, "retired");
     environment::insert_document(&e.pool, &retired)
         .await
         .unwrap();
     supervision_attempt(
         &e,
-        org.id,
         &retired,
         "succeeded",
         Some(&["datasets/retired.parquet"]),
@@ -757,7 +767,7 @@ async fn supervision_separates_attempts_publications_unknown_rows_and_purge() {
     assert_eq!(
         totals["published"],
         json!({
-            "documents":4,"chunks":28,"vectors":12,"tabular_datasets":5,
+            "documents":4,"chunks":12,"vectors":12,"tabular_datasets":5,
             "known_rows":12,"datasets_with_unknown_rows":3,"total_rows":null
         })
     );

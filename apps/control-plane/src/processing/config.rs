@@ -34,10 +34,8 @@ pub struct Limits {
     pub queue_seconds: u32,
     pub execution_seconds: u32,
     pub output_bytes: i64,
-    pub derived_bytes: i64,
     pub artifacts: u32,
     pub chunks: u32,
-    pub generations: u32,
 }
 impl Default for Limits {
     fn default() -> Self {
@@ -48,10 +46,8 @@ impl Default for Limits {
             queue_seconds: 3600,
             execution_seconds: 86400,
             output_bytes: 512 * 1024 * 1024,
-            derived_bytes: 20 * 1024 * 1024 * 1024,
             artifacts: 2000,
             chunks: 100000,
-            generations: 32,
         }
     }
 }
@@ -87,12 +83,10 @@ impl ProcessingConfig {
         );
         ensure!(
             (1..=10_737_418_240).contains(&l.output_bytes)
-                && l.derived_bytes >= l.output_bytes
                 && l.artifacts > 0
                 && l.artifacts <= 2000
                 && l.chunks > 0
-                && l.chunks <= 100000
-                && (3..=64).contains(&l.generations),
+                && l.chunks <= 100000,
             "invalid processing output limits"
         );
         ensure!(

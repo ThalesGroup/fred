@@ -269,7 +269,7 @@ impl Storage {
         }
         let digest = file.sha256();
         let existing: Option<UploadRow> =
-            sqlx::query_as("select * from document_upload where actor=$1 and request_key=$2")
+            sqlx::query_as("select *, case when status='stored' then id end as document_id from document_upload where actor=$1 and request_key=$2")
                 .bind(&user.uid)
                 .bind(key)
                 .fetch_optional(&mut *tx)
@@ -300,7 +300,7 @@ impl Storage {
         }
         let predecessor: Option<UploadRow> = if let Some(retry) = retry_of {
             let previous: UploadRow = sqlx::query_as(
-                "select * from document_upload where actor=$1 and request_key=$2 for update",
+                "select *, case when status='stored' then id end as document_id from document_upload where actor=$1 and request_key=$2 for update",
             )
             .bind(&user.uid)
             .bind(retry)
@@ -357,7 +357,7 @@ impl Storage {
                 "The encoded document path exceeds the object-store key limit",
             ));
         }
-        let row: UploadRow = sqlx::query_as("insert into document_upload (id,request_key,actor,organization_id,space_id,folder_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,retry_of,processing_profile) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'pending',clock_timestamp()+make_interval(secs=>$13),$14,$15) returning *")
+        let row: UploadRow = sqlx::query_as("insert into document_upload (id,request_key,actor,organization_id,space_id,folder_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,retry_of,processing_profile) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'pending',clock_timestamp()+make_interval(secs=>$13),$14,$15) returning *, null::uuid as document_id")
             .bind(id).bind(key).bind(&user.uid).bind(space.organization).bind(space.id).bind(folder.id).bind(owner)
             .bind(&file.name).bind(&file.mime).bind(file.size).bind(&digest).bind(object_key)
             .bind(self.config.limits.lease_seconds() as f64).bind(predecessor.as_ref().map(|p|p.id)).bind(profile).fetch_one(&mut *tx).await?;
@@ -376,7 +376,7 @@ impl Storage {
         processing: Option<&crate::processing::Processing>,
     ) -> AppResult<UploadReceipt> {
         let mut tx = self.writer(user, upload.receipt.space_id).await?;
-        let row: UploadRow = sqlx::query_as("select * from document_upload where id=$1 for update")
+        let row: UploadRow = sqlx::query_as("select *, case when status='stored' then id end as document_id from document_upload where id=$1 for update")
             .bind(upload.id)
             .fetch_one(&mut *tx)
             .await?;
@@ -389,7 +389,7 @@ impl Storage {
         db::folder(&mut *tx, row.receipt.folder_id).await?;
         sqlx::query("insert into document (id,space_id,folder_id,name,mime,size,sha256,created_by,object_key,quota_owner) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)")
             .bind(row.id).bind(row.receipt.space_id).bind(row.receipt.folder_id).bind(&row.receipt.name).bind(&row.receipt.mime).bind(row.receipt.size).bind(&row.receipt.sha256).bind(&row.actor).bind(&row.object_key).bind(row.quota_owner).execute(&mut *tx).await?;
-        let receipt = sqlx::query_as("update document_upload set status='stored',document_id=id,completed_at=clock_timestamp() where id=$1 and status='pending' and expires_at>clock_timestamp() returning *")
+        let receipt = sqlx::query_as("update document_upload set status='stored',completed_at=clock_timestamp() where id=$1 and status='pending' and expires_at>clock_timestamp() returning *, id as document_id")
             .bind(row.id).fetch_one(&mut *tx).await?;
         if let Some(profile) = row.receipt.processing_profile {
             processing
@@ -399,7 +399,6 @@ impl Storage {
                     &row.actor,
                     row.receipt.request_key,
                     row.id,
-                    row.organization_id,
                     &crate::processing::models::Start {
                         profile,
                         retry_of: None,

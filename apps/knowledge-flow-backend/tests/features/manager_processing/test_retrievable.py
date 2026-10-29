@@ -29,7 +29,6 @@ def projection(monkeypatch):
         "document_id": str(document),
         "operation_id": str(operation),
         "retrievable": False,
-        "restore": False,
         "confirmed": False,
         "phase": "ready",
         "manifest": {"generation": str(generation), "artifacts": [], "chunks": 2, "vectors": 2, "vector_ordinals": [0, 2], "rows": None},
@@ -67,17 +66,14 @@ def projection(monkeypatch):
     return SimpleNamespace(command={"document_id": str(document), "operation_id": str(operation)}, state=state, ids=ids, vectors=vectors, client=client, failures=failures)
 
 
-@pytest.mark.parametrize("restore,value", [(False, False), (False, True), (True, True), (True, False)])
-def test_projection_and_read_only_restore(projection, restore, value):
+@pytest.mark.parametrize("value", [False, True])
+def test_projection(projection, value):
     p = projection
-    p.state.update(restore=restore, retrievable=value)
+    p.state.update(retrievable=value)
     assert retrievable.set_document_retrievable(p.command)
     retrievable.record_retrievable_applied(p.command)
     retrievable.confirm_document_retrievable(p.command)
-    if restore:
-        p.vectors.set_chunks_retrievable.assert_not_called()
-    else:
-        p.vectors.set_chunks_retrievable.assert_called_once_with(document_uid=p.command["document_id"], chunk_ids=p.ids, value=value)
+    p.vectors.set_chunks_retrievable.assert_called_once_with(document_uid=p.command["document_id"], chunk_ids=p.ids, value=value)
     p.vectors.verify_chunks_retrievable.assert_called_once_with(document_uid=p.command["document_id"], chunk_ids=p.ids, value=value)
     assert p.state["confirmed"]
     assert not retrievable.set_document_retrievable(p.command)
@@ -85,8 +81,8 @@ def test_projection_and_read_only_restore(projection, restore, value):
     assert p.vectors.verify_chunks_retrievable.call_count == 1
 
 
-def test_unknown_writer_and_legacy_command_cannot_be_confirmed_or_rewritten(projection):
-    for phase in ("writing", "uncertain"):
+def test_unknown_writer_cannot_be_confirmed_or_rewritten(projection):
+    for phase in ("writing",):
         projection.state["phase"] = phase
         for action in (retrievable.set_document_retrievable, retrievable.confirm_document_retrievable):
             with pytest.raises(ApplicationError, match="retrieval_projection_uncertain"):

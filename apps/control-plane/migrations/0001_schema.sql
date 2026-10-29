@@ -86,16 +86,28 @@ create table document (
     object_key  text not null unique,
     quota_owner uuid not null references space (id),
     retrievable boolean not null default false,
-    retrieval_command jsonb,
+    -- The last search-inclusion command; KF confirms it after the claim/applied phases.
+    retrieval_id        uuid,
+    retrieval_actor     text,
+    retrieval_target    boolean,
+    retrieval_phase     text check (retrieval_phase in ('ready', 'writing', 'applied')),
+    retrieval_confirmed boolean,
     retrievable_pending boolean generated always as
-        (retrieval_command is not null and not (retrieval_command->>'confirmed')::boolean) stored,
+        (retrieval_id is not null and not retrieval_confirmed) stored,
+    published_generation uuid,    -- the official processing result; foreign key below
+    purged_at   timestamptz,      -- retired document whose vectors and outputs are gone
     deletion_id uuid references deletion (id),
     foreign key (folder_id, space_id) references folder (id, space_id),
     constraint document_size_valid check (size >= 0 and size <= 104857600),
-    constraint document_digest_valid check (sha256 ~ '^[0-9a-f]{64}$')
+    constraint document_digest_valid check (sha256 ~ '^[0-9a-f]{64}$'),
+    constraint document_retrieval_command check (
+        num_nulls(retrieval_id, retrieval_actor, retrieval_target, retrieval_phase, retrieval_confirmed) in (0, 5)
+    ),
+    check (purged_at is null or deletion_id is not null)
 );
 create index document_quota_owner on document (quota_owner) include (size);
 create index document_deletion_manifest on document (deletion_id) where deletion_id is not null;
+create index document_purge on document (id) where deletion_id is not null and purged_at is null;
 create unique index document_space_id_folder_id_name_key on document (space_id, folder_id, name)
     nulls not distinct where deletion_id is null;
 
@@ -191,6 +203,7 @@ create table document_storage (
 );
 
 -- Historical target IDs deliberately survive failed uploads and target deletion.
+-- A stored upload's id is its document's id.
 create table document_upload (
     id uuid primary key,
     request_key uuid not null,
@@ -205,7 +218,6 @@ create table document_upload (
     sha256 text not null check(sha256 ~ '^[0-9a-f]{64}$'),
     object_key text not null unique,
     status text not null check(status in ('pending', 'stored', 'failed')),
-    document_id uuid unique references document(id),
     error_code text,
     created_at timestamptz not null default now(),
     expires_at timestamptz not null,
@@ -218,7 +230,6 @@ create table document_upload (
     cleanup_attempts integer not null default 0,
     cleaned_at timestamptz,
     unique(actor, request_key),
-    check((status = 'stored') = (document_id is not null)),
     check((status = 'pending') = (completed_at is null))
 );
 create unique index document_upload_active_name on document_upload(space_id, folder_id, name) where status = 'pending';
@@ -227,17 +238,13 @@ create index document_upload_receipts on document_upload(actor, space_id, create
 create index document_upload_cleanup on document_upload(cleanup_due_at, id) where status = 'failed' and cleaned_at is null;
 create index document_upload_expiration on document_upload(expires_at, id) where status = 'pending';
 
--- Processing attempts outlive delivery and activity retries. Generations are bounded
--- operational state, not grants; the space remains the only authorization object.
+-- Processing requests and their Temporal outbox. Results live in `generation`; the
+-- document's space remains the only authorization object.
 create table document_processing (
     id uuid primary key,
     request_key uuid not null,
     actor text not null,
-    installation_id uuid not null,
     document_id uuid not null references document(id),
-    organization_id uuid not null,
-    space_id uuid not null references space(id),
-    original_sha256 text not null check(original_sha256 ~ '^[0-9a-f]{64}$'),
     profile text not null check(profile in ('fast','medium','rich')),
     status text not null default 'pending' check(status in ('pending','running','succeeded','failed')),
     stage text not null default 'queued' check(stage in ('queued','preparation','extraction','indexing','done')),
@@ -257,41 +264,65 @@ create table document_processing (
     error_code text,
     retry_of uuid unique references document_processing(id),
     profile_settings jsonb not null,
-    generations jsonb not null default '[]',
-    manifest jsonb,
-    chunks bigint not null default 0 check(chunks>=0),
-    vectors bigint not null default 0 check(vectors>=0 and vectors<=chunks),
-    rows bigint check(rows>=0),
-    reserved_bytes bigint not null default 0 check(reserved_bytes>=0),
-    cleanup_due_at timestamptz not null default now(),
+    -- Stage leases, copied from the KF submission policy at admission.
+    preparation_seconds integer not null check(preparation_seconds>0),
+    extraction_seconds integer not null check(extraction_seconds>0),
+    indexing_seconds integer not null check(indexing_seconds>0),
     unique(actor,request_key),
-    check((status in ('succeeded','failed')) = (completed_at is not null)),
-    check((status='succeeded') = (manifest is not null)),
-    check(jsonb_typeof(generations)='array' and jsonb_array_length(generations)<=64)
+    check((status in ('succeeded','failed')) = (completed_at is not null))
 );
 create unique index document_processing_active on document_processing(document_id) where status in ('pending','running');
 create unique index document_processing_success on document_processing(document_id) where status='succeeded';
 create index document_processing_history on document_processing(document_id,created_at desc,id desc);
 create index document_processing_delivery on document_processing(delivery_due_at,id) where status in ('pending','running');
-create index document_processing_cleanup on document_processing(cleanup_due_at,id);
 
 create function protect_processing_identity() returns trigger language plpgsql as $$
 begin
-    if TG_OP='UPDATE' then
-        if (new.actor,new.request_key,new.installation_id,new.document_id,new.organization_id,new.space_id,new.original_sha256,new.profile,new.workflow_id,new.retry_of,new.submission,new.profile_settings)
-            is distinct from (old.actor,old.request_key,old.installation_id,old.document_id,old.organization_id,old.space_id,old.original_sha256,old.profile,old.workflow_id,old.retry_of,old.submission,old.profile_settings) then
-            raise exception 'processing identity is immutable';
-        end if;
-        if old.status in ('succeeded','failed') and (new.status,new.stage,new.completed_at,new.error_code,new.manifest) is distinct from (old.status,old.stage,old.completed_at,old.error_code,old.manifest) then
-            raise exception 'processing outcome is final';
-        end if;
+    if (new.actor,new.request_key,new.document_id,new.profile,new.workflow_id,new.retry_of,new.submission,new.profile_settings,new.preparation_seconds,new.extraction_seconds,new.indexing_seconds)
+        is distinct from (old.actor,old.request_key,old.document_id,old.profile,old.workflow_id,old.retry_of,old.submission,old.profile_settings,old.preparation_seconds,old.extraction_seconds,old.indexing_seconds) then
+        raise exception 'processing identity is immutable';
     end if;
-    if not exists(select 1 from document where id=new.document_id and space_id=new.space_id and sha256=new.original_sha256) then
-        raise exception 'processing input does not match original';
+    if old.status in ('succeeded','failed') and (new.status,new.stage,new.completed_at,new.error_code) is distinct from (old.status,old.stage,old.completed_at,old.error_code) then
+        raise exception 'processing outcome is final';
     end if;
     return new;
 end $$;
-create trigger document_processing_identity before insert or update on document_processing for each row execute function protect_processing_identity();
+create trigger document_processing_identity before update on document_processing for each row execute function protect_processing_identity();
+
+-- One row per stage attempt. Its outputs live under `prefix`, computed once at creation;
+-- readers never recompute a location. `chunks` fences the vector ordinals it may write.
+create table generation (
+    id uuid primary key,
+    processing_id uuid not null references document_processing(id) on delete cascade,
+    stage text not null check(stage in ('preparation','extraction','indexing')),
+    execution_id uuid not null,
+    activity_id uuid not null,
+    attempt integer not null check(attempt>0),
+    created_at timestamptz not null default clock_timestamp(),
+    expires_at timestamptz not null,
+    prefix text not null,
+    committed_at timestamptz,
+    chunks integer not null default 0 check(chunks>=0),
+    vector_ordinals integer[] check((committed_at is null) = (vector_ordinals is null)),
+    rows bigint check(rows>=0),
+    cleanup_cursor integer not null default 0 check(cleanup_cursor>=0),
+    cleaned_at timestamptz
+);
+create index generation_processing on generation(processing_id,created_at,id);
+create index generation_cleanup on generation(expires_at,id) where cleaned_at is null;
+
+-- Committed outputs; preview checks the size, KF and publication check the digest.
+create table artifact (
+    generation_id uuid not null references generation(id) on delete cascade,
+    path text not null,
+    size bigint not null check(size>=0),
+    sha256 text not null check(sha256 ~ '^[0-9a-f]{64}$'),
+    primary key (generation_id, path)
+);
+
+-- Deferred: a purge deletes the document together with its processing and generations.
+alter table document add foreign key (published_generation) references generation(id)
+    deferrable initially deferred;
 
 -- The organization lock orders application mutations; these checks also protect SQL callers.
 create function protect_pending_document_uploads() returns trigger language plpgsql as $$

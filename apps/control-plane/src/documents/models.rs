@@ -60,7 +60,6 @@ pub(super) struct UploadRow {
     pub quota_owner: Uuid,
     pub object_key: String,
     pub expires_at: DateTime<Utc>,
-    pub organization_id: Uuid,
     #[sqlx(flatten)]
     pub receipt: UploadReceipt,
 }

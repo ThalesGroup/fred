@@ -20,7 +20,7 @@ use uuid::Uuid;
 impl Storage {
     pub async fn receipt(&self, actor: &str, key: Uuid) -> AppResult<UploadReceipt> {
         let mut row: UploadReceipt =
-            sqlx::query_as("select * from document_upload where actor=$1 and request_key=$2")
+            sqlx::query_as("select *, case when status='stored' then id end as document_id from document_upload where actor=$1 and request_key=$2")
                 .bind(actor)
                 .bind(key)
                 .fetch_one(&self.pool)
@@ -48,7 +48,7 @@ impl Storage {
         if query.before.is_some() != query.before_key.is_some() {
             return Err(invalid("Both receipt cursor fields are required"));
         }
-        let mut receipts:Vec<UploadReceipt>=sqlx::query_as("select * from document_upload u where actor=$1 and space_id=$2 and (acknowledged_at is null or exists(select 1 from document_processing p where p.document_id=u.document_id and p.status in ('pending','running'))) and successor_key is null and ($3::timestamptz is null or (created_at,request_key)<($3,$4)) order by created_at desc,request_key desc limit $5")
+        let mut receipts:Vec<UploadReceipt>=sqlx::query_as("select *, case when status='stored' then id end as document_id from document_upload u where actor=$1 and space_id=$2 and (acknowledged_at is null or exists(select 1 from document_processing p where p.document_id=u.id and p.status in ('pending','running'))) and successor_key is null and ($3::timestamptz is null or (created_at,request_key)<($3,$4)) order by created_at desc,request_key desc limit $5")
             .bind(actor).bind(space).bind(query.before).bind(query.before_key).bind(query.limit.unwrap_or(50).clamp(1,200)).fetch_all(&self.pool).await?;
         let ids: Vec<Uuid> = receipts.iter().filter_map(|r| r.document_id).collect();
         let mut summaries = crate::processing::store::summaries(&self.pool, &ids).await?;
