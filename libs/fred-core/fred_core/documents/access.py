@@ -38,11 +38,11 @@ _SPACE = text(
 
 _DOCUMENTS = text(
     "SELECT d.id, d.space_id, d.deletion_id, s.deletion_id AS space_deletion_id,"
-    " d.retrievable, d.retrievable_pending, p.manifest"
+    " d.retrievable, d.retrievable_pending,"
+    " g.id AS generation_id, g.vector_ordinals"
     " FROM document d"
     " JOIN space s ON s.id = d.space_id"
-    " LEFT JOIN document_processing p"
-    " ON p.document_id = d.id AND p.status = 'succeeded'"
+    " LEFT JOIN generation g ON g.id = d.published_generation"
     " WHERE d.id = ANY(:document_ids)"
 ).bindparams(bindparam("document_ids", type_=ARRAY(Uuid)))
 
@@ -89,12 +89,13 @@ def _document_id(candidate: Candidate) -> UUID | None:
         return None
 
 
-def _published_chunks(manifest: Mapping[str, Any], wanted: set[str]) -> set[str]:
+def _published_chunks(
+    generation_id: UUID, vector_ordinals: Iterable[int], wanted: set[str]
+) -> set[str]:
     # Chunk ids cannot be inverted to ordinals, so stop once every wanted id is found.
-    generation = UUID(manifest["generation"])
     found: set[str] = set()
-    for ordinal in manifest["vector_ordinals"]:
-        chunk_uid = str(uuid5(generation, str(ordinal)))
+    for ordinal in vector_ordinals:
+        chunk_uid = str(uuid5(generation_id, str(ordinal)))
         if chunk_uid in wanted:
             found.add(chunk_uid)
             if len(found) == len(wanted):
@@ -123,7 +124,7 @@ def filter_candidates(
     visible: dict[UUID, Mapping[Any, Any]] = {
         row["id"]: row
         for row in documents
-        if is_live_document(row, allowed) and row["manifest"] is not None
+        if is_live_document(row, allowed) and row["generation_id"] is not None
     }
     wanted: dict[UUID, set[str]] = {}
     for candidate in candidates:
@@ -131,7 +132,11 @@ def filter_candidates(
         if document_id is not None and document_id in visible:
             wanted.setdefault(document_id, set()).add(candidate.chunk_uid)
     published = {
-        document_id: _published_chunks(visible[document_id]["manifest"], chunks)
+        document_id: _published_chunks(
+            visible[document_id]["generation_id"],
+            visible[document_id]["vector_ordinals"],
+            chunks,
+        )
         for document_id, chunks in wanted.items()
     }
     kept: list[Candidate] = []
@@ -203,8 +208,8 @@ async def verify_candidates(
             rejected["not_retrievable"] += 1
         if row["retrievable_pending"] is not False:
             rejected["retrievable_pending"] += 1
-        if row["manifest"] is None:
-            rejected["no_published_manifest"] += 1
+        if row["generation_id"] is None:
+            rejected["not_published"] += 1
     logger.info(
         "[VECTOR][SQL] checked",
         extra={

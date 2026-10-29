@@ -84,7 +84,8 @@ def document(**changes: Any) -> dict[str, Any]:
         "space_deletion_id": None,
         "retrievable": True,
         "retrievable_pending": False,
-        "manifest": {"generation": str(GENERATION), "vector_ordinals": [0, 2, 5]},
+        "generation_id": GENERATION,
+        "vector_ordinals": [0, 2, 5],
     }
     return {**row, **changes}
 
@@ -106,7 +107,7 @@ def test_published_in_scope_chunk_is_kept() -> None:
         {"space_deletion_id": uuid4()},
         {"retrievable": False},
         {"retrievable_pending": True},
-        {"manifest": None},
+        {"generation_id": None, "vector_ordinals": None},
     ],
     ids=[
         "out-of-scope",
