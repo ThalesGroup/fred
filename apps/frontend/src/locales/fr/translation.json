@@ -1151,7 +1151,7 @@
       "collectionDetails": "Dates et périmètre de collecte",
       "distribution": "Répartition des données",
       "scope": "Périmètre",
-      "title": "Supervision de l'organisation",
+      "title": "Supervision",
       "refresh": "Actualiser",
       "lastSuccess": "Dernier chargement réussi : {{date}}",
       "neverLoaded": "Aucun chargement réussi pour le moment",
@@ -2851,8 +2851,12 @@
           "marketplaces": "Marketplaces"
         },
         "platformTitle": "Plateforme",
-        "organizationTitle": "Organisation {{name}}",
-        "organizationFallbackTitle": "Organisation"
+        "title": "Administration",
+        "spaces": {
+          "switch": "Changer d'espace d'administration",
+          "platform": "Administration de la plateforme",
+          "organizations": "Mes organisations"
+        }
       },
       "chatList": {
         "deleteDialog": {

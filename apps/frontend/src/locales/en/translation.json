@@ -1151,7 +1151,7 @@
       "collectionDetails": "Collection dates and scope",
       "distribution": "Data distribution",
       "scope": "Scope",
-      "title": "Organization supervision",
+      "title": "Supervision",
       "refresh": "Refresh",
       "lastSuccess": "Last successful load: {{date}}",
       "neverLoaded": "No successful load yet",
@@ -2851,8 +2851,12 @@
           "marketplaces": "Marketplaces"
         },
         "platformTitle": "Platform",
-        "organizationTitle": "{{name}} organization",
-        "organizationFallbackTitle": "Organization"
+        "title": "Administration",
+        "spaces": {
+          "switch": "Switch administration space",
+          "platform": "Platform administration",
+          "organizations": "My organizations"
+        }
       },
       "chatList": {
         "deleteDialog": {

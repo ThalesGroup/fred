@@ -22,6 +22,8 @@ export interface MenuPopoverItemProps {
   icon?: IconProps;
   /** Primary row label. */
   label: string;
+  /** Supporting text under the label (e.g. the roles held in a listed space). */
+  description?: string;
   /** Current value shown on the right in muted text (e.g. "Hybride", "aucun"). */
   value?: string;
   /** Pill shown on the right (e.g. the "admin" badge). */
@@ -48,7 +50,8 @@ export interface MenuPopoverItemProps {
    * state layer). Opt-in per caller — e.g. the search-mode picker. */
   accentSelected?: boolean;
   onClick?: () => void;
-  role?: "menuitem" | "option";
+  /** `menuitemradio` marks one choice among its group: `selected` becomes `aria-checked`. */
+  role?: "menuitem" | "menuitemradio" | "option";
   /** Roving-tabindex support for consumers driving keyboard nav across rows (e.g. `EnumSelectRow`). */
   ref?: Ref<HTMLButtonElement>;
   tabIndex?: number;
@@ -67,6 +70,7 @@ export interface MenuPopoverItemProps {
 export default function MenuPopoverItem({
   icon,
   label,
+  description,
   value,
   badge,
   trailingIcon,
@@ -96,7 +100,7 @@ export default function MenuPopoverItem({
       data-selected={trailingToggle ? undefined : selected}
       data-accent-selected={accentSelected ? "true" : undefined}
       aria-selected={role === "option" && !trailingToggle ? selected : undefined}
-      aria-checked={trailingToggle ? selected : undefined}
+      aria-checked={trailingToggle || role === "menuitemradio" ? selected : undefined}
       onClick={onClick}
       tabIndex={tabIndex}
       onKeyDown={onKeyDown}
@@ -107,7 +111,14 @@ export default function MenuPopoverItem({
           <Icon {...icon} />
         </span>
       )}
-      <span className={styles.itemLabel}>{label}</span>
+      {description != null ? (
+        <span className={styles.itemText}>
+          <span className={styles.itemLabel}>{label}</span>
+          <span className={styles.itemDescription}>{description}</span>
+        </span>
+      ) : (
+        <span className={styles.itemLabel}>{label}</span>
+      )}
       {value != null && <span className={styles.itemValue}>{value}</span>}
       {badge != null && <span className={styles.badge}>{badge}</span>}
       {trailingToggle && (

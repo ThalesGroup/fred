@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   user: "priya",
   roles: ["member", "personal_space_creator"],
   personal: false,
+  organization: true,
   fail: false,
   navigate: vi.fn(),
   open: vi.fn(),
@@ -26,7 +27,9 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
   useMeQuery: () => ({ data: { user_id: state.user } }),
   useMySpacesQuery: () => {
     const data = [
-      { id: "org", kind: "organization", path: ["org"], name: "Demo", roles: state.roles },
+      ...(state.organization
+        ? [{ id: "org", kind: "organization", path: ["org"], name: "Demo", roles: state.roles }]
+        : []),
       { id: "fredlab", kind: "team", name: "fredlab", roles: ["admin", "editor", "analyst"] },
       ...(state.personal
         ? [{ id: "personal", kind: "personal", name: "priya", personal_owner: "priya", roles: ["member"] }]
@@ -45,7 +48,6 @@ vi.mock("../../../../../../hooks/useFrontendBootstrap", () => ({ useFrontendBoot
 vi.mock("../../../../../../hooks/useFrontendProperties", () => ({ useFrontendProperties: () => ({}) }));
 vi.mock("@shared/atoms/UserAvatar/UserAvatar.tsx", () => ({ default: () => <span>avatar</span> }));
 vi.mock("@shared/atoms/TeamInitials/TeamInitials.tsx", () => ({ default: () => <span>initials</span> }));
-vi.mock("@shared/molecules/NavPanelHeader/NavPanelHeader", () => ({ default: () => <span>spaces</span> }));
 vi.mock("@shared/molecules/SearchInput/SearchInput", () => ({ default: () => <input /> }));
 import HomeNavPanel from "./HomeNavPanel";
 
@@ -68,6 +70,7 @@ afterEach(async () => {
   state.user = "priya";
   state.roles = ["member", "personal_space_creator"];
   state.personal = false;
+  state.organization = true;
   state.fail = false;
   vi.clearAllMocks();
 });
@@ -166,6 +169,7 @@ it("does not select an absent UUID when refetch joins a stale pending query", as
 });
 
 it("keeps the team list and ordinary agents destination without an organization row", async () => {
+  state.organization = false;
   await render();
   expect(node.textContent).toContain("fredlab");
   expect(node.textContent).toContain("rework.home.yourTeams");
@@ -173,4 +177,20 @@ it("keeps the team list and ordinary agents destination without an organization 
   expect(node.querySelector('a[href="/team/fredlab/agents"]')).not.toBeNull();
   expect(node.textContent).toContain("rework.teamRoles.team_admin");
   expect(node.textContent).not.toContain("rework.manager.hierarchy");
+});
+
+it("heads Home with the section and the person's organization, read-only", async () => {
+  await render();
+  const heading = node.querySelector("h2");
+  expect(heading?.textContent).toBe("rework.home.title");
+  expect(heading?.closest("button")).toBeNull();
+  expect(heading?.previousElementSibling?.textContent).toBe("Demo");
+  expect(node.querySelector('[aria-haspopup="menu"]')).toBeNull();
+});
+
+it("keeps the Home title without an organization", async () => {
+  state.organization = false;
+  await render();
+  expect(node.querySelector("h2")?.textContent).toBe("rework.home.title");
+  expect(node.querySelector("h2")?.previousElementSibling).toBeNull();
 });

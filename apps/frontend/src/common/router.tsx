@@ -56,7 +56,8 @@ import { useTranslation } from "react-i18next";
 import { createBrowserRouter, Navigate, RouteObject, useParams, Outlet, useLocation } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
-import { adminIndexPath, Protected } from "@core/guards/Protected";
+import { Protected } from "@core/guards/Protected";
+import { adminIndexPath } from "@core/guards/organizationAdminPages";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { PageError } from "@components/pages/PageError/PageError.tsx";
 import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.tsx";
@@ -122,11 +123,11 @@ const AdminIndexRoute = () => {
   const manager = useManagerPlatformAdmin();
   const organization = useOrganizationAdmin();
   if (organization.isLoading || (organization.isFetching && !organization.currentData)) return null;
-  if (organization.isAdmin) return <Navigate to="/admin/features" replace />;
   if (isLoading || manager.isLoading || supervision.loading) return null;
   const target = adminIndexPath({
-    capabilities: { ...capabilities, canManageFeatures: false },
+    capabilities: { ...capabilities, canManageFeatures: organization.isAdmin },
     supervision: supervision.allowed,
+    platformAccessEnabled: !!getConfig()?.platform_access_enabled,
     platformOwner: manager.isAdmin,
   });
   return <Navigate to={target} replace />;
