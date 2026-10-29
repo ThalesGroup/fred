@@ -4535,14 +4535,25 @@
       "existing": "Existing organizations",
       "empty": "No organizations yet.",
       "loadFailed": "Unable to load organizations.",
-      "create": "Create organization",
       "name": "Organization name",
       "owner": "Organization owner",
       "admin": "Organization administrator",
       "searchFailed": "User search failed.",
-      "accountsHint": "Select existing accounts. The same account can hold both roles. These roles do not grant access to resources.",
-      "createFailed": "Organization creation failed.",
-      "created": "Organization {{name}} created."
+      "accountsHint": "Choose people who already have an account. One person can hold both roles. These roles give no access to content.",
+      "createOrganization": {
+        "open": "Create organization",
+        "title": "Create organization",
+        "namePlaceholder": "e.g. Customer support",
+        "submit": "Create organization",
+        "successSummary": "Organization {{name}} created",
+        "errors": {
+          "summary": "Failed to create organization",
+          "fallbackDetail": "Could not create the organization. Please try again.",
+          "conflictDetail": "An organization with this name already exists.",
+          "validationDetail": "Check the name and make sure both people still have an account.",
+          "forbiddenDetail": "You are not allowed to create organizations."
+        }
+      }
     },
     "provisioning": {
       "title": "Provisioning",

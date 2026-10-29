@@ -12,14 +12,18 @@ const h = vi.hoisted(() => ({
     isFetching: false,
     refetch: vi.fn(),
   },
-  result: { isLoading: false, error: undefined as unknown },
+  result: { isLoading: false },
   submit: vi.fn(),
   query: vi.fn(),
+  showSuccess: vi.fn(),
+  notifyApiError: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string, args?: { name: string }) => (args?.name ? `${key} ${args.name}` : key) }),
 }));
 vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({ useManagerPlatformAdmin: () => h.access }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showSuccess: h.showSuccess }) }));
+vi.mock("@core/hooks/useApiErrorToast", () => ({ useApiErrorToast: () => ({ notifyApiError: h.notifyApiError }) }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useOrganizationRegistryQuery: (args, options) => {
     h.query(args, options);
@@ -32,10 +36,24 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
     isError: false,
   }),
 }));
+vi.mock("@shared/molecules/Dialog/Dialog", () => ({
+  Dialog: ({ title, children, confirmLabel, confirmDisabled, onConfirm }) => (
+    <div role="dialog" aria-label={title}>
+      {children}
+      <button type="button" disabled={confirmDisabled} onClick={onConfirm}>
+        {confirmLabel}
+      </button>
+    </div>
+  ),
+}));
 vi.mock("@shared/molecules/Autocomplete/Autocomplete", () => ({
   default: ({ textInput, onFieldValueChange, options, onSelect }) => (
     <div>
-      <input {...textInput} onChange={(event) => onFieldValueChange(event.target.value)} />
+      <input
+        placeholder={textInput.placeholder}
+        aria-label={textInput["aria-label"]}
+        onChange={(event) => onFieldValueChange(event.target.value)}
+      />
       {options.map((option) => (
         <button type="button" key={option.key} onClick={() => onSelect(option.value)}>
           Select {option.key}
@@ -48,6 +66,8 @@ import OrganizationsPage from "./OrganizationsPage";
 let host: HTMLDivElement;
 let root: Root;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+const OPEN = "rework.organizations.createOrganization.open";
+const SUBMIT = "rework.organizations.createOrganization.submit";
 beforeEach(() => {
   vi.clearAllMocks();
   Object.assign(h.access, { isAdmin: true, isLoading: false, isFetching: false, isError: false });
@@ -56,7 +76,7 @@ beforeEach(() => {
     isError: false,
     isFetching: false,
   });
-  Object.assign(h.result, { isLoading: false, error: undefined });
+  h.result.isLoading = false;
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -69,22 +89,20 @@ afterEach(() => {
 function render() {
   act(() => root.render(<OrganizationsPage />));
 }
-function fill() {
-  act(() => {
-    const inputs = host.querySelectorAll("input");
-    [" New Org ", " owner ", " admin "].forEach((value, i) => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(inputs[i], value);
-      inputs[i].dispatchEvent(new Event("input", { bubbles: true }));
-    });
-  });
-  act(() => {
-    for (const label of ["Select owner", "Select admin"]) {
-      [...host.querySelectorAll("button")].find((button) => button.textContent === label)!.click();
-    }
-  });
+const button = (label: string) => [...host.querySelectorAll("button")].find((b) => b.textContent?.endsWith(label));
+const dialog = () => host.querySelector('[role="dialog"]');
+function type(input: HTMLInputElement, value: string) {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
 }
-function submit() {
-  host.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+function openAndFill() {
+  act(() => button(OPEN)!.click());
+  act(() => type(dialog()!.querySelector("input")!, " New Org "));
+  for (const who of ["owner", "admin"]) {
+    const label = `rework.organizations.${who}`;
+    act(() => type(dialog()!.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!, who));
+    act(() => button(`Select ${who}`)!.click());
+  }
 }
 it("distinguishes unavailable, loading and successful empty lists without stale rows", () => {
   render();
@@ -103,49 +121,50 @@ it("distinguishes unavailable, loading and successful empty lists without stale 
   render();
   expect(host.textContent).toContain("rework.organizations.empty");
 });
-it("skips registry and form when platform ownership is absent", () => {
+it("hides the create button and skips the registry when platform ownership is absent", () => {
   h.access.isAdmin = false;
   render();
-  expect(host.querySelector("form")).toBeNull();
+  expect(button(OPEN)).toBeUndefined();
   expect(h.query).toHaveBeenLastCalledWith({ after: undefined }, expect.objectContaining({ skip: true }));
 });
-it("uses cursor pages and resets to the first after confirmed creation", async () => {
+it("creates from the dialog, closes it and resets to the first page", async () => {
   h.registry.currentData.next_cursor = "next";
   render();
-  act(() => [...host.querySelectorAll("button")].find((b) => b.textContent === "dataTable.pagination.next")!.click());
+  expect(dialog()).toBeNull();
+  act(() => button("dataTable.pagination.next")!.click());
   expect(h.query).toHaveBeenLastCalledWith({ after: "next" }, expect.anything());
-  fill();
-  await act(async () => submit());
+  openAndFill();
+  await act(async () => button(SUBMIT)!.click());
   expect(h.submit).toHaveBeenCalledExactlyOnceWith({
     createOrganization: { name: "New Org", owner_username: "owner", admin_username: "admin" },
   });
   expect(h.query).toHaveBeenLastCalledWith({ after: undefined }, expect.anything());
-  expect(host.textContent).toContain("rework.organizations.created New Org");
-});
-it("prevents duplicate submits and ignores success after unmount", async () => {
-  let resolve!: (value: unknown) => void;
-  h.submit.mockReturnValue({
-    unwrap: () =>
-      new Promise((done) => {
-        resolve = done;
-      }),
+  expect(h.showSuccess).toHaveBeenCalledWith({
+    summary: "rework.organizations.createOrganization.successSummary New Org",
   });
-  render();
-  fill();
-  act(() => {
-    submit();
-    submit();
-  });
-  expect(h.submit).toHaveBeenCalledOnce();
-  act(() => root.render(<p>Another account</p>));
-  await act(async () => resolve({ name: "Old" }));
-  expect(host.textContent).toBe("Another account");
-  expect(h.registry.refetch).not.toHaveBeenCalled();
+  expect(dialog()).toBeNull();
 });
-it("reports failure without automatic replay or successful creation", () => {
-  h.result.error = { status: 409, data: { detail: "already attached" } };
+it("keeps submit disabled until every field is set and while a creation runs", () => {
   render();
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain("already attached");
-  expect(host.textContent).not.toContain("rework.organizations.created");
-  expect(h.submit).not.toHaveBeenCalled();
+  act(() => button(OPEN)!.click());
+  expect(button(SUBMIT)!.disabled).toBe(true);
+  act(() => root.unmount());
+  root = createRoot(host);
+  h.result.isLoading = true;
+  render();
+  openAndFill();
+  expect(button(SUBMIT)!.disabled).toBe(true);
+});
+it("reports failure through the error toast and keeps the dialog open", async () => {
+  const error = { status: 409, data: { detail: "already exists" } };
+  h.submit.mockReturnValue({ unwrap: () => Promise.reject(error) });
+  render();
+  openAndFill();
+  await act(async () => button(SUBMIT)!.click());
+  expect(h.notifyApiError).toHaveBeenCalledWith(
+    error,
+    expect.objectContaining({ conflictDetail: "rework.organizations.createOrganization.errors.conflictDetail" }),
+  );
+  expect(h.showSuccess).not.toHaveBeenCalled();
+  expect(dialog()).not.toBeNull();
 });

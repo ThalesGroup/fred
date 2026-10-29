@@ -113,3 +113,10 @@
   padding: 0;
   list-style: none;
 }
+
+/* Pagination row under a list, aligned with the table's right edge. */
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+}

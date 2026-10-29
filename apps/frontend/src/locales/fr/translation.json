@@ -4535,14 +4535,25 @@
       "existing": "Organisations existantes",
       "empty": "Aucune organisation pour le moment.",
       "loadFailed": "Impossible de charger les organisations.",
-      "create": "Créer une organisation",
       "name": "Nom de l'organisation",
-      "owner": "Owner de l'organisation",
+      "owner": "Propriétaire de l'organisation",
       "admin": "Administrateur de l'organisation",
       "searchFailed": "La recherche d'utilisateurs a échoué.",
-      "accountsHint": "Sélectionnez des comptes existants. Le même compte peut détenir les deux rôles. Ces rôles ne donnent pas accès aux ressources.",
-      "createFailed": "La création de l'organisation a échoué.",
-      "created": "Organisation {{name}} créée."
+      "accountsHint": "Choisissez des personnes qui ont déjà un compte. Une même personne peut tenir les deux rôles. Ces rôles ne donnent accès à aucun contenu.",
+      "createOrganization": {
+        "open": "Créer une organisation",
+        "title": "Créer une organisation",
+        "namePlaceholder": "ex. Support client",
+        "submit": "Créer l'organisation",
+        "successSummary": "Organisation {{name}} créée",
+        "errors": {
+          "summary": "Échec de la création de l'organisation",
+          "fallbackDetail": "Impossible de créer l'organisation. Veuillez réessayer.",
+          "conflictDetail": "Une organisation porte déjà ce nom.",
+          "validationDetail": "Vérifiez le nom et que les deux personnes ont toujours un compte.",
+          "forbiddenDetail": "Vous n'êtes pas autorisé à créer des organisations."
+        }
+      }
     },
     "provisioning": {
       "title": "Provisioning",
