@@ -40,6 +40,7 @@ import { applyDocumentAccessConfigChange, normalizeDocumentAccessConfig } from "
 import { CAP_DOCUMENT_ACCESS } from "./toolPacks.ts";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 import { isAgentNameTaken } from "../agentNames.ts";
+import type { StagedAssetFile } from "../../../../features/capabilities/types.ts";
 
 export type AgentFormPayload = {
   templateId: string;
@@ -60,7 +61,7 @@ export type AgentFormPayload = {
    * `with-assets` save endpoints so the files travel INSIDE the atomic save.
    * Only files for ACTIVE capabilities are included.
    */
-  capabilityAssetFiles: Record<string, Record<string, File>>;
+  capabilityAssetFiles: Record<string, Record<string, StagedAssetFile>>;
   /**
    * True when the chosen template advertises at least one capability. When false
    * the caller omits capability fields from the request so a plain edit of a
@@ -95,8 +96,8 @@ type FormState = {
   tuningValues: Record<string, unknown>;
   selectedCapabilityIds: string[];
   capabilityConfigValues: Record<string, Record<string, unknown>>;
-  /** Pending capability asset files (capability id → AssetSlot.key → File, #1903). */
-  capabilityAssetFiles: Record<string, Record<string, File | undefined>>;
+  /** Pending capability asset files (capability id -> AssetSlot.key -> File(s)). */
+  capabilityAssetFiles: Record<string, Record<string, StagedAssetFile | undefined>>;
   /** Save-blocking problems reported by capability config widgets (null = none). */
   capabilityBlockingErrors: Record<string, string | null>;
 };
@@ -210,14 +211,16 @@ export function buildAgentFormSubmitPayload(
   const effectiveCapabilityConfig = Object.fromEntries(
     Object.entries(form.capabilityConfigValues).filter(([id]) => effectiveCapabilityIds.includes(id)),
   );
-  // Asset files only travel for ACTIVE capabilities, with undefined slots
-  // dropped, so a deselected capability's staged upload never reaches the pod.
+  // Asset files only travel for ACTIVE capabilities, with undefined and empty
+  // slots dropped, so a deselected capability's staged upload never reaches the pod.
   const effectiveAssetFiles = Object.fromEntries(
     Object.entries(form.capabilityAssetFiles)
       .filter(([id]) => effectiveCapabilityIds.includes(id))
       .map(([id, slots]) => [
         id,
-        Object.fromEntries(Object.entries(slots).filter(([, file]) => file instanceof File)) as Record<string, File>,
+        Object.fromEntries(
+          Object.entries(slots).filter(([, file]) => file instanceof File || (Array.isArray(file) && file.length > 0)),
+        ) as Record<string, StagedAssetFile>,
       ])
       .filter(([, slots]) => Object.keys(slots).length > 0),
   );
@@ -396,7 +399,7 @@ export default function AgentFormModal({
     }));
   };
 
-  const handleCapabilityAssetFileChange = (capabilityId: string, slotKey: string, file: File | null) => {
+  const handleCapabilityAssetFileChange = (capabilityId: string, slotKey: string, file: StagedAssetFile | null) => {
     setForm((prev) => ({
       ...prev,
       capabilityAssetFiles: {

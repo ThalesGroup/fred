@@ -48,6 +48,7 @@ import { RecommendedModelField } from "./RecommendedModelField/RecommendedModelF
 import { helpPagePath } from "@rework/features/helpCenter/content";
 import { isHelpLang } from "@rework/features/helpCenter/manifest";
 import styles from "./AgentFormBody.module.css";
+import type { StagedAssetFile } from "../../../../features/capabilities/types.ts";
 
 export type SectionKey = "general" | "prompts" | "tools" | "commitments";
 
@@ -110,7 +111,7 @@ type AgentFormBodyProps = {
   /** Per-capability config values: outer key = capability id, inner key = config_fields[].key. */
   capabilityConfigValues: Record<string, Record<string, unknown>>;
   /** Pending capability asset files: outer key = capability id, inner key = AssetSlot.key (#1903). */
-  capabilityAssetFiles: Record<string, Record<string, File | undefined>>;
+  capabilityAssetFiles: Record<string, Record<string, StagedAssetFile | undefined>>;
   isSubmitting: boolean;
   submitAttempted: boolean;
   activeSection: SectionKey;
@@ -132,7 +133,7 @@ type AgentFormBodyProps = {
    *  used by the Simple "packs" view, which flips several at once. */
   onCapabilitySelectionReplace: (next: CapabilitySelectionState) => void;
   onCapabilityConfigChange: (capabilityId: string, key: string, value: unknown) => void;
-  onCapabilityAssetFileChange: (capabilityId: string, slotKey: string, file: File | null) => void;
+  onCapabilityAssetFileChange: (capabilityId: string, slotKey: string, file: StagedAssetFile | null) => void;
   onCapabilityBlockingErrorChange: (capabilityId: string, message: string | null) => void;
   /** Bumped when the creation assistant fills the form: prompt fields show the editor again. */
   draftRevision?: number;

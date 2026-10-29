@@ -21,6 +21,7 @@ import { configWidgetFor } from "../../../../../features/capabilities/configWidg
 import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { TuningFieldRenderer } from "../TuningFieldRenderer.tsx";
 import styles from "./CapabilityCard.module.css";
+import type { StagedAssetFile } from "../../../../../features/capabilities/types.ts";
 
 type CapabilityCardProps = {
   name: string;
@@ -115,9 +116,9 @@ export function CapabilityConfigForm({
   teamId?: string;
   agentInstanceId?: string;
   agentDisplayName?: string;
-  assetFiles: Record<string, File | undefined>;
+  assetFiles: Record<string, StagedAssetFile | undefined>;
   onConfigChange: (key: string, value: unknown) => void;
-  onAssetFileChange: (slotKey: string, file: File | null) => void;
+  onAssetFileChange: (slotKey: string, file: StagedAssetFile | null) => void;
   onBlockingErrorChange: (message: string | null) => void;
 }) {
   const { t } = useTranslation();

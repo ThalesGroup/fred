@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useDispatch } from "react-redux";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useDispatch, useStore } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
@@ -28,6 +28,9 @@ import {
   useGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery,
   usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { selectCapabilityBaseUrl, type CapabilityRoutingState } from "../../../../common/capabilityRoutingSlice";
+import { chatAttachmentHandlersForCapabilities } from "../../../features/capabilities/chatAttachmentRegistry";
+import type { ChatAttachmentContext, ChatAttachmentForget } from "../../../features/capabilities/types";
 import { taskEventReceived, taskRegistered } from "../../../features/tasks/taskSlice";
 import type { AttachmentSource, ChatAttachment, ChatImageContext, SessionAttachment } from "@rework/types/attachments";
 
@@ -138,10 +141,65 @@ export function excludeDeletedAttachments(
 interface UseChatAttachmentsParams {
   teamId: string;
   sessionId: string | null;
+  /** Capabilities active in this session - their `onChatAttachment` handlers see each file. */
+  capabilityIds?: readonly string[];
 }
 
-export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsParams) {
+const NO_CAPABILITIES: readonly string[] = [];
+
+export function useChatAttachments({ teamId, sessionId, capabilityIds = NO_CAPABILITIES }: UseChatAttachmentsParams) {
   const dispatch = useDispatch();
+  const store = useStore<{ capabilityRouting: CapabilityRoutingState }>();
+  // Read at attach time, not captured: `addFiles` stays stable across renders.
+  const capabilityIdsRef = useRef(capabilityIds);
+  useEffect(() => {
+    capabilityIdsRef.current = capabilityIds;
+  }, [capabilityIds]);
+
+  // Per chat attachment id: how each capability forgets its copy when the
+  // user removes the file. `removedIdsRef` covers a removal that lands before
+  // the capability has answered.
+  const forgetsRef = useRef(new Map<string, ChatAttachmentForget[]>());
+  const removedIdsRef = useRef(new Set<string>());
+
+  const forgetCapabilityCopies = useCallback((id: string) => {
+    const forgets = forgetsRef.current.get(id) ?? [];
+    forgetsRef.current.delete(id);
+    for (const forget of forgets) {
+      forget().catch((error) => console.warn("[chat attachments] a capability could not forget a file", error));
+    }
+  }, []);
+
+  /** Hand the file to every active capability's handler; never throws. */
+  const notifyCapabilities = useCallback(
+    async (file: File, activeSessionId: string, id: string) => {
+      const handlers = chatAttachmentHandlersForCapabilities(capabilityIdsRef.current);
+      const forgets = await Promise.all(
+        handlers.map(async ({ capabilityId, handle }) => {
+          const baseUrl = selectCapabilityBaseUrl(store.getState(), capabilityId);
+          if (!baseUrl) return undefined;
+          try {
+            const context = {
+              capabilityId,
+              baseUrl,
+              teamId,
+              sessionId: activeSessionId,
+              dispatch: dispatch as ChatAttachmentContext["dispatch"],
+            };
+            return (await handle(file, context)) ?? undefined;
+          } catch (error) {
+            console.warn(`[chat attachments] ${capabilityId} could not keep ${file.name}`, error);
+            return undefined;
+          }
+        }),
+      );
+      const kept = forgets.filter((forget): forget is ChatAttachmentForget => forget !== undefined);
+      if (kept.length === 0) return;
+      forgetsRef.current.set(id, kept);
+      if (removedIdsRef.current.has(id)) forgetCapabilityCopies(id);
+    },
+    [dispatch, forgetCapabilityCopies, store, teamId],
+  );
   const { t } = useTranslation();
   const { notifyApiError } = useApiErrorToast();
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -193,6 +251,8 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
   const deletePersistedAttachment = useCallback(
     async (attachmentId: string) => {
       if (!teamId || !sessionId) return;
+      removedIdsRef.current.add(attachmentId);
+      forgetCapabilityCopies(attachmentId);
       setAttachments((prev) => prev.filter((attachment) => attachment.id !== attachmentId));
       setDeletedAttachmentIds((prev) => new Set(prev).add(attachmentId));
       try {
@@ -218,7 +278,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
         // unawaited rejection here becomes an unhandled promise rejection.
       }
     },
-    [deletePersistedAttachmentMutation, notifyApiError, sessionId, t, teamId],
+    [deletePersistedAttachmentMutation, forgetCapabilityCopies, notifyApiError, sessionId, t, teamId],
   );
 
   const addFiles = useCallback(
@@ -266,9 +326,12 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
         // erasure would ever find them to clean up otherwise.
         let fastIngestResult: FastIngestResponse | null = null;
         try {
+          // Capabilities get the file in parallel, and before the attachment
+          // turns "ready": a message sent right after must already see it.
           const [imageContext, fastIngest] = await Promise.all([
             readImageContext(file),
             fastIngestAttachment(file, ingestionSessionId),
+            notifyCapabilities(file, ingestionSessionId, id),
           ]);
           fastIngestResult = fastIngest;
 
@@ -325,6 +388,9 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
               attachment.id === id ? { ...attachment, status: "error", error: errorMessage } : attachment,
             ),
           );
+          // A failed file is never sent: the capabilities forget their copy too.
+          removedIdsRef.current.add(id);
+          forgetCapabilityCopies(id);
           // Fast-ingest succeeded (real KF vectors/tabular dataset exist) but
           // the persist that would have made them reachable through the
           // normal delete paths never landed -- clean them up directly
@@ -349,18 +415,30 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
       // concurrently — one at a time hid file N behind file N-1's ingestion.
       await Promise.all(files.filter((file) => file.size > 0).map(ingestFile));
     },
-    [deleteFastArtifactsMutation, dispatch, fastIngestAttachment, persistAttachmentMutation, sessionId, t, teamId],
+    [
+      deleteFastArtifactsMutation,
+      dispatch,
+      fastIngestAttachment,
+      forgetCapabilityCopies,
+      notifyCapabilities,
+      persistAttachmentMutation,
+      sessionId,
+      t,
+      teamId,
+    ],
   );
 
   const removeAttachment = useCallback(
     (id: string) => {
+      removedIdsRef.current.add(id);
+      forgetCapabilityCopies(id);
       setAttachments((prev) => prev.filter((attachment) => attachment.id !== id));
       const persisted = persistedAttachments.find((attachment) => attachment.attachmentId === id);
       if (persisted) {
         void deletePersistedAttachment(id);
       }
     },
-    [deletePersistedAttachment, persistedAttachments],
+    [deletePersistedAttachment, forgetCapabilityCopies, persistedAttachments],
   );
 
   const clearReadyAttachments = useCallback(() => {

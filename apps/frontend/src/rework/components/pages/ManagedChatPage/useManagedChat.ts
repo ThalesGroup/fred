@@ -262,7 +262,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   // (#1979, RFC §9 item 3). The host resolves each id against the plugin index.
   const capabilityIds = agentInstance?.selected_capability_ids ?? [];
 
-  const attachments = useChatAttachments({ teamId, sessionId });
+  const attachments = useChatAttachments({ teamId, sessionId, capabilityIds });
 
   useEffect(() => {
     const attempt = sendAttemptRef.current;
