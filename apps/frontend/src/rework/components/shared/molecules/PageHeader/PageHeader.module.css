@@ -32,6 +32,14 @@
   color: var(--on-surface);
 }
 
+@media (max-width: 767px) {
+  .sticky {
+    top: calc(var(--spacing-s) - var(--spacing-m));
+    margin: calc(-1 * var(--spacing-m)) calc(-1 * var(--spacing-m)) calc(-1 * var(--spacing-s));
+    padding: var(--spacing-m) var(--spacing-m) var(--spacing-s);
+  }
+}
+
 .breadcrumb {
   display: flex;
   align-items: center;

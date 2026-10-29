@@ -15,7 +15,9 @@
  */
 
 /* Shell: rail and nav panel sit on the app background; the page lives in one rounded
- * surface card, the only part that scrolls. */
+ * surface card, the only part that scrolls. The mode follows the input device: a fine
+ * pointer keeps compact values, a coarse one gets touch margins; under 768px the card
+ * goes edge to edge between the section panel and a bottom bar (Sidebar.module.scss). */
 .mainLayout {
   display: flex;
   background-color: var(--surface-container);
@@ -55,4 +57,38 @@
 
 .content:has([data-shell-inset="none"]) {
   padding: 0;
+}
+
+@media (pointer: coarse) {
+  .content {
+    margin: var(--spacing-m) var(--spacing-m) var(--spacing-m) 0;
+    border-radius: var(--radius-m);
+  }
+
+  .sidebar:not(:has([data-nav-panel])) + .content {
+    margin-left: var(--spacing-m);
+  }
+}
+
+@media (max-width: 767px) {
+  .mainLayout {
+    flex-direction: column;
+  }
+
+  /* Rail and panel become direct items of this column so they can sit on either side
+   * of the card: panel above, bottom bar below. */
+  .sidebar {
+    display: contents;
+  }
+
+  .content {
+    order: 1;
+    margin: 0;
+    border-radius: 0;
+    padding: var(--spacing-m);
+  }
+
+  .sidebar:not(:has([data-nav-panel])) + .content {
+    margin-left: 0;
+  }
 }
