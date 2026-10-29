@@ -185,7 +185,7 @@ Display preferences use the application context and i18n after startup loads
 `GET /users/me/preferences` through the generated Rust client.
 `user_preferences.rs` serves GET/PATCH with `OwnUser` before consent, deriving
 the subject from verified identity and refusing service accounts and asserted
-query subjects. Migration `0013_user_preferences.sql` stores one row per subject;
+query subjects. Table `users_preferences` stores one row per subject;
 the optional UUID identity snapshot cannot own it. An atomic SQL upsert changes
 only supplied columns; explicit null restores defaults. Theme IDs stay opaque
 and syntax-validated. Missing rows/read failures use defaults; old personal

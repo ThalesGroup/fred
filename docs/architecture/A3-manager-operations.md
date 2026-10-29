@@ -315,11 +315,9 @@ the control-plane tables and their responsibilities. Ordered files in
 schema source of truth. SQLx embeds them in the Rust binary and records applied
 versions and checksums in `_sqlx_migrations`.
 
-`0001_manager_schema.sql` defines the initial schema, including immutable
-organization/parent placement and the local identity directory;
-`0002_personal_space_owner.sql` adds the unique index of active personal spaces and
-`0003_user_identity_prefix_search.sql` the local search indexes. A
-fresh installation
+`0001_schema.sql` defines the schema, including immutable organization/parent
+placement, the unique index of active personal spaces and the local identity
+directory with its search indexes. A fresh installation
 applies the whole chain; an existing installation applies only pending files.
 Applied files are immutable, including comments and whitespace. A database whose
 recorded versions or checksums differ from the embedded files is refused by the API

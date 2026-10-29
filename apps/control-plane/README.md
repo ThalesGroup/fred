@@ -264,8 +264,7 @@ publication of both successes and failures. Configuration equality and latest-to
 checks still fence M1 publication; an unauthorized or cancelled attempt leaves its
 token harmlessly supersedable by a later explicit refresh.
 
-Migration `0016_organization_model_policy.sql` adds policy and permission tables;
-0015 and earlier files are unchanged. Composite offer foreign keys retain diagnostic
+Tables `organization_model_policy` and `organization_model_permission` hold the policy. Composite offer foreign keys retain diagnostic
 references; deferred membership foreign keys ensure atomic default/fallback
 consistency. A trigger restricts the policy owner to an organization. Policy and
 permissions cascade only on physical organization purge, not retirement or a user's
@@ -323,7 +322,7 @@ before returning. No SQL transaction survives a provider call (there is no provi
 call here); the additional authorization checks occur outside the read transaction.
 
 Reasoning activation is an organization ceiling stored on the existing permission
-rows (`0018_model_reasoning.sql`, initially false). Complete policy replacement
+rows (`reasoning_enabled`, initially false). Complete policy replacement
 includes `reasoning_enabled`, a subset of permitted composite keys. Newly enabled
 reasoning requires a selectable offer with discovery-reported `reasoning: true`;
 revoking permission removes its reasoning activation too. The same Manage gate,
@@ -388,8 +387,8 @@ original row without overwriting title/activity, even when its instance is now
 missing or disabled. New registration requires an executable saved association.
 Title/activity edits and history metadata reads do not require template Use.
 
-Migration `0017_session_metadata.sql` is additive and unapplied. This private
-index is distinct from shared instances and contains no messages or checkpoints.
+Table `session_metadata` is a private index, distinct from
+shared instances; it contains no messages or checkpoints.
 Its immutable identity columns deliberately have no cascading foreign keys:
 instance/space purge neither removes retained provenance nor cascades into runtime
 history. Missing/retired space authorization still prevents reading that index.
@@ -619,7 +618,7 @@ within the same transaction. Deploy matching API and generated clients together;
 older binaries/clients only understand the three previous kinds. Review custom
 `space_kind: team` retention rules: they no longer select personal documents.
 
-`0001_manager_schema.sql` creates the initial schema; later numbered files evolve it.
+`0001_schema.sql` creates the schema; later numbered files evolve it.
 A database whose recorded
 versions or checksums differ from the embedded files is refused by the API and by
 `migrate`; recreate it explicitly. Do not edit applied files or replace stored checksums.
@@ -703,7 +702,7 @@ retry before SQL succeeds can repeat this read cost; a confirmed replay performs
 vector reads. No latency or throughput measurement is claimed. Unsupported vector
 backends explicitly reject both generation-scoped mutation and verification.
 
-Migration `0004_document_retrievable.sql` adds state without adopting pre-existing
+Retrievability state is never adopted from pre-existing
 vector data. Before considering an old document's indicator repaired, an authorized
 writer must explicitly call the same route with `{"retrievable": null}`. This restores
 only a document with no prior inclusion command, using the verified published

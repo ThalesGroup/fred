@@ -167,8 +167,8 @@ This catalogue covers the Rust control-plane's PostgreSQL tables. In the local k
 configuration they live in database `fred`, schema `public`. It does not describe
 the private schemas of Keycloak, Temporal, OpenFGA or other Fred services.
 
-Internal catalog storage is defined by
-[`0014_runtime_capability_catalog.sql`](../../apps/control-plane/migrations/0014_runtime_capability_catalog.sql)
+Internal catalog storage is defined by the `runtime_*` tables of
+[`0001_schema.sql`](../../apps/control-plane/migrations/0001_schema.sql)
 and [`agents/catalog.rs`](../../apps/control-plane/src/agents/catalog.rs).
 Offerings and template links share the composite runtime/capability key; successful
 replacement and failed observation retain withdrawn or last-known declarations.
@@ -180,8 +180,8 @@ Read uses a consistent SQL snapshot; bounded discovery precedes the authorized
 write transaction. Agent enrollment and chat preparation read live template
 discovery, not this store.
 
-Organization enablement of these offers is defined by additive
-[`0020_organization_capability.sql`](../../apps/control-plane/migrations/0020_organization_capability.sql)
+Organization enablement of these offers is defined by table `organization_capability` of
+[`0001_schema.sql`](../../apps/control-plane/migrations/0001_schema.sql)
 and owned by [`agents/enablement.rs`](../../apps/control-plane/src/agents/enablement.rs).
 A row enables one `(runtime_id, capability_id)` offer for every space of the
 organization; no row denies it. Its foreign key requires an observed offer, and
@@ -193,13 +193,12 @@ with a `capability.default_changed` audit event when the decision changes.
 edits; chat preparation does not consult it.
 
 Model storage has a separate platform owner in
-[`model_catalog`](../../apps/control-plane/src/model_catalog/mod.rs) and additive
-[`0015_platform_model_catalog.sql`](../../apps/control-plane/migrations/0015_platform_model_catalog.sql).
+[`model_catalog`](../../apps/control-plane/src/model_catalog/mod.rs) and the `model_source` and `model_offer` tables of
+[`0001_schema.sql`](../../apps/control-plane/migrations/0001_schema.sql).
 Observations and retained offers use `(source_id, upstream_model_id)` and create no
 grants. [`http.rs`](../../apps/control-plane/src/model_catalog/http.rs) supplies
 organization Manage-protected inventory, refresh and policy read/write.
-[`policy.rs`](../../apps/control-plane/src/model_catalog/policy.rs) and additive
-[`0016_organization_model_policy.sql`](../../apps/control-plane/migrations/0016_organization_model_policy.sql)
+[`policy.rs`](../../apps/control-plane/src/model_catalog/policy.rs) and the `organization_model_*` tables
 store organization choices with expected revision, attribution and composite foreign
 keys. Source approvals remain platform-only. Publication uses the transaction that
 rechecks admission/Manage and fences authorization after HTTP, preserving the M1
@@ -218,8 +217,7 @@ action performs the same update without exposing per-source controls.
 Source observations remain distinct from model permission; failed refreshes retain
 existing choices. Discovery retains the provider's boolean `capabilities.reasoning`;
 missing metadata remains unknown. The existing reasoning switch persists an
-organization ceiling on permission rows through additive
-[`0018_model_reasoning.sql`](../../apps/control-plane/migrations/0018_model_reasoning.sql).
+organization ceiling on permission rows (`reasoning_enabled`).
 Preparation exposes the corresponding per-model control. The pod combines it with
 the user's explicit per-question choice in its admitted turn context, and enforces
 `reasoning_effort: high` (or omission) at the transport boundary. This UI binding
@@ -327,19 +325,10 @@ a successful model call.
 
 The [administration journey](02.3-agent-administration.md) remains agreed behavior.
 
-The source of truth is the complete ordered SQL migration chain. Key references:
-
-| Migration | Responsibility |
-| --- | --- |
-| [0001_manager_schema.sql](../../apps/control-plane/migrations/0001_manager_schema.sql) | Space placement and document metadata, operational receipts, bootstrap, consent, installation bindings and local identity profiles; constraints, indexes and triggers. |
-| [0002_personal_space_owner.sql](../../apps/control-plane/migrations/0002_personal_space_owner.sql) | Unique index of active personal spaces by organization and owner. |
-| [0003_user_identity_prefix_search.sql](../../apps/control-plane/migrations/0003_user_identity_prefix_search.sql) | Case-insensitive prefix indexes of local identity profile fields. |
-| [0010_personal_space_kind.sql](../../apps/control-plane/migrations/0010_personal_space_kind.sql) | Canonical `personal` variant in `space_kind`. |
-| [0011_classify_personal_spaces.sql](../../apps/control-plane/migrations/0011_classify_personal_spaces.sql) | Classifies personal spaces while preserving identity/placement; constrains kind, owner and absence of parent. |
-
-The complete chain defines the current schema: eleven application tables, plus SQLx's
-own `_sqlx_migrations` history table. The diagram below is generated by tbls from
-all migration files (`make -C docs/architecture er`), not maintained by hand.
+The source of truth is the ordered SQL migration chain, starting with
+[0001_schema.sql](../../apps/control-plane/migrations/0001_schema.sql). It defines every
+application table, plus SQLx's own `_sqlx_migrations` history table. The diagram below
+is generated by tbls from all migration files (`make -C docs/architecture er`), not maintained by hand.
 SQLx creates its history table itself; it is outside that generated diagram.
 
 ### Table responsibilities

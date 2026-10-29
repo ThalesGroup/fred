@@ -19,8 +19,8 @@ No configuration changes are required.
 
 ## Upgrade
 
-For Weaver, deploy the Rust Control Plane with SQLx migration
-`0013_user_preferences.sql`, which creates `users_preferences`, before rolling out
+For Weaver, deploy the Rust Control Plane with SQLx schema
+`0001_schema.sql`, which creates `users_preferences`, before rolling out
 the frontend. The deployment migration Job runs `control-plane migrate`; API
 startup only verifies the installed migration chain. No existing table is
 renamed. Existing users start without a row and see the documented defaults.

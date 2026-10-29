@@ -1225,58 +1225,11 @@ async fn instances_list_deduplicates_bounded_checks_and_propagates_failures() {
 
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn instances_additive_migration_and_opaque_storage() {
+async fn instances_store_tuning_opaquely() {
     let e = env().await;
+    let (org, _) = org_and_team(&e).await;
+    let org = org.id;
     let mut conn = e.pool.acquire().await.unwrap();
-    sqlx::query("create schema instances_upgrade")
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    sqlx::query("set search_path to instances_upgrade")
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    let migrator = sqlx::migrate!();
-    migrator.run_to(11, &mut *conn).await.unwrap();
-    let org = Uuid::new_v4();
-    sqlx::query(
-        "insert into space (id,kind,name,organization_id) values ($1,'organization','Existing',$1)",
-    )
-    .bind(org)
-    .execute(&mut *conn)
-    .await
-    .unwrap();
-    let before: Value = sqlx::query_scalar("select to_jsonb(s) from space s where id=$1")
-        .bind(org)
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-    let history: Vec<(i64, Vec<u8>)> =
-        sqlx::query_as("select version,checksum from _sqlx_migrations order by version")
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-    // Exercise the 11 -> 12 upgrade independently of later migrations.
-    migrator.run_to(12, &mut *conn).await.unwrap();
-    let after: Value = sqlx::query_scalar("select to_jsonb(s) from space s where id=$1")
-        .bind(org)
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-    assert_eq!(before, after);
-    let applied: Vec<(i64, Vec<u8>)> = sqlx::query_as(
-        "select version,checksum from _sqlx_migrations where version<=11 order by version",
-    )
-    .fetch_all(&mut *conn)
-    .await
-    .unwrap();
-    assert_eq!(history, applied);
-    let version: i64 =
-        sqlx::query_scalar("select max(version) from _sqlx_migrations where success")
-            .fetch_one(&mut *conn)
-            .await
-            .unwrap();
-    assert_eq!(version, 12);
     for (n,tuning) in [Value::Null,json!({"unknown":{"nested":[null,{},[]]},"selected_capability_ids":null,"capability_config":{"tool":{"schema_version":2,"config":{"nested":{"list":[1,false]}}}}}),json!({"selected_capability_ids":[]})].into_iter().enumerate() {
         let record=storage::create(&mut *conn,&storage::NewAgentInstance{agent_instance_id:Uuid::new_v4(),space_id:org,template_id:Uuid::new_v4(),source_runtime_id:"fixture".into(),source_agent_id:"opaque".into(),display_name:format!("  Opaque {n}  "),description:None,enabled:false,created_by:None,updated_by:None,tuning:tuning.clone()}).await.unwrap();
         assert_eq!(record.tuning.0,tuning);assert_eq!(record.display_name,format!("Opaque {n}"));
