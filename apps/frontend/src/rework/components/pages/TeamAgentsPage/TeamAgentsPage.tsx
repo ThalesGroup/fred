@@ -86,7 +86,9 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
   const instances = useListAgentInstancesQuery({ spaceId }, { refetchOnMountOrArgChange: true });
   const catalog = useSpaceAgentTemplatesQuery({ spaceId }, { skip: !canManageAgents, refetchOnMountOrArgChange: true });
   const managedInstances = instances.isError ? [] : (instances.currentData ?? []);
-  const templates = catalog.isError || !canManageAgents ? [] : (catalog.currentData ?? []);
+  // `data` survives skip while rights are revalidated, keeping the form mounted.
+  // SpaceAgents is keyed by space; saving still requires canManageAgents.
+  const templates = catalog.isError ? [] : (catalog.data ?? []);
   const [isEnrollOpen, setIsEnrollOpen] = useState(false);
   const [editingId, setEditingId] = useState<string>();
   const [refusedNames, setRefusedNames] = useState<ReadonlySet<string>>(new Set());
