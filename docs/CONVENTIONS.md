@@ -184,6 +184,7 @@ below are what to follow while writing the code, not just at review time.
   can use `unknown` with a guard; never `as any` at a prop or hook boundary.
 - **Never hand-edit generated slices.** `runtimeOpenApi.ts`, `controlPlaneOpenApi.ts`,
   `knowledgeFlowOpenApi.ts` — regenerate from OpenAPI spec.
-- **`tsc --noEmit` and Prettier must pass** before reporting any frontend task done.
-  For files under `apps/frontend/src/rework/`, also read
+- **`make code-quality && make test` (in `apps/frontend`) must pass** before
+  reporting any frontend task done: type-check, Prettier, ESLint, then the unit
+  tests, the same checks CI runs. For files under `apps/frontend/src/rework/`, also read
   `docs/swift/platform/FRONTEND_CODING_GUIDELINES.md`.
