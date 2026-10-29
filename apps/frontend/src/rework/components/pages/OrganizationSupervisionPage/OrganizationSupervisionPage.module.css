@@ -8,7 +8,6 @@
   gap: var(--spacing-m);
   box-sizing: border-box;
   background: var(--surface-main);
-  padding: var(--spacing-l);
   width: 100%;
   min-width: 0;
   color: var(--on-surface);

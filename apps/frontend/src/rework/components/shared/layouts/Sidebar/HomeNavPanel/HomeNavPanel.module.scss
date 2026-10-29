@@ -39,9 +39,8 @@
   position: relative;
   justify-content: space-between;
   align-items: center;
-  /* Trailing inset tightened (m → s) so the search IconButton sits flush with
-   * the row below it, while the label keeps its `m` inset on the left. */
-  padding: 0 var(--spacing-s) 0 var(--spacing-m);
+  /* Text 16px in, aligned with the item icons; the search button keeps the 8px edge. */
+  padding: 0 var(--spacing-xs) 0 var(--spacing-m);
   height: 48px;
 }
 

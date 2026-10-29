@@ -24,7 +24,6 @@ import { useOrganizationAdmin } from "@core/hooks/useOrganizationAdmin";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { isProtectedAllowed, type ProtectedRequirement } from "@core/guards/Protected";
 import { selectActiveCount } from "../../../../../features/tasks/taskSlice";
-import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
 import styles from "./AdminNavbar.module.css";
 
 // `requires` is the same value the page's route guard in router.tsx passes to
@@ -39,7 +38,6 @@ function BusinessAdminNavbar() {
   );
   const organization = useOrganizationAdmin(pathname.replace(/\/$/, "") !== "/admin/supervision");
   const supervision = useOrganizationSupervisionAccess();
-  const manager = useManagerPlatformAdmin();
   const allItems: (NavigationMenuItemProps & { requires: ProtectedRequirement })[] = [
     {
       type: "link",
@@ -151,15 +149,13 @@ function BusinessAdminNavbar() {
     });
   }
 
-  if (manager.isAdmin)
-    navigationItems.push({
-      type: "link",
-      label: t("rework.provisioning.title"),
-      icon: { category: "outlined", type: "upload", filled: false },
-      linkProps: { to: "/admin/provisioning" },
-    });
+  // /me/spaces rows all belong to one organization; its own row carries the name.
+  const organizationName = organization.currentData?.find((space) => space.kind === "organization")?.name;
+  const title = organizationName
+    ? t("rework.sidebar.admin.organizationTitle", { name: organizationName })
+    : t("rework.sidebar.admin.organizationFallbackTitle");
 
-  return <AdminNavigation items={navigationItems} />;
+  return <AdminNavigation title={title} items={navigationItems} />;
 }
 
 export default function AdminNavbar({ platformArea = false }: { platformArea?: boolean }) {
@@ -172,6 +168,7 @@ function PlatformAdminNavbar() {
   const supervision = useOrganizationSupervisionAccess();
   return (
     <AdminNavigation
+      title={t("rework.sidebar.admin.platformTitle")}
       items={[
         ...(supervision.allowed
           ? [
@@ -210,11 +207,10 @@ function PlatformAdminNavbar() {
   );
 }
 
-function AdminNavigation({ items }: { items: NavigationMenuItemProps[] }) {
-  const { t } = useTranslation();
+function AdminNavigation({ title, items }: { title: string; items: NavigationMenuItemProps[] }) {
   return (
     <div className={styles.adminNavbarContainer}>
-      <NavPanelHeader title={t("rework.sidebar.admin.title")} />
+      <NavPanelHeader title={title} />
       <NavigationMenu items={items} />
     </div>
   );

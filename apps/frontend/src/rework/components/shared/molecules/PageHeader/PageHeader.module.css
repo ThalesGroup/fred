@@ -20,16 +20,24 @@
   gap: var(--spacing-s);
 }
 
-/* Covers the page gutter on three sides so content scrolling under it stays hidden; the negative
-   `top` lets most of the top gutter scroll away, keeping only a small margin once pinned. */
+/* Covers the card's page inset (MainLayout) on three sides so content scrolling under it stays
+   hidden; the negative `top` lets most of the top inset scroll away once pinned. */
 .sticky {
   position: sticky;
-  top: calc(var(--spacing-s) - var(--spacing-xl));
+  top: calc(var(--spacing-s) - var(--spacing-l));
   z-index: 10;
-  margin: calc(-1 * var(--spacing-xl)) calc(-1 * var(--spacing-xl)) calc(-1 * var(--spacing-s));
+  margin: calc(-1 * var(--spacing-l)) calc(-1 * var(--spacing-l)) calc(-1 * var(--spacing-s));
   background: var(--surface-main);
-  padding: var(--spacing-xl) var(--spacing-xl) var(--spacing-s);
+  padding: var(--spacing-l) var(--spacing-l) var(--spacing-s);
   color: var(--on-surface);
+}
+
+@media (max-width: 767px) {
+  .sticky {
+    top: calc(var(--spacing-s) - var(--spacing-m));
+    margin: calc(-1 * var(--spacing-m)) calc(-1 * var(--spacing-m)) calc(-1 * var(--spacing-s));
+    padding: var(--spacing-m) var(--spacing-m) var(--spacing-s);
+  }
 }
 
 .breadcrumb {
@@ -76,11 +84,13 @@
   font: var(--font-body-medium);
 }
 
+/* May shrink below its content so a narrow page wraps the controls instead of overflowing. */
 .actions {
   display: flex;
-  flex: none;
+  flex: 0 1 auto;
   flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-xs);
+  min-width: 0;
 }

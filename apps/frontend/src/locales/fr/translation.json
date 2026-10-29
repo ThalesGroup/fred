@@ -2850,7 +2850,9 @@
           "uiSettings": "Interface utilisateur",
           "marketplaces": "Marketplaces"
         },
-        "title": "Espace administration"
+        "platformTitle": "Plateforme",
+        "organizationTitle": "Organisation {{name}}",
+        "organizationFallbackTitle": "Organisation"
       },
       "chatList": {
         "deleteDialog": {

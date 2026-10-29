@@ -41,6 +41,13 @@
   }
 }
 
+// Touch rows meet the 48px target; this follows the input device, not the width.
+@media (pointer: coarse) {
+  .navigation-menu-item {
+    height: 3rem;
+  }
+}
+
 .icon {
   display: flex;
   justify-content: center;
