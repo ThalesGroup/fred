@@ -1006,6 +1006,24 @@ async fn organization_detail(s: &AppState, organization: Space) -> AppResult<Org
     })
 }
 
+/// After a committed change, a failed directory lookup degrades to id-only summaries:
+/// reporting an error would hide a change that did happen.
+async fn committed_summaries(
+    directory: &crate::users::Directory<'_>,
+    subjects: &[String],
+) -> Vec<crate::users::UserSummary> {
+    match directory.summaries(subjects).await {
+        Ok(summaries) => summaries,
+        Err(_) => {
+            tracing::warn!("Directory lookup failed after an organization change; ids only");
+            subjects
+                .iter()
+                .map(|id| crate::users::UserSummary::id_only(id))
+                .collect()
+        }
+    }
+}
+
 #[utoipa::path(
     get, path = "/admin/organizations/{id}",
     params(("id" = Uuid, Path)),
@@ -1063,7 +1081,7 @@ async fn update_organization(
     ApiJson(req): ApiJson<UpdateOrganization>,
 ) -> AppResult<Json<OrganizationDetail>> {
     let directory = organization_directory(&s)?;
-    let organization = spaces::update_managed_organization(
+    let governance = spaces::update_managed_organization(
         &s.pool,
         &s.fga,
         &directory,
@@ -1076,7 +1094,11 @@ async fn update_organization(
         },
     )
     .await?;
-    Ok(Json(organization_detail(&s, organization).await?))
+    Ok(Json(OrganizationDetail {
+        owners: committed_summaries(&directory, &governance.owners).await,
+        admins: committed_summaries(&directory, &governance.admins).await,
+        organization: governance.organization,
+    }))
 }
 
 impl FromRef<AppState> for AdmissionState {

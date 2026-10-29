@@ -438,6 +438,13 @@ pub async fn load_organization(pool: &PgPool, id: Uuid) -> AppResult<Space> {
     Ok(space)
 }
 
+/// An organization and the subjects directly holding its governance roles.
+pub struct OrganizationGovernance {
+    pub organization: Space,
+    pub owners: Vec<String>,
+    pub admins: Vec<String>,
+}
+
 /// Requested changes to a managed organization; absent fields stay unchanged.
 pub struct OrganizationChange<'a> {
     pub name: Option<&'a str>,
@@ -516,7 +523,7 @@ pub async fn update_managed_organization(
     caller: &str,
     id: Uuid,
     change: OrganizationChange<'_>,
-) -> AppResult<Space> {
+) -> AppResult<OrganizationGovernance> {
     crate::platform::require_owner(fga, caller).await?;
     let name = change.name.map(validate_space_name).transpose()?;
     if name.is_none() && change.owner_username.is_none() && change.admin_username.is_none() {
@@ -539,9 +546,10 @@ pub async fn update_managed_organization(
         Some(username) => Some(resolve_account(directory, username, ADMIN_NOT_FOUND).await?),
         None => None,
     };
-    let mut org = load_organization(pool, id).await?;
-    let (mut tx, mut guard) = lock_for(pool, fga, &org).await?;
+    let (mut tx, mut guard) = lock_for(pool, fga, &load_organization(pool, id).await?).await?;
     crate::platform::require_owner(fga, caller).await?;
+    // Re-read under the lock: a concurrent rename may have committed meanwhile.
+    let mut organization: Space = db::space(&mut *tx, id).await?.into();
     crate::lifecycle::store::require_active(&mut *tx, id).await?;
     if let Some(name) = &name
         && db::organization_named(&mut *tx, name)
@@ -550,10 +558,18 @@ pub async fn update_managed_organization(
     {
         return Err(AppError::Conflict(SIBLING_NAME.into()));
     }
+    // Both rosters are read under the lock, so the response describes what is committed.
+    let (owners, admins) = tokio::try_join!(
+        fga.space_holders(id, Role::OrganizationOwner),
+        fga.space_holders(id, Role::Admin),
+    )?;
     let mut holders = Vec::new();
-    for (target, role) in [(&owner, Role::OrganizationOwner), (&admin, Role::Admin)] {
+    for (target, role, current) in [
+        (&owner, Role::OrganizationOwner, &owners),
+        (&admin, Role::Admin, &admins),
+    ] {
         if let Some(target) = target {
-            holders.push((target.as_str(), role, fga.space_holders(id, role).await?));
+            holders.push((target.as_str(), role, current));
         }
     }
     let (mut writes, mut deletes) = (Vec::new(), Vec::new());
@@ -583,7 +599,7 @@ pub async fn update_managed_organization(
             .bind(id)
             .execute(&mut *tx)
             .await?;
-        org.name = name;
+        organization.name = name;
     }
     fga.write(&mut guard, &writes, &deletes).await?;
     for (tuple, granted) in writes
@@ -600,7 +616,11 @@ pub async fn update_managed_organization(
         );
     }
     tx.commit().await?;
-    Ok(org)
+    Ok(OrganizationGovernance {
+        organization,
+        owners: owner.map_or(owners, |owner| vec![owner]),
+        admins: admin.map_or(admins, |admin| vec![admin]),
+    })
 }
 
 /// A team or project, administered by `admin`; the caller gets nothing on it.

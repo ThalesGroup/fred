@@ -534,10 +534,10 @@ async fn organization_console_edit_replaces_name_owner_and_admin() {
     assert_eq!(detail["owners"][0]["username"], "new-owner");
     assert_eq!(detail["admins"].as_array().unwrap().len(), 1);
     assert_eq!(detail["admins"][0]["username"], "new-admin");
-    // Two owner Checks; guard, holder, attachment and response holder Reads; one Write.
+    // Two owner Checks; guard, holder and attachment Reads, none after commit; one Write.
     assert_eq!(
         proxy.fault.lock().await.calls,
-        [("check", 2), ("read", 8), ("write", 1)]
+        [("check", 2), ("read", 6), ("write", 1)]
             .map(|(k, v)| (k.to_owned(), v))
             .into_iter()
             .collect()
@@ -580,6 +580,31 @@ async fn organization_console_edit_replaces_name_owner_and_admin() {
             .await
             .unwrap()
             .is_none()
+    );
+    // A directory failure after commit degrades to id-only summaries, never an error.
+    identity
+        .users
+        .lock()
+        .await
+        .insert("unavailable".into(), "flaky".into());
+    let (status, detail) = request(
+        &app,
+        &identity,
+        Some("root"),
+        "PATCH",
+        &path,
+        json!({"owner_username":"flaky"}),
+    )
+    .await;
+    assert_eq!(status, 200, "{detail}");
+    assert_eq!(
+        detail["owners"],
+        json!([{"id":"unavailable","username":null,"first_name":null,"last_name":null,"email":null,"avatar_image_url":null}])
+    );
+    assert_eq!(detail["admins"][0]["username"], "new-admin");
+    assert_eq!(
+        e.fga.direct_roles_on("unavailable", id).await.unwrap(),
+        vec![Role::OrganizationOwner]
     );
 }
 

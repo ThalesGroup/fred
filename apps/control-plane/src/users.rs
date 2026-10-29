@@ -116,6 +116,18 @@ pub struct UserSummary {
 }
 
 impl UserSummary {
+    /// A subject without display fields, when the directory cannot describe it.
+    pub fn id_only(id: &str) -> Self {
+        Self {
+            id: id.to_owned(),
+            username: None,
+            first_name: None,
+            last_name: None,
+            email: None,
+            avatar_image_url: None,
+        }
+    }
+
     pub(crate) fn from_raw(raw: &serde_json::Value) -> Option<Self> {
         let id = raw.get("id")?.as_str()?.to_owned();
         if id.is_empty() {
@@ -213,16 +225,7 @@ impl Directory<'_> {
             known.into_iter().map(|u| (u.id.clone(), u)).collect();
         Ok(subjects
             .iter()
-            .map(|id| {
-                known.remove(id).unwrap_or_else(|| UserSummary {
-                    id: id.clone(),
-                    username: None,
-                    first_name: None,
-                    last_name: None,
-                    email: None,
-                    avatar_image_url: None,
-                })
-            })
+            .map(|id| known.remove(id).unwrap_or_else(|| UserSummary::id_only(id)))
             .collect())
     }
 
