@@ -50,7 +50,7 @@
     border-color 150ms ease;
   cursor: pointer;
   border: 1px solid var(--outline-variant);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--surface-container) 75%, transparent);
   width: 32px;
   height: 32px;

@@ -239,3 +239,26 @@ it("deletes a document through the generated route and refreshes directory and s
   storage.unsubscribe();
   store.dispatch(api.util.resetApiState());
 });
+
+it("patches the edited organization into cached registry pages without refetching them", async () => {
+  const space = (id: string, name: string) => ({ id, name }) as import("./controlPlaneOpenApi").Space;
+  const { store, fetch } = setup({ items: [space("a", "Demo"), space("b", "Other")], next_cursor: null });
+  const registry = store.dispatch(api.endpoints.organizationRegistry.initiate({}));
+  await registry.unwrap();
+  fetch.mockClear();
+  const detail = { organization: space("a", "Renamed"), owners: [], admins: [] };
+  fetch.mockImplementationOnce(async () => new Response(JSON.stringify(detail)));
+  await store
+    .dispatch(api.endpoints.updateOrganization.initiate({ id: "a", updateOrganization: { name: "Renamed" } }))
+    .unwrap();
+  await vi.waitFor(() =>
+    expect(
+      api.endpoints.organizationRegistry
+        .select({})(store.getState())
+        .data?.items.map((o) => o.name),
+    ).toEqual(["Renamed", "Other"]),
+  );
+  expect(fetch).toHaveBeenCalledTimes(1);
+  registry.unsubscribe();
+  store.dispatch(api.util.resetApiState());
+});

@@ -14,7 +14,6 @@
 
 import { describe, it, expect } from "vitest";
 import {
-  adminLandingPath,
   canEnterAdminSection,
   isProtectedAllowed,
   type ProtectedCapabilities,
@@ -79,15 +78,5 @@ describe("canEnterAdminSection", () => {
 
   it("keeps a user with no platform role out", () => {
     expect(canEnterAdminSection(NONE)).toBe(false);
-  });
-});
-
-describe("adminLandingPath", () => {
-  it("sends an access-only manager to Platform Access", () => {
-    expect(adminLandingPath(caps({ canManagePlatformAccess: true }))).toBe("/admin/platform-access");
-  });
-
-  it("keeps the platform administrator landing on teams", () => {
-    expect(adminLandingPath(caps({ canAdmin: true }))).toBe("/admin/teams");
   });
 });

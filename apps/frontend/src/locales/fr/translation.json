@@ -1160,7 +1160,7 @@
       "collectionDetails": "Dates et périmètre de collecte",
       "distribution": "Répartition des données",
       "scope": "Périmètre",
-      "title": "Supervision de l'organisation",
+      "title": "Supervision",
       "refresh": "Actualiser",
       "lastSuccess": "Dernier chargement réussi : {{date}}",
       "neverLoaded": "Aucun chargement réussi pour le moment",
@@ -2283,6 +2283,14 @@
     "loading": "Chargement...",
     "marketplace": {
       "teams": {
+        "empty": {
+          "title": "Aucune équipe à afficher pour l'instant",
+          "description": "Les équipes publiques apparaissent ici, avec celles dont vous êtes membre. Vous pouvez rejoindre une équipe publique pour travailler avec ses membres."
+        },
+        "emptySearch": {
+          "title": "Aucune équipe ne correspond à votre recherche",
+          "description": "Essayez d'autres mots, ou effacez la recherche pour voir toutes les équipes."
+        },
         "otherTeams": "Découvrez d'autres équipes",
         "search": {
           "ariaLabel": "Rechercher une équipe",
@@ -2859,7 +2867,13 @@
           "uiSettings": "Interface utilisateur",
           "marketplaces": "Marketplaces"
         },
-        "title": "Espace administration"
+        "platformTitle": "Plateforme",
+        "title": "Administration",
+        "spaces": {
+          "switch": "Changer d'espace d'administration",
+          "platform": "Administration de la plateforme",
+          "organizations": "Mes organisations"
+        }
       },
       "chatList": {
         "deleteDialog": {
@@ -4544,14 +4558,43 @@
       "existing": "Organisations existantes",
       "empty": "Aucune organisation pour le moment.",
       "loadFailed": "Impossible de charger les organisations.",
-      "create": "Créer une organisation",
       "name": "Nom de l'organisation",
-      "owner": "Owner de l'organisation",
+      "owner": "Propriétaire de l'organisation",
       "admin": "Administrateur de l'organisation",
       "searchFailed": "La recherche d'utilisateurs a échoué.",
-      "accountsHint": "Sélectionnez des comptes existants. Le même compte peut détenir les deux rôles. Ces rôles ne donnent pas accès aux ressources.",
-      "createFailed": "La création de l'organisation a échoué.",
-      "created": "Organisation {{name}} créée."
+      "accountsHint": "Choisissez des personnes qui ont déjà un compte. Une même personne peut tenir les deux rôles. Ces rôles ne donnent accès à aucun contenu.",
+      "editOrganization": {
+        "openAria": "Modifier {{name}}",
+        "title": "Modifier l'organisation",
+        "submit": "Enregistrer",
+        "successSummary": "Organisation {{name}} modifiée",
+        "loadFailed": "Impossible de charger cette organisation. Fermez et réessayez.",
+        "severalOwners": "Cette organisation a actuellement plusieurs propriétaires : {{names}}. Choisir un nouveau propriétaire les remplace tous.",
+        "severalAdmins": "Cette organisation a actuellement plusieurs administrateurs : {{names}}. Choisir un nouvel administrateur les remplace tous.",
+        "errors": {
+          "summary": "Échec de la modification de l'organisation",
+          "fallbackDetail": "Impossible de modifier l'organisation. Veuillez réessayer.",
+          "notFoundDetail": "Cette organisation n'existe plus.",
+          "conflictDetail": "Ce nom est déjà pris, ou l'une des personnes appartient déjà à une autre organisation.",
+          "retiredDetail": "Cette organisation est en cours de suppression et ne peut plus être modifiée.",
+          "validationDetail": "Vérifiez le nom et que les deux personnes ont toujours un compte.",
+          "forbiddenDetail": "Vous n'êtes pas autorisé à modifier des organisations."
+        }
+      },
+      "createOrganization": {
+        "open": "Créer une organisation",
+        "title": "Créer une organisation",
+        "namePlaceholder": "ex. Support client",
+        "submit": "Créer l'organisation",
+        "successSummary": "Organisation {{name}} créée",
+        "errors": {
+          "summary": "Échec de la création de l'organisation",
+          "fallbackDetail": "Impossible de créer l'organisation. Veuillez réessayer.",
+          "conflictDetail": "Ce nom est déjà pris, ou l'une des personnes appartient déjà à une autre organisation.",
+          "validationDetail": "Vérifiez le nom et que les deux personnes ont toujours un compte.",
+          "forbiddenDetail": "Vous n'êtes pas autorisé à créer des organisations."
+        }
+      }
     },
     "provisioning": {
       "title": "Provisioning",

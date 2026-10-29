@@ -401,6 +401,213 @@ async fn organization_console_rechecks_waiting_creator_and_serializes_attachment
     assert!(matches!(a.err().or(b.err()), Some(AppError::Conflict(_))));
 }
 
+// Proves: I1, I23
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn organization_console_edit_replaces_name_owner_and_admin() {
+    let e = env().await;
+    let identity = support::IdentityServer::start().await;
+    for user in ["owner", "admin", "extra", "new-owner", "new-admin", "other"] {
+        identity.users.lock().await.insert(user.into(), user.into());
+    }
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+    let observed = Fga::connect(&proxy.base, &e.store, false, false, None, None)
+        .await
+        .unwrap()
+        .load(&e.pool)
+        .await
+        .unwrap();
+    let app = routes(state(&e, &identity, observed).await);
+    let (_, org) = request(
+        &app,
+        &identity,
+        Some("root"),
+        "POST",
+        "/admin/organizations",
+        creation("A", "owner", "admin"),
+    )
+    .await;
+    let id = Uuid::parse_str(org["id"].as_str().unwrap()).unwrap();
+    request(
+        &app,
+        &identity,
+        Some("root"),
+        "POST",
+        "/admin/organizations",
+        creation("B", "other", "other"),
+    )
+    .await;
+    let path = format!("/admin/organizations/{id}");
+    let (status, detail) = request(&app, &identity, Some("root"), "GET", &path, Value::Null).await;
+    assert_eq!(status, 200, "{detail}");
+    assert_eq!(detail["organization"]["name"], "A");
+    assert_eq!(
+        detail["owners"],
+        json!([{"id":"owner","username":"owner","first_name":null,"last_name":null,"email":null,"avatar_image_url":null}])
+    );
+    assert_eq!(detail["admins"][0]["username"], "admin");
+    for actor in [None, Some("owner")] {
+        for method in ["GET", "PATCH"] {
+            assert_eq!(
+                request(&app, &identity, actor, method, &path, json!({"name":"X"}))
+                    .await
+                    .0,
+                if actor.is_none() { 401 } else { 403 }
+            );
+        }
+    }
+    let missing = format!("/admin/organizations/{}", Uuid::new_v4());
+    for (path, body, expected) in [
+        (&missing, json!({"name":"X"}), 404),
+        (&path, json!({}), 422),
+        (&path, json!({"name":" "}), 422),
+        (&path, json!({"name":"B"}), 409),
+        (&path, json!({"owner_username":"missing"}), 422),
+        (&path, json!({"admin_username":"missing"}), 422),
+        (&path, json!({"admin_username":"other"}), 409),
+        (&path, json!({"owner":"x"}), 422),
+    ] {
+        assert_eq!(
+            request(&app, &identity, Some("root"), "PATCH", path, body.clone())
+                .await
+                .0,
+            expected,
+            "{body}"
+        );
+    }
+    // A failed publication changes neither the row nor the roles.
+    *proxy.fault.lock().await = support::fga_proxy::Fault {
+        fail_at: 1,
+        ..Default::default()
+    };
+    let rename = json!({"name":"A2", "owner_username":"new-owner", "admin_username":"new-admin"});
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("root"),
+            "PATCH",
+            &path,
+            rename.clone()
+        )
+        .await
+        .0,
+        500
+    );
+    assert!(
+        db::organization_named(&e.pool, "A2")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        e.fga.direct_roles_on("owner", id).await.unwrap(),
+        vec![Role::OrganizationOwner]
+    );
+    // An administrator appointed inside the organization is replaced too.
+    spaces::grant(
+        &e.pool,
+        &e.fga,
+        &control_plane::users::Directory::Keycloak(Some(&identity.directory())),
+        "owner",
+        id,
+        Role::Admin,
+        "extra",
+    )
+    .await
+    .unwrap();
+    *proxy.fault.lock().await = Default::default();
+    let (status, detail) = request(
+        &app,
+        &identity,
+        Some("root"),
+        "PATCH",
+        &path,
+        rename.clone(),
+    )
+    .await;
+    assert_eq!(status, 200, "{detail}");
+    assert_eq!(detail["organization"]["name"], "A2");
+    assert_eq!(detail["owners"][0]["username"], "new-owner");
+    assert_eq!(detail["admins"].as_array().unwrap().len(), 1);
+    assert_eq!(detail["admins"][0]["username"], "new-admin");
+    // Two owner Checks; guard, holder and attachment Reads, none after commit; one Write.
+    assert_eq!(
+        proxy.fault.lock().await.calls,
+        [("check", 2), ("read", 6), ("write", 1)]
+            .map(|(k, v)| (k.to_owned(), v))
+            .into_iter()
+            .collect()
+    );
+    for who in ["owner", "admin", "extra"] {
+        assert!(e.fga.direct_roles_on(who, id).await.unwrap().is_empty());
+        assert!(
+            spaces::organization(&e.pool, &e.fga, who)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+    assert_eq!(
+        e.fga.direct_roles_on("new-admin", id).await.unwrap(),
+        vec![Role::Admin]
+    );
+    for who in ["root", "new-owner", "new-admin"] {
+        assert!(!reads(&e, who, id).await);
+    }
+    // Replay is idempotent, and an unchanged name is not a conflict with itself.
+    *proxy.fault.lock().await = Default::default();
+    assert_eq!(
+        request(&app, &identity, Some("root"), "PATCH", &path, rename)
+            .await
+            .0,
+        200
+    );
+    assert!(
+        !proxy
+            .fault
+            .lock()
+            .await
+            .written
+            .iter()
+            .any(|w| w.to_string().contains("user:"))
+    );
+    assert!(
+        db::organization_named(&e.pool, "A")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    // A directory failure after commit degrades to id-only summaries, never an error.
+    identity
+        .users
+        .lock()
+        .await
+        .insert("unavailable".into(), "flaky".into());
+    let (status, detail) = request(
+        &app,
+        &identity,
+        Some("root"),
+        "PATCH",
+        &path,
+        json!({"owner_username":"flaky"}),
+    )
+    .await;
+    assert_eq!(status, 200, "{detail}");
+    assert_eq!(
+        detail["owners"],
+        json!([{"id":"unavailable","username":null,"first_name":null,"last_name":null,"email":null,"avatar_image_url":null}])
+    );
+    assert_eq!(detail["admins"][0]["username"], "new-admin");
+    assert_eq!(
+        e.fga.direct_roles_on("unavailable", id).await.unwrap(),
+        vec![Role::OrganizationOwner]
+    );
+}
+
 // Proves: I1, I5, I23. Owner-only HTTP access, isolated totals and direct grants.
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]

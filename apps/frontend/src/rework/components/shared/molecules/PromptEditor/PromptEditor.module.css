@@ -72,7 +72,7 @@
   resize: vertical;
   /* Carries the editor's own type size so the `em` below is one text line, not
      one line of the surrounding form. */
-  font-size: 0.8125rem;
+  font: var(--font-body-medium);
 }
 
 .editor:not(.error):not(.disabled):not(.readOnly) .host:hover {

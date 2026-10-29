@@ -41,6 +41,8 @@ const UNKNOWN_SUBJECT: &str = "the subject is not a known identity of the user d
 const OWNER_ON_ORGANIZATIONS: &str = "only an organization has owners";
 const PERSONAL_FIXED: &str = "a personal space has a fixed single member";
 const CHILDREN_FIRST: &str = "remove dependent child roles and personal-space eligibility first";
+const OWNER_NOT_FOUND: &str = "organization owner account was not found";
+const ADMIN_NOT_FOUND: &str = "organization administrator account was not found";
 
 async fn require(fga: &Fga, user: &str, permission: Permission, space: Uuid) -> AppResult<()> {
     if fga.check(user, permission, space).await? {
@@ -402,6 +404,54 @@ fn validate_space_name(name: &str) -> AppResult<String> {
     })
 }
 
+fn validate_username(username: &str) -> AppResult<()> {
+    if username.is_empty()
+        || username.chars().count() > 255
+        || username.chars().any(char::is_control)
+    {
+        return Err(AppError::Unprocessable(
+            "an existing username is required (1..255 characters)".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// The subject of an existing account, looked up by exact username.
+async fn resolve_account(
+    directory: &crate::users::Directory<'_>,
+    username: &str,
+    missing: &str,
+) -> AppResult<String> {
+    Ok(directory
+        .find_username(username)
+        .await?
+        .ok_or_else(|| AppError::Unprocessable(missing.into()))?
+        .id)
+}
+
+/// An active or retired organization row; any other space id does not exist here.
+pub async fn load_organization(pool: &PgPool, id: Uuid) -> AppResult<Space> {
+    let space = load(pool, id).await?;
+    if space.kind != SpaceKind::Organization {
+        return Err(AppError::NotFound);
+    }
+    Ok(space)
+}
+
+/// An organization and the subjects directly holding its governance roles.
+pub struct OrganizationGovernance {
+    pub organization: Space,
+    pub owners: Vec<String>,
+    pub admins: Vec<String>,
+}
+
+/// Requested changes to a managed organization; absent fields stay unchanged.
+pub struct OrganizationChange<'a> {
+    pub name: Option<&'a str>,
+    pub owner_username: Option<&'a str>,
+    pub admin_username: Option<&'a str>,
+}
+
 /// HTTP governance creates only the two explicitly selected roles, never content access.
 pub async fn create_managed_organization(
     pool: &PgPool,
@@ -415,35 +465,17 @@ pub async fn create_managed_organization(
     crate::platform::require_owner(fga, caller).await?;
     let name = &validate_space_name(name)?;
     for username in [owner_username, admin_username] {
-        if username.is_empty()
-            || username.chars().count() > 255
-            || username.chars().any(char::is_control)
-        {
-            return Err(AppError::Unprocessable(
-                "an existing username is required (1..255 characters)".into(),
-            ));
-        }
+        validate_username(username)?;
     }
     // Resolve before taking the global mutation lock. No directory write is performed.
-    let owner = directory
-        .find_username(owner_username)
-        .await?
-        .ok_or_else(|| {
-            AppError::Unprocessable("organization owner account was not found".into())
-        })?;
+    let owner = resolve_account(directory, owner_username, OWNER_NOT_FOUND).await?;
     let admin = if admin_username == owner_username {
-        owner.id.clone()
+        owner.clone()
     } else {
-        directory
-            .find_username(admin_username)
-            .await?
-            .ok_or_else(|| {
-                AppError::Unprocessable("organization administrator account was not found".into())
-            })?
-            .id
+        resolve_account(directory, admin_username, ADMIN_NOT_FOUND).await?
     };
     let initial_roles = [
-        (owner.id.as_str(), Role::OrganizationOwner),
+        (owner.as_str(), Role::OrganizationOwner),
         (admin.as_str(), Role::Admin),
     ];
     let id = Uuid::new_v4();
@@ -479,6 +511,116 @@ pub async fn create_managed_organization(
     }
     persist(tx, fga, &mut guard, &org, &[], &tuples, Some(caller)).await?;
     Ok(org)
+}
+
+/// Renames an organization and/or makes each named account the sole direct holder of
+/// its role, with the same authority, validation and locking as creation. Roles and
+/// the renamed row land together: SQL commits only after OpenFGA accepted the delta.
+pub async fn update_managed_organization(
+    pool: &PgPool,
+    fga: &Fga,
+    directory: &crate::users::Directory<'_>,
+    caller: &str,
+    id: Uuid,
+    change: OrganizationChange<'_>,
+) -> AppResult<OrganizationGovernance> {
+    crate::platform::require_owner(fga, caller).await?;
+    let name = change.name.map(validate_space_name).transpose()?;
+    if name.is_none() && change.owner_username.is_none() && change.admin_username.is_none() {
+        return Err(AppError::Unprocessable(
+            "no organization change requested".into(),
+        ));
+    }
+    for username in [change.owner_username, change.admin_username]
+        .into_iter()
+        .flatten()
+    {
+        validate_username(username)?;
+    }
+    let owner = match change.owner_username {
+        Some(username) => Some(resolve_account(directory, username, OWNER_NOT_FOUND).await?),
+        None => None,
+    };
+    let admin = match change.admin_username {
+        Some(username) if change.owner_username == Some(username) => owner.clone(),
+        Some(username) => Some(resolve_account(directory, username, ADMIN_NOT_FOUND).await?),
+        None => None,
+    };
+    let (mut tx, mut guard) = lock_for(pool, fga, &load_organization(pool, id).await?).await?;
+    crate::platform::require_owner(fga, caller).await?;
+    // Re-read under the lock: a concurrent rename may have committed meanwhile.
+    let mut organization: Space = db::space(&mut *tx, id).await?.into();
+    crate::lifecycle::store::require_active(&mut *tx, id).await?;
+    if let Some(name) = &name
+        && db::organization_named(&mut *tx, name)
+            .await?
+            .is_some_and(|other| other.id != id)
+    {
+        return Err(AppError::Conflict(SIBLING_NAME.into()));
+    }
+    // Both rosters are read under the lock, so the response describes what is committed.
+    let (owners, admins) = tokio::try_join!(
+        fga.space_holders(id, Role::OrganizationOwner),
+        fga.space_holders(id, Role::Admin),
+    )?;
+    let mut holders = Vec::new();
+    for (target, role, current) in [
+        (&owner, Role::OrganizationOwner, &owners),
+        (&admin, Role::Admin, &admins),
+    ] {
+        if let Some(target) = target {
+            holders.push((target.as_str(), role, current));
+        }
+    }
+    let (mut writes, mut deletes) = (Vec::new(), Vec::new());
+    for (target, role, current) in &holders {
+        if !current.iter().any(|holder| holder == target) {
+            may_attach(&mut *tx, fga, target, id).await?;
+            writes.push(Tuple {
+                user: target,
+                role: *role,
+                space: id,
+            });
+        }
+        deletes.extend(
+            current
+                .iter()
+                .filter(|holder| holder != target)
+                .map(|holder| Tuple {
+                    user: holder,
+                    role: *role,
+                    space: id,
+                }),
+        );
+    }
+    if let Some(name) = name {
+        sqlx::query("update space set name = $1 where id = $2")
+            .bind(&name)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        organization.name = name;
+    }
+    fga.write(&mut guard, &writes, &deletes).await?;
+    for (tuple, granted) in writes
+        .iter()
+        .map(|t| (t, true))
+        .chain(deletes.iter().map(|t| (t, false)))
+    {
+        crate::logging::audit_relation(
+            Some(caller),
+            tuple.user,
+            tuple.role.as_str(),
+            &format!("space:{id}"),
+            granted,
+        );
+    }
+    tx.commit().await?;
+    Ok(OrganizationGovernance {
+        organization,
+        owners: owner.map_or(owners, |owner| vec![owner]),
+        admins: admin.map_or(admins, |admin| vec![admin]),
+    })
 }
 
 /// A team or project, administered by `admin`; the caller gets nothing on it.

@@ -984,6 +984,123 @@ async fn create_organization(
     Ok((StatusCode::CREATED, Json(org)))
 }
 
+/// Governance view of one organization: its direct owners and administrators.
+#[derive(Serialize, utoipa::ToSchema)]
+struct OrganizationDetail {
+    organization: Space,
+    owners: Vec<crate::users::UserSummary>,
+    admins: Vec<crate::users::UserSummary>,
+}
+
+async fn organization_detail(s: &AppState, organization: Space) -> AppResult<OrganizationDetail> {
+    let directory = organization_directory(s)?;
+    let (owners, admins) = tokio::try_join!(
+        s.fga
+            .space_holders(organization.id, Role::OrganizationOwner),
+        s.fga.space_holders(organization.id, Role::Admin),
+    )?;
+    Ok(OrganizationDetail {
+        owners: directory.summaries(&owners).await?,
+        admins: directory.summaries(&admins).await?,
+        organization,
+    })
+}
+
+/// After a committed change, a failed directory lookup degrades to id-only summaries:
+/// reporting an error would hide a change that did happen.
+async fn committed_summaries(
+    directory: &crate::users::Directory<'_>,
+    subjects: &[String],
+) -> Vec<crate::users::UserSummary> {
+    match directory.summaries(subjects).await {
+        Ok(summaries) => summaries,
+        Err(_) => {
+            tracing::warn!("Directory lookup failed after an organization change; ids only");
+            subjects
+                .iter()
+                .map(|id| crate::users::UserSummary::id_only(id))
+                .collect()
+        }
+    }
+}
+
+#[utoipa::path(
+    get, path = "/admin/organizations/{id}",
+    params(("id" = Uuid, Path)),
+    responses(
+        (status = 200, body = OrganizationDetail),
+        (status = 400, body = crate::error::ErrorBody),
+        (status = 401, body = crate::error::ErrorBody),
+        (status = 403, body = crate::error::ErrorBody),
+        (status = 404, body = crate::error::ErrorBody),
+        (status = 409, body = crate::error::ErrorBody),
+        (status = 422, body = crate::error::ErrorBody),
+        (status = 500, body = crate::error::ErrorBody),
+        (status = 503, body = crate::error::ErrorBody)
+    )
+)]
+async fn get_organization(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath(id): ApiPath<Uuid>,
+) -> AppResult<Json<OrganizationDetail>> {
+    platform::require_owner(&s.fga, &user.uid).await?;
+    let organization = spaces::load_organization(&s.pool, id).await?;
+    crate::lifecycle::store::require_active(&s.pool, id).await?;
+    Ok(Json(organization_detail(&s, organization).await?))
+}
+
+/// Absent fields stay unchanged. A named account becomes the role's sole direct holder.
+#[derive(Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+struct UpdateOrganization {
+    name: Option<String>,
+    owner_username: Option<String>,
+    admin_username: Option<String>,
+}
+
+#[utoipa::path(
+    patch, path = "/admin/organizations/{id}", request_body = UpdateOrganization,
+    params(("id" = Uuid, Path)),
+    responses(
+        (status = 200, body = OrganizationDetail),
+        (status = 400, body = crate::error::ErrorBody),
+        (status = 401, body = crate::error::ErrorBody),
+        (status = 403, body = crate::error::ErrorBody),
+        (status = 404, body = crate::error::ErrorBody),
+        (status = 409, body = crate::error::ErrorBody),
+        (status = 422, body = crate::error::ErrorBody),
+        (status = 500, body = crate::error::ErrorBody),
+        (status = 503, body = crate::error::ErrorBody)
+    )
+)]
+async fn update_organization(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiJson(req): ApiJson<UpdateOrganization>,
+) -> AppResult<Json<OrganizationDetail>> {
+    let directory = organization_directory(&s)?;
+    let governance = spaces::update_managed_organization(
+        &s.pool,
+        &s.fga,
+        &directory,
+        &user.uid,
+        id,
+        spaces::OrganizationChange {
+            name: req.name.as_deref(),
+            owner_username: req.owner_username.as_deref(),
+            admin_username: req.admin_username.as_deref(),
+        },
+    )
+    .await?;
+    Ok(Json(OrganizationDetail {
+        owners: committed_summaries(&directory, &governance.owners).await,
+        admins: committed_summaries(&directory, &governance.admins).await,
+        organization: governance.organization,
+    }))
+}
+
 impl FromRef<AppState> for AdmissionState {
     fn from_ref(s: &AppState) -> Self {
         Self {
@@ -1037,6 +1154,7 @@ fn registrations() -> OpenApiRouter<AppState> {
         .routes(routes!(team_registry))
         .routes(routes!(organization_registry, create_organization))
         .routes(routes!(search_organization_candidates))
+        .routes(routes!(get_organization, update_organization))
         .routes(routes!(authorize_platform))
         .routes(routes!(authorize_space))
         .route_layer(axum::middleware::from_fn(logging::expose_route))

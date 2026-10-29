@@ -56,7 +56,8 @@ import { useTranslation } from "react-i18next";
 import { createBrowserRouter, Navigate, RouteObject, useParams, Outlet, useLocation } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
-import { adminLandingPath, canEnterAdminSection, Protected } from "@core/guards/Protected";
+import { Protected } from "@core/guards/Protected";
+import { adminIndexPath } from "@core/guards/organizationAdminPages";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { PageError } from "@components/pages/PageError/PageError.tsx";
 import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.tsx";
@@ -89,13 +90,15 @@ function AdmittedContent() {
       <BootstrapGuard>
         <OrganizationSupervisionAccessProvider>
           <ManagerArea>
-            <div className={appStyles.appContent}>
-              {!agentManagement && <AnnouncementStack />}
-              <div className={appStyles.routedContent}>
-                {!agentManagement && <PatchNoteGate />}
-                <Outlet />
+            {(business) => (
+              <div className={appStyles.appContent}>
+                {business && !agentManagement && <AnnouncementStack />}
+                <div className={appStyles.routedContent}>
+                  {business && !agentManagement && <PatchNoteGate />}
+                  <Outlet />
+                </div>
               </div>
-            </div>
+            )}
           </ManagerArea>
         </OrganizationSupervisionAccessProvider>
       </BootstrapGuard>
@@ -120,12 +123,14 @@ const AdminIndexRoute = () => {
   const manager = useManagerPlatformAdmin();
   const organization = useOrganizationAdmin();
   if (organization.isLoading || (organization.isFetching && !organization.currentData)) return null;
-  if (organization.isAdmin) return <Navigate to="/admin/features" replace />;
-  if (manager.isAdmin) return <Navigate to="/admin/organizations" replace />;
   if (isLoading || manager.isLoading || supervision.loading) return null;
-  if (!canEnterAdminSection({ ...capabilities, canManageFeatures: organization.isAdmin }) && supervision.allowed)
-    return <Navigate to="/admin/supervision" replace />;
-  return <Navigate to={adminLandingPath({ ...capabilities, canManageFeatures: organization.isAdmin })} replace />;
+  const target = adminIndexPath({
+    capabilities: { ...capabilities, canManageFeatures: organization.isAdmin },
+    supervision: supervision.allowed,
+    platformAccessEnabled: !!getConfig()?.platform_access_enabled,
+    platformOwner: manager.isAdmin,
+  });
+  return <Navigate to={target} replace />;
 };
 
 const TaskPlayground = lazy(() => import("../pages/TaskPlayground"));

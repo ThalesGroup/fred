@@ -1160,7 +1160,7 @@
       "collectionDetails": "Collection dates and scope",
       "distribution": "Data distribution",
       "scope": "Scope",
-      "title": "Organization supervision",
+      "title": "Supervision",
       "refresh": "Refresh",
       "lastSuccess": "Last successful load: {{date}}",
       "neverLoaded": "No successful load yet",
@@ -2283,6 +2283,14 @@
     "loading": "Loading...",
     "marketplace": {
       "teams": {
+        "empty": {
+          "title": "No team to show yet",
+          "description": "Public teams appear here, along with the teams you belong to. You can join a public team to work with its members."
+        },
+        "emptySearch": {
+          "title": "No team matches your search",
+          "description": "Try other words, or clear the search to see every team."
+        },
         "otherTeams": "Discover other teams",
         "search": {
           "ariaLabel": "Search for a team",
@@ -2859,7 +2867,13 @@
           "uiSettings": "User interface",
           "marketplaces": "Marketplaces"
         },
-        "title": "Administration spaces"
+        "platformTitle": "Platform",
+        "title": "Administration",
+        "spaces": {
+          "switch": "Switch administration space",
+          "platform": "Platform administration",
+          "organizations": "My organizations"
+        }
       },
       "chatList": {
         "deleteDialog": {
@@ -4544,14 +4558,43 @@
       "existing": "Existing organizations",
       "empty": "No organizations yet.",
       "loadFailed": "Unable to load organizations.",
-      "create": "Create organization",
       "name": "Organization name",
       "owner": "Organization owner",
       "admin": "Organization administrator",
       "searchFailed": "User search failed.",
-      "accountsHint": "Select existing accounts. The same account can hold both roles. These roles do not grant access to resources.",
-      "createFailed": "Organization creation failed.",
-      "created": "Organization {{name}} created."
+      "accountsHint": "Choose people who already have an account. One person can hold both roles. These roles give no access to content.",
+      "editOrganization": {
+        "openAria": "Edit {{name}}",
+        "title": "Edit organization",
+        "submit": "Save",
+        "successSummary": "Organization {{name}} updated",
+        "loadFailed": "Unable to load this organization. Close and try again.",
+        "severalOwners": "This organization currently has several owners: {{names}}. Choosing a new owner replaces all of them.",
+        "severalAdmins": "This organization currently has several administrators: {{names}}. Choosing a new administrator replaces all of them.",
+        "errors": {
+          "summary": "Failed to update the organization",
+          "fallbackDetail": "Could not update the organization. Please try again.",
+          "notFoundDetail": "This organization no longer exists.",
+          "conflictDetail": "This name is already taken, or one of the people already belongs to another organization.",
+          "retiredDetail": "This organization is being deleted and can no longer be changed.",
+          "validationDetail": "Check the name and make sure both people still have an account.",
+          "forbiddenDetail": "You are not allowed to edit organizations."
+        }
+      },
+      "createOrganization": {
+        "open": "Create organization",
+        "title": "Create organization",
+        "namePlaceholder": "e.g. Customer support",
+        "submit": "Create organization",
+        "successSummary": "Organization {{name}} created",
+        "errors": {
+          "summary": "Failed to create organization",
+          "fallbackDetail": "Could not create the organization. Please try again.",
+          "conflictDetail": "This name is already taken, or one of the people already belongs to another organization.",
+          "validationDetail": "Check the name and make sure both people still have an account.",
+          "forbiddenDetail": "You are not allowed to create organizations."
+        }
+      }
     },
     "provisioning": {
       "title": "Provisioning",

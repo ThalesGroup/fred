@@ -45,8 +45,8 @@
 
 .lang {
   color: var(--on-surface-muted);
-  font-size: 0.6875rem;
-  font-family: monospace;
+  font: var(--font-label-small);
+  font-family: var(--font-family-mono);
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -63,7 +63,7 @@
   background: transparent;
   padding: 2px var(--spacing-xs);
   color: var(--on-surface-retreat);
-  font-size: 0.6875rem;
+  font: var(--font-label-small);
 }
 
 .copy:hover {

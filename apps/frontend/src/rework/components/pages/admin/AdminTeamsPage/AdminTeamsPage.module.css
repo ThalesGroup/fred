@@ -20,7 +20,6 @@
   flex-direction: column;
   gap: var(--spacing-l);
   margin: 0 auto;
-  padding: var(--spacing-xl);
   width: 100%;
   max-width: 1080px;
 }
@@ -112,4 +111,11 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* Pagination row under a list, aligned with the table's right edge. */
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
 }

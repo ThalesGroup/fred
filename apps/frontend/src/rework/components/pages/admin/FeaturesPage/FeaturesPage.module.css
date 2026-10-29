@@ -19,7 +19,6 @@
   flex-direction: column;
   gap: var(--spacing-l);
   margin: 0 auto;
-  padding: var(--spacing-xl);
   width: 100%;
   max-width: 1080px;
   /* DataTable's own root sets height:100%/overflow:auto so its sticky column
@@ -108,7 +107,7 @@
   display: inline-flex;
   align-items: center;
   border: 1px solid var(--outline-variant);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--surface-container-high);
   padding: var(--spacing-3xs) var(--spacing-xs);
   white-space: nowrap;
@@ -122,7 +121,7 @@
   align-items: center;
   gap: var(--spacing-3xs);
   border: 0.5px solid var(--outline-variant);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--surface-container-highest);
   padding: var(--spacing-3xs) var(--spacing-xs);
   color: var(--on-surface-retreat);
@@ -144,7 +143,7 @@
 /* Muted like the neutral health cell: this is an absent value, not a number. */
 .countUnknown {
   border: 0.5px solid var(--outline-variant);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--surface-container-highest);
   padding: var(--spacing-3xs) var(--spacing-xs);
   color: var(--on-surface-muted);

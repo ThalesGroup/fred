@@ -419,49 +419,47 @@ export default function PromptsPage() {
         <>
           {/* ── Toolbar: title + create button, then search + category
               management grouped at the far right ── */}
-          <div className={styles.pageTitle}>
-            <PageHeader
-              title={isPersonalTeam ? t("rework.teams.prompts.titlePersonal") : t("rework.teams.prompts.title")}
-              actions={
-                <>
-                  {canManage && (
-                    <Button
-                      color="primary"
-                      variant="filled"
-                      size="small"
-                      icon={{ category: "outlined", type: "add" }}
-                      onClick={openCreate}
-                    >
-                      {t("rework.teams.prompts.create")}
-                    </Button>
-                  )}
-                  <div className={styles.titleActions}>
-                    <div className={styles.searchBar}>
-                      <SearchInput
-                        value={search}
-                        onChange={setSearch}
-                        placeholder={t("rework.teams.prompts.searchPlaceholder")}
-                        clearAriaLabel={t("rework.teams.prompts.clearSearch")}
-                        size="xs"
-                      />
-                    </div>
-                    {canManage && (
-                      <Tooltip text={t("rework.promptCategories.manage.buttonAria")}>
-                        <IconButton
-                          size="small"
-                          color="on-surface-retreat"
-                          variant="icon"
-                          icon={{ category: "outlined", type: "tune" }}
-                          aria-label={t("rework.promptCategories.manage.buttonAria")}
-                          onClick={() => setIsManageCategoriesOpen(true)}
-                        />
-                      </Tooltip>
-                    )}
+          <PageHeader
+            title={isPersonalTeam ? t("rework.teams.prompts.titlePersonal") : t("rework.teams.prompts.title")}
+            actions={
+              <>
+                {canManage && (
+                  <Button
+                    color="primary"
+                    variant="filled"
+                    size="small"
+                    icon={{ category: "outlined", type: "add" }}
+                    onClick={openCreate}
+                  >
+                    {t("rework.teams.prompts.create")}
+                  </Button>
+                )}
+                <div className={styles.titleActions}>
+                  <div className={styles.searchBar}>
+                    <SearchInput
+                      value={search}
+                      onChange={setSearch}
+                      placeholder={t("rework.teams.prompts.searchPlaceholder")}
+                      clearAriaLabel={t("rework.teams.prompts.clearSearch")}
+                      size="xs"
+                    />
                   </div>
-                </>
-              }
-            />
-          </div>
+                  {canManage && (
+                    <Tooltip text={t("rework.promptCategories.manage.buttonAria")}>
+                      <IconButton
+                        size="small"
+                        color="on-surface-retreat"
+                        variant="icon"
+                        icon={{ category: "outlined", type: "tune" }}
+                        aria-label={t("rework.promptCategories.manage.buttonAria")}
+                        onClick={() => setIsManageCategoriesOpen(true)}
+                      />
+                    </Tooltip>
+                  )}
+                </div>
+              </>
+            }
+          />
 
           {/* ── Favorites toggle, then the category chips (radio) ── */}
           <div className={styles.filterBar}>

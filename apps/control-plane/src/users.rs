@@ -117,6 +117,18 @@ pub struct UserSummary {
 }
 
 impl UserSummary {
+    /// A subject without display fields, when the directory cannot describe it.
+    pub fn id_only(id: &str) -> Self {
+        Self {
+            id: id.to_owned(),
+            username: None,
+            first_name: None,
+            last_name: None,
+            email: None,
+            avatar_image_url: None,
+        }
+    }
+
     pub(crate) fn from_raw(raw: &serde_json::Value) -> Option<Self> {
         let id = raw.get("id")?.as_str()?.to_owned();
         if id.is_empty() {
@@ -196,7 +208,7 @@ impl Directory<'_> {
             Self::Keycloak(None) => Ok(HashMap::new()),
             Self::Keycloak(Some(directory)) => {
                 let profiles: Vec<Option<UserSummary>> = futures::stream::iter(subjects)
-                    .map(|subject| async move { directory.profile(&subject).await })
+                    .map(|subject| async move { directory.user(&subject).await })
                     .buffer_unordered(PROFILE_CONCURRENCY)
                     .try_collect()
                     .await?;
@@ -247,6 +259,35 @@ impl Directory<'_> {
                 Err(_) => Ok(false),
             },
         }
+    }
+
+    /// Display summaries of known subjects, in order. A subject the directory no longer
+    /// knows keeps an id-only summary rather than disappearing from governance views.
+    pub async fn summaries(&self, subjects: &[String]) -> AppResult<Vec<UserSummary>> {
+        let known: Vec<UserSummary> = match self {
+            // Governance rosters are a few accounts: one lookup each, in order.
+            Self::Keycloak(Some(directory)) => {
+                let mut found = Vec::with_capacity(subjects.len());
+                for subject in subjects {
+                    found.extend(directory.user(subject).await?);
+                }
+                found
+            }
+            Self::Keycloak(None) => Vec::new(),
+            Self::Local(pool) => {
+                let ids: Vec<Uuid> = subjects.iter().filter_map(|s| s.parse().ok()).collect();
+                sqlx::query_as("select id::text as id, username, email, first_name, last_name, null::text as avatar_image_url from user_identity where id = any($1)")
+                    .bind(&ids)
+                    .fetch_all(*pool)
+                    .await?
+            }
+        };
+        let mut known: std::collections::HashMap<String, UserSummary> =
+            known.into_iter().map(|u| (u.id.clone(), u)).collect();
+        Ok(subjects
+            .iter()
+            .map(|id| known.remove(id).unwrap_or_else(|| UserSummary::id_only(id)))
+            .collect())
     }
 
     pub async fn find_username(&self, username: &str) -> AppResult<Option<keycloak::User>> {

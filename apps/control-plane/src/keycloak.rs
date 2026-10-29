@@ -310,11 +310,11 @@ impl Directory {
     }
 
     pub async fn exists(&self, subject: &str) -> Result<bool> {
-        Ok(self.profile(subject).await?.is_some())
+        Ok(self.user(subject).await?.is_some())
     }
 
-    /// The subject's profile, or `None` when the directory does not know it.
-    pub async fn profile(&self, subject: &str) -> Result<Option<crate::users::UserSummary>> {
+    /// One account by subject; `None` when the directory does not know it.
+    pub async fn user(&self, subject: &str) -> Result<Option<crate::users::UserSummary>> {
         if subject.is_empty() {
             return Ok(None);
         }
@@ -333,8 +333,8 @@ impl Directory {
             .json()
             .await
             .map_err(|_| anyhow::anyhow!("invalid Keycloak user response"))?;
-        let user = crate::users::UserSummary::from_raw(&raw)
-            .ok_or_else(|| anyhow::anyhow!("invalid Keycloak user response"))?;
+        let user =
+            crate::users::UserSummary::from_raw(&raw).context("invalid Keycloak user response")?;
         if user.id != subject {
             bail!("Keycloak returned a different subject");
         }

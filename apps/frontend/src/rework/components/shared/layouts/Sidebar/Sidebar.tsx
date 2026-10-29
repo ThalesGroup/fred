@@ -24,10 +24,14 @@ import AdminNavbar from "./AdminNavbar/AdminNavbar.tsx";
 export default function Sidebar({
   navigation = true,
   platformArea = false,
+  platformOnly = false,
   organizationArea = false,
 }: {
   navigation?: boolean;
+  /** The page belongs to the platform admin space. */
   platformArea?: boolean;
+  /** A platform owner with no organization membership: the rail has nothing else to offer. */
+  platformOnly?: boolean;
   organizationArea?: boolean;
 }) {
   const { pathname } = useLocation();
@@ -45,7 +49,7 @@ export default function Sidebar({
     <div className={styles["sidebar-container"]}>
       <div className={styles.rail}>
         <div className={styles["main-nav-bar-container"]}>
-          {navigation && <MainNavBar platformArea={platformArea} />}
+          {navigation && <MainNavBar platformOnly={platformOnly} />}
         </div>
         <div className={styles["user-profile-container"]}>
           <UserProfile
@@ -57,7 +61,7 @@ export default function Sidebar({
         </div>
       </div>
       {navigation && (
-        <div className={styles["nav-panel-card"]}>
+        <div className={styles["nav-panel-card"]} data-nav-panel>
           {sidebarMode === "HOME" && <HomeNavPanel />}
           {sidebarMode === "TEAM" && <TeamContentNavbar />}
           {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}

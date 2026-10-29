@@ -16,6 +16,7 @@ import { PropsWithChildren, ReactNode, useCallback, useEffect, useId, useRef } f
 import IconButton from "../../atoms/IconButton/IconButton.tsx";
 import { usePaneResize } from "../../../../core/hooks/usePaneResize.ts";
 import styles from "./InlineDrawer.module.css";
+import { useFocusHandoff } from "../../utils/useFocusHandoff";
 
 export interface InlineDrawerResizeSpec {
   /** localStorage identity for the persisted width — one key per drawer family. */
@@ -109,6 +110,7 @@ export function InlineDrawer({
 }: PropsWithChildren<InlineDrawerProps>) {
   const titleId = useId();
   const drawerRef = useRef<HTMLElement | null>(null);
+  useFocusHandoff(open, drawerRef);
   // Hooks must run unconditionally — without `resizable` the hook only reads a
   // never-written storage key and its handlers are never attached.
   const seedWidthPx = Number.parseInt(width, 10);

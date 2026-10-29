@@ -18,7 +18,7 @@ import Sidebar from "@shared/layouts/Sidebar/Sidebar.tsx";
 import TeamAdminCharterGate from "@shared/organisms/TeamAdminCharterGate/TeamAdminCharterGate";
 import { useTaskPolling } from "../../../../features/tasks/useTaskPolling";
 import { useTaskRehydration } from "../../../../features/tasks/useTaskRehydration";
-import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
+import { usePlatformArea } from "@core/hooks/usePlatformArea";
 import { isAgentManagementRoute } from "@core/utils/agentManagementRoute";
 import styles from "./MainLayout.module.css";
 
@@ -33,21 +33,23 @@ function AdmittedWorkspace() {
 }
 
 export default function MainLayout({ children, navigation = true }: PropsWithChildren<{ navigation?: boolean }>) {
-  const { isAdmin } = useManagerPlatformAdmin(!navigation);
+  const area = usePlatformArea(!navigation);
   const { pathname } = useLocation();
   const organizationArea = ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, ""));
+  const platformArea = area.platformArea && !organizationArea;
   return (
     <div className={styles.mainLayout}>
-      <nav className={styles.sidebar}>
+      <div className={styles.sidebar}>
         <Sidebar
           navigation={navigation}
-          platformArea={isAdmin && !organizationArea}
+          platformArea={platformArea}
+          platformOnly={area.platformOnly}
           organizationArea={organizationArea}
         />
-      </nav>
+      </div>
       <main className={styles.content}>
         {navigation ? (
-          isAdmin || organizationArea || isAgentManagementRoute(pathname) ? (
+          platformArea || organizationArea || isAgentManagementRoute(pathname) ? (
             <Outlet />
           ) : (
             <AdmittedWorkspace />

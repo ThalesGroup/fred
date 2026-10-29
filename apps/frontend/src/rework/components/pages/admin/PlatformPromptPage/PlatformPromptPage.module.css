@@ -31,7 +31,6 @@
   flex-direction: column;
   gap: var(--spacing-s);
   margin: 0 auto;
-  padding: var(--spacing-m);
   width: 100%;
   max-width: 1440px;
   min-height: 0;

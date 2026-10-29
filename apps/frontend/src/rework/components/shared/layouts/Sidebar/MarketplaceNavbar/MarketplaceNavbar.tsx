@@ -16,13 +16,15 @@ import styles from "./MarketplaceNavbar.module.scss";
 import { useTranslation } from "react-i18next";
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
-import NavPanelHeader from "@shared/molecules/NavPanelHeader/NavPanelHeader.tsx";
+import SpaceHeader from "@shared/molecules/SpaceHeader/SpaceHeader.tsx";
 import type { IconType } from "@shared/utils/Type.ts";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
+import { useMySpacesQuery } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 export default function MarketplaceNavbar() {
   const { t } = useTranslation();
   const { agentIconName, agentsNicknamePlural } = useFrontendProperties();
+  const organization = useMySpacesQuery().currentData?.find((space) => space.kind === "organization");
 
   const navigationItems: NavigationMenuItemProps[] = [
     {
@@ -48,7 +50,8 @@ export default function MarketplaceNavbar() {
 
   return (
     <div className={styles["marketplace-navbar-container"]}>
-      <NavPanelHeader title={t("rework.sidebar.marketplace.title")} />
+      {/* The marketplace of the person's organization; without one, just the section. */}
+      <SpaceHeader eyebrow={organization?.name} title={t("rework.sidebar.marketplace.title")} />
       <NavigationMenu items={navigationItems} />
     </div>
   );

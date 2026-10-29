@@ -12,30 +12,64 @@ const h = vi.hoisted(() => ({
     isFetching: false,
     refetch: vi.fn(),
   },
-  result: { isLoading: false, error: undefined as unknown },
+  result: { isLoading: false },
   submit: vi.fn(),
+  update: vi.fn(),
+  detail: { currentData: undefined as unknown, isError: false, error: undefined as unknown },
+  detailQuery: vi.fn(),
+  showError: vi.fn(),
   query: vi.fn(),
+  showSuccess: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string, args?: { name: string }) => (args?.name ? `${key} ${args.name}` : key) }),
 }));
 vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({ useManagerPlatformAdmin: () => h.access }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useOrganizationRegistryQuery: (args, options) => {
-    h.query(args, options);
-    return h.registry;
-  },
-  useCreateOrganizationMutation: () => [h.submit, h.result],
-  useSearchOrganizationCandidatesQuery: ({ query }, { skip }) => ({
-    currentData: skip ? undefined : [{ id: query, username: query, first_name: query, last_name: "" }],
-    isFetching: false,
-    isError: false,
-  }),
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({ showSuccess: h.showSuccess, showError: h.showError }),
+}));
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", async () => {
+  const { useEffect, useState } = await import("react");
+  return {
+    useOrganizationRegistryQuery: (args, options) => {
+      h.query(args, options);
+      return h.registry;
+    },
+    useCreateOrganizationMutation: () => [h.submit, h.result],
+    useUpdateOrganizationMutation: () => [h.update, { isLoading: false }],
+    // A cold cache: the detail arrives from a request made after the dialog mounted.
+    useGetOrganizationQuery: (args, options) => {
+      h.detailQuery(args, options);
+      const [fetched, setFetched] = useState(false);
+      useEffect(() => setFetched(true), []);
+      if (options.skip) return { currentData: undefined, isError: false };
+      return fetched ? { ...h.detail, requestId: "this-open" } : { currentData: undefined, isFetching: true };
+    },
+    useSearchOrganizationCandidatesQuery: ({ query }, { skip }) => ({
+      currentData: skip ? undefined : [{ id: query, username: query, first_name: query, last_name: "" }],
+      isFetching: false,
+      isError: false,
+    }),
+  };
+});
+vi.mock("@shared/molecules/Dialog/Dialog", () => ({
+  Dialog: ({ title, children, confirmLabel, confirmDisabled, onConfirm }) => (
+    <div role="dialog" aria-label={title}>
+      {children}
+      <button type="button" disabled={confirmDisabled} onClick={onConfirm}>
+        {confirmLabel}
+      </button>
+    </div>
+  ),
 }));
 vi.mock("@shared/molecules/Autocomplete/Autocomplete", () => ({
   default: ({ textInput, onFieldValueChange, options, onSelect }) => (
     <div>
-      <input {...textInput} onChange={(event) => onFieldValueChange(event.target.value)} />
+      <input
+        placeholder={textInput.placeholder}
+        aria-label={textInput["aria-label"]}
+        onChange={(event) => onFieldValueChange(event.target.value)}
+      />
       {options.map((option) => (
         <button type="button" key={option.key} onClick={() => onSelect(option.value)}>
           Select {option.key}
@@ -48,6 +82,11 @@ import OrganizationsPage from "./OrganizationsPage";
 let host: HTMLDivElement;
 let root: Root;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+const OPEN = "rework.organizations.createOrganization.open";
+const SUBMIT = "rework.organizations.createOrganization.submit";
+const SAVE = "rework.organizations.editOrganization.submit";
+const user = (name: string) => ({ id: name, username: name, first_name: name, last_name: "" });
+const DETAIL = { organization: { id: "a", name: "Demo" }, owners: [user("olivia")], admins: [user("adam")] };
 beforeEach(() => {
   vi.clearAllMocks();
   Object.assign(h.access, { isAdmin: true, isLoading: false, isFetching: false, isError: false });
@@ -56,7 +95,11 @@ beforeEach(() => {
     isError: false,
     isFetching: false,
   });
-  Object.assign(h.result, { isLoading: false, error: undefined });
+  h.result.isLoading = false;
+  Object.assign(h.detail, { currentData: DETAIL, isError: false, error: undefined });
+  h.update.mockReturnValue({
+    unwrap: () => Promise.resolve({ ...DETAIL, organization: { id: "a", name: "Renamed" } }),
+  });
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -69,22 +112,20 @@ afterEach(() => {
 function render() {
   act(() => root.render(<OrganizationsPage />));
 }
-function fill() {
-  act(() => {
-    const inputs = host.querySelectorAll("input");
-    [" New Org ", " owner ", " admin "].forEach((value, i) => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(inputs[i], value);
-      inputs[i].dispatchEvent(new Event("input", { bubbles: true }));
-    });
-  });
-  act(() => {
-    for (const label of ["Select owner", "Select admin"]) {
-      [...host.querySelectorAll("button")].find((button) => button.textContent === label)!.click();
-    }
-  });
+const button = (label: string) => [...host.querySelectorAll("button")].find((b) => b.textContent?.endsWith(label));
+const dialog = () => host.querySelector('[role="dialog"]');
+function type(input: HTMLInputElement, value: string) {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
 }
-function submit() {
-  host.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+function openAndFill() {
+  act(() => button(OPEN)!.click());
+  act(() => type(dialog()!.querySelector("input")!, " New Org "));
+  for (const who of ["owner", "admin"]) {
+    const label = `rework.organizations.${who}`;
+    act(() => type(dialog()!.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!, who));
+    act(() => button(`Select ${who}`)!.click());
+  }
 }
 it("distinguishes unavailable, loading and successful empty lists without stale rows", () => {
   render();
@@ -103,49 +144,113 @@ it("distinguishes unavailable, loading and successful empty lists without stale 
   render();
   expect(host.textContent).toContain("rework.organizations.empty");
 });
-it("skips registry and form when platform ownership is absent", () => {
+it("hides the create button and skips the registry when platform ownership is absent", () => {
   h.access.isAdmin = false;
   render();
-  expect(host.querySelector("form")).toBeNull();
+  expect(button(OPEN)).toBeUndefined();
   expect(h.query).toHaveBeenLastCalledWith({ after: undefined }, expect.objectContaining({ skip: true }));
 });
-it("uses cursor pages and resets to the first after confirmed creation", async () => {
+it("creates from the dialog, closes it and resets to the first page", async () => {
   h.registry.currentData.next_cursor = "next";
   render();
-  act(() => [...host.querySelectorAll("button")].find((b) => b.textContent === "dataTable.pagination.next")!.click());
+  expect(dialog()).toBeNull();
+  act(() => button("dataTable.pagination.next")!.click());
   expect(h.query).toHaveBeenLastCalledWith({ after: "next" }, expect.anything());
-  fill();
-  await act(async () => submit());
+  openAndFill();
+  await act(async () => button(SUBMIT)!.click());
   expect(h.submit).toHaveBeenCalledExactlyOnceWith({
     createOrganization: { name: "New Org", owner_username: "owner", admin_username: "admin" },
   });
   expect(h.query).toHaveBeenLastCalledWith({ after: undefined }, expect.anything());
-  expect(host.textContent).toContain("rework.organizations.created New Org");
+  expect(h.showSuccess).toHaveBeenCalledWith({
+    summary: "rework.organizations.createOrganization.successSummary New Org",
+  });
+  expect(dialog()).toBeNull();
 });
-it("prevents duplicate submits and ignores success after unmount", async () => {
-  let resolve!: (value: unknown) => void;
-  h.submit.mockReturnValue({
-    unwrap: () =>
-      new Promise((done) => {
-        resolve = done;
-      }),
-  });
+it("keeps submit disabled until every field is set and while a creation runs", () => {
   render();
-  fill();
-  act(() => {
-    submit();
-    submit();
+  act(() => button(OPEN)!.click());
+  expect(button(SUBMIT)!.disabled).toBe(true);
+  act(() => root.unmount());
+  root = createRoot(host);
+  h.result.isLoading = true;
+  render();
+  openAndFill();
+  expect(button(SUBMIT)!.disabled).toBe(true);
+});
+it("reports failure through the error toast and keeps the dialog open", async () => {
+  const error = { status: 409, data: { detail: "already exists", code: "conflict" } };
+  h.submit.mockReturnValue({ unwrap: () => Promise.reject(error) });
+  render();
+  openAndFill();
+  await act(async () => button(SUBMIT)!.click());
+  expect(h.showError).toHaveBeenCalledWith({
+    summary: "rework.organizations.createOrganization.errors.summary",
+    detail: "rework.organizations.createOrganization.errors.conflictDetail",
   });
-  expect(h.submit).toHaveBeenCalledOnce();
-  act(() => root.render(<p>Another account</p>));
-  await act(async () => resolve({ name: "Old" }));
-  expect(host.textContent).toBe("Another account");
+  expect(h.showSuccess).not.toHaveBeenCalled();
+  expect(dialog()).not.toBeNull();
+});
+const openEdit = () =>
+  act(() =>
+    host
+      .querySelector<HTMLButtonElement>('[aria-label="rework.organizations.editOrganization.openAria Demo"]')!
+      .click(),
+  );
+const nameInput = () => dialog()!.querySelector<HTMLInputElement>("input")!;
+it("opens the edit pre-filled from the organization's detail, with nothing to save yet", () => {
+  render();
+  openEdit();
+  expect(h.detailQuery).toHaveBeenLastCalledWith({ id: "a" }, expect.objectContaining({ skip: false }));
+  expect(nameInput().value).toBe("Demo");
+  expect(dialog()!.textContent).toContain("(olivia)");
+  expect(dialog()!.textContent).toContain("(adam)");
+  expect(button(SAVE)!.disabled).toBe(true);
+  act(() => type(nameInput(), " Demo "));
+  expect(button(SAVE)!.disabled).toBe(true);
+});
+it("shows a loading state until the detail arrives", () => {
+  h.detail.currentData = undefined;
+  render();
+  openEdit();
+  expect(dialog()!.textContent).toContain("common.loading");
+  expect(button(SAVE)!.disabled).toBe(true);
+  h.detail.error = { status: 404, data: { detail: "not found" } };
+  h.detail.isError = true;
+  render();
+  expect(dialog()!.textContent).toContain("rework.organizations.editOrganization.errors.notFoundDetail");
+});
+it("sends only the changed fields, then closes without reloading the list", async () => {
+  render();
+  openEdit();
+  act(() => type(nameInput(), "Renamed"));
+  act(() =>
+    [...dialog()!.querySelectorAll("button")].find((b) => b.getAttribute("aria-label")?.includes("adam"))!.click(),
+  );
+  act(() => type(dialog()!.querySelector<HTMLInputElement>('input[aria-label="rework.organizations.admin"]')!, "zoe"));
+  act(() => button("Select zoe")!.click());
+  await act(async () => button(SAVE)!.click());
+  expect(h.update).toHaveBeenCalledExactlyOnceWith({
+    id: "a",
+    updateOrganization: { name: "Renamed", admin_username: "zoe" },
+  });
+  expect(h.showSuccess).toHaveBeenCalledWith({
+    summary: "rework.organizations.editOrganization.successSummary Renamed",
+  });
   expect(h.registry.refetch).not.toHaveBeenCalled();
+  expect(dialog()).toBeNull();
 });
-it("reports failure without automatic replay or successful creation", () => {
-  h.result.error = { status: 409, data: { detail: "already attached" } };
+it("keeps the edit open and explains a refusal in plain words", async () => {
+  const error = { status: 409, data: { detail: "the user already belongs to another organization", code: "conflict" } };
+  h.update.mockReturnValue({ unwrap: () => Promise.reject(error) });
   render();
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain("already attached");
-  expect(host.textContent).not.toContain("rework.organizations.created");
-  expect(h.submit).not.toHaveBeenCalled();
+  openEdit();
+  act(() => type(nameInput(), "Renamed"));
+  await act(async () => button(SAVE)!.click());
+  expect(h.showError).toHaveBeenCalledWith({
+    summary: "rework.organizations.editOrganization.errors.summary",
+    detail: "rework.organizations.editOrganization.errors.conflictDetail",
+  });
+  expect(h.showSuccess).not.toHaveBeenCalled();
+  expect(dialog()).not.toBeNull();
 });

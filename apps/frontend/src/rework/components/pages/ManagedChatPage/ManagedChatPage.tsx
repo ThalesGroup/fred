@@ -878,6 +878,7 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
     <TraceDrawerProvider value={traceDrawerApi}>
       <div
         className={styles.page}
+        data-shell-inset="none"
         onDragEnter={handleDragOver}
         onDragOver={handleDragOver}
         onDragLeave={(event) => {

@@ -340,7 +340,7 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
 
   const connected = status === "connecting" || status === "ready";
   return (
-    <div className={styles.host}>
+    <div className={styles.host} data-shell-inset="none">
       {status !== "ready" && <ApplicationHostState state={status === "connecting" ? "connecting" : status} />}
       {connected && (
         <iframe

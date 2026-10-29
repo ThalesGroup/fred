@@ -18,6 +18,8 @@ import styles from "./MainNavBar.module.scss";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import type { IconType } from "@shared/utils/Type.ts";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { useMediaQuery } from "@core/hooks/useMediaQuery";
 
 // Medium button footprint (40px) but with the `small` tier's 1.25rem glyph.
 // `--icon-size` is set on `.btn-medium`, so an inline override (higher
@@ -30,6 +32,7 @@ import { useOrganizationSupervisionAccess } from "@core/hooks/useOrganizationSup
 import { useOrganizationAdmin } from "@core/hooks/useOrganizationAdmin";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { canEnterAdminSection } from "@core/guards/Protected";
+import { isPlatformAdminRoute } from "@core/hooks/usePlatformArea";
 
 interface MainNavEntry {
   key: string;
@@ -51,8 +54,11 @@ function BusinessMainNavBar() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  // Platform pages never mount the business bootstrap; the platform role alone shows Admin there.
   const capabilities = useUserCapabilities(
-    isAgentManagementRoute(pathname) || ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, "")),
+    isAgentManagementRoute(pathname) ||
+      isPlatformAdminRoute(pathname) ||
+      ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, "")),
   );
   const organization = useOrganizationAdmin(pathname.replace(/\/$/, "") !== "/admin/supervision");
   const supervision = useOrganizationSupervisionAccess();
@@ -107,8 +113,9 @@ function BusinessMainNavBar() {
   return <NavRail entries={entries} />;
 }
 
-export default function MainNavBar({ platformArea = false }: { platformArea?: boolean }) {
-  return platformArea ? <PlatformMainNavBar /> : <BusinessMainNavBar />;
+/** The same rail in every admin space; only a platform owner without an organization gets Admin alone. */
+export default function MainNavBar({ platformOnly = false }: { platformOnly?: boolean }) {
+  return platformOnly ? <PlatformMainNavBar /> : <BusinessMainNavBar />;
 }
 
 function PlatformMainNavBar() {
@@ -131,22 +138,40 @@ function PlatformMainNavBar() {
 
 function NavRail({ entries }: { entries: MainNavEntry[] }) {
   const { t } = useTranslation();
+  // Touch devices get the labelled M3 rail item; a mouse keeps the compact icon rail.
+  const coarse = useMediaQuery("(pointer: coarse)");
   return (
-    <nav className={styles.bar} aria-label={t("rework.mainNav.ariaLabel")}>
-      {entries.map((entry) => (
-        <Tooltip key={entry.key} text={entry.label} placement="right">
-          <IconButton
-            variant="icon"
-            size="medium"
-            style={ICON_STYLE}
-            color={entry.active ? "primary" : "on-surface-retreat"}
-            icon={{ category: "outlined", type: entry.icon, filled: entry.active }}
-            aria-label={entry.label}
+    <nav className={styles.bar} data-touch={coarse || undefined} aria-label={t("rework.mainNav.ariaLabel")}>
+      {entries.map((entry) =>
+        coarse ? (
+          <button
+            key={entry.key}
+            type="button"
+            className={styles.item}
+            data-active={entry.active || undefined}
             aria-current={entry.active || undefined}
             onClick={entry.onClick}
-          />
-        </Tooltip>
-      ))}
+          >
+            <span className={styles.indicator}>
+              <Icon category="outlined" type={entry.icon} filled={entry.active} />
+            </span>
+            <span className={styles.label}>{entry.label}</span>
+          </button>
+        ) : (
+          <Tooltip key={entry.key} text={entry.label} placement="right">
+            <IconButton
+              variant="icon"
+              size="medium"
+              style={ICON_STYLE}
+              color={entry.active ? "primary" : "on-surface-retreat"}
+              icon={{ category: "outlined", type: entry.icon, filled: entry.active }}
+              aria-label={entry.label}
+              aria-current={entry.active || undefined}
+              onClick={entry.onClick}
+            />
+          </Tooltip>
+        ),
+      )}
     </nav>
   );
 }

@@ -30,7 +30,11 @@ it("moves keyboard focus into a portaled action menu and restores it on Escape",
   });
   const trigger = host.querySelector("button")!;
   trigger.focus();
-  act(() => trigger.click());
+  // A keyboard open: Enter on the focused trigger.
+  act(() => {
+    trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    trigger.click();
+  });
   expect(document.activeElement?.textContent).toBe("Edit");
 
   act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
@@ -54,11 +58,38 @@ it("restores focus when a portaled action closes the menu", () => {
     );
   });
   const trigger = host.querySelector("button")!;
-  act(() => trigger.click());
+  act(() => {
+    trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    trigger.click();
+  });
   const edit = document.querySelector<HTMLButtonElement>('[role="dialog"] button')!;
   expect(document.activeElement).toBe(edit);
 
   act(() => edit.click());
   expect(document.activeElement).toBe(trigger);
   expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+
+it("focuses the first action, not the checked one, inside a non-portaled menu", () => {
+  host = document.createElement("div");
+  document.body.append(host);
+  root = createRoot(host);
+  act(() => {
+    root?.render(
+      <ComposerActionsMenu openAriaLabel="Actions">
+        <button type="button">Attach</button>
+        <button type="button" aria-checked="true">
+          Search
+        </button>
+      </ComposerActionsMenu>,
+    );
+  });
+  const trigger = host.querySelector("button")!;
+  act(() => {
+    trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    trigger.click();
+  });
+  expect(document.activeElement?.textContent).toBe("Attach");
+  act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect(document.activeElement).toBe(trigger);
 });

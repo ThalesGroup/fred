@@ -77,7 +77,7 @@
   &::-webkit-datetime-edit-minute-field,
   &::-webkit-datetime-edit-second-field,
   &::-webkit-datetime-edit-ampm-field {
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
     padding: 0 1px;
     color: var(--on-surface);
 
@@ -103,7 +103,7 @@
       filter 0.15s;
     cursor: pointer;
     margin-left: var(--spacing-xs);
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
     padding: 0;
     width: 1rem;
     height: 1rem;
