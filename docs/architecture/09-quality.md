@@ -174,7 +174,9 @@ without duplication. The successful empty-target creation fixture records two Ch
 four Reads and two Writes; each registry page records one Check and no Read/Write.
 Editing renames an organization and replaces its owner and its two admins (one
 appointed inside the organization) in one call. A failed publication changes neither,
-replay writes no role, and the full edit records two Checks, eight Reads and one Write.
+replay writes no role, and the full edit records two Checks, six Reads and one Write,
+with no OpenFGA call after commit. A directory failure after commit still answers the
+committed change, with id-only summaries.
 These fixtures establish correctness and RPC counts, not latency or throughput.
 
 Frontend tests cover list loading/error/empty states, cursor navigation, creation,
@@ -277,8 +279,8 @@ resolver before filtering active rows and enumerating descendants.
 | Team registry page | `1 C` | Platform registry permission; SQL placement for at most 100 returned teams |
 | Organization registry page | `1 C` | Owner Check; SQL selects at most 101 active rows and returns 100; no tuple/identity enumeration or advisory lock |
 | HTTP create organization | `2 C + W(2) + 2 R_g + sum Q(distinct target) + W(6)` | Preflight and guarded owner Checks; two exact directory lookups (one for identical usernames) before locking; Owner/Admin grants only |
-| Organization detail | `1 C + 2 Read` | Owner Check; direct owner and admin holders of that organization only; one directory lookup per holder |
-| HTTP edit organization | `2 C + 2 R_g + 1-2 Read + sum Q(new holder) + W(r + 4)` | Preflight and guarded owner Checks; current holders of each named role; `r` role tuples granted or revoked in one guarded Write; the response adds the detail Reads |
+| Organization detail | `1 C + 2 Read` | Owner Check; direct owner and admin holders of that organization only; then `N` directory lookups, one per holder |
+| HTTP edit organization | `2 C + 2 R_g + 2 Read + sum Q(new holder) + W(r + 4)` | Preflight and guarded owner Checks; up to two exact directory lookups (one for identical usernames) before locking; both rosters read under the locks; `r` role tuples granted or revoked in one guarded Write; after commit, no FGA call and `N` directory lookups, one per resulting holder |
 | List platform grants | `1 C + P_p Read` | Owner check, then all subjects/roles on `platform:root` |
 | Grant platform role | `1 R_g + 1 C + W(3)` | Actor owner; separate Keycloak subject lookup |
 | Revoke platform role | `1 R_g + 1 C + P_p Read + W(3)` | All platform grants are read to locate one direct grant and another owner |

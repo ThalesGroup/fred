@@ -485,11 +485,21 @@ authority and answer the organization with its direct owners and admins as user
 summaries, read with two holder Reads on that organization only; the registry stays
 free of roster reads. `PATCH` takes any of `name`, `owner_username` and
 `admin_username`, validated and resolved as for creation. Under the platform and
-organization locks it rechecks caller ownership and retirement, keeps names unique
-and makes each named account the sole direct holder of its role, checking the new
-holder's attachment. The rename, grants and revocations commit together after one
-guarded Write; a lost acknowledgment can leave the roles applied without the rename,
-and a retry converges. A missing or non-organization id answers 404.
+organization locks it rechecks caller ownership, re-reads the row, rechecks
+retirement, keeps names unique, reads both rosters and makes each named account the
+sole direct holder of its role, checking the new holder's attachment. The rename,
+grants and revocations commit together after one guarded Write; a lost
+acknowledgment can leave the roles applied without the rename, and a retry
+converges. The response is built from the row and rosters read under the locks;
+a directory failure after commit returns id-only summaries rather than an error.
+A missing or non-organization id answers 404.
+
+**Pending decision (review of #3319).** This `PATCH` is a platform-owner path to an
+organization's governance roles that grant and revoke do not offer: it needs
+neither the caller's attachment to the organization nor `Manage`/`OwnOrganization`
+on it, and replacing the admin revokes admins the organization's owners appointed.
+The alternative under review limits `PATCH` to the name and owner, leaving admins
+to the organization's own governance.
 
 Team creation requires management of the parent organization, project creation
 management of the parent team. The nominated admin must hold a direct content
