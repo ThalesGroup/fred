@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
-import { useEffect, useRef, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import styles from "./SettingsModal.module.css";
 
 export interface SettingsModalProps {
@@ -54,19 +54,9 @@ export default function SettingsModal({
   cardClassName,
   children,
 }: SettingsModalProps) {
-  const card = useRef<HTMLDivElement>(null);
-
-  // A dialog whose fields are all disabled autofocuses nothing, leaving focus
-  // on the page behind an `aria-modal` overlay. Take it only in that case, so a
-  // form with its own autofocused first field keeps it.
-  useEffect(() => {
-    if (!isOpen) return;
-    if (document.activeElement === document.body) card.current?.focus();
-  }, [isOpen]);
-
   return (
     <FullPageModal isOpen={isOpen} onClose={onClose} id={id} background="container">
-      <div className={cardClassName ? `${styles.card} ${cardClassName}` : styles.card} ref={card} tabIndex={-1}>
+      <div className={cardClassName ? `${styles.card} ${cardClassName}` : styles.card} tabIndex={-1}>
         <div className={styles.header}>
           <div className={styles.titleBlock}>
             <div id={`${id}-title`} className={styles.title}>

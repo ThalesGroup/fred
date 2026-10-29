@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useFocusHandoff } from "@shared/utils/useFocusHandoff";
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { useSelector } from "react-redux";
@@ -92,6 +93,8 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
   }, [open, onClose]);
+
+  useFocusHandoff(open && !!task && !!pos, popoverRef);
 
   if (!open || !task || !pos) return null;
 

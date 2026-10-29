@@ -72,7 +72,9 @@ function mount(admitted = false) {
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => root!.render(<UserProfile admitted={admitted} />));
-  act(() => container!.querySelector<HTMLButtonElement>("button[aria-haspopup]")!.click());
+  const trigger = container!.querySelector<HTMLButtonElement>("button[aria-haspopup]")!;
+  trigger.focus();
+  act(() => trigger.click());
 }
 
 afterEach(() => {

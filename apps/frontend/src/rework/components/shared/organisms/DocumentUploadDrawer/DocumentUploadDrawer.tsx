@@ -17,6 +17,7 @@ import { useDispatch } from "react-redux";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
 import { Portal } from "@shared/utils/Portal";
+import { useFocusHandoff } from "@shared/utils/useFocusHandoff";
 import Button from "@shared/atoms/Button/Button";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -547,6 +548,9 @@ export function DocumentUploadDrawer({
     });
   };
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusHandoff(isOpen, dialogRef);
+
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -564,6 +568,7 @@ export function DocumentUploadDrawer({
     <Portal id="modal-portal">
       <div className={styles.overlay} onClick={handleClose}>
         <div
+          ref={dialogRef}
           className={styles.dialog}
           role="dialog"
           aria-modal="true"

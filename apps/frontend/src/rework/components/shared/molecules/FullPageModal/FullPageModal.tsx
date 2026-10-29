@@ -15,6 +15,7 @@
 import { useEffect, useRef, ReactNode } from "react";
 import styles from "./FullPageModal.module.scss";
 import { isTopmostModal, Portal } from "@shared/utils/Portal.tsx";
+import { useFocusHandoff } from "@shared/utils/useFocusHandoff";
 
 interface FullPageModalProps {
   isOpen: boolean;
@@ -32,6 +33,7 @@ export interface ModalInteractionProps {
 
 export const FullPageModal = ({ isOpen, onClose, children, id, background = "main" }: FullPageModalProps) => {
   const modalRef = useRef<HTMLDivElement | null>(null);
+  useFocusHandoff(isOpen, modalRef);
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
