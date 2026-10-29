@@ -138,12 +138,12 @@
           "description": "Afficher un sélecteur de bibliothèque de documents dans l'interface de discussion."
         },
         "bind_libraries": {
-          "title": "Restreindre à des dossiers spécifiques",
-          "description": "Restreindre la connaissance et la recherche de l'agent à certains dossiers."
+          "title": "Restreindre à des dossiers et documents",
+          "description": "Restreindre la connaissance et la recherche de l'agent aux dossiers et documents sélectionnés. Une sélection vide ne permet aucun document."
         },
         "library_tag_ids": {
-          "title": "Bibliothèques de documents liées",
-          "description": "Restreindre le sélecteur de bibliothèque du chat à cet ensemble présélectionné de bibliothèques de documents."
+          "title": "Périmètre documentaire de l'agent",
+          "description": "Les dossiers couvrent leurs documents directs. Sélectionner un sous-arbre inclut ses sous-dossiers. Le chat peut seulement réduire ce périmètre."
         },
         "show_document_selection": {
           "title": "Sélecteur de document",
@@ -387,6 +387,7 @@
     }
   },
   "chatbot": {
+    "agentConfigurationChanged": "Cet agent a été modifié depuis le début de cette conversation. Démarrez une nouvelle conversation pour utiliser sa nouvelle configuration.",
     "artifactLinks": {
       "ariaLabel": "Fichiers générés",
       "downloadAria": "Télécharger {{name}}",
@@ -498,6 +499,11 @@
       "tuneOpenAria": "Ouvrir les réglages de conversation"
     },
     "documentScopePanel": {
+      "agentScope": "Périmètre de l'agent (aucune restriction supplémentaire)",
+      "boundScope": "Restriction de l'agent (lecture seule)",
+      "turnScope": "Sélection du tour, limitée au périmètre de l'agent",
+      "space": "Espace",
+      "clearSelection": "Vider la sélection",
       "title": "Définir les ressources accessibles",
       "resetTooltip": "Réinitialiser"
     },
@@ -1130,6 +1136,9 @@
   },
   "rework": {
     "weaverAgents": {
+      "documentSelectionUnknown": "La sélection des sous-dossiers n'est pas encore entièrement connue. Un clic vérifie toute l'arborescence, puis la retire si elle est entièrement sélectionnée ou la sélectionne en entier sinon.",
+      "documentSelectionUnavailable": "La sélection de dossiers et de documents n'est pas encore disponible. L'agent recherche dans son périmètre d'espaces autorisé.",
+      "documentSelectionFailed": "La sélection complète n'a pas pu être chargée. Aucun changement effectué. Réessayez.",
       "notConnected": "Pas encore raccordé à Weaver.",
       "chatUnavailable": "Le chat et l’historique des conversations ne sont pas encore raccordés à Weaver.",
       "scopeUnavailable": "Cet espace équipe ou personnel est indisponible ou vous n’y avez pas accès.",
@@ -2149,7 +2158,7 @@
             "search": "Recherche dans les données"
           },
           "text": {
-            "search_documents_using_vectorization": "Recherche dans les documents"
+            "search_documents": "Recherche dans les documents"
           },
           "prometheusOps": {
             "prometheus_query": "Exécution d'une requête instantanée Prometheus",

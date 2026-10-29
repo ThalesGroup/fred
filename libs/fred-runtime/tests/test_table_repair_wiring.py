@@ -19,6 +19,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import pytest
+from fred_core.documents.selection import DocumentScope
 from fred_core.store.vector_search import VectorSearchHit
 from fred_runtime.integrations.v2_runtime import adapters as adapters_module
 from fred_runtime.model_routing.turn import TurnAuthority
@@ -118,7 +119,12 @@ async def test_document_search_port_repairs_table_hits(
 
     # The completion read stays in the turn's space, like the search itself.
     assert client.fetched == [
-        {"document_uid": "d1", "space_id": str(binding.space.id), "limit": 40}
+        {
+            "document_uid": "d1",
+            "space_id": str(binding.space.id),
+            "limit": 40,
+            "document_scope": DocumentScope(),
+        }
     ]
     # Completed to three rows, in index order, with the repeated header dropped.
     assert [hit.content for hit in result.hits] == [

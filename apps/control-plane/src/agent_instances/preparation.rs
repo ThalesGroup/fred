@@ -124,6 +124,7 @@ pub struct ChatControlDescriptor {
 
 #[derive(Serialize, ToSchema)]
 pub struct ExecutionPreparation {
+    pub agent_configuration_revision: i64,
     pub agent_instance_id: Uuid,
     pub space_id: Uuid,
     pub runtime_id: String,
@@ -202,7 +203,6 @@ async fn prepare_execution(
     if !s.fga.can_use_agent(initial.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
-    super::require_executable(&s, &space, &initial)?;
     let base = public_base(&s.agent_catalog, &initial.source_runtime_id).ok_or_else(|| {
         AppError::problem(
             StatusCode::CONFLICT,
@@ -210,9 +210,6 @@ async fn prepare_execution(
             "No approved public route is configured for this runtime.",
         )
     })?;
-    if let Some(session_id) = &query.session_id {
-        sessions::require_association(&s.pool, &user.uid, session_id, &initial).await?;
-    }
     // Discovery supplies current template support/input policy, never destinations.
     // It runs outside SQL and has the existing timeout and no-redirect policy.
     let template = agents::editable_template(
@@ -243,10 +240,10 @@ async fn prepare_execution(
     let current = super::get_for_space(&mut *tx, space_id, instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    super::require_executable(&s, &space, &current)?;
     if let Some(session_id) = &query.session_id {
         sessions::require_association(&mut *tx, &user.uid, session_id, &current).await?;
     }
+    super::require_executable(&s, &space, &current)?;
     let selected = require_available_capabilities(&current.tuning.0, &template)?;
     let policy = enablement::Policy::load(&mut *tx, space.organization).await?;
     enablement::require_usable(&policy, &space, &current.source_runtime_id, &selected)?;
@@ -279,6 +276,7 @@ async fn prepare_execution(
         });
     }
     let result = ExecutionPreparation {
+        agent_configuration_revision: current.configuration_revision,
         agent_instance_id: instance_id,
         space_id,
         runtime_id: current.source_runtime_id,

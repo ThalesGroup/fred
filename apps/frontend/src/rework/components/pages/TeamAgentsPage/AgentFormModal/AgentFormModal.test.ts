@@ -94,3 +94,27 @@ describe("Weaver form fidelity", () => {
     expect(resolveAgentSpace(SPACES, "personal")?.id).toBe(SPACES[1].id);
   });
 });
+
+it.each([
+  { bind_libraries: true, library_tag_ids: ["folder"], document_uids: ["doc"] },
+  { bind_libraries: true, library_tag_ids: [], document_uids: [] },
+  { bind_libraries: false, library_tag_ids: [], document_uids: null },
+])("round-trips document restrictions through create, reopen and update: %j", (config) => {
+  const template = { ...TEMPLATE, supports_capabilities: true };
+  const payload = buildAgentFormSubmitPayload(
+    {
+      ...form(),
+      selectedCapabilityIds: ["document_access"],
+      capabilityConfigValues: { document_access: config },
+    },
+    template,
+  );
+  expect(createAgentRequest(payload).capability_config_values?.document_access).toEqual(config);
+  const saved = { ...INSTANCE, capability_config: { document_access: { schema_version: "0.3.0", config } } };
+  const reopened = extractCapabilityConfigValues(saved.capability_config);
+  expect(reopened.document_access).toEqual(config);
+  expect(
+    updateAgentRequest({ ...payload, templateHasCapabilities: true, capabilityConfigValues: reopened }, saved)
+      .capability_config_values?.document_access,
+  ).toEqual(config);
+});

@@ -1584,10 +1584,10 @@
                   "additionalProperties": false
                 },
                 "ai": {
-                  "description": "AI model and knowledge-flow settings for an agent pod.\n\nWhy this section exists separately from AgentAppSettings:\n- pods only need the outbound Knowledge Flow base URL plus runtime HTTP\n  timeout tuning shared by KF and MCP adapters\n- gateway-only concerns such as attachment/session limits should not leak\n  into the pod config contract\n\nExample:\n- `PodAIConfig(knowledge_flow_url=\"http://localhost:8111/knowledge-flow/v1\", timeout=RuntimeTimeouts(connect=20, read=60))`",
+                  "description": "AI model and knowledge-flow settings for an agent pod.\n\nWhy this section exists separately from AgentAppSettings:\n- pods only need the outbound Knowledge Flow base URL plus runtime HTTP\n  timeout tuning shared by KF and MCP adapters\n- gateway-only concerns such as attachment/session limits should not leak\n  into the pod config contract\n\nExample:\n- `PodAIConfig(knowledge_flow_url=\"http://localhost:8111/knowledge-flow/v2\", timeout=RuntimeTimeouts(connect=20, read=60))`",
                   "properties": {
                     "knowledge_flow_url": {
-                      "default": "http://localhost:8111/knowledge-flow/v1",
+                      "default": "http://localhost:8111/knowledge-flow/v2",
                       "title": "Knowledge Flow Url",
                       "type": "string"
                     },
@@ -4676,7 +4676,7 @@
                       "title": "Name"
                     },
                     "base_url": {
-                      "default": "/knowledge-flow/v1",
+                      "default": "/knowledge-flow/v2",
                       "title": "Base Url",
                       "type": "string"
                     },
@@ -10011,7 +10011,7 @@
                       "title": "Name"
                     },
                     "base_url": {
-                      "default": "/knowledge-flow/v1",
+                      "default": "/knowledge-flow/v2",
                       "title": "Base Url",
                       "type": "string"
                     },
@@ -15346,7 +15346,7 @@
                       "title": "Name"
                     },
                     "base_url": {
-                      "default": "/knowledge-flow/v1",
+                      "default": "/knowledge-flow/v2",
                       "title": "Base Url",
                       "type": "string"
                     },
@@ -20442,7 +20442,7 @@
                       "title": "Name"
                     },
                     "base_url": {
-                      "default": "/knowledge-flow/v1",
+                      "default": "/knowledge-flow/v2",
                       "title": "Base Url",
                       "type": "string"
                     },
@@ -25538,7 +25538,7 @@
                       "title": "Name"
                     },
                     "base_url": {
-                      "default": "/knowledge-flow/v1",
+                      "default": "/knowledge-flow/v2",
                       "title": "Base Url",
                       "type": "string"
                     },

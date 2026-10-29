@@ -759,7 +759,7 @@ async def test_compiled_deep_parent_executes_mixed_mistral_calls() -> None:
     executed: list[str] = []
 
     @tool
-    def read_query(sql: str, dataset_uids: list[str]) -> str:
+    def query_tabular_documents(sql: str, dataset_uids: list[str]) -> str:
         """Read fake rows."""
 
         executed.append(sql)
@@ -771,14 +771,14 @@ async def test_compiled_deep_parent_executes_mixed_mistral_calls() -> None:
         {"type": "reference", "reference_ids": []},
         {"type": "text", "text": '{"sql":"'},
         'SELECT COUNT(*) FROM fake_fleet","dataset_uids":["fake"]} '
-        + 'read_query{"sql":"SELECT COUNT(*) FROM fake_vehicles","dataset_uids":["fake"]}',
+        + 'query_tabular_documents{"sql":"SELECT COUNT(*) FROM fake_vehicles","dataset_uids":["fake"]}',
     ]
     middleware = deep_mod._build_deepagent_runtime_middleware(
         tracer=None,
         kpi=None,
         binding=_binding(),
         approval_policy=ToolApprovalPolicy(),
-        available_tool_names={"read_query"},
+        available_tool_names={"query_tabular_documents"},
     )
     graph = cast(
         Any,
@@ -792,7 +792,7 @@ async def test_compiled_deep_parent_executes_mixed_mistral_calls() -> None:
                     AIMessage(content="two queries completed"),
                 ]
             ),
-            tools=[read_query],
+            tools=[query_tabular_documents],
             system_prompt="Answer briefly.",
             checkpointer=InMemorySaver(),
             subagent_middleware=[],

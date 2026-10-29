@@ -1,7 +1,7 @@
 # fred-capability-document-access
 
 Fred agent capability giving an agent scoped access to the Knowledge Flow
-document corpus: `search_documents_using_vectorization` (semantic/RAG search)
+document corpus: `search_documents` (semantic/RAG search)
 and `list_document_tree` (folder and document listing, names and uids only).
 
 It is the reference implementation a capability author copies: real tools wired

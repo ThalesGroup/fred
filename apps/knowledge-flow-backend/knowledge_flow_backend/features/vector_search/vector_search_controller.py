@@ -14,15 +14,16 @@
 
 import logging
 from typing import List
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from fred_core.documents.access import SpaceNotFoundError, SpacePendingDeletionError
+from fred_core.documents.transport import DocumentAccessContext
 from fred_core.kpi import phase_timer
 from fred_core.security.delegation import AssertedUser
 from fred_core.store import VectorSearchHit
 
 from knowledge_flow_backend.application_context import get_kpi_writer
+from knowledge_flow_backend.features.document_scope import document_access_context
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchRequest
 from knowledge_flow_backend.security.weaver_admission import _space_error, delegated_person, require_space_read
@@ -38,18 +39,19 @@ class VectorSearchController:
         self.kpi = get_kpi_writer()
 
         @router.post(
-            "/vector/search",
+            "/documents/search",
             tags=["Vector Search"],
             summary="Search documents using vectorization",
-            description="Returns ranked hits from the space and its ancestors, published documents only.",
+            description="Returns up to top_k ranked published chunks from the context space and its ancestors, intersected with the document selection. Fewer hits, including an empty array, are valid. No offset or pagination token. Scores depend on the search policy and are not probabilities. A hit is rechecked against publication and lifecycle facts.",
             response_model=list[VectorSearchHit],
-            operation_id="search_documents_using_vectorization",
+            operation_id="search_documents",
         )
         async def vector_search(
             request: SearchRequest,
+            context: DocumentAccessContext = Depends(document_access_context),
             person: AssertedUser = Depends(delegated_person),
         ) -> List[VectorSearchHit]:
-            await require_space_read(person, request.space_id)
+            await require_space_read(person, context.space_id)
             try:
                 async with phase_timer(self.kpi, "vector_search"):
                     return await self.service.search(
@@ -57,32 +59,34 @@ class VectorSearchController:
                         user=person,
                         top_k=request.top_k,
                         policy_name=request.search_policy,
-                        space_id=request.space_id,
+                        space_id=context.space_id,
+                        document_scope=context.document_scope,
                     )
             except (SpaceNotFoundError, SpacePendingDeletionError) as exc:
                 raise _space_error(exc) from None
 
         @router.get(
-            "/vector/document-chunks",
+            "/documents/{document_uid}/chunks",
             tags=["Vector Search"],
             summary="Fetch a document's published chunks in index order",
-            description="Returns a whole table intact; the document must be published in the space or its ancestors.",
+            description="Returns visible published chunks in chunk_index order, capped by limit (default 200, maximum 1000). No continuation token or truncation flag: reaching the limit does not establish completeness. An empty array also covers no visible chunks or a vector store without direct chunk-read support. This is not an existence check or a whole-document guarantee.",
             response_model=List[VectorSearchHit],
-            operation_id="get_document_chunks_ordered",
+            operation_id="get_document_chunks",
         )
         async def get_document_chunks_ordered(
             document_uid: str,
-            space_id: UUID,
+            context: DocumentAccessContext = Depends(document_access_context),
             limit: int = Query(default=200, ge=1, le=1000),
             person: AssertedUser = Depends(delegated_person),
         ) -> List[VectorSearchHit]:
-            await require_space_read(person, space_id)
+            await require_space_read(person, context.space_id)
             try:
                 async with phase_timer(self.kpi, "vector_document_chunks"):
                     return await self.service.get_document_chunks_ordered(
                         user=person,
                         document_uid=document_uid,
-                        space_id=space_id,
+                        space_id=context.space_id,
+                        document_scope=context.document_scope,
                         limit=limit,
                     )
             except (SpaceNotFoundError, SpacePendingDeletionError) as exc:

@@ -92,6 +92,7 @@ vi.mock("../../../security/KeycloakService", () => ({
 import { KeyCloakService } from "../../../security/KeycloakService";
 
 const preparation = {
+  agent_configuration_revision: 1,
   space_id: "space-1",
   agent_instance_id: "agent-1",
   supports_streaming: true,
@@ -201,6 +202,45 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     });
     container.remove();
   });
+
+  it.each(["message", "continue", "hitl"] as const)(
+    "reports agent configuration changes for %s at preparation and runtime admission",
+    async (mode) => {
+      const fetchMock = vi.spyOn(globalThis, "fetch");
+      mount();
+      const run = () =>
+        mode === "hitl"
+          ? latest.sendHitlResume(hitlEvent, "proceed")
+          : latest.send(
+              "draft",
+              "session-1",
+              undefined,
+              undefined,
+              mode === "continue" ? { action: "continue", interruptionId: "stopped" } : undefined,
+            );
+      const normalPreparation = prepareExecutionImpl;
+      prepareExecutionImpl = async () => {
+        throw { status: 409, data: { code: "agent_configuration_changed" } };
+      };
+      await act(async () => {
+        expect(await run()).toBe(false);
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(onErrorMock).toHaveBeenLastCalledWith("chatbot.agentConfigurationChanged:");
+      prepareExecutionImpl = normalPreparation;
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ detail: { code: "agent_configuration_changed", message: "Changed" } }), {
+          status: 409,
+        }),
+      );
+      await act(async () => {
+        expect(await run()).toBe(false);
+      });
+      expect(onErrorMock).toHaveBeenLastCalledWith("chatbot.agentConfigurationChanged:");
+      expect(latest.messages).toEqual([]);
+      fetchMock.mockRestore();
+    },
+  );
 
   it.each([false, true])("rejects %s resume/send when availability changes during preparation", async (resume) => {
     vi.stubGlobal("fetch", vi.fn());

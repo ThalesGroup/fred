@@ -77,6 +77,7 @@ from fred_core.common.fastapi_handlers import (
     register_exception_handlers as register_authorization_handlers,
 )
 from fred_core.diagnostics import install_gc_diagnostics
+from fred_core.documents.selection import DocumentScope
 from fred_core.history.history_schema import ChatMessage, CommandDescriptor
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
@@ -738,8 +739,10 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         capability_registry: CapabilityRegistry | None = None,
         *,
         platform_prompt: str | None = None,
+        document_scope: DocumentScope = DocumentScope(),
         credentials: OutboundCredentialProvider | None = None,
     ) -> None:
+        self._document_scope = document_scope
         self._registry = registry
         self._access_token = access_token
         self._capability_registry = capability_registry
@@ -790,6 +793,8 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             # A child has no user to offer "continue" to.
             interrupted_action="restart",
         )
+
+        execute_request._document_scope = self._document_scope
 
         # Each child names itself on the run it shares with its parent, so a
         # receiver attributes its calls to this agent and not to the caller.
@@ -902,6 +907,8 @@ def _build_runtime_services(
     credential_provider: OutboundCredentialProvider | None = None,
     conversation_filesystem: ConversationFilesystemService | None = None,
     bound_library_ids: Sequence[str] | None = None,
+    document_scope: DocumentScope = DocumentScope(),
+    turn_options: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> RuntimeServices:
     """
     Assemble the full `RuntimeServices` bundle for one pod request.
@@ -936,45 +943,6 @@ def _build_runtime_services(
         )
         conversation_port = DeepConversationFilesystemPort(backend, permissions)
     settings = _build_agent_settings(definition, team_id=team_id)
-    base_tool_invoker = FredKnowledgeSearchToolInvoker(
-        binding=binding,
-        settings=settings,
-        credentials=credential_provider,
-        bound_library_ids=bound_library_ids,
-    )
-    document_search = DocumentSearchAdapter(
-        binding=binding,
-        settings=settings,
-        credentials=credential_provider,
-    )
-    # The tree tool waits for its Knowledge Flow endpoint; document_access omits it.
-    document_summarize = DocumentSummarizeAdapter(
-        binding=binding,
-        settings=settings,
-        credentials=credential_provider,
-    )
-    # Paginated full-markdown read (DOCREAD-01): powers document_verbatim,
-    # same private-binding doctrine.
-    document_markdown = DocumentMarkdownAdapter(
-        binding=binding,
-        settings=settings,
-        credentials=credential_provider,
-    )
-    # Server-side exhaustive extraction (DOCREAD-01 Phase 2): powers
-    # document_extract's single-call path.
-    document_extraction = DocumentExtractionAdapter(
-        binding=binding,
-        settings=settings,
-        credentials=credential_provider,
-    )
-    # Targeted similarity / comparison search: powers document_similarity. Its
-    # own adapter rather than a second method on the search one, because its
-    # targeting comes from the model per call, not from the conversation.
-    document_similarity = DocumentSimilarityAdapter(
-        binding=binding,
-        settings=settings,
-        credentials=credential_provider,
-    )
     document_access_config = None
     effective_tuning = tuning if tuning is not None else settings.tuning
     if capability_registry is not None and "document_access" in capability_registry:
@@ -988,11 +956,81 @@ def _build_runtime_services(
             .ConfigModel.model_validate(stored.config if stored else {})
             .model_dump()
         )
+    if document_access_config is not None:
+        document_scope = document_scope.intersect(
+            DocumentScope.from_ids(
+                document_access_config["library_tag_ids"]
+                if document_access_config["bind_libraries"]
+                else None,
+                document_access_config["document_uids"],
+            )
+        )
+        if not document_access_config["team_documents"]:
+            document_scope = document_scope.intersect(DocumentScope.from_ids([], []))
+    options = (turn_options or {}).get("document_access", {})
+    document_scope = document_scope.intersect(
+        DocumentScope.from_ids(
+            options.get("library_tag_ids"), options.get("document_uids")
+        )
+    ).intersect(
+        DocumentScope.from_ids(
+            binding.runtime_context.selected_document_libraries_ids
+            if binding.runtime_context
+            else None,
+            binding.runtime_context.selected_document_uids
+            if binding.runtime_context
+            else None,
+        )
+    )
+    base_tool_invoker = FredKnowledgeSearchToolInvoker(
+        binding=binding,
+        settings=settings,
+        credentials=credential_provider,
+        document_scope=document_scope,
+        bound_library_ids=bound_library_ids if document_access_config is None else None,
+    )
+    document_search = DocumentSearchAdapter(
+        binding=binding,
+        settings=settings,
+        credentials=credential_provider,
+        document_scope=document_scope,
+    )
+    # The tree tool waits for its Knowledge Flow endpoint; document_access omits it.
+    document_summarize = DocumentSummarizeAdapter(
+        binding=binding,
+        settings=settings,
+        credentials=credential_provider,
+        document_scope=document_scope,
+    )
+    # Paginated full-markdown read (DOCREAD-01): powers document_verbatim,
+    # same private-binding doctrine.
+    document_markdown = DocumentMarkdownAdapter(
+        binding=binding,
+        settings=settings,
+        credentials=credential_provider,
+        document_scope=document_scope,
+    )
+    # Server-side exhaustive extraction (DOCREAD-01 Phase 2): powers
+    # document_extract's single-call path.
+    document_extraction = DocumentExtractionAdapter(
+        binding=binding,
+        settings=settings,
+        credentials=credential_provider,
+        document_scope=document_scope,
+    )
+    # Targeted similarity / comparison search: powers document_similarity. Its
+    # own adapter rather than a second method on the search one, because its
+    # targeting comes from the model per call, not from the conversation.
+    document_similarity = DocumentSimilarityAdapter(
+        binding=binding,
+        settings=settings,
+        credentials=credential_provider,
+    )
     tool_provider = FredMcpToolProvider(
         binding=binding,
         settings=settings,
         credentials=credential_provider,
-        document_access_config=document_access_config,
+        document_scope=document_scope,
     )
     workspace_fs = FredWorkspaceFs(
         binding=binding,
@@ -1029,6 +1067,7 @@ def _build_runtime_services(
     agent_invoker = (
         LocalRegistryAgentInvoker(
             registry=registry,
+            document_scope=document_scope,
             access_token=access_token,
             capability_registry=capability_registry,
             credentials=credential_provider
@@ -1141,6 +1180,8 @@ def _normalize_base_url(base_url: str) -> str:
 
 
 class _AgentExecuteRequest(BaseModel):
+    _document_scope: DocumentScope = PrivateAttr(default_factory=DocumentScope)
+
     _turn_authority: TurnAuthority | None = PrivateAttr(default=None)
     """
     Input payload for the agent execution endpoints.
@@ -1577,6 +1618,19 @@ async def _resolve_agent_instance(
             auth=None,  # Never inherit client auth or a transparent resolver retry.
             follow_redirects=False,
         )
+        if response.status_code == 409:
+            problem = response.json()
+            if (
+                isinstance(problem, dict)
+                and problem.get("code") == "agent_configuration_changed"
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "agent_configuration_changed",
+                        "message": "This agent has changed since this conversation started. Start a new conversation to use its new configuration.",
+                    },
+                )
         if response.status_code != 200:
             raise HTTPException(
                 status_code=403 if response.status_code in (401, 403, 404) else 503,
@@ -4316,6 +4370,8 @@ async def _iterate_runtime_event_payloads_inner(
         definition,
         binding,
         tuning=tuning,
+        document_scope=request._document_scope,
+        turn_options=getattr(request, "turn_options", None),
         team_id=resolved_team_id,
         registry=registry,
         access_token=access_token,

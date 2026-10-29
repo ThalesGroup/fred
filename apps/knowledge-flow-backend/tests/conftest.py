@@ -163,7 +163,7 @@ def app_context(monkeypatch, fake_embedder):
     )
     config = Configuration(
         app=AppConfig(
-            base_url="/knowledge-flow/v1",
+            base_url="/knowledge-flow/v2",
             address="127.0.0.1",
             port=8888,
             log_level="debug",

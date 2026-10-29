@@ -16,8 +16,8 @@
 
 import logging
 import time
-from uuid import UUID
 
+from fred_core.documents.transport import DocumentAccessContext
 from fred_core.security.delegation import AssertedUser
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 
 class ExtractDocumentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    space_id: UUID
 
     instruction: str = Field(
         min_length=1,
@@ -41,17 +40,17 @@ class ExtractDocumentResponse(BaseModel):
     document_uid: str
     extraction: str = Field(description="Consolidated, de-duplicated list of every extracted item (markdown bullets), in document order.")
     item_count: int
-    chunks_processed: int
-    truncated: bool = Field(description="True if the document exceeded the processing cap and was head/tail-windowed.")
+    chunks_processed: int = Field(description="Number of map windows attempted, not the number of successful model calls or source chunks.")
+    truncated: bool = Field(description="True only when input exceeded the 2,000,000-character cap and was head/tail-windowed. Does not report individual model-call failures.")
 
 
 class ExtractService:
     def _build_extractor(self) -> DocumentExtractor:
         return DocumentExtractor()
 
-    async def extract_document(self, user: AssertedUser, document_uid: str, request: ExtractDocumentRequest) -> ExtractDocumentResponse:
+    async def extract_document(self, user: AssertedUser, document_uid: str, request: ExtractDocumentRequest, context: DocumentAccessContext) -> ExtractDocumentResponse:
         started = time.monotonic()
-        text = await published_markdown(user, request.space_id, document_uid)
+        text = await published_markdown(user, context.space_id, document_uid, context.document_scope)
         extractor = self._build_extractor()
         result = await extractor.extract(text=text, instruction=request.instruction)
         logger.info(

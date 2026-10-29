@@ -48,8 +48,7 @@ const doc = (uid: string, name: string, retrievable: boolean | undefined) => ({
   tags: { tag_ids: ["tag-cir"] },
 });
 
-// A tabular dataset only ever completes the `sql` stage — `retrievable` stays
-// false there by design (no vector chunks), not a real exclusion.
+// A published table can be included without vectors; this fixture is excluded.
 const tabularDoc = (uid: string, name: string) => ({
   identity: { document_uid: uid, title: name, document_name: `${name}.xlsx`, uploaded_by: null },
   file: { file_type: "xlsx", file_size_bytes: 2048 },
@@ -198,7 +197,7 @@ describe("DocumentWorkspace — row 'more' menu searchable label", () => {
     expect(label.endsWith("rework.resources.action.searchable")).toBe(true);
   });
 
-  it("omits the searchable/include-in-search option entirely for a tabular-only dataset", () => {
+  it("offers inclusion for an excluded tabular-only dataset", () => {
     act(() => {
       moreButtons()[3].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
@@ -212,7 +211,7 @@ describe("DocumentWorkspace — row 'more' menu searchable label", () => {
         el.textContent?.includes("rework.resources.action.includeInSearch") ||
         el.textContent?.includes("rework.resources.action.searchable"),
     );
-    expect(item).toBeUndefined();
+    expect(item?.textContent).toContain("rework.resources.action.includeInSearch");
   });
 });
 
@@ -247,13 +246,13 @@ describe("DocumentWorkspace — bulk search-toggle button", () => {
     expect(toggleRetrievable).toHaveBeenCalledTimes(2);
   });
 
-  it("ignores a tabular-only doc in the selection — still shows 'Include in search' for the two real exclusions, not hidden as a mixed selection", () => {
+  it("includes tabular documents in a uniformly excluded selection", () => {
     selectRows(0, 1, 3); // two excluded + the tabular doc
     expect(container.querySelector('button[aria-label="rework.resources.bulkActions.includeInSearch"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="rework.resources.bulkActions.excludeFromSearch"]')).toBeNull();
   });
 
-  it("does not toggle the tabular doc when the bulk action fires on a mixed real+tabular selection", () => {
+  it("toggles tabular and vector documents together", () => {
     selectRows(0, 1, 3);
     const button = container.querySelector(
       'button[aria-label="rework.resources.bulkActions.includeInSearch"]',
@@ -261,13 +260,13 @@ describe("DocumentWorkspace — bulk search-toggle button", () => {
     act(() => {
       button.click();
     });
-    // Only the two real exclusions toggle — the tabular doc is skipped entirely.
-    expect(toggleRetrievable).toHaveBeenCalledTimes(2);
+    // All three excluded documents are included.
+    expect(toggleRetrievable).toHaveBeenCalledTimes(3);
   });
 
-  it("hides the button entirely when only tabular-only docs are selected — nothing toggle-relevant", () => {
+  it("offers inclusion when only tabular documents are selected", () => {
     selectRows(3);
-    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.includeInSearch"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.includeInSearch"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="rework.resources.bulkActions.excludeFromSearch"]')).toBeNull();
   });
 });

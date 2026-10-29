@@ -62,7 +62,11 @@ export function applyDocumentAccessConfigChange(
   key: string,
   value: unknown,
 ): Pick<CapabilitySelectionState, "selectedCapabilityIds" | "capabilityConfigValues"> {
-  const next = { ...state.capabilityConfigValues[CAP_DOCUMENT_ACCESS], [key]: value };
+  const next: Record<string, unknown> = { ...state.capabilityConfigValues[CAP_DOCUMENT_ACCESS], [key]: value };
+  if (key === "bind_libraries") {
+    next.library_tag_ids = value ? (next.library_tag_ids ?? []) : [];
+    next.document_uids = value ? (next.document_uids ?? []) : null;
+  }
   const noSource = !sourceOn(next, DOC_ACCESS_ATTACHMENTS) && !sourceOn(next, DOC_ACCESS_TEAM_DOCUMENTS);
   if (!noSource) {
     return { ...state, capabilityConfigValues: { ...state.capabilityConfigValues, [CAP_DOCUMENT_ACCESS]: next } };

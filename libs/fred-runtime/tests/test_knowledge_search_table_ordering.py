@@ -26,6 +26,7 @@ from typing import Any
 import fred_runtime.common.table_hits as table_hits
 import fred_runtime.integrations.v2_runtime.adapters as adapters_module
 import pytest
+from fred_core.documents.selection import DocumentScope
 from fred_core.store.vector_search import VectorSearchHit
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -36,7 +37,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from fred_sdk.support.builtins.catalog import TOOL_REF_KNOWLEDGE_SEARCH
-from weaver_fixtures import SPACE_ID, active_turn
+from weaver_fixtures import INSTANCE_ID, SPACE_ID, active_turn
 
 HEADER = "| name | default |\n| --- | --- |"
 NO_LEADING_PIPE = "name | default\n--- | ---"
@@ -167,7 +168,13 @@ class _FakeSettings:
 
 def _binding() -> BoundRuntimeContext:
     return BoundRuntimeContext(
-        runtime_context=RuntimeContext(session_id="s-1", team_id="team-1"),
+        runtime_context=RuntimeContext(
+            user_id="alice",
+            session_id="s-1",
+            team_id="team-1",
+            space_id=SPACE_ID,
+            agent_instance_id=INSTANCE_ID,
+        ),
         portable_context=PortableContext(
             request_id="request-1",
             correlation_id="correlation-1",
@@ -203,7 +210,7 @@ async def _invoke(monkeypatch: pytest.MonkeyPatch, client_cls) -> Any:
     invoker = adapters_module.FredKnowledgeSearchToolInvoker(
         binding=binding, settings=_FakeSettings()
     )
-    with active_turn("agent-1") as turn:
+    with active_turn("agent-1", session="s-1") as turn:
         assert str(turn.binding.space.id) == SPACE_ID
         return await invoker.invoke(
             ToolInvocationRequest(
@@ -236,6 +243,7 @@ async def test_truncated_table_is_refetched_whole_with_a_bounded_limit(
             "document_uid": "d1",
             "space_id": SPACE_ID,
             "limit": table_hits.TABLE_EXPANSION_MAX_CHUNKS,
+            "document_scope": DocumentScope(),
         }
     ]
     contents = [hit["content"] for hit in result.blocks[0].data["hits"]]

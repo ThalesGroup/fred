@@ -15,8 +15,10 @@
 import logging
 
 from fastapi import APIRouter, Depends
+from fred_core.documents.transport import DocumentAccessContext
 from fred_core.security.delegation import AssertedUser
 
+from knowledge_flow_backend.features.document_scope import document_access_context
 from knowledge_flow_backend.features.summarize.service import (
     SummarizeDocumentRequest,
     SummarizeDocumentResponse,
@@ -42,6 +44,7 @@ class SummarizeController:
             tags=["Documents"],
             summary="Summarize a document on demand",
             response_model=SummarizeDocumentResponse,
+            operation_id="summarize_document",
             description="""
         Generates a fresh, steerable summary of an already-ingested document.
 
@@ -50,12 +53,15 @@ class SummarizeController:
         "focus on financial risks", "list every action item") and a `max_chars`
         budget. Large documents are summarized via map-reduce; small documents take
         a single pass. If the result still exceeds `max_chars`, one corrective pass
-        rewrites it to fit.
+        attempts to shorten it. This is a target, not a guaranteed output length: the
+        corrective pass may fail or remain above the budget. LLM output is selective
+        and may omit source information; this is not a verbatim read.
         """,
         )
         async def summarize_document(
             document_uid: str,
             request: SummarizeDocumentRequest,
+            context: DocumentAccessContext = Depends(document_access_context),
             user: AssertedUser = Depends(delegated_person),
         ):
-            return await self.service.summarize_document(user, document_uid, request)
+            return await self.service.summarize_document(user, document_uid, request, context)

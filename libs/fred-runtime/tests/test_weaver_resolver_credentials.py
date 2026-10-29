@@ -251,3 +251,32 @@ async def test_resolver_reuses_one_client_and_keeps_request_headers_isolated(
     assert {r.headers["Authorization"] for r in calls} == {
         "Bearer synthetic-workload-token"
     }
+
+
+@pytest.mark.parametrize("mode", ["message", "continue", "hitl"])
+async def test_configuration_conflict_is_preserved_before_execution(
+    admission: _Admission, mode: str
+) -> None:
+    assert admission.request.context is not None
+    admission.request.context["session_id"] = "conversation"
+    if mode == "continue":
+        admission.request.interrupted_action = "continue"
+        admission.request.interruption_id = "interruption"
+    elif mode == "hitl":
+        admission.request.resume_payload = {"answer": "yes"}
+    calls: list[httpx.Request] = []
+
+    def refuse(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(
+            409, json={"code": "agent_configuration_changed", "detail": "Changed"}
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(refuse)) as client:
+        with pytest.raises(HTTPException) as error:
+            await admission.resolve(client)
+    assert error.value.status_code == 409
+    assert error.value.detail["code"] == "agent_configuration_changed"
+    assert len(calls) == 1
+    assert calls[0].url.params["conversation"] == "conversation"
+    assert admission.request._turn_authority is None

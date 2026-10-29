@@ -20,6 +20,7 @@ from knowledge_flow_backend.features.manager_processing.artifacts import Artifac
 from knowledge_flow_backend.features.manager_processing.client import ManagerClient, ManagerError, raise_permanent_failure
 from knowledge_flow_backend.features.manager_processing.contracts import Claim, Commit, Descriptor, Failure, FailureCode, Stage, Work
 from knowledge_flow_backend.features.manager_processing.persistence import scoped_pipeline
+from knowledge_flow_backend.features.tabular.artifacts import read_tabular_artifact, read_tabular_multi_artifact
 
 
 class ManagedIngestionService(IngestionService):
@@ -78,8 +79,11 @@ class ManagedIngestionService(IngestionService):
         count = self.vectors.count if self.vectors else 0
         rows = metadata.file.row_count if metadata else None
         if metadata is not None:
-            if d.stage == "indexing" and count == 0:
-                metadata.mark_unretrievable()
+            if d.stage == "indexing":
+                single = read_tabular_artifact(metadata)
+                multi = read_tabular_multi_artifact(metadata)
+                tabular = metadata.processing.stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE and (single is not None or bool(multi and multi.tables))
+                metadata.source.retrievable = count > 0 or tabular
             (output / "metadata.json").write_text(metadata.model_dump_json())
         manifest = self.artifacts.publish(d, output, chunks=count, vectors=count, rows=rows)
         manifest.vector_ordinals = self.vectors.ordinals if self.vectors else []

@@ -139,8 +139,8 @@ make run
 
 Then visit:
 
-- Swagger UI: http://localhost:8111/knowledge-flow/v1/docs
-- ReDoc: http://localhost:8111/knowledge-flow/v1/redoc
+- Swagger UI: http://localhost:8111/knowledge-flow/v2/docs
+- ReDoc: http://localhost:8111/knowledge-flow/v2/redoc
 
 Prefer a zero-install workflow? Open the project in VS Code’s Dev Container to get the app ready with all local-only
 dependencies (no MinIO or OpenSearch). Follow the “Dev-Container mode” section in the root `README.md` for step-by-step

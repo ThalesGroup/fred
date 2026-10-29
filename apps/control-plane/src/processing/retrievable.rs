@@ -123,10 +123,13 @@ impl Processing {
         let value = metadata["source"]["retrievable"]
             .as_bool()
             .ok_or_else(invalid)?;
-        if value != (manifest.vectors > 0) {
+        let tabular = published_tabular(&metadata, manifest)?;
+        if value != (manifest.vectors > 0 || tabular) {
             return Err(invalid());
         }
-        if value && metadata["processing"]["stages"]["vector"].as_str() != Some("done") {
+        if manifest.vectors > 0
+            && metadata["processing"]["stages"]["vector"].as_str() != Some("done")
+        {
             return Err(invalid());
         }
         Ok(value)
@@ -161,7 +164,21 @@ impl Processing {
             .fetch_one(&mut *tx)
             .await?;
         if vectors == 0 {
-            return Err(conflict("document_not_vectorized"));
+            // Publication already verified these generation-scoped Parquet descriptors.
+            // With no vector projection, SQL inclusion is the complete operation.
+            if document.retrievable_pending {
+                return Err(conflict("retrieval_pending"));
+            }
+            let tabular: bool = sqlx::query_scalar("select exists(select 1 from document d join generation g on g.id=d.published_generation join artifact a on a.generation_id=g.id where d.id=$1 and g.rows is not null and a.path like 'datasets/%.parquet')")
+                .bind(id).fetch_one(&mut *tx).await?;
+            if !tabular {
+                return Err(conflict("document_not_indexed"));
+            }
+            let updated = sqlx::query_as("update document set retrievable=$2,retrieval_id=null,retrieval_actor=null,retrieval_target=null,retrieval_phase=null,retrieval_confirmed=null where id=$1 returning *")
+                .bind(id).bind(input.retrievable).fetch_one(&mut *tx).await?;
+            tx.commit().await?;
+            tracing::info!(document_id=%id,retrievable=input.retrievable,"Tabular inclusion updated");
+            return Ok(updated);
         }
         let previous: Columns = sqlx::query_as(COMMAND).bind(id).fetch_one(&mut *tx).await?;
         let command = match command(previous) {
@@ -267,6 +284,55 @@ impl Processing {
         Ok(())
     }
 }
+/// Tabular inclusion requires descriptors pointing only to verified manifest objects.
+fn published_tabular(metadata: &serde_json::Value, manifest: &Manifest) -> AppResult<bool> {
+    let extensions = &metadata["extensions"];
+    let single = extensions.get("tabular_v1");
+    let multi = extensions.get("tabular_multi_v1");
+    let tables: Vec<&serde_json::Value> = match (single, multi) {
+        (None, None) => return Ok(false),
+        (Some(table), None) => vec![table],
+        (None, Some(multi)) => multi["tables"]
+            .as_array()
+            .ok_or_else(invalid)?
+            .iter()
+            .collect(),
+        _ => return Err(invalid()),
+    };
+    if tables.is_empty() || metadata["processing"]["stages"]["sql"].as_str() != Some("done") {
+        return Err(invalid());
+    }
+    let uid = metadata["identity"]["document_uid"]
+        .as_str()
+        .ok_or_else(invalid)?;
+    let revision = metadata["file"]["sha256"].as_str().ok_or_else(invalid)?;
+    let mut rows = 0_i64;
+    for table in tables {
+        let path = table["object_key"].as_str().ok_or_else(invalid)?;
+        let count = table["row_count"]
+            .as_i64()
+            .filter(|n| *n >= 0)
+            .ok_or_else(invalid)?;
+        rows = rows.checked_add(count).ok_or_else(invalid)?;
+        if !path.starts_with("datasets/")
+            || !path.ends_with(".parquet")
+            || table["format"].as_str() != Some("parquet")
+            || table["dataset_uid"].as_str() != Some(uid)
+            || table["source_revision"].as_str() != Some(revision)
+            || !manifest
+                .artifacts
+                .iter()
+                .any(|a| a.path == path && Some(a.size) == table["file_size_bytes"].as_i64())
+        {
+            return Err(invalid());
+        }
+    }
+    if manifest.rows != Some(rows) || metadata["file"]["row_count"].as_i64() != Some(rows) {
+        return Err(invalid());
+    }
+    Ok(true)
+}
+
 fn pending() -> AppError {
     AppError::problem(
         axum::http::StatusCode::SERVICE_UNAVAILABLE,
@@ -278,6 +344,71 @@ fn pending() -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn table_publication(multi: bool) -> (serde_json::Value, Manifest) {
+        let uid = Uuid::new_v4().to_string();
+        let table = serde_json::json!({"dataset_uid":uid,"object_key":"datasets/table.parquet",
+            "format":"parquet","source_revision":"a".repeat(64),"file_size_bytes":100,"row_count":2});
+        let extensions = if multi {
+            // Identical sheets may legitimately share a content-addressed artifact.
+            serde_json::json!({"tabular_multi_v1":{"tables":[table.clone(),table]}})
+        } else {
+            serde_json::json!({"tabular_v1":table})
+        };
+        let rows = if multi { 4 } else { 2 };
+        let metadata = serde_json::json!({"identity":{"document_uid":uid},
+            "file":{"sha256":"a".repeat(64),"row_count":rows},
+            "processing":{"stages":{"sql":"done"}},"extensions":extensions});
+        let manifest = Manifest {
+            generation: Uuid::new_v4(),
+            chunks: 0,
+            vectors: 0,
+            vector_ordinals: vec![],
+            rows: Some(rows),
+            artifacts: vec![Artifact {
+                path: "datasets/table.parquet".into(),
+                size: 100,
+                sha256: "b".repeat(64),
+            }],
+        };
+        (metadata, manifest)
+    }
+
+    #[test]
+    fn verified_csv_and_workbook_tables_are_retrievable_without_vectors() {
+        for multi in [false, true] {
+            let (metadata, manifest) = table_publication(multi);
+            assert!(published_tabular(&metadata, &manifest).unwrap());
+        }
+    }
+
+    #[test]
+    fn table_publication_rejects_unfinished_or_foreign_artifacts() {
+        let (metadata, manifest) = table_publication(false);
+        for (key, value) in [
+            ("object_key", serde_json::json!("datasets/foreign.parquet")),
+            ("dataset_uid", serde_json::json!(Uuid::new_v4().to_string())),
+            ("source_revision", serde_json::json!("c".repeat(64))),
+            ("format", serde_json::json!("csv")),
+            ("file_size_bytes", serde_json::json!(99)),
+            ("row_count", serde_json::json!(3)),
+        ] {
+            let mut changed = metadata.clone();
+            changed["extensions"]["tabular_v1"][key] = value;
+            assert!(published_tabular(&changed, &manifest).is_err(), "{key}");
+        }
+        let mut unfinished = metadata.clone();
+        unfinished["processing"]["stages"]["sql"] = serde_json::json!("failed");
+        assert!(published_tabular(&unfinished, &manifest).is_err());
+        let mut unpublished = manifest.clone();
+        unpublished.artifacts.clear();
+        assert!(published_tabular(&metadata, &unpublished).is_err());
+        let mut empty = metadata.clone();
+        empty["extensions"] = serde_json::json!({"tabular_multi_v1":{"tables":[]}});
+        assert!(published_tabular(&empty, &manifest).is_err());
+        empty["extensions"] = serde_json::json!({});
+        assert!(!published_tabular(&empty, &manifest).unwrap());
+    }
+
     #[test]
     fn inclusion_requires_an_explicit_boolean_and_rejects_unknown_fields() {
         for body in [

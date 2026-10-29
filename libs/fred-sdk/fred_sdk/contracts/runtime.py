@@ -43,6 +43,7 @@ from typing import (
     TypeVar,
 )
 
+from fred_core.documents.selection import DocumentScope
 from fred_core.history.history_schema import FinishReason, coerce_finish_reason
 from fred_core.kpi import BaseKPIWriter
 from fred_core.portable import MetricsProvider, Span, Tracer
@@ -862,6 +863,7 @@ class DocumentSearchPort(ABC):
         query: str,
         *,
         top_k: int = 8,
+        document_scope: DocumentScope | None = None,
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
         search_policy: str | None = None,
@@ -871,7 +873,12 @@ class DocumentSearchPort(ABC):
         """
         Run one scoped vector search and return typed hits.
 
-        `library_tag_ids` / `document_uids` are the capability's already-narrowed
+        `document_scope` is an intersection of Weaver selections, evaluated by
+        document coverage downstream. Legacy parameter names `library_tag_ids`
+        (Weaver folder UUIDs, direct contents) / `document_uids` form one union,
+        additionally intersected with `document_scope` and the private agent/turn
+        ceiling. Both None means no restriction; any present empty selection
+        means no documents. These parameters carry the capability's already-narrowed
         scope (None = "no capability-side narrowing at this level", an empty list
         = nothing in scope); the adapter further bounds them by the session
         binding. Libraries and documents union, so the search finds nothing only
@@ -1119,6 +1126,7 @@ class DocumentTreePort(ABC):
         self,
         *,
         working_directory: str | None = None,
+        document_scope: DocumentScope | None = None,
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
         max_chars: int = 20_000,
@@ -1126,7 +1134,12 @@ class DocumentTreePort(ABC):
         """
         Return the caller's authorized folder/document tree as rendered text.
 
-        `library_tag_ids` / `document_uids` are the capability's already-narrowed
+        `document_scope` is an intersection of Weaver selections, evaluated by
+        document coverage downstream. Legacy parameter names `library_tag_ids`
+        (Weaver folder UUIDs, direct contents) / `document_uids` form one union,
+        additionally intersected with `document_scope` and the private agent/turn
+        ceiling. Both None means no restriction; any present empty selection
+        means no documents. These parameters carry the capability's already-narrowed
         scope (None = "no capability-side narrowing at that level", an empty list
         = nothing in scope); the adapter further bounds them by the session
         binding before calling Knowledge Flow, completing

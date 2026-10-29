@@ -193,7 +193,7 @@ def test_default_mcp_catalog_loads_packaged_instructions(
     )
 
     expected_paths = {
-        "mcp-knowledge-flow-mcp-tabular": "mcp-tabular",
+        "mcp-knowledge-flow-mcp-tabular": "mcp/tabular",
         "mcp-knowledge-flow-prometheus-ops": "mcp-prometheus-ops",
     }
     assert set(by_id) == set(expected_paths)

@@ -351,9 +351,9 @@ describe("ManagedChatPage chat-input policy wiring", () => {
       ragScope: "all",
       reasoning: false,
       removeAttachment: noop,
+      documentSelection: null,
+      setDocumentSelection: vi.fn(),
       searchPolicy: "hybrid",
-      selectedDocumentUids: [],
-      selectedLibraryIds: [],
       sessionId: "session-1",
       sessionTitle: "Chat",
       setHitlFreeText: noop,
@@ -361,8 +361,6 @@ describe("ManagedChatPage chat-input policy wiring", () => {
       setRagScope: noop,
       setReasoning: noop,
       setSearchPolicy: noop,
-      setSelectedDocumentUids: noop,
-      setSelectedLibraryIds: noop,
       threadMessages: [],
       waitResponse: false,
     };
@@ -414,9 +412,9 @@ const baseChatValue = (messages: Record<string, unknown>[]) => {
     ragScope: "all",
     reasoning: false,
     removeAttachment: noop,
+    documentSelection: null,
+    setDocumentSelection: vi.fn(),
     searchPolicy: "hybrid",
-    selectedDocumentUids: [],
-    selectedLibraryIds: [],
     sessionId: "session-1",
     sessionTitle: "Chat",
     setHitlFreeText: noop,
@@ -424,8 +422,6 @@ const baseChatValue = (messages: Record<string, unknown>[]) => {
     setRagScope: noop,
     setReasoning: noop,
     setSearchPolicy: noop,
-    setSelectedDocumentUids: noop,
-    setSelectedLibraryIds: noop,
     threadMessages: [renderedTurn],
     waitResponse: false,
   };
@@ -559,6 +555,27 @@ describe("ManagedChatPage deleted agent", () => {
 });
 
 describe("ManagedChatPage new conversation action", () => {
+  it.each([null, "saved"])("offers a restart for an incompatible draft or session (%s)", (sessionId) => {
+    const startNewConversation = vi.fn();
+    chatValue = {
+      ...baseChatValue([]),
+      sessionId,
+      agentConfigurationChanged: true,
+      executionDisabled: true,
+      startNewConversation,
+    };
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    act(() => root.render(<ManagedChatPage />));
+    expect(container.textContent).toContain("chatbot.agentConfigurationChanged");
+    const button = Array.from(container.querySelectorAll("button")).find(
+      (candidate) => candidate.textContent === "chatbot.newConversation",
+    );
+    expect(button).toBeDefined();
+    act(() => button?.click());
+    expect(startNewConversation).toHaveBeenCalledOnce();
+    act(() => root.unmount());
+  });
   it("keeps the header on a bound session whose history came back empty", () => {
     chatValue = { ...baseChatValue([]), threadMessages: [], startNewConversation: vi.fn() };
     const container = document.createElement("div");

@@ -136,10 +136,12 @@ async def _run_stream(
 async def test_final_token_usage_sums_every_model_call_not_just_the_last() -> None:
     tool_call = AIMessage(
         content="",
-        tool_calls=[{"id": "call-1", "name": "read_query", "args": {}}],
+        tool_calls=[{"id": "call-1", "name": "query_tabular_documents", "args": {}}],
         usage_metadata={"input_tokens": 100, "output_tokens": 20, "total_tokens": 120},
     )
-    tool_result = ToolMessage(content="ok", tool_call_id="call-1", name="read_query")
+    tool_result = ToolMessage(
+        content="ok", tool_call_id="call-1", name="query_tabular_documents"
+    )
     final_message = AIMessage(
         content="done",
         usage_metadata={"input_tokens": 30, "output_tokens": 10, "total_tokens": 40},
@@ -177,7 +179,7 @@ async def test_final_token_usage_carries_cache_detail_through_the_pipeline() -> 
 
     tool_call = AIMessage(
         content="",
-        tool_calls=[{"id": "call-1", "name": "read_query", "args": {}}],
+        tool_calls=[{"id": "call-1", "name": "query_tabular_documents", "args": {}}],
         usage_metadata={
             "input_tokens": 100,
             "output_tokens": 20,
@@ -185,7 +187,9 @@ async def test_final_token_usage_carries_cache_detail_through_the_pipeline() -> 
             "input_token_details": {"cache_read": 80, "cache_creation": 0},
         },
     )
-    tool_result = ToolMessage(content="ok", tool_call_id="call-1", name="read_query")
+    tool_result = ToolMessage(
+        content="ok", tool_call_id="call-1", name="query_tabular_documents"
+    )
     final_message = AIMessage(
         content="done",
         usage_metadata={
@@ -218,7 +222,7 @@ async def test_final_token_usage_carries_cache_detail_through_the_pipeline() -> 
 def _tool_call(call_id: str, input_tokens: int, output_tokens: int = 1) -> AIMessage:
     return AIMessage(
         content="",
-        tool_calls=[{"id": call_id, "name": "read_query", "args": {}}],
+        tool_calls=[{"id": call_id, "name": "query_tabular_documents", "args": {}}],
         usage_metadata={
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
@@ -322,7 +326,7 @@ async def test_split_tool_name_is_held_without_streaming_recovered_syntax() -> N
         tool_calls=[
             {
                 "id": "recovered-1",
-                "name": "read_query",
+                "name": "query_tabular_documents",
                 "args": {"sql": "SELECT 1", "dataset_uids": ["fake"]},
             }
         ],
@@ -361,7 +365,9 @@ async def test_split_tool_name_is_held_without_streaming_recovered_syntax() -> N
         ("updates", {"agent": {"messages": [recovered]}}),
     ]
 
-    collected = await _run_stream(events, available_tool_names={"read_query"})
+    collected = await _run_stream(
+        events, available_tool_names={"query_tabular_documents"}
+    )
 
     streamed = "".join(
         event.delta
@@ -375,7 +381,7 @@ async def test_split_tool_name_is_held_without_streaming_recovered_syntax() -> N
         event.tool_name
         for event in collected
         if isinstance(event, ToolCallRuntimeEvent)
-    ] == ["read_query"]
+    ] == ["query_tabular_documents"]
 
 
 @tool
@@ -503,7 +509,7 @@ async def test_payloadless_blocks_do_not_break_streamed_call_recovery(
                 {"type": "text", "text": '{"sql":"'},
                 'SELECT COUNT(*) FROM fake_fleet","dataset_uids":["fake"]}',
             ],
-            "read_query",
+            "query_tabular_documents",
             {"sql": "SELECT COUNT(*) FROM fake_fleet", "dataset_uids": ["fake"]},
         ),
         (
@@ -514,7 +520,7 @@ async def test_payloadless_blocks_do_not_break_streamed_call_recovery(
                 {"type": "text", "text": '{"question":"'},
                 'fleet size","top_k":5}',
             ],
-            "search_documents_using_vectorization",
+            "search_documents",
             {"question": "fleet size", "top_k": 5},
         ),
     ],
@@ -557,7 +563,7 @@ async def test_repeated_markers_are_withheld_until_completed_recovery() -> None:
         {"type": "reference", "reference_ids": []},
         {
             "type": "text",
-            "text": '{"sql":"SELECT 1","dataset_uids":["fake"]} read_query',
+            "text": '{"sql":"SELECT 1","dataset_uids":["fake"]} query_tabular_documents',
         },
         {"type": "reference", "reference_ids": []},
         {"type": "text", "text": '{"sql":"SELECT 2","dataset_uids":["fake"]}'},
@@ -567,12 +573,12 @@ async def test_repeated_markers_are_withheld_until_completed_recovery() -> None:
         tool_calls=[
             {
                 "id": "recovered-1",
-                "name": "read_query",
+                "name": "query_tabular_documents",
                 "args": {"sql": "SELECT 1", "dataset_uids": ["fake"]},
             },
             {
                 "id": "recovered-2",
-                "name": "read_query",
+                "name": "query_tabular_documents",
                 "args": {"sql": "SELECT 2", "dataset_uids": ["fake"]},
             },
         ],
@@ -583,7 +589,9 @@ async def test_repeated_markers_are_withheld_until_completed_recovery() -> None:
         ("updates", {"agent": {"messages": [recovered]}}),
     ]
 
-    collected = await _run_stream(events, available_tool_names={"read_query"})
+    collected = await _run_stream(
+        events, available_tool_names={"query_tabular_documents"}
+    )
 
     assert not [
         event.delta
@@ -594,7 +602,10 @@ async def test_repeated_markers_are_withheld_until_completed_recovery() -> None:
         (event.call_id, event.tool_name)
         for event in collected
         if isinstance(event, ToolCallRuntimeEvent)
-    ] == [("recovered-1", "read_query"), ("recovered-2", "read_query")]
+    ] == [
+        ("recovered-1", "query_tabular_documents"),
+        ("recovered-2", "query_tabular_documents"),
+    ]
 
 
 @pytest.mark.asyncio
@@ -787,7 +798,7 @@ async def test_ordinary_typed_text_is_emitted_before_next_provider_event() -> No
         binding=_FakeBinding(),  # type: ignore[arg-type]
         services=_FakeServices(),  # type: ignore[arg-type]
         runtime_class_name="ReActRuntime",
-        available_tool_names={"ls", "read_query"},
+        available_tool_names={"ls", "query_tabular_documents"},
         model_name="mistral-medium-latest",
     )
     input_model = ReActInput(
@@ -845,7 +856,9 @@ async def test_mixed_reference_with_unknown_block_remains_visible() -> None:
         ("updates", {"agent": {"messages": [AIMessage(content=content)]}}),
     ]
 
-    collected = await _run_stream(events, available_tool_names={"read_query"})
+    collected = await _run_stream(
+        events, available_tool_names={"query_tabular_documents"}
+    )
 
     streamed = "".join(
         event.delta

@@ -270,7 +270,8 @@ export type ChatSseCallbacks = {
   onTurnPersisted?: (sessionId: string) => void;
   onSteeredMessage?: (messageId: string, sessionId: string) => void;
   onAwaitingHuman?: (event: RuntimeAwaitingHumanEvent) => void;
-  onError?: (message: string) => void;
+  onError?: (message: string, code?: string) => void;
+  onPreparation?: (preparation: ExecutionPreparation) => void;
   /**
    * Fires the instant this turn actually starts — right before the
    * optimistic user message is created and streaming begins, once
@@ -327,6 +328,7 @@ export function useChatSse(
     onSteeredMessage,
     onAwaitingHuman,
     onError,
+    onPreparation,
     onTurnStarted,
     onTurnRejected,
     isTurnCurrent,
@@ -336,6 +338,14 @@ export function useChatSse(
 
   const [prepareExecution] = usePrepareExecutionMutation();
   const { i18n } = useTranslation();
+
+  const reportRequestError = useCallback(
+    (error: unknown, fallback: string) => {
+      const { code } = normalizeApiError(error);
+      onError?.(code === "agent_configuration_changed" ? i18n.t("chatbot.agentConfigurationChanged") : fallback, code);
+    },
+    [onError, i18n],
+  );
 
   const abortRef = useRef<AbortController | null>(null);
   // Synchronous reentrancy lock for the preflight phase of send() (token
@@ -413,6 +423,7 @@ export function useChatSse(
       if (prep.space_id !== spaceId || prep.agent_instance_id !== agentInstanceId || !prep.supports_streaming) {
         throw new Error("Execution preparation does not match the selected instance");
       }
+      onPreparation?.(prep);
       setPreparationUnavailable(false);
       setPreparationErrorDetail(undefined);
       setPreparation(prep);
@@ -423,7 +434,7 @@ export function useChatSse(
           : undefined,
       );
     },
-    [spaceId, agentInstanceId],
+    [spaceId, agentInstanceId, onPreparation],
   );
 
   const reset = useCallback(() => {
@@ -1014,7 +1025,7 @@ export function useChatSse(
           (err instanceof Error ? err.message : undefined) ??
           (normalized.status !== undefined ? `HTTP ${normalized.status}` : "unexpected error");
         console.error(`[useChatSse][${sendId}] ${stage} failed — ${msg}`, err);
-        onError?.(`Could not prepare this turn: ${msg}`);
+        reportRequestError(err, `Could not prepare this turn: ${msg}`);
       };
 
       const tokenProblem = await preflightTurnToken(degradedTokenWarnedRef);
@@ -1243,7 +1254,7 @@ export function useChatSse(
             if (!continuing) onTurnRejected?.(input, effectiveSessionId);
           }
           console.error(`[useChatSse][${sendId}] streamToMessages error — ${name}: ${msg}`);
-          onError?.(`Streaming failed: ${msg}`);
+          reportRequestError(err, `Streaming failed: ${msg}`);
         }
       } finally {
         if (activeSteeringTurnIdRef.current === steeringTurnId) activeSteeringTurnIdRef.current = null;
@@ -1262,6 +1273,7 @@ export function useChatSse(
       prepareExecution,
       streamToMessages,
       onError,
+      reportRequestError,
       onTurnStarted,
       onTurnRejected,
       dropOptimisticTurn,
@@ -1348,7 +1360,7 @@ export function useChatSse(
         if (!prep.supports_hitl) throw new Error("HITL is unavailable for this execution");
       } catch (err) {
         if (!ac.signal.aborted) {
-          onError?.(`Could not resume this turn: ${(err as Error)?.message ?? String(err)}`);
+          reportRequestError(err, `Could not resume this turn: ${(err as Error)?.message ?? String(err)}`);
         }
         // prepare-execution failed, so the resume never started either — the
         // prompt must come back for the same reason as the token refusal.
@@ -1379,7 +1391,12 @@ export function useChatSse(
       // seconds stale by the time the stream opened, and any refresh those
       // awaits triggered would have been discarded.
       const token = KeyCloakService.GetToken() ?? "";
-      applyPreparation(prep);
+      try {
+        applyPreparation(prep);
+      } catch (error) {
+        reportRequestError(error, "Could not resume this turn.");
+        return bailOut(false);
+      }
       if (prep.model_error) {
         onError?.(prep.model_error.message);
         return bailOut(false);
@@ -1600,13 +1617,10 @@ export function useChatSse(
       } catch (err) {
         const status = (err as { status?: number })?.status;
         const aborted = (err as Error)?.name === "AbortError";
-        // 409 = the runtime says this checkpoint is not waiting for a resume
-        // (already answered, or a stale interrupt_id after a reload). Restoring
-        // the prompt there produces an unanswerable card that re-409s on every
-        // attempt. An abort is the user's own choice and may land AFTER the
-        // resume was delivered, so it must not resurrect a consumed checkpoint
-        // either. Both count as reached.
-        if (status === 409 || aborted) {
+        // A configuration refusal never consumes the checkpoint. Other 409s
+        // describe a stale/already-answered interrupt; an abort may land after
+        // delivery, so neither should resurrect a potentially consumed prompt.
+        if ((status === 409 && normalizeApiError(err).code !== "agent_configuration_changed") || aborted) {
           acceptedByRuntime = true;
         }
         if (!aborted) {
@@ -1620,7 +1634,7 @@ export function useChatSse(
                   }),
             );
           } else {
-            onError?.(`HITL resume failed: ${(err as Error)?.message ?? String(err)}`);
+            reportRequestError(err, `HITL resume failed: ${(err as Error)?.message ?? String(err)}`);
           }
         }
       } finally {
@@ -1642,6 +1656,7 @@ export function useChatSse(
       isTurnCurrent,
       isExecutionAllowed,
       onError,
+      reportRequestError,
       applyPreparation,
       i18n,
     ],
@@ -1669,6 +1684,7 @@ export function useChatSse(
             setChatControls([]);
             setPreparationUnavailable(true);
             setPreparationErrorDetail(preparationRefusal(error));
+            if (normalizeApiError(error).code === "agent_configuration_changed") reportRequestError(error, "");
           }
           throw error;
         });
@@ -1679,7 +1695,7 @@ export function useChatSse(
         },
       });
     },
-    [spaceId, agentInstanceId, prepareExecution, applyPreparation],
+    [spaceId, agentInstanceId, prepareExecution, applyPreparation, reportRequestError],
   );
 
   const steerActiveTurn = useCallback(

@@ -155,6 +155,7 @@ class RuntimeAgent(ResolverFact):
     runtime_id: str
     template_id: UUID
     template_key: str
+    configuration_revision: int = Field(gt=0, strict=True)
     configuration_updated_at: datetime
     configuration: dict[str, Any]
 

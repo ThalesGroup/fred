@@ -108,7 +108,7 @@ function message(overrides: Partial<ChatMessage>): ChatMessage {
   };
 }
 
-describe("TraceDetailDrawer read_query failure", () => {
+describe("TraceDetailDrawer query_tabular_documents failure", () => {
   it("shows the submitted SQL and engine error without HTTP transport details", () => {
     const entry: TraceEntry = {
       kind: "combo",
@@ -118,7 +118,7 @@ describe("TraceDetailDrawer read_query failure", () => {
           {
             type: "tool_call",
             call_id: "call-1",
-            name: "read_query",
+            name: "query_tabular_documents",
             args: { sql: "SELECT amount_typo FROM d_sales" },
           },
         ],
@@ -169,7 +169,7 @@ describe("TraceDetailDrawer read_query failure", () => {
           {
             type: "tool_call",
             call_id: "call-2",
-            name: "mcp__knowledge_flow__read_query",
+            name: "mcp__knowledge_flow__query_tabular_documents",
             args: { sql: "SELECT * FROM d_sales WHERE 1 = 0" },
           },
         ],

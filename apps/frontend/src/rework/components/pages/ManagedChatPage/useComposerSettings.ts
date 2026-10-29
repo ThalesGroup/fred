@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type { DocumentLibrarySelection } from "@shared/molecules/DocumentLibraryScopePicker/documentLibrarySelection";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SearchPolicyName } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -21,10 +22,11 @@ import { modelChoiceKey, offerLabel } from "../../../features/capabilities/model
 type RagScope = "corpus_only" | "hybrid" | "general_only";
 
 interface ComposerState {
+  agentConfigurationRevision: number | null;
   searchPolicy: SearchPolicyName;
   ragScope: RagScope;
-  selectedLibraryIds: string[];
-  selectedDocumentUids: string[];
+  /** null inherits the agent scope; empty arrays deliberately select nothing. */
+  documentSelection: DocumentLibrarySelection | null;
   /** Per-question reasoning activation (REASON-01 level 4, RFC §7.4). On/off
    *  only — the effort a reasoning turn runs with is the ops-authored
    *  `reasoning_effort` of the routed profile, never a user pick. */
@@ -77,10 +79,10 @@ function writeStorage(sessionId: string, state: ComposerState): void {
 
 function buildInitial(sessionId: string | null, chatControls: readonly ChatControlDescriptor[]): ComposerState {
   const defaults: ComposerState = {
+    agentConfigurationRevision: null,
     searchPolicy: findDefault<SearchPolicyName>(chatControls, "search_policy") ?? "hybrid",
     ragScope: findDefault<RagScope>(chatControls, "rag_scope") ?? "hybrid",
-    selectedLibraryIds: [],
-    selectedDocumentUids: [],
+    documentSelection: null,
     // The team's reasoning default for the model the conversation starts on.
     reasoning: findDefault<boolean>(chatControls, "reasoning_toggle") ?? false,
     askUser: findDefault<boolean>(chatControls, "ask_user_toggle") ?? true,
@@ -102,7 +104,7 @@ function buildInitial(sessionId: string | null, chatControls: readonly ChatContr
  * Owns the per-session composer settings: search policy, RAG scope,
  * library selection, selected documents, reasoning and the model choice.
  *
- * Initialises from sessionStorage (keyed by sessionId) when available,
+ * Initialises from sessionStorage (user, space, agent, session or draft) when available,
  * otherwise from the `search_policy`/`rag_scope` chat-control descriptors'
  * `params.default` (CAPAB-01 #1976 — supersedes the retired
  * `EffectiveChatOptions.default_search_policy`/`default_search_rag_scope`).
@@ -118,12 +120,13 @@ export function useComposerSettings(
   sessionId: string | null,
   chatControls: readonly ChatControlDescriptor[],
   effectiveModel?: PreparationModels,
-  _onChoiceDropped?: (modelLabel: string) => void,
+  scopeKey = "",
 ) {
-  const [state, setState] = useState<ComposerState>(() => buildInitial(sessionId, chatControls));
+  const scopedSession = useCallback((id: string | null) => `${scopeKey}:${id ?? "draft"}`, [scopeKey]);
+  const [state, setState] = useState<ComposerState>(() => buildInitial(scopedSession(sessionId), chatControls));
 
   const sessionIdRef = useRef(sessionId);
-  sessionIdRef.current = sessionId;
+  sessionIdRef.current = scopedSession(sessionId);
   const effectiveModelRef = useRef(effectiveModel);
   effectiveModelRef.current = effectiveModel;
   // Read by bindSession() below, which fires from a callback and so cannot
@@ -131,14 +134,8 @@ export function useComposerSettings(
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  // True as soon as the user picks anything; cleared by reset() (a genuine
-  // entry into a new or different session). #2369: sessionStorage alone cannot
-  // stand in for it. A pick made in a brand-new conversation happens while
-  // `sessionId` is still null, so update() below writes nothing — and
-  // prepare-execution hands back a FRESH chat_controls array on every send(),
-  // which re-runs the effect below. Without this flag the first send reverted
-  // the user's own reasoning pick (and search policy, RAG scope, library and
-  // document selection) to the widget defaults, mid-conversation.
+  // Fresh preparation descriptors must not overwrite an explicit choice,
+  // including one made before the first session id exists.
   const userEditedRef = useRef(false);
 
   // chatControls arrives async (an eager prepare-execution call, RFC §3.7). If
@@ -155,42 +152,69 @@ export function useComposerSettings(
   const update = useCallback(
     (patch: Partial<ComposerState>) => {
       userEditedRef.current = true;
-      setState((prev) => {
-        const next = { ...prev, ...patch };
-        if (sessionId) writeStorage(sessionId, next);
-        return next;
-      });
+      const next = { ...stateRef.current, ...patch };
+      stateRef.current = next;
+      writeStorage(scopedSession(sessionId), next);
+      setState(next);
     },
-    [sessionId],
+    [sessionId, scopedSession],
   );
 
-  const reset = useCallback((nextSessionId: string | null, nextChatControls: readonly ChatControlDescriptor[]) => {
-    userEditedRef.current = false;
-    const initial = buildInitial(nextSessionId, nextChatControls);
-    setState(initial);
+  const reset = useCallback(
+    (nextSessionId: string | null, nextChatControls: readonly ChatControlDescriptor[]) => {
+      userEditedRef.current = false;
+      sessionIdRef.current = scopedSession(nextSessionId);
+      const initial = buildInitial(scopedSession(nextSessionId), nextChatControls);
+      stateRef.current = initial;
+      setState(initial);
+    },
+    [scopedSession],
+  );
+
+  const acceptPreparation = useCallback((revision: number, controls: readonly ChatControlDescriptor[]) => {
+    const previous = stateRef.current.agentConfigurationRevision;
+    if (previous !== null && previous !== revision) {
+      throw { status: 409, data: { code: "agent_configuration_changed" } };
+    }
+    if (previous !== null) return;
+    const next = {
+      ...(!userEditedRef.current && Object.keys(readStorage(sessionIdRef.current)).length === 0
+        ? buildInitial(null, controls)
+        : stateRef.current),
+      agentConfigurationRevision: revision,
+    };
+    stateRef.current = next;
+    if (sessionIdRef.current) writeStorage(sessionIdRef.current, next);
+    setState(next);
   }, []);
 
-  // Called by the caller that MINTS a session id for a conversation that had
-  // none (#2369) — the flag above keeps the pick alive for the rest of the
-  // mount, this is what makes it durable. Until the id exists update() has
-  // nowhere to write, so without this a reasoning pick made before the first
-  // message was gone the next time the user entered that very session (reload,
-  // or leaving and coming back), reverting to the widget default one
-  // navigation later. Only a real pick is written: seeding storage with
-  // untouched defaults would freeze them against a later chat_controls
-  // refresh, which is exactly what the storage guard above is there to allow.
-  const bindSession = useCallback((nextSessionId: string) => {
-    if (!userEditedRef.current) return;
-    writeStorage(nextSessionId, stateRef.current);
-  }, []);
+  const discardDraft = useCallback(() => {
+    try {
+      sessionStorage.removeItem(storageKey(scopedSession(null)));
+    } catch {
+      // Same best-effort browser persistence as readStorage/writeStorage.
+    }
+  }, [scopedSession]);
+
+  // Move the scoped draft to its assigned session before router binding.
+  // An untouched draft must not freeze asynchronous control defaults.
+  const bindSession = useCallback(
+    (nextSessionId: string) => {
+      if (!userEditedRef.current && Object.keys(readStorage(scopedSession(null))).length === 0) return;
+      writeStorage(scopedSession(nextSessionId), stateRef.current);
+      discardDraft();
+    },
+    [scopedSession, discardDraft],
+  );
 
   const setSearchPolicy = useCallback((p: SearchPolicyName) => update({ searchPolicy: p }), [update]);
 
   const setRagScope = useCallback((s: RagScope) => update({ ragScope: s }), [update]);
 
-  const setSelectedLibraryIds = useCallback((ids: string[]) => update({ selectedLibraryIds: ids }), [update]);
-
-  const setSelectedDocumentUids = useCallback((uids: string[]) => update({ selectedDocumentUids: uids }), [update]);
+  const setDocumentSelection = useCallback(
+    (selection: DocumentLibrarySelection | null) => update({ documentSelection: selection }),
+    [update],
+  );
 
   const setReasoning = useCallback((value: boolean) => update({ reasoning: value }), [update]);
   const setAskUser = useCallback((value: boolean) => update({ askUser: value }), [update]);
@@ -208,10 +232,11 @@ export function useComposerSettings(
   );
 
   return {
+    agentConfigurationRevision: state.agentConfigurationRevision,
+    acceptPreparation,
     searchPolicy: state.searchPolicy,
     ragScope: offeredRagScope(state.ragScope, chatControls),
-    selectedLibraryIds: state.selectedLibraryIds,
-    selectedDocumentUids: state.selectedDocumentUids,
+    documentSelection: state.documentSelection,
     reasoning: state.reasoning,
     setReasoning,
     askUser: state.askUser,
@@ -220,9 +245,9 @@ export function useComposerSettings(
     setChatProfileId,
     setSearchPolicy,
     setRagScope,
-    setSelectedLibraryIds,
-    setSelectedDocumentUids,
+    setDocumentSelection,
     reset,
     bindSession,
+    discardDraft,
   };
 }

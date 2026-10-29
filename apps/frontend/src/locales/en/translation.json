@@ -138,12 +138,12 @@
           "description": "Show a document library selector in the chat interface."
         },
         "bind_libraries": {
-          "title": "Restrict to specific folders",
-          "description": "Restrict the agent's knowledge and search to specific folders."
+          "title": "Restrict to folders and documents",
+          "description": "Restrict the agent's knowledge and search to the selected folders and documents. An empty selection allows no documents."
         },
         "library_tag_ids": {
-          "title": "Bound document libraries",
-          "description": "Restrict the chat library picker to this preselected set of document libraries."
+          "title": "Agent document scope",
+          "description": "Folders cover their direct documents. Selecting a subtree includes its subfolders. The chat can only narrow this scope."
         },
         "show_document_selection": {
           "title": "Document picker",
@@ -387,6 +387,7 @@
     }
   },
   "chatbot": {
+    "agentConfigurationChanged": "This agent has changed since this conversation started. Start a new conversation to use its new configuration.",
     "artifactLinks": {
       "ariaLabel": "Generated files",
       "downloadAria": "Download {{name}}",
@@ -498,6 +499,11 @@
       "tuneOpenAria": "Open chat settings"
     },
     "documentScopePanel": {
+      "agentScope": "Agent scope (no additional restriction)",
+      "boundScope": "Agent restriction (read-only)",
+      "turnScope": "Turn selection, limited to the agent scope",
+      "space": "Space",
+      "clearSelection": "Clear selection",
       "title": "Define accessible resources",
       "resetTooltip": "Reset"
     },
@@ -1130,6 +1136,9 @@
   },
   "rework": {
     "weaverAgents": {
+      "documentSelectionUnknown": "Subfolder selection is not fully known yet. Clicking checks the entire subtree, then clears it if fully selected or selects it all otherwise.",
+      "documentSelectionUnavailable": "Folder and document selection is not available yet. The agent searches its authorized space scope.",
+      "documentSelectionFailed": "The complete selection could not be loaded. Nothing was changed. Try again.",
       "notConnected": "Not yet connected to Weaver.",
       "chatUnavailable": "Chat and conversation history are not yet connected to Weaver.",
       "scopeUnavailable": "This team or personal space is unavailable or you do not have access.",
@@ -2149,7 +2158,7 @@
             "search": "Searching data"
           },
           "text": {
-            "search_documents_using_vectorization": "Searching documents"
+            "search_documents": "Searching documents"
           },
           "prometheusOps": {
             "prometheus_query": "Running an instant Prometheus query",

@@ -16,8 +16,8 @@ import asyncio
 import logging
 import time
 from typing import List, Optional
-from uuid import UUID
 
+from fred_core.documents.transport import DocumentAccessContext
 from fred_core.security.delegation import AssertedUser
 from langchain_core.documents import Document
 from pydantic import BaseModel, ConfigDict, Field
@@ -31,7 +31,6 @@ logger = logging.getLogger(__name__)
 
 class SummarizeDocumentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    space_id: UUID
 
     instruction: Optional[str] = Field(
         default=None,
@@ -41,14 +40,14 @@ class SummarizeDocumentRequest(BaseModel):
         default=2000,
         ge=200,
         le=20_000,
-        description="Target ceiling for the returned summary length, in characters.",
+        description="Target summary length in characters, not a guaranteed ceiling. One corrective pass is attempted if exceeded.",
     )
 
 
 class SummarizeDocumentResponse(BaseModel):
     document_uid: str
     summary: str
-    shrunk_for_budget: bool = Field(description="True if a corrective pass had to shrink the summary to fit max_chars.")
+    shrunk_for_budget: bool = Field(description="True when a corrective rewriting pass completed. This does not guarantee that the result is within max_chars.")
     keywords: List[str] = Field(default_factory=list)
 
 
@@ -73,9 +72,9 @@ class SummarizeService:
             splitter=self.context.get_text_splitter(),
         )
 
-    async def summarize_document(self, user: AssertedUser, document_uid: str, request: SummarizeDocumentRequest) -> SummarizeDocumentResponse:
+    async def summarize_document(self, user: AssertedUser, document_uid: str, request: SummarizeDocumentRequest, context: DocumentAccessContext) -> SummarizeDocumentResponse:
         started = time.monotonic()
-        markdown = await published_markdown(user, request.space_id, document_uid)
+        markdown = await published_markdown(user, context.space_id, document_uid, context.document_scope)
         fetch_ms = (time.monotonic() - started) * 1000
         document = Document(page_content=markdown, metadata={})
 

@@ -23,12 +23,14 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from collections.abc import Container, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import Any
 from uuid import UUID, uuid5
 
 from sqlalchemy import ARRAY, Uuid, bindparam, text
 from sqlalchemy.ext.asyncio import AsyncConnection
+
+from fred_core.documents.selection import DocumentScope
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +39,7 @@ _SPACE = text(
 ).bindparams(bindparam("space_id", type_=Uuid))
 
 _DOCUMENTS = text(
-    "SELECT d.id, d.space_id, d.deletion_id, s.deletion_id AS space_deletion_id,"
+    "SELECT d.id, d.folder_id, d.space_id, d.deletion_id, s.deletion_id AS space_deletion_id,"
     " d.retrievable, d.retrievable_pending,"
     " g.id AS generation_id, g.vector_ordinals"
     " FROM document d"
@@ -48,7 +50,7 @@ _DOCUMENTS = text(
 
 
 _PUBLISHED_ARTIFACT = text(
-    "SELECT d.space_id, d.deletion_id, s.deletion_id AS space_deletion_id,"
+    "SELECT d.id, d.folder_id, d.space_id, d.deletion_id, s.deletion_id AS space_deletion_id,"
     " d.retrievable, d.retrievable_pending, g.prefix, a.size, a.sha256"
     " FROM document d"
     " JOIN space s ON s.id = d.space_id"
@@ -56,6 +58,15 @@ _PUBLISHED_ARTIFACT = text(
     " JOIN artifact a ON a.generation_id = g.id AND a.path = :path"
     " WHERE d.id = :document_id"
 ).bindparams(bindparam("document_id", type_=Uuid))
+
+
+_FOLDERS = text(
+    "SELECT id, path FROM folder WHERE id = ANY(:folder_ids)"
+    " AND space_id = ANY(:space_ids) AND deletion_id IS NULL"
+).bindparams(
+    bindparam("folder_ids", type_=ARRAY(Uuid)),
+    bindparam("space_ids", type_=ARRAY(Uuid)),
+)
 
 
 @dataclass(frozen=True)
@@ -76,6 +87,23 @@ class SpacePendingDeletionError(Exception):
 @dataclass(frozen=True)
 class SearchScope:
     space_ids: tuple[UUID, ...]
+    document_scope: DocumentScope = field(default_factory=DocumentScope)
+    folder_paths: Mapping[UUID, str] = field(default_factory=dict)
+
+    @property
+    def selection_terms(self) -> tuple[dict[str, list[str]], ...]:
+        """AND of unions for index prefiltering; SQL still verifies every hit."""
+        return tuple(
+            {
+                "folder_path": [
+                    self.folder_paths[id]
+                    for id in selection.folder_ids
+                    if id in self.folder_paths
+                ],
+                "document_uid": [str(id) for id in selection.document_ids],
+            }
+            for selection in self.document_scope.selections
+        )
 
 
 @dataclass(frozen=True)
@@ -142,7 +170,12 @@ def filter_candidates(
     visible: dict[UUID, Mapping[Any, Any]] = {
         row["id"]: row
         for row in documents
-        if is_live_document(row, allowed) and row["generation_id"] is not None
+        if is_live_document(row, allowed)
+        and row["generation_id"] is not None
+        and (
+            not scope.document_scope.selections
+            or scope.document_scope.covers(row["id"], row["folder_id"])
+        )
     }
     wanted: dict[UUID, set[str]] = {}
     for candidate in candidates:
@@ -183,9 +216,40 @@ def filter_candidates(
     return kept
 
 
-async def resolve_scope(conn: AsyncConnection, space_id: UUID) -> SearchScope:
+async def resolve_scope(
+    conn: AsyncConnection, space_id: UUID, document_scope: DocumentScope | None = None
+) -> SearchScope:
     row = (await conn.execute(_SPACE, {"space_id": space_id})).mappings().first()
-    return scope_from_space(space_id, row)
+    scope = scope_from_space(space_id, row)
+    selection = document_scope or DocumentScope()
+    folder_ids = list({id for item in selection.selections for id in item.folder_ids})
+    paths = {}
+    if folder_ids:
+        rows = (
+            (
+                await conn.execute(
+                    _FOLDERS,
+                    {"folder_ids": folder_ids, "space_ids": list(scope.space_ids)},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        paths = {row["id"]: row["path"] for row in rows}
+    # A missing/retired/out-of-space folder selects nothing, never the corpus.
+    selection = selection.model_copy(
+        update={
+            "selections": tuple(
+                item.model_copy(
+                    update={
+                        "folder_ids": tuple(id for id in item.folder_ids if id in paths)
+                    }
+                )
+                for item in selection.selections
+            )
+        }
+    )
+    return replace(scope, document_scope=selection, folder_paths=paths)
 
 
 async def verify_candidates(
@@ -251,8 +315,96 @@ async def published_artifact(
         _PUBLISHED_ARTIFACT, {"document_id": document_id, "path": path}
     )
     row = result.mappings().first()
-    if row is None or not is_live_document(row, scope.space_ids):
+    if (
+        row is None
+        or not is_live_document(row, scope.space_ids)
+        or (
+            scope.document_scope.selections
+            and not scope.document_scope.covers(document_id, row["folder_id"])
+        )
+    ):
         return None
     return PublishedArtifact(
         prefix=row["prefix"], size=row["size"], sha256=row["sha256"]
     )
+
+
+@dataclass(frozen=True)
+class PublishedDocument:
+    document_id: UUID
+    name: str
+    source_revision: str
+    artifacts: dict[str, PublishedArtifact]
+
+
+_TABULAR_DOCUMENTS = text(
+    "WITH page AS (SELECT d.id, d.name, d.sha256, d.folder_id, d.space_id,"
+    " d.deletion_id, s.deletion_id AS space_deletion_id,"
+    " d.retrievable, d.retrievable_pending, g.id AS generation_id, g.prefix"
+    " FROM document d JOIN space s ON s.id = d.space_id"
+    " JOIN generation g ON g.id = d.published_generation"
+    " WHERE d.space_id = ANY(:space_ids) AND d.id > :after"
+    " AND (:all_documents OR d.id = ANY(:document_ids))"
+    " AND EXISTS (SELECT 1 FROM artifact a WHERE a.generation_id = g.id"
+    " AND a.path LIKE 'datasets/%.parquet')"
+    " ORDER BY d.id LIMIT 100)"
+    " SELECT page.*, a.path, a.size, a.sha256 AS artifact_sha256"
+    " FROM page JOIN artifact a ON a.generation_id = page.generation_id"
+    " ORDER BY page.id, a.path"
+).bindparams(
+    bindparam("space_ids", type_=ARRAY(Uuid)),
+    bindparam("document_ids", type_=ARRAY(Uuid)),
+    bindparam("after", type_=Uuid),
+)
+
+
+async def published_tabular_documents(
+    conn: AsyncConnection,
+    scope: SearchScope,
+    *,
+    after: UUID,
+    document_ids: Sequence[UUID] | None = None,
+) -> tuple[list[PublishedDocument], UUID | None]:
+    """One bounded page, using the same placement/lifecycle rules as other reads.
+
+    Return the cursor of the scanned page, including refused rows. Artifacts are
+    joined to one published generation in one statement, never mixed across reads.
+    """
+    if scope.document_scope.is_empty or document_ids == []:
+        return [], None
+    rows = (
+        (
+            await conn.execute(
+                _TABULAR_DOCUMENTS,
+                {
+                    "space_ids": list(scope.space_ids),
+                    "after": after,
+                    "all_documents": document_ids is None,
+                    "document_ids": list(document_ids or ()),
+                },
+            )
+        )
+        .mappings()
+        .all()
+    )
+    documents: dict[UUID, PublishedDocument] = {}
+    for row in rows:
+        if not is_live_document(
+            row, scope.space_ids
+        ) or not scope.document_scope.covers(row["id"], row["folder_id"]):
+            continue
+        document = documents.setdefault(
+            row["id"],
+            PublishedDocument(
+                document_id=row["id"],
+                name=row["name"],
+                source_revision=row["sha256"],
+                artifacts={},
+            ),
+        )
+        document.artifacts[row["path"]] = PublishedArtifact(
+            prefix=row["prefix"],
+            size=row["size"],
+            sha256=row["artifact_sha256"],
+        )
+    return list(documents.values()), rows[-1]["id"] if rows else None

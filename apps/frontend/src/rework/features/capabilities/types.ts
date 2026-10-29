@@ -79,19 +79,17 @@ export type RagScopeName = "corpus_only" | "hybrid" | "general_only";
  * Shared composer state threaded to every mounted chat-turn control (RFC §9
  * item 2). This is the same per-session state `SearchConfig` drove before its
  * rows were extracted into the stock kit (CAPAB-01 #1976) — the values keep
- * traveling to the pod exactly as before (`RuntimeContext` for the MCP stock
- * widgets today); `turn_options` is the generic per-capability path for other
- * capabilities, none of which are stock yet.
+ * traveling to the pod via their canonical contract. The combined document
+ * selection belongs to the composer and travels only in document_access turn_options.
  */
 export interface ChatTurnControlComposerState {
   /** Scopes the document/library picker's queries. */
   teamId: string;
   /** Opens the native file picker (composer attachment flow). */
   onAttach: () => void;
-  selectedLibraryIds: string[];
-  onSelectedLibraryIdsChange: (ids: string[]) => void;
-  selectedDocumentUids: string[];
-  onSelectedDocumentUidsChange: (uids: string[]) => void;
+  documentSelection:
+    | import("@shared/molecules/DocumentLibraryScopePicker/documentLibrarySelection").DocumentLibrarySelection
+    | null;
   /**
    * Opens the right-side document-scope panel (#2259). The `document_scope`
    * tune-menu row calls this instead of expanding its own inline popover; the

@@ -1758,6 +1758,7 @@ export type PreparationModels = {
   requires_reselection: boolean;
 };
 export type ExecutionPreparation = {
+  agent_configuration_revision: number;
   agent_instance_id: string;
   chat_controls: ChatControlDescriptor[];
   execute_stream_url: string;
@@ -1780,6 +1781,7 @@ export type RuntimeAgent = {
   /** Saved tuning, excluding the legacy profile reference exposed in models for diagnostics.
     No refresh from the catalog; fields, values and capability envelopes are preserved. */
   configuration: any;
+  configuration_revision: number;
   configuration_updated_at: string;
   instance_id: string;
   runtime_id: string;
@@ -1865,6 +1867,8 @@ export type AgentTemplateSummary = {
   template_id: string;
 };
 export type SessionDetails = {
+  agent_configuration_changed: boolean;
+  agent_configuration_revision: number;
   agent_deleted: boolean;
   agent_disabled: boolean;
   /** Current name, or the registration snapshot after instance removal. */
@@ -1882,6 +1886,7 @@ export type SessionDetails = {
   updated_at: string;
 };
 export type CreateSessionRequest = {
+  agent_configuration_revision: number;
   agent_instance_id: string;
   /** Frontend-generated identifier, retained verbatim. */
   session_id: string;

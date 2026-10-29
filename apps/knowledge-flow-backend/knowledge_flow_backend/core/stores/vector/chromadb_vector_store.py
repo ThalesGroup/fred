@@ -68,6 +68,10 @@ def _build_where(search_filter: Optional[SearchFilter]) -> Optional[Dict]:
             return json.dumps(value)
         return value
 
+    for clause in search_filter.metadata_any:
+        alternatives = [{key: {"$in": list(values)}} for key, values in clause.items() if values]
+        clauses.append({"$or": alternatives} if len(alternatives) > 1 else alternatives[0] if alternatives else {"document_uid": {"$eq": "__empty_selection__"}})
+
     # ---- Tag IDs ----
     if search_filter.tag_ids is not None:
         if search_filter.tag_ids:

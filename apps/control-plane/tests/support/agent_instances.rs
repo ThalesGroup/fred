@@ -380,6 +380,7 @@ async fn instances_round_trip_validation_and_saved_snapshot() {
     }
     let after = saved(&e, team.id, &first).await;
     assert_eq!(after.updated_at, before.updated_at);
+    assert_eq!(after.configuration_revision, before.configuration_revision);
     assert_eq!(after.updated_by, before.updated_by);
     catalog.state.lock().await.status = 503;
     let calls = catalog.state.lock().await.calls;
@@ -1458,4 +1459,211 @@ async fn preparation_combines_pod_controls_and_reasoning_after_capability_govern
     let (status, _) = request(&app, &identity, Some("alice"), "POST", &path, Value::Null).await;
     assert_eq!(status, 422);
     assert_eq!(catalog.state.lock().await.control_requests.len(), 1);
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn conversations_pin_configuration_and_keep_history_after_agent_edits() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let identity = support::IdentityServer::start().await;
+    let catalog = Catalog::start().await;
+    let app = app(&e, &identity, &catalog, e.fga.clone()).await;
+    let template = enable(&e, org.id, "custom", true).await;
+    let instance = create(&app, &identity, team.id, creation(template, "Revision")).await;
+    let base = item(team.id, &instance);
+    let sessions = format!("/spaces/{}/sessions", team.id);
+    let sid = Uuid::new_v4();
+    let session = format!("{sessions}/{sid}");
+    let creation = |id, revision| {
+        json!({
+            "session_id": id, "agent_instance_id": instance["agent_instance_id"],
+            "agent_configuration_revision": revision
+        })
+    };
+    let prepared = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "POST",
+        &format!("{base}/prepare-execution"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(prepared.0, 200, "{prepared:?}");
+    assert_eq!(prepared.1["agent_configuration_revision"], 1);
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "POST",
+            &sessions,
+            creation(sid, 1)
+        )
+        .await
+        .0,
+        201
+    );
+    let resolve = format!("{base}/runtime?conversation={sid}");
+    let admitted = request(&app, &identity, Some("alice"), "GET", &resolve, Value::Null).await;
+    assert_eq!(admitted.0, 200, "{admitted:?}");
+    assert_eq!(admitted.1["agent"]["configuration_revision"], 1);
+
+    // A no-op keeps the association valid, including normalized metadata.
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PATCH",
+            &base,
+            json!({"display_name":" Revision "})
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        saved(&e, team.id, &instance).await.configuration_revision,
+        1
+    );
+    assert_eq!(
+        request(&app, &identity, Some("alice"), "GET", &resolve, Value::Null)
+            .await
+            .0,
+        200
+    );
+
+    // The preparation predates the persisted edit; admission must reread both rows.
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PATCH",
+            &base,
+            json!({"display_name":"Renamed"})
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        saved(&e, team.id, &instance).await.configuration_revision,
+        2
+    );
+    for (method, path, body) in [
+        ("GET", resolve, Value::Null),
+        (
+            "POST",
+            format!("{base}/prepare-execution?session_id={sid}"),
+            Value::Null,
+        ),
+        ("POST", sessions.clone(), creation(Uuid::new_v4(), 1)),
+        ("POST", sessions.clone(), creation(sid, 1)),
+        ("POST", sessions.clone(), creation(sid, 2)),
+    ] {
+        let refused = request(&app, &identity, Some("alice"), method, &path, body).await;
+        assert_eq!(refused.0, 409, "{refused:?}");
+        assert_eq!(refused.1["code"], "agent_configuration_changed");
+    }
+    // Reading and renaming history do not perform execution admission.
+    let history = request(&app, &identity, Some("alice"), "GET", &session, Value::Null).await;
+    assert_eq!(history.0, 200);
+    assert_eq!(history.1["agent_configuration_revision"], 1);
+    assert_eq!(history.1["agent_configuration_changed"], true);
+    assert!(history.1["messages_url"].is_string());
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PATCH",
+            &session,
+            json!({"title":"Kept history"})
+        )
+        .await
+        .0,
+        200
+    );
+    assert_ne!(
+        request(
+            &app,
+            &identity,
+            Some("stranger"),
+            "GET",
+            &session,
+            Value::Null
+        )
+        .await
+        .0,
+        200
+    );
+    let fresh = Uuid::new_v4();
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "POST",
+            &sessions,
+            creation(fresh, 2)
+        )
+        .await
+        .0,
+        201
+    );
+    let accepted = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &format!("{base}/runtime?conversation={fresh}"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(accepted.0, 200, "{accepted:?}");
+    assert_eq!(accepted.1["agent"]["configuration_revision"], 2);
+
+    // Every editable persisted field uses the same monotone revision, even a revert.
+    for (index, patch) in [
+        json!({"description":"Changed"}),
+        json!({"role":"Another role"}),
+        json!({"usage_statement":"Another use"}),
+        json!({"tuning_field_values":{"count":2}}),
+        json!({"status":"disabled"}),
+        json!({"status":"enabled"}),
+        json!({"display_name":"Revision"}),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let changed = request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PATCH",
+            &base,
+            patch.clone(),
+        )
+        .await;
+        assert_eq!(changed.0, 200, "{changed:?}");
+        let revision = 3 + index as i64;
+        assert_eq!(
+            saved(&e, team.id, &instance).await.configuration_revision,
+            revision
+        );
+        assert_eq!(
+            request(&app, &identity, Some("alice"), "PATCH", &base, patch)
+                .await
+                .0,
+            200
+        );
+        assert_eq!(
+            saved(&e, team.id, &instance).await.configuration_revision,
+            revision
+        );
+    }
 }

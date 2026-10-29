@@ -8,7 +8,7 @@ servers:
     prompt_group_title: "tabular action"
     transport: "streamable_http"
     service: knowledge_flow
-    path: mcp-tabular
+    path: mcp/tabular
     sse_read_timeout: 2000
     enabled: true
     auth_mode: "delegated"

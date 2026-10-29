@@ -72,7 +72,7 @@ def _healthy_context() -> SimpleNamespace:
 
 def _client(ctx: object) -> TestClient:
     app = FastAPI()
-    router = APIRouter(prefix="/knowledge-flow/v1")
+    router = APIRouter(prefix="/knowledge-flow/v2")
     MonitoringController(router, ctx)
     app.include_router(router)
     return TestClient(app)
@@ -80,14 +80,14 @@ def _client(ctx: object) -> TestClient:
 
 def test_healthz_is_trivial_ok() -> None:
     with _client(_healthy_context()) as client:
-        resp = client.get("/knowledge-flow/v1/healthz")
+        resp = client.get("/knowledge-flow/v2/healthz")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
 
 
 def test_ready_all_dependencies_ok() -> None:
     with _client(_healthy_context()) as client:
-        resp = client.get("/knowledge-flow/v1/ready")
+        resp = client.get("/knowledge-flow/v2/ready")
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "ready"
@@ -102,7 +102,7 @@ def test_ready_reports_degraded_when_gcs_down() -> None:
     ctx.get_content_store = lambda: failing
 
     with _client(ctx) as client:
-        resp = client.get("/knowledge-flow/v1/ready")
+        resp = client.get("/knowledge-flow/v2/ready")
 
     assert resp.status_code == 503
     body = resp.json()
@@ -119,7 +119,7 @@ def test_ready_skips_non_gcs_backend() -> None:
     ctx.get_filesystem = lambda: local_fs
 
     with _client(ctx) as client:
-        resp = client.get("/knowledge-flow/v1/ready")
+        resp = client.get("/knowledge-flow/v2/ready")
 
     assert resp.status_code == 200
     assert ctx is not None
@@ -138,9 +138,9 @@ def test_api_stays_live_and_becomes_ready_after_corpus_initialization():
     store.ensure_ready.side_effect = [RuntimeError("Corpus index is not initialized"), None]
     ctx.get_vector_store = lambda: store
     with _client(ctx) as client:
-        assert client.get("/knowledge-flow/v1/healthz").status_code == 200
-        response = client.get("/knowledge-flow/v1/ready")
+        assert client.get("/knowledge-flow/v2/healthz").status_code == 200
+        response = client.get("/knowledge-flow/v2/ready")
         assert response.status_code == 503
         assert response.json()["checks"]["opensearch"]["ok"] is False
-        assert client.get("/knowledge-flow/v1/healthz").status_code == 200
-        assert client.get("/knowledge-flow/v1/ready").status_code == 200
+        assert client.get("/knowledge-flow/v2/healthz").status_code == 200
+        assert client.get("/knowledge-flow/v2/ready").status_code == 200

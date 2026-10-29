@@ -15,7 +15,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
+import { normalizeApiError } from "@core/errors/normalizeApiError";
+import type { ExecutionPreparation } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useComposerSettings } from "./useComposerSettings";
+import { documentSelectionTurnOptions } from "./documentSelectionTurnOptions";
+import { DOCUMENT_SELECTION_SUPPORTED } from "@shared/molecules/DocumentLibraryScopePicker/documentLibrarySelection";
 import { useSearchParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
@@ -109,6 +113,11 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   const [persistedSessionId, setPersistedSessionId] = useState<string | null>(null);
   const visibleSessionRef = useRef(sessionId);
   const sameSession = visibleSessionRef.current === sessionId;
+  const [configurationRefused, setConfigurationRefused] = useState(false);
+  const composerRef = useRef<ReturnType<typeof useComposerSettings> | null>(null);
+  const acceptPreparation = useCallback((prep: ExecutionPreparation) => {
+    composerRef.current?.acceptPreparation(prep.agent_configuration_revision, prep.chat_controls);
+  }, []);
   const [input, setInput] = useState("");
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
   const queuedStartRef = useRef<PendingMessage | null>(null);
@@ -255,12 +264,14 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   const {
     sessionData,
     isReadOnly,
-    executionDisabled,
+    executionDisabled: availabilityDisabled,
     sessionUnavailable,
     historyRevision,
     sessionErrorKey,
     refetchSession,
   } = useConversationAvailability(spaceId, agentInstanceId, sessionId, locallyCreatingSession);
+  const agentConfigurationChanged = configurationRefused || sessionData?.agent_configuration_changed === true;
+  const executionDisabled = availabilityDisabled || agentConfigurationChanged;
   const agentDisplayName =
     (isReadOnly ? sessionData?.agent_display_name : (agentInstance?.display_name ?? sessionData?.agent_display_name)) ??
     t("rework.sidebar.chatList.unknownAgent", { agentsNicknameSingular });
@@ -389,7 +400,8 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     [replacePendingHitls, replaceStagedHitlAnswers],
   );
   const handleChatError = useCallback(
-    (msg: string) => {
+    (msg: string, code?: string) => {
+      if (code === "agent_configuration_changed") setConfigurationRefused(true);
       const resumePreparing = hitlResumePreparingRef.current?.session_id === activeSessionIdRef.current;
       setPendingMessages((current) => {
         const queued = queuedStartRef.current;
@@ -478,6 +490,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     onSteeredMessage: handleSteeredMessage,
     onAwaitingHuman: handleAwaitingHuman,
     onError: handleChatError,
+    onPreparation: acceptPreparation,
     onTurnStarted: handleTurnStarted,
     onTurnRejected: handleTurnRejected,
     isTurnCurrent,
@@ -511,7 +524,8 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   const isTurnActive = useCallback(() => waitResponseRef.current, []);
   const getCurrentMessages = useCallback(() => latestMessagesRef.current, []);
 
-  const composer = useComposerSettings(sessionId, chatControls, preparation?.models);
+  const composer = useComposerSettings(sessionId, chatControls, preparation?.models, `${spaceId}:${agentInstanceId}`);
+  composerRef.current = composer;
   useEffect(() => {
     visibleSessionRef.current = sessionId;
     if (skipResetOnSessionBindRef.current) {
@@ -521,6 +535,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       skipResetOnSessionBindRef.current = false;
       return;
     }
+    setConfigurationRefused(false);
     console.debug(`[useManagedChat] sessionId changed → reset() — sessionId=${sessionId ?? "null"}`);
     reset();
     // reset() aborts any in-flight turn synchronously, but the waitResponse
@@ -562,7 +577,9 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   const modelPreparationCurrent = preparation !== undefined && preparedModelKey === requestedModelKey;
   const modelPreparationError =
     requestedModel.error ?? (modelPreparationCurrent ? preparation?.model_error?.message : null);
-  const modelPreparationPending = preparingExecution && !preparationUnavailable && !modelPreparationCurrent;
+  const modelPreparationPending =
+    (!sessionId && composer.agentConfigurationRevision === null) ||
+    (preparingExecution && !preparationUnavailable && !modelPreparationCurrent);
   useEffect(() => {
     if (executionDisabled || !sameSession || !preparingExecution || (sessionId && locallyCreatingSession)) return;
     const request = prepareChatControls(sessionId, requestedModel.choice);
@@ -630,12 +647,17 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   executionDisabledRef.current = executionDisabled;
 
   const notifySessionSaveFailed = useCallback(
-    (error: unknown) =>
+    (error: unknown) => {
+      if (normalizeApiError(error).code === "agent_configuration_changed") {
+        handleChatError(t("chatbot.agentConfigurationChanged"), "agent_configuration_changed");
+        return;
+      }
       notifyApiError(error, {
         summary: t("chatbot.errors.sessionSaveFailedSummary"),
         fallbackDetail: t("chatbot.errors.sessionSaveFailedDetail"),
-      }),
-    [notifyApiError, t],
+      });
+    },
+    [notifyApiError, t, handleChatError],
   );
 
   // Enqueues the session-row creation POST onto this sid's write tail, so it
@@ -645,17 +667,24 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   // URL-bound) sid re-attempts creation instead of silently skipping it.
   const createSessionRow = useCallback(
     (sid: string, title: string) => {
+      const revision = composer.agentConfigurationRevision;
+      if (revision === null) return;
       locallyCreatedSessionIdRef.current = sid;
       void enqueueSessionWrite(
         sid,
         () =>
           registerSession({
             spaceId,
-            createSessionRequest: { session_id: sid, agent_instance_id: agentInstanceId, title },
+            createSessionRequest: {
+              session_id: sid,
+              agent_instance_id: agentInstanceId,
+              agent_configuration_revision: revision,
+              title,
+            },
           }).unwrap(),
         (error) => {
           if (!confirmedSessionIdsRef.current.has(sid)) sessionCreateFailedIdRef.current.add(sid);
-          notifySessionSaveFailed(error);
+          if (isTurnCurrent(sid)) notifySessionSaveFailed(error);
         },
         true,
       ).then((result) => {
@@ -665,7 +694,15 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
         }
       });
     },
-    [agentInstanceId, enqueueSessionWrite, notifySessionSaveFailed, registerSession, spaceId],
+    [
+      agentInstanceId,
+      enqueueSessionWrite,
+      notifySessionSaveFailed,
+      registerSession,
+      spaceId,
+      composer.agentConfigurationRevision,
+      isTurnCurrent,
+    ],
   );
 
   const ensureSessionForAttachments = useCallback((): string => {
@@ -703,9 +740,13 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
           ? { reasoning: composer.reasoning }
           : {}),
       },
-      turnOptions: undefined,
+      turnOptions:
+        DOCUMENT_SELECTION_SUPPORTED &&
+        (composer.documentSelection !== null || chatControls.some((control) => control.widget === "document_scope"))
+          ? documentSelectionTurnOptions(composer.documentSelection)
+          : undefined,
     }),
-    [composer.chatProfileId, composer.reasoning, chatControls, preparation?.models],
+    [composer.chatProfileId, composer.reasoning, composer.documentSelection, chatControls, preparation?.models],
   );
 
   // Read at answer time so handleHitlAnswer keeps its identity across keystrokes.
@@ -1251,16 +1292,20 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   }, [agentInstanceId, executionDisabled, handleHitlAnswer, pendingHitl, waitResponse]);
 
   const startNewConversation = useCallback(() => {
-    if (executionDisabledRef.current) return;
+    if (availabilityDisabled && !agentConfigurationChanged) return;
+    setConfigurationRefused(false);
     const attempt = sendAttemptRef.current;
     if (attempt) attempt.cancelled = true;
     locallyCreatedSessionIdRef.current = null;
     activeSessionIdRef.current = null;
-    if (attempt && !sessionId) {
-      reset();
-      setInput("");
-      skipResetOnSessionBindRef.current = false;
-    }
+    composer.discardDraft();
+    composer.reset(null, []);
+    reset();
+    setInput("");
+    setPendingMessages([]);
+    attachments.clearLocalAttachments();
+    skipResetOnSessionBindRef.current = false;
+    if (!sessionId) void prepareChatControls(null).catch(() => {});
     replacePendingHitls([]);
     lastHitlExchangeRef.current = null;
     submittedBatchKeysRef.current = new Set();
@@ -1277,7 +1322,19 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       },
       { replace: true },
     );
-  }, [setSearchParams, replacePendingHitls, replaceStagedHitlAnswers, reset, sessionId]);
+  }, [
+    setSearchParams,
+    replacePendingHitls,
+    replaceStagedHitlAnswers,
+    reset,
+    sessionId,
+    composer.discardDraft,
+    composer.reset,
+    availabilityDisabled,
+    agentConfigurationChanged,
+    attachments.clearLocalAttachments,
+    prepareChatControls,
+  ]);
 
   const commitTitle = useCallback(
     async (title: string) => {
@@ -1303,8 +1360,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   );
   const guardedComposer = useMemo(
     () => ({
-      setSelectedLibraryIds: guardChange(composer.setSelectedLibraryIds),
-      setSelectedDocumentUids: guardChange(composer.setSelectedDocumentUids),
+      setDocumentSelection: guardChange(composer.setDocumentSelection),
       setSearchPolicy: guardChange(composer.setSearchPolicy),
       setRagScope: guardChange(composer.setRagScope),
       setReasoning: guardChange(composer.setReasoning),
@@ -1313,8 +1369,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     }),
     [
       guardChange,
-      composer.setSelectedLibraryIds,
-      composer.setSelectedDocumentUids,
+      composer.setDocumentSelection,
       composer.setSearchPolicy,
       composer.setRagScope,
       composer.setReasoning,
@@ -1341,6 +1396,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     isReadOnly,
     executionDisabled,
     sessionUnavailable,
+    agentConfigurationChanged,
     preparationUnavailable,
     preparationErrorDetail,
     modelPreparationError,
@@ -1373,7 +1429,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     resumingAgentQuestionSessionId,
     hitlFreeText,
     setHitlFreeText: setSelectedHitlFreeText,
-    selectedLibraryIds: composer.selectedLibraryIds,
+    documentSelection: composer.documentSelection,
     attachments: attachments.attachments,
     persistedAttachments: attachments.persistedAttachments,
     isHydratingAttachments: attachments.isHydratingAttachments,
@@ -1381,9 +1437,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     handleAddAttachments,
     removeAttachment,
     deletePersistedAttachment,
-    setSelectedLibraryIds: guardedComposer.setSelectedLibraryIds,
-    selectedDocumentUids: composer.selectedDocumentUids,
-    setSelectedDocumentUids: guardedComposer.setSelectedDocumentUids,
+    setDocumentSelection: guardedComposer.setDocumentSelection,
     searchPolicy: composer.searchPolicy,
     setSearchPolicy: guardedComposer.setSearchPolicy,
     ragScope: composer.ragScope,

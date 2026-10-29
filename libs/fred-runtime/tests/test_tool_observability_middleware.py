@@ -658,7 +658,7 @@ def _fake_context_aware_tool() -> ContextAwareTool:
 @tool
 def native_capability_tool(question: str) -> str:
     """A plain capability-native tool, shaped exactly like
-    `DocumentAccessCapability`'s `search_documents_using_vectorization` —
+    `DocumentAccessCapability`'s `search_documents` —
     NOT wrapped by `ContextAwareTool` at all."""
     return f"hits for {question}"
 

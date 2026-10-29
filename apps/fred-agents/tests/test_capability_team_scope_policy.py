@@ -46,7 +46,7 @@ _DEFAULT_ON_WAIVERS: set[str] = set()
 def test_no_mcp_server_declares_default_on_without_explicit_waiver() -> None:
     class Services:
         def get_base_url(self, service: FredService) -> str:
-            return "http://localhost:8111/knowledge-flow/v1"
+            return "http://localhost:8111/knowledge-flow/v2"
 
     catalog = load_catalog(Services())
     offenders = [

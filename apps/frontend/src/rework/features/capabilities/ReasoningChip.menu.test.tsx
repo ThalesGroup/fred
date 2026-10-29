@@ -45,10 +45,7 @@ function composerState(over: Partial<ChatTurnControlComposerState> = {}): ChatTu
   return {
     teamId: "fredlab",
     onAttach: () => undefined,
-    selectedLibraryIds: [],
-    onSelectedLibraryIdsChange: () => undefined,
-    selectedDocumentUids: [],
-    onSelectedDocumentUidsChange: () => undefined,
+    documentSelection: null,
     searchPolicy: "hybrid",
     onSearchPolicyChange: () => undefined,
     ragScope: "hybrid",

@@ -294,6 +294,7 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
           isSubmitting={busy || !canManageAgents}
           mode={editing ? "edit" : "create"}
           teamName={space.name}
+          teamId={spaceId}
           templates={templates}
           editInstance={editing}
           takenNames={names}

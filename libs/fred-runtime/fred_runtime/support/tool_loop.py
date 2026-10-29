@@ -210,7 +210,7 @@ def trim_to_human_boundary(messages: list, max_messages: int) -> list:
       with "messages with role 'tool' must be a response to a preceding message
       with 'tool_calls'", which crashes the turn instead of answering the user.
     - This is easy to hit when a single reasoning step fans out many tool calls
-      (e.g. a batch of failed `read_query` calls) that alone exceed
+      (e.g. a batch of failed `query_tabular_documents` calls) that alone exceed
       `max_messages`: every message in the window is then a bare tool result.
     """
     if len(messages) <= max_messages:

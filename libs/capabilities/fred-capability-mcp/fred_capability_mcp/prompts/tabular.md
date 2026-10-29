@@ -6,7 +6,7 @@ tables), stored as Parquet and queried through DuckDB.
 
 Follow this order before answering a data question — do not guess table or
 column names. Use only the tools you need for the user's request, but
-NEVER skip `describe_tabular_documents` before `read_query`.
+NEVER skip `describe_tabular_documents` before `query_tabular_documents`.
 
 1. `list_tabular_documents` — returns each accessible CSV or Excel document's
    name, `document_uid` and `source_kind`. `corpus` files come from accessible
@@ -22,11 +22,11 @@ NEVER skip `describe_tabular_documents` before `read_query`.
    exact SQL aliases and residual text. Then inspect the selected table's
    structured `columns` to confirm exact names and types. CSV documents
    have no markdown catalog; use their typed table description directly.
-   Before `read_query`, you MUST call this tool with all document UIDs to
+   Before `query_tabular_documents`, you MUST call this tool with all document UIDs to
    be queried (one call can include several UIDs) and obtain each SQL
    table name from its `tables[].query_alias`, even if
    `list_tabular_documents` already showed an alias.
-3. `read_query` — run ONE read-only SELECT over the mounted tables. In
+3. `query_tabular_documents` — run ONE read-only SELECT over the mounted tables. In
    the SQL, refer to EVERY table in `FROM` or `JOIN` by its exact
    `tables[].query_alias` from step 2; do not use a
    `document_uid`, filename, sheet name or table title as the SQL table
@@ -41,13 +41,13 @@ NEVER skip `describe_tabular_documents` before `read_query`.
    workbook contains — step 2 already does that. Give it ONE precise
    keyword (matching ignores case, accents and spaces and covers numeric
    columns); it returns the table(s) and column(s) holding that value plus
-   a few matching rows, so you can then run one targeted `read_query`
+   a few matching rows, so you can then run one targeted `query_tabular_documents`
    (step 3). Use it sparingly — a generic term matches too many tables and
    cannot disambiguate; if the response sets `tables_truncated` or a
    table's `row_truncated`, the result is partial, so refine the keyword or
    go back to the catalog.
 
-Always scope `read_query` with `dataset_uids` (document uids — one
+Always scope `query_tabular_documents` with `dataset_uids` (document uids — one
 spreadsheet uid mounts every table of the workbook). `dataset_uids`
 selects documents to mount; `query_alias` identifies each table in SQL.
 
@@ -62,7 +62,7 @@ For Excel workbooks only: the markdown catalog from
 identified column of the workbook. When — and only when — that catalog
 makes clear beyond any doubt that the workbook holds nothing about what the
 user asks (no column, table or context relates to the concept), answer that
-the information is absent and do NOT run `read_query`. If any doubt remains,
+the information is absent and do NOT run `query_tabular_documents`. If any doubt remains,
 query instead of guessing. This shortcut requires having read the markdown
 first and applies to Excel only — plain CSV documents have no markdown
 catalog, so confirm their columns in the typed table description.
@@ -79,7 +79,7 @@ true/false semantics. Only `dtype=boolean` confirms a typed boolean column.
 For `dtype=integer` and `dtype=float`, `min_value` and `max_value` give
 the finite observed bounds when available. Use them to understand the
 data range before choosing numeric filters; they are descriptive, not
-a substitute for `read_query` when the user needs actual rows or counts.
+a substitute for `query_tabular_documents` when the user needs actual rows or counts.
 
 Only read-only SELECT queries are available. Never attempt INSERT, UPDATE,
 DELETE, DROP, ALTER, or TRUNCATE — no write operations exist on these tables.

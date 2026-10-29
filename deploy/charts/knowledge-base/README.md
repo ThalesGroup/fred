@@ -28,7 +28,7 @@ configuration:
   knowledge_base:
     prefix: my.kb
     control_plane_url: http://control-plane-backend:8222/control-plane/v1
-    knowledge_flow_url: http://knowledge-flow-backend:8000/knowledge-flow/v1
+    knowledge_flow_url: http://knowledge-flow-backend:8000/knowledge-flow/v2
   security:
     m2m:
       realm_url: http://keycloak:8080/realms/app

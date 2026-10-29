@@ -20,6 +20,10 @@ import { PromptEditor, PROMPT_EDITOR_ROWS } from "@shared/molecules/PromptEditor
 import { PromptPicker } from "@shared/molecules/PromptPicker/PromptPicker.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 import TagInput from "@shared/molecules/TagInput/TagInput.tsx";
+import {
+  DOCUMENT_SELECTION_SUPPORTED,
+  type DocumentLibrarySelection,
+} from "@shared/molecules/DocumentLibraryScopePicker/documentLibrarySelection";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ManagedAgentFieldSpec } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
@@ -41,6 +45,9 @@ type TuningFieldRendererProps = {
   disabled: boolean;
   error?: string;
   teamId?: string;
+  /** Capability forms can bind the folder widget to a combined document scope. */
+  documentSelection?: DocumentLibrarySelection;
+  onDocumentSelectionChange?: (selection: DocumentLibrarySelection) => void;
   /** Effective values (current input or declared default) of every sibling field
    * in the same form — drives the `ui.visible_when` conditional display. */
   allValues?: Record<string, unknown>;
@@ -63,6 +70,8 @@ export function TuningFieldRenderer({
   disabled,
   error,
   teamId,
+  documentSelection,
+  onDocumentSelectionChange,
   allValues,
   pickerExplicit: pickerExplicitProp,
   onPickerExplicitChange,
@@ -257,20 +266,20 @@ export function TuningFieldRenderer({
     // `ui.widget` stock form widgets. "document_libraries" renders the
     // library/document tree picker instead of a raw tag-id text input; an
     // unknown widget id falls through to the default TagInput.
-    if (field.ui?.widget === "document_libraries" && disconnected) {
-      return (
-        <TextInput label={label} value={tags.join(", ")} disabled explanation={t("rework.weaverAgents.notConnected")} />
-      );
-    }
     if (field.ui?.widget === "document_libraries") {
       return (
         <div className={styles.field}>
           <span className={styles.label}>{label}</span>
           <DocumentLibraryScopePicker
-            teamId={teamId}
-            selectedTagIds={tags}
-            onChange={(tagIds) => onChange(field.key, tagIds)}
+            spaceId={teamId ?? ""}
+            value={documentSelection ?? { folderIds: tags, documentIds: [] }}
+            onChange={onDocumentSelectionChange ?? ((selection) => onChange(field.key, selection.folderIds))}
+            showDocuments={!!onDocumentSelectionChange}
+            disabled={disabled || !DOCUMENT_SELECTION_SUPPORTED}
           />
+          {!DOCUMENT_SELECTION_SUPPORTED && (
+            <p className={styles.hint}>{t("rework.weaverAgents.documentSelectionUnavailable")}</p>
+          )}
           {fieldDescription && <p className={styles.hint}>{fieldDescription}</p>}
           {error && <p className={styles.error}>{error}</p>}
         </div>

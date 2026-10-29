@@ -36,7 +36,7 @@ def test_confirmation_preserves_session_context_and_interrupt(
                 [
                     {
                         "kind": "tool_result",
-                        "tool_name": "search_documents_using_vectorization",
+                        "tool_name": "search_documents",
                         "is_error": False,
                     },
                     {
@@ -79,7 +79,7 @@ def test_confirmation_preserves_session_context_and_interrupt(
         [
             {
                 "kind": "tool_result",
-                "tool_name": "search_documents_using_vectorization",
+                "tool_name": "search_documents",
                 "is_error": True,
             },
             {"kind": "final", "sources": []},
@@ -87,7 +87,7 @@ def test_confirmation_preserves_session_context_and_interrupt(
         [
             {
                 "kind": "tool_result",
-                "tool_name": "search_documents_using_vectorization",
+                "tool_name": "search_documents",
             },
             {"kind": "awaiting_human", "request": {"stage": "tool_approval"}},
         ],

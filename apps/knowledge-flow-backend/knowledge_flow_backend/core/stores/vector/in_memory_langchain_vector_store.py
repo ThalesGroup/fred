@@ -295,13 +295,13 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
         Applies SearchFilter tag_ids and metadata_terms via a callable filter.
         """
         lc_filter = None
-        if search_filter and (search_filter.tag_ids or search_filter.metadata_terms):
+        if search_filter and (search_filter.tag_ids or search_filter.metadata_terms or search_filter.metadata_any):
             tag_ids = list(search_filter.tag_ids) if search_filter.tag_ids else None
             metadata_terms = search_filter.metadata_terms
 
             def _filter(doc: Document) -> bool:
                 md = doc.metadata or {}
-                return _matches_tag_ids(md, tag_ids) and _matches_metadata_terms(md, metadata_terms)
+                return search_filter.matches_selection(md) and _matches_tag_ids(md, tag_ids) and _matches_metadata_terms(md, metadata_terms)
 
             lc_filter = _filter
 

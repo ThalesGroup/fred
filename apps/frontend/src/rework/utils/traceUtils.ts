@@ -124,7 +124,7 @@ const SLUG_OVERRIDES: Record<string, string> = {
 
 // Group names match the MCP mounts and Fred tool sources.
 const TOOL_LABEL_GROUPS: Record<string, readonly string[]> = {
-  "mcp.text": ["search_documents_using_vectorization"],
+  "mcp.text": ["search_documents"],
   "mcp.prometheusOps": [
     "prometheus_query",
     "prometheus_query_range",
@@ -210,7 +210,7 @@ function toTitleCase(s: string): string {
 
 /**
  * Bare tool slug of a raw tool name: MCP prefix and provider dropped, trailing
- * numeric suffix stripped. `mcp__knowledge_flow__read_query_2` → `read_query`.
+ * numeric suffix stripped. `mcp__knowledge_flow__query_tabular_documents_2` → `query_tabular_documents`.
  */
 export function toolSlug(rawName: string): string {
   let slug = rawName;
@@ -431,7 +431,7 @@ function userFacingSqlError(error: string): string {
 
 /** Build the curated SQL failure view from the paired call/result messages.
  *
- * Only `read_query` is allowed to reveal one argument in the trace: the SQL is
+ * Only `query_tabular_documents` is allowed to reveal one argument in the trace: the SQL is
  * already shown by the success view, and the failed result text crossed Fred's
  * typed error trust boundary before reaching the frontend. Transport details
  * such as HTTP status stay outside this payload.
@@ -441,7 +441,7 @@ export function asFailedSqlQueryResult(entry: TraceEntry): SqlQueryResult | null
     entry.kind !== "combo" ||
     !entry.result ||
     toolResultOk(entry.result) ||
-    toolSlug(toolName(entry.call)) !== "read_query"
+    toolSlug(toolName(entry.call)) !== "query_tabular_documents"
   ) {
     return null;
   }
@@ -622,7 +622,7 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
       if (skillFilePathOf(entry) && translate) {
         return translate("rework.chatTrace.toolLabels.platform.readSkillFile");
       }
-      if (toolSlug(toolName(entry.call)) === "read_query" && translate) {
+      if (toolSlug(toolName(entry.call)) === "query_tabular_documents" && translate) {
         return translate("rework.chatTrace.toolLabels.mcp.tabular.readQuery");
       }
       const webKind = webResearchToolKind(toolName(entry.call));

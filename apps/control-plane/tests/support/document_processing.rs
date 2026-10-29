@@ -1078,6 +1078,32 @@ async fn processing_existing_worker_journey_without_kf_http() {
                 ProcessingStatus::Succeeded
             );
         }
+        if name.ends_with("csv") || name.ends_with("xlsx") {
+            let published = control_plane::db::document(&d.e.pool, id).await.unwrap();
+            assert!(
+                published.retrievable,
+                "published tables are included without requiring vectors"
+            );
+            let tables: i64 = sqlx::query_scalar("select count(*) from document d join artifact a on a.generation_id=d.published_generation where d.id=$1 and a.path like 'datasets/%.parquet'")
+                .bind(id).fetch_one(&d.e.pool).await.unwrap();
+            assert!(tables > 0);
+            if outcome.vectors == 0 {
+                use control_plane::processing::retrievable::SetRetrievable;
+                for retrievable in [false, true] {
+                    let changed = p
+                        .set_retrievable("writer", id, SetRetrievable { retrievable })
+                        .await
+                        .unwrap();
+                    assert_eq!(changed.retrievable, retrievable);
+                    assert!(!changed.retrievable_pending);
+                }
+                assert!(
+                    p.set_retrievable("reader", id, SetRetrievable { retrievable: false })
+                        .await
+                        .is_err()
+                );
+            }
+        }
         if name.ends_with("csv") {
             assert_eq!(outcome.rows, Some(2));
         } else if !name.ends_with("xlsx") {

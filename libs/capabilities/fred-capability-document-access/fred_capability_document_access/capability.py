@@ -22,7 +22,7 @@ Why this module exists:
 - it doubles as the canonical in-tree reference a capability author copies
 
 What this capability ships (and deliberately does NOT):
-- `search_documents_using_vectorization`, the vector-search tool, wired live
+- `search_documents`, the vector-search tool, wired live
   through `ctx.services.document_search`
 - `list_document_tree`: exposed only when `ctx.services.document_tree` exists.
   The Weaver pod does not supply it yet. Failures surface as
@@ -72,7 +72,9 @@ import json
 import logging
 import time
 from collections.abc import Mapping, Sequence
+from uuid import UUID
 
+from fred_core.documents.selection import DocumentScope
 from fred_core.store.vector_search import (
     DEFAULT_MIN_SOURCE_SCORE_RATIO,
     select_citable_sources,
@@ -105,7 +107,7 @@ from fred_sdk.contracts.runtime import (
     unwrap_run_stop_error,
 )
 from langchain_core.tools import BaseTool, tool
-from pydantic import BaseModel, Field, TypeAdapter, model_validator
+from pydantic import BaseModel, Field, TypeAdapter, field_validator, model_validator
 
 # The tool-result `tool_ref` this capability stamps on its artifact — distinct
 # from the builtin `knowledge.search` ref so the two paths stay traceable apart.
@@ -254,12 +256,13 @@ class DocumentAccessConfig(BaseModel):
     Agent-creation / stored config of the document-access capability (RFC §3.2),
     mirroring the legacy MCP search tool's configuration surface exactly.
 
-    `bind_libraries` + `library_tag_ids` pin the agent to a fixed library set
-    (the bound ids are IGNORED while `bind_libraries` is off, like the legacy
-    tool); `document_uids` NARROWS to specific documents. An empty list means
-    "no capability-side narrowing at this level" (the session binding still
-    bounds it). `default_top_k` and `search_policy` set retrieval defaults;
-    `attachments` and `team_documents` are the two document sources (at least
+    `library_tag_ids` are Weaver folder UUIDs (direct contents, no recursion),
+    active when `bind_libraries` is true. `document_uids` are Weaver document
+    UUIDs; they union with the selected folders. None means no document selection;
+    [] is explicitly empty. A binding with no folders/documents selects nothing.
+    The turn can only intersect this configuration, never broaden it.
+    `default_top_k` and `search_policy` set retrieval defaults;
+    `attachments` and `team_documents` are the two sources (at least
     one must stay on); the `show_*` toggles pick which computed chat controls
     the composer shows (library/document scope, search policy, RAG scope). When
     the search-policy picker is shown, `search_policy` acts as the picker's
@@ -271,7 +274,7 @@ class DocumentAccessConfig(BaseModel):
     """
 
     library_tag_ids: ScopePrivate[list[str]] = []
-    document_uids: ScopePrivate[list[str]] = []
+    document_uids: ScopePrivate[list[str] | None] = None
     default_top_k: int = 8
     search_policy: str | None = None
     # The switch and its list form one team-owned setting: a copy that kept the
@@ -296,6 +299,23 @@ class DocumentAccessConfig(BaseModel):
             "the model itself can read — only the human-facing Sources panel."
         ),
     )
+
+    @field_validator("library_tag_ids", "document_uids")
+    @classmethod
+    def _weaver_ids(cls, values: list[str] | None) -> list[str] | None:
+        return (
+            None
+            if values is None
+            else list(dict.fromkeys(str(UUID(value)) for value in values))
+        )
+
+    @property
+    def document_scope(self) -> DocumentScope:
+        if not self.team_documents:
+            return DocumentScope.from_ids([], [])
+        return DocumentScope.from_ids(
+            self.library_tag_ids if self.bind_libraries else None, self.document_uids
+        )
 
     @model_validator(mode="before")
     @classmethod
@@ -335,6 +355,7 @@ class DocumentAccessConfig(BaseModel):
                 "document_access needs at least one source: attachments or "
                 "team_documents."
             )
+        self.document_scope  # Validate Weaver identifiers, including explicit empty scope.
         return self
 
 
@@ -342,12 +363,31 @@ class DocumentAccessTurnOptions(BaseModel):
     """
     Per-turn narrowing carried by the `document_scope` chat control (RFC §3.5).
 
-    Each field is `None` when the turn does not narrow that level; a present list
-    is intersected with the capability config scope (never widening it).
+    Both fields absent/null reset to the agent scope. Any present list creates a
+    selection: folders and documents union, then intersect the agent scope by
+    covered documents. Empty lists select nothing. IDs are Weaver UUIDs.
     """
 
     library_tag_ids: list[str] | None = None
     document_uids: list[str] | None = None
+
+    @field_validator("library_tag_ids", "document_uids")
+    @classmethod
+    def _weaver_ids(cls, values: list[str] | None) -> list[str] | None:
+        return (
+            None
+            if values is None
+            else list(dict.fromkeys(str(UUID(value)) for value in values))
+        )
+
+    @property
+    def document_scope(self) -> DocumentScope:
+        return DocumentScope.from_ids(self.library_tag_ids, self.document_uids)
+
+    @model_validator(mode="after")
+    def _validate_selection(self) -> DocumentAccessTurnOptions:
+        self.document_scope
+        return self
 
 
 class DocumentAccessCapability(
@@ -368,7 +408,7 @@ class DocumentAccessCapability(
         id="document_access",
         # Bump on every config-surface change: the version keys the stored-slice
         # schema_version and the control-plane chat-controls cache.
-        version="0.2.1",
+        version="0.3.0",
         name="capability.document_access.name",
         description="capability.document_access.description",
         icon="find_in_page",
@@ -496,15 +536,11 @@ class DocumentAccessCapability(
         uploads: Mapping[str, list[UploadedFile]],
         ctx: SaveContext,
     ) -> DocumentAccessConfig:
-        """Refuse sources and scopes Knowledge Flow does not serve on Weaver yet."""
+        """Validate Weaver selections; session attachments remain unavailable."""
 
         del uploads, ctx
         if config.attachments:
             raise ValueError("Session attachments are not available on this platform.")
-        if config.bind_libraries or config.library_tag_ids or config.document_uids:
-            raise ValueError(
-                "Library or document selections are not available on this platform."
-            )
         return config
 
     def chat_controls(self, config: DocumentAccessConfig) -> list[ChatControlSpec]:
@@ -604,23 +640,8 @@ class DocumentAccessCapability(
         turn = ctx.turn_options
         services = ctx.services
 
-        # Capability-config ∩ turn-option → the params handed to the port. This
-        # enforces `turn_option ⊆ capability_config`; the adapter then bounds the
-        # result by the session binding (`⊆ session_binding`).
-        # Bound library ids only apply while the binding toggle is on — same
-        # semantics as the legacy tool (the tree's value is kept but inert
-        # when unbound).
-        bound_library_ids = (
-            (config.library_tag_ids or None)
-            if config.team_documents and config.bind_libraries
-            else None
-        )
-        scoped_library_tag_ids = narrow_scope_ids(
-            bound_library_ids, turn.library_tag_ids
-        )
-        scoped_document_uids = narrow_scope_ids(
-            config.document_uids or None, turn.document_uids
-        )
+        # Keep unions intact: only Knowledge Flow knows folder/document membership.
+        document_scope = config.document_scope.intersect(turn.document_scope)
         default_top_k = config.default_top_k if config.default_top_k > 0 else 8
         # With the search-policy picker shown, the configured policy is only
         # the picker's DEFAULT: pass None so the adapter falls back to the
@@ -632,10 +653,10 @@ class DocumentAccessCapability(
         min_source_score_ratio = config.min_source_score_ratio
 
         @tool(
-            "search_documents_using_vectorization",
+            "search_documents",
             response_format="content_and_artifact",
         )
-        async def search_documents_using_vectorization(
+        async def search_documents(
             question: str,
             top_k: int | None = None,
         ) -> tuple[str, ToolInvocationResult]:
@@ -671,8 +692,7 @@ class DocumentAccessCapability(
                 result: DocumentSearchResult = await port.search(
                     question,
                     top_k=effective_top_k or default_top_k,
-                    library_tag_ids=scoped_library_tag_ids,
-                    document_uids=scoped_document_uids,
+                    document_scope=document_scope,
                     search_policy=search_policy,
                     include_attachments=config.attachments,
                     include_team_documents=config.team_documents,
@@ -765,8 +785,7 @@ class DocumentAccessCapability(
             try:
                 result: DocumentTreeResult = await port.tree(
                     working_directory=working_directory,
-                    library_tag_ids=scoped_library_tag_ids,
-                    document_uids=scoped_document_uids,
+                    document_scope=document_scope,
                     max_chars=effective_max_chars,
                 )
             except Exception as exc:
@@ -790,7 +809,7 @@ class DocumentAccessCapability(
             )
             return text, artifact
 
-        tools: list[BaseTool] = [search_documents_using_vectorization]
+        tools: list[BaseTool] = [search_documents]
         # The tree lists the corpus only (no session-attachment enumeration yet,
         # see module docstring), so it is dropped rather than registered-but-empty.
         if config.team_documents and services.document_tree is not None:

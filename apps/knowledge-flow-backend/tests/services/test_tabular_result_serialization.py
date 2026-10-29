@@ -19,7 +19,6 @@ from datetime import datetime
 import httpx
 import pytest
 from fastapi import APIRouter, FastAPI
-from fred_core import get_current_user
 from fred_core.common import register_exception_handlers
 from fred_core.documents.document_structures import FileType
 from openpyxl import Workbook
@@ -27,7 +26,9 @@ from openpyxl import Workbook
 from knowledge_flow_backend.core.processors.input.excel_processor.excel_processor import ExcelProcessor
 from knowledge_flow_backend.core.processors.output.excel_processor.excel_table_registration_processor import ExcelTableRegistrationProcessor
 from knowledge_flow_backend.features.metadata.service import MetadataService
-from knowledge_flow_backend.features.tabular.controller import TabularController
+from knowledge_flow_backend.features.tabular.controller import TabularController, tabular_service
+from knowledge_flow_backend.security.weaver_admission import delegated_person
+from tests.services.tabular_engine import TabularEngineHarness
 from tests.services.test_tabular_service import _ingest_csv, _metadata, _user
 
 
@@ -38,10 +39,12 @@ def tabular_app(app_context):
     app = FastAPI()
     register_exception_handlers(app)
     router = APIRouter()
-    controller = TabularController(router)
+    TabularController(router)
+    service = TabularEngineHarness()
     app.include_router(router)
-    app.dependency_overrides[get_current_user] = _user
-    return app, controller.service
+    app.dependency_overrides[delegated_person] = _user
+    app.dependency_overrides[tabular_service] = lambda: service
+    return app, service
 
 
 @pytest.mark.asyncio

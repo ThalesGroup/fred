@@ -152,7 +152,7 @@ async def test_runtime_provider_content_and_artifact_preserves_error_artifact() 
 
     runtime_tool = StructuredTool.from_function(
         coroutine=_provider_error,
-        name="read_query",
+        name="query_tabular_documents",
         description="Run one SQL query.",
         response_format="content_and_artifact",
     )
@@ -170,19 +170,21 @@ async def test_runtime_provider_content_and_artifact_preserves_error_artifact() 
 
 
 @pytest.mark.asyncio
-async def test_context_aware_read_query_keeps_classified_engine_detail() -> None:
+async def test_context_aware_query_tabular_documents_keeps_classified_engine_detail() -> (
+    None
+):
     """The trusted SQL detail must survive provider resolution without HTTP text."""
 
-    async def _failing_read_query(sql: str) -> str:
+    async def _failing_query_tabular_documents(sql: str) -> str:
         del sql
         raise RuntimeError(
-            "Error calling read_query. Status code: 400. Response: "
+            "Error calling query_tabular_documents. Status code: 400. Response: "
             '{"detail":"Binder Error: Referenced column amount_typo not found"}'
         )
 
     base_tool = StructuredTool.from_function(
-        coroutine=_failing_read_query,
-        name="read_query",
+        coroutine=_failing_query_tabular_documents,
+        name="query_tabular_documents",
         description="Run one SQL query.",
         response_format="content_and_artifact",
     )

@@ -85,7 +85,7 @@ class BoundTool:
 def tabular_tools_bound(bound_tools: Sequence[BoundTool]) -> bool:
     """
     Tell whether the tabular MCP server is actually bound to this agent
-    instance, i.e. whether it can run `read_query`/`search_tabular_values`
+    instance, i.e. whether it can run `query_tabular_documents`/`search_tabular_values`
     against a SQL-queryable attachment dataset.
 
     Why this exists:

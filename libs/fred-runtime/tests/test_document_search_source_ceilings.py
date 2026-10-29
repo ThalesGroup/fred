@@ -97,8 +97,6 @@ async def test_sources_bound_the_turn_scope(
     "restriction",
     [
         {"include_attachments": True},
-        {"library_tag_ids": ["library"]},
-        {"document_uids": ["document"]},
     ],
 )
 async def test_unsupported_scope_is_refused(
@@ -153,3 +151,22 @@ async def test_failure_is_not_an_empty_result(monkeypatch: pytest.MonkeyPatch) -
         with pytest.raises(DocumentPortCallError) as exc:
             await adapter.search("q", include_attachments=False)
     assert exc.value.timed_out
+
+
+@pytest.mark.asyncio
+async def test_weaver_selections_are_transmitted_without_id_list_intersection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fred_core.documents.selection import DocumentScope
+
+    folder = "00000000-0000-0000-0000-000000000201"
+    doc = "00000000-0000-0000-0000-000000000101"
+    client = _Client()
+    adapter, authority = _adapter(client, monkeypatch, selected_document_uids=[doc])
+    with RunScope.open() as run:
+        run.turn_authority = authority
+        authority.start(run)
+        await adapter.search("q", library_tag_ids=[folder], include_attachments=False)
+    assert client.calls[0]["document_scope"] == DocumentScope.from_ids(
+        document_ids=[doc]
+    ).intersect(DocumentScope.from_ids([folder]))

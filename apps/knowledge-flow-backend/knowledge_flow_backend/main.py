@@ -42,9 +42,13 @@ from knowledge_flow_backend.common.config_loader import load_configuration
 from knowledge_flow_backend.common.structures import Configuration
 from knowledge_flow_backend.core.monitoring.monitoring_controller import MonitoringController
 from knowledge_flow_backend.features.content.published_markdown import MarkdownController
+from knowledge_flow_backend.features.document_scope import declare_document_context_openapi
 from knowledge_flow_backend.features.extract.controller import ExtractController
 from knowledge_flow_backend.features.summarize.controller import SummarizeController
+from knowledge_flow_backend.features.tabular.controller import TabularController
+from knowledge_flow_backend.features.tabular.execution import close_tabular_execution, register_tabular_exception_handlers
 from knowledge_flow_backend.features.vector_search.vector_search_controller import VectorSearchController
+from knowledge_flow_backend.mcp_mount import mount_fastapi_tools
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -109,6 +113,7 @@ def create_app() -> FastAPI:
                     with suppress(asyncio.CancelledError):
                         await task
             await gc_diagnostics.stop()
+            close_tabular_execution()
             await application_context.shutdown()
 
     app = RequestLoggingFastAPI(
@@ -126,6 +131,7 @@ def create_app() -> FastAPI:
         start_http_server(prom_cfg.port, addr=prom_cfg.address)
 
     register_exception_handlers(app)
+    register_tabular_exception_handlers(app)
     initialize_user_security(configuration.security.user)
     # JWT and trusted delegation only; admission is Control Plane's, at turn start.
     configure_token_security(configuration.security)
@@ -141,8 +147,17 @@ def create_app() -> FastAPI:
     MarkdownController(router)
     SummarizeController(router)
     ExtractController(router)
+    TabularController(router)
     app.include_router(monitoring_router)
     app.include_router(router)
+    declare_document_context_openapi(app)
+    mount_fastapi_tools(
+        app,
+        path=f"{configuration.app.base_url}/mcp/tabular",
+        name="Knowledge Flow Tabular MCP",
+        description="Query published CSV and Excel tables in the active document selection. Start with list_tabular_documents, then describe_tabular_documents, search_tabular_values or query_tabular_documents.",
+        tags={"Tabular"},
+    )
     return app
 
 

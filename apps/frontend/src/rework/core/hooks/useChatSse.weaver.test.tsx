@@ -30,6 +30,7 @@ import type { ExecutionPreparation } from "../../../slices/controlPlane/controlP
 
 const spaceId = "f0137825-89b0-4d36-bdc3-b007a9777122";
 const preparation: ExecutionPreparation = {
+  agent_configuration_revision: 1,
   space_id: spaceId,
   agent_instance_id: "agent-1",
   execute_stream_url: "/runtime/agents/execute/stream",

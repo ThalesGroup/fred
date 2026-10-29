@@ -18,17 +18,16 @@ EXCEL-EXTRACTION-PIPELINE-RFC §12 / INGEST-04).
 
 These exercise the service method directly: normalized substring matching
 (case/accent/whitespace insensitive, decimal comma treated as point) over every
-column cast to text, the row/table caps and their truncation signals, and that
-ReBAC scoping matches `query_read`.
+column cast to text, the row/table caps and their truncation signals, with access resolution supplied by the engine harness. Weaver authorization
+is covered separately in test_weaver_tabular.py.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
-from fred_core import DocumentPermission, KeycloakUser, TagPermission
+from fred_core import KeycloakUser
 from fred_core.documents.document_structures import (
     DocumentMetadata,
     FileInfo,
@@ -42,8 +41,8 @@ from fred_core.documents.document_structures import (
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
 from knowledge_flow_backend.features.metadata.service import MetadataService
-from knowledge_flow_backend.features.tabular.service import TabularService
 from knowledge_flow_backend.features.tabular.structures import TabularSearchRequest
+from tests.services.tabular_engine import TabularEngineHarness
 
 
 def _user() -> KeycloakUser:
@@ -65,22 +64,6 @@ async def _ingest_csv(*, tmp_path: Path, document_uid: str, file_name: str, cont
     return processed
 
 
-class _FakeRebac:
-    def __init__(self, readable_document_uids: set[str]):
-        self.readable_document_uids = readable_document_uids
-
-    async def lookup_user_resources(self, user, permission):
-        """Readable documents expose their folder; documents are never enumerated."""
-        del user
-        assert permission is TagPermission.READ
-        return [SimpleNamespace(id=f"lib-{uid}") for uid in sorted(self.readable_document_uids)]
-
-    async def has_user_permission(self, user, permission, resource_id):
-        del user
-        assert permission is DocumentPermission.READ
-        return resource_id in self.readable_document_uids
-
-
 @pytest.mark.asyncio
 async def test_search_locates_value_case_accent_and_space_insensitive(tmp_path, metadata_store):
     content_store = ApplicationContext.get_instance().get_content_store()
@@ -93,7 +76,7 @@ async def test_search_locates_value_case_accent_and_space_insensitive(tmp_path, 
         content="reference,fournisseur,quantite\nABC-123,Café de Paris,42\nXYZ-999,Boulangerie,7\n",
     )
 
-    service = TabularService()
+    service = TabularEngineHarness()
 
     # Accent + case insensitive: search "CAFE" finds "Café de Paris".
     accent = await service.search_values(_user(), request=TabularSearchRequest(keyword="CAFE"))
@@ -123,7 +106,7 @@ async def test_search_quotes_filename_column_and_keyword(tmp_path, metadata_stor
         content=f'"quo""te",amount\n"{keyword}",10\n',
     )
 
-    service = TabularService()
+    service = TabularEngineHarness()
     response = await service.search_values(_user(), request=TabularSearchRequest(keyword=keyword))
     assert len(response.matches) == 1
     assert response.matches[0].matched_columns == ['quo"te']
@@ -144,7 +127,7 @@ async def test_search_matches_numeric_format_with_thousands_space_and_decimal_co
         content='produit,montant\nVis,"1 234,56"\nEcrou,"99,90"\n',
     )
 
-    service = TabularService()
+    service = TabularEngineHarness()
     response = await service.search_values(_user(), request=TabularSearchRequest(keyword="1234.56"))
     assert [match.document_uid for match in response.matches] == ["doc-montants"]
     assert response.matches[0].matched_columns == ["montant"]
@@ -164,7 +147,7 @@ async def test_search_caps_rows_per_table_and_flags_truncation(tmp_path, metadat
         content=f"id,status\n{rows}\n",
     )
 
-    service = TabularService()
+    service = TabularEngineHarness()
     response = await service.search_values(_user(), request=TabularSearchRequest(keyword="error", max_rows_per_table=2))
     assert len(response.matches) == 1
     match = response.matches[0]
@@ -186,7 +169,7 @@ async def test_search_caps_matching_tables_and_flags_truncation(tmp_path, metada
             content="label\nwidget\n",
         )
 
-    service = TabularService()
+    service = TabularEngineHarness()
     response = await service.search_values(_user(), request=TabularSearchRequest(keyword="widget", max_matching_tables=2))
     assert len(response.matches) == 2
     assert response.tables_truncated is True
@@ -206,28 +189,10 @@ async def test_search_returns_no_match_when_value_absent(tmp_path, metadata_stor
         content="reference,fournisseur\nABC-123,Café de Paris\n",
     )
 
-    service = TabularService()
+    service = TabularEngineHarness()
     response = await service.search_values(_user(), request=TabularSearchRequest(keyword="introuvable-xyz"))
     assert response.matches == []
     assert response.tables_truncated is False
-
-
-@pytest.mark.asyncio
-async def test_search_only_scans_rebac_authorized_documents(tmp_path, metadata_store):
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    await _ingest_csv(tmp_path=tmp_path, document_uid="doc-visible", file_name="visible.csv", content="note\nsecret\n")
-    await _ingest_csv(tmp_path=tmp_path, document_uid="doc-hidden", file_name="hidden.csv", content="note\nsecret\n")
-
-    service = TabularService()
-    service.rebac = _FakeRebac({"doc-visible"})
-
-    response = await service.search_values(_user(), request=TabularSearchRequest(keyword="secret"))
-    assert [match.document_uid for match in response.matches] == ["doc-visible"]
-
-    with pytest.raises(PermissionError, match="doc-hidden"):
-        await service.search_values(_user(), request=TabularSearchRequest(keyword="secret", dataset_uids=["doc-hidden"]))
 
 
 @pytest.mark.asyncio
@@ -237,7 +202,7 @@ async def test_search_rejects_too_short_keyword(tmp_path, metadata_store):
 
     await _ingest_csv(tmp_path=tmp_path, document_uid="doc-catalogue", file_name="catalogue.csv", content="note\nhello\n")
 
-    service = TabularService()
+    service = TabularEngineHarness()
     with pytest.raises(ValueError, match="at least 2 characters"):
         await service.search_values(_user(), request=TabularSearchRequest(keyword="a"))
 
@@ -264,7 +229,7 @@ async def test_search_caps_datasets_examined_even_when_nothing_matches(tmp_path,
             content="label\nsomethingelse\n",
         )
 
-    service = TabularService()
+    service = TabularEngineHarness()
     service.tabular_config = service.tabular_config.model_copy(update={"query": service.tabular_config.query.model_copy(update={"max_selected_datasets": 2})})
 
     examined: list[str] = []
@@ -316,7 +281,7 @@ async def test_search_does_not_claim_to_have_searched_a_partially_scanned_docume
         content="label\nwidget\n",
     )
 
-    service = TabularService()
+    service = TabularEngineHarness()
     all_datasets = await service._resolve_authorized_datasets(_user())
     workbook_tables = [dataset for dataset in all_datasets if dataset.metadata.document_uid == "doc-book"]
     assert len(workbook_tables) > 1, "fixture must produce a multi-table workbook"

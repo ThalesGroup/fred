@@ -107,7 +107,7 @@ let preparedModelChoice: ModelOfferKey | null = null;
 let capturedOnTurnStarted: (() => void) | undefined;
 let capturedOnTurnRejected: ((draft: string, sessionId: string) => void) | undefined;
 let capturedIsTurnCurrent: ((sessionId: string) => boolean) | undefined;
-let capturedOnError: ((msg: string) => void) | undefined;
+let capturedOnError: ((msg: string, code?: string) => void) | undefined;
 let capturedOnAwaitingHuman: ((event: unknown) => void) | undefined;
 let capturedOnSteeredMessage: ((messageId: string, sessionId: string) => void) | undefined;
 vi.mock("@hooks/useChatSse", () => ({
@@ -115,7 +115,7 @@ vi.mock("@hooks/useChatSse", () => ({
     onTurnStarted?: () => void;
     onTurnRejected?: (draft: string, sessionId: string) => void;
     isTurnCurrent?: (sessionId: string) => boolean;
-    onError?: (msg: string) => void;
+    onError?: (msg: string, code?: string) => void;
     onAwaitingHuman?: (event: unknown) => void;
     onSteeredMessage?: (messageId: string, sessionId: string) => void;
   }) => {
@@ -142,13 +142,19 @@ vi.mock("@hooks/useChatSse", () => ({
   },
 }));
 
+vi.mock("@shared/molecules/DocumentLibraryScopePicker/documentLibrarySelection", () => ({
+  DOCUMENT_SELECTION_SUPPORTED: true,
+}));
+
 const composerResetMock = vi.fn();
 const composerBindSessionMock = vi.fn();
 const composerValue = {
+  agentConfigurationRevision: 7,
+  acceptPreparation: vi.fn(),
+  documentSelection: null as { folderIds: string[]; documentIds: string[] } | null,
+  setDocumentSelection: vi.fn(),
   searchPolicy: "corpus" as const,
   ragScope: "general" as const,
-  selectedLibraryIds: [] as string[],
-  selectedDocumentUids: [] as string[],
   askUser: true,
   setAskUser: vi.fn(),
   reasoning: false,
@@ -157,10 +163,9 @@ const composerValue = {
   setChatProfileId: vi.fn(),
   setSearchPolicy: vi.fn(),
   setRagScope: vi.fn(),
-  setSelectedLibraryIds: vi.fn(),
-  setSelectedDocumentUids: vi.fn(),
   reset: composerResetMock,
   bindSession: composerBindSessionMock,
+  discardDraft: vi.fn(),
 };
 vi.mock("./useComposerSettings", () => ({
   useComposerSettings: (_sessionId: unknown, _controls: unknown, _models: unknown) => {
@@ -183,6 +188,7 @@ const chatAttachmentsValue = {
   removeAttachment: vi.fn(),
   deletePersistedAttachment: vi.fn(),
   clearReadyAttachments: vi.fn(),
+  clearLocalAttachments: vi.fn(),
 };
 vi.mock("./useChatAttachments", () => ({
   useChatAttachments: () => chatAttachmentsValue,
@@ -311,10 +317,34 @@ describe("useManagedChat — session write reliability", () => {
     });
   };
 
+  it("sends the pinned draft revision and permits a clean restart after a configuration refusal", async () => {
+    registerSessionImpl = async () => {
+      throw { status: 409, data: { code: "agent_configuration_changed" } };
+    };
+    mount();
+    act(() => latest.setInput("old draft"));
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(registerSessionCalls[0]).toMatchObject({ createSessionRequest: { agent_configuration_revision: 7 } });
+    expect(latest.agentConfigurationChanged).toBe(true);
+    expect(latest.executionDisabled).toBe(true);
+    expect(sendMock).not.toHaveBeenCalled();
+    act(() => latest.startNewConversation());
+    expect(latest.sessionId).toBeNull();
+    expect(latest.input).toBe("");
+    expect(composerValue.discardDraft).toHaveBeenCalled();
+    expect(composerResetMock).toHaveBeenCalledWith(null, []);
+    expect(chatAttachmentsValue.clearLocalAttachments).toHaveBeenCalled();
+    expect(chatAttachmentsValue.deletePersistedAttachment).not.toHaveBeenCalled();
+    expect(latest.agentConfigurationChanged).toBe(false);
+  });
+
   beforeEach(() => {
     postponeNavigation = false;
     commitNavigation = undefined;
     localStorage.clear();
+    composerValue.documentSelection = null;
     composerValue.askUser = true;
     composerValue.reasoning = false;
     composerValue.chatProfileId = null;
@@ -359,6 +389,10 @@ describe("useManagedChat — session write reliability", () => {
       showErrorMock,
       notifyApiErrorMock,
       chatAttachmentsValue.clearReadyAttachments,
+      chatAttachmentsValue.clearLocalAttachments,
+      chatAttachmentsValue.deletePersistedAttachment,
+      composerValue.discardDraft,
+      composerValue.acceptPreparation,
       chatAttachmentsValue.addFiles,
     ]) {
       mock.mockReset();
@@ -519,6 +553,27 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.input).toBe("");
   });
 
+  it("does not mark a new draft incompatible when an abandoned creation fails late", async () => {
+    sessionQueryUnresolved = true;
+    const creation = deferred<unknown>();
+    registerSessionImpl = () => creation.promise;
+    mount();
+    act(() => latest.setInput("old draft"));
+    let first!: Promise<void>;
+    await act(async () => {
+      first = latest.handleSend();
+      await Promise.resolve();
+    });
+    act(() => latest.startNewConversation());
+    await act(async () => {
+      creation.reject({ status: 409, data: { code: "agent_configuration_changed" } });
+      await first;
+    });
+    expect(latest.sessionId).toBeNull();
+    expect(latest.agentConfigurationChanged).toBe(false);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
   it("does not start a first turn when session creation finishes after unmount", async () => {
     sessionQueryUnresolved = true;
     mount();
@@ -665,6 +720,40 @@ describe("useManagedChat — session write reliability", () => {
     expect(registerSessionCalls).toEqual([]);
     expect(sendMock).not.toHaveBeenCalled();
     expect(prepareChatControlsMock).toHaveBeenCalledWith(null, undefined);
+  });
+
+  it("sends combined selection on first and following messages, then explicit empty and reset", async () => {
+    chatSseChatControls = [{ capability_id: "document_access", widget: "document_scope", params: {} }];
+    composerValue.documentSelection = { folderIds: ["folder"], documentIds: ["doc"] };
+    mount();
+    for (const selection of [composerValue.documentSelection, { folderIds: [], documentIds: [] }, null]) {
+      composerValue.documentSelection = selection;
+      act(() => latest.setInput("question"));
+      rerender();
+      await act(async () => {
+        await latest.handleSend();
+      });
+      const call = sendMock.mock.calls[sendMock.mock.calls.length - 1];
+      expect(call[3]).toEqual({
+        document_access: {
+          library_tag_ids: selection?.folderIds ?? null,
+          document_uids: selection?.documentIds ?? null,
+        },
+      });
+      expect(call[2]).not.toHaveProperty("selected_document_libraries_ids");
+      expect(call[2]).not.toHaveProperty("selected_document_uids");
+    }
+  });
+
+  it("preserves an explicitly empty scope on human-input resume after restoration", async () => {
+    composerValue.documentSelection = { folderIds: [], documentIds: [] };
+    mount();
+    bindSession("session-1");
+    act(() => capturedOnAwaitingHuman?.(awaitingHumanEvent));
+    await act(async () => latest.handleHitlAnswer("proceed"));
+    expect(sendHitlResumeMock.mock.calls[sendHitlResumeMock.mock.calls.length - 1]?.[4]).toEqual({
+      document_access: { library_tag_ids: [], document_uids: [] },
+    });
   });
 
   it("hands a handleSend-minted session id to the composer instead of resetting it", async () => {
@@ -1385,6 +1474,26 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendHitlResumeMock).not.toHaveBeenCalled();
     act(() => capturedOnAwaitingHuman?.(interruptedEvent));
     expect(latest.pendingHitl).toEqual(interruptedEvent);
+  });
+
+  it("continues an interrupted run with the restored document restriction", async () => {
+    composerValue.documentSelection = { folderIds: [], documentIds: [] };
+    mount();
+    bindSession("session-1");
+    act(() => capturedOnAwaitingHuman?.(interruptedEvent));
+    await act(async () => {
+      latest.handleHitlAnswer("continue");
+      await Promise.resolve();
+    });
+    expect(sendMock).toHaveBeenCalledWith(
+      "",
+      "session-1",
+      expect.any(Object),
+      {
+        document_access: { library_tag_ids: [], document_uids: [] },
+      },
+      { action: "continue", interruptionId: "int-1" },
+    );
   });
 
   it("continue on an interrupted run sends the interruption, not a HITL resume, and keeps the draft", async () => {

@@ -13,14 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage: a document excluded from search (source.retrievable === false)
-// shows an error-colored indicator icon at the end of its row, just left of
-// the Preview icon button — visible only for that state, not for a
-// retrievable (or not-yet-stamped) document. Also covers a tabular dataset
-// (CSV/XLSX, only the `sql` stage ever completes): `retrievable` stays false
-// there by design (RAG-DATASET-DISCOVERY-RFC.md, no vector chunks emitted
-// unless dataset pointer chunks are enabled), so the indicator must stay
-// hidden — it isn't a real exclusion for that content type.
+// Coverage: exclusion applies to vector and tabular documents after indexing.
 
 import "./inactiveManagerFolders.test-support";
 import { act } from "react";
@@ -183,10 +176,10 @@ describe("DocumentWorkspace — excluded-from-search row indicator", () => {
     ).toBeNull();
   });
 
-  it("hides the indicator for a tabular dataset even though retrievable is false", () => {
+  it("shows the indicator for an excluded tabular dataset", () => {
     expect(
       rowFor("Tabular doc.xlsx").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
-    ).toBeNull();
+    ).not.toBeNull();
   });
 
   it("hides the indicator while the document is still processing, even though retrievable is false", () => {

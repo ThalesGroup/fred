@@ -19,6 +19,10 @@
 // `InlineDrawer layout="push"` reflows the conversation left, sharing the page's
 // single-open push-drawer slot with the attachments / capability panels.
 
+import {
+  type DocumentLibrarySelection,
+  DOCUMENT_SELECTION_SUPPORTED,
+} from "@shared/molecules/DocumentLibraryScopePicker/documentLibrarySelection";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
@@ -28,16 +32,15 @@ import { DocumentLibraryScopePicker } from "@shared/molecules/DocumentLibrarySco
 interface DocumentScopePanelProps {
   open: boolean;
   onClose: () => void;
-  teamId: string;
+  spaceId: string;
   showLibraries: boolean;
   showDocuments: boolean;
   /** Non-empty when the agent binds specific libraries at creation — the library
    * tree is then read-only and pinned to this set (reset returns here). */
   boundLibraryIds: string[];
-  selectedLibraryIds: string[];
-  onSelectedLibraryIdsChange: (ids: string[]) => void;
-  selectedDocumentUids: string[];
-  onSelectedDocumentUidsChange: (uids: string[]) => void;
+  configuredSelection: DocumentLibrarySelection | null;
+  selection: DocumentLibrarySelection | null;
+  onSelectionChange: (selection: DocumentLibrarySelection) => void;
   /** Reverts the per-turn selection to the agent's configured scope. */
   onReset: () => void;
   /** False when the current selection already equals the agent's scope (nothing to reset). */
@@ -47,23 +50,22 @@ interface DocumentScopePanelProps {
 export function DocumentScopePanel({
   open,
   onClose,
-  teamId,
+  spaceId,
   showLibraries,
   showDocuments,
   boundLibraryIds,
-  selectedLibraryIds,
-  onSelectedLibraryIdsChange,
-  selectedDocumentUids,
-  onSelectedDocumentUidsChange,
+  configuredSelection,
+  selection,
+  onSelectionChange,
   onReset,
   canReset,
 }: DocumentScopePanelProps) {
   const { t } = useTranslation();
 
   const hasBound = boundLibraryIds.length > 0;
-  // Bound scope wins the library display and can't be edited, exactly like the
-  // former DocumentScopeControl row (`effectiveLibraryIds` + disable).
-  const effectiveLibraryIds = hasBound ? boundLibraryIds : selectedLibraryIds;
+  // Agent restrictions remain read-only above the separate turn selection.
+  // Copying bound folders into the turn union would defeat document narrowing.
+  const displayedSelection = selection ?? { folderIds: [], documentIds: [] };
 
   return (
     <ChatSidePanel
@@ -78,23 +80,32 @@ export function DocumentScopePanel({
             size="small"
             icon={{ category: "outlined", type: "refresh" }}
             aria-label={t("chatbot.documentScopePanel.resetTooltip")}
-            disabled={!canReset}
+            disabled={!DOCUMENT_SELECTION_SUPPORTED || !canReset}
             onClick={onReset}
           />
         </Tooltip>
       }
     >
-      {/* Mount the picker only while open so its tag/document queries don't
+      {!DOCUMENT_SELECTION_SUPPORTED && <p>{t("rework.weaverAgents.documentSelectionUnavailable")}</p>}
+      {/* Mount the picker only while open so its directory queries don't
             fire for every chat that merely exposes the control. The InlineDrawer
             shell still animates; the body is briefly empty during the close
             transition, which is imperceptible. */}
+      {selection === null && <p>{t("chatbot.documentScopePanel.agentScope")}</p>}
+      {open && configuredSelection !== null && (
+        <>
+          <p>{t("chatbot.documentScopePanel.boundScope")}</p>
+          <DocumentLibraryScopePicker spaceId={spaceId} value={configuredSelection} onChange={() => {}} disabled />
+        </>
+      )}
+      {open && <p>{t("chatbot.documentScopePanel.turnScope")}</p>}
       {open && (
         <DocumentLibraryScopePicker
-          teamId={teamId}
-          selectedTagIds={effectiveLibraryIds}
-          onChange={onSelectedLibraryIdsChange}
-          selectedDocumentUids={showDocuments ? selectedDocumentUids : undefined}
-          onDocumentsChange={showDocuments ? onSelectedDocumentUidsChange : undefined}
+          spaceId={spaceId}
+          value={displayedSelection}
+          onChange={onSelectionChange}
+          showDocuments={showDocuments}
+          disabled={!DOCUMENT_SELECTION_SUPPORTED}
           disableLibrarySelection={hasBound || !showLibraries}
         />
       )}

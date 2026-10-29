@@ -259,7 +259,7 @@ _FILL_INSTRUCTIONS = (
     "MUST call the 'fill_ppt_template' tool; never answer with slide content "
     "in the chat instead. This capability works together with the Document "
     "access capability: BEFORE calling 'fill_ppt_template', FIRST search the "
-    "document base with its tools (search_documents_using_vectorization, "
+    "document base with its tools (search_documents, "
     "then summarize_document / list_document_tree as needed) to ground the "
     "values — especially when a field description points at documents. If "
     "those document tools are not in your toolset, tell the user this agent "

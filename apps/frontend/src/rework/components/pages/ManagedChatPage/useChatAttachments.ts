@@ -364,6 +364,8 @@ export function useChatAttachments({ teamId, sessionId, enabled = true }: UseCha
     [deletePersistedAttachment, persistedAttachments],
   );
 
+  const clearLocalAttachments = useCallback(() => setAttachments([]), []);
+
   const clearReadyAttachments = useCallback(() => {
     setAttachments((prev) =>
       prev.filter((attachment) => attachment.status === "uploading" || attachment.status === "ingesting"),
@@ -397,5 +399,6 @@ export function useChatAttachments({ teamId, sessionId, enabled = true }: UseCha
     removeAttachment,
     deletePersistedAttachment,
     clearReadyAttachments,
+    clearLocalAttachments,
   };
 }

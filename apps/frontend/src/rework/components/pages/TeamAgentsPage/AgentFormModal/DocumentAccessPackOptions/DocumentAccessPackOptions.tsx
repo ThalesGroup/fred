@@ -16,6 +16,7 @@
 // for library scoping.
 
 import { DocumentLibraryScopePicker } from "@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker.tsx";
+import { DOCUMENT_SELECTION_SUPPORTED } from "@shared/molecules/DocumentLibraryScopePicker/documentLibrarySelection";
 import { useTranslation } from "react-i18next";
 import { SwitchRow } from "../../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
 import styles from "./DocumentAccessPackOptions.module.css";
@@ -36,8 +37,13 @@ export function DocumentAccessPackOptions({
   disabled = false,
 }: DocumentAccessPackOptionsProps) {
   const { t } = useTranslation();
-  const bindLibraries = Boolean(configValues.bind_libraries);
-  const selectedTagIds = Array.isArray(configValues.library_tag_ids) ? (configValues.library_tag_ids as string[]) : [];
+  const bindLibraries = Boolean(configValues.bind_libraries) || Array.isArray(configValues.document_uids);
+  const selectedFolderIds =
+    configValues.bind_libraries && Array.isArray(configValues.library_tag_ids)
+      ? (configValues.library_tag_ids as string[])
+      : [];
+
+  const selectedDocumentIds = Array.isArray(configValues.document_uids) ? (configValues.document_uids as string[]) : [];
 
   return (
     <div className={styles.root}>
@@ -46,17 +52,22 @@ export function DocumentAccessPackOptions({
         label={t("capability.document_access.fields.bind_libraries.title")}
         description={t("capability.document_access.fields.bind_libraries.description")}
         checked={bindLibraries}
-        disabled={disabled}
+        disabled={disabled || !DOCUMENT_SELECTION_SUPPORTED}
         onChange={(checked) => onConfigChange("bind_libraries", checked)}
       />
+      {!DOCUMENT_SELECTION_SUPPORTED && <p>{t("rework.weaverAgents.documentSelectionUnavailable")}</p>}
       {bindLibraries && (
         <div className={styles.treeCard}>
           <DocumentLibraryScopePicker
-            teamId={teamId}
-            selectedTagIds={selectedTagIds}
-            onChange={(tagIds) => onConfigChange("library_tag_ids", tagIds)}
-            foldersOnly
-            disableLibrarySelection={disabled}
+            spaceId={teamId ?? ""}
+            value={{ folderIds: selectedFolderIds, documentIds: selectedDocumentIds }}
+            onChange={(selection) => {
+              onConfigChange("bind_libraries", true);
+              onConfigChange("library_tag_ids", selection.folderIds);
+              onConfigChange("document_uids", selection.documentIds);
+            }}
+            showDocuments
+            disabled={disabled || !DOCUMENT_SELECTION_SUPPORTED}
           />
         </div>
       )}

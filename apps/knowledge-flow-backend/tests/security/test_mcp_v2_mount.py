@@ -239,10 +239,10 @@ async def test_v2_mount_classifies_only_receiver_authority_refusals(monkeypatch,
 @pytest.mark.parametrize(
     ("tool_name", "status", "body", "expected_detail"),
     [
-        ("read_query", 400, '{"detail":"Unknown column amount_typo","internal":"private"}', "Unknown column amount_typo"),
+        ("query_tabular_documents", 400, '{"detail":"Unknown column amount_typo","internal":"private"}', "Unknown column amount_typo"),
         ("another_tool", 400, '{"detail":"private"}', None),
-        ("read_query", 500, '{"detail":"private"}', None),
-        ("read_query", 400, "private", None),
+        ("query_tabular_documents", 500, '{"detail":"private"}', None),
+        ("query_tabular_documents", 400, "private", None),
     ],
 )
 async def test_v2_mount_keeps_only_curated_sql_400_detail(monkeypatch, tool_name: str, status: int, body: str, expected_detail: str | None) -> None:

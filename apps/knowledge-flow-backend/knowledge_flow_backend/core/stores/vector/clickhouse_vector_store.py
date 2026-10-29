@@ -729,6 +729,15 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
                 if exclude_values:
                     conditions.append(or_(json_expr.is_(None), ~json_expr.in_([str(v) for v in exclude_values])))
 
+        for clause in search_filter.metadata_any:
+            alternatives = []
+            for key, values in clause.items():
+                if key not in ("document_uid", "folder_path"):
+                    raise ValueError("Unsupported selection metadata field")
+                column = table.c.document_uid if key == "document_uid" else func.JSONExtractString(table.c.metadata, key)
+                if values:
+                    alternatives.append(column.in_(list(values)))
+            conditions.append(or_(*alternatives) if alternatives else table.c.document_uid.in_([]))
         return conditions
 
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:

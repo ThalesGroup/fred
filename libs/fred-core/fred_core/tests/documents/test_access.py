@@ -35,6 +35,7 @@ from fred_core.documents.access import (
     scope_from_space,
     verify_candidates,
 )
+from fred_core.documents.selection import DocumentScope
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 ORG, TEAM, PROJECT, PERSONAL = uuid4(), uuid4(), uuid4(), uuid4()
@@ -233,3 +234,88 @@ async def test_published_artifact_propagates_database_failure() -> None:
         await published_artifact(
             cast(AsyncConnection, FailingConnection()), SCOPE, uuid4(), "output.md"
         )
+
+
+@pytest.mark.parametrize("source", ["folder", "explicit", "both"])
+def test_selection_unions_direct_contents_and_explicit_documents(source: str) -> None:
+    folder, other = uuid4(), uuid4()
+    row = document(folder_id=folder)
+    scope = SearchScope(
+        space_ids=(TEAM,),
+        document_scope=DocumentScope.from_ids(
+            [str(folder)] if source != "explicit" else [],
+            [str(row["id"])] if source != "folder" else [],
+        ),
+    )
+    candidate = Candidate(str(row["id"]), chunk(2))
+    assert filter_candidates(scope, [candidate], [row]) == [candidate]
+    row["folder_id"] = other
+    assert filter_candidates(scope, [candidate], [row]) == (
+        [] if source == "folder" else [candidate]
+    )
+
+
+def test_folder_agent_and_document_turn_intersect_by_coverage() -> None:
+    folder = uuid4()
+    row = document(folder_id=folder)
+    candidate = Candidate(str(row["id"]), chunk(2))
+    agent = DocumentScope.from_ids([str(folder)])
+    turn = DocumentScope.from_ids(document_ids=[str(row["id"])])
+    scope = SearchScope(space_ids=(TEAM,), document_scope=agent.intersect(turn))
+    assert filter_candidates(scope, [candidate], [row]) == [candidate]
+    row["folder_id"] = uuid4()
+    assert filter_candidates(scope, [candidate], [row]) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("empty", [False, True])
+async def test_known_id_cannot_bypass_published_artifact_selection(empty: bool) -> None:
+    folder = uuid4()
+    row = document(folder_id=folder, prefix="published/", size=42, sha256="a" * 64)
+    scope = SearchScope(
+        space_ids=(TEAM,),
+        document_scope=DocumentScope.from_ids([] if empty else [str(uuid4())]),
+    )
+    conn = MagicMock(spec=AsyncConnection)
+    conn.execute = AsyncMock(return_value=MagicMock())
+    conn.execute.return_value.mappings.return_value.first.return_value = row
+    assert await published_artifact(conn, scope, row["id"], "output.md") is None
+    conn.execute.assert_awaited_once()
+
+
+def test_empty_is_not_unrestricted_and_reset_keeps_agent_ceiling() -> None:
+    folder, doc = uuid4(), uuid4()
+    agent = DocumentScope.from_ids([str(folder)])
+    empty = DocumentScope.from_ids(document_ids=[])
+    assert not agent.intersect(empty).covers(doc, folder)
+    reset = agent.intersect(DocumentScope.from_ids())
+    assert reset.covers(doc, folder)
+    assert not reset.covers(doc, uuid4())
+    assert DocumentScope.model_validate_json(empty.model_dump_json()).is_empty
+
+
+@pytest.mark.asyncio
+async def test_folder_resolution_is_one_batched_query_without_document_enumeration() -> (
+    None
+):
+    from fred_core.documents.access import resolve_scope
+
+    folders = [uuid4(), uuid4()]
+    conn = MagicMock(spec=AsyncConnection)
+    space_result, folder_result = MagicMock(), MagicMock()
+    space_result.mappings.return_value.first.return_value = space(TEAM, ORG, ORG)
+    folder_result.mappings.return_value.all.return_value = [
+        {"id": folders[0], "path": f"/{folders[0]}/"}
+    ]
+    conn.execute = AsyncMock(side_effect=[space_result, folder_result])
+    scope = await resolve_scope(
+        conn, TEAM, DocumentScope.from_ids([str(id) for id in folders])
+    )
+    assert conn.execute.await_count == 2
+    statement, params = conn.execute.call_args.args
+    assert "FROM folder" in str(statement) and "FROM document" not in str(statement)
+    assert set(params["folder_ids"]) == set(folders)
+    assert scope.selection_terms == (
+        {"folder_path": [f"/{folders[0]}/"], "document_uid": []},
+    )
+    assert not scope.document_scope.covers(uuid4(), folders[1])

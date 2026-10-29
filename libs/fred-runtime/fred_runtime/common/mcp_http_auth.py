@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 
 import httpx2
 from fred_core.common.fastapi_handlers import (
     ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
     DENIAL_CAUSE_HEADER,
 )
+from fred_core.documents.transport import DOCUMENT_CONTEXT_HEADER
 from fred_core.logs.propagation import CONTEXT_HEADER, outbound_context_headers
 
 from fred_runtime.common.outbound_credentials import (
@@ -31,8 +32,10 @@ class MCPHTTPAuth(httpx2.Auth):
         *,
         refresh: TokenRefreshCallback | None = None,
         refresh_owner: object | None = None,
+        document_context: Callable[[], str] | None = None,
     ) -> None:
         self._provider = provider
+        self._document_context = document_context
         self._refresh = refresh
         self._refresh_owner = refresh_owner or self
 
@@ -41,8 +44,11 @@ class MCPHTTPAuth(httpx2.Auth):
     ) -> AsyncGenerator[httpx2.Request, httpx2.Response]:
         await request.aread()
         request.headers.pop(CONTEXT_HEADER, None)
+        request.headers.pop(DOCUMENT_CONTEXT_HEADER, None)
         if isinstance(self._provider, DelegatedCredentialProvider):
             await self._provider.credentials()
+            if self._document_context is not None:
+                request.headers[DOCUMENT_CONTEXT_HEADER] = self._document_context()
             lease = await self._provider.get_token_lease()
             request.headers["Authorization"] = f"Bearer {lease.token}"
             request.headers.update(outbound_context_headers())

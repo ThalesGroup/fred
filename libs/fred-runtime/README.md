@@ -212,7 +212,7 @@ observability:
   metrics: prometheus
 
 ai:
-  knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
+  knowledge_flow_url: "http://localhost:8111/knowledge-flow/v2"
 ```
 
 Full schema: `fred_runtime.app.config.AgentPodConfig`.
