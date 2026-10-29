@@ -5,7 +5,7 @@ use super::*;
 /// The session API needs a running agent instance; its product row is all attachments use.
 async fn conversation(d: &Documents, owner: &str, space: Uuid) -> Uuid {
     let id = Uuid::new_v4();
-    sqlx::query("insert into session_metadata (session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name) values ($1,$2,$3,$4,$5,'native','Assistant')")
+    sqlx::query("insert into session_metadata (session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values ($1,$2,$3,$4,$5,'native','Assistant',1)")
         .bind(id).bind(owner).bind(space).bind(Uuid::new_v4()).bind(Uuid::new_v4())
         .execute(&d.e.pool).await.unwrap();
     id
