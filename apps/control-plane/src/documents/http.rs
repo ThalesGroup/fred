@@ -27,7 +27,7 @@ fn storage(state: &AppState) -> AppResult<&Arc<Storage>> {
 /// Multipart body: exactly one `file` part.
 #[allow(dead_code)]
 #[derive(utoipa::ToSchema)]
-struct FileUpload {
+pub(crate) struct FileUpload {
     /// The file; its multipart filename becomes the document name.
     #[schema(value_type=String,format=Binary)]
     file: Vec<u8>,
@@ -57,6 +57,29 @@ async fn upload(
     headers: HeaderMap,
     multipart: Result<Multipart, axum::extract::multipart::MultipartRejection>,
 ) -> AppResult<Response> {
+    // Relative to folders/{id}/documents, preserving either mounted API prefix.
+    upload_response(
+        &s,
+        &user,
+        Destination::Folder(id),
+        query,
+        &headers,
+        multipart,
+        "../../",
+    )
+    .await
+}
+
+/// The upload protocol shared by every destination; `to_root` climbs from the route to the API root.
+pub(crate) async fn upload_response(
+    s: &AppState,
+    user: &crate::auth::CurrentUser,
+    destination: Destination,
+    query: UploadQuery,
+    headers: &HeaderMap,
+    multipart: Result<Multipart, axum::extract::multipart::MultipartRejection>,
+    to_root: &str,
+) -> AppResult<Response> {
     let mut values = headers.get_all("idempotency-key").iter();
     let key = values
         .next()
@@ -66,10 +89,10 @@ async fn upload(
     if values.next().is_some() {
         return Err(invalid("Idempotency-Key must be one UUID"));
     }
-    let outcome = storage(&s)?
+    let outcome = storage(s)?
         .upload(
-            &user,
-            id,
+            user,
+            destination,
             key,
             query,
             multipart.map_err(|_| {
@@ -116,10 +139,9 @@ async fn upload(
         ) => (error.into_response(), query.retry_of.unwrap_or(key)),
         Err(error) => return Err(error),
     };
-    // Relative to folders/{id}/documents, preserving either mounted API prefix.
     response.headers_mut().insert(
         header::LOCATION,
-        format!("../../document-uploads/{receipt_key}")
+        format!("{to_root}document-uploads/{receipt_key}")
             .parse()
             .map_err(|_| unavailable())?,
     );
@@ -233,7 +255,7 @@ async fn delete_document(
 ) -> AppResult<(StatusCode, Json<crate::lifecycle::Receipt>)> {
     let receipt = s
         .lifecycle
-        .accept_document(&s.pool, &s.fga, &user.uid, id)
+        .accept_document(&s.pool, &s.fga, &user.uid, id, None)
         .await?;
     Ok((
         if receipt.status == crate::lifecycle::Status::Completed {

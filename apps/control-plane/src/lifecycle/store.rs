@@ -132,13 +132,17 @@ pub(crate) async fn reserved<'e>(
     .await?)
 }
 impl Lifecycle {
+    /// `conversation` is `(space_id, session_id)` for an attachment, which only its
+    /// conversation owner deletes; each route answers 404 for the other kind of document.
     pub async fn accept_document(
         &self,
         pool: &PgPool,
         fga: &Fga,
         actor: &str,
         document_id: Uuid,
+        conversation: Option<(Uuid, Uuid)>,
     ) -> AppResult<Receipt> {
+        let session = conversation.map(|(_, session)| session);
         if let Some(receipt) = sqlx::query_as::<_, Receipt>(
             "select * from deletion where target_id = $1 and target_kind = 'document'",
         )
@@ -149,7 +153,20 @@ impl Lifecycle {
             let space_id = receipt
                 .target_parent_id
                 .ok_or_else(|| anyhow::anyhow!("document deletion has no parent"))?;
-            let tx = spaces::authorized_write(pool, fga, actor, space_id).await?;
+            // Placement is readable until purge; then the conversation route answers its deleter only.
+            let placed: Option<Option<Uuid>> =
+                sqlx::query_scalar("select session_id from document where id = $1")
+                    .bind(document_id)
+                    .fetch_optional(pool)
+                    .await?;
+            let visible = match placed {
+                Some(placed) => placed == session,
+                None => session.is_none() || receipt.actor_subject == actor,
+            };
+            if !visible {
+                return Err(AppError::NotFound);
+            }
+            let tx = document_writer(pool, fga, actor, space_id, conversation).await?;
             tx.commit().await?;
             return Ok(receipt);
         }
@@ -159,12 +176,13 @@ impl Lifecycle {
             ));
         }
         let space_id: Uuid = sqlx::query_scalar(
-            "select space_id from document where id = $1 and deletion_id is null",
+            "select space_id from document where id = $1 and deletion_id is null and session_id is not distinct from $2",
         )
         .bind(document_id)
+        .bind(session)
         .fetch_one(pool)
         .await?;
-        let mut tx = spaces::authorized_write(pool, fga, actor, space_id).await?;
+        let mut tx = document_writer(pool, fga, actor, space_id, conversation).await?;
         let document: Option<Uuid> = sqlx::query_scalar(
             "select id from document where id = $1 and deletion_id is null for update",
         )
@@ -260,6 +278,13 @@ impl Lifecycle {
             .bind(operation)
             .execute(&mut *tx)
             .await?;
+        // Its attachments retire with it and free their quota; cleanup purges them as documents.
+        sqlx::query("update document set deletion_id = $3, purge_after = clock_timestamp() where session_id = $1 and space_id = $2 and deletion_id is null")
+            .bind(session_id)
+            .bind(space_id)
+            .bind(operation)
+            .execute(&mut *tx)
+            .await?;
         fga.fence(&mut guard).await?;
         tx.commit().await?;
         tracing::info!(target: "fred.security.audit", audit_event="deletion.accepted", target_kind="session", operation_id=%operation, session_id=%session_id, space_id=%space_id, actor_uid=actor, "Session deletion accepted");
@@ -329,6 +354,23 @@ impl Lifecycle {
         Ok(receipt)
     }
 }
+/// A drive document needs write access to its space; an attachment, its conversation's ownership.
+async fn document_writer(
+    pool: &PgPool,
+    fga: &Fga,
+    actor: &str,
+    space_id: Uuid,
+    conversation: Option<(Uuid, Uuid)>,
+) -> AppResult<Transaction<'static, Postgres>> {
+    match conversation {
+        None => spaces::authorized_write(pool, fga, actor, space_id).await,
+        Some((space, session)) if space == space_id => {
+            crate::sessions::lock_owner(pool, fga, actor, space, session).await
+        }
+        Some(_) => Err(AppError::NotFound),
+    }
+}
+
 async fn mark(tx: &mut Transaction<'_, Postgres>, id: Uuid, operation: Uuid) -> AppResult<()> {
     require_active(&mut **tx, id).await?;
     let has_documents: bool =

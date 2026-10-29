@@ -3101,3 +3101,6 @@ async fn editor_deletes_document_without_retiring_its_folder() {
     assert_eq!(completed.documents_deleted, 1);
     assert!(db::folder(&d.e.pool, d.folder.id).await.is_ok());
 }
+
+#[path = "conversation_attachments.rs"]
+mod attachments;

@@ -7,6 +7,8 @@ with documents as materialized (
     from document d join space s on s.id = d.space_id
     where s.organization_id = $1
       and ($2::uuid is null or s.id = $2 or s.parent_id = $2)
+      -- Conversation attachments are private to their owner, so absent from every count.
+      and d.session_id is null
 ), publications as (
     -- The official generation, independently of the last attempt's status.
     select d.id as document_id, cardinality(g.vector_ordinals) as vectors, g.rows,

@@ -50,7 +50,7 @@ impl Processing {
         }
         let planned = generation.chunks as u32;
         if commit.stage == Stage::Indexing {
-            let document = crate::db::document(&self.pool, r.summary.document_id).await?;
+            let document = crate::db::pipeline_document(&self.pool, r.summary.document_id).await?;
             let names: std::collections::HashSet<&str> =
                 manifest.artifacts.iter().map(|a| a.path.as_str()).collect();
             if manifest.vectors > i64::from(planned)

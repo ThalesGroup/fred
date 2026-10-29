@@ -219,7 +219,22 @@ pub async fn delete_folder<'e>(pool: impl sqlx::PgExecutor<'e>, id: Uuid) -> sql
     Ok(())
 }
 
+/// A live drive document. An attachment is absent here: only its conversation routes reach it.
 pub async fn document<'e>(ex: impl sqlx::PgExecutor<'e>, id: Uuid) -> sqlx::Result<Document> {
+    sqlx::query_as(concat!(
+        document!(),
+        " where id = $1 and deletion_id is null and session_id is null"
+    ))
+    .bind(id)
+    .fetch_one(ex)
+    .await
+}
+
+/// Any live document, attachments included, for processing paths that never serve a user route.
+pub async fn pipeline_document<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    id: Uuid,
+) -> sqlx::Result<Document> {
     sqlx::query_as(concat!(
         document!(),
         " where id = $1 and deletion_id is null"

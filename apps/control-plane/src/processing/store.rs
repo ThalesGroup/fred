@@ -201,7 +201,7 @@ impl Processing {
             .bind(document_id.to_string())
             .execute(&mut **tx)
             .await?;
-        db::document(&mut **tx, document_id).await?;
+        db::pipeline_document(&mut **tx, document_id).await?;
         // Serializes admissions so the pending-attempt cap stays exact.
         sqlx::query("select singleton from document_storage where singleton for update")
             .execute(&mut **tx)
@@ -417,7 +417,7 @@ impl Processing {
         generations: &[Generation],
         g: &Generation,
     ) -> AppResult<Descriptor> {
-        let d = db::document(&self.pool, r.summary.document_id).await?;
+        let d = db::pipeline_document(&self.pool, r.summary.document_id).await?;
         let folder = db::folder(&self.pool, d.folder_id.ok_or_else(invalid)?).await?;
         let predecessor = match generations
             .iter()

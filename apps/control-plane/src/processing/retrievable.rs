@@ -226,7 +226,7 @@ impl Processing {
         if c.id != operation {
             return Err(conflict("retrieval_changed"));
         }
-        let document = db::document(&self.pool, id).await?;
+        let document = db::pipeline_document(&self.pool, id).await?;
         spaces::authorize(
             &self.pool,
             &self.fga,
@@ -262,7 +262,7 @@ impl Processing {
         if input.retrievable != work.retrievable {
             return Err(invalid());
         }
-        let document = db::document(&self.pool, id).await?;
+        let document = db::pipeline_document(&self.pool, id).await?;
         let c = self.retrieval_command(id).await?;
         let mut tx =
             spaces::authorized_write(&self.pool, &self.fga, &c.actor, document.space_id).await?;
