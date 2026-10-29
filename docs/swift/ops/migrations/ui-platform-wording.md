@@ -1,10 +1,10 @@
 ---
 schema: 1
-title: "Replace \"Fred\" with \"platform\" in user-facing UI text"
+title: "Show the deployment's site name instead of \"Fred\" in user-facing UI text"
 impact: none
 configuration: none
-configuration_reason: "Only Help Center markdown and frontend translation strings change; no configuration keys or defaults change."
-no_action_reason: "No data, API or configuration is touched; the new wording ships with the normal frontend deployment."
+configuration_reason: "Help Center pages and translations now read the existing siteDisplayName branding property; no configuration key or default changes."
+no_action_reason: "Deployments without siteDisplayName keep showing Fred; branded ones show their name with the normal frontend deployment."
 ---
 ## Applicability
 
@@ -24,7 +24,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-Open Help Center > Resources: the upload walkthrough says "the platform" (or "la plateforme" in French) instead of "Fred".
+On a deployment whose branding sets `siteDisplayName`, open Help Center > Getting started: the welcome page names that site instead of "Fred".
 
 ## Rollback
 

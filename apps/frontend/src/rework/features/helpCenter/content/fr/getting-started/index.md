@@ -1,13 +1,13 @@
 ---
 title: Bienvenue
 order: 0
-description: Ce qu'est la plateforme, ce qu'elle ne fait pas, et par où commencer.
+description: Ce qu'est {{siteDisplayName}}, ses limites, et par où commencer.
 icon: rocket_launch
 ---
 
 # Bienvenue
 
-La plateforme réunit au même endroit des **agents** — des assistants IA — les **documents** de
+{{siteDisplayName}} réunit au même endroit des **agents** — des assistants IA — les **documents** de
 vos équipes et les **conversations** qui font travailler les deux ensemble.
 L'intérêt : obtenir des réponses appuyées sur vos propres contenus, avec les
 passages utilisés affichés pour que vous puissiez vérifier.
@@ -18,17 +18,17 @@ réutilisables et un espace documentaire. Vous disposez aussi d'un **espace
 personnel**, une équipe dont vous êtes le seul membre, pour essayer des choses
 sans rien partager.
 
-## Ce que la plateforme ne fait pas
+## Ce que {{siteDisplayName}} ne fait pas
 
 Il est utile de le préciser dès maintenant :
 
-- **Elle ne garantit pas l'exactitude.** Un agent peut se tromper et le
+- **Pas de garantie d'exactitude.** Un agent peut se tromper et le
   formuler avec assurance. Les réponses qui comptent se vérifient sur les
   sources citées.
-- **Elle ne permet pas à chacun de créer une équipe.** La création relève de
+- **Tout le monde ne peut pas créer une équipe.** La création relève de
   l'administration de la plateforme — voir
   [Équipes et droits](/help/fr/features/teams-and-permissions).
-- **Elle ne devine pas vos documents.** Un agent ne voit que les documents
+- **Pas de documents devinés.** Un agent ne voit que les documents
   qu'on lui a rattachés.
 
 ## Par où commencer

@@ -74,8 +74,8 @@
   },
   "app": {
     "loading": {
-      "router": "La plateforme démarre...",
-      "ui": "La plateforme prépare l'interface...",
+      "router": "{{siteDisplayName}} démarre...",
+      "ui": "{{siteDisplayName}} prépare l'interface...",
       "generic": "Chargement, veuillez patienter..."
     }
   },
@@ -4525,9 +4525,9 @@
       "catalog-loading": "Chargement de l'application…",
       "connecting": "Connexion à l'application…",
       "unavailable": "Cette application n'est pas disponible.",
-      "protocol-mismatch": "Cette application utilise une version du protocole applicatif de la plateforme non prise en charge par ce déploiement.",
+      "protocol-mismatch": "Cette application utilise une version du protocole applicatif {{siteDisplayName}} non prise en charge par ce déploiement.",
       "unreachable": "L'application n'a pas répondu. Elle est peut-être en cours de démarrage ou mal configurée.",
-      "render": "L'application s'est arrêtée de manière inattendue. La plateforme reste disponible."
+      "render": "L'application s'est arrêtée de manière inattendue. {{siteDisplayName}} reste disponible."
     }
   },
   "unauthorized": {

@@ -74,8 +74,8 @@
   },
   "app": {
     "loading": {
-      "router": "The platform is starting...",
-      "ui": "The platform is getting the UI ready...",
+      "router": "{{siteDisplayName}} is starting...",
+      "ui": "{{siteDisplayName}} is getting the UI ready...",
       "generic": "Loading, please wait..."
     }
   },
@@ -4525,9 +4525,9 @@
       "catalog-loading": "Loading application…",
       "connecting": "Connecting to the application…",
       "unavailable": "This application is unavailable.",
-      "protocol-mismatch": "This application speaks a platform application protocol this deployment does not support.",
+      "protocol-mismatch": "This application speaks a {{siteDisplayName}} application protocol this deployment does not support.",
       "unreachable": "The application did not respond. It may be starting up or misconfigured.",
-      "render": "The application stopped unexpectedly. The platform is still available."
+      "render": "The application stopped unexpectedly. {{siteDisplayName}} is still available."
     }
   },
   "unauthorized": {

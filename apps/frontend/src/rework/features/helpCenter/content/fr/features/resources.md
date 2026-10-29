@@ -31,8 +31,8 @@ refusé ; convertissez-le dans un format courant.
 
 ## Un document du même nom existe déjà
 
-Si un document porte déjà le même nom dans la bibliothèque visée, la plateforme
-vous le dit **avant** d'envoyer quoi que ce soit, et vous laisse choisir :
+Si un document porte déjà le même nom dans la bibliothèque visée, {{siteDisplayName}} vous le
+dit **avant** d'envoyer quoi que ce soit, et vous laisse choisir :
 
 - **Remplacer** : le document existant garde sa place et ses liens, seul son
   contenu change. Tout ce qui le citait continue de fonctionner et renvoie
@@ -50,7 +50,7 @@ ce sont deux documents indépendants.
 
 ## Suivre vos imports
 
-Dès que vous validez, la fenêtre se ferme : vous récupérez la plateforme tout de suite et
+Dès que vous validez, la fenêtre se ferme : vous récupérez {{siteDisplayName}} tout de suite et
 l'envoi continue derrière. Un **panneau** s'ouvre à droite de la page et suit
 chaque fichier. Vous pouvez le replier en simple bouton, le rouvrir, et
 l'élargir en tirant son bord gauche.
@@ -59,14 +59,14 @@ Chaque fichier passe par quatre temps. Le panneau les montre comme quatre
 repères qui se cochent l'un après l'autre, et nomme celui en cours :
 
 1. **Envoi du fichier** — votre navigateur transmet. Tant que ce temps dure,
-   rien n'est encore arrivé sur la plateforme.
-2. **Préparation du document** — la plateforme a reçu le fichier et le range.
-3. **Extraction du contenu** — la plateforme lit le document. C'est presque toujours le
+   rien n'est encore arrivé chez {{siteDisplayName}}.
+2. **Préparation du document** — {{siteDisplayName}} a reçu le fichier et le range.
+3. **Extraction du contenu** — {{siteDisplayName}} lit le document. C'est presque toujours le
    temps le plus long : un PDF volumineux ou scanné peut y rester plusieurs
    minutes.
-4. **Indexation** — la plateforme range ce qu'elle a lu pour pouvoir le retrouver.
+4. **Indexation** — {{siteDisplayName}} range ce qui a été lu pour pouvoir le retrouver.
 
-La plateforme analyse quelques fichiers à la fois. Quand vous en importez plusieurs, ceux
+{{siteDisplayName}} analyse quelques fichiers à la fois. Quand vous en importez plusieurs, ceux
 qui attendent leur tour affichent **En attente…**, en gris, avec un repère
 immobile : le fichier est bien arrivé, son analyse démarrera dès qu'une place se
 libère.
@@ -79,8 +79,8 @@ puis disparaît d'elle-même au bout de quelques secondes : le document est dans
 le tableau, il n'y a plus rien à suivre. Seuls les fichiers en échec ou en
 attente de réponse restent.
 
-> Aucun de ces temps n'annonce de pourcentage : la plateforme ne sait pas
-> combien de temps il lui reste, et préfère ne pas l'inventer. Un temps qui dure n'est
+> Aucun de ces temps n'annonce de pourcentage : {{siteDisplayName}} ne sait pas combien de
+> temps il lui reste, et préfère ne pas l'inventer. Un temps qui dure n'est
 > pas un temps bloqué.
 
 ### Si un fichier échoue
@@ -93,12 +93,12 @@ nouveau : un navigateur ne peut pas rouvrir un fichier tout seul.
 ### Annuler un envoi
 
 Les fichiers partent quelques-uns à la fois. Ceux qui attendent encore leur tour
-peuvent être annulés d'un clic ; ceux qui sont déjà partis appartiennent à la
-plateforme et vont au bout.
+peuvent être annulés d'un clic ; ceux qui sont déjà partis appartiennent à {{siteDisplayName}}
+et vont au bout.
 
 ### Si vous fermez l'onglet en cours d'import
 
-Ce qui est déjà arrivé sur la plateforme continue sans vous. Le reste n'est jamais
+Ce qui est déjà arrivé chez {{siteDisplayName}} continue sans vous. Le reste n'est jamais
 parti : à votre retour, le panneau **nomme les fichiers qui ne sont pas
 arrivés** et vous propose de les sélectionner à nouveau. Seuls ceux-là
 repartent, vers la même bibliothèque.

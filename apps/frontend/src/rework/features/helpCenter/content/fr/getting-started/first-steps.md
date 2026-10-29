@@ -63,7 +63,7 @@ premier, la flèche de droite mène aux précédentes, et le repère entre les d
 Dès la première connexion vous avez un **espace personnel** : une équipe dont
 vous êtes le seul membre. Vous pouvez y déposer des documents et y essayer des
 agents sans que personne n'y accède — pas même un administrateur de la
-plateforme. C'est l'endroit indiqué pour vous familiariser avec la plateforme.
+plateforme. C'est l'endroit indiqué pour vous familiariser avec {{siteDisplayName}}.
 
 ## Rejoindre une équipe
 

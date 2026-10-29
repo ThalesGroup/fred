@@ -12,10 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { describe, expect, it } from "vitest";
-import { getHelpPage, getHelpPagesForLang, getHelpTree, helpPagePath, parseFrontmatter } from "./content";
+import { describe, expect, it, vi } from "vitest";
+import {
+  getHelpPage,
+  getHelpPagesForLang,
+  getHelpTree,
+  helpPagePath,
+  parseFrontmatter,
+  resolveSiteName,
+} from "./content";
 import { HELP_LANGS, HELP_SECTIONS } from "./manifest";
 import { extractHeadings } from "./search";
+
+vi.mock("../../../common/config.tsx", () => ({
+  getProperty: (key: string) => (key === "siteDisplayName" ? "Acme" : undefined),
+}));
 
 describe("parseFrontmatter", () => {
   it("splits fields from body and ignores unknown keys", () => {
@@ -36,6 +47,14 @@ describe("parseFrontmatter", () => {
   it("keeps colons inside values", () => {
     const { fields } = parseFrontmatter("---\ntitle: Ratio 16:9\n---\nbody");
     expect(fields.title).toBe("Ratio 16:9");
+  });
+});
+
+describe("resolveSiteName", () => {
+  it("replaces every placeholder with the given name", () => {
+    expect(resolveSiteName("{{siteDisplayName}} reads; ask {{siteDisplayName}}.", "Acme")).toBe(
+      "Acme reads; ask Acme.",
+    );
   });
 });
 
@@ -81,6 +100,16 @@ describe("help content corpus", () => {
     expect(page).not.toBeNull();
     expect(page!.meta.title).toBe("Premiers pas");
     expect(page!.body).not.toContain("---\ntitle");
+  });
+
+  it("names the product only through the deployment's site name", () => {
+    for (const lang of HELP_LANGS) {
+      for (const { meta, body } of getHelpPagesForLang(lang)) {
+        const text = `${meta.title}\n${meta.description ?? ""}\n${body}`;
+        expect(text, `${lang}/${meta.sectionId}/${meta.id}`).not.toMatch(/\bFred\b|\{\{siteDisplayName\}\}/);
+      }
+    }
+    expect(getHelpPage("en", "getting-started", "index")!.body).toContain("Acme brings together");
   });
 
   it("returns null for unknown pages", () => {

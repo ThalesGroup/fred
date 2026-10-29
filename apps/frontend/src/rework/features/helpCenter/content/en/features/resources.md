@@ -30,8 +30,8 @@ to a common one.
 
 ## A document of the same name already exists
 
-If the target library already holds a document of the same name, the platform says
-so **before** sending anything, and lets you choose:
+If the target library already holds a document of the same name, {{siteDisplayName}} says so
+**before** sending anything, and lets you choose:
 
 - **Replace**: the existing document keeps its place and its links, only its
   content changes. Everything that cited it keeps working, and now points at the
@@ -48,7 +48,7 @@ You can answer once for every file concerned, or file by file. The same name in
 
 ## Following your imports
 
-The dialog closes as soon as you confirm: you get the platform back straight away and
+The dialog closes as soon as you confirm: you get {{siteDisplayName}} back straight away and
 the transfer carries on behind it. A **panel** opens on the right of the page
 and follows every file. You can fold it back into a button, reopen it, and widen
 it by dragging its left edge.
@@ -57,13 +57,13 @@ Every file goes through four stages. The panel shows them as four markers
 that tick off one by one, and names the one under way:
 
 1. **Sending the file** — your browser is transferring it. For as long as this
-   lasts, nothing has reached the platform yet.
-2. **Preparing the document** — the platform has received the file and is filing it.
-3. **Extracting the content** — the platform reads the document. This is almost always
+   lasts, nothing has reached {{siteDisplayName}} yet.
+2. **Preparing the document** — {{siteDisplayName}} has received the file and is filing it.
+3. **Extracting the content** — {{siteDisplayName}} reads the document. This is almost always
    the longest stage: a large or scanned PDF can stay here for several minutes.
-4. **Indexing** — the platform files away what it read so it can find it again.
+4. **Indexing** — {{siteDisplayName}} files away what it read so it can find it again.
 
-The platform analyses a few files at a time. When you import several, the ones waiting
+{{siteDisplayName}} analyses a few files at a time. When you import several, the ones waiting
 their turn read **Waiting…**, in grey, with a still marker: the file has arrived,
 and its analysis starts as soon as a slot frees up.
 
@@ -74,7 +74,7 @@ Once a file is through, its row reads **Ingestion complete** and then leaves on
 its own after a few seconds: the document is in the table and there is nothing
 left to follow. Only files that failed, or that are waiting on an answer, stay.
 
-> None of these stages announces a percentage: the platform does not know how long it
+> None of these stages announces a percentage: {{siteDisplayName}} does not know how long it
 > has left, and would rather not invent it. A stage that takes a while is not a
 > stage that is stuck.
 
@@ -87,12 +87,11 @@ the panel asks you to pick it again: a browser cannot reopen a file on its own.
 ### Cancelling a transfer
 
 Files go a few at a time. The ones still waiting their turn can be cancelled
-with one click; the ones already on their way belong to the platform
-and go through.
+with one click; the ones already on their way belong to {{siteDisplayName}} and go through.
 
 ### If you close the tab mid-import
 
-What already reached the platform carries on without you. The rest never left: on your
+What already reached {{siteDisplayName}} carries on without you. The rest never left: on your
 return, the panel **names the files that did not arrive** and offers to let you
 pick them again. Only those are sent, to the same library.
 

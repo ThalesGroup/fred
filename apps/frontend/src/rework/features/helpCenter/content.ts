@@ -14,6 +14,7 @@
 
 import type { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 import type { MaterialIconType } from "@shared/utils/Type.ts";
+import { getProperty } from "../../../common/config.tsx";
 import { HELP_SECTIONS, type HelpLang } from "./manifest";
 
 /** Parsed frontmatter of one help page. */
@@ -92,6 +93,26 @@ export function resolveAssetUrls(body: string): string {
   });
 }
 
+/**
+ * Pages write `{{siteDisplayName}}` instead of a product name so a branded
+ * deployment reads its own name in pages, sidebar and search alike.
+ */
+export function resolveSiteName(raw: string, siteDisplayName: string): string {
+  return raw.replace(/\{\{siteDisplayName\}\}/g, siteDisplayName);
+}
+
+// Same fallback as `useFrontendProperties`, which a module-level store cannot call.
+const DEFAULT_SITE_DISPLAY_NAME = "Fred";
+
+function deploymentSiteName(): string {
+  // The config is loaded before any page renders; tests import this without one.
+  try {
+    return getProperty("siteDisplayName") || DEFAULT_SITE_DISPLAY_NAME;
+  } catch {
+    return DEFAULT_SITE_DISPLAY_NAME;
+  }
+}
+
 interface StoredPage {
   meta: HelpPageMeta;
   rawBody: string;
@@ -99,13 +120,14 @@ interface StoredPage {
 
 function buildStore(): Map<string, StoredPage> {
   const store = new Map<string, StoredPage>();
+  const siteName = deploymentSiteName();
   for (const [path, raw] of Object.entries(pageModules)) {
     // ./content/<lang>/<sectionId>/<pageId>.md
     const segments = path.split("/");
     const lang = segments[2] as HelpLang;
     const sectionId = segments[3];
     const id = segments[4].replace(/\.md$/, "");
-    const { fields, body } = parseFrontmatter(raw);
+    const { fields, body } = parseFrontmatter(resolveSiteName(raw, siteName));
     const meta: HelpPageMeta = {
       id,
       sectionId,

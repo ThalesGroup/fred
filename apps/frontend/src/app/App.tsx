@@ -85,7 +85,7 @@ function FredUiContent() {
   if (!router)
     return (
       <LoadingScreen
-        label={t("app.loading.router")}
+        label={t("app.loading.router", { siteDisplayName })}
         logoName={favicon}
         logoNameDark={faviconDark}
         alt={siteDisplayName}
@@ -96,7 +96,7 @@ function FredUiContent() {
     <React.Suspense
       fallback={
         <LoadingScreen
-          label={t("app.loading.ui")}
+          label={t("app.loading.ui", { siteDisplayName })}
           logoName={favicon}
           logoNameDark={faviconDark}
           alt={siteDisplayName}

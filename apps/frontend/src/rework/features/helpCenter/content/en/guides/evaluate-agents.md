@@ -11,7 +11,7 @@ How do you know whether an agent answers well — and whether it improves when y
 tune it? By measuring it, rather than relying on an impression formed over a
 few questions.
 
-> The standalone evaluator must be deployed, registered in the platform and enabled for
+> The standalone evaluator must be deployed, registered in {{siteDisplayName}} and enabled for
 > your team. If it is missing from **Apps**, ask your administrator.
 
 ## 1. Create the evaluation

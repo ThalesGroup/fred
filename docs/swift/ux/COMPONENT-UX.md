@@ -4541,6 +4541,9 @@ When `contactSupportLink` is configured, the shared header displays a localized
 "Contact support" link on every section and article page. It opens the configured
 destination in a new tab with `noopener noreferrer`; the action is absent when
 the URL is empty. Header actions wrap on narrower screens.
+Pages never name the product: they write `{{siteDisplayName}}`, which the
+loader replaces with the deployment's branding (default "Fred") in titles,
+bodies and the search index. A corpus test rejects a literal "Fred".
 
 ### `MarkdownRenderer` `headingAnchors` + `HeadingWithAnchor`
 
