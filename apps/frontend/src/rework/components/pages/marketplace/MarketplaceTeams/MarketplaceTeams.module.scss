@@ -15,6 +15,9 @@
  */
 
 .marketplaceTeamsContainer {
+  // Column flow so the empty state can take the remaining height and centre itself.
+  display: flex;
+  flex-direction: column;
   height: 100%;
 }
 

@@ -2274,6 +2274,14 @@
     "loading": "Chargement...",
     "marketplace": {
       "teams": {
+        "empty": {
+          "title": "Aucune équipe à afficher pour l'instant",
+          "description": "Les équipes publiques apparaissent ici, avec celles dont vous êtes membre. Vous pouvez rejoindre une équipe publique pour travailler avec ses membres."
+        },
+        "emptySearch": {
+          "title": "Aucune équipe ne correspond à votre recherche",
+          "description": "Essayez d'autres mots, ou effacez la recherche pour voir toutes les équipes."
+        },
         "otherTeams": "Découvrez d'autres équipes",
         "search": {
           "ariaLabel": "Rechercher une équipe",

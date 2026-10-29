@@ -38,7 +38,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-// `renderToStaticMarkup` has no router context, so a real `Link`/`Navigate`
+// `renderToStaticMarkup` has no router context, so a real `Link`
 // throws (`useContext(...) is null`) the moment a member card wraps itself
 // in one — stand in with plain markup, same as other page tests that don't
 // need actual routing behaviour asserted.
@@ -48,7 +48,6 @@ vi.mock("react-router-dom", () => ({
       {children}
     </a>
   ),
-  Navigate: ({ to }: { to: string }) => <div data-testid="navigate" data-to={to} />,
 }));
 
 vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
@@ -57,6 +56,10 @@ vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhanceme
 
 vi.mock("../../../../../hooks/useFrontendBootstrap", () => ({
   useFrontendBootstrap: () => h.bootstrap,
+}));
+
+vi.mock("@shared/molecules/PageEmptyState/PageEmptyState.tsx", () => ({
+  default: ({ message }: { message: string }) => <div data-testid="empty-state">{message}</div>,
 }));
 
 vi.mock("@shared/organisms/TeamCard/TeamCard.tsx", () => ({
@@ -235,5 +238,43 @@ describe("MarketplaceTeams descriptions", () => {
     const html = render();
     expect(html).toContain("Prepare board briefs.");
     expect(html).toContain("Answer IT questions.");
+  });
+});
+
+describe("MarketplaceTeams without a collaborative team", () => {
+  beforeEach(() => {
+    h.bootstrap = {
+      activeTeam: { id: "personal-me" } as TeamWithPermissions,
+      availableTeams: [{ id: "personal-me" }] as Team[],
+      bootstrap: undefined,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+  });
+
+  it("still lists the public teams the caller can join", () => {
+    h.teams = {
+      data: [
+        { id: "personal-me", name: "personal", is_member: true } as Team,
+        { id: "globex", name: "globex", is_member: false, visibility: "public" } as Team,
+      ],
+    };
+    const html = render();
+    expect(html).toContain("team-card-globex");
+    expect(html).toContain("rework.marketplace.teams.otherTeams");
+    expect(html).not.toContain("rework.marketplace.teams.yourTeams");
+    expect(html).not.toContain("empty-state");
+  });
+
+  it("shows the empty state when no team can be shown", () => {
+    h.teams = {
+      data: [
+        { id: "personal-me", name: "personal", is_member: true } as Team,
+        { id: "acme", name: "acme", is_member: false, visibility: "private" } as Team,
+      ],
+    };
+    const html = render();
+    expect(html).toContain("rework.marketplace.teams.empty.title");
+    expect(html).not.toContain("team-card-");
   });
 });

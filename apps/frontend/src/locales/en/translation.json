@@ -2274,6 +2274,14 @@
     "loading": "Loading...",
     "marketplace": {
       "teams": {
+        "empty": {
+          "title": "No team to show yet",
+          "description": "Public teams appear here, along with the teams you belong to. You can join a public team to work with its members."
+        },
+        "emptySearch": {
+          "title": "No team matches your search",
+          "description": "Try other words, or clear the search to see every team."
+        },
         "otherTeams": "Discover other teams",
         "search": {
           "ariaLabel": "Search for a team",
