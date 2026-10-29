@@ -120,16 +120,16 @@ async fn reader_attaches_privately_to_own_conversation() {
     assert_eq!(code, 201, "{sibling}");
     used += sibling["size"].as_i64().unwrap();
 
-    // Another member, organization administrator included, cannot reach Bob's conversation.
-    for user in ["alice", "admin", "writer"] {
+    // Other readers of the space find no such conversation; a team admin reads no content at all.
+    for (user, refused) in [("alice", 404), ("writer", 404), ("admin", 403)] {
         assert_eq!(
             status(&d, user, "GET", &attachments(team, bob)).await,
-            404,
+            refused,
             "{user}"
         );
         assert_eq!(
             attach(&d, user, team, bob, "intruder.txt", b"x").await.0,
-            404,
+            refused,
             "{user}"
         );
         assert_eq!(
@@ -140,7 +140,7 @@ async fn reader_attaches_privately_to_own_conversation() {
                 &format!("{}/{document}", attachments(team, bob))
             )
             .await,
-            404,
+            refused,
             "{user}"
         );
     }
@@ -358,6 +358,8 @@ async fn project_attachment_counts_against_its_team_quota() {
     )
     .await
     .unwrap();
+    // A team member stays local: reading the project needs its own role.
+    crate::grant(&d.e, project.id, Role::Member, "reader").await;
     let session = conversation(&d, "reader", project.id).await;
     let (code, receipt) = attach(&d, "reader", project.id, session, "p.txt", b"12345").await;
     assert_eq!(code, 201, "{receipt}");
