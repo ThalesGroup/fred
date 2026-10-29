@@ -70,13 +70,11 @@
   justify-content: center;
   align-items: center;
   margin-left: auto;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background-color: var(--info);
   padding: 0 5px;
   min-width: 18px;
   height: 18px;
   color: var(--on-primary);
-  font-weight: 600;
-  font-size: 11px;
-  line-height: 1;
+  font: var(--font-label-small-emphasized);
 }
