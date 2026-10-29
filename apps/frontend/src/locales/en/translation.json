@@ -650,6 +650,7 @@
       "errorTitle": "Skill could not be used",
       "unavailable": "This skill’s content is unavailable.",
       "loaded": "Skill loaded",
+      "partiallyLoaded": "Skill partially loaded",
       "originUser": "Requested by you",
       "originAgent": "Selected by the agent",
       "originChild": "Selected by a sub-agent",

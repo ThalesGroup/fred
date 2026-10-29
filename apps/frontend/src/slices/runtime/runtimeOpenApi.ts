@@ -975,6 +975,8 @@ export type SkillLoadAttribution = {
   load_id: string;
   name: string;
   origin: "user" | "agent";
+  /** The actual instruction read did not prove full-file coverage. */
+  partial?: boolean;
   revision: string;
 };
 export type StatusRuntimeEvent = {

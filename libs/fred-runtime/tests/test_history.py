@@ -1205,7 +1205,10 @@ def test_migrated_sqlite_startup_reads_and_writes_history(
     assert messages[0].parts[0].text == "hello"
 
 
-def test_skill_load_history_is_compact_and_duplicate_status_is_not_persisted() -> None:
+@pytest.mark.parametrize("partial", [False, True])
+def test_skill_load_history_is_compact_and_duplicate_status_is_not_persisted(
+    partial: bool,
+) -> None:
     from fred_sdk.contracts.skills import SkillLoadAttribution
 
     store = AsyncMock()
@@ -1216,6 +1219,7 @@ def test_skill_load_history_is_compact_and_duplicate_status_is_not_persisted() -
         revision="r",
         load_id="load",
         agent_id="test",
+        partial=partial,
     )
     payload = {
         "kind": "status",
@@ -1239,6 +1243,7 @@ def test_skill_load_history_is_compact_and_duplicate_status_is_not_persisted() -
     assert row.role == Role.system and row.parts[0].text == "meeting-minutes"
     assert row.exchange_id == "e"
     assert row.metadata.extras["skill_load"] == attribution.model_dump(mode="json")
+    assert row.metadata.extras["skill_load"]["partial"] is partial
     # The same JSON is used by GET history and the live SSE projection.
     assert (
         row.model_dump(mode="json")["metadata"]["extras"]["skill_load"]["origin"]

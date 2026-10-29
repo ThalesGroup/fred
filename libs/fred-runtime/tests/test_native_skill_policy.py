@@ -82,10 +82,11 @@ async def test_natural_request_receives_skill_selection_guidance(
             "before answering or using any other tool, including task delegation"
             in system
         )
-        assert (
-            "read_file at the catalog path (limit=1000; continue if truncated)"
-            in system
-        )
+        assert "ALWAYS pass limit=1000 explicitly" in system
+        assert "read_file(file_path=the_catalog_path, offset=0, limit=1000)" in system
+        assert "Omitting limit returns only 100 lines" in system
+        assert "continue with the returned next offset and limit=1000" in system
+        assert "Do not apply the procedure or use task tools before reading" in system
         assert "unless the complete instructions are already in context" in system
         assert "Reuse complete pinned instructions without rereading SKILL.md" in system
         assert "Read any missing required references" in system

@@ -56,6 +56,10 @@ class SkillLoadAttribution(BaseModel):
     child: bool = False
     child_id: str | None = None
     builtin: bool = False
+    partial: bool = Field(
+        default=False,
+        description="The actual instruction read did not prove full-file coverage.",
+    )
 
 
 class SkillsPort(Protocol):

@@ -103,6 +103,7 @@ def record_skill_load(
     agent_id: str,
     child: bool = False,
     child_id: str | None = None,
+    partial: bool = False,
     kpi: BaseKPIWriter | None = None,
     binding: BoundRuntimeContext | None = None,
 ) -> SkillLoadAttribution:
@@ -115,6 +116,7 @@ def record_skill_load(
         agent_id=agent_id,
         child=child,
         child_id=child_id,
+        partial=partial,
         builtin=any(s.name == name and s.builtin for s in skills.catalog.skills),
     )
     if kpi is not None and binding is not None:

@@ -56,7 +56,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
       <button
         type="button"
         className={`${styles.row} ${styles.skillRow}`}
-        aria-label={`${index !== null ? `${index}. ` : ""}${t("chatbot.skills.loaded")}: ${skillDisplay.title}`}
+        aria-label={`${index !== null ? `${index}. ` : ""}${label}: ${skillDisplay.title}`}
         title={skillDisplay.description || skill.name}
         onClick={() => openTrace(entry)}
       >
@@ -66,7 +66,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
             {index ?? ""}
           </span>
         </span>
-        <span className={styles.label}>{t("chatbot.skills.loaded")}</span>
+        <span className={styles.label}>{label}</span>
         <span className={styles.primary}>{skillDisplay.title}</span>
         <span className={styles.secondary}>
           {t(

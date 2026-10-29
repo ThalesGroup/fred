@@ -5607,6 +5607,12 @@ the header’s tool-execution count retain their existing meaning. Each skill-lo
 row is a native button that opens the same skill preview, including agent and
 child loads, and toggles it closed on a second activation.
 
+A native instruction read with incomplete or unproven full-file coverage is
+labeled "Skill partiellement chargé" / "Skill partially loaded", including its
+accessible name and trace label. The disclosure survives history reload and
+describes that read; it does not track cumulative coverage across later pages.
+Complete loads and older history retain the existing skill-loaded label.
+
 ### Running a command, and the turn it leaves
 
 The menu never sends. `Enter` on a row inserts the command like `Tab` and a

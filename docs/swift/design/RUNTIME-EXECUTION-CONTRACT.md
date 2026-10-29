@@ -642,7 +642,11 @@ Runtime events emitted during agent execution (both native SSE and OpenAI compat
 
 `StatusRuntimeEvent.skill_load` optionally carries `SkillLoadAttribution`:
 `name`, `origin` (`user` or `agent`), `revision`, `load_id`, `agent_id`, `child`
-and optional `child_id`, plus trusted `builtin` provenance. ReAct preloads and
+and optional `child_id`, plus trusted `builtin` provenance and a `partial` flag
+(default false for older events/history). Native instruction reads set `partial`
+when the returned window does not prove full-file coverage, including pagination,
+size clipping and unknown coverage. This describes the individual read, not
+cumulative page coverage. ReAct preloads and
 successful native Deep pins use user origin; model-directed native reads retain
 selection-aware origin. Native child loads use a namespace-derived opaque child identity.
 The event projects to `system/system_note` history with the same typed object in
@@ -855,7 +859,11 @@ Native context recovery does not re-emit an already observed pin's activity or
 usage; observation identity is isolated to that model invocation's graph state.
 Successful native `read_file` windows starting at normalized offset zero on a
 mounted `SKILL.md` emit a selection-aware load through the existing tool boundary;
-zero-length windows and failed reads do not. Further pages and reference reads
+zero-length windows and failed reads do not. The activity discloses partial
+coverage without changing successful-read counts. The native parent/child prompt
+explicitly requires `limit=1000` for main skill reads and continuation before
+applying incomplete instructions. Native defaults, explicit windows, reference
+reads and full pinning remain unchanged. Further pages and reference reads
 do not count. Native pins emit user-origin loads only after the native message
 exists, with a checkpoint marker preventing duplicate attribution on resume.
 Reusing context, replaying history/status,
@@ -7191,3 +7199,12 @@ The outer request authenticates before MCP dispatch; the inner FastAPI request
 gets only the verified grant and admitted log context. The upgrade preserves
 tool names, descriptions and callable input schemas, allowing existing agents
 and legacy HTTP peers to use the same catalog entries.
+
+### 8.119 Partial native skill-read activity (2026-10-29)
+
+`SkillLoadAttribution.partial` is an additive boolean, defaulting to false for
+existing producers and history. Successful native first-page reads set it from
+the actual returned coverage and truncation envelope; SSE and persisted activity
+retain it for the translated partial-load label. It describes that read, without
+changing successful-read counts, native defaults or full pinning. The native
+parent/child prompt explicitly requests `limit=1000` and continuation.

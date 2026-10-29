@@ -343,9 +343,11 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
-  it.each(["user", "agent", "child"] as const)(
-    "projects one compact %s skill load from repeated live statuses",
-    async (source) => {
+  it.each(
+    (["user", "agent", "child"] as const).flatMap((source) => [false, true].map((partial) => ({ source, partial }))),
+  )(
+    "projects one compact $source skill load from repeated live statuses (partial: $partial)",
+    async ({ source, partial }) => {
       const load = {
         name: "meeting-minutes",
         origin: source === "user" ? "user" : "agent",
@@ -354,6 +356,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
         agent_id: "test",
         child: source === "child",
         child_id: source === "child" ? "child" : null,
+        partial,
       };
       const status = { kind: "status", status: "skill_loaded", skill_load: load };
       const fetchSpy = vi
