@@ -83,90 +83,6 @@
   font: var(--font-label-small);
 }
 
-.modelCell {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 2rem 2rem;
-  column-gap: var(--spacing-xs);
-  row-gap: var(--spacing-3xs);
-  padding-block: var(--spacing-xs);
-  width: 100%;
-  min-width: 0;
-}
-
-.modelIdentity {
-  grid-row: 1;
-  grid-column: 1;
-  min-width: 0;
-}
-
-.newModelBadge {
-  grid-column: 1 / -1;
-  justify-self: start;
-  margin-left: var(--spacing-xl);
-  border: 1px solid var(--outline-variant);
-  border-radius: 999px;
-  padding: var(--spacing-3xs) var(--spacing-xs);
-  font: var(--font-label-small);
-}
-
-.discoveryStatus {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--spacing-s);
-}
-
-.discoveryRemoved h3 {
-  margin: 0;
-  font: var(--font-title-small-emphasized);
-}
-
-.discoveryRemoved p {
-  margin: var(--spacing-3xs) 0 var(--spacing-xs);
-}
-
-.discoveryRemoved ul {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-s);
-  background: var(--surface-container-low);
-  padding: 0;
-  list-style: none;
-}
-
-.discoveryRemovedDialog {
-  height: min(34rem, calc(100dvh - 2rem));
-}
-
-.discoveryRemoved li {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-xs) var(--spacing-s);
-}
-
-.discoveryRemoved li + li {
-  border-top: 1px solid var(--outline-variant);
-}
-
-.discoveryRemoved code {
-  font: var(--font-body-small);
-  font-family: var(--font-family-mono, monospace);
-  overflow-wrap: anywhere;
-}
-
-.modelToolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-m);
-  margin-top: var(--spacing-xs);
-}
-
 .modelFilter {
   margin-left: auto;
   width: 240px;
@@ -177,72 +93,6 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-s);
-}
-
-.discoveryActions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
-.discoverySettingsToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-3xs);
-  cursor: pointer;
-  border-radius: var(--radius-s);
-  color: var(--on-surface-retreat);
-  font: var(--font-label-medium);
-  list-style: none;
-}
-
-.discoverySettingsToggle::-webkit-details-marker {
-  display: none;
-}
-
-.discoverySettingsToggle:hover {
-  color: var(--on-surface);
-}
-
-.discoverySettingsToggle:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
-.discoverySettingsChevron {
-  display: inline-flex;
-  transition: transform 150ms ease;
-}
-
-.discoverySettings[open] .discoverySettingsChevron {
-  transform: rotate(180deg);
-}
-
-.discoverySettingsContent {
-  margin-top: var(--spacing-s);
-}
-
-.discoverySource {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  border-top: 1px solid var(--outline-variant);
-  padding-top: var(--spacing-s);
-}
-
-.discoverySource + .discoverySource {
-  margin-top: var(--spacing-s);
-}
-
-.discoverySourceTitle {
-  margin: 0;
-  color: var(--on-surface);
-  font: var(--font-title-medium-emphasized);
-}
-
-.discoveryReadOnlyUrl {
-  font-family: var(--font-family-mono, monospace);
-  overflow-wrap: anywhere;
 }
 
 .modelSpecs {
@@ -262,82 +112,6 @@
   background: var(--surface-container-high);
   padding: var(--spacing-3xs) var(--spacing-xs);
   white-space: nowrap;
-}
-
-.modelNameForm {
-  display: flex;
-  grid-column: 1 / -1;
-  flex-direction: column;
-  gap: var(--spacing-3xs);
-  margin-top: var(--spacing-s);
-  padding-bottom: var(--spacing-s);
-  min-width: 0;
-}
-
-.modelSection {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  min-height: 0;
-}
-
-.modelNameEditButton {
-  grid-row: 1;
-  grid-column: 2;
-  align-self: center;
-  justify-self: start;
-}
-
-.modelDetailButton {
-  display: flex;
-  grid-row: 1;
-  grid-column: 3;
-  align-items: center;
-  align-self: center;
-}
-
-.modelDetailPanel {
-  padding: var(--spacing-s);
-  width: min(520px, 80vw);
-  max-height: 60vh;
-  overflow: auto;
-  color: var(--on-surface);
-  font: var(--font-body-small);
-}
-
-.modelDetailFields {
-  display: grid;
-  gap: var(--spacing-3xs);
-  margin: 0;
-}
-
-.modelDetailField {
-  display: grid;
-  grid-template-columns: minmax(110px, 0.35fr) minmax(0, 1fr);
-  gap: var(--spacing-xs);
-  border-bottom: 1px solid var(--outline-variant);
-  padding: var(--spacing-3xs) 0;
-}
-
-.modelDetailGroup {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.modelDetailField dt {
-  color: var(--on-surface-muted);
-  overflow-wrap: anywhere;
-}
-
-.modelDetailField dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.modelNameActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-3xs);
 }
 
 /* Pill badge — same visual language as the team-role chips
@@ -398,18 +172,9 @@
   opacity: 0.55;
 }
 
-.unavailableRow {
-  opacity: 0.55;
-}
-
 .healthNeutral {
   color: var(--on-surface-muted);
   font: var(--font-body-medium);
-}
-
-.healthUnavailable {
-  color: var(--warning);
-  font: var(--font-label-medium);
 }
 
 .healthWarn {
@@ -447,8 +212,8 @@
 }
 
 /* Disable-confirmation impact preview: the concrete count of agents this change
- * would break, an optional unreachable-pod caveat, and the affected-agent
- * drill-down. Sits under the dialog's generic message. */
+ * would break and the affected-agent drill-down. Sits under the dialog's
+ * generic message. */
 .impact {
   display: flex;
   flex-direction: column;
@@ -465,12 +230,6 @@
 .impactNone {
   margin: 0;
   color: var(--on-surface-retreat);
-  font: var(--font-body-small);
-}
-
-.impactUnknown {
-  margin: 0;
-  color: var(--on-surface-muted);
   font: var(--font-body-small);
 }
 

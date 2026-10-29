@@ -13,12 +13,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// #2470 — the "Enable all" flow on the platform-wide default-on switch.
+// The "Enable all" flow of the per-team drawer, and the organization agent
+// default-on switch of FeaturesPage.
 //
-// The bug this covers is a SEQUENCE, not a snapshot: flipping an agent template
-// default-on while its `default_capability_ids` were not default-on themselves
-// used to fire the write immediately, handing every team a template none of
-// them could use. A static render cannot show the ordering that fixes it, so
+// The drawer bug this covers is a SEQUENCE, not a snapshot: enabling an agent
+// template while its `default_capability_ids` were not usable by that team
+// used to fire the write immediately, handing the team a template it could not
+// use. A static render cannot show the ordering that fixes it, so
 // this drives real clicks through `createRoot` + `act`, the repo's idiom (no
 // @testing-library/react here).
 //
@@ -46,18 +47,13 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const h = vi.hoisted(() => ({
-  items: [] as CapabilityEnablementItem[],
   organizationAgents: [] as AgentEnablement[],
   organizationWrites: [] as SetOrganizationAgentDefaultApiArg[],
-  /** Every default-on write, in call order — the sequence under test. */
+  /** Every drawer write, in call order — the sequence under test. */
   calls: [] as Array<{ id: string; on: boolean }>,
-  /** Capability ids whose default-on write should reject. */
+  /** Capability ids whose write should reject. */
   failFor: new Set<string>(),
   errors: [] as string[],
-  /** Capability ids the revoke-impact preview was requested for, in order. */
-  impactCalls: [] as string[],
-  impactData: undefined as unknown,
-  applicationsEnabled: false,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -85,31 +81,9 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
 }));
 
 vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
-  useAdminCapabilitiesQuery: () => ({ data: { items: h.items }, isLoading: false, isError: false }),
-  useModelDiscoveryQuery: () => ({ data: { sources: [] } }),
-  usePodChatDefaultsQuery: () => ({ data: { pods: [] }, isFetching: false, isError: false }),
-  useRefreshModelDiscoveryMutation: () => [
-    () => ({ unwrap: async () => ({ sources: [] }) }),
-    { isLoading: false, isError: false },
-  ],
-  useListAllTeamsQuery: () => ({ data: [], isLoading: false, isError: false }),
-  useSetCapabilityDefaultOnMutation: () => [
-    (args: { capabilityId: string; setCapabilityDefaultOnRequest: { default_on: boolean } }) => ({
-      unwrap: async () => {
-        h.calls.push({ id: args.capabilityId, on: args.setCapabilityDefaultOnRequest.default_on });
-        if (h.failFor.has(args.capabilityId)) throw new Error("boom");
-        return { suspended_instances: 0 };
-      },
-    }),
-    { isLoading: false },
-  ],
-  useSetModelReasoningMutation: () => [vi.fn(), { isLoading: false }],
-  useLazyCapabilityRevokeImpactQuery: () => [
-    (args: { capabilityId: string }) => void h.impactCalls.push(args.capabilityId),
-    { data: h.impactData, isFetching: false },
-  ],
-  // The drawer's own writes land in the same `h.calls` log, so the team and
-  // personal paths assert ordering exactly like the platform one does.
+  useAdminCapabilitiesQuery: () => ({ data: undefined, isLoading: false, isError: false }),
+  // The drawer's writes land in the same `h.calls` log, so the team and
+  // personal paths assert ordering the same way.
   useEnableTeamCapabilityMutation: () => [
     (args: { capabilityId: string; teamId: string }) => ({
       unwrap: async () => {
@@ -131,21 +105,6 @@ vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhanceme
     }),
     { isLoading: false },
   ],
-  usePlatformModelBindingQuery: () => ({
-    data: { model_capability: "chat", binding: null },
-    isLoading: false,
-    isError: false,
-  }),
-  useSetPlatformModelBindingMutation: () => [vi.fn(), { isLoading: false }],
-  useDeletePlatformModelBindingMutation: () => [vi.fn(), { isLoading: false }],
-  usePlatformModelFallbackQuery: () => ({ data: { binding: null }, isLoading: false, isError: false }),
-  useSetPlatformModelFallbackMutation: () => [vi.fn(), { isLoading: false }],
-  useDeletePlatformModelFallbackMutation: () => [vi.fn(), { isLoading: false }],
-  useSetModelDiscoveryUrlMutation: () => [vi.fn(), { isLoading: false }],
-  useSetPodChatDefaultMutation: () => [vi.fn(), { isLoading: false }],
-  useClearPodChatDefaultMutation: () => [vi.fn(), { isLoading: false }],
-  useSetPodChatFallbackMutation: () => [vi.fn(), { isLoading: false }],
-  useClearPodChatFallbackMutation: () => [vi.fn(), { isLoading: false }],
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
@@ -159,20 +118,10 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
 
 // The page reads the applications deployment gate on every render, and that
 // hook goes through RTK Query. Left unmocked it needs a store this suite has no
-// reason to build. It defaults off, which is both the deployment default and
-// irrelevant to the agent-only flow above.
+// reason to build. It stays off, which is both the deployment default and
+// irrelevant to the agent-only flow below.
 vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
-  useFrontendFeatureFlag: () => ({ enabled: h.applicationsEnabled, isLoading: false }),
-}));
-
-// Same reason: the admin gate reads the frontend bootstrap through RTK Query.
-vi.mock("@rework/core/hooks/useUserCapabilities", () => ({
-  useUserCapabilities: () => ({ canAdmin: true }),
-}));
-
-vi.mock("./SuspendedInstancesDrawer", () => ({ SuspendedInstancesDrawer: () => null }));
-vi.mock("./PlatformModelBindingsPanel/PlatformModelBindingsPanel", () => ({
-  PlatformModelBindingsPanel: () => null,
+  useFrontendFeatureFlag: () => ({ enabled: false, isLoading: false }),
 }));
 
 const { default: FeaturesPage } = await import("./FeaturesPage");
@@ -193,22 +142,17 @@ const cap = (over: Partial<CapabilityEnablementItem>): CapabilityEnablementItem 
     ...over,
   }) as CapabilityEnablementItem;
 
-const AGENT = cap({ id: "platform_ops", kind: "agent", default_capability_ids: ["platform_postgres"] });
 const DEP = cap({ id: "platform_postgres" });
 
 let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
-  h.items = [];
   h.organizationAgents = [];
   h.organizationWrites = [];
   h.calls = [];
   h.failFor = new Set();
   h.errors = [];
-  h.impactCalls = [];
-  h.impactData = undefined;
-  h.applicationsEnabled = false;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -218,28 +162,6 @@ afterEach(() => {
   act(() => root.unmount());
   container.remove();
 });
-
-/** Render the page and switch to the Agents tab, where `kind="agent"` rows live. */
-function renderAgentsTab(items: CapabilityEnablementItem[]) {
-  h.items = items;
-  act(() => root.render(<FeaturesPage />));
-  // KIND_FILTERS order is [tool, agent, model]; the tab strip is the first radio group.
-  const tabs = container.querySelectorAll('[role="radio"]');
-  act(() => (tabs[1] as HTMLElement).click());
-}
-
-/** Same, for any kind tab: [tool, agent, model], plus app when the gate is on. */
-// Addressed by kind, never by tab position: the filter grows a kind from time
-// to time, and a positional index silently retargets every test when it does.
-function renderKindTab(items: CapabilityEnablementItem[], kind: string) {
-  h.items = items;
-  act(() => root.render(<FeaturesPage />));
-  if (kind === "tool") return;
-  const tabs = Array.from(container.querySelectorAll('[role="radio"]'));
-  const tab = tabs.find((element) => element.textContent?.endsWith(`kindFilter.${kind}`));
-  if (!tab) throw new Error(`no tab for kind ${kind}`);
-  act(() => (tab as HTMLElement).click());
-}
 
 const defaultOnSwitch = () => container.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
 
@@ -258,77 +180,9 @@ const clickConfirm = async () => {
   await act(async () => confirm!.click());
 };
 
-describe("FeaturesPage default-on grant-all", () => {
-  it("intercepts the bare write and opens the confirmation instead", () => {
-    renderAgentsTab([AGENT, DEP]);
-    act(() => defaultOnSwitch()!.click());
-
-    // The whole point: nothing reached the wire.
-    expect(h.calls).toEqual([]);
-    expect(dialog()?.textContent).toContain("grantAllConfirm.title");
-  });
-
-  it("writes the dependency BEFORE the template on confirm", async () => {
-    renderAgentsTab([AGENT, DEP]);
-    act(() => defaultOnSwitch()!.click());
-    await clickConfirm();
-
-    expect(h.calls).toEqual([
-      { id: "platform_postgres", on: true },
-      { id: "platform_ops", on: true },
-    ]);
-  });
-
-  it("aborts before the template when a dependency fails", async () => {
-    h.failFor = new Set(["platform_postgres"]);
-    renderAgentsTab([AGENT, DEP]);
-    act(() => defaultOnSwitch()!.click());
-    await clickConfirm();
-
-    // "dependency attempted, template untouched" — never a template granted
-    // without what it needs, which is the state #2470 exists to prevent.
-    expect(h.calls.map((c) => c.id)).toEqual(["platform_postgres"]);
-    expect(h.errors.join()).toContain("grantAllConfirm.depFailed");
-  });
-
-  it("cancel writes nothing at all", () => {
-    renderAgentsTab([AGENT, DEP]);
-    act(() => defaultOnSwitch()!.click());
-    const cancel = dialogButton("cancel");
-    expect(cancel, "the Cancel button should be in the dialog").toBeTruthy();
-    act(() => cancel!.click());
-
-    expect(h.calls).toEqual([]);
-    expect(dialog()).toBeNull();
-  });
-
-  it("names only the dependencies still missing when several are declared", async () => {
-    const multi = cap({
-      id: "platform_ops",
-      kind: "agent",
-      default_capability_ids: ["dep_a", "dep_b", "dep_c"],
-    });
-    renderAgentsTab([multi, cap({ id: "dep_a" }), cap({ id: "dep_b", default_on: true }), cap({ id: "dep_c" })]);
-    act(() => defaultOnSwitch()!.click());
-    await clickConfirm();
-
-    // `dep_b` is already default-on: re-granting it would be a write the admin
-    // never asked for. Order still puts the template last.
-    expect(h.calls.map((c) => c.id)).toEqual(["dep_a", "dep_c", "platform_ops"]);
-  });
-
-  it("fires the write directly when the dependency is already default-on", async () => {
-    renderAgentsTab([AGENT, cap({ id: "platform_postgres", default_on: true })]);
-    await act(async () => defaultOnSwitch()!.click());
-
-    // No dialog, no dependency write — just the template.
-    expect(h.calls).toEqual([{ id: "platform_ops", on: true }]);
-  });
-});
-
-// The drawer's two paths (#2470). Same ordering guarantee as the platform
-// switch above, but each grants at its OWN scope: a team row enables the
-// dependency for that team, the personal class row sets its personal scope.
+// The drawer's two paths share one ordering guarantee, but each grants at its
+// OWN scope: a team row enables the dependency for that team, the personal
+// class row sets its personal scope.
 describe("CapabilityTeamMatrixDrawer grant-all (#2470)", () => {
   const AGENT_DEP = cap({ id: "platform_ops", kind: "agent", default_capability_ids: ["platform_postgres"] });
 
@@ -419,48 +273,6 @@ describe("CapabilityTeamMatrixDrawer grant-all (#2470)", () => {
   });
 });
 
-// Where the applications work meets the grant-all flow above: both edit the same
-// if/else chain in `onToggleDefault`, so every rebase resolves it by hand. These
-// pin which branch each behaviour belongs to, which no other test asserts.
-describe("FeaturesPage default-on toggle routing", () => {
-  it("previews the revoke impact for an ordinary capability", () => {
-    renderKindTab([cap({ id: "web_search", default_on: true })], "tool");
-    act(() => defaultOnSwitch()!.click());
-
-    expect(h.impactCalls).toEqual(["web_search"]);
-    expect(dialog()?.textContent).toContain("defaultOffConfirm.genericTitle");
-  });
-
-  it("states how many published agents the revoke removes from the marketplace", () => {
-    h.impactData = { capability_id: "web_search", suspended_instances: 2, published_instances: 2 };
-    renderKindTab([cap({ id: "web_search", default_on: true })], "tool");
-    act(() => defaultOnSwitch()!.click());
-
-    expect(dialog()?.textContent).toContain("defaultOffConfirm.impactPublished");
-  });
-
-  it("asks for no impact preview when the row is an application", () => {
-    // An application has no agent instances to suspend, so the agent-specific
-    // impact endpoint has nothing to say about one.
-    h.applicationsEnabled = true;
-    renderKindTab([cap({ id: "app__forecast", kind: "app", default_on: true })], "app");
-    act(() => defaultOnSwitch()!.click());
-
-    expect(h.impactCalls).toEqual([]);
-    expect(dialog()?.textContent).toContain("defaultOffConfirm.appTitle");
-  });
-
-  it("routes an agent with missing dependencies to grant-all, previewing nothing", () => {
-    // Turning default-on ON must never ask for a REVOKE preview: that request
-    // belongs to the off path alone.
-    renderKindTab([AGENT, DEP], "agent");
-    act(() => defaultOnSwitch()!.click());
-
-    expect(h.impactCalls).toEqual([]);
-    expect(dialog()?.textContent).toContain("grantAllConfirm.title");
-  });
-});
-
 describe("organization agent default", () => {
   const ralph = (on: boolean): AgentEnablement => ({
     id: "template-o1",
@@ -502,11 +314,10 @@ describe("organization agent default", () => {
     expect(defaultOnSwitch()!.checked).toBe(true);
   });
 
-  it("preserves cancellation and never asks legacy instance impact", async () => {
+  it("preserves cancellation", async () => {
     renderOrganization(true);
     act(() => defaultOnSwitch()!.click());
     expect(dialog()?.textContent).toContain("defaultOffConfirm.organizationMessage");
-    expect(h.impactCalls).toEqual([]);
     act(() => offButton("cancel").click());
     expect(h.organizationWrites).toEqual([]);
     act(() => defaultOnSwitch()!.click());
