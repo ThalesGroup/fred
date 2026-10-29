@@ -3,7 +3,12 @@
 
 //! Swift enrollment and partial edits over the complete saved tuning snapshot.
 
-use std::{borrow::Cow, collections::BTreeMap, sync::OnceLock, time::Duration};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet},
+    sync::OnceLock,
+    time::Duration,
+};
 
 use anyhow::Context;
 use axum::http::{HeaderValue, StatusCode, header};
@@ -12,7 +17,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::{
-    agents::{AgentTemplateSummary, PlatformConfig},
+    agents::{AgentTemplateSummary, PlatformConfig, enablement},
     error::{AppError, AppResult},
 };
 
@@ -93,6 +98,7 @@ pub(super) async fn enroll(
     authorization: Option<&HeaderValue>,
     mut tuning: Value,
     template: &AgentTemplateSummary,
+    usable: &BTreeSet<String>,
     body: &CreateAgentInstanceRequest,
 ) -> AppResult<Value> {
     if body.recommended_chat_profile_id.is_some() {
@@ -135,6 +141,7 @@ pub(super) async fn enroll(
         platform,
         authorization,
         template,
+        usable,
         body.capability_ids.as_deref(),
         |id| {
             body.capability_config_values
@@ -165,6 +172,7 @@ pub(super) async fn validate_capability_update(
     platform: &PlatformConfig,
     authorization: Option<&HeaderValue>,
     template: &AgentTemplateSummary,
+    usable: &BTreeSet<String>,
     saved: &Value,
     body: &UpdateAgentInstanceRequest,
 ) -> AppResult<CapabilityUpdate> {
@@ -184,6 +192,7 @@ pub(super) async fn validate_capability_update(
         platform,
         authorization,
         template,
+        usable,
         requested,
         |id| match &body.capability_config_values {
             Some(Some(values)) if values.contains_key(id) => json!(values[id]),
@@ -208,6 +217,7 @@ async fn select_capabilities(
     platform: &PlatformConfig,
     authorization: Option<&HeaderValue>,
     template: &AgentTemplateSummary,
+    usable: &BTreeSet<String>,
     requested: Option<&[String]>,
     config_for: impl Fn(&str) -> Value,
 ) -> AppResult<(Vec<String>, serde_json::Map<String, Value>)> {
@@ -224,6 +234,10 @@ async fn select_capabilities(
         }
     }
     require_inventory(template, selected)?;
+    // Organization authorization, checked before any pod validation.
+    if let Some(id) = selected.iter().find(|id| !usable.contains(*id)) {
+        return Err(enablement::not_enabled(id));
+    }
     let envelopes = futures::future::try_join_all(selected.iter().map(|id| {
         let config = config_for(id);
         validate_capability(platform, template, authorization, id, config)
@@ -233,6 +247,16 @@ async fn select_capabilities(
         selected.to_vec(),
         selected.iter().cloned().zip(envelopes).collect(),
     ))
+}
+
+/// The effective selection: enrollment always stores it, so absence is corrupt data.
+pub(super) fn saved_selection(tuning: &Value) -> AppResult<Vec<String>> {
+    Ok(Vec::<String>::deserialize(
+        tuning
+            .get("selected_capability_ids")
+            .unwrap_or(&Value::Null),
+    )
+    .context("invalid saved capability selection")?)
 }
 
 /// Every selected capability must belong to the template's pod inventory.

@@ -261,7 +261,7 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/agents/${queryArg.agentId}/default-on`,
         method: "PUT",
-        body: queryArg.setAgentDefaultOnRequest,
+        body: queryArg.setDefaultOnRequest,
       }),
     }),
     organizationCapabilities: build.query<OrganizationCapabilitiesApiResponse, OrganizationCapabilitiesApiArg>({
@@ -274,6 +274,24 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/capabilities/${queryArg.runtimeId}/refresh`,
         method: "POST",
+      }),
+    }),
+    setOrganizationCapabilityDefault: build.mutation<
+      SetOrganizationCapabilityDefaultApiResponse,
+      SetOrganizationCapabilityDefaultApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/capabilities/${queryArg.runtimeId}/${queryArg.capabilityId}/default-on`,
+        method: "PUT",
+        body: queryArg.setDefaultOnRequest,
+      }),
+    }),
+    organizationCapabilityRevokeImpact: build.query<
+      OrganizationCapabilityRevokeImpactApiResponse,
+      OrganizationCapabilityRevokeImpactApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/capabilities/${queryArg.runtimeId}/${queryArg.capabilityId}/revoke-impact`,
       }),
     }),
     organizationModelPolicy: build.query<OrganizationModelPolicyApiResponse, OrganizationModelPolicyApiArg>({
@@ -662,7 +680,7 @@ export type SetOrganizationAgentDefaultApiResponse = /** status 200 undefined */
 export type SetOrganizationAgentDefaultApiArg = {
   organizationId: string;
   agentId: string;
-  setAgentDefaultOnRequest: SetAgentDefaultOnRequest;
+  setDefaultOnRequest: SetDefaultOnRequest;
 };
 export type OrganizationCapabilitiesApiResponse = /** status 200 undefined */ PodCapabilityInventory[];
 export type OrganizationCapabilitiesApiArg = {
@@ -672,6 +690,20 @@ export type RefreshOrganizationCapabilitiesApiResponse = unknown;
 export type RefreshOrganizationCapabilitiesApiArg = {
   organizationId: string;
   runtimeId: string;
+};
+export type SetOrganizationCapabilityDefaultApiResponse = unknown;
+export type SetOrganizationCapabilityDefaultApiArg = {
+  organizationId: string;
+  runtimeId: string;
+  capabilityId: string;
+  setDefaultOnRequest: SetDefaultOnRequest;
+};
+export type OrganizationCapabilityRevokeImpactApiResponse =
+  /** status 200 Instances usable now that disabling this offer would stop */ AffectedAgentInstance[];
+export type OrganizationCapabilityRevokeImpactApiArg = {
+  organizationId: string;
+  runtimeId: string;
+  capabilityId: string;
 };
 export type OrganizationModelPolicyApiResponse = /** status 200 undefined */ OrganizationModelPolicy;
 export type OrganizationModelPolicyApiArg = {
@@ -1306,7 +1338,7 @@ export type AgentDefaultOnResult = {
   capability_id: string;
   default_on: boolean;
 };
-export type SetAgentDefaultOnRequest = {
+export type SetDefaultOnRequest = {
   default_on: boolean;
 };
 export type CapabilityFieldType =
@@ -1352,12 +1384,25 @@ export type PodCapabilityDescriptor = {
   team_settings_fields?: CapabilityFieldDescription[];
   version: string;
 };
+export type AffectedAgentInstance = {
+  agent_instance_id: string;
+  display_name: string;
+  /** Display name of a personal space's owner; null for other spaces. */
+  owner_name: string | null;
+  space_id: string;
+  space_kind: SpaceKind;
+  space_name: string;
+};
 export type CapabilityInventoryOffer = {
   /** Present in the last successful snapshot; independent of observation state. */
   advertised: boolean;
   capability_id: string;
+  /** Enabled for every space of this organization. */
+  default_on: boolean;
   descriptor: PodCapabilityDescriptor;
   runtime_id: string;
+  /** Instances that select this offer and may no longer use it. */
+  unusable_instances: AffectedAgentInstance[];
   version: string;
 };
 export type CatalogObservationState = "not_observed" | "observed" | "unavailable";
@@ -1934,6 +1979,9 @@ export const {
   useOrganizationCapabilitiesQuery,
   useLazyOrganizationCapabilitiesQuery,
   useRefreshOrganizationCapabilitiesMutation,
+  useSetOrganizationCapabilityDefaultMutation,
+  useOrganizationCapabilityRevokeImpactQuery,
+  useLazyOrganizationCapabilityRevokeImpactQuery,
   useOrganizationModelPolicyQuery,
   useLazyOrganizationModelPolicyQuery,
   useReplaceOrganizationModelPolicyMutation,

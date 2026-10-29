@@ -1031,7 +1031,9 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
                   <div className={styles.inputOverlay}>
                     {(chat.historyUnavailable || chat.sessionUnavailable || chat.preparationUnavailable) && (
                       <p className={styles.conversationNotice} role="status">
-                        {t(chat.historyErrorKey ?? "chatbot.historyUnavailable")}
+                        {chat.historyUnavailable || chat.sessionUnavailable || !chat.preparationErrorDetail
+                          ? t(chat.historyErrorKey ?? "chatbot.historyUnavailable")
+                          : chat.preparationErrorDetail}
                       </p>
                     )}
                     {(chat.pendingMessages?.length ?? 0) > 0 && (

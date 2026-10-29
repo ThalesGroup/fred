@@ -49,10 +49,17 @@ import {
 import type { CapabilityEnablementItem } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { skipToken } from "@reduxjs/toolkit/query";
 import {
+  useLazyOrganizationCapabilityRevokeImpactQuery,
   useOrganizationAgentsQuery,
+  useOrganizationCapabilitiesQuery,
   useSetOrganizationAgentDefaultMutation,
+  useSetOrganizationCapabilityDefaultMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { AgentEnablement, CapabilityInventoryOffer } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type {
+  AffectedAgentInstance,
+  AgentEnablement,
+  CapabilityInventoryOffer,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./FeaturesPage.module.css";
 import { OrganizationCapabilities } from "./OrganizationCapabilities";
 import { OrganizationModels } from "./OrganizationModels";
@@ -87,6 +94,11 @@ import { partitionDiscoveredModels, splitModelSections } from "./modelSections";
 // belongs on this surface rather than a page of its own.
 type CapabilityKind = "tool" | "agent" | "model" | "app" | "knowledge_base";
 const CORE_KIND_FILTERS: CapabilityKind[] = ["tool", "agent", "model", "knowledge_base"];
+
+// A pod offer shares the default-on switch; (pod, capability) is its identity.
+type DefaultOnRow = CapabilityEnablementItem | CapabilityInventoryOffer;
+const isOffer = (row: DefaultOnRow): row is CapabilityInventoryOffer => "descriptor" in row;
+const defaultOnKey = (row: DefaultOnRow) => (isOffer(row) ? `${row.runtime_id}/${row.capability_id}` : row.id);
 
 export default function FeaturesPage({ organizationId }: { organizationId?: string } = {}) {
   const readOnly = organizationId !== undefined;
@@ -124,7 +136,8 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   const [setDefaultOn, { isLoading: isTogglingLegacyDefault }] = useSetCapabilityDefaultOnMutation();
   const [setOrganizationDefault, { isLoading: isTogglingOrganizationDefault }] =
     useSetOrganizationAgentDefaultMutation();
-  const isTogglingDefault = isTogglingLegacyDefault || isTogglingOrganizationDefault;
+  const [setOfferDefault, { isLoading: isTogglingOfferDefault }] = useSetOrganizationCapabilityDefaultMutation();
+  const isTogglingDefault = isTogglingLegacyDefault || isTogglingOrganizationDefault || isTogglingOfferDefault;
   // Per-model reasoning activation (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5).
   const [setModelReasoning, { isLoading: isTogglingReasoning }] = useSetModelReasoningMutation();
 
@@ -133,13 +146,15 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   // would break right now. The resting per-capability health count in the
   // table itself comes straight from the aggregate list (#1975), not from here.
   const [fetchRevokeImpact, revokeImpact] = useLazyCapabilityRevokeImpactQuery();
+  const [fetchOfferRevokeImpact, offerRevokeImpact] = useLazyOrganizationCapabilityRevokeImpactQuery();
 
   const [matrixCapabilityId, setMatrixCapabilityId] = useState<string | null>(null);
-  const [suspendedCapabilityId, setSuspendedCapabilityId] = useState<string | null>(null);
+  // A catalog row id or a pod offer's defaultOnKey.
+  const [suspendedKey, setSuspendedKey] = useState<string | null>(null);
   const [platformBindingsPanelOpen, setPlatformBindingsPanelOpen] = useState(false);
   const [noDefaultModalOpen, setNoDefaultModalOpen] = useState(false);
   const [noDefaultModalPending, setNoDefaultModalPending] = useState(false);
-  const [pendingDefaultOff, setPendingDefaultOff] = useState<CapabilityEnablementItem | null>(null);
+  const [pendingDefaultOff, setPendingDefaultOff] = useState<DefaultOnRow | null>(null);
   // #2470: an agent template whose dependencies are not default-on, waiting for
   // the admin to confirm granting them alongside it. Holds the capability the
   // switch was clicked on; the missing ids are re-derived at confirm time from
@@ -241,6 +256,7 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   const [togglingCapabilityId, setTogglingCapabilityId] = useState<string | null>(null);
   useEffect(() => {
     setPendingDefaultOff(null);
+    setSuspendedKey(null);
   }, [organizationId, kindFilter]);
 
   // Synchronous, ref-backed guard against double-invoking applyDefaultOn for
@@ -336,37 +352,62 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
   // behind it updates.
   const matrixCapability =
     capabilities.find((cap) => cap.id === matrixCapabilityId && !unavailableDiscoveredIds.has(cap.id)) ?? null;
-  const suspendedCapability = capabilities.find((cap) => cap.id === suspendedCapabilityId) ?? null;
-  const visiblePendingDefaultOff = applicationsEnabled || pendingDefaultOff?.kind !== "app" ? pendingDefaultOff : null;
+  const suspendedCapability = capabilities.find((cap) => cap.id === suspendedKey) ?? null;
+  // Served from the cache OrganizationCapabilities already holds, so the drawer follows refetches.
+  const { data: offerPods } = useOrganizationCapabilitiesQuery(
+    discoveringCapabilities && organizationId && suspendedKey ? { organizationId } : skipToken,
+  );
+  const suspendedOffer =
+    offerPods?.flatMap((pod) => pod.capabilities).find((offer) => defaultOnKey(offer) === suspendedKey) ?? null;
+  // A personal space is named by its owner, never by its stored identifier.
+  const spaceLabel = (instance: AffectedAgentInstance) =>
+    instance.space_kind === "personal"
+      ? [t("rework.sidebar.team.userTeam"), instance.owner_name].filter(Boolean).join(" - ")
+      : instance.space_name;
+  const offerName = (offer: CapabilityInventoryOffer) =>
+    t(offer.descriptor.name, { defaultValue: offer.descriptor.name });
+  const pendingCapability = pendingDefaultOff && !isOffer(pendingDefaultOff) ? pendingDefaultOff : null;
+  const pendingOffer = pendingDefaultOff && isOffer(pendingDefaultOff) ? pendingDefaultOff : null;
+  const visiblePendingDefaultOff = applicationsEnabled || pendingCapability?.kind !== "app" ? pendingDefaultOff : null;
   // Each kind loses something different when default-on goes off: agent
   // instances can be suspended, an application or a Knowledge Base only loses
   // inherited access. Naming the object is what makes the dialog truthful.
   const defaultOffCopyVariant = discoveringAgents
     ? "organization"
-    : visiblePendingDefaultOff?.kind === "app"
+    : pendingCapability?.kind === "app"
       ? "app"
-      : visiblePendingDefaultOff?.kind === "knowledge_base"
+      : pendingCapability?.kind === "knowledge_base"
         ? "knowledgeBase"
         : "generic";
+  // Organization pages are read-only except for agent and offer default-on.
+  const canToggleDefault = (row: DefaultOnRow) => !readOnly || discoveringAgents || isOffer(row);
 
-  const applyDefaultOn = async (capability: CapabilityEnablementItem, nextValue: boolean) => {
-    if (readOnly && !discoveringAgents) return;
-    if (inFlightDefaultOnIdRef.current === capability.id) {
+  const writeDefaultOn = async (row: DefaultOnRow, default_on: boolean) => {
+    if (isOffer(row)) {
+      if (!organizationId) throw new Error("Capability offers belong to an organization.");
+      await setOfferDefault({
+        organizationId,
+        runtimeId: row.runtime_id,
+        capabilityId: row.capability_id,
+        setDefaultOnRequest: { default_on },
+      }).unwrap();
+      return { default_on };
+    }
+    return organizationId
+      ? setOrganizationDefault({ organizationId, agentId: row.id, setDefaultOnRequest: { default_on } }).unwrap()
+      : setDefaultOn({ capabilityId: row.id, setCapabilityDefaultOnRequest: { default_on } }).unwrap();
+  };
+
+  const applyDefaultOn = async (capability: DefaultOnRow, nextValue: boolean) => {
+    if (!canToggleDefault(capability)) return;
+    const key = defaultOnKey(capability);
+    if (inFlightDefaultOnIdRef.current === key) {
       return;
     }
-    inFlightDefaultOnIdRef.current = capability.id;
-    setTogglingCapabilityId(capability.id);
+    inFlightDefaultOnIdRef.current = key;
+    setTogglingCapabilityId(key);
     try {
-      const result = organizationId
-        ? await setOrganizationDefault({
-            organizationId,
-            agentId: capability.id,
-            setAgentDefaultOnRequest: { default_on: nextValue },
-          }).unwrap()
-        : await setDefaultOn({
-            capabilityId: capability.id,
-            setCapabilityDefaultOnRequest: { default_on: nextValue },
-          }).unwrap();
+      const result = await writeDefaultOn(capability, nextValue);
       const suspended =
         "suspended_instances" in result && typeof result.suspended_instances === "number"
           ? result.suspended_instances
@@ -474,8 +515,8 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
     await applyDefaultOn(capability, true);
   };
 
-  const onToggleDefault = (capability: CapabilityEnablementItem) => {
-    if (readOnly && !discoveringAgents) return;
+  const onToggleDefault = (capability: DefaultOnRow) => {
+    if (!canToggleDefault(capability)) return;
     if (capability.default_on) {
       // Turning default-on off revokes inherited access team-by-team and can
       // suspend dependent instances — confirm before firing, and preview the
@@ -485,10 +526,22 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
       // Applications have no agent-instance dependencies or suspension
       // lifecycle. Their confirmation stays generic and never asks the
       // agent-specific impact endpoint for a meaningless preview.
-      if (!discoveringAgents && hasAgentInstanceLifecycle(capability.kind)) {
+      if (isOffer(capability)) {
+        if (organizationId) {
+          void fetchOfferRevokeImpact({
+            organizationId,
+            runtimeId: capability.runtime_id,
+            capabilityId: capability.capability_id,
+          });
+        }
+      } else if (!discoveringAgents && hasAgentInstanceLifecycle(capability.kind)) {
         void fetchRevokeImpact({ capabilityId: capability.id });
       }
-    } else if (!discoveringAgents && missingAgentDependenciesForPlatform(capability, allCapabilities).length > 0) {
+    } else if (
+      !isOffer(capability) &&
+      !discoveringAgents &&
+      missingAgentDependenciesForPlatform(capability, allCapabilities).length > 0
+    ) {
       // #2470: the backend now 409s this write. Offer to grant the dependencies
       // in the same gesture rather than surfacing a refusal the admin has to
       // resolve by hand, one capability at a time, elsewhere in the table.
@@ -498,20 +551,34 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
     }
   };
 
+  // An offer preview lists the instances it would stop; it has no published or unknown count.
+  const impactQuery = pendingOffer ? offerRevokeImpact : revokeImpact;
   const impact = revokeImpact.data;
-  const impactSuspended = impact?.suspended_instances ?? 0;
-  const impactUnknown = impact?.health_unknown_instances ?? 0;
-  const impactPublished = impact?.published_instances ?? 0;
-  const impactInstances = impact?.instances ?? [];
+  const offerImpact = offerRevokeImpact.data ?? [];
+  const impactSuspended = pendingOffer ? offerImpact.length : (impact?.suspended_instances ?? 0);
+  const impactUnknown = pendingOffer ? 0 : (impact?.health_unknown_instances ?? 0);
+  const impactPublished = pendingOffer ? 0 : (impact?.published_instances ?? 0);
+  const impactInstances = pendingOffer
+    ? offerImpact.map((instance) => ({
+        id: instance.agent_instance_id,
+        name: instance.display_name,
+        team: spaceLabel(instance),
+      }))
+    : (impact?.instances ?? []).map((instance) => ({
+        id: instance.agent_instance_id,
+        name: instance.display_name,
+        // Resolve the opaque Keycloak group id to its team name.
+        team: teams.find((team) => team.id === instance.team_id)?.name ?? instance.team_id,
+      }));
 
   // Concrete impact for the disable-confirmation dialog: how many working agents
   // this default-off would suspend, plus the affected-agent drill-down. While
   // the preview is still loading we render nothing extra — the dialog keeps its
   // generic message and stays actionable.
   const renderImpactDetails = () => {
-    if (discoveringAgents || !visiblePendingDefaultOff || !hasAgentInstanceLifecycle(visiblePendingDefaultOff.kind))
-      return null;
-    if (revokeImpact.isFetching || !impact) return null;
+    if (discoveringAgents) return null;
+    if (!pendingOffer && !(pendingCapability && hasAgentInstanceLifecycle(pendingCapability.kind))) return null;
+    if (impactQuery.isFetching || !impactQuery.data) return null;
     return (
       <div className={styles.impact}>
         <p className={impactSuspended > 0 ? styles.impactWarn : styles.impactNone}>
@@ -547,12 +614,10 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
             {showAffected && (
               <ul className={styles.affectedList}>
                 {impactInstances.map((instance) => (
-                  <li key={instance.agent_instance_id} className={styles.affectedItem}>
+                  <li key={instance.id} className={styles.affectedItem}>
                     {t("rework.admin.capabilities.defaultOffConfirm.affectedAgent", {
-                      name: instance.display_name,
-                      // Resolve the opaque Keycloak group id to its team name —
-                      // same pattern as SuspendedInstancesDrawer's grouping.
-                      team: teams.find((team) => team.id === instance.team_id)?.name ?? instance.team_id,
+                      name: instance.name,
+                      team: instance.team,
                     })}
                   </li>
                 ))}
@@ -579,51 +644,83 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
     </div>
   );
 
-  const columns: (DataTableColumn<CapabilityEnablementItem> & { field?: "defaultOn" | "identity" | "actions" })[] = [
+  const defaultOnCell = (cap: DefaultOnRow) => {
+    // §8.2: a capability with a REQUIRED team setting can never be on by
+    // default — nobody has filled the settings for the teams that would
+    // inherit it, so the write 409s (`DefaultOnNotAllowed`). Turning it
+    // OFF stays possible, hence the `!cap.default_on` guard: a row that is
+    // already default-on (settings added after the fact) must not be
+    // trapped in that state. An offer its pod no longer advertises follows
+    // the same rule, without the settings hint.
+    //
+    // This flips only when `default_on` itself does, i.e. on the
+    // turn-OFF path — which runs through the confirmation dialog, so the
+    // Switch does not hold focus when the cell re-renders (the dialog
+    // restores focus to nothing on close). That is why the swap between
+    // the wrapped and bare control cannot reintroduce the Chromium
+    // focus-yank bug documented above; it is not because `blockedOn` is
+    // constant, which it isn't.
+    const blockedOn = !cap.default_on && (isOffer(cap) ? !cap.advertised : requiresTeamSettings(cap));
+    const control = (
+      <Switch
+        size="small"
+        checked={cap.default_on}
+        disabled={
+          !canToggleDefault(cap) ||
+          blockedOn ||
+          (!isOffer(cap) && unavailableDiscoveredIds.has(cap.id)) ||
+          (isTogglingDefault && togglingCapabilityId !== defaultOnKey(cap))
+        }
+        onChange={() => onToggleDefault(cap)}
+        aria-label={t("rework.admin.capabilities.col.defaultOn")}
+      />
+    );
+    return (
+      <div className={styles.centered}>
+        {blockedOn && !isOffer(cap) ? (
+          <Tooltip text={t("rework.admin.capabilities.defaultOnRequiresSettingsHint")}>{control}</Tooltip>
+        ) : (
+          control
+        )}
+      </div>
+    );
+  };
+
+  // Shared by catalog rows and pod offers; only catalog rows can be "unknown".
+  const healthCell = (suspended: number, unknown: number, onOpen?: () => void) => (
+    <div className={styles.centered}>
+      {suspended > 0 ? (
+        // A button, not a span, so it is keyboard-reachable and announced as actionable.
+        <button
+          type="button"
+          className={styles.healthWarnButton}
+          disabled={!onOpen}
+          onClick={onOpen}
+          aria-label={t("rework.admin.capabilities.health.suspendedAction", { count: suspended })}
+        >
+          <Icon category="outlined" type="warning" />
+          {t("rework.admin.capabilities.health.suspended", { count: suspended })}
+        </button>
+      ) : unknown > 0 ? (
+        <Tooltip text={t("rework.admin.capabilities.health.unknownHint")}>
+          <span className={styles.healthNeutral}>
+            {t("rework.admin.capabilities.health.unknown", { count: unknown })}
+          </span>
+        </Tooltip>
+      ) : (
+        <span className={styles.healthNeutral}>{t("rework.admin.capabilities.health.healthy")}</span>
+      )}
+    </div>
+  );
+
+  const columns: (DataTableColumn<CapabilityEnablementItem> & {
+    field?: "defaultOn" | "identity" | "health" | "actions";
+  })[] = [
     {
       field: "defaultOn",
       label: t("rework.admin.capabilities.col.defaultOn"),
       size: "1fr",
-      cellRenderer: (cap) => {
-        // §8.2: a capability with a REQUIRED team setting can never be on by
-        // default — nobody has filled the settings for the teams that would
-        // inherit it, so the write 409s (`DefaultOnNotAllowed`). Turning it
-        // OFF stays possible, hence the `!cap.default_on` guard: a row that is
-        // already default-on (settings added after the fact) must not be
-        // trapped in that state.
-        //
-        // This flips only when `default_on` itself does, i.e. on the
-        // turn-OFF path — which runs through the confirmation dialog, so the
-        // Switch does not hold focus when the cell re-renders (the dialog
-        // restores focus to nothing on close). That is why the swap between
-        // the wrapped and bare control cannot reintroduce the Chromium
-        // focus-yank bug documented above; it is not because `blockedOn` is
-        // constant, which it isn't.
-        const blockedOn = !cap.default_on && requiresTeamSettings(cap);
-        const control = (
-          <Switch
-            size="small"
-            checked={cap.default_on}
-            disabled={
-              (readOnly && !discoveringAgents) ||
-              blockedOn ||
-              unavailableDiscoveredIds.has(cap.id) ||
-              (isTogglingDefault && togglingCapabilityId !== cap.id)
-            }
-            onChange={() => onToggleDefault(cap)}
-            aria-label={t("rework.admin.capabilities.col.defaultOn")}
-          />
-        );
-        return (
-          <div className={styles.centered}>
-            {blockedOn ? (
-              <Tooltip text={t("rework.admin.capabilities.defaultOnRequiresSettingsHint")}>{control}</Tooltip>
-            ) : (
-              control
-            )}
-          </div>
-        );
-      },
+      cellRenderer: defaultOnCell,
     },
     {
       field: "identity",
@@ -752,49 +849,25 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
       ? []
       : [
           {
+            field: "health" as const,
             label: t("rework.admin.capabilities.col.health"),
             size: activeKindFilter === "model" ? "0.9fr" : "1fr",
-            cellRenderer: (cap: CapabilityEnablementItem) => {
-              // Resting health straight from the aggregate list: agents this
-              // capability breaks AT REST (`suspended_instances`) vs. agents whose pod
-              // was unreachable so their health can't be determined
-              // (`health_unknown_instances`) — kept visually distinct.
-              const suspended = cap.suspended_instances ?? 0;
-              const unknown = cap.health_unknown_instances ?? 0;
-              return (
+            // Resting health from the aggregate list: agents this capability breaks
+            // at rest vs. agents whose pod was unreachable, kept visually distinct.
+            cellRenderer: (cap: CapabilityEnablementItem) =>
+              unavailableDiscoveredIds.has(cap.id) ? (
                 <div className={styles.centered}>
-                  {unavailableDiscoveredIds.has(cap.id) ? (
-                    <span className={styles.healthUnavailable}>
-                      {t("rework.admin.capabilities.discovery.unavailable")}
-                    </span>
-                  ) : suspended > 0 ? (
-                    // Clickable: opens the drill-down of which agents, in which team,
-                    // this capability breaks at rest. A button, not a span, so
-                    // it is keyboard-reachable and announced as actionable.
-                    <button
-                      type="button"
-                      className={styles.healthWarnButton}
-                      disabled={readOnly}
-                      onClick={() => {
-                        if (!readOnly) setSuspendedCapabilityId(cap.id);
-                      }}
-                      aria-label={t("rework.admin.capabilities.health.suspendedAction", { count: suspended })}
-                    >
-                      <Icon category="outlined" type="warning" />
-                      {t("rework.admin.capabilities.health.suspended", { count: suspended })}
-                    </button>
-                  ) : unknown > 0 ? (
-                    <Tooltip text={t("rework.admin.capabilities.health.unknownHint")}>
-                      <span className={styles.healthNeutral}>
-                        {t("rework.admin.capabilities.health.unknown", { count: unknown })}
-                      </span>
-                    </Tooltip>
-                  ) : (
-                    <span className={styles.healthNeutral}>{t("rework.admin.capabilities.health.healthy")}</span>
-                  )}
+                  <span className={styles.healthUnavailable}>
+                    {t("rework.admin.capabilities.discovery.unavailable")}
+                  </span>
                 </div>
-              );
-            },
+              ) : (
+                healthCell(
+                  cap.suspended_instances ?? 0,
+                  cap.health_unknown_instances ?? 0,
+                  readOnly ? undefined : () => setSuspendedKey(cap.id),
+                )
+              ),
           },
         ]),
     {
@@ -825,21 +898,25 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
       return <div className={styles.centered} />;
     },
   }));
-  // Pod offers keep the catalog layout. No organization authorization exists yet,
-  // so access, team and health cells stay empty and team management is disabled.
+  // Pod offers keep the catalog layout with the organization default-on switch and health.
+  // Access and per-team management remain empty or disabled for now.
   const offerColumns: DataTableColumn<CapabilityInventoryOffer>[] = columns.map((column) => ({
     label: column.label,
     size: column.size,
     cellRenderer: (offer) =>
-      column.field === "identity" ? (
+      column.field === "defaultOn" ? (
+        defaultOnCell(offer)
+      ) : column.field === "identity" ? (
         <EntityIdentity
-          name={t(offer.descriptor.name, { defaultValue: offer.descriptor.name })}
+          name={offerName(offer)}
           icon={toIconType(offer.descriptor.icon, "tune")}
           sourceId={offer.capability_id}
           runtimeId={offer.runtime_id}
           version={offer.descriptor.public_version}
           dimmed={!offer.advertised}
         />
+      ) : column.field === "health" ? (
+        healthCell(offer.unusable_instances.length, 0, () => setSuspendedKey(defaultOnKey(offer)))
       ) : column.field === "actions" ? (
         manageTeamsCell(!offer.advertised, true)
       ) : (
@@ -847,6 +924,25 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
       ),
   }));
   const rowCount = discoveringAgents ? agents.length : visibleCapabilities.length;
+  const suspendedDrawer = suspendedOffer
+    ? {
+        name: offerName(suspendedOffer),
+        instances: suspendedOffer.unusable_instances.map((instance) => ({
+          spaceId: instance.space_id,
+          spaceName: spaceLabel(instance),
+          displayName: instance.display_name,
+        })),
+      }
+    : suspendedCapability
+      ? {
+          name: capabilityLabel(t, suspendedCapability),
+          instances: (suspendedCapability.suspended_instance_details ?? []).map((instance) => ({
+            spaceId: instance.team_id,
+            spaceName: teams.find((team) => team.id === instance.team_id)?.name ?? instance.team_id,
+            displayName: instance.display_name,
+          })),
+        }
+      : null;
 
   return (
     <div className={styles.page}>
@@ -1055,6 +1151,14 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
         }}
         onCancel={() => setPendingDefaultOff(null)}
       />
+      <SuspendedInstancesDrawer
+        title={
+          suspendedDrawer ? t("rework.admin.capabilities.suspendedDrawer.title", { name: suspendedDrawer.name }) : ""
+        }
+        instances={suspendedDrawer?.instances ?? []}
+        open={suspendedDrawer !== null}
+        onClose={() => setSuspendedKey(null)}
+      />
       {!readOnly && (
         <>
           <CapabilityTeamMatrixDrawer
@@ -1089,13 +1193,6 @@ export default function FeaturesPage({ organizationId }: { organizationId?: stri
               setPlatformBindingsPanelOpen(true);
             }}
             onCancel={() => setNoDefaultModalOpen(false)}
-          />
-
-          <SuspendedInstancesDrawer
-            capability={suspendedCapability}
-            teams={teams}
-            open={suspendedCapability !== null}
-            onClose={() => setSuspendedCapabilityId(null)}
           />
 
           <ConfirmationDialog

@@ -15,6 +15,7 @@
 //! Embedded and live runtime template discovery, with pod-scoped catalog storage.
 
 pub mod catalog;
+pub mod enablement;
 mod inventory;
 
 use std::{collections::BTreeMap, time::Duration};
@@ -318,9 +319,10 @@ pub(crate) async fn enrollable_template(
     Err(AppError::NotFound)
 }
 
+/// Organization "enabled for all" decision, shared by agents and capability offers.
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-pub struct SetAgentDefaultOnRequest {
+pub struct SetDefaultOnRequest {
     pub default_on: bool,
 }
 
@@ -406,8 +408,14 @@ async fn space_agent_templates(
     // Discovery uses the pod's public catalog; no caller can opt into hidden agents.
     // Neither discovery nor template checks retain a SQL connection/transaction.
     let catalogs = discover(&s.agent_catalog).await?;
+    let mut usable = BTreeMap::new();
+    for catalog in &catalogs {
+        let ids = enablement::usable_capability_ids(&s.pool, &space, &catalog.runtime_id).await?;
+        usable.insert(catalog.runtime_id.clone(), ids);
+    }
     let fga = &s.fga;
     let space = &space;
+    let usable = &usable;
     let items: Vec<Option<AgentTemplateSummary>> =
         futures::stream::iter(catalogs.into_iter().flat_map(|catalog| {
             let runtime = catalog.runtime_id;
@@ -421,7 +429,20 @@ async fn space_agent_templates(
             if !fga.can_use_agent(id, space).await? {
                 return Ok(None);
             }
-            template_summary(id, runtime, &template)
+            let usable = usable.get(&runtime);
+            let allowed = |id: &str| usable.is_some_and(|ids| ids.contains(id));
+            let Some(mut summary) = template_summary(id, runtime, &template)? else {
+                return Ok(None);
+            };
+            // Offers the space may not use are neither proposed nor preselected.
+            summary.available_capabilities.retain(|entry| {
+                entry
+                    .get("id")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(allowed)
+            });
+            summary.default_capability_ids.retain(|id| allowed(id));
+            Ok::<_, anyhow::Error>(Some(summary))
         })
         .buffered(crate::fga::READ_CONCURRENCY)
         .try_collect()
@@ -467,7 +488,7 @@ async fn organization_agents(
 #[utoipa::path(
     put, path = "/organizations/{organization_id}/agents/{agent_id}/default-on",
     params(("organization_id" = Uuid, Path), ("agent_id" = Uuid, Path)),
-    request_body = SetAgentDefaultOnRequest,
+    request_body = SetDefaultOnRequest,
     responses(
         (status = 200, body = AgentDefaultOnResult),
         (status = 401, body = crate::error::ErrorBody),
@@ -482,7 +503,7 @@ async fn set_organization_agent_default(
     axum::extract::State(s): axum::extract::State<crate::api::AppState>,
     crate::onboarding::AdmittedUser(user): crate::onboarding::AdmittedUser,
     crate::extract::ApiPath((organization_id, agent_id)): crate::extract::ApiPath<(Uuid, Uuid)>,
-    crate::extract::ApiJson(body): crate::extract::ApiJson<SetAgentDefaultOnRequest>,
+    crate::extract::ApiJson(body): crate::extract::ApiJson<SetDefaultOnRequest>,
 ) -> AppResult<axum::Json<AgentDefaultOnResult>> {
     let organization = spaces::authorize(
         &s.pool,

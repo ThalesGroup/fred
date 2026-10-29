@@ -77,6 +77,9 @@ vi.mock("react-i18next", () => ({
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useOrganizationAgentsQuery: () => ({ currentData: undefined, isLoading: false, isError: false }),
   useSetOrganizationAgentDefaultMutation: () => [() => ({ unwrap: async () => ({}) }), { isLoading: false }],
+  useSetOrganizationCapabilityDefaultMutation: () => [vi.fn(), { isLoading: false }],
+  useOrganizationCapabilitiesQuery: () => ({ data: undefined }),
+  useLazyOrganizationCapabilityRevokeImpactQuery: () => [vi.fn(), { data: undefined, isFetching: false }],
 }));
 
 vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({

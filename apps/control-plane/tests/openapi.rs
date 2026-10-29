@@ -137,6 +137,8 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /organizations/{organization_id}/agents",
         "get /organizations/{organization_id}/capabilities",
         "post /organizations/{organization_id}/capabilities/{runtime_id}/refresh",
+        "put /organizations/{organization_id}/capabilities/{runtime_id}/{capability_id}/default-on",
+        "get /organizations/{organization_id}/capabilities/{runtime_id}/{capability_id}/revoke-impact",
         "get /organizations/{organization_id}/models",
         "get /organizations/{organization_id}/model-policy",
         "put /organizations/{organization_id}/model-policy",

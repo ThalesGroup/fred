@@ -74,11 +74,14 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
       unwrap: async () => {
         h.organizationWrites.push(args);
         if (h.failFor.has(args.agentId)) throw new Error("boom");
-        return { capability_id: args.agentId, default_on: args.setAgentDefaultOnRequest.default_on };
+        return { capability_id: args.agentId, default_on: args.setDefaultOnRequest.default_on };
       },
     }),
     { isLoading: false },
   ],
+  useSetOrganizationCapabilityDefaultMutation: () => [vi.fn(), { isLoading: false }],
+  useOrganizationCapabilitiesQuery: () => ({ data: undefined }),
+  useLazyOrganizationCapabilityRevokeImpactQuery: () => [vi.fn(), { data: undefined, isFetching: false }],
 }));
 
 vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
@@ -490,7 +493,7 @@ describe("organization agent default", () => {
       {
         organizationId: "O1",
         agentId: "template-o1",
-        setAgentDefaultOnRequest: { default_on: true },
+        setDefaultOnRequest: { default_on: true },
       },
     ]);
     expect(h.calls).toEqual([]);
@@ -508,7 +511,7 @@ describe("organization agent default", () => {
     expect(h.organizationWrites).toEqual([]);
     act(() => defaultOnSwitch()!.click());
     await act(async () => offButton("confirm").click());
-    expect(h.organizationWrites[0].setAgentDefaultOnRequest.default_on).toBe(false);
+    expect(h.organizationWrites[0].setDefaultOnRequest.default_on).toBe(false);
     expect(h.calls).toEqual([]);
   });
 

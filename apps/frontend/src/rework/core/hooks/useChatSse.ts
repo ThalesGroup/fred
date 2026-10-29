@@ -197,6 +197,12 @@ class RuntimeHttpError extends Error {
   }
 }
 
+// Only an HTTP refusal's detail is shown; network failures keep the generic notice.
+function preparationRefusal(error: unknown): string | undefined {
+  const { status, detail } = normalizeApiError(error);
+  return status === undefined ? undefined : detail;
+}
+
 function recordValue(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -379,6 +385,7 @@ export function useChatSse(
   // resolves each descriptor's `widget` id against the chat-turn-control
   // registry (plugin first, then the capability-agnostic stock kit).
   const [preparationUnavailable, setPreparationUnavailable] = useState(false);
+  const [preparationErrorDetail, setPreparationErrorDetail] = useState<string>();
   const preparationGeneration = useRef(0);
   const [preparation, setPreparation] = useState<ExecutionPreparation>();
   const [chatControls, setChatControls] = useState<ChatControlDescriptor[]>([]);
@@ -407,6 +414,7 @@ export function useChatSse(
         throw new Error("Execution preparation does not match the selected instance");
       }
       setPreparationUnavailable(false);
+      setPreparationErrorDetail(undefined);
       setPreparation(prep);
       setChatControls(prep.chat_controls);
       setMaxChatInputChars(
@@ -433,6 +441,7 @@ export function useChatSse(
     setAll([]);
     preparationGeneration.current += 1;
     setPreparationUnavailable(false);
+    setPreparationErrorDetail(undefined);
     setPreparation(undefined);
     setChatControls([]);
     setMaxChatInputChars(undefined);
@@ -1108,6 +1117,7 @@ export function useChatSse(
           setPreparation(undefined);
           setChatControls([]);
           setPreparationUnavailable(true);
+          setPreparationErrorDetail(preparationRefusal(err));
         }
         failPreflight("prepare-execution", err);
         return false;
@@ -1658,6 +1668,7 @@ export function useChatSse(
             setPreparation(undefined);
             setChatControls([]);
             setPreparationUnavailable(true);
+            setPreparationErrorDetail(preparationRefusal(error));
           }
           throw error;
         });
@@ -1711,6 +1722,7 @@ export function useChatSse(
     waitResponse,
     preparation,
     preparationUnavailable,
+    preparationErrorDetail,
     chatControls,
     maxChatInputChars,
     prepareChatControls,

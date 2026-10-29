@@ -12,12 +12,15 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use super::{RuntimeCatalogSource, catalog};
+use sqlx::{Postgres, Transaction};
+
+use super::{RuntimeCatalogSource, SetDefaultOnRequest, catalog, enablement};
 use crate::{
+    agent_instances::{self, SelectingInstance},
     api::AppState,
-    domain::{Permission, SpaceKind},
+    domain::{Permission, Space, SpaceKind},
     error::{AppError, AppResult},
-    extract::ApiPath,
+    extract::{ApiJson, ApiPath},
     onboarding::AdmittedUser,
     spaces,
 };
@@ -180,7 +183,37 @@ pub struct CapabilityInventoryOffer {
     pub version: String,
     /// Present in the last successful snapshot; independent of observation state.
     pub advertised: bool,
+    /// Enabled for every space of this organization.
+    pub default_on: bool,
+    /// Instances that select this offer and may no longer use it.
+    pub unusable_instances: Vec<AffectedAgentInstance>,
     pub descriptor: PodCapabilityDescriptor,
+}
+
+/// An agent instance an offer's authorization affects, with its space for display.
+#[derive(Serialize, ToSchema)]
+pub struct AffectedAgentInstance {
+    pub agent_instance_id: Uuid,
+    pub display_name: String,
+    pub space_id: Uuid,
+    pub space_name: String,
+    pub space_kind: SpaceKind,
+    /// Display name of a personal space's owner; null for other spaces.
+    #[schema(required = true)]
+    pub owner_name: Option<String>,
+}
+
+impl From<&SelectingInstance> for AffectedAgentInstance {
+    fn from(instance: &SelectingInstance) -> Self {
+        Self {
+            agent_instance_id: instance.agent_instance_id,
+            display_name: instance.display_name.clone(),
+            space_id: instance.space.id,
+            space_name: instance.space.name.clone(),
+            space_kind: instance.space.kind,
+            owner_name: instance.owner_name.clone(),
+        }
+    }
 }
 
 #[derive(Serialize, ToSchema)]
@@ -195,11 +228,22 @@ pub struct PodCapabilityInventory {
     pub template_capabilities: Vec<PodTemplateCapability>,
 }
 
-async fn read_inventory(s: &AppState) -> AppResult<Vec<PodCapabilityInventory>> {
+/// One read-only snapshot for administration views; no lock, no network call.
+async fn read_snapshot(s: &AppState) -> AppResult<Transaction<'static, Postgres>> {
     let mut tx = s.pool.begin().await?;
     sqlx::query("set transaction isolation level repeatable read, read only")
         .execute(&mut *tx)
         .await?;
+    Ok(tx)
+}
+
+async fn read_inventory(
+    s: &AppState,
+    organization_id: Uuid,
+) -> AppResult<Vec<PodCapabilityInventory>> {
+    let mut tx = read_snapshot(s).await?;
+    let policy = enablement::Policy::load(&mut *tx, organization_id).await?;
+    let instances = agent_instances::selecting_in_organization(&mut *tx, organization_id).await?;
     let mut items = Vec::new();
     for source in &s.agent_catalog.runtime_catalog_sources {
         let observation = catalog::observation(&mut *tx, &source.runtime_id).await?;
@@ -219,6 +263,21 @@ async fn read_inventory(s: &AppState) -> AppResult<Vec<PodCapabilityInventory>> 
                 .into_iter()
                 .map(|offer| {
                     Ok(CapabilityInventoryOffer {
+                        default_on: policy.default_on(&offer.runtime_id, &offer.capability_id),
+                        unusable_instances: instances
+                            .iter()
+                            .filter(|instance| {
+                                instance.source_runtime_id == offer.runtime_id
+                                    && instance.selected.contains(&offer.capability_id)
+                                    && !enablement::usable(
+                                        &policy,
+                                        &instance.space,
+                                        &offer.runtime_id,
+                                        &offer.capability_id,
+                                    )
+                            })
+                            .map(AffectedAgentInstance::from)
+                            .collect(),
                         runtime_id: offer.runtime_id,
                         capability_id: offer.capability_id,
                         version: offer.version,
@@ -242,11 +301,7 @@ async fn read_inventory(s: &AppState) -> AppResult<Vec<PodCapabilityInventory>> 
     Ok(items)
 }
 
-async fn authorize(
-    s: &AppState,
-    uid: &str,
-    organization_id: Uuid,
-) -> AppResult<crate::domain::Space> {
+async fn authorize(s: &AppState, uid: &str, organization_id: Uuid) -> AppResult<Space> {
     let org = spaces::authorize(&s.pool, &s.fga, uid, organization_id, Permission::Manage).await?;
     if org.kind != SpaceKind::Organization {
         return Err(AppError::NotFound);
@@ -254,10 +309,36 @@ async fn authorize(
     Ok(org)
 }
 
+fn require_source(s: &AppState, runtime_id: &str) -> AppResult<()> {
+    if s.agent_catalog
+        .runtime_catalog_sources
+        .iter()
+        .any(|source| source.runtime_id == runtime_id)
+    {
+        Ok(())
+    } else {
+        Err(AppError::NotFound)
+    }
+}
+
+/// Organization lock, Manage recheck on the locked connection, then the FGA fence.
+async fn authorized_transaction(
+    s: &AppState,
+    uid: &str,
+    org: &Space,
+) -> AppResult<Transaction<'static, Postgres>> {
+    let (mut tx, mut guard) = spaces::lock_for(&s.pool, &s.fga, org).await?;
+    spaces::authorize_locked(&mut tx, &s.fga, uid, org.id, Permission::Manage).await?;
+    s.fga.fence(&mut guard).await?;
+    Ok(tx)
+}
+
 pub(super) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
     utoipa_axum::router::OpenApiRouter::new()
         .routes(utoipa_axum::routes!(organization_capabilities))
         .routes(utoipa_axum::routes!(refresh_organization_capabilities))
+        .routes(utoipa_axum::routes!(set_organization_capability_default))
+        .routes(utoipa_axum::routes!(organization_capability_revoke_impact))
 }
 
 #[utoipa::path(
@@ -279,7 +360,7 @@ async fn organization_capabilities(
     ApiPath(organization_id): ApiPath<Uuid>,
 ) -> AppResult<Json<Vec<PodCapabilityInventory>>> {
     authorize(&s, &user.uid, organization_id).await?;
-    let inventory = read_inventory(&s).await?;
+    let inventory = read_inventory(&s, organization_id).await?;
     authorize(&s, &user.uid, organization_id).await?;
     Ok(Json(inventory))
 }
@@ -366,16 +447,7 @@ async fn refresh_organization_capabilities(
     }
     // No SQL connection or organization lock survives the bounded pod request.
     let snapshot = fetch(source).await;
-    let (mut tx, mut guard) = spaces::lock_for(&s.pool, &s.fga, &org).await?;
-    spaces::authorize_locked(
-        &mut tx,
-        &s.fga,
-        &user.uid,
-        organization_id,
-        Permission::Manage,
-    )
-    .await?;
-    s.fga.fence(&mut guard).await?;
+    let mut tx = authorized_transaction(&s, &user.uid, &org).await?;
     match &snapshot {
         Ok(snapshot) => catalog::replace(&mut tx, &source.runtime_id, snapshot).await?,
         Err(_) => catalog::mark_unreachable(&mut tx, &source.runtime_id).await?,
@@ -383,4 +455,105 @@ async fn refresh_organization_capabilities(
     tx.commit().await?;
     snapshot?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    put, path = "/organizations/{organization_id}/capabilities/{runtime_id}/{capability_id}/default-on",
+    params(
+        ("organization_id" = Uuid, Path),
+        ("runtime_id" = String, Path),
+        ("capability_id" = String, Path)
+    ),
+    request_body = SetDefaultOnRequest,
+    responses(
+        (status = 204, description = "Organization decision stored"),
+        (status = 401, body = crate::error::ErrorBody),
+        (status = 403, body = crate::error::ErrorBody),
+        (status = 404, description = "Unknown organization, pod source or offer", body = crate::error::ErrorBody),
+        (status = 409, description = "Enabling an offer the pod no longer advertises", body = crate::error::ErrorBody),
+        (status = 500, body = crate::error::ErrorBody),
+        (status = 503, body = crate::error::ErrorBody)
+    )
+)]
+async fn set_organization_capability_default(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath((organization_id, runtime_id, capability_id)): ApiPath<(Uuid, String, String)>,
+    ApiJson(body): ApiJson<SetDefaultOnRequest>,
+) -> AppResult<StatusCode> {
+    let org = authorize(&s, &user.uid, organization_id).await?;
+    require_source(&s, &runtime_id)?;
+    let mut tx = authorized_transaction(&s, &user.uid, &org).await?;
+    let changed = enablement::set_default_on(
+        &mut tx,
+        organization_id,
+        &runtime_id,
+        &capability_id,
+        body.default_on,
+        &user.uid,
+    )
+    .await?;
+    tx.commit().await?;
+    if changed {
+        tracing::info!(target: "fred.security.audit", audit_event="capability.default_changed",
+            actor_uid=%user.uid, organization_id=%organization_id, runtime_id=%runtime_id,
+            capability_id=%capability_id, default_on=body.default_on,
+            "Organization capability default changed");
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    get, path = "/organizations/{organization_id}/capabilities/{runtime_id}/{capability_id}/revoke-impact",
+    params(
+        ("organization_id" = Uuid, Path),
+        ("runtime_id" = String, Path),
+        ("capability_id" = String, Path)
+    ),
+    responses(
+        (status = 200, description = "Instances usable now that disabling this offer would stop", body = [AffectedAgentInstance]),
+        (status = 401, body = crate::error::ErrorBody),
+        (status = 403, body = crate::error::ErrorBody),
+        (status = 404, description = "Unknown organization, pod source or offer", body = crate::error::ErrorBody),
+        (status = 500, body = crate::error::ErrorBody),
+        (status = 503, body = crate::error::ErrorBody)
+    )
+)]
+async fn organization_capability_revoke_impact(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath((organization_id, runtime_id, capability_id)): ApiPath<(Uuid, String, String)>,
+) -> AppResult<Json<Vec<AffectedAgentInstance>>> {
+    authorize(&s, &user.uid, organization_id).await?;
+    require_source(&s, &runtime_id)?;
+    let mut tx = read_snapshot(&s).await?;
+    if !catalog::capabilities(&mut *tx, &runtime_id)
+        .await?
+        .iter()
+        .any(|offer| offer.capability_id == capability_id)
+    {
+        return Err(AppError::NotFound);
+    }
+    let policy = enablement::Policy::load(&mut *tx, organization_id).await?;
+    let instances = agent_instances::selecting_in_organization(&mut *tx, organization_id).await?;
+    tx.commit().await?;
+    let revoked = policy.without(&runtime_id, &capability_id);
+    let affected = instances
+        .iter()
+        .filter(|instance| {
+            let usable_under = |policy| {
+                enablement::first_unusable(
+                    policy,
+                    &instance.space,
+                    &instance.source_runtime_id,
+                    &instance.selected,
+                )
+                .is_none()
+            };
+            usable_under(&policy) && !usable_under(&revoked)
+        })
+        .map(AffectedAgentInstance::from)
+        .collect();
+    authorize(&s, &user.uid, organization_id).await?;
+    Ok(Json(affected))
 }

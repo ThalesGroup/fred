@@ -19,7 +19,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{
-    agents,
+    agents::{self, enablement::usable_capability_ids},
     api::AppState,
     domain::{Permission, SpaceKind},
     error::{AppError, AppResult},
@@ -250,11 +250,13 @@ async fn create_agent_instance(
     // Discovery and pod validation never retain a SQL connection or transaction.
     let (template, default_tuning) =
         agents::enrollable_template(&s.agent_catalog, space.organization, body.template_id).await?;
+    let usable = usable_capability_ids(&s.pool, &space, &template.source_runtime_id).await?;
     let tuning = tuning::enroll(
         &s.agent_catalog,
         headers.get(header::AUTHORIZATION),
         default_tuning,
         &template,
+        &usable,
         &body,
     )
     .await?;
@@ -436,6 +438,7 @@ async fn update_agent_instance(
                 &s.agent_catalog,
                 headers.get(header::AUTHORIZATION),
                 template,
+                &usable_capability_ids(&s.pool, &space, &template.source_runtime_id).await?,
                 &record.tuning.0,
                 &body,
             )

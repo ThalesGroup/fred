@@ -17,7 +17,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{
-    agents,
+    agents::{self, enablement},
     api::AppState,
     auth::{CurrentUser, bearer},
     domain::{Permission, SpaceKind, valid_subject},
@@ -224,6 +224,14 @@ async fn resolve_runtime(
         .await?
         .ok_or(AppError::NotFound)?;
     require_executable(&state, &space, &record)?;
+    // Organization revocation is observed here, at the next turn, never during one.
+    let policy = enablement::Policy::load(&mut *tx, space.organization).await?;
+    enablement::require_usable(
+        &policy,
+        &space,
+        &record.source_runtime_id,
+        &super::tuning::saved_selection(&record.tuning.0)?,
+    )?;
     if let Some(conversation) = &query.conversation {
         crate::sessions::require_association(&mut *tx, subject, conversation, &record).await?;
     }

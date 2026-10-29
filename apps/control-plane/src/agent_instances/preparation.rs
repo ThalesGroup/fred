@@ -16,7 +16,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{
-    agents::{self, PlatformConfig},
+    agents::{self, PlatformConfig, enablement},
     api::AppState,
     domain::Permission,
     error::{AppError, AppResult},
@@ -168,16 +168,10 @@ pub(crate) fn public_base<'a>(config: &'a PlatformConfig, runtime_id: &str) -> O
 fn require_available_capabilities(
     tuning: &Value,
     template: &agents::AgentTemplateSummary,
-) -> AppResult<()> {
-    let saved: Option<Vec<String>> = serde_json::from_value(
-        tuning
-            .get("selected_capability_ids")
-            .cloned()
-            .unwrap_or(Value::Null),
-    )
-    .map_err(|e| AppError::Internal(e.into()))?;
-    let selected = saved.as_deref().unwrap_or(&template.default_capability_ids);
-    super::tuning::require_inventory(template, selected)
+) -> AppResult<Vec<String>> {
+    let selected = super::tuning::saved_selection(tuning)?;
+    super::tuning::require_inventory(template, &selected)?;
+    Ok(selected)
 }
 
 pub(super) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
@@ -253,7 +247,9 @@ async fn prepare_execution(
     if let Some(session_id) = &query.session_id {
         sessions::require_association(&mut *tx, &user.uid, session_id, &current).await?;
     }
-    require_available_capabilities(&current.tuning.0, &template)?;
+    let selected = require_available_capabilities(&current.tuning.0, &template)?;
+    let policy = enablement::Policy::load(&mut *tx, space.organization).await?;
+    enablement::require_usable(&policy, &space, &current.source_runtime_id, &selected)?;
     let model_choice = query.model_choice()?;
     let models = models::resolve(&mut tx, space.organization, &current.tuning.0, false).await?;
     let model_error = models::preparation_error(&models, model_choice.as_ref());
@@ -328,15 +324,15 @@ mod tests {
         let saved = |ids: Value| json!({"selected_capability_ids": ids});
         assert!(require_available_capabilities(&saved(json!(["search"])), &template).is_ok());
         assert!(require_available_capabilities(&saved(json!([])), &template).is_ok());
-        for refused in [saved(json!(["other"])), saved(Value::Null)] {
-            assert!(matches!(
-                require_available_capabilities(&refused, &template),
-                Err(AppError::Problem {
-                    code: "agent_capability_unavailable",
-                    ..
-                })
-            ));
-        }
+        assert!(matches!(
+            require_available_capabilities(&saved(json!(["other"])), &template),
+            Err(AppError::Problem {
+                code: "agent_capability_unavailable",
+                ..
+            })
+        ));
+        // The selection is always materialized; its absence is never the template default.
+        assert!(require_available_capabilities(&saved(Value::Null), &template).is_err());
         template.available_capabilities.clear();
         assert!(require_available_capabilities(&saved(json!(["search"])), &template).is_err());
     }

@@ -12,83 +12,68 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Health-column drill-down (CAPAB-01 / #1975): the agents behind a capability's
-// resting "N suspended" count, grouped by team. Read-only — it names which
-// agents, in which team, this capability breaks at rest, so an admin can go fix
-// access team-by-team from the matrix drawer. The instance list comes inline on
-// the aggregate item (`suspended_instance_details`), the same derivation as the
-// count, so opening this needs no extra request.
+// Health-column drill-down: the agents behind a "N suspended" count, grouped
+// by space. Read-only; callers supply the title and the instance list.
 
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type {
-  CapabilityEnablementItem,
-  Team,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
-import { capabilityLabel } from "./capabilityEnablement";
 import styles from "./SuspendedInstancesDrawer.module.css";
 
+export interface SuspendedInstance {
+  spaceId: string;
+  spaceName: string;
+  displayName: string;
+}
+
 interface SuspendedInstancesDrawerProps {
-  capability: CapabilityEnablementItem | null;
-  teams: Team[];
+  title: string;
+  instances: SuspendedInstance[];
   open: boolean;
   onClose: () => void;
 }
 
-interface TeamGroup {
-  teamId: string;
-  teamName: string;
+interface SpaceGroup {
+  spaceId: string;
+  spaceName: string;
   agents: string[];
 }
 
-export function SuspendedInstancesDrawer({ capability, teams, open, onClose }: SuspendedInstancesDrawerProps) {
+export function SuspendedInstancesDrawer({ title, instances, open, onClose }: SuspendedInstancesDrawerProps) {
   const { t } = useTranslation();
 
-  // Group the flat instance list by team, resolving each opaque team id to its
-  // name (ids are Keycloak group ids). Sorted by team name, agents by display
-  // name, so the same catalog renders the same order every open. Memoised on the
-  // capability identity — it changes when the list refetches, which is exactly
-  // when the grouping must be recomputed.
-  const groups = useMemo<TeamGroup[]>(() => {
-    const details = capability?.suspended_instance_details ?? [];
-    const teamName = (teamId: string) => teams.find((team) => team.id === teamId)?.name ?? teamId;
-    const byTeam = new Map<string, TeamGroup>();
-    for (const instance of details) {
-      const group = byTeam.get(instance.team_id);
+  // Keyed by id so same-named spaces stay apart; sorted by name for a stable order.
+  const groups = useMemo<SpaceGroup[]>(() => {
+    const bySpace = new Map<string, SpaceGroup>();
+    for (const instance of instances) {
+      const group = bySpace.get(instance.spaceId);
       if (group) {
-        group.agents.push(instance.display_name);
+        group.agents.push(instance.displayName);
       } else {
-        byTeam.set(instance.team_id, {
-          teamId: instance.team_id,
-          teamName: teamName(instance.team_id),
-          agents: [instance.display_name],
+        bySpace.set(instance.spaceId, {
+          spaceId: instance.spaceId,
+          spaceName: instance.spaceName,
+          agents: [instance.displayName],
         });
       }
     }
-    const ordered = [...byTeam.values()];
-    ordered.sort((a, b) => a.teamName.localeCompare(b.teamName));
+    const ordered = [...bySpace.values()];
+    ordered.sort((a, b) => a.spaceName.localeCompare(b.spaceName));
     for (const group of ordered) group.agents.sort((a, b) => a.localeCompare(b));
     return ordered;
-  }, [capability, teams]);
-
-  const title = capability
-    ? t("rework.admin.capabilities.suspendedDrawer.title", {
-        name: capabilityLabel(t, capability),
-      })
-    : "";
+  }, [instances]);
 
   return (
     <InlineDrawer open={open} onClose={onClose} title={title} width="440px">
-      {capability && (
+      {open && (
         <div className={styles.body}>
           <p className={styles.hint}>{t("rework.admin.capabilities.suspendedDrawer.subtitle")}</p>
           <ul className={styles.teamList}>
             {groups.map((group) => (
-              <li key={group.teamId} className={styles.teamGroup}>
+              <li key={group.spaceId} className={styles.teamGroup}>
                 <div className={styles.teamHeader}>
-                  <span className={styles.teamName} title={group.teamName}>
-                    {group.teamName}
+                  <span className={styles.teamName} title={group.spaceName}>
+                    {group.spaceName}
                   </span>
                   <span className={styles.teamCount}>
                     {t("rework.admin.capabilities.suspendedDrawer.teamCount", { count: group.agents.length })}
@@ -96,7 +81,7 @@ export function SuspendedInstancesDrawer({ capability, teams, open, onClose }: S
                 </div>
                 <ul className={styles.agentList}>
                   {group.agents.map((name, index) => (
-                    <li key={`${group.teamId}-${index}`} className={styles.agentItem} title={name}>
+                    <li key={`${group.spaceId}-${index}`} className={styles.agentItem} title={name}>
                       {name}
                     </li>
                   ))}

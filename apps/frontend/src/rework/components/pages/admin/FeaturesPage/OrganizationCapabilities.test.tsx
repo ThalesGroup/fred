@@ -77,6 +77,8 @@ const offer = (capability_id: string, advertised = true): CapabilityInventoryOff
   capability_id,
   version: "1",
   advertised,
+  default_on: false,
+  unusable_instances: [],
   descriptor: { id: capability_id, name: capability_id, description: "", icon: "description", version: "1" },
 });
 
