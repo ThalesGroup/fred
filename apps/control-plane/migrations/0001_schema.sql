@@ -96,6 +96,7 @@ create table document (
         (retrieval_id is not null and not retrieval_confirmed) stored,
     published_generation uuid,    -- the official processing result; foreign key below
     purged_at   timestamptz,      -- retired document whose vectors and outputs are gone
+    purge_after timestamptz,      -- purge queue order; each claim pushes it back
     deletion_id uuid references deletion (id),
     foreign key (folder_id, space_id) references folder (id, space_id),
     constraint document_size_valid check (size >= 0 and size <= 104857600),
@@ -103,11 +104,12 @@ create table document (
     constraint document_retrieval_command check (
         num_nulls(retrieval_id, retrieval_actor, retrieval_target, retrieval_phase, retrieval_confirmed) in (0, 5)
     ),
-    check (purged_at is null or deletion_id is not null)
+    check (purged_at is null or deletion_id is not null),
+    check ((purge_after is null) = (deletion_id is null))
 );
 create index document_quota_owner on document (quota_owner) include (size);
 create index document_deletion_manifest on document (deletion_id) where deletion_id is not null;
-create index document_purge on document (id) where deletion_id is not null and purged_at is null;
+create index document_purge on document (purge_after, id) where deletion_id is not null and purged_at is null;
 create unique index document_space_id_folder_id_name_key on document (space_id, folder_id, name)
     nulls not distinct where deletion_id is null;
 
@@ -306,10 +308,12 @@ create table generation (
     vector_ordinals integer[] check((committed_at is null) = (vector_ordinals is null)),
     rows bigint check(rows>=0),
     cleanup_cursor integer not null default 0 check(cleanup_cursor>=0),
+    -- Cleanup queue order: the lease end plus 60 s, pushed back by each claim.
+    cleanup_after timestamptz not null,
     cleaned_at timestamptz
 );
 create index generation_processing on generation(processing_id,created_at,id);
-create index generation_cleanup on generation(expires_at,id) where cleaned_at is null;
+create index generation_cleanup on generation(cleanup_after,id) where cleaned_at is null;
 
 -- Committed outputs; preview checks the size, KF and publication check the digest.
 create table artifact (

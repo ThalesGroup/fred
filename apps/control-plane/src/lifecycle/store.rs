@@ -203,11 +203,13 @@ impl Lifecycle {
         let operation = Uuid::new_v4();
         let receipt = sqlx::query_as("insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning *")
             .bind(operation).bind(document_id).bind(TargetKind::Document).bind(space_id).bind(space.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).fetch_one(&mut *tx).await?;
-        sqlx::query("update document set deletion_id = $2 where id = $1")
-            .bind(document_id)
-            .bind(operation)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(
+            "update document set deletion_id = $2, purge_after = clock_timestamp() where id = $1",
+        )
+        .bind(document_id)
+        .bind(operation)
+        .execute(&mut *tx)
+        .await?;
         tx.commit().await?;
         tracing::info!(target: "fred.security.audit", audit_event="deletion.accepted", target_kind="document", operation_id=%operation, document_id=%document_id, space_id=%space_id, actor_uid=actor, "Document deletion accepted");
         Ok(receipt)

@@ -662,8 +662,8 @@ async fn supervision_attempt(
     let generation = Uuid::new_v4();
     sqlx::query(
         "insert into generation(id,processing_id,stage,execution_id,activity_id,attempt,
-        expires_at,prefix,committed_at,chunks,vector_ordinals,rows)
-        values($1,$2,'indexing',$1,$1,1,now(),'fixture/',now(),7,'{0,1,2}',$3)",
+        expires_at,prefix,committed_at,chunks,vector_ordinals,rows,cleanup_after)
+        values($1,$2,'indexing',$1,$1,1,now(),'fixture/',now(),7,'{0,1,2}',$3,now())",
     )
     .bind(generation)
     .bind(id)
@@ -738,7 +738,7 @@ async fn supervision_separates_attempts_publications_unknown_rows_and_purge() {
     .execute(&e.pool)
     .await
     .unwrap();
-    sqlx::query("update document set deletion_id=$1 where id=$2")
+    sqlx::query("update document set deletion_id=$1,purge_after=clock_timestamp() where id=$2")
         .bind(deletion)
         .bind(retired.id)
         .execute(&e.pool)

@@ -93,7 +93,7 @@ async fn published(pool: &sqlx::PgPool, document: Uuid) -> (store::Generation, M
     (g, manifest)
 }
 async fn expire_generations(pool: &sqlx::PgPool, processing: Uuid) {
-    sqlx::query("update generation set expires_at=clock_timestamp()-interval '2 minutes' where processing_id=$1")
+    sqlx::query("update generation set expires_at=clock_timestamp()-interval '2 minutes',cleanup_after=clock_timestamp()-interval '1 minute' where processing_id=$1")
         .bind(processing).execute(pool).await.unwrap();
 }
 async fn commit(p: &Processing, d: &Descriptor, files: &[(&str, &[u8])], chunks: i64) -> Summary {
@@ -250,7 +250,7 @@ async fn verify_terminal_replay(d: &Documents, p: &Processing, work: &Work, done
         p.confirm_retrievable(
             work.document_id,
             RetrievalConfirmation {
-                step: Default::default(),
+                step: RetrievalStep::Confirm,
                 operation_id: Uuid::new_v4(),
                 retrievable: false
             }
@@ -269,7 +269,7 @@ async fn verify_terminal_replay(d: &Documents, p: &Processing, work: &Work, done
     p.confirm_retrievable(
         work.document_id,
         RetrievalConfirmation {
-            step: Default::default(),
+            step: RetrievalStep::Confirm,
             operation_id: operation,
             retrievable: false,
         },
@@ -1820,6 +1820,130 @@ async fn stage_claims_lock_only_their_own_processing() {
     held.rollback().await.unwrap();
 }
 
+/// An abandoned attempt whose lease expired; `due` is its queue time relative to now.
+async fn abandoned_generation(pool: &sqlx::PgPool, processing: Uuid, due: &str) -> Uuid {
+    let id = Uuid::new_v4();
+    sqlx::query("insert into generation(id,processing_id,stage,execution_id,activity_id,attempt,expires_at,prefix,cleanup_after) values($1,$2,'preparation',$1,$1,1,clock_timestamp()-interval '2 minutes','fixture/'||$1||'/',clock_timestamp()+$3::interval)")
+        .bind(id).bind(processing).bind(due).execute(pool).await.unwrap();
+    id
+}
+async fn report_cleaned(p: &Processing, candidate: control_plane::processing::cleanup::Cleanup) {
+    p.cleaned(control_plane::processing::cleanup::Cleaned {
+        work: candidate.work,
+        generation: candidate.generation,
+        cursor: candidate.cursor,
+        next_cursor: candidate.chunks,
+        objects_empty: true,
+        purge_document: candidate.purge_document,
+    })
+    .await
+    .unwrap();
+}
+/// Concurrent polls; every claimed candidate appears in exactly one batch.
+async fn poll_concurrently(
+    p: &Arc<Processing>,
+) -> Vec<control_plane::processing::cleanup::Cleanup> {
+    let pollers: Vec<_> = (0..4)
+        .map(|_| {
+            let p = p.clone();
+            tokio::spawn(async move { p.cleanup_candidates().await.unwrap() })
+        })
+        .collect();
+    let mut all = Vec::new();
+    for poller in pollers {
+        all.extend(poller.await.unwrap());
+    }
+    let mut ids: Vec<Uuid> = all.iter().map(|c| c.generation).collect();
+    ids.sort();
+    ids.dedup();
+    assert_eq!(ids.len(), all.len(), "pollers received overlapping batches");
+    all
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+async fn cleanup_queues_lease_disjoint_batches_past_failing_candidates() {
+    let (d, p) = Box::pin(setup()).await;
+    let processing = admit(&d, &p, "swept.txt").await;
+    let batch = p.config.limits.batch as usize;
+    let mut failing = Vec::new();
+    for _ in 0..batch {
+        failing.push(abandoned_generation(&d.e.pool, processing, "-10 minutes").await);
+    }
+    let first = abandoned_generation(&d.e.pool, processing, "-1 minute").await;
+    let claimed = poll_concurrently(&p).await;
+    assert_eq!(claimed.len(), batch + 1);
+
+    // The head batch keeps failing: its sweep never reports. Later work still completes.
+    for candidate in claimed {
+        if candidate.generation == first {
+            report_cleaned(&p, candidate).await;
+        }
+    }
+    let later = abandoned_generation(&d.e.pool, processing, "-1 minute").await;
+    let next = poll_concurrently(&p).await;
+    assert_eq!(
+        next.iter().map(|c| c.generation).collect::<Vec<_>>(),
+        vec![later]
+    );
+    for candidate in next {
+        report_cleaned(&p, candidate).await;
+    }
+
+    // Once their claims lapse, the failing candidates return and finish.
+    sqlx::query("update generation set cleanup_after=clock_timestamp() where id=any($1)")
+        .bind(&failing)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    let retried = poll_concurrently(&p).await;
+    let mut ids: Vec<Uuid> = retried.iter().map(|c| c.generation).collect();
+    ids.sort();
+    failing.sort();
+    assert_eq!(ids, failing);
+    for candidate in retried {
+        report_cleaned(&p, candidate).await;
+    }
+    assert!(p.cleanup_candidates().await.unwrap().is_empty());
+
+    // The purge queue leases the same way and closes every generation of the document.
+    let pending = abandoned_generation(&d.e.pool, processing, "-1 minute").await;
+    sqlx::query(
+        "update document_processing set status='failed',completed_at=clock_timestamp() where id=$1",
+    )
+    .bind(processing)
+    .execute(&d.e.pool)
+    .await
+    .unwrap();
+    mark_document_team(&d).await;
+    let purge = poll_concurrently(&p).await;
+    assert_eq!(purge.len(), 1);
+    assert!(purge[0].purge_document);
+    assert!(p.cleanup_candidates().await.unwrap().is_empty());
+    for candidate in purge {
+        report_cleaned(&p, candidate).await;
+    }
+    let (purged, open): (bool, i64) = sqlx::query_as("select d.purged_at is not null, (select count(*) from generation where processing_id=p.id and cleaned_at is null) from document d join document_processing p on p.document_id=d.id where p.id=$1")
+        .bind(processing)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert!(purged);
+    assert_eq!(
+        open, 0,
+        "generation {pending} stayed queued after the purge"
+    );
+    sqlx::query("update generation set cleanup_after=clock_timestamp()-interval '1 minute'")
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    sqlx::query("update document set purge_after=clock_timestamp()-interval '1 minute' where deletion_id is not null")
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    assert!(p.cleanup_candidates().await.unwrap().is_empty());
+}
+
 // Proves: I25, I26
 #[tokio::test]
 #[ignore = "needs disposable PostgreSQL, OpenFGA, SeaweedFS and Temporal"]
@@ -1982,12 +2106,14 @@ async fn retired_folders_and_documents_are_absent_from_reads_and_producers() {
         .execute(&mut *tx)
         .await
         .unwrap();
-    sqlx::query("update document set deletion_id=$1 where id=any($2)")
-        .bind(receipt)
-        .bind(&[ids[0], ids[1], ids[3]][..])
-        .execute(&mut *tx)
-        .await
-        .unwrap();
+    sqlx::query(
+        "update document set deletion_id=$1,purge_after=clock_timestamp() where id=any($2)",
+    )
+    .bind(receipt)
+    .bind(&[ids[0], ids[1], ids[3]][..])
+    .execute(&mut *tx)
+    .await
+    .unwrap();
     tx.commit().await.unwrap();
 
     for suffix in ["", "&search=C", "&search=A", "&search=B", "&search=r.pdf"] {
@@ -2311,12 +2437,14 @@ async fn mark_document_team(d: &Documents) -> Uuid {
         .execute(&mut *tx)
         .await
         .unwrap();
-    sqlx::query("update document set deletion_id=$1 where space_id=$2")
-        .bind(id)
-        .bind(d.folder.space_id)
-        .execute(&mut *tx)
-        .await
-        .unwrap();
+    sqlx::query(
+        "update document set deletion_id=$1,purge_after=clock_timestamp() where space_id=$2",
+    )
+    .bind(id)
+    .bind(d.folder.space_id)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
     tx.commit().await.unwrap();
     id
 }
@@ -2610,7 +2738,7 @@ async fn lifecycle_waits_for_running_retired_document() {
     let operation = mark_document_team(&d).await;
     let row = store::row(&d.e.pool, processing).await.unwrap();
     assert_eq!(row.summary.status, ProcessingStatus::Running);
-    sqlx::query("update generation set expires_at=clock_timestamp()-interval '2 minutes',cleaned_at=clock_timestamp() where processing_id=$1")
+    sqlx::query("update generation set expires_at=clock_timestamp()-interval '2 minutes',cleanup_after=clock_timestamp()-interval '1 minute',cleaned_at=clock_timestamp() where processing_id=$1")
         .bind(processing).execute(&d.e.pool).await.unwrap();
     assert!(p.cleanup_candidates().await.unwrap().is_empty());
     for _ in 0..2 {

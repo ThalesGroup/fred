@@ -404,7 +404,7 @@ impl Processing {
             "{}{id}/",
             document_output(&self.config.derived.prefix, r.summary.document_id)
         );
-        let g: Generation = sqlx::query_as("insert into generation(id,processing_id,stage,execution_id,activity_id,attempt,expires_at,prefix) values($1,$2,$3,$4,$5,$6,$7,$8) returning *")
+        let g: Generation = sqlx::query_as("insert into generation(id,processing_id,stage,execution_id,activity_id,attempt,expires_at,prefix,cleanup_after) values($1,$2,$3,$4,$5,$6,$7,$8,$7 + interval '60 seconds') returning *")
             .bind(id).bind(r.summary.id).bind(c.stage).bind(c.execution_id).bind(c.activity_id).bind(attempt).bind(expires).bind(prefix).fetch_one(&mut *tx).await?;
         sqlx::query("update document_processing set status='running',stage=$2,error_code=null,revision=revision+1 where id=$1")
             .bind(r.summary.id).bind(c.stage).execute(&mut *tx).await?;

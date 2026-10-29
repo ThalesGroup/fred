@@ -1066,7 +1066,7 @@ export type RetrievalStep = "claim" | "applied" | "confirm";
 export type RetrievalConfirmation = {
   operation_id: string;
   retrievable: boolean;
-  step?: RetrievalStep;
+  step: RetrievalStep;
 };
 export type Stage = "queued" | "preparation" | "extraction" | "indexing" | "done";
 export type ProcessingStatus = "pending" | "running" | "succeeded" | "failed";

@@ -128,6 +128,6 @@ class RetrievalWork(Contract):
 
 
 class RetrievalConfirmation(Contract):
-    step: Literal["claim", "applied", "confirm"] = "confirm"
+    step: Literal["claim", "applied", "confirm"]
     operation_id: UUID
     retrievable: bool

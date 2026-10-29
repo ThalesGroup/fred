@@ -53,12 +53,11 @@ pub enum ProjectionPhase {
     Writing,
     Applied,
 }
-#[derive(Default, Deserialize, utoipa::ToSchema)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum RetrievalStep {
     Claim,
     Applied,
-    #[default]
     Confirm,
 }
 #[derive(Serialize, utoipa::ToSchema)]
@@ -73,7 +72,6 @@ pub struct RetrievalWork {
 #[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RetrievalConfirmation {
-    #[serde(default)]
     pub step: RetrievalStep,
     pub operation_id: Uuid,
     pub retrievable: bool,
@@ -295,6 +293,22 @@ mod tests {
         assert!(
             serde_json::from_str::<SetRetrievable>(r#"{"retrievable":false}"#)
                 .is_ok_and(|s| !s.retrievable)
+        );
+    }
+    #[test]
+    fn confirmation_requires_its_step() {
+        let operation = Uuid::nil();
+        assert!(
+            serde_json::from_str::<RetrievalConfirmation>(&format!(
+                r#"{{"operation_id":"{operation}","retrievable":true}}"#
+            ))
+            .is_err()
+        );
+        assert!(
+            serde_json::from_str::<RetrievalConfirmation>(&format!(
+                r#"{{"operation_id":"{operation}","retrievable":true,"step":"confirm"}}"#
+            ))
+            .is_ok_and(|c| matches!(c.step, RetrievalStep::Confirm))
         );
     }
 }

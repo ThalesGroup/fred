@@ -1,7 +1,9 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 //! Two indexed queues: obsolete generations, then retired documents to purge. A row
-//! leaves its queue once done, so an idle platform scans nothing.
+//! leaves its queue once done, so an idle platform scans nothing. A poll claims its rows
+//! by pushing their queue time back: replicas get disjoint batches and a failing row
+//! returns behind the others; reported progress makes it due again at once.
 use super::{
     Processing, conflict,
     models::*,
@@ -13,17 +15,21 @@ use uuid::Uuid;
 
 /// Ordinals and objects swept per call.
 const BATCH: u32 = 200;
+/// How long a claimed candidate stays out of the queue unless its sweep reports progress.
+/// Queue bounds use `now()`: unlike `clock_timestamp()`, it is an index condition.
+const CLAIM_SECONDS: f64 = 300.0;
 
-/// Expired generations of live documents; a published one only for its excess ordinals.
+/// Generations of live documents that are no longer needed; a published one only for its
+/// excess ordinals. Queue order (`cleanup_after`) starts 60 s after the lease end.
 macro_rules! generation_due {
     () => {
-        "g.cleaned_at is null and g.expires_at < clock_timestamp() - interval '60 seconds' and d.deletion_id is null and (p.status in ('succeeded', 'failed') or g.committed_at is null) and (d.published_generation is distinct from g.id or cardinality(g.vector_ordinals) < g.chunks)"
+        "g.cleaned_at is null and d.deletion_id is null and (p.status in ('succeeded', 'failed') or g.committed_at is null) and (d.published_generation is distinct from g.id or cardinality(g.vector_ordinals) < g.chunks)"
     };
 }
-/// Retired documents with no active request and no unexpired lease.
+/// Retired documents with no active request and no generation before its cleanup time.
 macro_rules! purge_due {
     () => {
-        "d.deletion_id is not null and d.purged_at is null and not exists (select 1 from document_processing a where a.document_id = d.id and a.status in ('pending', 'running')) and not exists (select 1 from document_processing lp join generation lg on lg.processing_id = lp.id where lp.document_id = d.id and lg.expires_at >= clock_timestamp() - interval '60 seconds')"
+        "d.deletion_id is not null and d.purged_at is null and not exists (select 1 from document_processing a where a.document_id = d.id and a.status in ('pending', 'running')) and not exists (select 1 from document_processing lp join generation lg on lg.processing_id = lp.id where lp.document_id = d.id and lg.cleanup_after > clock_timestamp())"
     };
 }
 
@@ -111,11 +117,12 @@ impl Processing {
             profile,
         };
         let due: Vec<DueGeneration> = sqlx::query_as(concat!(
-            "select g.*, p.document_id, p.profile, d.sha256 as original_sha256, d.published_generation is not distinct from g.id as published from generation g join document_processing p on p.id = g.processing_id join document d on d.id = p.document_id where ",
+            "with due as materialized (select g.id, p.document_id, p.profile, d.sha256 as original_sha256, d.published_generation is not distinct from g.id as published from generation g join document_processing p on p.id = g.processing_id join document d on d.id = p.document_id where g.cleanup_after <= now() and ",
             generation_due!(),
-            " order by g.expires_at, g.id limit $1"
+            " order by g.cleanup_after, g.id limit $1 for update of g skip locked) update generation g set cleanup_after = clock_timestamp() + make_interval(secs => $2) from due where g.id = due.id returning g.*, due.document_id, due.profile, due.original_sha256, due.published"
         ))
         .bind(limit)
+        .bind(CLAIM_SECONDS)
         .fetch_all(&self.pool)
         .await?;
         let mut result: Vec<Cleanup> = due
@@ -145,11 +152,12 @@ impl Processing {
             })
             .collect();
         let purges: Vec<DuePurge> = sqlx::query_as(concat!(
-            "select d.id as document_id, latest.processing_id, latest.profile, d.sha256 as original_sha256, latest.generation from document d cross join lateral (select p.id as processing_id, p.profile, g.id as generation from document_processing p join generation g on g.processing_id = p.id where p.document_id = d.id order by g.created_at desc, g.id desc limit 1) latest where ",
+            "with due as materialized (select d.id as document_id, latest.processing_id, latest.profile, d.sha256 as original_sha256, latest.generation from document d cross join lateral (select p.id as processing_id, p.profile, g.id as generation from document_processing p join generation g on g.processing_id = p.id where p.document_id = d.id order by g.created_at desc, g.id desc limit 1) latest where d.purge_after <= now() and ",
             purge_due!(),
-            " order by d.id limit $1"
+            " order by d.purge_after, d.id limit $1 for update of d skip locked) update document d set purge_after = clock_timestamp() + make_interval(secs => $2) from due where d.id = due.document_id returning due.*"
         ))
         .bind(limit)
+        .bind(CLAIM_SECONDS)
         .fetch_all(&self.pool)
         .await?;
         result.extend(purges.into_iter().map(|c| Cleanup {
@@ -183,22 +191,28 @@ impl Processing {
             if cleaned.cursor != 0 || cleaned.next_cursor != 0 {
                 return Err(conflict("cleanup_cursor"));
             }
+            let purged = sqlx::query(concat!(
+                "update document d set purge_after = clock_timestamp(), purged_at = case when $2 then clock_timestamp() end where d.id = $1 and ",
+                purge_due!()
+            ))
+            .bind(r.summary.document_id)
+            .bind(cleaned.objects_empty)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected();
+            if purged == 0 {
+                return Err(conflict("protected_generation"));
+            }
             if cleaned.objects_empty {
-                let purged = sqlx::query(concat!(
-                    "update document d set purged_at = clock_timestamp() where d.id = $1 and ",
-                    purge_due!()
-                ))
-                .bind(r.summary.document_id)
-                .execute(&mut *tx)
-                .await?
-                .rows_affected();
-                if purged == 0 {
-                    return Err(conflict("protected_generation"));
-                }
+                sqlx::query("update generation g set cleaned_at = clock_timestamp() from document_processing p where p.id = g.processing_id and p.document_id = $1 and g.cleaned_at is null")
+                    .bind(r.summary.document_id)
+                    .execute(&mut *tx)
+                    .await?;
             }
         } else {
+            // The queue time can be pushed back by a claim; the lease end is the fence.
             let due: bool = sqlx::query_scalar(concat!(
-                "select exists(select 1 from generation g join document_processing p on p.id = g.processing_id join document d on d.id = p.document_id where g.id = $1 and ",
+                "select exists(select 1 from generation g join document_processing p on p.id = g.processing_id join document d on d.id = p.document_id where g.id = $1 and g.expires_at < clock_timestamp() - interval '60 seconds' and ",
                 generation_due!(),
                 ")"
             ))
@@ -218,7 +232,7 @@ impl Processing {
             // generation keeps its objects, so one full pass finishes it.
             let complete = cleaned.next_cursor == chunks;
             let published = r.published_generation == Some(g.id);
-            sqlx::query("update generation set cleanup_cursor=$2,cleaned_at=case when $3 then clock_timestamp() end where id=$1")
+            sqlx::query("update generation set cleanup_cursor=$2,cleanup_after=clock_timestamp(),cleaned_at=case when $3 then clock_timestamp() end where id=$1")
                 .bind(g.id)
                 .bind(if complete { 0 } else { cleaned.next_cursor as i32 })
                 .bind(complete && (published || cleaned.objects_empty))
