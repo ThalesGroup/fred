@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Sequence
 
 import pytest
 from fred_core.store.vector_search import VectorSearchHit
@@ -148,7 +149,7 @@ async def test_mcp_structured_content_survives_graph_runtime_and_events() -> Non
         id: str = "agent-1"
         team_id: str | None = None
         tuning: AgentTuning | None = None
-        active_mcp_servers: tuple[MCPServerRef, ...] = ()
+        active_mcp_servers: Sequence[MCPServerRef] = ()
 
     @lc_tool("list_tabular_documents", response_format="content_and_artifact")
     async def provider() -> tuple[str, dict[str, object]]:
