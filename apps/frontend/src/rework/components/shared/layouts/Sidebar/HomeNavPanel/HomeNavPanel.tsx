@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./HomeNavPanel.module.scss";
-import NavPanelHeader from "@shared/molecules/NavPanelHeader/NavPanelHeader.tsx";
+import SpaceHeader from "@shared/molecules/SpaceHeader/SpaceHeader.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import TeamSelectionListItem from "@shared/molecules/TeamSelectionListItem/TeamSelectionListItem.tsx";
@@ -127,6 +127,7 @@ export default function HomeNavPanel() {
     return list;
   }, [visibleTeams, sortMode, recency]);
 
+  const organization = spaces.currentData?.find((space) => space.kind === "organization");
   const sortOptions: TeamSortOption<TeamSortMode>[] = [
     { value: "recent", label: t("rework.home.sort.recent") },
     { value: "alpha", label: t("rework.home.sort.alpha") },
@@ -134,7 +135,8 @@ export default function HomeNavPanel() {
 
   return (
     <div className={styles.panel}>
-      <NavPanelHeader title={t("rework.home.title")} />
+      {/* Home of the person's organization; without one, just the section. */}
+      <SpaceHeader eyebrow={organization?.name} title={t("rework.home.title")} />
 
       {canOpen && (
         <div className={styles.personalSpace}>

@@ -77,18 +77,6 @@ export function canEnterAdminSection(capabilities: ProtectedCapabilities): boole
   );
 }
 
-const ADMIN_LANDING: [ProtectedRequirement, string][] = [
-  ["teams", "/admin/teams"],
-  ["platformAccess", "/admin/platform-access"],
-  ["features", "/admin/features"],
-  ["platformPrompt", "/admin/platform-prompt"],
-  ["observer", "/admin/analytics"],
-];
-
-export function adminLandingPath(capabilities: ProtectedCapabilities): string {
-  return ADMIN_LANDING.find(([requires]) => isProtectedAllowed(requires, capabilities))?.[1] ?? "/unauthorized";
-}
-
 interface ProtectedProps {
   requires: ProtectedRequirement;
   children: React.ReactNode;

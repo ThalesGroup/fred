@@ -32,6 +32,7 @@ import { useOrganizationSupervisionAccess } from "@core/hooks/useOrganizationSup
 import { useOrganizationAdmin } from "@core/hooks/useOrganizationAdmin";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { canEnterAdminSection } from "@core/guards/Protected";
+import { isPlatformAdminRoute } from "@core/hooks/usePlatformArea";
 
 interface MainNavEntry {
   key: string;
@@ -53,8 +54,11 @@ function BusinessMainNavBar() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  // Platform pages never mount the business bootstrap; the platform role alone shows Admin there.
   const capabilities = useUserCapabilities(
-    isAgentManagementRoute(pathname) || ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, "")),
+    isAgentManagementRoute(pathname) ||
+      isPlatformAdminRoute(pathname) ||
+      ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, "")),
   );
   const organization = useOrganizationAdmin(pathname.replace(/\/$/, "") !== "/admin/supervision");
   const supervision = useOrganizationSupervisionAccess();
@@ -109,8 +113,9 @@ function BusinessMainNavBar() {
   return <NavRail entries={entries} />;
 }
 
-export default function MainNavBar({ platformArea = false }: { platformArea?: boolean }) {
-  return platformArea ? <PlatformMainNavBar /> : <BusinessMainNavBar />;
+/** The same rail in every admin space; only a platform owner without an organization gets Admin alone. */
+export default function MainNavBar({ platformOnly = false }: { platformOnly?: boolean }) {
+  return platformOnly ? <PlatformMainNavBar /> : <BusinessMainNavBar />;
 }
 
 function PlatformMainNavBar() {
