@@ -18,9 +18,10 @@ import type { TFunction } from "i18next";
 import { teamDescriptionText } from "@core/utils/teamFields.ts";
 import TeamCard from "@shared/organisms/TeamCard/TeamCard.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
+import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
 import { useListTeamsQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { Team } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
-import { Link, Navigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import { isPersonalTeamId } from "@shared/utils/teamId";
 import { useMemo, useState } from "react";
@@ -48,28 +49,19 @@ function filterTeams(teams: Team[] | undefined, search: string, t: TFunction): T
 }
 
 /**
- * Render the collaborative team marketplace only when collaborative teams exist.
+ * Team marketplace: the caller's own teams plus the public teams they can join.
  *
- * Why this component exists:
- * - the no-security personal-only baseline should not expose collaborative-team
- *   discovery as a primary supported path
- *
- * How to use it:
- * - mount it on the marketplace team route; it redirects back to the personal
- *   agent page when the user only has the reserved personal team
+ * Always rendered, even for a user with no collaborative team yet: the
+ * discover section is how they find one to join.
  *
  * Example:
  * - `<MarketplaceTeams />`
  */
 export default function MarketplaceTeams() {
   const { t } = useTranslation();
-  const { activeTeam, availableTeams, isLoading, refetch } = useFrontendBootstrap();
+  const { refetch } = useFrontendBootstrap();
   const [search, setSearch] = useState("");
-  const personalTeamId = activeTeam?.id ?? "personal";
-  const collaborativeTeams = availableTeams.filter((team) => team.id !== personalTeamId);
-  const { data: teams } = useListTeamsQuery(undefined, {
-    skip: collaborativeTeams.length === 0,
-  });
+  const { data: teams, isLoading } = useListTeamsQuery();
 
   // `GET /teams` intentionally includes personal spaces (it also feeds the
   // bootstrap-driven sidebar/team switcher), but the marketplace must never
@@ -91,16 +83,6 @@ export default function MarketplaceTeams() {
 
   const filteredYourTeams = useMemo(() => filterTeams(yourTeams, search, t), [yourTeams, search, t]);
   const filteredOtherTeams = useMemo(() => filterTeams(otherTeams, search, t), [otherTeams, search, t]);
-
-  // Wait for bootstrap before redirecting away: redirecting on the first,
-  // pre-bootstrap render sends the user to the bare "personal" alias, then a
-  // second redirect fires once activeTeam.id resolves — the same URL/navbar
-  // desync as the CTRLP-10 index-route residual (router.tsx).
-  if (isLoading) return null;
-
-  if (collaborativeTeams.length === 0) {
-    return <Navigate to={`/team/${personalTeamId}/agents`} replace />;
-  }
 
   const renderCard = (team: Team) => {
     // TEAM-09: a successful self-service join changes team.is_member, which
@@ -134,12 +116,34 @@ export default function MarketplaceTeams() {
           />
         </div>
       </div>
-      <div className={styles.marketplaceTeamsContent}>
-        <div className={styles.marketplaceTeamsListSubtitle}>{t("rework.marketplace.teams.yourTeams")}</div>
-        <div className={styles.marketplaceTeamsList}>{filteredYourTeams.map((team) => renderCard(team))}</div>
-        <div className={styles.marketplaceTeamsListSubtitle}>{t("rework.marketplace.teams.otherTeams")}</div>
-        <div className={styles.marketplaceTeamsList}>{filteredOtherTeams.map((team) => renderCard(team))}</div>
-      </div>
+      {isLoading ? null : !yourTeams?.length && !otherTeams?.length ? (
+        <PageEmptyState
+          icon="groups"
+          message={t("rework.marketplace.teams.empty.title")}
+          description={t("rework.marketplace.teams.empty.description")}
+        />
+      ) : !filteredYourTeams.length && !filteredOtherTeams.length ? (
+        <PageEmptyState
+          icon="search_off"
+          message={t("rework.marketplace.teams.emptySearch.title")}
+          description={t("rework.marketplace.teams.emptySearch.description")}
+        />
+      ) : (
+        <div className={styles.marketplaceTeamsContent}>
+          {filteredYourTeams.length > 0 && (
+            <>
+              <div className={styles.marketplaceTeamsListSubtitle}>{t("rework.marketplace.teams.yourTeams")}</div>
+              <div className={styles.marketplaceTeamsList}>{filteredYourTeams.map((team) => renderCard(team))}</div>
+            </>
+          )}
+          {filteredOtherTeams.length > 0 && (
+            <>
+              <div className={styles.marketplaceTeamsListSubtitle}>{t("rework.marketplace.teams.otherTeams")}</div>
+              <div className={styles.marketplaceTeamsList}>{filteredOtherTeams.map((team) => renderCard(team))}</div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
