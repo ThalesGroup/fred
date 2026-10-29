@@ -1460,7 +1460,7 @@ One of: `source_guarantee`, `api_metadata`.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `admin_username` | string | yes |  |
+| `admin_usernames` | array of string, min items 1, max items 50 | yes | Accounts that become the organization's direct administrators; a repeated name grants once. |
 | `name` | string | yes |  |
 | `owner_username` | string | yes |  |
 
@@ -2424,11 +2424,11 @@ Type: [`TuningScalar`](#tuningscalar) or array of [`TuningScalar`](#tuningscalar
 
 ### UpdateOrganization
 
-Absent fields stay unchanged. A named account becomes the role's sole direct holder.
+Absent fields stay unchanged. The named owner becomes the sole direct owner.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `admin_username` | string or null |  |  |
+| `admin_usernames` | array of string, min items 1, max items 50 or null |  | The complete set of direct administrators: missing ones are added, others revoked. |
 | `name` | string or null |  |  |
 | `owner_username` | string or null |  |  |
 

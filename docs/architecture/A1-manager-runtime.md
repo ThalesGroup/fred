@@ -473,8 +473,8 @@ team metadata records ordered by UUID, with placement from the same SQL query.
 rows with a UUID keyset and 101-row SQL lookahead. It returns at most 100 `items` and
 an optional `next_cursor`, without FGA placement reads or directory enumeration.
 `POST /admin/organizations` requires the same authority and personal admission. It
-resolves exact existing owner/admin usernames in the configured matching Keycloak
-realm before locking SQL. Under the platform lock it checks name availability,
+takes one owner and 1 to 50 administrator usernames, and resolves each distinct exact
+existing username in the configured matching Keycloak realm before locking SQL. Under the platform lock it checks name availability,
 initializes the new organization guard, captures platform/organization guards,
 rechecks caller ownership and validates each distinct nominee's attachment. The
 existing persistence path inserts the row, publishes only Owner/Admin direct roles
@@ -484,22 +484,24 @@ orphan tuples on an uncommitted UUID confer no effective attachment or access.
 authority and answer the organization with its direct owners and admins as user
 summaries, read with two holder Reads on that organization only; the registry stays
 free of roster reads. `PATCH` takes any of `name`, `owner_username` and
-`admin_username`, validated and resolved as for creation. Under the platform and
+`admin_usernames`, validated and resolved as for creation. Under the platform and
 organization locks it rechecks caller ownership, re-reads the row, rechecks
-retirement, keeps names unique, reads both rosters and makes each named account the
-sole direct holder of its role, checking the new holder's attachment. The rename,
+retirement, keeps names unique and reads both rosters. The named owner becomes the
+sole direct owner; the administrator list is the complete set of direct admins, so
+missing ones are granted and the others revoked. An empty list, or more than 96
+grants and revocations in one edit, is refused.
+Each new holder's attachment is checked. The rename,
 grants and revocations commit together after one guarded Write; a lost
 acknowledgment can leave the roles applied without the rename, and a retry
 converges. The response is built from the row and rosters read under the locks;
 a directory failure after commit returns id-only summaries rather than an error.
 A missing or non-organization id answers 404.
 
-**Pending decision (review of #3319).** This `PATCH` is a platform-owner path to an
-organization's governance roles that grant and revoke do not offer: it needs
-neither the caller's attachment to the organization nor `Manage`/`OwnOrganization`
-on it, and replacing the admin revokes admins the organization's owners appointed.
-The alternative under review limits `PATCH` to the name and owner, leaving admins
-to the organization's own governance.
+This `PATCH` is a platform-owner path to an organization's governance roles that
+grant and revoke do not offer: it needs neither the caller's attachment to the
+organization nor `Manage`/`OwnOrganization` on it, so a platform owner can unblock
+an organization whose governance is unavailable. Its administrator list can revoke
+admins the organization's owners appointed.
 
 Team creation requires management of the parent organization, project creation
 management of the parent team. The nominated admin must hold a direct content

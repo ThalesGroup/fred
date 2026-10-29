@@ -305,7 +305,8 @@ pub async fn member_organization(
                 )
                 .header("content-type", "application/json")
                 .body(axum::body::Body::from(
-                    json!({"name":name,"owner_username":owner,"admin_username":admin}).to_string(),
+                    json!({"name":name,"owner_username":owner,"admin_usernames":[admin]})
+                        .to_string(),
                 ))
                 .unwrap(),
         )

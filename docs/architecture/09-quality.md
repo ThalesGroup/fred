@@ -166,7 +166,8 @@ of the UI. These fixtures do not certify every Fred component.
 ## Organization console acceptance
 
 Focused HTTP integration tests exercise consent/owner authority, exact known
-accounts, distinct or identical nominees, unique names, conflicting attachment,
+accounts, distinct or identical nominees, several or repeated administrators, an
+empty or oversized administrator list, unique names, conflicting attachment,
 revocation during a platform-lock wait, and FGA failures before or after publication.
 Two concurrent creators sharing a nominee commit at most one organization. Registry
 pagination uses 102 rows, one retired, and obtains the 101 active rows in two pages
@@ -176,7 +177,11 @@ Editing renames an organization and replaces its owner and its two admins (one
 appointed inside the organization) in one call. A failed publication changes neither,
 replay writes no role, and the full edit records two Checks, six Reads and one Write,
 with no OpenFGA call after commit. A directory failure after commit still answers the
-committed change, with id-only summaries.
+committed change, with id-only summaries. A later administrator list adding one
+account writes only that grant; a list without a current admin revokes it. Creating
+with three administrator entries naming two accounts, one of them the owner, records
+two Checks, four Reads and three role tuples in the creation Write. Replacing 50
+administrators by 50 others is refused with 422 before any Write.
 These fixtures establish correctness and RPC counts, not latency or throughput.
 
 Frontend tests cover list loading/error/empty states, cursor navigation, creation,
@@ -278,9 +283,9 @@ resolver before filtering active rows and enumerating descendants.
 | `GET /me/spaces` | `P_u + sum P_c(s) Read` | Direct roles and SQL placement; all child pages of each organization and team reached by a descending role, concurrent per level |
 | Team registry page | `1 C` | Platform registry permission; SQL placement for at most 100 returned teams |
 | Organization registry page | `1 C` | Owner Check; SQL selects at most 101 active rows and returns 100; no tuple/identity enumeration or advisory lock |
-| HTTP create organization | `2 C + W(2) + 2 R_g + sum Q(distinct target) + W(6)` | Preflight and guarded owner Checks; two exact directory lookups (one for identical usernames) before locking; Owner/Admin grants only |
+| HTTP create organization | `2 C + W(2) + 2 R_g + sum Q(distinct target) + W(5 + a)` | Preflight and guarded owner Checks; one exact directory lookup per distinct username before locking, at most 51 (the owner is not looked up again as an admin); Owner and `a` Admin grants only, `a` at most 50 |
 | Organization detail | `1 C + 2 Read` | Owner Check; direct owner and admin holders of that organization only; then `N` directory lookups, one per holder |
-| HTTP edit organization | `2 C + 2 R_g + 2 Read + sum Q(new holder) + W(r + 4)` | Preflight and guarded owner Checks; up to two exact directory lookups (one for identical usernames) before locking; both rosters read under the locks; `r` role tuples granted or revoked in one guarded Write; after commit, no FGA call and `N` directory lookups, one per resulting holder |
+| HTTP edit organization | `2 C + 2 R_g + 2 Read + sum Q(distinct new holder) + W(r + 4)` | Preflight and guarded owner Checks; one exact directory lookup per distinct requested username before locking, at most 51; both rosters read under the locks; `r` role tuples granted or revoked in one guarded Write, `r` at most 96 (422 beyond); after commit, no FGA call and `N` directory lookups, one per resulting holder |
 | List platform grants | `1 C + P_p Read` | Owner check, then all subjects/roles on `platform:root` |
 | Grant platform role | `1 R_g + 1 C + W(3)` | Actor owner; separate Keycloak subject lookup |
 | Revoke platform role | `1 R_g + 1 C + P_p Read + W(3)` | All platform grants are read to locate one direct grant and another owner |
