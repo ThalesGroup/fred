@@ -152,6 +152,7 @@ describe("Weaver execution context and HTTP diagnostics", () => {
     {
       detail: { message: "Execution refused", code: "refused", input: "private-input" },
       expected: "Execution refused",
+      expectedCode: "refused",
     },
     {
       detail: [
@@ -165,7 +166,7 @@ describe("Weaver execution context and HTTP diagnostics", () => {
       expected: "runtime_context.space_id is required",
     },
     { detail: [{ input: "private-input", ctx: { token: "private-token" } }], expected: "Runtime request failed (422)" },
-  ])("reports only the diagnostic from $expected", async ({ detail, expected }) => {
+  ])("reports only the diagnostic from $expected", async ({ detail, expected, expectedCode }) => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(JSON.stringify({ detail }), { status: 422 })),
@@ -173,7 +174,7 @@ describe("Weaver execution context and HTTP diagnostics", () => {
     await act(async () => {
       await latest.send("bonjour", "saved-session");
     });
-    expect(onError).toHaveBeenCalledWith(expect.stringContaining(expected));
+    expect(onError).toHaveBeenCalledExactlyOnceWith(expect.stringContaining(expected), expectedCode);
     const displayed = JSON.stringify(onError.mock.calls);
     expect(displayed).not.toContain("private-input");
     expect(displayed).not.toContain("private-token");

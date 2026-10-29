@@ -53,10 +53,10 @@ describe("DocumentAccessPackOptions", () => {
     expect(html).not.toContain("capability.document_access.fields.attachments");
   });
 
-  it("keeps binding disabled until the runtime can enforce it", () => {
+  it("enables binding now that Weaver enforces document selection", () => {
     const html = render({ bind_libraries: false });
-    expect(html).toContain('data-disabled="true"');
-    expect(html).toContain("documentSelectionUnavailable");
+    expect(html).toContain('data-disabled="false"');
+    expect(html).not.toContain("documentSelectionUnavailable");
   });
 
   it("hides the folder tree until libraries are bound", () => {
