@@ -14,12 +14,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Sequence
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from fastmcp import Client, FastMCP
+from fastmcp.tools import ToolResult
 from fred_core.store import VectorSearchHit
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.react.react_tool_rendering import GENERIC_TOOL_FAILURE_MESSAGE
@@ -36,6 +39,8 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from fred_sdk.contracts.runtime import RuntimeServices, ToolProviderPort
+from langchain.mcp import MCPAdapter
+from langchain_core.messages import ToolMessage
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel
 
@@ -208,6 +213,123 @@ async def test_context_aware_read_query_keeps_classified_engine_detail() -> None
     assert [block.text for block in artifact.blocks] == [
         "Binder Error: Referenced column amount_typo not found"
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tool_name,payload",
+    [
+        ("list_tabular_documents", {"result": [{"document_uid": "cars"}]}),
+        (
+            "describe_tabular_documents",
+            {"result": [{"tables": [{"query_alias": "d_cars"}]}]},
+        ),
+        ("search_tabular_values", {"matches": [{"value": "available"}]}),
+        (
+            "provider_data",
+            {"tool_ref": "untrusted", "is_error": True, "ui_parts": [], "sources": []},
+        ),
+    ],
+)
+@pytest.mark.parametrize("structured_only", [False, True])
+async def test_mcp_structured_results_survive_the_agent_tool_path(
+    tool_name: str, payload: dict[str, object], structured_only: bool
+) -> None:
+    from fred_runtime.react.react_tool_binding import ReActToolBinder
+
+    server = FastMCP("Structured result regression")
+
+    @server.tool(name=tool_name, output_schema=None)
+    async def tabular_result() -> ToolResult:
+        return ToolResult(
+            content=[] if structured_only else json.dumps(payload),
+            structured_content=payload,
+        )
+
+    provider = (await MCPAdapter(Client(server)).list_tools())[0]
+    wrapper = ContextAwareTool(
+        base_tool=provider,
+        context_provider=lambda: None,
+        agent_settings_provider=_AgentSettings,
+    )
+    spec = _resolver()._resolve_runtime_provider_tool(
+        runtime_tool=wrapper, tool_name=tool_name, description=wrapper.description
+    )
+    tool = (
+        ReActToolBinder(runtime_tools=[spec], tracer=None, binding=_binding())
+        .build_tools()[0]
+        .tool
+    )
+
+    result = await tool.ainvoke(
+        {
+            "type": "tool_call",
+            "id": "structured-regression",
+            "name": tool_name,
+            "args": {},
+        }
+    )
+
+    assert isinstance(result, ToolMessage)
+    assert result.status == "success"
+    assert json.loads(str(result.content)) == payload
+    assert isinstance(result.artifact, ToolInvocationResult)
+    assert result.artifact.tool_ref == tool_name
+    assert result.artifact.is_error is False
+    assert result.artifact.sources == ()
+    assert result.artifact.ui_parts == ()
+    assert result.artifact.blocks == (
+        ToolContentBlock(kind=ToolContentKind.JSON, data=payload),
+    )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_mcp_results_keep_each_calls_payload() -> None:
+    from fred_runtime.react.react_tool_binding import ReActToolBinder
+
+    server = FastMCP("Concurrent structured results")
+
+    @server.tool
+    async def read_query(request_id: int) -> dict[str, object]:
+        await asyncio.sleep(0)
+        return {"request_id": request_id, "rows": [{"count": request_id + 1}]}
+
+    provider = (await MCPAdapter(Client(server)).list_tools())[0]
+    wrapper = ContextAwareTool(
+        base_tool=provider,
+        context_provider=lambda: None,
+        agent_settings_provider=_AgentSettings,
+    )
+    spec = _resolver()._resolve_runtime_provider_tool(
+        runtime_tool=wrapper, tool_name=wrapper.name, description=wrapper.description
+    )
+    tool = (
+        ReActToolBinder(runtime_tools=[spec], tracer=None, binding=_binding())
+        .build_tools()[0]
+        .tool
+    )
+
+    results = await asyncio.gather(
+        *(
+            tool.ainvoke(
+                {
+                    "type": "tool_call",
+                    "id": f"concurrent-{request_id}",
+                    "name": tool.name,
+                    "args": {"request_id": request_id},
+                }
+            )
+            for request_id in range(50)
+        )
+    )
+
+    for request_id, result in enumerate(results):
+        expected = {"request_id": request_id, "rows": [{"count": request_id + 1}]}
+        assert isinstance(result, ToolMessage)
+        assert result.status == "success"
+        assert json.loads(str(result.content)) == expected
+        assert isinstance(result.artifact, ToolInvocationResult)
+        assert result.artifact.blocks[0].data == expected
 
 
 def test_ask_user_is_mounted_only_for_explicit_interactive_context() -> None:

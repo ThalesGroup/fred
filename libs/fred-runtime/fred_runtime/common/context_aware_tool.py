@@ -578,6 +578,27 @@ class ContextAwareTool(BaseTool):
         if isinstance(structured, dict) and structured.get("cause") == "authority_lost":
             raise AuthorityLostError() from None
 
+    def _normalize_result(self, result: Any) -> Any:
+        result = normalize_mcp_content(result)
+        if (
+            isinstance(result, tuple)
+            and len(result) == 2
+            and isinstance(result[1], dict)
+            and set(result[1]) == {"structured_content"}
+            and isinstance(result[1]["structured_content"], dict)
+        ):
+            # MCP structured content is data, never trusted Fred status or UI metadata.
+            return result[0], ToolInvocationResult(
+                tool_ref=self.name,
+                blocks=(
+                    ToolContentBlock(
+                        kind=ToolContentKind.JSON,
+                        data=result[1]["structured_content"],
+                    ),
+                ),
+            )
+        return result
+
     def _run(self, **kwargs: Any) -> Any:
         """Sync execution with context injection + robust HTTP(401) tracing.
 
@@ -625,7 +646,7 @@ class ContextAwareTool(BaseTool):
                 return msg, _build_tool_error_artifact(self.name, kwargs, e, inner)
             return msg
         else:
-            return normalize_mcp_content(result)
+            return self._normalize_result(result)
 
     async def _arun(self, config=None, **kwargs: Any) -> Any:
         """Async execution with context injection + robust HTTP(401) tracing.
@@ -671,4 +692,4 @@ class ContextAwareTool(BaseTool):
                 return msg, _build_tool_error_artifact(self.name, kwargs, e, inner)
             return msg
         else:
-            return normalize_mcp_content(result)
+            return self._normalize_result(result)
