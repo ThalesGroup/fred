@@ -81,3 +81,68 @@ ordering unresolved. No alternative or weaker guarantee is selected here.
   `admit`, `claim`; [administrative import](../../apps/control-plane/src/provisioning.rs): `reconcile`.
 - [Security ordering](A6-security.md#mutation-ordering-and-revocation) and
   [runtime write boundary](A1-manager-runtime.md#folder-mutations-from-resources).
+
+## OI-2. Where to retain computed conversation controls
+
+**Decision deferred, 2026-10-29:** make no further implementation change for now.
+Choose whether to retain computed interface controls in the Control Plane, in
+the browser, or to keep evaluating them on each preparation. This entry records
+an open question from the `gap/picker` working branch, not an end-to-end validated
+Weaver journey or a decision to remove server-side authorization.
+
+### Observed call path and cost
+
+The browser calls Control Plane `prepare-execution` when opening a conversation
+and before each message, even a second "hello" after the first answer. In the
+current working change, Control Plane then asks the configured Agent Pod to
+compute the selected capabilities' interface controls in one batched request.
+Control Plane returns the descriptors to the browser, which can then send the
+message to the Agent Pod. The control calculation calls no LLM. The Agent Pod's
+subsequent trusted turn-context resolution from Control Plane is a separate
+admission exchange and is not the subject of this cache discussion.
+
+The working change adds one pod request per preparation with evaluable selected
+capabilities, even when the person never opens the document picker. The request
+uses a shared HTTP client, a ten-second timeout and no open SQL transaction.
+Its latency and load impact have not been measured. A failed evaluation omits
+the affected controls from that preparation response and logs the failure.
+
+Swift's **Python Control Plane process** held a bounded in-memory cache of these
+computed controls, keyed by capability, manifest version and configuration hash.
+Neither the browser nor the Agent Pod owned that cache. Each Control Plane
+process had its own entries, lost on restart; cache hits avoided asking the pod
+again. The working Rust Control Plane implementation currently has no such cache.
+
+### Alternatives and evidence needed
+
+A Control Plane cache could avoid repeated pod evaluation while keeping the
+existing browser preparation flow. A browser cache could retain controls in the
+conversation page and refresh them when the relevant configuration or capability
+version changes. Browser retention alone would not avoid the current pod call:
+Control Plane would still recompute controls inside every preparation. That
+option therefore also needs a way to separate control refresh from preparation
+or tell the server which revision the browser already has.
+
+Before choosing, compare the frequency and latency of preparations, configuration
+changes and pod calls against the complexity of cache invalidation. Establish
+how updates, pod deployments, navigation between instances/spaces, account changes
+and dependency failures affect freshness. Any reuse must distinguish the owning
+pod, capability version and effective configuration, with appropriate browser
+account/instance scope. Keeping the uncached batch is also an option if its
+measured cost is acceptable. No measurement campaign is requested by this entry.
+
+Only interface descriptors are candidates for reuse. Cached controls never confer
+permission: trusted turn admission and resource-specific authorization retain
+their existing server-side boundaries, even if the browser displays old controls.
+No cache location or invalidation protocol is selected here.
+
+### Implementation references
+
+- [Browser preparation and send](../../apps/frontend/src/rework/core/hooks/useChatSse.ts):
+  `prepareChatControls`, `applyPreparation` and the preparation before sending.
+- [Control Plane preparation](../../apps/control-plane/src/agent_instances/preparation.rs):
+  `prepare_execution`; [pod control evaluation](../../apps/control-plane/src/agent_instances/chat_controls.rs): `resolve`, `fetch`.
+- [Pod evaluation and wire contract](../../libs/fred-sdk/fred_sdk/contracts/capability/chat_controls.py),
+  [capability evaluation](../../libs/fred-runtime/fred_runtime/capabilities/assembly.py): `evaluate_chat_controls_batch`.
+- Swift branch reference: `apps/control-plane-backend/control_plane_backend/product/service.py`,
+  `_chat_controls_cache`, `_resolve_chat_controls` (historical comparison only).

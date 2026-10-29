@@ -1587,6 +1587,10 @@ export type Directory = {
   };
   processing_enabled: boolean;
   total: number;
+  /** Display names of the listed documents' `created_by`; unknown users are absent. */
+  uploaders: {
+    [key: string]: string;
+  };
 };
 export type EntryOrder = "name_asc" | "name_desc" | "created_asc" | "created_desc" | "size_asc" | "size_desc";
 export type ModelOptions = {
@@ -1755,7 +1759,6 @@ export type PreparationModels = {
 };
 export type ExecutionPreparation = {
   agent_instance_id: string;
-  /** Only controls supported by the current model facts are advertised. */
   chat_controls: ChatControlDescriptor[];
   execute_stream_url: string;
   execute_url: string;

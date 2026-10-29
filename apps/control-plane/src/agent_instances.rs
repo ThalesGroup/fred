@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::domain::{Space, SpaceRow};
 
+mod chat_controls;
 pub mod http;
 pub(crate) mod preparation;
 mod runtime;
@@ -115,8 +116,6 @@ pub struct SelectingInstance {
     pub source_runtime_id: String,
     pub selected: Vec<String>,
     pub space: Space,
-    /// Display name of a personal space's owner, when the directory knows it.
-    pub owner_name: Option<String>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -127,7 +126,6 @@ struct SelectingRow {
     selected: Json<Vec<String>>,
     #[sqlx(flatten)]
     space: SpaceRow,
-    owner_name: Option<String>,
 }
 
 /// Instances of the organization's live spaces that select a capability.
@@ -139,14 +137,8 @@ pub async fn selecting_in_organization<'e>(
     let rows: Vec<SelectingRow> = sqlx::query_as(
         "select a.agent_instance_id, a.display_name, a.source_runtime_id,
             a.tuning -> 'selected_capability_ids' as selected,
-            s.id, s.kind, s.name, s.personal_owner, s.parent_id, s.organization_id,
-            coalesce(nullif(trim(concat_ws(' ', u.first_name, u.last_name)), ''), u.username)
-                as owner_name
+            s.id, s.kind, s.name, s.personal_owner, s.parent_id, s.organization_id
         from space s join agent_instance a on a.space_id = s.id
-        -- Owners are subject UUIDs; the guarded cast keeps the primary-key lookup.
-        left join user_identity u on s.kind = 'personal' and u.id = case
-            when s.personal_owner ~* '^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$'
-            then s.personal_owner::uuid end
         where s.organization_id = $1 and s.deletion_id is null
             and a.tuning -> 'selected_capability_ids' <> '[]'::jsonb
         order by s.name, a.display_name",
@@ -162,7 +154,6 @@ pub async fn selecting_in_organization<'e>(
             source_runtime_id: row.source_runtime_id,
             selected: row.selected.0,
             space: row.space.into(),
-            owner_name: row.owner_name,
         })
         .collect())
 }

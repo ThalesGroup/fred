@@ -895,7 +895,7 @@ async fn organization_registry(
     }))
 }
 
-fn organization_directory(s: &AppState) -> AppResult<crate::users::Directory<'_>> {
+pub(crate) fn organization_directory(s: &AppState) -> AppResult<crate::users::Directory<'_>> {
     if s.onboarding.user_directory == crate::users::DirectoryKind::Local {
         return Ok(crate::users::Directory::Local(&s.pool));
     }

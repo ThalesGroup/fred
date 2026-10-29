@@ -149,6 +149,24 @@ async fn entries(
 ) -> AppResult<Json<Directory>> {
     let mut directory = Storage::directory(&s.pool, &s.fga, &user.uid, id, query).await?;
     directory.processing_enabled = s.processing.as_ref().is_some_and(|p| p.config.enabled);
+    let subjects = directory
+        .items
+        .iter()
+        .filter_map(|entry| match entry {
+            Entry::Document(document) => Some(document.created_by.clone()),
+            Entry::Folder(_) => None,
+        })
+        .collect();
+    // Display data, read after the SQL transaction: an unavailable directory omits names.
+    let names = async {
+        crate::api::organization_directory(&s)?
+            .display_names(subjects)
+            .await
+    };
+    directory.uploaders = names.await.unwrap_or_else(|_| {
+        tracing::warn!("[DOCUMENTS] Uploader names unavailable");
+        Default::default()
+    });
     Ok(Json(directory))
 }
 

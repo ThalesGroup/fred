@@ -129,6 +129,8 @@ pub struct Directory {
     pub can_write: bool,
     pub processing_enabled: bool,
     pub processing: std::collections::HashMap<Uuid, crate::processing::models::Summary>,
+    /// Display names of the listed documents' `created_by`; unknown users are absent.
+    pub uploaders: std::collections::HashMap<String, String>,
 }
 
 #[derive(Deserialize, Default, utoipa::ToSchema)]

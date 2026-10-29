@@ -383,7 +383,9 @@ retry. This mechanism does not increase the pool size or remove fencing RPCs.
 
 The directory query has no advisory lock. Total, mixed folder/document page,
 selected rows, processing summaries and up to 15 ancestors use one read-only
-repeatable-read transaction. Count and page share the same selection. Root/child
+repeatable-read transaction. Uploader display names are display data, read after
+it from the configured user directory (local identities, or at most eight
+concurrent Keycloak profile reads per page); an unavailable directory omits them. Count and page share the same selection. Root/child
 predicates use `IS NULL` or equality on the existing space/parent/name indexes of
 folders and documents. Search is a literal case-insensitive substring limited to
 255 characters. Counts, substring searches, creation-date sorting and deep

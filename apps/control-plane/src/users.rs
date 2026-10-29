@@ -9,10 +9,11 @@ use crate::{
     keycloak,
     onboarding::AdmissionState,
 };
+use futures::{StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::{
-    collections::VecDeque,
+    collections::{BTreeSet, HashMap, VecDeque},
     sync::LazyLock,
     time::{Duration, Instant},
 };
@@ -140,7 +141,24 @@ impl UserSummary {
             avatar_image_url: None,
         })
     }
+
+    /// "First Last", else the username.
+    pub fn display_name(&self) -> Option<String> {
+        let full = [self.first_name.as_deref(), self.last_name.as_deref()]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" ");
+        if full.is_empty() {
+            self.username.clone()
+        } else {
+            Some(full)
+        }
+    }
 }
+
+/// Bound on concurrent Keycloak profile reads for one request.
+const PROFILE_CONCURRENCY: usize = 8;
 
 pub enum Directory<'a> {
     Keycloak(Option<&'a keycloak::Directory>),
@@ -166,6 +184,49 @@ impl Directory<'_> {
             .bind(format!("{}%", like_literal(query)))
             .fetch_all(*pool)
             .await?),
+        }
+    }
+
+    /// Display names of the subjects this directory knows; unknown ones are absent.
+    pub async fn display_names(
+        &self,
+        subjects: BTreeSet<String>,
+    ) -> AppResult<HashMap<String, String>> {
+        match self {
+            Self::Keycloak(None) => Ok(HashMap::new()),
+            Self::Keycloak(Some(directory)) => {
+                let profiles: Vec<Option<UserSummary>> = futures::stream::iter(subjects)
+                    .map(|subject| async move { directory.profile(&subject).await })
+                    .buffer_unordered(PROFILE_CONCURRENCY)
+                    .try_collect()
+                    .await?;
+                Ok(profiles
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|user| {
+                        let name = user.display_name()?;
+                        Some((user.id, name))
+                    })
+                    .collect())
+            }
+            Self::Local(pool) => {
+                // Subjects are UUIDs here; parse to keep the primary-key lookup.
+                let ids: HashMap<Uuid, &String> = subjects
+                    .iter()
+                    .filter_map(|s| Some((Uuid::parse_str(s).ok()?, s)))
+                    .collect();
+                let rows: Vec<(Uuid, String)> = sqlx::query_as(
+                    "select id, coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), username)
+                     from user_identity where id = any($1)",
+                )
+                .bind(ids.keys().copied().collect::<Vec<_>>())
+                .fetch_all(*pool)
+                .await?;
+                Ok(rows
+                    .into_iter()
+                    .filter_map(|(id, name)| Some((ids.get(&id)?.to_string(), name)))
+                    .collect())
+            }
         }
     }
 
@@ -273,5 +334,17 @@ mod tests {
     fn like_wildcards_and_the_escape_are_literal() {
         assert_eq!(super::like_literal(r"50%_a\b"), r"50\%\_a\\b");
         assert_eq!(super::like_literal("dim"), "dim");
+    }
+
+    #[test]
+    fn display_name_prefers_the_full_name_then_the_username() {
+        let raw = |value| super::UserSummary::from_raw(&value).unwrap().display_name();
+        let named = serde_json::json!({"id": "u", "username": "pnair", "firstName": "Priya", "lastName": "Nair"});
+        assert_eq!(raw(named).as_deref(), Some("Priya Nair"));
+        let first = serde_json::json!({"id": "u", "username": "pnair", "firstName": "Priya"});
+        assert_eq!(raw(first).as_deref(), Some("Priya"));
+        let bare = serde_json::json!({"id": "u", "username": "pnair", "firstName": " "});
+        assert_eq!(raw(bare).as_deref(), Some("pnair"));
+        assert_eq!(raw(serde_json::json!({"id": "u"})), None);
     }
 }

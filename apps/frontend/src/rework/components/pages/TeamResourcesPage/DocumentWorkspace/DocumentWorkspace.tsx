@@ -1906,6 +1906,9 @@ function DocumentWorkspace({
       cellRenderer: (row) => {
         const uid = row.kind === "document" ? row.doc.identity.uploaded_by : null;
         if (!uid) return <span className={styles.nowrapCell}>—</span>;
+        // The manager listing resolves names itself, in the same response.
+        const managerName = directory?.uploaders[uid];
+        if (managerName) return <span className={styles.nowrapCell}>{managerName}</span>;
         const summary = uploaderById.get(uid);
         // A doc just uploaded this session adds a brand-new uid to
         // uploaderUids above, which re-keys the batched query and starts a

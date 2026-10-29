@@ -7,7 +7,7 @@
 use axum::{
     Json,
     extract::State,
-    http::{StatusCode, header},
+    http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
@@ -138,7 +138,6 @@ pub struct ExecutionPreparation {
     pub supports_ui_parts: bool,
     #[schema(required = true)]
     pub max_chat_input_chars: Option<u64>,
-    /// Only controls supported by the current model facts are advertised.
     pub chat_controls: Vec<ChatControlDescriptor>,
     pub models: PreparationModels,
     /// Echo of the requested choice; binds this diagnostic to the current composer selection.
@@ -193,6 +192,7 @@ async fn prepare_execution(
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, instance_id)): ApiPath<(Uuid, Uuid)>,
     ApiQuery(query): ApiQuery<PreparationQuery>,
+    headers: HeaderMap,
 ) -> AppResult<impl IntoResponse> {
     let space = spaces::authorize(&s.pool, &s.fga, &user.uid, space_id, Permission::Read).await?;
     super::http::require_instance_space(space.kind)?;
@@ -260,18 +260,24 @@ async fn prepare_execution(
         return Err(AppError::NotFound);
     }
     let models: PreparationModels = models.into();
-    let chat_controls = if models.offers.iter().any(|offer| offer.reasoning_enabled) {
-        vec![ChatControlDescriptor {
+    let mut chat_controls = super::chat_controls::resolve(
+        &s.agent_catalog,
+        &template,
+        &current.tuning.0,
+        &selected,
+        headers.get(header::AUTHORIZATION),
+    )
+    .await;
+    if models.offers.iter().any(|offer| offer.reasoning_enabled) {
+        chat_controls.push(ChatControlDescriptor {
             capability_id: "platform".into(),
             widget: "reasoning_toggle".into(),
             params: Some(std::collections::BTreeMap::from([(
                 "default".into(),
                 serde_json::json!(false),
             )])),
-        }]
-    } else {
-        Vec::new()
-    };
+        });
+    }
     let result = ExecutionPreparation {
         agent_instance_id: instance_id,
         space_id,

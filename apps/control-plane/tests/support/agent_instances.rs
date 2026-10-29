@@ -5,8 +5,8 @@ use super::*;
 use axum::{
     Json, Router,
     body::{Body, to_bytes},
-    http::Request,
-    routing::get,
+    http::{HeaderMap, Request},
+    routing::{get, post},
 };
 use control_plane::{
     agent_instances as storage,
@@ -22,6 +22,7 @@ struct CatalogState {
     templates: Value,
     status: u16,
     calls: usize,
+    control_requests: Vec<(Option<String>, Value)>,
     gate: Option<Arc<support::Gate>>,
 }
 struct Catalog {
@@ -40,9 +41,11 @@ impl Catalog {
             templates: json!([definition()]),
             status: 200,
             calls: 0,
+            control_requests: Vec::new(),
             gate: None,
         }));
         let shared = state.clone();
+        let controls = state.clone();
         let app = Router::new().route(
             "/agents/templates",
             get(move || {
@@ -64,6 +67,23 @@ impl Catalog {
                 }
             }),
         );
+        let app = app.route(
+            "/agents/capabilities/chat-controls",
+            post(move |headers: HeaderMap, Json(body): Json<Value>| {
+                let controls = controls.clone();
+                async move {
+                    controls.lock().await.control_requests.push((
+                        headers
+                            .get("authorization")
+                            .map(|v| v.to_str().unwrap().to_owned()),
+                        body,
+                    ));
+                    Json(json!({"results": [{"capability_id": "tool", "controls": [
+                        {"widget": "custom_picker", "params": {"opaque": [42]}}
+                    ]}]}))
+                }
+            }),
+        );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -74,7 +94,7 @@ impl Catalog {
             runtime_catalog_sources: vec![RuntimeCatalogSource {
                 runtime_id: "fixture".into(),
                 base_url: self.base.clone(),
-                public_base_url: None,
+                public_base_url: Some("/fixture-pod".into()),
                 enabled: true,
             }],
             ..Default::default()
@@ -1339,4 +1359,103 @@ async fn instances_space_revocation_during_discovery_preserves_configuration() {
         .0,
         403
     );
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn preparation_combines_pod_controls_and_reasoning_after_capability_governance() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let identity = support::IdentityServer::start().await;
+    let catalog = Catalog::start().await;
+    let app = app(&e, &identity, &catalog, e.fga.clone()).await;
+    let template = enable(&e, org.id, "custom", true).await;
+    sqlx::query("insert into runtime_catalog (runtime_id, reachable) values ('fixture', true)")
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    sqlx::query("insert into runtime_capability (runtime_id, capability_id, version, descriptor, advertised)
+        values ('fixture', 'tool', '1', '{}', true)")
+        .execute(&e.pool).await.unwrap();
+    sqlx::query("insert into organization_capability (organization_id, runtime_id, capability_id, enabled_by)
+        values ($1, 'fixture', 'tool', 'alice')")
+        .bind(org.id).execute(&e.pool).await.unwrap();
+    let instance = create(&app, &identity, team.id, creation(template, "Controls")).await;
+    let envelope = json!({"schema_version": "old-version", "config": {"opaque": [42]}});
+    sqlx::query("update agent_instance set tuning = tuning || $1 where agent_instance_id = $2")
+        .bind(sqlx::types::Json(
+            json!({"selected_capability_ids": ["tool"], "capability_config": {"tool": envelope}}),
+        ))
+        .bind(Uuid::parse_str(instance["agent_instance_id"].as_str().unwrap()).unwrap())
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"insert into model_source (source_id, configuration, state, snapshot_source_revision)
+        values ('models', '{"source_id":"models","revision":1,"enabled":true}', 'ok', 1)"#,
+    )
+    .execute(&e.pool)
+    .await
+    .unwrap();
+    sqlx::query(r#"insert into model_offer (source_id, upstream_model_id, metadata, first_seen_at, last_seen_at, advertised)
+        values ('models', 'reasoner', '{"chat":true,"reasoning":true}', now(), now(), true)"#)
+        .execute(&e.pool).await.unwrap();
+    sqlx::query(
+        "insert into organization_model_policy (organization_id, revision, created_by, updated_by)
+        values ($1, 1, 'alice', 'alice')",
+    )
+    .bind(org.id)
+    .execute(&e.pool)
+    .await
+    .unwrap();
+    sqlx::query("insert into organization_model_permission (organization_id, source_id, upstream_model_id, reasoning_enabled)
+        values ($1, 'models', 'reasoner', true)")
+        .bind(org.id).execute(&e.pool).await.unwrap();
+    let path = format!("{}/prepare-execution", item(team.id, &instance));
+    let authorization = format!("Bearer {}", identity.token("alice"));
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(&path)
+                .header("authorization", &authorization)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status().as_u16();
+    let prep: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 1024 * 1024).await.unwrap())
+            .unwrap();
+    assert_eq!(status, 200, "{prep}");
+    assert_eq!(
+        prep["chat_controls"],
+        json!([
+            {"capability_id": "tool", "widget": "custom_picker", "params": {"opaque": [42]}},
+            {"capability_id": "platform", "widget": "reasoning_toggle", "params": {"default": false}}
+        ])
+    );
+    assert_eq!(prep["execute_url"], "/fixture-pod/agents/execute");
+    {
+        let state = catalog.state.lock().await;
+        assert_eq!(state.control_requests.len(), 1);
+        assert_eq!(state.control_requests[0].0, Some(authorization));
+        assert_eq!(
+            state.control_requests[0].1,
+            json!({"items": [
+                {"capability_id": "tool", "config_envelope": envelope}
+            ]})
+        );
+    }
+    sqlx::query("delete from organization_capability where organization_id = $1")
+        .bind(org.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    let (status, _) = request(&app, &identity, Some("alice"), "POST", &path, Value::Null).await;
+    assert_eq!(status, 422);
+    assert_eq!(catalog.state.lock().await.control_requests.len(), 1);
 }
