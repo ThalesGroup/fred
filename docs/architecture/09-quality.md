@@ -336,6 +336,14 @@ pages remain and limiting deletions to 96 keys plus guards. It does not scan
 instances. Navigation shares `/me/spaces` for authority, refreshed every 60 seconds
 and on focus. These costs are source-derived, not performance measurements.
 
+Capability offer enablement adds no OpenFGA request beyond organization
+authorization. Reading the Capabilities tab adds one indexed SQL read to its
+inventory snapshot. Changing a decision costs `2 P_u + 2 C + 2 R + W`, the
+refresh sequence without its pod request, plus, under the organization lock, one
+offer row read `FOR SHARE` and one primary-key insert or delete. Agent forms add
+one indexed read per discovered pod after discovery; enrollment and capability
+edits add one before pod validation, outside any lock or transaction.
+
 ## Folder navigation and write costs
 
 Resources issues one combined directory request on entry, navigation, search, sort

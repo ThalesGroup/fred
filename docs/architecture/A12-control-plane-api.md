@@ -644,6 +644,7 @@ Operation `my_spaces`.
 | PUT | [/organizations/{organization_id}/agents/{agent_id}/default-on](#put-organizationsorganization_idagentsagent_iddefault-on) |  |
 | GET | [/organizations/{organization_id}/capabilities](#get-organizationsorganization_idcapabilities) |  |
 | POST | [/organizations/{organization_id}/capabilities/{runtime_id}/refresh](#post-organizationsorganization_idcapabilitiesruntime_idrefresh) |  |
+| PUT | [/organizations/{organization_id}/capabilities/{runtime_id}/{capability_id}/default-on](#put-organizationsorganization_idcapabilitiesruntime_idcapability_iddefault-on) |  |
 | GET | [/organizations/{organization_id}/model-policy](#get-organizationsorganization_idmodel-policy) |  |
 | PUT | [/organizations/{organization_id}/model-policy](#put-organizationsorganization_idmodel-policy) |  |
 | POST | [/organizations/{organization_id}/model-sources/{source_id}/refresh](#post-organizationsorganization_idmodel-sourcessource_idrefresh) |  |
@@ -672,7 +673,7 @@ Operation `set_organization_agent_default`.
 | `organization_id` | path | string (uuid) | yes |  |
 | `agent_id` | path | string (uuid) | yes |  |
 
-Request: [`SetAgentDefaultOnRequest`](#setagentdefaultonrequest).
+Request: [`SetDefaultOnRequest`](#setdefaultonrequest).
 
 - 200: [`AgentDefaultOnResult`](#agentdefaultonresult)
 - 400: [`ErrorBody`](#errorbody) — Malformed JSON body
@@ -702,6 +703,25 @@ Operation `refresh_organization_capabilities`.
 
 - 204: no body — Complete pod inventory persisted; read the catalog for observation and offers
 - 401, 403, 404, 409, 500, 502, 503: [`ErrorBody`](#errorbody)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### PUT /organizations/{organization_id}/capabilities/{runtime_id}/{capability_id}/default-on
+
+Operation `set_organization_capability_default`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `organization_id` | path | string (uuid) | yes |  |
+| `runtime_id` | path | string | yes |  |
+| `capability_id` | path | string | yes |  |
+
+Request: [`SetDefaultOnRequest`](#setdefaultonrequest).
+
+- 204: no body — Organization decision stored
+- 400: [`ErrorBody`](#errorbody) — Malformed JSON body
+- 401, 403, 500, 503: [`ErrorBody`](#errorbody)
+- 404: [`ErrorBody`](#errorbody) — Unknown organization, pod source or offer
+- 409: [`ErrorBody`](#errorbody) — Enabling an offer the pod no longer advertises
 - 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
 
 ### GET /organizations/{organization_id}/model-policy
@@ -1292,6 +1312,7 @@ One of: `string`, `text`, `text-multiline`, `number`, `integer`, `boolean`, `sel
 | --- | --- | --- | --- |
 | `advertised` | boolean | yes | Present in the last successful snapshot; independent of observation state. |
 | `capability_id` | string | yes |  |
+| `default_on` | boolean | yes | Enabled for every space of this organization. |
 | `descriptor` | [`PodCapabilityDescriptor`](#podcapabilitydescriptor) | yes |  |
 | `runtime_id` | string | yes |  |
 | `version` | string | yes |  |
@@ -2132,7 +2153,9 @@ One of:
 | `title` | string or null | yes |  |
 | `updated_at` | string (date-time) | yes |  |
 
-### SetAgentDefaultOnRequest
+### SetDefaultOnRequest
+
+Organization "enabled for all" decision, shared by agents and capability offers.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |

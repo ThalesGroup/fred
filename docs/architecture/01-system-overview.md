@@ -127,8 +127,8 @@ with Knowledge Flow.
 
 ## 1.4. Governance: administering resources by space
 
-The organization admin sets business choices, including permitted agents and
-models; capabilities are not restricted per organization. Each person's
+The organization admin sets business choices, including permitted agents, models
+and the capabilities each Agent Pod offers. Each person's
 space roles determine what they may
 manage, contribute to or read. The owner's separate institutional mandate and
 the precise role boundaries are defined in the [roles annex](A11-roles.md).

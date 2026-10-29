@@ -34,7 +34,9 @@ instances are not connected by this operation. Its Capabilities tab
 ([`OrganizationCapabilities.tsx`](../../apps/frontend/src/rework/components/pages/admin/FeaturesPage/OrganizationCapabilities.tsx))
 reads the stored per-pod inventory (`organization_capabilities`), refreshes it
 once on opening for an enabled pod never observed, and on request
-(`refresh_organization_capabilities`); it writes no authorization. Other business destinations
+(`refresh_organization_capabilities`). Each offer's existing default switch and
+withdrawal confirmation write only the organization's SQL enablement
+(`set_organization_capability_default`); team management stays disabled. Other business destinations
 retain their existing area boundary. The browser journey above therefore uses a
 separate business account after provisioning. This is the current navigation,
 not a claim that the platform-owner role authorizes document access.

@@ -25,6 +25,8 @@ erDiagram
 "organization_model_permission" }o--|| "model_offer" : "source_id, upstream_model_id"
 "organization_model_permission" }o--|| "organization_model_policy" : "organization_id"
 "session_metadata" }o--o| "deletion" : "deletion_id"
+"organization_capability" }o--|| "space" : "organization_id"
+"organization_capability" }o--|| "runtime_capability" : "runtime_id, capability_id"
 
 "deletion" {
   uuid id
@@ -279,4 +281,11 @@ erDiagram
   timestamp_with_time_zone created_at
   timestamp_with_time_zone updated_at
   uuid deletion_id FK
+}
+"organization_capability" {
+  uuid organization_id FK
+  text runtime_id FK
+  text capability_id FK
+  text enabled_by
+  timestamp_with_time_zone enabled_at
 }

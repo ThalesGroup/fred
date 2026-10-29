@@ -177,8 +177,20 @@ configured sources to organization Manage-protected read/refresh. The pod's comp
 registry advertisement lives in
 [`agent_app.py`](../../libs/fred-runtime/fred_runtime/app/agent_app.py).
 Read uses a consistent SQL snapshot; bounded discovery precedes the authorized
-write transaction. The organization Capabilities tab is their only consumer; agent
-enrollment and chat preparation read live template discovery, not this store.
+write transaction. Agent enrollment and chat preparation read live template
+discovery, not this store.
+
+Organization enablement of these offers is defined by additive
+[`0020_organization_capability.sql`](../../apps/control-plane/migrations/0020_organization_capability.sql)
+and owned by [`agents/enablement.rs`](../../apps/control-plane/src/agents/enablement.rs).
+A row enables one `(runtime_id, capability_id)` offer for every space of the
+organization; no row denies it. Its foreign key requires an observed offer, and
+enabling requires the offer to be currently advertised. It is SQL configuration,
+not an OpenFGA grant. The organization Capabilities tab reads it within the
+inventory snapshot and writes it in the same authorized transaction as refresh,
+with a `capability.default_changed` audit event when the decision changes.
+`usable_capability_ids` filters agent forms and gates enrollment and capability
+edits; chat preparation does not consult it.
 
 Model storage has a separate platform owner in
 [`model_catalog`](../../apps/control-plane/src/model_catalog/mod.rs) and additive
@@ -310,6 +322,7 @@ a successful model call.
 | --- | --- | --- |
 | GET | `/control-plane/v1/organizations/{organization_id}/capabilities` | `organization_capabilities` |
 | POST | `/control-plane/v1/organizations/{organization_id}/capabilities/{runtime_id}/refresh` | `refresh_organization_capabilities` |
+| PUT | `/control-plane/v1/organizations/{organization_id}/capabilities/{runtime_id}/{capability_id}/default-on` | `set_organization_capability_default` |
 <!-- end generated -->
 
 The [administration journey](02.3-agent-administration.md) remains agreed behavior.
@@ -390,6 +403,8 @@ erDiagram
 "organization_model_permission" }o--|| "model_offer" : "source_id, upstream_model_id"
 "organization_model_permission" }o--|| "organization_model_policy" : "organization_id"
 "session_metadata" }o--o| "deletion" : "deletion_id"
+"organization_capability" }o--|| "space" : "organization_id"
+"organization_capability" }o--|| "runtime_capability" : "runtime_id, capability_id"
 
 "deletion" {
   uuid id
@@ -644,6 +659,13 @@ erDiagram
   timestamp_with_time_zone created_at
   timestamp_with_time_zone updated_at
   uuid deletion_id FK
+}
+"organization_capability" {
+  uuid organization_id FK
+  text runtime_id FK
+  text capability_id FK
+  text enabled_by
+  timestamp_with_time_zone enabled_at
 }
 ```
 <!-- end generated -->
