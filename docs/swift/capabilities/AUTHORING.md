@@ -254,6 +254,21 @@ in the capability's turn options. Chat parts: extend the `UiPart` union
 by declaring a part with a `Literal` `type` discriminator in `manifest.chat_parts`
 (RFC §3.6). Both are shown in `fred-capability-document-access`.
 
+Needs the bytes of a file the user attaches in chat? The platform keeps none
+(fast-ingest extracts text, then deletes the file). Declare
+`onChatAttachment(file, {capabilityId, baseUrl, teamId, sessionId, dispatch})` on the
+frontend plugin: the chat calls it for every attached file in a session where the
+capability is active, in parallel with ingestion and before the attachment turns
+"ready" — best-effort, a rejection never fails the attachment. It may return a
+"forget" callback, which the chat calls when the user removes that file, so the
+capability's copy goes with it. The hook only fires when
+the composer shows its paperclip, i.e. when some capability on the agent declares the
+`attach_files` chat control — today `document_access` with its attachments source on,
+so an agent using such a hook needs that capability too. Upload what you need
+to your own `manifest.router` route and keep it in an owned table. Contract:
+`features/capabilities/chatAttachmentRegistry.ts` (handler lookup) and
+`ManagedChatPage/useChatAttachments.ts` (call site).
+
 **Used a `middleware()`-only row above?** Declare `manifest.execution_models =
 ("react",)` — the default is `("react", "graph")`. Skipping this is not a safe default:
 a Graph agent selecting a `middleware()`-only capability that left the default fails
