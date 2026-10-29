@@ -41,7 +41,7 @@
 
 body {
   background-color: var(--surface-main) !important;
-  font-size: 12px;
+  font: var(--font-body-medium);
 }
 
 a {

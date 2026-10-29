@@ -33,8 +33,7 @@
 }
 
 .title {
-  font-weight: 600;
-  font-size: var(--font-size-l);
+  font: var(--font-title-large);
 }
 
 .kind {
