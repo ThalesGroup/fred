@@ -227,8 +227,7 @@ export interface CapabilityUiPlugin {
   partRenderers?: Record<string, UiPartRenderer>;
   /**
    * The object each part kind shows, keyed by part `type`. A message renders one
-   * card per object, its last version: a deck rebuilt or a document rewritten in
-   * the same answer does not stack cards. Kinds without an entry are never merged.
+   * card per object, its last version. Kinds without an entry are never merged.
    */
   partIdentities?: Record<string, UiPartIdentity>;
   /**

@@ -54,7 +54,13 @@ function render(parts: RawUiPart[]): string {
   return renderToStaticMarkup(<UiParts parts={parts} />);
 }
 
-const LINK: RawUiPart = { type: "link", href: "https://example.test/report.pdf", file_name: "report.pdf" };
+const LINK: RawUiPart = {
+  type: "link",
+  kind: "download",
+  href: "https://example.test/report.pdf",
+  file_name: "report.pdf",
+};
+const CITATION: RawUiPart = { type: "link", kind: "citation", href: "https://example.test/paper", title: "Paper" };
 const GEO: RawUiPart = { type: "geo", geojson: { type: "FeatureCollection", features: [{}, {}] } };
 const PROBE_CARD: RawUiPart = { type: "probe_card", title: "Probe card", body: "HELLO" };
 const UNKNOWN: RawUiPart = { type: "part_kind_from_the_future", payload: "??" };
@@ -102,5 +108,16 @@ describe("UiParts (#1977)", () => {
     const html = render([LINK, other, { ...LINK }]);
     expect(html.match(/chatbot\.artifactLinks\.downloadAria/g)).toHaveLength(2);
     expect(html).toContain("other.pdf");
+  });
+
+  it("keeps every citation, even two of the same page", () => {
+    const html = render([CITATION, { ...CITATION, title: "Paper, section 2" }]);
+    expect(html.match(/chatbot\.artifactLinks\.citationAria/g)).toHaveLength(2);
+  });
+
+  it("keeps a repeated link that is not a download", () => {
+    const view: RawUiPart = { ...LINK, kind: "view" };
+    const html = render([view, { ...view }]);
+    expect(html.match(/chatbot\.artifactLinks\.downloadAria/g)).toHaveLength(2);
   });
 });

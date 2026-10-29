@@ -48,9 +48,12 @@ function GeoPartRenderer({ part }: UiPartRendererProps) {
   return <GeoSummaryChip features={features} />;
 }
 
-/** A download chip is about its file: the same href twice in a message is one chip. */
+/**
+ * A download chip is about its file: the same href twice in a message is one chip.
+ * Other links, citations first, may legitimately repeat an href and are never merged.
+ */
 export const builtinPartIdentities: Record<string, UiPartIdentity> = {
-  link: (part) => (typeof part.href === "string" ? part.href : undefined),
+  link: (part) => (part.kind === "download" && typeof part.href === "string" ? part.href : undefined),
 };
 
 /** Registry seed for the frozen base kinds; plugin kinds must not collide. */
