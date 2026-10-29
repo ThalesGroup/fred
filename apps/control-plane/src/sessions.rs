@@ -139,7 +139,7 @@ pub(crate) async fn require_owner(
     Ok(space)
 }
 
-/// The same rule under the space lock, holding the session row: an attachment
+/// The same rule under the organization lock, holding the session row: an attachment
 /// mutation serializes with the conversation's deletion, which locks that row too.
 pub(crate) async fn lock_owner(
     pool: &PgPool,
@@ -148,9 +148,7 @@ pub(crate) async fn lock_owner(
     space_id: Uuid,
     session_id: Uuid,
 ) -> AppResult<Transaction<'static, Postgres>> {
-    let space = spaces::authorize(pool, fga, actor, space_id, Permission::Read).await?;
-    let (mut tx, mut guard) = spaces::lock_for(pool, fga, &space).await?;
-    spaces::authorize_locked(&mut tx, fga, actor, space_id, Permission::Read).await?;
+    let mut tx = spaces::authorized_mutation(pool, fga, actor, space_id, Permission::Read).await?;
     sqlx::query_scalar::<_, Uuid>(
         "select session_id from session_metadata where session_id = $1 and space_id = $2
          and user_id = $3 and deletion_id is null for update",
@@ -161,7 +159,6 @@ pub(crate) async fn lock_owner(
     .fetch_optional(&mut *tx)
     .await?
     .ok_or(AppError::NotFound)?;
-    fga.fence(&mut guard).await?;
     Ok(tx)
 }
 

@@ -153,7 +153,7 @@ impl Lifecycle {
             let space_id = receipt
                 .target_parent_id
                 .ok_or_else(|| anyhow::anyhow!("document deletion has no parent"))?;
-            // Placement is readable until purge; then the conversation route answers its deleter only.
+            // Until purge the route must match the placement; after it, only the deleter replays.
             let placed: Option<Option<Uuid>> =
                 sqlx::query_scalar("select session_id from document where id = $1")
                     .bind(document_id)
@@ -161,7 +161,7 @@ impl Lifecycle {
                     .await?;
             let visible = match placed {
                 Some(placed) => placed == session,
-                None => session.is_none() || receipt.actor_subject == actor,
+                None => receipt.actor_subject == actor,
             };
             if !visible {
                 return Err(AppError::NotFound);

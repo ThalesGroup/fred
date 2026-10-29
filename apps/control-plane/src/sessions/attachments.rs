@@ -56,11 +56,11 @@ pub struct Attachment {
 
 pub(super) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
-        .routes(routes!(upload).layer(DefaultBodyLimit::max(
+        .routes(routes!(upload_attachment).layer(DefaultBodyLimit::max(
             crate::documents::config::MAX_FILE_BYTES as usize + 64 * 1024,
         )))
-        .routes(routes!(list))
-        .routes(routes!(delete))
+        .routes(routes!(list_attachments))
+        .routes(routes!(delete_attachment))
         .route_layer(axum::middleware::from_fn(no_store))
 }
 
@@ -84,7 +84,7 @@ pub(super) fn routes() -> OpenApiRouter<AppState> {
         (status = 422, description = "`quota_exceeded`, or an invalid request key, filename or media type", body = crate::error::ErrorBody),
         (status = 429, description = "`transfer_capacity`: all transfer slots are busy; honour `Retry-After`", body = crate::error::ErrorBody),
         (status = 503, description = "`storage_unavailable` or `processing_unavailable`", body = crate::error::ErrorBody)))]
-async fn upload(
+async fn upload_attachment(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, session_id)): ApiPath<(Uuid, Uuid)>,
@@ -119,7 +119,7 @@ async fn upload(
         (status = 401, body = crate::error::ErrorBody), (status = 403, body = crate::error::ErrorBody),
         (status = 404, body = crate::error::ErrorBody), (status = 409, body = crate::error::ErrorBody),
         (status = 422, body = crate::error::ErrorBody), (status = 503, body = crate::error::ErrorBody)))]
-async fn list(
+async fn list_attachments(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, session_id)): ApiPath<(Uuid, Uuid)>,
@@ -149,7 +149,7 @@ async fn list(
         (status = 404, body = crate::error::ErrorBody),
         (status = 409, description = "`processing_active` while the attachment is processing", body = crate::error::ErrorBody),
         (status = 422, body = crate::error::ErrorBody), (status = 503, body = crate::error::ErrorBody)))]
-async fn delete(
+async fn delete_attachment(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, session_id, document_id)): ApiPath<(Uuid, Uuid, Uuid)>,

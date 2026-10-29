@@ -314,7 +314,12 @@ fn upload_and_empty_responses_match_the_http_contract() {
                     if status == "202"
                         && matches!(
                             operation["operationId"].as_str(),
-                            Some("delete_space" | "delete_document" | "delete_session")
+                            Some(
+                                "delete_space"
+                                    | "delete_document"
+                                    | "delete_session"
+                                    | "delete_attachment"
+                            )
                         )
                     {
                         assert_eq!(

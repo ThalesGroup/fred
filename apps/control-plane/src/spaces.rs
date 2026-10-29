@@ -894,6 +894,18 @@ pub async fn authorized_write(
     caller: &str,
     space_id: Uuid,
 ) -> AppResult<Transaction<'static, Postgres>> {
+    authorized_mutation(pool, fga, caller, space_id, Permission::Write).await
+}
+
+/// The same bounded organization lock for a mutation that `permission` authorizes,
+/// such as a reader's conversation attachment.
+pub(crate) async fn authorized_mutation(
+    pool: &PgPool,
+    fga: &Fga,
+    caller: &str,
+    space_id: Uuid,
+    permission: Permission,
+) -> AppResult<Transaction<'static, Postgres>> {
     let space = load(pool, space_id).await?;
     let mut tx = tokio::time::timeout(Duration::from_secs(5), async {
         let key = i64::from_be_bytes(space.organization.as_bytes()[..8].try_into().unwrap());
@@ -922,7 +934,7 @@ pub async fn authorized_write(
     let mut guard = fga
         .guard(&[Scope::Organization(space.organization)])
         .await?;
-    authorize_locked(&mut tx, fga, caller, space_id, Permission::Write).await?;
+    authorize_locked(&mut tx, fga, caller, space_id, permission).await?;
     fga.fence(&mut guard).await?;
     Ok(tx)
 }

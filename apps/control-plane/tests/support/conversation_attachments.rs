@@ -300,6 +300,50 @@ async fn conversation_deletion_retires_and_purges_its_attachments() {
 
 #[tokio::test]
 #[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+async fn purged_attachment_receipt_answers_its_deleter_only() {
+    use control_plane::lifecycle::cleanup;
+    let (d, _p) = Box::pin(setup_with_lifecycle(deletion())).await;
+    let team = d.folder.space_id;
+    let bob = conversation(&d, "reader", team).await;
+    let (code, attached) = attach(&d, "reader", team, bob, "gone.txt", b"gone").await;
+    assert_eq!(code, 201, "{attached}");
+    let document: Uuid = attached["document_id"].as_str().unwrap().parse().unwrap();
+    finish_processing(&d, document).await;
+    let path = format!("{}/{document}", attachments(team, bob));
+    let (code, accepted) = json_response(
+        d.request("reader", "DELETE", &path, Body::empty(), "", None)
+            .await,
+    )
+    .await;
+    assert_eq!(code, 202, "{accepted}");
+    let operation: Uuid = accepted["id"].as_str().unwrap().parse().unwrap();
+    cleanup::batch(&d.e.pool, &d.e.fga, operation)
+        .await
+        .unwrap();
+    let present: bool = sqlx::query_scalar("select exists(select 1 from document where id=$1)")
+        .bind(document)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert!(!present);
+
+    // Without the row, another writer of the space cannot read the receipt; its deleter can.
+    assert_eq!(
+        status(&d, "writer", "DELETE", &format!("/documents/{document}")).await,
+        404
+    );
+    let (code, replay) = json_response(
+        d.request("reader", "DELETE", &path, Body::empty(), "", None)
+            .await,
+    )
+    .await;
+    assert_eq!(code, 200, "{replay}");
+    assert_eq!(replay["id"], accepted["id"]);
+    assert_eq!(replay["status"], "completed");
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
 async fn project_attachment_counts_against_its_team_quota() {
     let (d, _p) = Box::pin(setup()).await;
     let team = d.folder.space_id;
