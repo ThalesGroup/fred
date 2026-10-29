@@ -20,7 +20,6 @@ const h = vi.hoisted(() => ({
   showError: vi.fn(),
   query: vi.fn(),
   showSuccess: vi.fn(),
-  notifyApiError: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string, args?: { name: string }) => (args?.name ? `${key} ${args.name}` : key) }),
@@ -29,24 +28,30 @@ vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({ useManagerPlatformAdmin:
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showSuccess: h.showSuccess, showError: h.showError }),
 }));
-vi.mock("@core/hooks/useApiErrorToast", () => ({ useApiErrorToast: () => ({ notifyApiError: h.notifyApiError }) }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useOrganizationRegistryQuery: (args, options) => {
-    h.query(args, options);
-    return h.registry;
-  },
-  useCreateOrganizationMutation: () => [h.submit, h.result],
-  useUpdateOrganizationMutation: () => [h.update, { isLoading: false }],
-  useGetOrganizationQuery: (args, options) => {
-    h.detailQuery(args, options);
-    return options.skip ? { currentData: undefined, isError: false } : h.detail;
-  },
-  useSearchOrganizationCandidatesQuery: ({ query }, { skip }) => ({
-    currentData: skip ? undefined : [{ id: query, username: query, first_name: query, last_name: "" }],
-    isFetching: false,
-    isError: false,
-  }),
-}));
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", async () => {
+  const { useEffect, useState } = await import("react");
+  return {
+    useOrganizationRegistryQuery: (args, options) => {
+      h.query(args, options);
+      return h.registry;
+    },
+    useCreateOrganizationMutation: () => [h.submit, h.result],
+    useUpdateOrganizationMutation: () => [h.update, { isLoading: false }],
+    // A cold cache: the detail arrives from a request made after the dialog mounted.
+    useGetOrganizationQuery: (args, options) => {
+      h.detailQuery(args, options);
+      const [fetched, setFetched] = useState(false);
+      useEffect(() => setFetched(true), []);
+      if (options.skip) return { currentData: undefined, isError: false };
+      return fetched ? { ...h.detail, requestId: "this-open" } : { currentData: undefined, isFetching: true };
+    },
+    useSearchOrganizationCandidatesQuery: ({ query }, { skip }) => ({
+      currentData: skip ? undefined : [{ id: query, username: query, first_name: query, last_name: "" }],
+      isFetching: false,
+      isError: false,
+    }),
+  };
+});
 vi.mock("@shared/molecules/Dialog/Dialog", () => ({
   Dialog: ({ title, children, confirmLabel, confirmDisabled, onConfirm }) => (
     <div role="dialog" aria-label={title}>
@@ -174,15 +179,15 @@ it("keeps submit disabled until every field is set and while a creation runs", (
   expect(button(SUBMIT)!.disabled).toBe(true);
 });
 it("reports failure through the error toast and keeps the dialog open", async () => {
-  const error = { status: 409, data: { detail: "already exists" } };
+  const error = { status: 409, data: { detail: "already exists", code: "conflict" } };
   h.submit.mockReturnValue({ unwrap: () => Promise.reject(error) });
   render();
   openAndFill();
   await act(async () => button(SUBMIT)!.click());
-  expect(h.notifyApiError).toHaveBeenCalledWith(
-    error,
-    expect.objectContaining({ conflictDetail: "rework.organizations.createOrganization.errors.conflictDetail" }),
-  );
+  expect(h.showError).toHaveBeenCalledWith({
+    summary: "rework.organizations.createOrganization.errors.summary",
+    detail: "rework.organizations.createOrganization.errors.conflictDetail",
+  });
   expect(h.showSuccess).not.toHaveBeenCalled();
   expect(dialog()).not.toBeNull();
 });

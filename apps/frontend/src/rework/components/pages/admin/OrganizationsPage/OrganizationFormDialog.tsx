@@ -8,7 +8,6 @@ import Chip from "@shared/atoms/Chip/Chip";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import TextInput from "@shared/atoms/TextInput/TextInput";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { useApiErrorToast } from "@core/hooks/useApiErrorToast";
 import { useMutationAction } from "@core/hooks/useMutationAction";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import {
@@ -27,7 +26,12 @@ import styles from "../AdminTeamsPage/AdminTeamsPage.module.css";
 
 const MAX_ORGANIZATION_NAME_LENGTH = 180;
 
-const userLabel = (user: UserSummary) => `${user.first_name ?? ""} ${user.last_name ?? ""} (${user.username})`;
+// The directory may not describe a holder any more: its id stands in for the username.
+const userLabel = (user: UserSummary) => {
+  const name = [user.first_name, user.last_name].filter(Boolean).join(" ");
+  const handle = user.username ?? user.id;
+  return name ? `${name} (${handle})` : handle;
+};
 
 // One account per role: the search field gives way to the chosen person's chip.
 function AccountPicker({
@@ -55,7 +59,7 @@ function AccountPicker({
           <li>
             <Chip
               label={userLabel(value)}
-              removeAriaLabel={t("rework.adminTeams.createTeam.adminRemove", { name: value.username })}
+              removeAriaLabel={t("rework.adminTeams.createTeam.adminRemove", { name: value.username ?? value.id })}
               onRemove={() => onChange(null)}
             />
           </li>
@@ -90,16 +94,27 @@ function AccountPicker({
   );
 }
 
-// The server's 409 and 404 details are English and generic: show our own wording.
-function editRefusalKey(error: unknown): string | undefined {
+// Server details are English and generic: every refusal gets our own wording.
+function refusalKey(error: unknown, editing: boolean): string | undefined {
   const { status, code } = normalizeApiError(error);
-  if (status === 404) return "rework.organizations.editOrganization.errors.notFoundDetail";
-  if (status === 409) {
-    return code === "space_pending_deletion"
-      ? "rework.organizations.editOrganization.errors.retiredDetail"
-      : "rework.organizations.editOrganization.errors.conflictDetail";
-  }
+  const keys = `rework.organizations.${editing ? "edit" : "create"}Organization.errors`;
+  if (status === 403) return `${keys}.forbiddenDetail`;
+  if (status === 400 || status === 422) return `${keys}.validationDetail`;
+  if (status === 404 && editing) return `${keys}.notFoundDetail`;
+  if (status === 409)
+    return editing && code === "space_pending_deletion" ? `${keys}.retiredDetail` : `${keys}.conflictDetail`;
   return undefined;
+}
+
+// Saving a new holder replaces every current one: say so when there are several.
+function SeveralHolders({ holders, messageKey }: { holders?: UserSummary[]; messageKey: string }) {
+  const { t } = useTranslation();
+  if (!holders || holders.length < 2) return null;
+  return (
+    <p role="note" className={styles.sectionDescription}>
+      {t(messageKey, { names: holders.map(userLabel).join(", ") })}
+    </p>
+  );
 }
 
 interface OrganizationFormDialogProps {
@@ -113,7 +128,6 @@ interface OrganizationFormDialogProps {
 export default function OrganizationFormDialog({ organization, onSaved, onClose }: OrganizationFormDialogProps) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
-  const { notifyApiError } = useApiErrorToast();
   const { runMutationAction } = useMutationAction();
   const [createOrganization, { isLoading: isCreating }] = useCreateOrganizationMutation();
   const [updateOrganization, { isLoading: isUpdating }] = useUpdateOrganizationMutation();
@@ -123,12 +137,16 @@ export default function OrganizationFormDialog({ organization, onSaved, onClose 
     { id: organization?.id ?? "" },
     { skip: !organization, refetchOnMountOrArgChange: true },
   );
+  // On a warm cache the first render already has a detail, from an earlier request.
+  const [cachedRequestId] = useState(detailQuery.requestId);
   const [detail, setDetail] = useState<OrganizationDetail>();
   const [name, setName] = useState("");
   const [owner, setOwner] = useState<UserSummary | null>(null);
   const [admin, setAdmin] = useState<UserSummary | null>(null);
-  // Pre-fill once; a later refetch must not overwrite what the admin typed.
-  if (detailQuery.currentData && !detail) {
+  // Pre-fill once, from this open's own fetch rather than a cached copy; a later refetch
+  // must not overwrite what the admin typed.
+  const fresh = !detailQuery.isFetching && detailQuery.requestId !== cachedRequestId;
+  if (detailQuery.currentData && fresh && !detail) {
     setDetail(detailQuery.currentData);
     setName(detailQuery.currentData.organization.name);
     setOwner(detailQuery.currentData.owners[0] ?? null);
@@ -141,20 +159,23 @@ export default function OrganizationFormDialog({ organization, onSaved, onClose 
   const changes: UpdateOrganization = {};
   if (detail) {
     if (trimmedName !== detail.organization.name) changes.name = trimmedName;
-    if (owner?.username && owner.username !== detail.owners[0]?.username) changes.owner_username = owner.username;
-    if (admin?.username && admin.username !== detail.admins[0]?.username) changes.admin_username = admin.username;
+    if (owner?.username && owner.id !== detail.owners[0]?.id) changes.owner_username = owner.username;
+    if (admin?.username && admin.id !== detail.admins[0]?.id) changes.admin_username = admin.username;
   }
+  // An untouched holder is kept as is, even one the directory no longer names.
+  const kept = (user: UserSummary | null, current?: UserSummary) =>
+    !!user && (!!user.username || (!!current && user.id === current.id));
   const canSubmit =
     ready &&
     trimmedName !== "" &&
-    !!owner?.username &&
-    !!admin?.username &&
+    kept(owner, detail?.owners[0]) &&
+    kept(admin, detail?.admins[0]) &&
     !isCreating &&
     !isUpdating &&
     (!organization || Object.keys(changes).length > 0);
 
   const handleConfirm = async () => {
-    if (!canSubmit || !owner?.username || !admin?.username) return;
+    if (!canSubmit || !owner || !admin) return;
     await runMutationAction({
       action: async () =>
         organization
@@ -171,20 +192,11 @@ export default function OrganizationFormDialog({ organization, onSaved, onClose 
         onSaved(saved);
         onClose();
       },
-      onError: (error) => {
-        const refusalKey = organization ? editRefusalKey(error) : undefined;
-        if (refusalKey) {
-          showError({ summary: t(`${keys}.errors.summary`), detail: t(refusalKey) });
-          return;
-        }
-        notifyApiError(error, {
+      onError: (error) =>
+        showError({
           summary: t(`${keys}.errors.summary`),
-          fallbackDetail: t(`${keys}.errors.fallbackDetail`),
-          forbiddenDetail: t(`${keys}.errors.forbiddenDetail`),
-          conflictDetail: t(`${keys}.errors.conflictDetail`),
-          validationDetail: t(`${keys}.errors.validationDetail`),
-        });
-      },
+          detail: t(refusalKey(error, !!organization) ?? `${keys}.errors.fallbackDetail`),
+        }),
     });
   };
 
@@ -203,7 +215,7 @@ export default function OrganizationFormDialog({ organization, onSaved, onClose 
       {!ready ? (
         detailQuery.isError ? (
           <p role="alert">
-            {t(editRefusalKey(detailQuery.error) ?? "rework.organizations.editOrganization.loadFailed")}
+            {t(refusalKey(detailQuery.error, true) ?? "rework.organizations.editOrganization.loadFailed")}
           </p>
         ) : (
           <p role="status">{t("common.loading")}</p>
@@ -223,7 +235,9 @@ export default function OrganizationFormDialog({ organization, onSaved, onClose 
             required
           />
           <AccountPicker label={t("rework.organizations.owner")} value={owner} onChange={setOwner} />
+          <SeveralHolders holders={detail?.owners} messageKey="rework.organizations.editOrganization.severalOwners" />
           <AccountPicker label={t("rework.organizations.admin")} value={admin} onChange={setAdmin} />
+          <SeveralHolders holders={detail?.admins} messageKey="rework.organizations.editOrganization.severalAdmins" />
         </div>
       )}
     </Dialog>

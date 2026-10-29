@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-import { controlPlaneApi, type Space } from "./controlPlaneOpenApi";
+import { controlPlaneApi, type OrganizationDetail } from "./controlPlaneOpenApi";
 
 // The generator types binary fields as Blob, but sends the enclosing object as
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
@@ -156,13 +156,16 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       extraOptions: { retryUnauthorized: false },
       // Patch the cached registry pages in place: a refetch would replace the rows, and the
       // edit button that opened the dialog with them, so focus could not return to it.
-      async onQueryStarted(_args, { dispatch, getState, queryFulfilled }) {
-        let saved: Space;
+      async onQueryStarted({ id }, { dispatch, getState, queryFulfilled }) {
+        let detail: OrganizationDetail;
         try {
-          saved = (await queryFulfilled).data.organization;
+          detail = (await queryFulfilled).data;
         } catch {
           return;
         }
+        // The returned detail is what was committed: a reopened edit must not start from an older copy.
+        void dispatch(controlPlaneApi.util.upsertQueryData("getOrganization", { id }, detail));
+        const saved = detail.organization;
         const state = getState() as Parameters<typeof controlPlaneApi.util.selectCachedArgsForQuery>[0];
         for (const args of controlPlaneApi.util.selectCachedArgsForQuery(state, "organizationRegistry")) {
           dispatch(

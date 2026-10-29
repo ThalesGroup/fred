@@ -4546,6 +4546,8 @@
         "submit": "Enregistrer",
         "successSummary": "Organisation {{name}} modifiée",
         "loadFailed": "Impossible de charger cette organisation. Fermez et réessayez.",
+        "severalOwners": "Cette organisation a actuellement plusieurs propriétaires : {{names}}. Choisir un nouveau propriétaire les remplace tous.",
+        "severalAdmins": "Cette organisation a actuellement plusieurs administrateurs : {{names}}. Choisir un nouvel administrateur les remplace tous.",
         "errors": {
           "summary": "Échec de la modification de l'organisation",
           "fallbackDetail": "Impossible de modifier l'organisation. Veuillez réessayer.",
@@ -4565,7 +4567,7 @@
         "errors": {
           "summary": "Échec de la création de l'organisation",
           "fallbackDetail": "Impossible de créer l'organisation. Veuillez réessayer.",
-          "conflictDetail": "Une organisation porte déjà ce nom.",
+          "conflictDetail": "Ce nom est déjà pris, ou l'une des personnes appartient déjà à une autre organisation.",
           "validationDetail": "Vérifiez le nom et que les deux personnes ont toujours un compte.",
           "forbiddenDetail": "Vous n'êtes pas autorisé à créer des organisations."
         }
