@@ -584,6 +584,14 @@ class RuntimeContext(BaseModel):
             "interactive control was offered."
         ),
     )
+    auto_title: bool | None = Field(
+        default=None,
+        description=(
+            "Set on a conversation's first turn: the runtime then generates a "
+            "short title from this turn's input and streams it as a "
+            "`session_title` event. Later renames belong to the user."
+        ),
+    )
     # NOTE (2026-08-12): a per-question `reasoning_effort` override was built
     # and withdrawn the same day — providers disagree on accepted values
     # (Mistral small 400s on low/medium), and the declaration machinery it

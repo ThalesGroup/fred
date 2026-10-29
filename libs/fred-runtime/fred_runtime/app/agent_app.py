@@ -161,6 +161,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeEvent,
     RuntimeEventKind,
     RuntimeServices,
+    SessionTitleRuntimeEvent,
     parse_human_input_answer,
 )
 from fred_sdk.contracts.skills import SkillCatalog, SkillDetail, SkillInvocation
@@ -288,8 +289,12 @@ from .dependencies import (
     get_pod_container_from_app,
 )
 from .observability_factory import bootstrap_observability
+from .session_title import propose_session_title
 
 logger = logging.getLogger(__name__)
+
+# Longest the turn's last event waits for a title still being generated.
+SESSION_TITLE_GRACE_SECONDS = 2.0
 
 # Under delegation an audit event keeps codes only: free text can name a person.
 _BOUNDED_AUDIT_CODE = re.compile(r"[a-z_]+")
@@ -4674,6 +4679,14 @@ async def _iterate_runtime_event_payloads(
     )
     started = time.perf_counter()
     outcome = "succeeded"
+    # Runs beside the turn and is streamed as soon as it is ready; only a
+    # title still pending when `final` arrives gets a short grace period.
+    title_task = (
+        asyncio.create_task(propose_session_title(request.message))
+        if (request.context or {}).get("auto_title") is True
+        and request.resume_payload is None
+        else None
+    )
     with (
         operation_log_scope(
             completion=owns_run_record,
@@ -4702,6 +4715,19 @@ async def _iterate_runtime_event_payloads(
                     outcome = "failed"
                 elif payload.get("kind") == "awaiting_human" and outcome != "failed":
                     outcome = "awaiting_human"
+                if title_task is not None and (
+                    title_task.done() or payload.get("kind") == "final"
+                ):
+                    await asyncio.wait(
+                        {title_task}, timeout=SESSION_TITLE_GRACE_SECONDS
+                    )
+                    title = title_task.result() if title_task.done() else None
+                    title_task.cancel()
+                    title_task = None
+                    if title:
+                        yield SessionTitleRuntimeEvent(title=title).model_dump(
+                            mode="json"
+                        )
                 yield payload
         except asyncio.CancelledError:
             outcome = "cancelled"
@@ -4721,6 +4747,8 @@ async def _iterate_runtime_event_payloads(
             outcome = "failed"
             raise
         finally:
+            if title_task is not None:
+                title_task.cancel()
             try:
                 if owns_run_record:
                     _mark_run_terminal(credential_provider)
