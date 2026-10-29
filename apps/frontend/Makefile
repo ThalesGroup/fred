@@ -67,7 +67,7 @@ endif
 ##@ Common workflows
 ##> The commands you actually use day to day:
 ##>   make run             start the local dev server on http://localhost:5173
-##>   make code-quality    type-check + prettier check — run this before committing
+##>   make code-quality    type-check + prettier check + eslint - run this before committing
 ##>   make test            run the unit test suite with coverage
 ##>   make update-all-apis regenerate the API client after any backend change
 ##> First run installs npm dependencies automatically; later runs reuse them.
