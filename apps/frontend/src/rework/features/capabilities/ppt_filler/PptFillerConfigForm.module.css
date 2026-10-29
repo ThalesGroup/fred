@@ -89,7 +89,7 @@
   flex-direction: column;
   gap: var(--spacing-2, 8px);
   border: 1px solid var(--outline-variant, #e0e0e0);
-  border-radius: var(--radius-small, 8px);
+  border-radius: var(--radius-s);
   padding: var(--spacing-3, 12px);
 }
 
@@ -130,7 +130,7 @@
 }
 
 .keyName {
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--surface-container, #f4f4f4);
   padding: 0 4px;
   font-family: var(--font-mono, monospace);
@@ -138,7 +138,7 @@
 
 .imageBadge {
   border: 1px solid var(--outline-variant, #e0e0e0);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   padding: 0 6px;
   color: var(--on-surface-retreat);
   font-size: var(--font-size-x-small, 0.75rem);

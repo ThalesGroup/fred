@@ -93,7 +93,7 @@
 
 .legendDot {
   flex-shrink: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--dot-color);
   width: 6px;
   height: 6px;

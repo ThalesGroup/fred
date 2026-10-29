@@ -58,7 +58,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-3xs);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--secondary-container);
   padding: 2px var(--spacing-xs);
   color: var(--on-secondary-container);
@@ -71,7 +71,7 @@
   align-items: center;
   cursor: pointer;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: transparent;
   padding: 0;
   width: 1rem;

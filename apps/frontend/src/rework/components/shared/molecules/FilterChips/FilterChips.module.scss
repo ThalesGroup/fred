@@ -30,7 +30,7 @@
     color 100ms ease;
   cursor: pointer;
   border: 0.5px solid var(--outline-variant);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: transparent;
   padding: 4px 14px;
   color: var(--on-surface-retreat);
@@ -58,7 +58,7 @@
   transition: background 100ms ease;
   cursor: pointer;
   border: 0.5px solid var(--outline-variant);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: transparent;
   padding: 4px 12px;
   color: var(--on-surface-retreat);

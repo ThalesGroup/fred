@@ -37,7 +37,7 @@
 
 .creepFill {
   animation: creep 24s cubic-bezier(0.15, 0.85, 0.25, 1) forwards;
-  border-radius: 10px;
+  border-radius: var(--radius-full);
   background-color: var(--main-color);
   width: 8%;
   height: 100%;
