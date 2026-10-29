@@ -34,16 +34,8 @@
 /* Its own grid, structurally outside `.datatable-body`'s scroll area — so the
  * scrollbar (and whatever scrolls under it) starts right below the header
  * row instead of the header just floating on top via `position: sticky`.
- *
- * `overflow-y: scroll` here is deliberate even though this element never
- * has anything to scroll: it reserves the exact same scrollbar gutter width
- * the browser also reserves on `.datatable-body` below, so both grids
- * compute their columns against an identical effective width. A guessed
- * fixed value (e.g. padding-right: 4px) drifts from the real OS/browser
- * scrollbar width and reintroduces the header/row column misalignment this
- * is meant to prevent — matching mechanisms is the only way that can't
- * drift. The track/thumb are made transparent since there's nothing to
- * actually scroll here. */
+ * `scrollbar-gutter: stable` reserves the same gutter as the body so both grids
+ * compute their columns against an identical width, without drawing a scrollbar. */
 .datatable-header {
   display: grid;
   grid-template-columns: var(--grid-layout);
@@ -55,16 +47,13 @@
    * Cells truncate (`min-width: 0` below), so this is the fixed tracks' total,
    * not the longest cell's. */
   min-width: min-content;
-  overflow-y: scroll;
+  overflow-y: hidden;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
 
+  /* Same gutter width as the body where only the webkit rule applies. */
   &::-webkit-scrollbar {
     width: 4px;
-  }
-
-  &::-webkit-scrollbar-track,
-  &::-webkit-scrollbar-thumb {
-    background: transparent;
   }
 }
 
@@ -79,11 +68,10 @@
   /* Its own horizontal scroll would desynchronise it from the header; the
    * container above owns that axis now. */
   overflow-x: hidden;
-  /* Always reserve the vertical scrollbar's space, even when content
-   * doesn't overflow yet — keeps the column grid the same width as
-   * `.datatable-header`'s regardless of row count, instead of only
-   * shrinking once a scrollbar actually appears. */
-  overflow-y: scroll;
+  /* The gutter stays reserved when nothing overflows, so the column grid keeps
+   * `.datatable-header`'s width; the scrollbar itself only shows when needed. */
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
 
   &::-webkit-scrollbar {
