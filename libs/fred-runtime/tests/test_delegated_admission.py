@@ -1421,9 +1421,10 @@ async def test_with_the_flag_off_a_child_reads_the_updated_person_bearer(
     with active_turn("member-1"):
         captured: list[OutboundCredentials] = []
         runtime_context = RuntimeContext(
-            session_id="synthetic-session",
-            user_id="synthetic-person",
-            team_id="synthetic-team",
+            user_id="alice",
+            team_id="team-1",
+            space_id=SPACE_ID,
+            agent_instance_id=INSTANCE_ID,
             access_token="person-token-1",
         )
         binding = BoundRuntimeContext(
@@ -1454,7 +1455,7 @@ async def test_with_the_flag_off_a_child_reads_the_updated_person_bearer(
             services = agent_app_module._build_runtime_services(
                 definition,
                 binding,
-                team_id="synthetic-team",
+                team_id="team-1",
                 registry={"member-1": definition},
                 access_token="person-token-1",
             )

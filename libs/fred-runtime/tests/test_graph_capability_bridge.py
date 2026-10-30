@@ -167,9 +167,12 @@ async def test_mcp_structured_content_survives_graph_runtime_and_events() -> Non
         agent_settings_provider=Settings,
     )
     events: list[RuntimeEvent] = []
-    result = await _node_context(
-        {wrapper.name: wrapper}, events=events
-    ).invoke_runtime_tool(wrapper.name, {})
+    result = await in_turn(
+        _binding(),
+        _node_context({wrapper.name: wrapper}, events=events).invoke_runtime_tool(
+            wrapper.name, {}
+        ),
+    )
 
     assert isinstance(result, dict)
     assert result["blocks"][0]["data"] == payload

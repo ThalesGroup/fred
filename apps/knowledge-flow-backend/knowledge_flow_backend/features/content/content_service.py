@@ -20,7 +20,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
-from typing import BinaryIO, NamedTuple, Tuple
+from typing import BinaryIO, NamedTuple, Protocol, Tuple
 
 import pandas as pd
 from fred_core import (
@@ -94,6 +94,10 @@ class PdfRender(NamedTuple):
     cached: bool
 
 
+class _TabularPreviewService(Protocol):
+    async def read_dataset_preview_frame(self, user: KeycloakUser, document_uid: str, *, max_rows: int = 200) -> pd.DataFrame: ...
+
+
 class ContentService:
     """
     Service for retrieving document content and converting it to markdown.
@@ -109,7 +113,7 @@ class ContentService:
         self.config = ApplicationContext.get_instance().get_config()
         self.rebac = ApplicationContext.get_instance().get_rebac_engine()
         self.kpi: BaseKPIWriter = ApplicationContext.get_instance().get_kpi_writer()
-        self._tabular_service = None
+        self._tabular_service: _TabularPreviewService | None = None
         # Per-document cold-render locks; see `_render_lock`.
         self._render_locks: dict[str, asyncio.Lock] = {}
 
@@ -156,7 +160,7 @@ class ContentService:
             return "_(The CSV file is empty or has no data to display)_"
         return preview_str
 
-    def _get_tabular_service(self):
+    def _get_tabular_service(self) -> _TabularPreviewService:
         """A caller must provide a service already bound to its trusted scope.
 
         Weaver serves published previews through Control Plane and the published
