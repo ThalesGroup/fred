@@ -164,11 +164,11 @@ async fn provisioning_browser_journey() {
         );
         return;
     }
-    let org = named_space(&e.pool, &e.fga, None, "Demo")
+    let org = named_space(&e.pool, &e.fga, None, "Acme")
         .await
         .unwrap()
         .unwrap();
-    let north = named_space(&e.pool, &e.fga, Some(org.id), "northbridge")
+    let north = named_space(&e.pool, &e.fga, Some(org.id), "Research")
         .await
         .unwrap()
         .unwrap();
@@ -182,16 +182,12 @@ async fn provisioning_browser_journey() {
             .fetch_one(&e.pool)
             .await
             .unwrap(),
-        6
+        7
     );
-    let sophia = directory.find_username("sophia").await.unwrap().unwrap();
+    let oscar = directory.find_username("oscar").await.unwrap().unwrap();
     assert!(
         !e.fga
-            .check(
-                &sophia.id,
-                control_plane::domain::Permission::Read,
-                north.id
-            )
+            .check(&oscar.id, control_plane::domain::Permission::Read, north.id)
             .await
             .unwrap()
     );

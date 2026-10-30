@@ -178,7 +178,7 @@ async function assertAccountPages({ page, context, bearer }, owner) {
   await expect(roles).toContainText(owner ? "platform_admin" : "None");
   if (!owner) {
     await expect(page.getByText(/platform_admin/)).toHaveCount(0);
-    await expect(page.getByText("Organization: Demo", { exact: true })).toBeVisible();
+    await expect(page.getByText("Organization: Acme", { exact: true })).toBeVisible();
   }
   await expect(page.getByText("Profile picture", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "UI theme", exact: true }).click();
@@ -399,7 +399,7 @@ try {
     await acceptTerms(root.page);
     await root.page.getByRole("button", { name: "Home", exact: true }).click();
     await expect(root.page.getByRole("heading", { name: /^Hello / })).toBeVisible();
-    await expect(root.page.getByRole("link", { name: "Demo", exact: true })).toHaveCount(0);
+    await expect(root.page.getByRole("link", { name: "Acme", exact: true })).toHaveCount(0);
     const projectLink = root.page.getByRole("link", { name: "Browser project", exact: true });
     const projectHref = await projectLink.getAttribute("href");
     assert.match(projectHref, /^\/team\/[^/]+\/agents$/);
@@ -488,10 +488,8 @@ try {
     assert.equal(personalMembership.organization_id, organization.id);
     assert.deepEqual(personalMembership.path, [personal.id]);
     await carl.page.getByRole("button", { name: "Home", exact: true }).click();
-    await carl.page.getByRole("link", { name: "Research", exact: true }).click();
-    await expect(carl.page.getByText("Research", { exact: true })).toBeVisible();
+    await expect(carl.page.getByRole("link", { name: "Research", exact: true })).toBeVisible();
     // Carl owns Research but receives no content permission from that role.
-    await carl.page.getByRole("button", { name: "Home", exact: true }).click();
     const repeated = carl.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));
     await personalEntry.click();
     const reused = await repeated;
