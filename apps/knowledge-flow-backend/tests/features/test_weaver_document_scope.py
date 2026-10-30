@@ -14,7 +14,6 @@ from fred_core.documents.selection import DocumentScope
 from fred_core.documents.transport import DOCUMENT_CONTEXT_HEADER, DocumentAccessContext
 
 from knowledge_flow_backend.core.stores.vector.base_vector_store import SearchFilter
-from knowledge_flow_backend.core.stores.vector.chromadb_vector_store import _build_where
 from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from knowledge_flow_backend.features.content import published_markdown as markdown_module
 from knowledge_flow_backend.features.extract import service as extract_module
@@ -99,7 +98,6 @@ def test_index_filters_preserve_union_intersection_and_direct_folder_semantics()
     assert len(clauses[0]["bool"]["should"]) == 2
     assert clauses[1]["bool"]["should"] == [{"terms": {"metadata.document_uid": [str(DOC)]}}]
     assert "prefix" not in str(clauses)
-    assert "$and" in _build_where(sf)
     assert os._to_filter_clause(SearchFilter(metadata_any=({},))) == [{"match_none": {}}]
 
 

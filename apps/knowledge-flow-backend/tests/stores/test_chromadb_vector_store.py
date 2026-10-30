@@ -21,7 +21,7 @@ from langchain_community.embeddings import FakeEmbeddings
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, SearchFilter
-from knowledge_flow_backend.core.stores.vector.chromadb_vector_store import ChromaDBVectorStore
+from knowledge_flow_backend.core.stores.vector.chromadb_vector_store import ChromaDBVectorStore, _build_where
 
 
 def _make_store(tmp_path) -> ChromaDBVectorStore:
@@ -140,3 +140,9 @@ def test_set_document_tag_ids_moves_the_document_between_folder_filters(tmp_path
     store.set_document_tag_ids(document_uid="doc-1", tag_ids=["beta"])
     assert (_found(store, "alpha"), _found(store, "beta")) == (set(), {"doc-1"})
     assert store.get_chunks_for_document("doc-1")[0]["metadata"]["tag_ids"] == ["beta"]
+
+
+def test_build_where_intersects_selection_groups():
+    # A folder-or-document group intersected with a document group needs an `$and`.
+    selection = ({"folder_path": ["/f/"], "document_uid": ["d"]}, {"document_uid": ["d"]})
+    assert "$and" in _build_where(SearchFilter(metadata_any=selection))
