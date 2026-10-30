@@ -34,6 +34,10 @@ COPY --from=python-install /opt/python /opt/python
 RUN ln -s /opt/python/cpython-${PYTHON_VERSION}-*/bin/python3.12 /usr/local/bin/python3 && \
     ln -s python3 /usr/local/bin/python && \
     python3 -m pip uninstall --yes --break-system-packages pip
+# Compile the venv's bytecode at build time: the image is read back fresh at
+# every container start, so bytecode compiled at import is lost on each
+# restart, and compiling the whole venv outlasts the liveness probe.
+ENV UV_COMPILE_BYTECODE=1
 
 # -----------------------------------------------------------------------------
 # BUILD STAGE
