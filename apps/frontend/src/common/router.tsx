@@ -19,15 +19,11 @@ import FreeEnrollmentPage from "@components/pages/PlatformAccessPage/FreeEnrollm
 import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
 import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
 import AnnouncementsPage from "@components/pages/admin/AnnouncementsPage/AnnouncementsPage.tsx";
-import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAuditPage.tsx";
 import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
 import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
 import UiSettingsPage from "@components/pages/admin/UiSettingsPage/UiSettingsPage.tsx";
 import MarketplacesPage from "@components/pages/admin/MarketplacesPage/MarketplacesPage.tsx";
-import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
 import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
-import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage.tsx";
-import TasksPage from "@components/pages/admin/TasksPage/TasksPage.tsx";
 import BootstrapPage from "@components/pages/BootstrapPage/BootstrapPage.tsx";
 import DocumentViewerPage from "@components/pages/DocumentViewerPage/DocumentViewerPage.tsx";
 import { GcuPageContent } from "@components/pages/GcuPage/GcuPage.tsx";
@@ -39,8 +35,6 @@ import MarketplacePrompts from "@components/pages/marketplace/MarketplacePrompts
 import MarketplaceAgents from "@components/pages/marketplace/MarketplaceAgents/MarketplaceAgents.tsx";
 import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
-import KnowledgeBaseDocumentsPage from "@components/pages/TeamKnowledgeBasesPage/KnowledgeBaseDocumentsPage.tsx";
-import TeamKnowledgeBasesPage from "@components/pages/TeamKnowledgeBasesPage/TeamKnowledgeBasesPage.tsx";
 import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
 import TeamWikiPage from "@components/pages/TeamWikiPage/TeamWikiPage.tsx";
 import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
@@ -188,14 +182,6 @@ const applicationRoutes: RouteObject[] = [
         element: <TeamResourcesPage />,
       },
       {
-        path: "team/:teamId/knowledge-bases",
-        element: <TeamKnowledgeBasesPage />,
-      },
-      {
-        path: "team/:teamId/knowledge-bases/:instanceId",
-        element: <KnowledgeBaseDocumentsPage />,
-      },
-      {
         path: "team/:teamId/wiki",
         element: <TeamWikiPage />,
       },
@@ -312,14 +298,6 @@ const applicationRoutes: RouteObject[] = [
         ),
       },
       {
-        path: "admin/tasks",
-        element: (
-          <Protected requires="admin">
-            <TasksPage />
-          </Protected>
-        ),
-      },
-      {
         path: "admin/analytics",
         element: (
           <Protected requires="observer">
@@ -365,33 +343,6 @@ const applicationRoutes: RouteObject[] = [
         element: (
           <Protected requires="admin">
             <MarketplacesPage />
-          </Protected>
-        ),
-      },
-      {
-        path: "admin/self-test",
-        element: (
-          <Protected requires="admin">
-            <SelfTestPage />
-          </Protected>
-        ),
-      },
-      {
-        // Corpus audit (#2112): platform-admin-only surface over the document
-        // store audit/fix endpoints (`CAN_MANAGE_PLATFORM`) — same gate as the
-        // other admin-only pages above.
-        path: "admin/corpus-audit",
-        element: (
-          <Protected requires="admin">
-            <CorpusAuditPage />
-          </Protected>
-        ),
-      },
-      {
-        path: "admin/migration",
-        element: (
-          <Protected requires="admin">
-            <MigrationPage />
           </Protected>
         ),
       },

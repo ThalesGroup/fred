@@ -66,3 +66,8 @@ export function displayPath(file: File): string {
   const dir = relativeDirSegments(file);
   return dir.length ? `${dir.join("/")}/${file.name}` : file.name;
 }
+
+/** Filename sent to the Control Plane, without a dropped directory prefix. */
+export function leafFileName(file: File): string {
+  return file.name.split("/").pop() || file.name;
+}

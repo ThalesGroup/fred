@@ -19,8 +19,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { Portal } from "@shared/utils/Portal.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { useCreateTagMutation } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { MAX_FOLDER_DEPTH, folderPathDepth } from "@shared/organisms/DocumentUploadDrawer/droppedPaths";
+import { folderPathDepth } from "@shared/organisms/DocumentUploadDrawer/droppedPaths";
 import styles from "./CreateFolderModal.module.css";
 
 interface CreateFolderModalProps {
@@ -29,13 +28,8 @@ interface CreateFolderModalProps {
   /** Parent folder full path, e.g. "CIR" or "CIR/Sub". `undefined` => top level. */
   parentPath?: string;
   maxDepth?: number;
-  /** Team id for a collaborative team; omit/undefined for the personal space. */
-  teamId?: string;
-  /**
-   * Optional custom create handler. When provided it is used instead of creating a corpus
-   * library (e.g. a team-rooted /fs `mkdir`); the corpus behaviour is the default.
-   */
-  onSubmit?: (name: string) => Promise<void>;
+  /** The caller owns the destination and its Control Plane mutation. */
+  onSubmit: (name: string) => Promise<void>;
   onCreated: () => void;
 }
 
@@ -49,7 +43,6 @@ export default function CreateFolderModal({
   onClose,
   parentPath,
   maxDepth,
-  teamId,
   onSubmit,
   onCreated,
 }: CreateFolderModalProps) {
@@ -67,9 +60,8 @@ export default function CreateFolderModal({
   };
 
   const { showError } = useToast();
-  const [createTag, { isLoading: tagLoading }] = useCreateTagMutation();
   const [submitting, setSubmitting] = useState(false);
-  const isLoading = submitting || tagLoading;
+  const isLoading = submitting;
   const [name, setName] = useState("");
 
   // Reset the field each time the modal opens (it mounts fresh, so the input's
@@ -92,14 +84,9 @@ export default function CreateFolderModal({
   const trimmed = name.trim();
   const parentLeaf = parentPath?.split("/").filter(Boolean).pop();
 
-  // Mirror the backend's TagCreate guards (#2355) so the user learns BEFORE
-  // clicking Create, not from a 422 toast: a folder name is a single level
-  // (no slashes — a slashed name would smuggle several levels past the depth
-  // cap), and corpus folders stop nesting at MAX_FOLDER_DEPTH. A custom onSubmit
-  // variant has no default cap and passes its own `maxDepth` (the control-plane
-  // allows 15 levels); the slash rule always applies.
+  // A folder name is one level; the caller supplies its maximum path depth.
   const nameHasSlash = trimmed.includes("/") || trimmed.includes("\\");
-  const depthLimit = maxDepth ?? (!onSubmit ? MAX_FOLDER_DEPTH : undefined);
+  const depthLimit = maxDepth;
   const tooDeep = depthLimit !== undefined && folderPathDepth(parentPath) + 1 > depthLimit;
   const blocked = !trimmed || nameHasSlash || tooDeep;
   const inlineError = tooDeep
@@ -113,18 +100,7 @@ export default function CreateFolderModal({
     pending.current = true;
     setSubmitting(true);
     try {
-      if (onSubmit) {
-        await onSubmit(trimmed);
-      } else {
-        await createTag({
-          tagCreate: {
-            name: trimmed,
-            path: parentPath ?? null,
-            type: "document",
-            team_id: teamId ?? null,
-          },
-        }).unwrap();
-      }
+      await onSubmit(trimmed);
       if (mounted.current) {
         onCreated();
         onClose();

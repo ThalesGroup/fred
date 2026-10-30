@@ -49,16 +49,6 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ sho
 vi.mock("@shared/molecules/Select/Select", () => ({ default: () => null }));
 vi.mock("@shared/molecules/UploadWarningBanner/UploadWarningBanner", () => ({ default: () => null }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
-vi.mock("../../../../../slices/streamDocumentUpload", () => ({
-  leafFileName: (file: File) => file.name.split("/").pop() || file.name,
-  streamUploadOrProcessDocument: () => Promise.resolve([]),
-}));
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
-  useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation: () => [
-    () => ({ unwrap: () => Promise.resolve({ conflicts: [] }) }),
-  ],
-  useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation: () => [vi.fn()],
-}));
 vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: undefined }),
 }));
@@ -104,6 +94,7 @@ describe("DocumentUploadDrawer depth guardrail", () => {
   it("filters too-deep files out of the seed, counting the destination folder's depth", () => {
     render(
       <DocumentUploadDrawer
+        managerDestination={{ spaceId: "space", folderId: "folder", processingEnabled: true }}
         isOpen
         onClose={() => {}}
         destinationPath="CIR/Sub"
@@ -117,7 +108,14 @@ describe("DocumentUploadDrawer depth guardrail", () => {
   });
 
   it("rejects a too-deep in-drawer drop with a toast, keeping files within the cap", () => {
-    render(<DocumentUploadDrawer isOpen onClose={() => {}} ensureFolderPath={async () => null} />);
+    render(
+      <DocumentUploadDrawer
+        managerDestination={{ spaceId: "space", folderId: "folder", processingEnabled: true }}
+        isOpen
+        onClose={() => {}}
+        ensureFolderPath={async () => null}
+      />,
+    );
 
     act(() => {
       probe.dropzoneOptions?.onDrop?.([

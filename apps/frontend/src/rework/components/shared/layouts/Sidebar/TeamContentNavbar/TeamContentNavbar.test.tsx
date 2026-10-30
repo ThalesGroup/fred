@@ -13,10 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { act, type ReactNode } from "react";
-import { createRoot } from "react-dom/client";
+import { type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   isPersonalTeam: false,
@@ -263,91 +262,12 @@ describe("TeamContentNavbar — the team avatar", () => {
   });
 });
 
-describe("TeamContentNavbar — knowledge bases and beta badges", () => {
-  beforeEach(() => {
+describe("TeamContentNavbar — deferred knowledge bases", () => {
+  it("keeps unported knowledge bases out of the menu even with cached definitions", () => {
     h.canUseKnowledgeBases = true;
-    h.knowledgeBases = { currentData: undefined, isError: false };
-    h.wikiEnabled = true;
-  });
-
-  it("shows enabled definitions even before any instance is created, with beta after each label", () => {
-    h.knowledgeBases.currentData = [{ definition_id: "source", name: "Source", description: "" }];
-    const html = renderToStaticMarkup(<TeamContentNavbar />);
-    for (const [route, label] of [
-      ["knowledge-bases", "knowledgeBases"],
-      ["wiki", "wiki"],
-    ]) {
-      const entry = html.split(`href="/team/team-1/${route}"`)[1]?.split("</a>")[0];
-      expect(entry).toBeDefined();
-      expect(entry).toContain("aria-label=");
-      expect(entry!.indexOf("aria-label=")).toBeGreaterThan(entry!.indexOf(`rework.sidebar.team.menu.${label}`));
-    }
-  });
-
-  it.each([
-    { currentData: undefined, isError: false },
-    { currentData: undefined, isError: true },
-    { currentData: [], isError: false },
-  ])("hides knowledge bases when unavailable: %j", (result) => {
-    h.knowledgeBases = result;
-    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("/team/team-1/knowledge-bases");
-  });
-
-  it("keeps the last known definitions when a refresh fails", () => {
-    h.knowledgeBases = {
-      currentData: [{ definition_id: "source", name: "Source", description: "" }],
-      isError: true,
-    };
-    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain("/team/team-1/knowledge-bases");
-  });
-
-  it("requires team permission even with cached enabled definitions", () => {
-    h.canUseKnowledgeBases = false;
     h.knowledgeBases.currentData = [{ definition_id: "source", name: "Source", description: "" }];
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("/team/team-1/knowledge-bases");
   });
-});
-
-describe("TeamContentNavbar — cross-session knowledge base availability", () => {
-  beforeEach(() => {
-    h.canUseKnowledgeBases = true;
-    h.knowledgeBases = { currentData: undefined, isError: false };
-    h.refetchKnowledgeBases.mockClear();
-  });
-
-  it("polls and refreshes on focus, cleaning up when permission is removed or the menu unmounts", async () => {
-    const container = document.createElement("div");
-    const root = createRoot(container);
-    try {
-      await act(async () => root.render(<TeamContentNavbar />));
-      expect(h.knowledgeBasesQuery).toHaveBeenLastCalledWith(
-        { teamId: "team-1" },
-        { skip: false, pollingInterval: 60_000, refetchOnMountOrArgChange: 60 },
-      );
-      window.dispatchEvent(new Event("focus"));
-      expect(h.refetchKnowledgeBases).toHaveBeenCalledTimes(1);
-      h.canUseKnowledgeBases = false;
-      await act(async () => root.render(<TeamContentNavbar />));
-      expect(h.knowledgeBasesQuery).toHaveBeenLastCalledWith(
-        { teamId: "team-1" },
-        { skip: true, pollingInterval: 0, refetchOnMountOrArgChange: 60 },
-      );
-      window.dispatchEvent(new Event("focus"));
-      expect(h.refetchKnowledgeBases).toHaveBeenCalledTimes(1);
-      h.canUseKnowledgeBases = true;
-      await act(async () => root.render(<TeamContentNavbar />));
-    } finally {
-      await act(async () => root.unmount());
-    }
-    window.dispatchEvent(new Event("focus"));
-    expect(h.refetchKnowledgeBases).toHaveBeenCalledTimes(1);
-  });
-});
-
-afterEach(() => {
-  h.pathname = "/team/team-1/resources";
-  h.relations = ["team_member"];
-  h.charterEnabled = undefined;
 });
 
 describe("TeamContentNavbar Responsibilities entry", () => {
@@ -395,7 +315,6 @@ it("skips legacy sidebar reads and shows the Weaver chat list on agent managemen
   expect(h.flags).toHaveBeenLastCalledWith("enableApplications", true);
   expect(h.applications).toHaveBeenLastCalledWith("team-1", true);
   expect(h.wiki).toHaveBeenLastCalledWith({ teamId: "team-1" }, { skip: true });
-  expect(h.knowledgeBasesQuery).toHaveBeenLastCalledWith({ teamId: "team-1" }, expect.objectContaining({ skip: true }));
   expect(html).toContain("data-chat-list");
   expect(html).not.toContain("rework.weaverAgents.chatUnavailable");
 });

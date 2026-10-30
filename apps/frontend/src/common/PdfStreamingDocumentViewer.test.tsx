@@ -338,7 +338,7 @@ describe("PdfStreamingDocumentViewer large-file guard (#2273)", () => {
     await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
 
     expect(probe.calls).toHaveLength(1);
-    expect(probe.calls[0].url).toBe("/knowledge-flow/v1/raw_content/stream/doc-1");
+    expect(probe.calls[0].url).toBe("/control-plane/v1/documents/doc-1/preview?artifact=native");
     expect(probe.calls[0].init.headers).toMatchObject({ Range: "bytes=0-0" });
   });
 });

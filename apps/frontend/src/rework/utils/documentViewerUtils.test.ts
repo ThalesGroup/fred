@@ -104,15 +104,15 @@ describe("hasNativePreview", () => {
 
 describe("documentPdfSourceUrl", () => {
   it("streams a PDF from storage untouched", () => {
-    expect(documentPdfSourceUrl("abc", "facture.pdf")).toBe("/knowledge-flow/v1/raw_content/stream/abc");
+    expect(documentPdfSourceUrl("abc")).toBe("/control-plane/v1/documents/abc/preview?artifact=native");
   });
 
   it("routes a Word document through the render endpoint", () => {
-    expect(documentPdfSourceUrl("abc", "rapport.docx")).toBe("/knowledge-flow/v1/raw_content/pdf/abc");
+    expect(documentPdfSourceUrl("abc")).toBe("/control-plane/v1/documents/abc/preview?artifact=native");
   });
 
   it("routes a PowerPoint deck through the same render endpoint", () => {
-    expect(documentPdfSourceUrl("abc", "deck.pptx")).toBe("/knowledge-flow/v1/raw_content/pdf/abc");
+    expect(documentPdfSourceUrl("abc")).toBe("/control-plane/v1/documents/abc/preview?artifact=native");
   });
 });
 

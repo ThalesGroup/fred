@@ -52,10 +52,6 @@ vi.mock("../../../../../common/PdfStreamingDocumentViewer", () => ({
 // Non-empty: an empty-but-successful response is treated as "unavailable"
 // (DocumentViewer.tsx's MarkdownDocumentBody), same as a 404 — a stub of ""
 // would take that branch instead of rendering MarkdownRenderer.
-const fetchPreviewMock = vi.hoisted(() => vi.fn(() => ({ unwrap: () => Promise.resolve({ content: "stub" }) })));
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
-  useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery: () => [fetchPreviewMock],
-}));
 
 import { DocumentViewer, DocumentViewerModeToggle } from "./DocumentViewer.tsx";
 
@@ -126,14 +122,14 @@ describe("DocumentViewer Fichier/Raw content", () => {
     const pdfView = container.querySelector('[data-testid="pdf-view"]');
     expect(pdfView).not.toBeNull();
     // Not the raw stream: a .docx has to go through the backend PDF render.
-    expect(pdfView?.getAttribute("data-source-url")).toBe("/knowledge-flow/v1/raw_content/pdf/doc-1");
+    expect(pdfView?.getAttribute("data-source-url")).toBe("/control-plane/v1/documents/doc-1/preview?artifact=native");
     expect(container.querySelector('[data-testid="markdown-view"]')).toBeNull();
   });
 
   it('renders a PowerPoint deck natively for view="file", through the same render endpoint', () => {
     render(<DocumentViewer documentUid="doc-1" fileName="deck.pptx" view="file" />);
     const pdfView = container.querySelector('[data-testid="pdf-view"]');
-    expect(pdfView?.getAttribute("data-source-url")).toBe("/knowledge-flow/v1/raw_content/pdf/doc-1");
+    expect(pdfView?.getAttribute("data-source-url")).toBe("/control-plane/v1/documents/doc-1/preview?artifact=native");
   });
 
   it('still offers the markdown extraction of a Word document for view="raw"', async () => {
@@ -146,7 +142,7 @@ describe("DocumentViewer Fichier/Raw content", () => {
   it("streams a PDF from storage rather than through the render endpoint", () => {
     render(<DocumentViewer documentUid="doc-1" fileName="report.pdf" view="file" />);
     const pdfView = container.querySelector('[data-testid="pdf-view"]');
-    expect(pdfView?.getAttribute("data-source-url")).toBe("/knowledge-flow/v1/raw_content/stream/doc-1");
+    expect(pdfView?.getAttribute("data-source-url")).toBe("/control-plane/v1/documents/doc-1/preview?artifact=native");
   });
 });
 

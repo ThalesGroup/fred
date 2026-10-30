@@ -37,12 +37,8 @@ import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
 import { IconType } from "@shared/utils/Type.ts";
 import { useTeamApplications } from "@rework/features/applications/useTeamApplications.ts";
-import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@hooks/crossSessionRefresh.ts";
 import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
-import {
-  useKnowledgeBaseDefinitionsQuery,
-  useWikiAvailabilityQuery,
-} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import { useWikiAvailabilityQuery } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 
 /**
  * Team-scoped sidebar section — the second vertical bar.
@@ -134,14 +130,6 @@ export default function TeamContentNavbar() {
   // A failed refresh keeps the last known answer: an entry that vanishes on one
   // bad poll and returns a minute later reads worse than a stale one, and the
   // control-plane refuses the routes anyway.
-  const skipKnowledgeBases = agentManagement || !teamId || !capabilities.canUseTeamKnowledgeBases;
-  const { currentData: knowledgeBaseDefinitions, refetch: refetchKnowledgeBases } = useKnowledgeBaseDefinitionsQuery(
-    { teamId: teamId ?? "" },
-    crossSessionRefreshOptions(skipKnowledgeBases),
-  );
-  useRefetchOnWindowFocus(refetchKnowledgeBases, skipKnowledgeBases);
-  const showKnowledgeBases = capabilities.canUseTeamKnowledgeBases && (knowledgeBaseDefinitions?.length ?? 0) > 0;
-
   // #2100: which roles the current user holds on this team, "Admin · Analyst"
   // style — `permissions` alone cannot answer this (can_run_evaluations/
   // can_manage_evaluation_corpus are granted to team_analyst AND team_admin,
@@ -235,15 +223,6 @@ export default function TeamContentNavbar() {
       linkProps: { to: `/team/${teamId}/prompts` },
     },
   ];
-  if (showKnowledgeBases) {
-    navigationItems.push({
-      type: "link",
-      label: t("rework.sidebar.team.menu.knowledgeBases"),
-      trailingBadge: <BetaBadge />,
-      icon: { category: "outlined", type: "database", filled: true },
-      linkProps: { to: `/team/${teamId}/knowledge-bases` },
-    });
-  }
   if (showWiki) {
     navigationItems.push({
       type: "link",
@@ -298,16 +277,6 @@ export default function TeamContentNavbar() {
       label: t("rework.teamSettings.navigation.responsibilities"),
       icon: { category: "outlined", type: "admin_panel_settings", filled: false },
       linkProps: { to: `${settingsBase}/responsibilities` },
-    });
-  }
-  if (canSeeActivity) {
-    // Same "build" icon as the platform admin Tasks entry — one shared surface,
-    // identical ergonomy at both levels (OPS-04 §3.4).
-    settingsItems.push({
-      type: "link",
-      label: t("rework.teamSettings.navigation.activity"),
-      icon: { category: "outlined", type: "build", filled: false },
-      linkProps: { to: `${settingsBase}/activity` },
     });
   }
   if (canSeeActivity) {

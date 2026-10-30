@@ -18,7 +18,6 @@ import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts"
 import TeamSettingsMembers from "@shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembers.tsx";
 import TeamSettingsParameters from "@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx";
 import TeamSettingsRouting from "@shared/organisms/TeamSettingsPanel/TeamSettingsRouting/TeamSettingsRouting.tsx";
-import TaskActivity from "@shared/organisms/TaskActivity/TaskActivity.tsx";
 import TeamSettingsResponsibilities from "@shared/organisms/TeamSettingsPanel/TeamSettingsResponsibilities/TeamSettingsResponsibilities.tsx";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
@@ -63,7 +62,7 @@ export default function TeamSettingsPage() {
     section === "members" ||
     (section === "responsibilities" && charterEnabled && (isTeamAdmin || isPendingTeamAdmin)) ||
     ((section === "parameters" || section === "retention") && canUpdateInfo) ||
-    ((section === "activity" || section === "routing") && hasElevatedTeamRole(capabilities));
+    (section === "routing" && hasElevatedTeamRole(capabilities));
   if (section && !sectionAllowed) return <Navigate to={`/team/${teamId}/settings/members`} replace />;
 
   const renderSection = () => {
@@ -76,10 +75,6 @@ export default function TeamSettingsPage() {
         // Retention now lives inside the Parameters section (no dedicated tab).
         // Redirect any old /settings/retention link there.
         return <Navigate to={`/team/${teamId}/settings/parameters`} replace />;
-      case "activity":
-        // The exact same shared surface the platform admin sees (OPS-04 §3.4),
-        // scoped to this team. Server enforces CAN_READ_MEMBERS.
-        return <TaskActivity scope="team" teamId={teamId} />;
       case "routing":
         // Team admins write the team's models; a personal space's owner holds
         // no team_admin relation but owns the space.

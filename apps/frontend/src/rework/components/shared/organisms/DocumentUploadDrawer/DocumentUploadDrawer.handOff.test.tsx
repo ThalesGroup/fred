@@ -44,7 +44,22 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
 vi.mock("react-redux", () => ({
-  useDispatch: () => (action: { type: string; payload?: Record<string, unknown> }) => probe.dispatched.push(action),
+  useDispatch: () => (action: { type: string; payload?: Record<string, unknown> }) =>
+    action.type === "preflight"
+      ? {
+          unwrap: async () => ({
+            conflicts: [],
+            storage: {
+              uploads_enabled: true,
+              processing_enabled: true,
+              max_file_bytes: 104857600,
+              used_bytes: 0,
+              reserved_bytes: 0,
+              quota_bytes: 1000,
+            },
+          }),
+        }
+      : probe.dispatched.push(action),
 }));
 vi.mock("react-dropzone", () => ({
   useDropzone: () => ({ getRootProps: () => ({}), getInputProps: () => ({}), isDragActive: false }),
@@ -54,31 +69,19 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({}) }
 vi.mock("@shared/molecules/Select/Select", () => ({ default: () => null }));
 vi.mock("@shared/molecules/UploadWarningBanner/UploadWarningBanner", () => ({ default: () => null }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
-vi.mock("../../../../../slices/streamDocumentUpload", () => ({
-  leafFileName: (file: File) => file.name.split("/").pop() || file.name,
-  streamUploadOrProcessDocument: (files: File[], _mode: string, _metadata: unknown, onTask?: (t: unknown) => void) => {
-    probe.transferStarted += 1;
-    return new Promise((resolve) => {
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  enhancedControlPlaneApi: { endpoints: { preflight: { initiate: () => ({ type: "preflight" }) } } },
+}));
+vi.mock("../../../../features/imports/managerImportRun", () => ({
+  runManagerImport: (_dispatch: unknown, _space: string, files: { file: File }[]) => {
+    probe.transferStarted++;
+    return new Promise<void>((resolve) =>
       probe.releases.push(() => {
-        for (const file of files) {
-          probe.registeredTasks.push(file.name);
-          onTask?.({ taskId: `task-${file.name}`, documentUid: `uid-${file.name}`, filename: file.name });
-        }
-        resolve([]);
-      });
-    });
+        probe.registeredTasks.push(...files.map(({ file }) => file.name));
+        resolve();
+      }),
+    );
   },
-}));
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
-  useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation: () => [
-    () => ({ unwrap: () => Promise.resolve({ conflicts: [] }) }),
-  ],
-  useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation: () => [
-    () => ({ unwrap: () => Promise.resolve({ allowed: true }) }),
-  ],
-}));
-vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
-  useGetTeamQuery: () => ({ data: undefined }),
 }));
 
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
@@ -110,11 +113,11 @@ async function saveFifty() {
   act(() => {
     root.render(
       <DocumentUploadDrawer
+        managerDestination={{ spaceId: "space", folderId: "folder", processingEnabled: true }}
         isOpen
         onClose={probe.onClose}
         onUploadComplete={probe.onUploadComplete}
         teamId="team-a"
-        metadata={{ tags: ["tag-base"] }}
         initialFiles={files}
       />,
     );
@@ -160,15 +163,6 @@ describe("DocumentUploadDrawer hands the import off", () => {
     expect(probe.dispatched.map((action) => action.type)).toContain("tasks/importPanelOpenRequested");
   });
 
-  it("lists every file in the panel before a byte moves", async () => {
-    await saveFifty();
-
-    // Waiting for each file's own transfer would leave most of the import
-    // invisible: batches run a few at a time, so the last files sit queued
-    // with nothing on screen saying they exist.
-    expect(probe.dispatched.filter((a) => a.type === "tasks/uploadStarted").length).toBe(50);
-  });
-
   it("keeps reporting each file to the panel after the dialog is gone", async () => {
     await saveFifty();
     expect(probe.registeredTasks).toEqual([]);
@@ -176,10 +170,6 @@ describe("DocumentUploadDrawer hands the import off", () => {
     await finishTheTransfer();
 
     expect(probe.registeredTasks.length).toBe(50);
-    // Each file's entry switches over to its real task as the server names it.
-    expect(probe.dispatched.filter((a) => a.type === "tasks/uploadHandedOff").length).toBe(
-      probe.registeredTasks.length,
-    );
   });
 
   it("refreshes the folder only once the import is through", async () => {
@@ -189,38 +179,5 @@ describe("DocumentUploadDrawer hands the import off", () => {
     await finishTheTransfer();
 
     expect(probe.onUploadComplete).toHaveBeenCalled();
-  });
-});
-
-describe("DocumentUploadDrawer files the import under the team that owns it", () => {
-  it("prefers the resolved team id over the URL alias", async () => {
-    // The panel matches an import against the team the SERVER reports for it,
-    // which is a real id. Filing it under "personal" would work until the page
-    // was reloaded, and the panel would then come back empty.
-    const files = [new File(["x"], "report.pdf")];
-    act(() => {
-      root.render(
-        <DocumentUploadDrawer
-          isOpen
-          onClose={probe.onClose}
-          teamId="personal"
-          importScopeId="team-of-this-user"
-          metadata={{ tags: ["tag-base"] }}
-          initialFiles={files}
-        />,
-      );
-    });
-    const save = [...container.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("documentLibrary.importCount"),
-    );
-    if (!save) throw new Error("save button not rendered");
-    await act(async () => {
-      save.click();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-
-    const started = probe.dispatched.filter((action) => action.type === "tasks/uploadStarted");
-    expect(started.length).toBeGreaterThan(0);
-    expect(started.every((action) => action.payload.teamId === "team-of-this-user")).toBe(true);
   });
 });

@@ -38,9 +38,6 @@ vi.mock("react-i18next", () => ({
 }));
 vi.mock("@shared/utils/Portal", () => ({ Portal: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({}) }));
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
-  useCreateTagMutation: () => [probe.createTag, { isLoading: false }],
-}));
 
 import CreateFolderModal from "./CreateFolderModal";
 import { MAX_FOLDER_DEPTH } from "@shared/organisms/DocumentUploadDrawer/droppedPaths";
@@ -91,7 +88,14 @@ const parentAtDepth = (depth: number) => Array.from({ length: depth }, (_, i) =>
 describe("CreateFolderModal guards", () => {
   it("blocks creation inside a parent already at MAX_FOLDER_DEPTH, with an inline explanation", () => {
     render(
-      <CreateFolderModal open onClose={() => {}} onCreated={() => {}} parentPath={parentAtDepth(MAX_FOLDER_DEPTH)} />,
+      <CreateFolderModal
+        onSubmit={probe.createTag}
+        maxDepth={MAX_FOLDER_DEPTH}
+        open
+        onClose={() => {}}
+        onCreated={() => {}}
+        parentPath={parentAtDepth(MAX_FOLDER_DEPTH)}
+      />,
     );
 
     expect(container.textContent).toContain("rework.resources.folderModal.tooDeep");
@@ -103,6 +107,8 @@ describe("CreateFolderModal guards", () => {
   it("allows creation one level above the cap", () => {
     render(
       <CreateFolderModal
+        onSubmit={probe.createTag}
+        maxDepth={MAX_FOLDER_DEPTH}
         open
         onClose={() => {}}
         onCreated={() => {}}
@@ -116,21 +122,31 @@ describe("CreateFolderModal guards", () => {
   });
 
   it("rejects a slashed name inline — it would smuggle extra levels past the cap", () => {
-    render(<CreateFolderModal open onClose={() => {}} onCreated={() => {}} parentPath="CIR" />);
+    render(
+      <CreateFolderModal
+        onSubmit={probe.createTag}
+        maxDepth={MAX_FOLDER_DEPTH}
+        open
+        onClose={() => {}}
+        onCreated={() => {}}
+        parentPath="CIR"
+      />,
+    );
 
     typeName("a/b/c");
     expect(container.textContent).toContain("rework.resources.folderModal.nameNoSlash");
     expect(createButton().hasAttribute("disabled")).toBe(true);
   });
 
-  it("does not apply the tag depth cap to the fs mkdir variant (custom onSubmit)", () => {
+  it("accepts a valid destination with the supplied create handler", () => {
     render(
       <CreateFolderModal
+        onSubmit={probe.createTag}
+        maxDepth={MAX_FOLDER_DEPTH}
         open
         onClose={() => {}}
         onCreated={() => {}}
-        onSubmit={async () => {}}
-        parentPath={parentAtDepth(MAX_FOLDER_DEPTH + 3)}
+        parentPath={parentAtDepth(MAX_FOLDER_DEPTH - 1)}
       />,
     );
 

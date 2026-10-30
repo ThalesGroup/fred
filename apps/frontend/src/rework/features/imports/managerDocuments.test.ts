@@ -73,5 +73,5 @@ it.each([true, false])("preserves canonical inclusion %s independently of a succ
     vectors: 48,
     rows: null,
   };
-  expect(presentManagerDocument(document, processing).source.retrievable).toBe(retrievable);
+  expect(presentManagerDocument(document, processing).retrievable).toBe(retrievable);
 });

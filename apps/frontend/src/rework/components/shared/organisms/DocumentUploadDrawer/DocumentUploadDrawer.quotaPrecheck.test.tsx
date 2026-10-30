@@ -39,7 +39,7 @@ const probe = vi.hoisted(() => ({
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
-vi.mock("react-redux", () => ({ useDispatch: () => () => {} }));
+vi.mock("react-redux", () => ({ useDispatch: () => (value: unknown) => value }));
 vi.mock("react-dropzone", () => ({
   useDropzone: () => ({ getRootProps: () => ({}), getInputProps: () => ({}), isDragActive: false }),
 }));
@@ -48,22 +48,25 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ sho
 vi.mock("@shared/molecules/Select/Select", () => ({ default: () => null }));
 vi.mock("@shared/molecules/UploadWarningBanner/UploadWarningBanner", () => ({ default: () => null }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
-vi.mock("../../../../../slices/streamDocumentUpload", () => ({
-  leafFileName: (file: File) => file.name.split("/").pop() || file.name,
-  streamUploadOrProcessDocument: (files: File[]) => {
-    for (const file of files) probe.scheduled.push(file.name);
-    return Promise.resolve([]);
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  enhancedControlPlaneApi: { endpoints: { preflight: { initiate: probe.precheck } } },
+}));
+vi.mock("../../../../features/imports/managerImportRun", () => ({
+  runManagerImport: async (_dispatch: unknown, _space: string, files: { file: File }[]) => {
+    probe.scheduled.push(...files.map(({ file }) => file.name));
   },
 }));
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
-  useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation: () => [
-    () => ({ unwrap: () => Promise.resolve({ conflicts: [] }) }),
-  ],
-  useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation: () => [probe.precheck],
-}));
-vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
-  useGetTeamQuery: () => ({ data: undefined }),
-}));
+const verdict = (used = 0) => ({
+  conflicts: [],
+  storage: {
+    uploads_enabled: true,
+    processing_enabled: true,
+    max_file_bytes: 104857600,
+    used_bytes: used,
+    reserved_bytes: 0,
+    quota_bytes: 1000,
+  },
+});
 
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
 
@@ -112,10 +115,10 @@ async function clickSave() {
 
 const drawer = (
   <DocumentUploadDrawer
+    managerDestination={{ spaceId: "space", folderId: "folder", processingEnabled: true }}
     isOpen
     onClose={() => {}}
     teamId="team-a"
-    metadata={{ tags: ["tag-base"] }}
     ensureFolderPath={probe.ensureFolderPath}
     initialFiles={[fileOfSize("a.pdf", 60), fileOfSize("b.pdf", 40)]}
   />
@@ -123,21 +126,27 @@ const drawer = (
 
 describe("DocumentUploadDrawer quota precheck at Save", () => {
   it("sends ONE precheck with the batch's declared total and destination", async () => {
-    probe.precheck.mockReturnValue({ unwrap: () => Promise.resolve({ allowed: true }) });
+    probe.precheck.mockReturnValue({ unwrap: () => Promise.resolve(verdict()) });
     render(drawer);
 
     await clickSave();
 
     expect(probe.precheck).toHaveBeenCalledTimes(1);
     expect(probe.precheck).toHaveBeenCalledWith({
-      quotaPrecheckRequest: { tags: ["tag-base"], team_id: "team-a", total_size: 100 },
+      id: "folder",
+      preflight: {
+        files: [
+          { name: "a.pdf", size: 60 },
+          { name: "b.pdf", size: 40 },
+        ],
+      },
     });
     expect(probe.scheduled).toEqual(["a.pdf", "b.pdf"]);
   });
 
   it("a denial rejects the whole batch before any tag creation or upload, showing the server's numbers", async () => {
     probe.precheck.mockReturnValue({
-      unwrap: () => Promise.resolve({ allowed: false, scope: "team", owner_id: "team-a", current: 950, limit: 1000 }),
+      unwrap: () => Promise.resolve(verdict(950)),
     });
     render(drawer);
 
@@ -154,19 +163,20 @@ describe("DocumentUploadDrawer quota precheck at Save", () => {
     expect(save?.hasAttribute("disabled")).toBe(true);
   });
 
-  it("a precheck transport error is advisory: the save proceeds to enforcement", async () => {
+  it("a preflight transport error keeps the files unsent", async () => {
     probe.precheck.mockReturnValue({ unwrap: () => Promise.reject(new Error("503")) });
     render(drawer);
 
     await clickSave();
 
-    expect(probe.scheduled).toEqual(["a.pdf", "b.pdf"]);
+    expect(probe.scheduled).toEqual([]);
+    expect(probe.showError).toHaveBeenCalled();
     expect(container.textContent).not.toContain("documentLibrary.storageQuotaExceededTitle");
   });
 
   it("removing a file clears a shown denial so the user can retry", async () => {
     probe.precheck.mockReturnValue({
-      unwrap: () => Promise.resolve({ allowed: false, scope: "team", owner_id: "team-a", current: 950, limit: 1000 }),
+      unwrap: () => Promise.resolve(verdict(950)),
     });
     render(drawer);
     await clickSave();

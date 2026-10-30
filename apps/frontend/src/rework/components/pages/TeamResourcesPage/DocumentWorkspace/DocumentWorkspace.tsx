@@ -11,12 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 import { useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fromEvent } from "file-selector";
 import { useTranslation } from "react-i18next";
-import { useDispatch, useSelector } from "react-redux";
+import { useDispatch } from "react-redux";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import Select from "@shared/molecules/Select/Select";
 import ResourceExplorer from "@shared/organisms/ResourceExplorer/ResourceExplorer.tsx";
@@ -38,62 +37,14 @@ import {
 } from "@shared/organisms/DocumentUploadDrawer/droppedPaths.ts";
 import DocumentPreviewDrawer from "@shared/molecules/DocumentPreviewDrawer/DocumentPreviewDrawer.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import {
-  type DocumentMetadata,
-  type IngestionProcessingProfile,
-  type OwnerFilter,
-  type TagWithItemsId,
-  useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
-  useCreateTagMutation,
-  useDeleteTagMutation,
-  useListTagsQuery,
-  useListTasksKnowledgeFlowV1TasksGetQuery,
-  useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
-  useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
-  useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
-} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import {
-  buildTree,
-  collectDescendantTagIds,
-  findNode,
-  fullPath,
-  withoutMachineWritten,
-  type TagNode as LegacyTagNode,
-} from "../../../../../shared/utils/tagTree.ts";
-import {
-  importPanelOpenRequested,
-  selectActiveTasks,
-  selectAllTasks,
-  taskRegistered,
-} from "../../../../features/tasks/taskSlice";
-import { TERMINAL_STATES, type TaskViewModel } from "../../../../features/tasks/taskTypes";
-import { useRefetchOnTaskSettled } from "../../../../features/tasks/useRefetchOnTaskSettled";
-import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOnNewTaskTarget";
-import { useDocumentCommands } from "../../../../../components/documents/common/useDocumentCommands";
-import { downloadManyAsZip } from "../../../../../utils/downloadUtils.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
-import {
-  useGetTeamQuery,
-  useUsersByIdsQuery,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
-import { userDisplayName } from "@core/utils/userDisplayName.ts";
-import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { formatBytes } from "@shared/utils/formatBytes.ts";
 import { formatDateTime } from "../../../../utils/formatDateTime.ts";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
-import ManageLabelsModal from "../ManageLabelsModal/ManageLabelsModal.tsx";
 import RenameModal from "../RenameModal/RenameModal.tsx";
 import { StatusChip } from "@shared/molecules/StatusChip/StatusChip.tsx";
 import type { DocStatus } from "@shared/atoms/DocStatusBadge/DocStatusBadge.tsx";
 import BulkActionsBar from "../BulkActionsBar/BulkActionsBar.tsx";
-import { deriveDocStatus } from "@shared/molecules/StatusChip/deriveDocStatus.ts";
-import { pagesToRefreshOnTaskCompletion } from "./refreshOnCompletion.ts";
-import {
-  buildFolderRollups,
-  collectFailedDocsByTag,
-  indexFoldersByDocUid,
-  resolveDocOutcomes,
-} from "./folderRollups.ts";
 import styles from "./DocumentWorkspace.module.css";
 import {
   DEFAULT_ORDERING,
@@ -103,7 +54,6 @@ import {
   type DocumentOrdering,
   type DocumentSortField,
 } from "./documentOrdering.ts";
-
 import { startManagerProcessing } from "../../../../features/imports/managerImportRun";
 import {
   useSetRetrievableMutation,
@@ -120,41 +70,18 @@ import {
   downloadManagerDocument,
   type ResourceDocument,
 } from "../../../../features/imports/managerDocuments";
-import type { Folder } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-
-// Presentation nodes retain the original renderer. Manager metadata is never a KF tag:
-// no tag id is synthesized and document operations cannot consume these nodes.
-type TagNode = LegacyTagNode & { managerFolder?: Folder };
-const folderNode = (folder: Folder): TagNode => ({
-  name: folder.name,
-  full: folder.id,
-  children: new Map(),
-  tagsHere: [],
-  managerFolder: folder,
-});
-
+import type { Folder, Profile } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+type FolderNode = {
+  name: string;
+  full: string;
+  managerFolder?: Folder;
+};
+const folderNode = (folder: Folder): FolderNode => ({ name: folder.name, full: folder.id, managerFolder: folder });
 const DEFAULT_PAGE_SIZE = 50;
-// Port of main's DocumentLibraryList live-status loop: while a loaded row is
-// processing, its folder page is reloaded on this cadence so the badge flips
-// to Ready/Failed without a manual refresh.
 const DOC_STATUS_POLL_MS = 3000;
-// Separator for the memo keys the folder rollup below tracks its live inputs
-// by. NUL can never appear inside a tag id or a document uid, so two different
-// id sets can never join to the same string — unlike a comma, which a
-// scheduler-pull uid (`pull-{source_tag}-{hash}`, from a configurable tag)
-// could carry. Keys are compared, never split back apart.
-const KEY_SEP = "\u0000";
-interface PageState {
-  docs: DocumentMetadata[];
-  total: number;
-  offset: number;
-  loading: boolean;
-  loaded: boolean;
-}
-
 interface DocumentWorkspaceProps {
   teamId: string;
-  managerSpaceId?: string;
+  managerSpaceId: string;
   /** The owning team's real id, when `teamId` is the "personal" URL alias.
    *  Only the import panel's scoping uses it; everywhere else `teamId` is
    *  already the real one. */
@@ -165,83 +92,23 @@ interface DocumentWorkspaceProps {
    * stats cards (file count/size by type) refresh without owning any of
    * this workspace's own mutation plumbing. */
   onDocumentsChanged?: () => void;
-  /** The library this workspace is rooted at, by tag id — the breadcrumb
-   * starts there and nothing above it is reachable. Given as an id rather than
-   * a path because that is what a caller holds and because a path can be
-   * renamed underneath it. Absent means the team corpus itself, which is also
-   * the only mode that leaves out the libraries a machine fills: once inside
-   * one, its contents are precisely what you came to see. */
-  rootTagId?: string;
-  /** Offer no way to write. A Knowledge Base library is filled by its pod and
-   * the backend refuses every person-facing mutation against it, so upload,
-   * folder creation, rename, move, deletion and the bulk selection they serve
-   * are absent rather than shown disabled. Reading — opening, previewing,
-   * downloading, searching — is untouched. */
-  readOnly?: boolean;
 }
-
-/** The "User Assets" tag is surfaced in its own tab, not in the folder tree. */
-const isUserAssetsTag = (name: string, path?: string | null) => name === "User Assets" || path === "user-assets";
-
-type Row = { kind: "folder"; node: TagNode } | { kind: "document"; doc: ResourceDocument };
-
-type DocMenuAction = "rename" | "download" | "searchable" | "relaunch" | "delete" | "labels";
-
+type Row =
+  | {
+      kind: "folder";
+      node: FolderNode;
+    }
+  | {
+      kind: "document";
+      doc: ResourceDocument;
+    };
+type DocMenuAction = "rename" | "download" | "searchable" | "relaunch" | "delete";
 function rowKey(row: Row): string {
-  return row.kind === "folder" ? `folder:${row.node.full}` : `doc:${row.doc.identity.document_uid}`;
+  return row.kind === "folder" ? `folder:${row.node.full}` : `doc:${row.doc.id}`;
 }
-
 /** An OS file drag (not a text/element drag) — shared by every drop surface. */
 const isFileDrag = (event: React.DragEvent) => event.dataTransfer.types.includes("Files");
-
-// identity.document_name is always "Original file name incl. extension" —
-// the source of truth for both display and extension, unlike identity.title
-// (see embeddedTitle below).
-// Matches the backend's own extension check (Path(name).suffix) in
-// rename_document — a rename may never change it (DOCUMENT-RENAME-RFC.md §4).
-function documentExtension(doc: DocumentMetadata): string {
-  const dot = doc.identity.document_name.lastIndexOf(".");
-  return dot > 0 ? doc.identity.document_name.slice(dot) : "";
-}
-
-function rowLabel(row: Row): string {
-  return row.kind === "folder" ? row.node.name : documentDisplayName(row.doc);
-}
-
-// Every tag under `node` (its sub-folders included) paired with the directory it
-// sits at, expressed relative to `basePrefix` (the folder currently being
-// viewed). Used by the bulk download to mirror the on-disk tree inside the ZIP —
-// a selected folder "Reports" viewed from "A/B" yields `relDir` values like
-// "Reports" and "Reports/2024", so its documents zip under those paths.
-// collectDescendantTagIds returns ids only; this keeps the path alongside each.
-function descendantTagsWithPaths(node: TagNode, basePrefix: string): { tagId: string; relDir: string }[] {
-  const out: { tagId: string; relDir: string }[] = [];
-  const prefix = basePrefix ? `${basePrefix}/` : "";
-  const walk = (n: TagNode) => {
-    const relDir = prefix && n.full.startsWith(prefix) ? n.full.slice(prefix.length) : n.full;
-    n.tagsHere.forEach((tag) => out.push({ tagId: tag.id, relDir }));
-    n.children.forEach((child) => walk(child));
-  };
-  walk(node);
-  return out;
-}
-
-/**
- * Corpus d'équipe tab (RFC §13, Resources dashboard v2): breadcrumb drill-down
- * through one library (tag) level at a time — replaces the pre-FRONT-09.G
- * always-expanded tree — with a `DataTable` of the current folder's direct
- * children (subfolders + documents). Heavy listing stays on the backend:
- * folders lazy-load their first document page on entry.
- */
-function DocumentWorkspace({
-  teamId,
-  managerSpaceId,
-  importScopeId,
-  isPersonalTeam,
-  onDocumentsChanged,
-  rootTagId,
-  readOnly = false,
-}: DocumentWorkspaceProps) {
+function DocumentWorkspace({ teamId, managerSpaceId, importScopeId, onDocumentsChanged }: DocumentWorkspaceProps) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   // One place the sortable columns get their label, shared by the column
@@ -249,8 +116,6 @@ function DocumentWorkspace({
   const columnLabel = useCallback((field: DocumentSortField) => t(SORTABLE_COLUMN_KEYS[field]), [t]);
   const { showSuccess, showError, showWarn, showInfo } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
-  const activeTasks = useSelector(selectActiveTasks);
-
   const [currentFolderFull, setCurrentFolderFull] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE);
@@ -316,38 +181,7 @@ function DocumentWorkspace({
       setSelectedKeys(new Set());
     }
   }, [directory, folderOffset, rowsPerPage]);
-  const { data: team } = useGetTeamQuery({ teamId }, { skip: !!managerSpaceId });
-  const { canUpdateResources } = useTeamCapabilities(team);
-  // The single gate every write affordance already passes through — folder and
-  // document menus, both drop targets, the toolbar, folder creation on upload.
-  // A read-only workspace withholds them exactly as a member lacking the
-  // capability does, which is right: the backend refuses a person's write into
-  // a machine-filled library, so offering the action could only produce a
-  // failed request. Reading is untouched — download is deliberately outside
-  // this gate below.
-  const canCreateFolder = (managerSpaceId ? directory?.can_write === true : canUpdateResources) && !readOnly;
-
-  const ownerFilter: OwnerFilter = isPersonalTeam ? "personal" : "team";
-  const {
-    data: tags,
-    isLoading: tagsLoading,
-    refetch: refetchTagsQuery,
-  } = useListTagsQuery(
-    {
-      type: "document",
-      ownerFilter,
-      teamId: isPersonalTeam ? undefined : teamId,
-      limit: 10000,
-      offset: 0,
-    },
-    { skip: !!managerSpaceId },
-  );
-  // Every add/delete path in this workspace (upload, single/bulk removal,
-  // folder deletion, a newly-registered ingestion task) already calls
-  // refetchTags() to refresh the folder tree — piggyback the stats refresh
-  // on that same signal instead of threading it through each call site.
-  // Whether this workspace is still on screen. Read by the import drawer's
-  // completion callback, which outlives it.
+  const canCreateFolder = directory?.can_write === true;
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -355,521 +189,147 @@ function DocumentWorkspace({
       mounted.current = false;
     };
   }, []);
-
-  const refetchTags = useCallback(() => {
-    onDocumentsChanged?.();
-    return refetchTagsQuery();
-  }, [refetchTagsQuery, onDocumentsChanged]);
-
-  // Has the library we were rooted at been found? Not yet loaded and deleted
-  // look the same here, and both must withhold: `baseFull` below would be null
-  // either way, which is also the corpus-root sentinel, and a rooted tree
-  // carries every team tag. Without this the page would answer "show me one
-  // library" with the whole corpus — and a library outliving its folder is a
-  // supported state, since deleting one stays available to people.
-  const rootResolved = !rootTagId || (tags ?? []).some((tag) => tag.id === rootTagId);
-
-  const tree = useMemo(() => {
-    const documentTags = (tags ?? []).filter((tag) => !isUserAssetsTag(tag.name, tag.path));
-    // Rooted inside one library, everything it holds is in scope — the filter
-    // only applies to the corpus, where a machine-filled library is not one of
-    // the folders people manage.
-    if (!rootResolved) return buildTree([]);
-    return buildTree(rootTagId ? documentTags : withoutMachineWritten(documentTags));
-  }, [tags, rootTagId, rootResolved]);
-
-  // Where the breadcrumb starts: null at the Corpus root (the tree's synthetic
-  // top node), or the path of the library this workspace was rooted at.
-  const baseFull = useMemo(() => {
-    if (!rootTagId) return null;
-    const rootTag = (tags ?? []).find((tag) => tag.id === rootTagId);
-    return rootTag ? fullPath(rootTag) : null;
-  }, [tags, rootTagId]);
-
-  // Null means the base, wherever that is — so navigation keeps working across
-  // the render where `baseFull` resolves.
-  const currentFull = currentFolderFull ?? baseFull;
-  // Stack of previously-viewed folders, oldest first — the back button pops
-  // the most recent one. Not "go to parent": if you drilled in from a
-  // search result or a distant breadcrumb click, back returns to wherever
-  // you actually came from, which may not be this folder's parent. Whether
-  // the button itself is shown/enabled tracks currentFolderFull (are we at
-  // the root) instead — navigating to root via the breadcrumb still pushes
-  // here like any other navigation, so this stack alone can't answer that.
+  const currentFull = currentFolderFull;
   const [, setNavigationHistory] = useState<(string | null)[]>([]);
-  const [perTag, setPerTag] = useState<Record<string, PageState>>({});
-  // Latest page offsets, for the status-poll interval below: it reads them when
-  // it fires, and must not resubscribe every time a page loads.
-  const perTagRef = useRef(perTag);
-  perTagRef.current = perTag;
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string | number>>(new Set());
-  const [renameTarget, setRenameTarget] = useState<
-    { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata } | null
-  >(null);
-  // Document whose per-stage ingestion errors are being shown (#2315).
-  // The vocabulary query itself lives inside ManageLabelsModal — it only
-  // needs to be fetched while that dialog is open, which is exactly this
-  // component's own mount lifetime (see the conditional render below).
-  const [labelsTarget, setLabelsTarget] = useState<DocumentMetadata | null>(null);
+  const [renameTarget, setRenameTarget] = useState<FolderNode | null>(null);
   const relaunchRequests = useRef(new Set<string>());
   const [pendingRelaunches, setPendingRelaunches] = useState(new Set<string>());
   const [profilePromptOpen, setProfilePromptOpen] = useState(false);
-  const [relaunchProfile, setRelaunchProfile] = useState<IngestionProcessingProfile>();
-  const profileAnswer = useRef<((profile: IngestionProcessingProfile | undefined) => void) | null>(null);
-  const answerProfile = (profile: IngestionProcessingProfile | undefined) => {
+  const [relaunchProfile, setRelaunchProfile] = useState<Profile>();
+  const profileAnswer = useRef<((profile: Profile | undefined) => void) | null>(null);
+  const answerProfile = (profile: Profile | undefined) => {
     setProfilePromptOpen(false);
     profileAnswer.current?.(profile);
     profileAnswer.current = null;
   };
-  // The SSE task feed updates badges before processing stages reach the browse snapshot.
-  const activeDocTaskByUid = useMemo(() => {
-    const byUid = new Map<string, TaskViewModel>();
-    for (const task of activeTasks) {
-      if (task.target?.type === "document" && task.target.id) byUid.set(task.target.id, task);
-    }
-    return byUid;
-  }, [activeTasks]);
-  // Team history includes terminal outcomes; personal history needs explicit state queries.
-  const { data: taskHistory } = useListTasksKnowledgeFlowV1TasksGetQuery(
-    isPersonalTeam ? { scope: "user", kind: "ingestion" } : { scope: "team", teamId, kind: "ingestion" },
-    { skip: !!managerSpaceId },
-  );
-  // User-scoped listing hides terminal tasks unless a state is explicitly requested.
-  const { data: personalFailures } = useListTasksKnowledgeFlowV1TasksGetQuery(
-    { scope: "user", kind: "ingestion", state: "failed" },
-    { skip: !!managerSpaceId || !isPersonalTeam },
-  );
-  const { data: personalSuccesses } = useListTasksKnowledgeFlowV1TasksGetQuery(
-    { scope: "user", kind: "ingestion", state: "succeeded" },
-    { skip: !!managerSpaceId || !isPersonalTeam },
-  );
-  const allTasks = useSelector(selectAllTasks);
-  // Keyed on the session's terminal outcomes, not on `allTasks` itself: the task
-  // store is a fresh array on EVERY SSE progress event, and re-ranking the
-  // team's whole history on each one is precisely what the poll interval's
-  // `pendingTagKey` goes to such lengths to avoid.
-  const liveOutcomeKey = allTasks
-    .filter((task) => TERMINAL_STATES.has(task.state) && task.target?.type === "document")
-    .map((task) => `${task.target?.id}:${task.state}`)
-    .sort()
-    .join(KEY_SEP);
-  const docOutcomes = useMemo(
-    () =>
-      resolveDocOutcomes(
-        [...(taskHistory?.tasks ?? []), ...(personalFailures?.tasks ?? []), ...(personalSuccesses?.tasks ?? [])],
-        allTasks,
-      ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- see liveOutcomeKey
-    [taskHistory, personalFailures, personalSuccesses, liveOutcomeKey],
-  );
-
-  // Documents that finished during THIS browser session. Read from the Redux
-  // store ALONE, deliberately — the history exists only to rank outcomes, and
-  // folding it in here would mark every document the team ever ingested as
-  // "just finished", turning a transient "your upload landed" cue into a
-  // permanent green tick on every ready row (#2315).
-  const justCompletedDocUids = useMemo(() => {
-    const uids = new Set<string>();
-    for (const task of allTasks) {
-      if (task.state === "succeeded" && task.target?.type === "document" && task.target.id) uids.add(task.target.id);
-    }
-    return uids;
-  }, [allTasks]);
   const getDocStatus = (doc: ResourceDocument): DocStatus | "stored" => {
-    if (doc.managerDocument) {
-      const status = doc.managerProcessing?.status;
-      return status === "succeeded" ? "ready" : status === "failed" ? "failed" : status ? "processing" : "stored";
-    }
-    const status = deriveDocStatus(doc, activeDocTaskByUid.get(doc.identity.document_uid)).status;
-    if (status === "processing" || activeDocTaskByUid.has(doc.identity.document_uid)) return status;
-    return docOutcomes.failed.has(doc.identity.document_uid) ? "failed" : status;
+    const status = doc.processing?.status;
+    return status === "succeeded" ? "ready" : status === "failed" ? "failed" : status ? "processing" : "stored";
   };
-  // A TEAMMATE's ingestion is invisible in `activeTasks`: the SSE store is
-  // user-scoped (useTaskRehydration fetches scope=user), so only one's own
-  // tasks land there. The team listing above carries everyone's, in-flight
-  // ones included — `scope=team` does not exclude terminal states, so it is
-  // the only place a colleague's running ingestion shows up.
-  const liveTeamDocUids = useMemo(() => {
-    const uids = new Set<string>();
-    for (const task of taskHistory?.tasks ?? []) {
-      if (!TERMINAL_STATES.has(task.state) && task.target?.type === "document" && task.target.id) {
-        uids.add(task.target.id);
-      }
-    }
-    return uids;
-  }, [taskHistory]);
-  // Queue wait and worker retries remain active; absence from the local feed
-  // is never proof that a workflow stopped.
-  const isRelaunchable = (doc: ResourceDocument): boolean => {
-    if (doc.managerDocument)
-      return (
-        !pendingRelaunches.has(doc.identity.document_uid) &&
-        (!doc.managerProcessing || doc.managerProcessing.status === "failed")
-      );
-    const uid = doc.identity.document_uid;
-    if (pendingRelaunches.has(uid) || activeDocTaskByUid.has(uid) || liveTeamDocUids.has(uid)) return false;
-    if (Object.values(doc.processing?.stages ?? {}).includes("in_progress")) return false;
-    const status = deriveDocStatus(doc).status;
-    return status === "failed" || status === "raw";
-  };
+  const isRelaunchable = (doc: ResourceDocument) =>
+    !pendingRelaunches.has(doc.id) && (!doc.processing || doc.processing.status === "failed");
   const [uploadOpen, setUploadOpen] = useState(false);
   // Files dropped on a folder row, handed to the upload drawer as its initial list;
   // cleared on close so a later "+"-opened drawer starts empty.
   const [droppedFiles, setDroppedFiles] = useState<File[] | undefined>(undefined);
-  // Set only when the upload drawer was opened by dropping files onto a
-  // folder row — the drop target is not necessarily the folder currently
-  // being viewed, so it overrides destinationPath/tags for that one upload
-  // without changing navigation. Cleared alongside droppedFiles on close.
-  const [dropTargetNode, setDropTargetNode] = useState<TagNode | null>(null);
+  const [dropTargetNode, setDropTargetNode] = useState<FolderNode | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   // OS-file drag hovering anywhere over the opened folder's page (not a
   // specific folder row) — drives the full-page "drop here" overlay.
   const [pageDragOver, setPageDragOver] = useState(false);
-  // Folder tags created (or resolved) while the CURRENT upload drawer is open,
-  // keyed by full path — sibling subdirectories of one dropped folder share
-  // parent chains through it instead of racing duplicate POST /tags. Cleared
-  // when the drawer closes: a folder deleted later must not resurrect its id.
-  const pendingFolderTagIds = useRef(new Map<string, string>());
   const [createOpen, setCreateOpen] = useState(false);
-  // Client-side filter over the current folder's already-loaded rows — not
-  // the deferred server-side search from RFC §13.4 (POST .../browse's
-  // `query` field), which would search across the whole library, not just
-  // what's on screen. Same pattern as the team members table's search.
-  // Shared across the whole browser (not per-tag) — matches how the members
-  // table's rows-per-page selector is one setting for the whole DataTable.
-  // Ordering travels to the server with every browse: only one page comes
-  // back, so sorting it in the browser would order 50 rows and call it a
-  // sorted folder. Same lifetime as rowsPerPage — one setting for the view.
-
-  const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
-  const latestPageRequest = useRef(new Map<string, symbol>());
-  const [fetchTagSizes] = useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation();
-  const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
-  const [deleteTag] = useDeleteTagMutation();
-  const [createTag] = useCreateTagMutation();
-  // Direct retrievable mutation for the folder-aware "exclude from search" bulk
-  // action (#2446): a folder's descendant documents are toggled one PUT each,
-  // and unlike commands.toggleRetrievable this stays silent so a large subtree
-  // shows a single summary toast instead of one per document.
   const [updateManagerRetrievable] = useSetRetrievableMutation();
-  const [updateRetrievable] =
-    useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
-
-  const managerNode = useMemo<TagNode>(() => {
-    const current = directory?.ancestors[directory.ancestors.length - 1];
-    return {
-      ...(current ? folderNode(current) : { name: "", full: "", tagsHere: [], children: new Map() }),
-      children: new Map(
-        (directory?.items ?? []).flatMap((entry) =>
-          entry.kind === "folder" ? [[entry.data.id, folderNode(entry.data)] as const] : [],
-        ),
-      ),
-    };
-  }, [directory]);
-  const currentNode: TagNode = managerSpaceId ? managerNode : currentFull ? findNode(tree, currentFull) : tree;
-  const displayPath = managerSpaceId ? directory?.ancestors.map((folder) => folder.name).join("/") : currentFull;
+  const currentFolder = directory?.ancestors[directory.ancestors.length - 1];
+  const currentNode: FolderNode = currentFolder ? folderNode(currentFolder) : { name: "", full: "" };
+  const childFolders = useMemo(
+    () => (directory?.items ?? []).flatMap((entry) => (entry.kind === "folder" ? [folderNode(entry.data)] : [])),
+    [directory],
+  );
+  const displayPath = directory?.ancestors.map((folder) => folder.name).join("/");
   const location = `${teamId}:${currentFull ?? ""}`;
   const locationRef = useRef(location);
   locationRef.current = location;
-  const documentsUnavailable = () => showInfo?.({ summary: t("rework.resources.documentsUnavailable") });
-  const currentTag = currentNode.tagsHere[0] ?? null;
-
-  const loadTagPage = useCallback(
-    async (tagId: string, offset: number, limit: number = rowsPerPage, sort: DocumentOrdering = ordering) => {
-      const request = Symbol();
-      latestPageRequest.current.set(tagId, request);
-      setPerTag((prev) => ({
-        ...prev,
-        [tagId]: {
-          docs: prev[tagId]?.docs ?? [],
-          total: prev[tagId]?.total ?? 0,
-          offset,
-          loading: true,
-          loaded: prev[tagId]?.loaded ?? false,
-        },
-      }));
-      try {
-        const res = await browseDocumentsByTag({
-          browseDocumentsByTagRequest: { tag_id: tagId, offset, limit, sort_by: sort.by, sort_order: sort.order },
-        }).unwrap();
-        if (latestPageRequest.current.get(tagId) !== request) return;
-        setPerTag((prev) => ({
-          ...prev,
-          [tagId]: { docs: res.documents ?? [], total: res.total ?? 0, offset, loading: false, loaded: true },
-        }));
-      } catch {
-        if (latestPageRequest.current.get(tagId) !== request) return;
-        setPerTag((prev) => ({ ...prev, [tagId]: { ...prev[tagId], loading: false } as PageState }));
-      }
-    },
-    [browseDocumentsByTag, rowsPerPage, ordering],
-  );
-
-  const handleRowsPerPageChange = useCallback(
-    (limit: number) => {
-      setRowsPerPage(limit);
-      setFolderOffset(0);
-      if (currentTag) void loadTagPage(currentTag.id, 0, limit);
-    },
-    [currentTag, loadTagPage],
-  );
-
-  // Back to the first page: page 3 of a name-ordered folder holds different
-  // documents than page 3 of a size-ordered one, so keeping the offset would
-  // land the reader in an unrelated slice. The new ordering is passed
-  // explicitly for the same reason `handleRowsPerPageChange` passes its limit
-  // — `loadTagPage` would otherwise close over the pre-update state.
-  const handleSortChange = useCallback(
-    (next: SortState | null) => {
-      const sort = orderingFromSortState(next, columnLabel);
-      setOrdering(sort);
-      setFolderOffset(0);
-      if (currentTag) void loadTagPage(currentTag.id, 0, rowsPerPage, sort);
-    },
-    [currentTag, loadTagPage, rowsPerPage, columnLabel],
-  );
-
-  // Explicit "reload what I'm looking at". The knowledge-flow cache now serves
-  // the previous answer for a short window instead of refetching on every
-  // mount, which is what makes coming back to this page instant — this is the
-  // way to force the round trip when you know someone else has just changed
-  // something. refetchTags also refreshes the usage stats and the storage
-  // quota, so one press updates the whole view.
+  const handleRowsPerPageChange = (limit: number) => {
+    setRowsPerPage(limit);
+    setFolderOffset(0);
+    setSelectedKeys(new Set());
+  };
+  const handleSortChange = (next: SortState | null) => {
+    setOrdering(orderingFromSortState(next, columnLabel));
+    setFolderOffset(0);
+    setSelectedKeys(new Set());
+  };
   const [refreshing, setRefreshing] = useState(false);
   const refreshView = useCallback(async () => {
     setRefreshing(true);
     try {
-      if (managerSpaceId) {
-        await managerQuery.refetch();
-        return;
-      }
-      const tagId = currentTag?.id;
-      await Promise.all([
-        refetchTags(),
-        tagId ? loadTagPage(tagId, perTagRef.current[tagId]?.offset ?? 0) : Promise.resolve(),
-      ]);
+      await managerQuery.refetch();
+      return;
     } finally {
       setRefreshing(false);
     }
-  }, [refetchTags, loadTagPage, currentTag, managerSpaceId, managerQuery]);
-
+  }, [managerSpaceId, managerQuery]);
   const navigateTo = useCallback(
     (full: string | null) => {
       setNavigationHistory((prev) => [...prev, currentFolderFull]);
       setCurrentFolderFull(full);
-      if (managerSpaceId) {
-        setFolderOffset(0);
-        setSearch("");
-        setCreateOpen(false);
-        setRenameTarget(null);
-        setUploadOpen(false);
-      }
+      setFolderOffset(0);
+      setSearch("");
+      setCreateOpen(false);
+      setRenameTarget(null);
+      setUploadOpen(false);
       setSelectedKeys(new Set());
     },
     [currentFolderFull, managerSpaceId],
   );
-
   const navigateBack = useCallback(() => {
     setNavigationHistory((prev) => {
       if (prev.length === 0) return prev;
       setCurrentFolderFull(prev[prev.length - 1]);
-      if (managerSpaceId) {
-        setFolderOffset(0);
-        setSearch("");
-        setCreateOpen(false);
-        setRenameTarget(null);
-        setUploadOpen(false);
-      }
+      setFolderOffset(0);
+      setSearch("");
+      setCreateOpen(false);
+      setRenameTarget(null);
+      setUploadOpen(false);
       setSelectedKeys(new Set());
       return prev.slice(0, -1);
     });
   }, [managerSpaceId]);
-
-  // Load the current folder's document page on EVERY entry, not just the first:
-  // a folder opened while its files were still uploading (or their fresh ReBAC
-  // tuples still propagating server-side) would otherwise stay frozen on that
-  // first empty snapshot forever — none of the other refresh paths retries a
-  // page that doesn't yet SHOW the document (the 3s poll needs a visible
-  // processing row, useRefetchOnTaskSettled needs the doc already in the page,
-  // useNotifyOnNewTaskTarget fires before this page exists). loadTagPage keeps
-  // the previous rows while reloading, so re-entering an already-loaded folder
-  // refreshes without a flash of empty.
-  const currentTagId = currentTag?.id ?? null;
-  useEffect(() => {
-    if (currentTagId) void loadTagPage(currentTagId, 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the
-    // folder identity alone: one load per ENTRY is the contract, so nothing
-    // else may retrigger it. loadTagPage is deliberately not a dep — its
-    // identity tracks rowsPerPage (whose change already reloads explicitly
-    // via handleRowsPerPageChange), and any harness that rebuilds the browse
-    // trigger per render would otherwise refire this into a reload loop.
-  }, [currentTagId]);
-
-  // Port of main's DocumentLibraryList polling loop: while any loaded row is
-  // (or is pinned) "processing", reload the folder pages showing it so the
-  // badge flips to Ready/Failed without a manual refresh.
-  const pendingTagIds = useMemo(
-    () =>
-      Object.entries(perTag)
-        .filter(([, page]) => page.docs.some((doc) => getDocStatus(doc) === "processing"))
-        .map(([tagId]) => tagId),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- getDocStatus is
-    // rebuilt every render; its inputs (perTag and the live task
-    // map) are the real dependencies.
-    [perTag, activeDocTaskByUid],
-  );
-  // While any ingestion is live, poll the folder being viewed too, even if its
-  // loaded page shows no processing row yet: a subfolder entered before its
-  // files' uploads (or their fresh ReBAC tuples) landed keeps an empty
-  // snapshot that no other refresh path retries — this loop picks the rows up
-  // as they become visible, with their live "processing" badge.
-  const pollTagIds =
-    activeDocTaskByUid.size > 0 && currentTagId && !pendingTagIds.includes(currentTagId)
-      ? [...pendingTagIds, currentTagId]
-      : pendingTagIds;
-  // Keyed on the ids themselves, not the array identity: the live task map is a
-  // new object on every SSE event, and depending on it directly tore down and
-  // restarted the interval on each one — so during a bulk ingestion, when this
-  // refresh matters most, the 3s never elapsed and the folder never reloaded.
-  const pendingTagKey = pollTagIds.join(",");
-  useEffect(() => {
-    if (!pendingTagKey) return;
-    const interval = setInterval(() => {
-      for (const tagId of pendingTagKey.split(",")) void loadTagPage(tagId, perTagRef.current[tagId]?.offset ?? 0);
-    }, DOC_STATUS_POLL_MS);
-    return () => clearInterval(interval);
-  }, [pendingTagKey, loadTagPage, perTagRef]);
-
-  const setDocumentRetrievable = useCallback(
-    (doc: DocumentMetadata, value: boolean) =>
-      (doc as ResourceDocument).managerDocument
-        ? updateManagerRetrievable({ id: doc.identity.document_uid, setRetrievable: { retrievable: value } }).unwrap()
-        : updateRetrievable({ documentUid: doc.identity.document_uid, retrievable: value }).unwrap(),
-    [updateManagerRetrievable, updateRetrievable],
-  );
-  const commands = useDocumentCommands({
-    setRetrievable: setDocumentRetrievable,
-    refetchTags,
-    refetchDocs: async (tagId?: string) => {
-      if (tagId) await loadTagPage(tagId, perTag[tagId]?.offset ?? 0);
-    },
-  });
-  // Refresh document state and quota after a durable terminal task event.
-  // A batch of tasks settling together reloads each affected folder once.
-  useRefetchOnTaskSettled("document", (documentUids) => {
-    if (managerSpaceId) return;
-    onDocumentsChanged?.();
-    const settled = new Set(documentUids);
-    for (const [tagId, page] of Object.entries(perTag)) {
-      if (page.docs.some((doc) => settled.has(doc.identity.document_uid))) {
-        void loadTagPage(tagId, page.offset);
-      }
-    }
-  });
-
-  // A brand-new document (just registered by the upload drawer) has no row
-  // anywhere yet, so `useRefetchOnTaskSettled` above can never trigger its first
-  // refetch — its check requires the document to already be in a loaded page.
-  // Fire on first sighting of the task instead (any state, not just succeeded).
-  useNotifyOnNewTaskTarget("document", () => {
-    if (managerSpaceId) return;
-    void refetchTags();
-    for (const [tagId, page] of Object.entries(perTag)) {
-      void loadTagPage(tagId, page.offset);
-    }
-  });
-
-  // `POST /process-documents` takes a `files` array, so a multi-selection costs
-  // the same single round trip as one row. Returns whether the call went
-  // through — the caller clears its selection only then.
+  const [previewTarget, setPreviewTarget] = useState<{
+    documentUid: string;
+    fileName: string;
+  } | null>(null);
+  const setDocumentRetrievable = (doc: ResourceDocument, value: boolean) =>
+    updateManagerRetrievable({ id: doc.id, setRetrievable: { retrievable: value } }).unwrap();
   const relaunchIngestion = useCallback(
-    async (docs: ResourceDocument[], tagId: string): Promise<boolean> => {
-      if (docs.length === 0 || docs.some((doc) => relaunchRequests.current.has(doc.identity.document_uid)))
-        return false;
-      for (const doc of docs) relaunchRequests.current.add(doc.identity.document_uid);
+    async (docs: ResourceDocument[]): Promise<boolean> => {
+      if (docs.length === 0 || docs.some((doc) => relaunchRequests.current.has(doc.id))) return false;
+      for (const doc of docs) relaunchRequests.current.add(doc.id);
       setPendingRelaunches(new Set(relaunchRequests.current));
       try {
-        let selectedProfile: IngestionProcessingProfile | undefined;
+        let selectedProfile: Profile | undefined;
         if (docs.some((doc) => !doc.processing?.profile)) {
           setRelaunchProfile(undefined);
           setProfilePromptOpen(true);
-          selectedProfile = await new Promise<IngestionProcessingProfile | undefined>((resolve) => {
+          selectedProfile = await new Promise<Profile | undefined>((resolve) => {
             profileAnswer.current = resolve;
           });
           if (!selectedProfile) return false;
         }
         try {
-          if (managerSpaceId) {
-            for (const doc of docs)
-              await startManagerProcessing(
-                dispatch,
-                doc.identity.document_uid,
-                doc.managerProcessing?.profile ?? selectedProfile ?? "fast",
-                doc.managerProcessing,
-              );
-            showSuccess?.({ summary: t("rework.resources.toast.relaunchStarted", { count: docs.length }) });
-            return true;
-          }
-          const result = await processDocuments({
-            processDocumentsRequest: {
-              files: docs.map((doc) => ({
-                source_tag: doc.source?.source_tag ?? "",
-                document_uid: doc.identity.document_uid,
-                profile: doc.processing?.profile ?? selectedProfile,
-                tags: doc.tags?.tag_ids ?? [tagId],
-              })),
-              pipeline_name: "relaunch-ingestion",
-              relaunch: true,
-            },
-          }).unwrap();
-          for (const doc of docs) {
-            const taskId = result.task_ids?.[doc.identity.document_uid];
-            if (taskId)
-              dispatch(
-                taskRegistered({
-                  taskId,
-                  kind: "ingestion",
-                  target: { type: "document", id: doc.identity.document_uid, label: doc.identity.document_name },
-                  // Re-processing an existing document is not an import;
-                  // its row follows the task without adding it to the import panel.
-                  stage: null,
-                }),
-              );
-          }
+          for (const doc of docs)
+            await startManagerProcessing(
+              dispatch,
+              doc.id,
+              doc.processing?.profile ?? selectedProfile ?? "fast",
+              doc.processing,
+            );
           showSuccess?.({ summary: t("rework.resources.toast.relaunchStarted", { count: docs.length }) });
-          await loadTagPage(tagId, perTag[tagId]?.offset ?? 0);
           return true;
         } catch (e: unknown) {
           showError?.({
             summary: t("validation.error"),
-            detail: (e as { data?: { detail?: string } })?.data?.detail ?? t("rework.resources.toast.relaunchError"),
+            detail:
+              (
+                e as {
+                  data?: {
+                    detail?: string;
+                  };
+                }
+              )?.data?.detail ?? t("rework.resources.toast.relaunchError"),
           });
           return false;
         }
       } finally {
-        for (const doc of docs) relaunchRequests.current.delete(doc.identity.document_uid);
+        for (const doc of docs) relaunchRequests.current.delete(doc.id);
         setPendingRelaunches(new Set(relaunchRequests.current));
       }
     },
-    [dispatch, processDocuments, showSuccess, showError, t, loadTagPage, perTag, managerSpaceId],
+    [dispatch, showSuccess, showError, t, managerSpaceId],
   );
-
-  // Deletes the folder's tag; the backend cascades to sub-folders and untags/
-  // deletes their documents (TagPermission.DELETE, tag_service.py), so this is
-  // safe to offer for both empty and populated folders — the confirmation
-  // message just makes the blast radius explicit before it happens.
-  //
-  // That number is counted at click time over the folder AND its sub-folders,
-  // never read from the tag list's `item_ids`, which was wrong in both
-  // directions. Too high: `item_ids` only refreshes when this workspace itself
-  // mutates something, so a document the backend removed on its own — a
-  // cancelled ingestion erasing its half-built document (#2315), the OPS-04
-  // sweeper — stayed counted, and the dialog announced 4 documents for a folder
-  // showing 1. Too low: it covers the folder's own documents only, while
-  // `delete_tag` recurses into every sub-tag — under-announcing what is about
-  // to be destroyed, which is the direction that actually costs data.
   const confirmDeleteFolder = useCallback(
-    async (node: TagNode) => {
+    async (node: FolderNode) => {
       if (node.managerFolder) {
         const id = node.managerFolder.id;
         showConfirmationDialog({
@@ -886,91 +346,27 @@ function DocumentWorkspace({
                 showError?.({
                   summary: t("validation.error"),
                   detail:
-                    (e as { data?: { detail?: string } }).data?.detail ?? t("rework.resources.toast.deleteFolderError"),
+                    (
+                      e as {
+                        data?: {
+                          detail?: string;
+                        };
+                      }
+                    ).data?.detail ?? t("rework.resources.toast.deleteFolderError"),
                 });
             }
           },
         });
         return;
       }
-      const tag = node.tagsHere[0];
-      if (!tag) return;
-      // One `total` per tag in the subtree, `limit: 1` so the response carries a
-      // count and not a page of documents. Summing across the subtree cannot
-      // double-count: a document is tagged into exactly one folder, the same
-      // invariant the folder-size column relies on.
-      let docCount: number | null = null;
-      try {
-        const pages = await Promise.all(
-          collectDescendantTagIds(node).map((tagId) =>
-            browseDocumentsByTag({ browseDocumentsByTagRequest: { tag_id: tagId, offset: 0, limit: 1 } }).unwrap(),
-          ),
-        );
-        docCount = pages.reduce((sum, page) => sum + (page.total ?? 0), 0);
-      } catch {
-        // Counting failed — still offer the deletion, but promise no number
-        // rather than a number that might be wrong.
-      }
-      showConfirmationDialog({
-        title: t("rework.resources.confirm.deleteFolderTitle"),
-        message:
-          docCount === null || (docCount === 0 && node.children.size > 0)
-            ? t("rework.resources.confirm.deleteFolderMessageUnknownCount", { name: node.name })
-            : docCount > 0
-              ? t("rework.resources.confirm.deleteFolderMessageWithDocs", { name: node.name, count: docCount })
-              : t("rework.resources.confirm.deleteFolderMessageEmpty", { name: node.name }),
-        onConfirm: () =>
-          void deleteTag({ tagId: tag.id })
-            .unwrap()
-            .then(() => {
-              showSuccess?.({ summary: t("rework.resources.toast.deleteFolderSuccess") });
-              if (currentFull === node.full)
-                navigateTo(node.full.includes("/") ? node.full.split("/").slice(0, -1).join("/") : null);
-              void refetchTags();
-            })
-            .catch((e: unknown) => {
-              showError?.({
-                summary: t("validation.error"),
-                detail:
-                  (e as { data?: { detail?: string } })?.data?.detail ?? t("rework.resources.toast.deleteFolderError"),
-              });
-            }),
-      });
     },
-    [
-      browseDocumentsByTag,
-      deleteTag,
-      deleteManagerOnce,
-      location,
-      showConfirmationDialog,
-      showSuccess,
-      showError,
-      t,
-      refetchTags,
-      currentFull,
-      navigateTo,
-    ],
+    [deleteManagerOnce, location, showConfirmationDialog, showSuccess, showError, t],
   );
-
-  // Derived from the same map the badge and the row menu read, so "this row has
-  // a live ingestion" has one definition in this page instead of three.
-  const runningDocIds = useMemo(
-    () => new Set([...activeDocTaskByUid].filter(([, task]) => task.state !== "failed").map(([uid]) => uid)),
-    [activeDocTaskByUid],
-  );
-
-  const prevRunningDocIdsRef = useMemo(() => ({ current: new Set<string | undefined>() }), []);
-  useEffect(() => {
-    const pages = pagesToRefreshOnTaskCompletion(prevRunningDocIdsRef.current, runningDocIds, perTag);
-    prevRunningDocIdsRef.current = runningDocIds;
-    for (const { tagId, offset } of pages) void loadTagPage(tagId, offset);
-  }, [runningDocIds, perTag, loadTagPage, prevRunningDocIdsRef]);
-
   /** Seed the ingestion drawer with an OS-file drop, targeting `node`.
    * `requireDir` (the corpus root, where a file can only live inside a
    * library): keep only files that came out of a dropped folder — their
    * chain becomes the library — and reject loose ones, with a toast. */
-  const openDrawerWithDroppedFiles = (event: React.DragEvent, node: TagNode, requireDir = false) => {
+  const openDrawerWithDroppedFiles = (event: React.DragEvent, node: FolderNode, requireDir = false) => {
     event.preventDefault();
     // fromEvent must start synchronously: the DataTransfer entries needed to
     // walk a dropped directory are dead once the drop handler has returned.
@@ -993,10 +389,7 @@ function DocumentWorkspace({
           });
         dropped = foldered;
       }
-      // Depth guardrail (#2355): a file may not end up nested deeper than
-      // MAX_FOLDER_DEPTH levels, destination included — the mirrored tag
-      // chain is bounded the same way server-side (422 past the cap).
-      const destinationDepth = folderPathDepth(node.full);
+      const destinationDepth = folderPathDepth(node.managerFolder?.path);
       const shallow = dropped.filter((file) => !exceedsMaxFolderDepth(file, destinationDepth));
       if (shallow.length < dropped.length) {
         if (shallow.length === 0) {
@@ -1021,11 +414,10 @@ function DocumentWorkspace({
       setUploadOpen(true);
     });
   };
-
   /** OS-file drag-and-drop onto a folder row: pre-select that folder and open the
    * ingestion drawer seeded with the dropped files. Same gating as the row's
    * upload action. */
-  const folderDropProps = (node: TagNode, droppable: boolean) => {
+  const folderDropProps = (node: FolderNode, droppable: boolean) => {
     if (!droppable) return {};
     return {
       "data-drag-over": dragOverFolder === node.full || undefined,
@@ -1052,274 +444,91 @@ function DocumentWorkspace({
       },
     };
   };
-
-  const page = currentTag ? perTag[currentTag.id] : undefined;
-  // Folders always come first (they are prepended to the rows below, never
-  // interleaved); this orders them among themselves by the same key the
-  // server applies to the documents. They come from the in-memory tag tree,
-  // not from the paginated browse, so their order is ours to compute.
-  const childFolders = useMemo(() => {
-    if (managerSpaceId) return [...managerNode.children.values()] as TagNode[];
-    const nodes = [...currentNode.children.values()];
-    const direction = ordering.order === "desc" ? -1 : 1;
-    if (ordering.by === "created") {
-      const at = (node: TagNode) => Date.parse(node.tagsHere[0]?.created_at ?? "") || 0;
-      return nodes.sort((a, b) => direction * (at(a) - at(b)));
-    }
-    // A folder has no size of its own — its rollup is fetched per view and is
-    // not known here — so ordering by size falls back to the name, which at
-    // least keeps the group stable instead of shuffling it.
-    return nodes.sort((a, b) => direction * a.name.localeCompare(b.name));
-  }, [currentNode, ordering, managerSpaceId, managerNode]);
-
-  // Folder rows show the total size of every document the folder contains,
-  // including its subfolders' — a folder tag's own item_ids never cover
-  // nested tags, so this walks the (already fully loaded) in-memory tree via
-  // collectDescendantTagIds, batched once per folder view via
-  // /documents/metadata/tag-sizes for the union of every visible folder's own
-  // + descendant tag ids, not one query per row. Per-tag sums are summed
-  // client-side per folder: safe against double counting because a document
-  // is tagged into exactly one folder (its leaf tag), never simultaneously
-  // into an ancestor folder too — verified against real data (folder total +
-  // subfolder total == the team's whole storage counter, no overlap).
-  const [folderSizes, setFolderSizes] = useState<Record<string, number>>({});
-  const folderDescendantTagIds = useMemo(
-    () => new Map(childFolders.map((node) => [node.full, collectDescendantTagIds(node)])),
-    [childFolders],
-  );
-  const folderTagIds = useMemo(
-    () => Array.from(new Set([...folderDescendantTagIds.values()].flat())),
-    [folderDescendantTagIds],
-  );
-  // Keyed by sorted content, not the array's own identity: `tags` (and so
-  // `childFolders`/`folderTagIds`) can get a fresh reference on a render that
-  // doesn't actually change which folders are shown, and re-issuing the same
-  // batch call on every such render would both waste requests and, since each
-  // resolution replaces `folderSizes` wholesale, loop forever.
-  const folderTagIdsKey = [...folderTagIds].sort().join(",");
-  const fetchedSizesKeyRef = useRef<string>("");
-  useEffect(() => {
-    if (folderTagIds.length === 0 || folderTagIdsKey === fetchedSizesKeyRef.current) return;
-    fetchedSizesKeyRef.current = folderTagIdsKey;
-    (async () => {
-      try {
-        const res = await fetchTagSizes({ tagSizesRequest: { tag_ids: folderTagIds } }).unwrap();
-        setFolderSizes((prev) => ({ ...prev, ...res.sizes }));
-      } catch {
-        // Sizes stay unresolved for these tag ids — the cell keeps showing "—".
-      }
-    })();
-    // folderTagIds itself is intentionally not a dep: folderTagIdsKey already
-    // captures every content change it could cause, and it's recomputed fresh
-    // in this same render anyway.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [folderTagIdsKey, fetchTagSizes]);
-
-  // #2384 — a folder row summarizes the ingestion state of everything under it
-  // (its own documents + every sub-folder's, at any depth): still processing,
-  // some failed, or all finished during this session. Without it, the only way
-  // to tell whether a bulk upload has landed is to walk into each sub-folder
-  // and read the rows one by one.
-  //
-  // Every input is already in memory — no new endpoint, no new backend status.
-  // Two families of source, unioned per state because neither subsumes the
-  // other:
-  //  - the ALREADY-LOADED pages (`perTag`), read per tag id. Survives a page
-  //    reload, and is the only source that sees what the browse snapshot knows
-  //    and the task feed cannot: a teammate's ingestion, or a document a dead
-  //    worker left `in_progress`/failed (#2279). Limited to folders visited
-  //    this session — but without it a folder could read "settled" while a row
-  //    inside it visibly spins, the exact confusion this feature removes.
-  //  - the SSE task feed, matched against the tag tree's `item_ids`. Reaches
-  //    folders that were never opened, but carries only the current user's
-  //    tasks (`GET /tasks?scope=user`, useTaskRehydration) and — since that
-  //    route hides terminal tasks — only for this browser session.
-  //
-  // Hence the deliberate asymmetry between the two rolled-up terminal states:
-  // "all done" is session-only (it is a transient "your upload landed", and
-  // the memory-only task store expires it for free on refresh), while a
-  // failure stays visible for every folder the snapshot covers, because it
-  // still needs someone to act on it.
-  const failedDocsByTagId = useMemo(() => collectFailedDocsByTag(perTag, documentDisplayName), [perTag]);
-  const folderByDocUid = useMemo(() => indexFoldersByDocUid(childFolders), [childFolders]);
-
-  // Stable keys for the live inputs: the task store is a fresh object on EVERY
-  // SSE progress event, so depending on those identities would recompute on each
-  // one — the same trap `pendingTagKey` avoids for the poll interval above.
-  // Joined on NUL rather than a comma because a document uid is not always a
-  // plain uuid (scheduler pulls build `pull-{source_tag}-{hash}` from a
-  // configurable tag), and two different sets must not collide onto the same
-  // key. These are memo keys only — never split back apart. The failure key
-  // carries the NAMES too: `taskEventReceived` rewrites `target` on any event
-  // that carries one, so a label refined after the failure was first recorded
-  // must still reach the tooltip.
-  const pendingTagIdsKey = [...pendingTagIds].sort().join(KEY_SEP);
-  const activeDocUidKey = [...activeDocTaskByUid.keys()].sort().join(KEY_SEP);
-  const failedDocKey = [...docOutcomes.failed]
-    .map(([uid, doc]) => `${uid}${KEY_SEP}${doc.name}${KEY_SEP}${doc.error ?? ""}`)
-    .sort()
-    .join(KEY_SEP);
-  const justCompletedKey = [...justCompletedDocUids].sort().join(KEY_SEP);
-
-  const folderRollups = useMemo(
-    () =>
-      buildFolderRollups({
-        childFolders,
-        tagIdsByFolder: folderDescendantTagIds,
-        folderByDocUid,
-        pendingTagIds,
-        failedDocsByTagId,
-        activeDocUids: activeDocTaskByUid.keys(),
-        outcomes: docOutcomes,
-        justCompletedDocUids,
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- see the key block
-    // above: the live inputs are read from their sources, tracked by key.
-    [
-      childFolders,
-      folderDescendantTagIds,
-      folderByDocUid,
-      failedDocsByTagId,
-      docOutcomes,
-      pendingTagIdsKey,
-      activeDocUidKey,
-      failedDocKey,
-      justCompletedKey,
-    ],
-  );
-
   const rows: Row[] = useMemo(
     () => [
       ...childFolders.map((node): Row => ({ kind: "folder", node })),
-      ...(managerSpaceId
-        ? (directory?.items ?? []).flatMap((entry) =>
-            entry.kind === "document"
-              ? [presentManagerDocument(entry.data, directory?.processing?.[entry.data.id])]
-              : [],
-          )
-        : (page?.docs ?? [])
-      ).map((doc): Row => ({ kind: "document", doc })),
+      ...(directory?.items ?? [])
+        .flatMap((entry) =>
+          entry.kind === "document" ? [presentManagerDocument(entry.data, directory?.processing?.[entry.data.id])] : [],
+        )
+        .map((doc): Row => ({ kind: "document", doc })),
     ],
-    [childFolders, page?.docs, managerSpaceId, directory],
+    [childFolders, managerSpaceId, directory],
   );
-
-  const filteredRows = useMemo(() => {
-    const trimmed = search.trim().toLowerCase();
-    if (managerSpaceId || !trimmed) return rows;
-    return rows.filter((row) => rowLabel(row).toLowerCase().includes(trimmed));
-  }, [rows, search, managerSpaceId]);
-
-  // Batched once for the whole page (not one query per row, same pattern as
-  // TeamAgentsPage's audit-user resolution, #2096) — the Auteur column shows
-  // the uploader's display name, resolved from their uid.
-  const uploaderUids = useMemo(
-    () =>
-      Array.from(
-        new Set((page?.docs ?? []).map((doc) => doc.identity.uploaded_by).filter((uid): uid is string => Boolean(uid))),
-      ),
-    [page?.docs],
-  );
-  const { data: uploaders = [], isFetching: isFetchingUploaders } = useUsersByIdsQuery(
-    { ids: uploaderUids },
-    { skip: !!managerSpaceId || uploaderUids.length === 0 },
-  );
-  const uploaderById = useMemo(() => new Map(uploaders.map((summary) => [summary.id, summary])), [uploaders]);
-
+  const filteredRows = rows;
   const selectedDocs = useMemo(
     () =>
       filteredRows
-        .filter((row): row is Row & { kind: "document" } => row.kind === "document" && selectedKeys.has(rowKey(row)))
+        .filter(
+          (
+            row,
+          ): row is Row & {
+            kind: "document";
+          } => row.kind === "document" && selectedKeys.has(rowKey(row)),
+        )
         .map((row) => row.doc),
     [filteredRows, selectedKeys],
   );
-
-  // Selected folder rows (#2446). Folder checkboxes have always rendered but did
-  // nothing; these now drive the same contextual bar as documents, with every
-  // action applied recursively to the folder's contents.
   const selectedFolders = useMemo(
     () =>
       filteredRows
-        .filter((row): row is Row & { kind: "folder" } => row.kind === "folder" && selectedKeys.has(rowKey(row)))
+        .filter(
+          (
+            row,
+          ): row is Row & {
+            kind: "folder";
+          } => row.kind === "folder" && selectedKeys.has(rowKey(row)),
+        )
         .map((row) => row.node),
     [filteredRows, selectedKeys],
   );
-
-  // Page through every document under one tag. A folder bulk action can span a
-  // large subtree, so this is deliberately called only when the action fires
-  // (never on selection) — ticking a folder box must stay instant.
-  const fetchAllDocsForTag = useCallback(
-    async (tagId: string): Promise<DocumentMetadata[]> => {
-      const PAGE = 200;
-      const first = await browseDocumentsByTag({
-        browseDocumentsByTagRequest: { tag_id: tagId, offset: 0, limit: PAGE },
-      }).unwrap();
-      const docs = [...(first.documents ?? [])];
-      const total = first.total ?? docs.length;
-      for (let offset = PAGE; offset < total; offset += PAGE) {
-        const next = await browseDocumentsByTag({
-          browseDocumentsByTagRequest: { tag_id: tagId, offset, limit: PAGE },
-        }).unwrap();
-        docs.push(...(next.documents ?? []));
-      }
-      return docs;
-    },
-    [browseDocumentsByTag],
-  );
-
-  // Resolve every document under the given folders, each paired with the ZIP-
-  // relative directory it lives in (for `bulkDownload`'s structure). Fetched on
-  // demand, deduplicated by uid (a document is tagged into exactly one folder,
-  // but the walk does not rely on it).
   const resolveFolderDocs = useCallback(
-    async (folders: TagNode[]): Promise<{ doc: DocumentMetadata; relDir: string }[]> => {
-      if (managerSpaceId) {
-        const pending = folders.map((node) => ({ id: node.managerFolder!.id, relDir: node.name }));
-        const visited = new Set<string>();
-        const documents = new Map<string, { doc: ResourceDocument; relDir: string }>();
-        while (pending.length) {
-          const folder = pending.pop()!;
-          if (visited.has(folder.id)) continue;
-          visited.add(folder.id);
-          for (let offset = 0; ; ) {
-            const page = await findManagerEntries({
-              id: managerSpaceId,
-              parentId: folder.id,
-              offset,
-              limit: 200,
-            }).unwrap();
-            for (const item of page.items) {
-              if (item.kind === "folder")
-                pending.push({ id: item.data.id, relDir: `${folder.relDir}/${item.data.name}` });
-              else
-                documents.set(item.data.id, {
-                  doc: presentManagerDocument(item.data, page.processing[item.data.id]),
-                  relDir: folder.relDir,
-                });
-            }
-            offset += page.items.length;
-            if (!page.items.length || offset >= page.total) break;
-          }
+    async (
+      folders: FolderNode[],
+    ): Promise<
+      {
+        doc: ResourceDocument;
+        relDir: string;
+      }[]
+    > => {
+      const pending = folders.map((node) => ({ id: node.managerFolder!.id, relDir: node.name }));
+      const visited = new Set<string>();
+      const documents = new Map<
+        string,
+        {
+          doc: ResourceDocument;
+          relDir: string;
         }
-        return [...documents.values()];
+      >();
+      while (pending.length) {
+        const folder = pending.pop()!;
+        if (visited.has(folder.id)) continue;
+        visited.add(folder.id);
+        for (let offset = 0; ; ) {
+          const page = await findManagerEntries({
+            id: managerSpaceId,
+            parentId: folder.id,
+            offset,
+            limit: 200,
+          }).unwrap();
+          for (const item of page.items) {
+            if (item.kind === "folder")
+              pending.push({ id: item.data.id, relDir: `${folder.relDir}/${item.data.name}` });
+            else
+              documents.set(item.data.id, {
+                doc: presentManagerDocument(item.data, page.processing[item.data.id]),
+                relDir: folder.relDir,
+              });
+          }
+          offset += page.items.length;
+          if (!page.items.length || offset >= page.total) break;
+        }
       }
-      const tagEntries = folders.flatMap((node) => descendantTagsWithPaths(node, currentNode.full));
-      const perTagResults = await Promise.all(
-        tagEntries.map(async ({ tagId, relDir }) => (await fetchAllDocsForTag(tagId)).map((doc) => ({ doc, relDir }))),
-      );
-      const seen = new Set<string>();
-      const out: { doc: DocumentMetadata; relDir: string }[] = [];
-      for (const entry of perTagResults.flat()) {
-        if (seen.has(entry.doc.identity.document_uid)) continue;
-        seen.add(entry.doc.identity.document_uid);
-        out.push(entry);
-      }
-      return out;
+      return [...documents.values()];
     },
-    [fetchAllDocsForTag, currentNode.full, managerSpaceId, findManagerEntries],
+    [managerSpaceId, findManagerEntries],
   );
-
   const hasSelection = selectedDocs.length > 0 || selectedFolders.length > 0;
-
   // Unlike the search toggle there is no direction to disambiguate here, so a
   // mixed selection has one unambiguous meaning: relaunch the stuck ones, leave
   // the rest alone. Computed per render rather than memoized — it reads the
@@ -1328,173 +537,78 @@ function DocumentWorkspace({
   const relaunchableSelection = selectedDocs.filter(isRelaunchable);
   const [bulkRelaunching, setBulkRelaunching] = useState(false);
   const bulkRelaunch = async () => {
-    if ((!managerSpaceId && !currentTag) || relaunchableSelection.length === 0) return;
+    if (relaunchableSelection.length === 0) return;
     setBulkRelaunching(true);
     try {
-      if (await relaunchIngestion(relaunchableSelection, currentTag?.id ?? "")) setSelectedKeys(new Set());
+      if (await relaunchIngestion(relaunchableSelection)) setSelectedKeys(new Set());
     } finally {
       setBulkRelaunching(false);
     }
   };
-
-  // Delete is folder-aware (#2446): each selected folder's tag is deleted (the
-  // backend cascades to sub-folders + their documents, same path as the single-
-  // folder delete), and the loose selected documents are untagged from the
-  // current folder. A precise recursive count is deliberately NOT recomputed
-  // here — that would cost one browse per subtree tag; the confirmation warns
-  // generically once folders are involved, while the single-folder delete keeps
-  // its live count.
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const managerBulkPending = useRef(false);
   const bulkDelete = () => {
     if (!hasSelection) return;
-    if (managerSpaceId) {
-      showConfirmationDialog({
-        title: t("rework.resources.action.delete"),
-        message:
-          selectedFolders.length === 0
-            ? t("rework.resources.confirm.deleteManagerDocuments", { count: selectedDocs.length })
-            : selectedDocs.length === 0
-              ? t("rework.resources.confirm.deleteManagerFolders", { count: selectedFolders.length })
-              : t("rework.resources.confirm.deleteManagerMixed", {
-                  folderCount: selectedFolders.length,
-                  docCount: selectedDocs.length,
-                }),
-        onConfirm: async () => {
-          if (!mounted.current || locationRef.current !== location || managerBulkPending.current) return;
-          managerBulkPending.current = true;
-          setBulkDeleting(true);
-          const outcomes = await Promise.allSettled([
-            ...selectedDocs.map((doc) => deleteDocument({ id: doc.managerDocument!.id }).unwrap()),
-            ...selectedFolders.map((node) => deleteManagerOnce(node.managerFolder!.id)),
-          ]);
-          managerBulkPending.current = false;
-          if (mounted.current) setBulkDeleting(false);
-          if (!mounted.current || locationRef.current !== location) return;
-          setSelectedKeys(new Set());
-          const failures = outcomes.filter((result) => result.status === "rejected").length;
-          if (failures)
-            showError?.({
-              summary: t("validation.error"),
-              detail: t("rework.resources.confirm.deleteManagerPartial", { failed: failures, count: outcomes.length }),
-            });
-          else
-            showSuccess?.({
-              summary: t(
-                selectedDocs.length ? "documentLibrary.removeSuccess" : "rework.resources.toast.deleteFolderSuccess",
-              ),
-            });
-        },
-      });
-      return;
-    }
-    const docCount = selectedDocs.length;
-    const folderCount = selectedFolders.length;
-    const message =
-      folderCount === 0
-        ? t("rework.resources.confirm.deleteBulkMessage", { count: docCount })
-        : docCount === 0
-          ? t("rework.resources.confirm.deleteFoldersMessage", { count: folderCount })
-          : t("rework.resources.confirm.deleteMixedMessage", { folderCount, docCount });
     showConfirmationDialog({
-      title: t("rework.resources.confirm.deleteTitle"),
-      message,
+      title: t("rework.resources.action.delete"),
+      message:
+        selectedFolders.length === 0
+          ? t("rework.resources.confirm.deleteManagerDocuments", { count: selectedDocs.length })
+          : selectedDocs.length === 0
+            ? t("rework.resources.confirm.deleteManagerFolders", { count: selectedFolders.length })
+            : t("rework.resources.confirm.deleteManagerMixed", {
+                folderCount: selectedFolders.length,
+                docCount: selectedDocs.length,
+              }),
       onConfirm: async () => {
+        if (!mounted.current || locationRef.current !== location || managerBulkPending.current) return;
+        managerBulkPending.current = true;
         setBulkDeleting(true);
-        try {
-          await Promise.all(
-            selectedFolders.map((node) => {
-              const tag = node.tagsHere[0];
-              return tag ? deleteTag({ tagId: tag.id }).unwrap() : Promise.resolve();
-            }),
-          );
-          if (docCount > 0 && currentTag) {
-            // Handles its own success toast + tag/doc refresh.
-            await commands.bulkRemoveFromLibraryForTag(selectedDocs, currentTag as unknown as TagWithItemsId);
-          }
-          if (folderCount > 0) {
-            showSuccess?.({ summary: t("rework.resources.toast.deleteFolderSuccess") });
-            void refetchTags();
-          }
-          setSelectedKeys(new Set());
-        } catch (e: unknown) {
+        const outcomes = await Promise.allSettled([
+          ...selectedDocs.map((doc) => deleteDocument({ id: doc.id }).unwrap()),
+          ...selectedFolders.map((node) => deleteManagerOnce(node.managerFolder!.id)),
+        ]);
+        managerBulkPending.current = false;
+        if (mounted.current) setBulkDeleting(false);
+        if (!mounted.current || locationRef.current !== location) return;
+        setSelectedKeys(new Set());
+        const failures = outcomes.filter((result) => result.status === "rejected").length;
+        if (failures)
           showError?.({
             summary: t("validation.error"),
-            detail:
-              (e as { data?: { detail?: string } })?.data?.detail ?? t("rework.resources.toast.deleteFolderError"),
+            detail: t("rework.resources.confirm.deleteManagerPartial", { failed: failures, count: outcomes.length }),
           });
-        } finally {
-          setBulkDeleting(false);
-        }
+        else
+          showSuccess?.({
+            summary: t(
+              selectedDocs.length ? "documentLibrary.removeSuccess" : "rework.resources.toast.deleteFolderSuccess",
+            ),
+          });
       },
     });
+    return;
   };
-
   // Inclusion applies to every published document, including Parquet-only datasets.
   const searchToggleMode = useMemo<"exclude" | "include" | undefined>(() => {
     const toggleable = selectedDocs;
     if (toggleable.length === 0) return undefined;
-    const excludedCount = toggleable.filter((doc) => doc.source.retrievable === false).length;
+    const excludedCount = toggleable.filter((doc) => doc.retrievable === false).length;
     if (excludedCount === 0) return "exclude";
     if (excludedCount === toggleable.length) return "include";
     return undefined;
   }, [selectedDocs]);
-
-  // toggleRetrievable only calls the backend — it never touches `perTag`, so
-  // without this the row's icon/menu label (both derived straight from
-  // `row.doc.source.retrievable`) stay stale until the folder is reloaded.
-  // Patches every loaded page that happens to hold this doc (not just the
-  // current tag's), matching the hook's own "no list-wide refetch needed"
-  // contract: flipping this flag never changes tag membership or counts.
-  const patchDocRetrievable = (documentUid: string, retrievable: boolean) => {
-    setPerTag((prev) => {
-      const next: typeof prev = {};
-      for (const [tagId, page] of Object.entries(prev)) {
-        next[tagId] = {
-          ...page,
-          docs: page.docs.map((d) =>
-            d.identity.document_uid === documentUid ? { ...d, source: { ...d.source, retrievable } } : d,
-          ),
-        };
-      }
-      return next;
-    });
+  const toggleSearchable = async (doc: ResourceDocument) => {
+    try {
+      await setDocumentRetrievable(doc, !doc.retrievable);
+    } catch {
+      showError({ summary: t("validation.error") });
+    }
   };
-
-  const toggleSearchable = async (doc: DocumentMetadata) => {
-    const next = await commands.toggleRetrievable(doc);
-    if (next !== undefined) patchDocRetrievable(doc.identity.document_uid, next);
-  };
-
-  // Same rationale as patchDocRetrievable above: a label add/remove never
-  // changes tag membership or counts, so patch every loaded page holding this
-  // doc instead of a list-wide refetch.
-  const patchDocLabels = (documentUid: string, labels: string[]) => {
-    setPerTag((prev) => {
-      const next: typeof prev = {};
-      for (const [tagId, page] of Object.entries(prev)) {
-        next[tagId] = {
-          ...page,
-          docs: page.docs.map((d) => (d.identity.document_uid === documentUid ? { ...d, labels } : d)),
-        };
-      }
-      return next;
-    });
-  };
-
   const bulkToggleSearchable = async () => {
     // The selection is uniform: all included or all excluded, including tables.
     await Promise.all(selectedDocs.map((doc) => toggleSearchable(doc)));
     setSelectedKeys(new Set());
   };
-
-  // Folder-aware "exclude from search" (#2446). When the selection contains a
-  // folder there is no cheap way to know the uniform retrievable state of its
-  // subtree, so this is not the directional file-only toggle: it resolves every
-  // descendant document on click (spinner meanwhile) and forces `retrievable`
-  // to false on all of them — the one direction the user asked for at the folder
-  // level. Silent per-document mutation with a single summary toast, unlike
-  // bulkToggleSearchable's one-toast-per-doc path (kept for the file-only case).
   const [bulkExcluding, setBulkExcluding] = useState(false);
   const bulkExcludeSelection = async () => {
     setBulkExcluding(true);
@@ -1502,9 +616,9 @@ function DocumentWorkspace({
       const folderDocs = selectedFolders.length > 0 ? (await resolveFolderDocs(selectedFolders)).map((e) => e.doc) : [];
       // Union of loose selected docs + every document under the selected folders,
       // deduplicated, keeping only those actually excludable and still searchable.
-      const byUid = new Map<string, DocumentMetadata>();
-      for (const doc of [...selectedDocs, ...folderDocs]) byUid.set(doc.identity.document_uid, doc);
-      const targets = [...byUid.values()].filter((doc) => doc.source.retrievable !== false);
+      const byUid = new Map<string, ResourceDocument>();
+      for (const doc of [...selectedDocs, ...folderDocs]) byUid.set(doc.id, doc);
+      const targets = [...byUid.values()].filter((doc) => doc.retrievable !== false);
       if (targets.length === 0) {
         showInfo?.({ summary: t("rework.resources.toast.bulkExcludeNothing") });
         setSelectedKeys(new Set());
@@ -1513,14 +627,10 @@ function DocumentWorkspace({
       const done = await Promise.all(
         targets.map((doc) =>
           setDocumentRetrievable(doc, false)
-            .then(() => doc.identity.document_uid)
+            .then(() => doc.id)
             .catch(() => null),
         ),
       );
-      // Patch any loaded page holding a just-excluded document (folder docs are
-      // off-screen, so this only touches the loose-doc rows — the rest are not
-      // rendered anyway).
-      for (const uid of done) if (uid) patchDocRetrievable(uid, false);
       const okCount = done.filter(Boolean).length;
       if (okCount > 0)
         showSuccess?.({ summary: t("rework.resources.toast.bulkExcludedFromSearch", { count: okCount }) });
@@ -1529,59 +639,21 @@ function DocumentWorkspace({
     } catch (e: unknown) {
       showError?.({
         summary: t("validation.error"),
-        detail: (e as { data?: { detail?: string } })?.data?.detail ?? t("rework.resources.toast.bulkExcludeError"),
+        detail:
+          (
+            e as {
+              data?: {
+                detail?: string;
+              };
+            }
+          )?.data?.detail ?? t("rework.resources.toast.bulkExcludeError"),
       });
     } finally {
       setBulkExcluding(false);
     }
   };
-
-  // Non-destructive and repeatable — unlike delete/exclude above, the
-  // selection is left as-is afterward (a user may well want to act on the
-  // same rows again right after downloading them).
-  const [bulkDownloading, setBulkDownloading] = useState(false);
-  const bulkDownload = async () => {
-    if (managerSpaceId) {
-      documentsUnavailable();
-      return;
-    }
-    setBulkDownloading(true);
-    try {
-      // Folder-aware (#2446): resolve each selected folder's documents and zip
-      // them under their folder-relative path, preserving the tree; loose
-      // selected documents sit at the archive root. Resolved on click so a
-      // folder selection stays instant until the user actually downloads.
-      const folderDocs = selectedFolders.length > 0 ? await resolveFolderDocs(selectedFolders) : [];
-      const files = [
-        ...selectedDocs.map((doc) => ({
-          filename: doc.identity.document_name || doc.identity.document_uid,
-          fetchBlob: () => commands.fetchBlob(doc),
-        })),
-        ...folderDocs.map(({ doc, relDir }) => {
-          const name = doc.identity.document_name || doc.identity.document_uid;
-          return { filename: relDir ? `${relDir}/${name}` : name, fetchBlob: () => commands.fetchBlob(doc) };
-        }),
-      ];
-      if (files.length === 0) {
-        // Folders-only selection that resolved to no documents — give feedback
-        // rather than a silently dead click after the spinner.
-        showInfo?.({ summary: t("rework.resources.toast.downloadEmpty") });
-        return;
-      }
-      await downloadManyAsZip(files, "resources.zip");
-    } catch (e: unknown) {
-      showError?.({
-        summary: t("validation.error"),
-        detail: (e as { data?: { detail?: string } })?.data?.detail || t("rework.resources.toast.downloadError"),
-      });
-    } finally {
-      setBulkDownloading(false);
-    }
-  };
-
   const managerFolderPaths = useRef(new Map<string, Promise<string>>());
   const ensureManagerFolderPath = async (segments: string[]): Promise<string | null> => {
-    if (!managerSpaceId) return null;
     let parent = uploadTargetNode.managerFolder?.id ?? null;
     for (const segment of segments) {
       // The control plane stores folder names in NFC without surrounding whitespace.
@@ -1598,7 +670,14 @@ function DocumentWorkspace({
               }).unwrap()
             ).id;
           } catch (error) {
-            if ((error as { status?: number }).status !== 409) throw error;
+            if (
+              (
+                error as {
+                  status?: number;
+                }
+              ).status !== 409
+            )
+              throw error;
             let offset = 0;
             for (;;) {
               const page = await findManagerEntries({
@@ -1622,9 +701,8 @@ function DocumentWorkspace({
     }
     return parent;
   };
-
-  const moreOptionsForFolder = (node: TagNode): OptionModel<"rename" | "delete">[] => {
-    if (!canCreateFolder || (!node.managerFolder && !node.tagsHere[0])) return [];
+  const moreOptionsForFolder = (node: FolderNode): OptionModel<"rename" | "delete">[] => {
+    if (!canCreateFolder || !node.managerFolder) return [];
     return [
       {
         value: "rename",
@@ -1641,24 +719,9 @@ function DocumentWorkspace({
       },
     ];
   };
-
   const moreOptionsForDoc = (doc: ResourceDocument): OptionModel<DocMenuAction>[] => {
-    const activeTask = doc.managerDocument
-      ? doc.managerProcessing?.status === "pending" || doc.managerProcessing?.status === "running"
-      : activeDocTaskByUid.get(doc.identity.document_uid);
+    const activeTask = doc.processing?.status === "pending" || doc.processing?.status === "running";
     const options: OptionModel<DocMenuAction>[] = [];
-    // No "error detail" entry here: the per-stage messages ride the "failed"
-    // StatusChip itself, on hover (#2315).
-    if (canCreateFolder) {
-      options.push({
-        value: "rename",
-        key: "rename",
-        label: t("rework.resources.action.rename"),
-        icon: { category: "outlined", type: "drive_file_rename_outline" },
-      });
-    }
-    // Download is read-only — offered regardless of canCreateFolder, unlike
-    // the three mutating actions around it.
     options.push({
       value: "download",
       key: "download",
@@ -1666,16 +729,7 @@ function DocumentWorkspace({
       icon: { category: "outlined", type: "download" },
     });
     if (canCreateFolder) {
-      // Labels are descriptive metadata, not resource management — only
-      // checks the document's own UPDATE access server-side, same gate as
-      // rename, so it's offered under this same condition.
-      options.push({
-        value: "labels",
-        key: "labels",
-        label: t("rework.resources.action.manageLabels"),
-        icon: { category: "outlined", type: "category" },
-      });
-      const excludedFromSearch = doc.source.retrievable === false;
+      const excludedFromSearch = doc.retrievable === false;
       options.push(
         {
           value: "searchable" as const,
@@ -1710,52 +764,17 @@ function DocumentWorkspace({
         },
       );
     }
-    return doc.managerDocument
-      ? options.map((option) =>
-          option.value === "delete"
-            ? option
-            : {
-                ...option,
-                disabled:
-                  option.value !== "download" &&
-                  option.value !== "searchable" &&
-                  !(option.value === "relaunch" && directory?.processing_enabled),
-                tooltip:
-                  option.value !== "download" &&
-                  option.value !== "searchable" &&
-                  !(option.value === "relaunch" && directory?.processing_enabled)
-                    ? t("rework.resources.documentsUnavailable")
-                    : undefined,
-              },
-        )
-      : options;
+    return options.filter((option) => option.value !== "relaunch" || directory?.processing_enabled);
   };
-
   // Two of the tracks after "Auteur" hold nothing most of the time: a settled
   // document shows no chip at all, and the search-exclusion icon is rare. They
   // still reserved their full width on every row, which is what made the table
   // refuse to narrow. Both grids read the same track list, so deciding this
   // once here keeps the header and the rows in step.
-  const showsStatus = filteredRows.some((row) => {
-    if (row.kind === "folder") {
-      const rollup = folderRollups.get(row.node.full);
-      return Boolean(rollup?.processing || rollup?.failed.length || rollup?.justDone);
-    }
-    return getDocStatus(row.doc) !== "ready" || justCompletedDocUids.has(row.doc.identity.document_uid);
-  });
-  // Names in this folder that a file still on the user's hands is waiting to be
-  // told what to do about. The row only points at the panel: a table is no
-  // place to be answering a question (see the panel's own decision buttons).
-  const contestedNames = new Set(
-    allTasks
-      .filter((vm) => vm.stage === "decision" && vm.conflict?.tagId && vm.conflict.tagId === currentTag?.id)
-      .map((vm) => vm.conflict!.filename),
-  );
-
+  const showsStatus = filteredRows.some((row) => row.kind === "document" && getDocStatus(row.doc) !== "ready");
   const showsExclusion = filteredRows.some(
-    (row) => row.kind === "document" && getDocStatus(row.doc) === "ready" && row.doc.source.retrievable === false,
+    (row) => row.kind === "document" && getDocStatus(row.doc) === "ready" && row.doc.retrievable === false,
   );
-
   // Only present when some row actually has a state to report — a folder of
   // settled documents shows nothing here, and an always-there track would just
   // be 8rem of blank on every row. Fixed rather than "auto" for the same
@@ -1765,37 +784,16 @@ function DocumentWorkspace({
     label: "",
     size: "minmax(0, 8rem)",
     cellRenderer: (row) => {
-      // Folder rollup (#2384). Precedence is processing > failures > done:
-      // while anything is still running the folder is not settled yet, and
-      // once it is, an unresolved failure is more actionable than a "your
-      // upload landed" marker. `raw` is never rolled up — a folder holding
-      // never-processed documents is a normal steady state, not news.
-      if (row.kind === "folder") {
-        const rollup = folderRollups.get(row.node.full);
-        if (rollup?.processing) return <StatusChip status="processing" />;
-        if (rollup?.failed.length) return <StatusChip status="warning" failedDocuments={rollup.failed} />;
-        return rollup?.justDone ? <StatusChip status="ready" justCompleted /> : null;
-      }
+      if (row.kind === "folder") return null;
       return (
         <StatusChip
           status={getDocStatus(row.doc)}
-          errors={
-            row.doc.managerDocument ? managerProcessingErrors(row.doc.managerProcessing, t) : row.doc.processing?.errors
-          }
-          documentUid={row.doc.identity.document_uid}
-          // The failure a Temporal child job reported: for a run that died
-          // before any stage started, this is the ONLY account of it —
-          // `processing.errors` is keyed by stage and stays empty. Already in
-          // hand from the task feed, so the Resources tab stops being the one
-          // surface that shows "Erreur" with nothing behind it (#2315 put the
-          // message on the task; it only ever reached the task popover).
-          taskError={row.doc.managerDocument ? undefined : docOutcomes.failed.get(row.doc.identity.document_uid)?.error}
-          justCompleted={justCompletedDocUids.has(row.doc.identity.document_uid)}
+          errors={managerProcessingErrors(row.doc.processing, t)}
+          documentUid={row.doc.id}
         />
       );
     },
   };
-
   const columns: DataTableColumn<Row>[] = [
     {
       label: columnLabel("name"),
@@ -1817,22 +815,7 @@ function DocumentWorkspace({
             </button>
           );
         }
-        if (!contestedNames.has(row.doc.identity.document_name)) return <DocumentNameCell doc={row.doc} />;
-        return (
-          <span className={styles.contestedName}>
-            <DocumentNameCell doc={row.doc} />
-            <Tooltip text={t("rework.imports.conflict.rowHint")}>
-              <IconButton
-                variant="icon"
-                size="small"
-                color="warning"
-                icon={{ category: "outlined", type: "warning" }}
-                aria-label={t("rework.imports.conflict.rowHint")}
-                onClick={() => dispatch(importPanelOpenRequested())}
-              />
-            </Tooltip>
-          </span>
-        );
+        return <DocumentNameCell doc={row.doc} />;
       },
     },
     {
@@ -1841,74 +824,35 @@ function DocumentWorkspace({
       size: "minmax(0, 6.5rem)",
       cellRenderer: (row) => {
         if (row.kind === "folder") {
-          const ids = folderDescendantTagIds.get(row.node.full) ?? [];
-          const resolved = ids.length > 0 && ids.every((id) => folderSizes[id] !== undefined);
-          const bytes = resolved ? ids.reduce((sum, id) => sum + (folderSizes[id] ?? 0), 0) : undefined;
-          return <span className={styles.nowrapCell}>{bytes === undefined ? "—" : formatBytes(bytes)}</span>;
+          return <span className={styles.nowrapCell}>—</span>;
         }
-        return <span className={styles.nowrapCell}>{formatBytes(row.doc.file?.file_size_bytes ?? 0)}</span>;
+        return <span className={styles.nowrapCell}>{formatBytes(row.doc.size ?? 0)}</span>;
       },
     },
     {
-      // Documents: source.date_added_to_kb, not identity.created — the
-      // latter is the file's OWN embedded metadata (e.g. a .docx's core
-      // "created" property, or nothing at all for a PDF, since that
-      // processor never extracts one), not when it landed in Fred.
-      // date_added_to_kb is stamped server-side at ingestion (SourceInfo's
-      // Pydantic default_factory, base_input_processor.py) and always set.
+      // Use the time this original was stored in the Control Plane.
       label: columnLabel("created"),
       sortable: true,
       size: "minmax(0, 9rem)",
       cellRenderer: (row) => (
         <span className={styles.nowrapCell}>
-          {formatDateTime(
-            row.kind === "folder"
-              ? (row.node.managerFolder?.created_at ?? row.node.tagsHere[0]?.created_at)
-              : row.doc.source.date_added_to_kb,
-          )}
+          {formatDateTime(row.kind === "folder" ? row.node.managerFolder?.created_at : row.doc.created_at)}
         </span>
       ),
     },
     {
-      // identity.author is the file's own embedded-metadata author, not the
-      // Fred user who uploaded it — RFC §13.10 decision 10 / FRONT-09.L.
-      // uploaded_by (the uid, stamped once at ingestion) is resolved to a
-      // display name via the batched uploaderById lookup above; a document
-      // ingested before this field existed has no uploaded_by and renders
-      // "—", same as a folder (folders have no uploader concept at all).
       label: t("rework.resources.columns.author"),
       size: "minmax(0, 9rem)",
       cellRenderer: (row) => {
-        const uid = row.kind === "document" ? row.doc.identity.uploaded_by : null;
+        const uid = row.kind === "document" ? row.doc.created_by : null;
         if (!uid) return <span className={styles.nowrapCell}>—</span>;
         // The manager listing resolves names itself, in the same response.
         const managerName = directory?.uploaders[uid];
-        if (managerName) return <span className={styles.nowrapCell}>{managerName}</span>;
-        const summary = uploaderById.get(uid);
-        // A doc just uploaded this session adds a brand-new uid to
-        // uploaderUids above, which re-keys the batched query and starts a
-        // fresh fetch — until it resolves, `summary` is genuinely absent yet,
-        // not "no such user". Falling through to userDisplayName's raw-uid
-        // fallback here would flash the uploader's UUID for that window
-        // instead of their name; "—" that self-corrects on the next render
-        // reads as loading rather than as broken data.
-        if (!summary && isFetchingUploaders) return <span className={styles.nowrapCell}>—</span>;
-        return <span className={styles.nowrapCell}>{userDisplayName(uid, summary)}</span>;
+        return <span className={styles.nowrapCell}>{managerName ?? uid}</span>;
       },
     },
     ...(showsStatus ? [statusColumn] : []),
     {
-      // Fixed, not "auto": DataTable renders the header and body as two
-      // independent grids (RFC-tracked, for the scroll-starts-below-header
-      // behavior), so an "auto" track sizes itself from each grid's OWN
-      // content — the header's empty label vs. the row's icon buttons — and
-      // the two grids disagree on this column's width. That leftover space
-      // then gets absorbed differently by the flexible Name (2fr) column in
-      // each grid, shifting every column after it out of alignment. A fixed
-      // width both grids agree on avoids the whole class of drift. Two 2rem
-      // buttons plus their gap and the cell's padding is the normal case; the
-      // third slot is only reserved when a document on the page is actually
-      // excluded from search.
       label: "",
       size: showsExclusion ? "8rem" : "5.75rem",
       cellRenderer: (row) => {
@@ -1919,7 +863,7 @@ function DocumentWorkspace({
         const status = row.kind === "document" && getDocStatus(row.doc);
         return (
           <span className={styles.actionsCell}>
-            {row.kind === "document" && status === "ready" && row.doc.source.retrievable === false && (
+            {row.kind === "document" && status === "ready" && row.doc.retrievable === false && (
               <Tooltip text={t("rework.resources.status.excludedFromSearch")}>
                 <span className={styles.excludedIcon} aria-label={t("rework.resources.status.excludedFromSearch")}>
                   <Icon category="outlined" type="search_off" />
@@ -1934,7 +878,7 @@ function DocumentWorkspace({
                   size="small"
                   icon={{ category: "outlined", type: "visibility" }}
                   aria-label={t("rework.resources.action.preview")}
-                  onClick={() => commands.preview(row.doc)}
+                  onClick={() => setPreviewTarget({ documentUid: row.doc.id, fileName: row.doc.name })}
                 />
               </Tooltip>
             )}
@@ -1949,23 +893,18 @@ function DocumentWorkspace({
               options={row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc(row.doc)}
               onSelect={(value) => {
                 if (row.kind === "folder") {
-                  if (value === "rename") setRenameTarget({ kind: "folder", node: row.node });
+                  if (value === "rename") setRenameTarget(row.node);
                   if (value === "delete") void confirmDeleteFolder(row.node);
                 } else {
-                  if (value === "rename") setRenameTarget({ kind: "document", doc: row.doc });
                   if (value === "download") {
-                    if (row.doc.managerDocument)
-                      void downloadManagerDocument(row.doc.managerDocument).catch(() =>
-                        showError({ summary: t("rework.resources.toast.downloadError") }),
-                      );
-                    else void commands.download(row.doc);
+                    void downloadManagerDocument(row.doc).catch(() =>
+                      showError({ summary: t("rework.resources.toast.downloadError") }),
+                    );
                   }
-                  if (value === "labels") setLabelsTarget(row.doc);
                   if (value === "searchable") void toggleSearchable(row.doc);
-                  if (value === "relaunch" && (row.doc.managerDocument || currentTag))
-                    void relaunchIngestion([row.doc], currentTag?.id ?? "");
-                  if (value === "delete" && row.doc.managerDocument) {
-                    const id = row.doc.managerDocument.id;
+                  if (value === "relaunch") void relaunchIngestion([row.doc]);
+                  if (value === "delete" && row.doc) {
+                    const id = row.doc.id;
                     showConfirmationDialog({
                       title: t("rework.resources.action.delete"),
                       message: t("rework.resources.confirm.deleteManagerDocument", {
@@ -1981,19 +920,17 @@ function DocumentWorkspace({
                           if (mounted.current && locationRef.current === location)
                             showError?.({
                               summary: t("validation.error"),
-                              detail: (e as { data?: { detail?: string } }).data?.detail ?? t("validation.error"),
+                              detail:
+                                (
+                                  e as {
+                                    data?: {
+                                      detail?: string;
+                                    };
+                                  }
+                                ).data?.detail ?? t("validation.error"),
                             });
                         }
                       },
-                    });
-                  } else if (value === "delete" && currentTag) {
-                    showConfirmationDialog({
-                      title: t("rework.resources.confirm.deleteTitle"),
-                      message: t("rework.resources.confirm.deleteMessage", {
-                        name: documentDisplayName(row.doc),
-                      }),
-                      onConfirm: () =>
-                        void commands.removeFromLibrary(row.doc, currentTag as unknown as TagWithItemsId),
                     });
                   }
                 }
@@ -2004,117 +941,28 @@ function DocumentWorkspace({
       },
     },
   ];
-
   const breadcrumbSegments = useMemo(() => {
-    if (managerSpaceId)
-      return [
-        { label: t("rework.resources.roots.resources"), onClick: currentFull ? () => navigateTo(null) : undefined },
-        ...(directory?.ancestors ?? []).map((folder, i, ancestors) => ({
-          label: folder.name,
-          onClick: i < ancestors.length - 1 ? () => navigateTo(folder.id) : undefined,
-        })),
-      ];
-    // Rooted inside a library, the trail starts at the library itself: the
-    // corpus above it is not somewhere this workspace can go.
-    const rootLabel = baseFull ? baseFull.split("/").pop()! : t("rework.resources.roots.resources");
-    if (currentFull === baseFull) return [{ label: rootLabel }];
-    const relative = baseFull ? currentFull!.slice(baseFull.length + 1) : currentFull!;
-    const parts = relative.split("/");
-    const segments = [{ label: rootLabel, onClick: () => navigateTo(baseFull) }];
-    let acc = baseFull ?? "";
-    parts.forEach((part, i) => {
-      acc = acc ? `${acc}/${part}` : part;
-      // Snapshot this iteration's path: every segment's onClick otherwise
-      // closes over the same mutable `acc` binding, so by the time any of
-      // them actually fires (a later click), they'd all navigate to
-      // whatever `acc` was left at after the loop finished — the deepest
-      // folder — instead of the segment that was actually clicked.
-      const stepPath = acc;
-      const isLast = i === parts.length - 1;
-      segments.push({ label: part, onClick: isLast ? undefined : () => navigateTo(stepPath) });
-    });
-    return segments;
-  }, [currentFull, baseFull, t, navigateTo, managerSpaceId, directory]);
-
-  const failedInitialLoad = managerSpaceId
-    ? failedManagerRead.current
-    : Boolean(currentTag && page && !page.loading && !page.loaded);
-  const isEmpty = managerSpaceId
-    ? !managerQuery.isFetching && filteredRows.length === 0
-    : !tagsLoading &&
-      childFolders.length === 0 &&
-      (failedInitialLoad || (currentTag ? page?.loaded && page.docs.length === 0 : true));
-  // "Create a library" belongs to the corpus root alone.
+    return [
+      { label: t("rework.resources.roots.resources"), onClick: currentFull ? () => navigateTo(null) : undefined },
+      ...(directory?.ancestors ?? []).map((folder, i, ancestors) => ({
+        label: folder.name,
+        onClick: i < ancestors.length - 1 ? () => navigateTo(folder.id) : undefined,
+      })),
+    ];
+  }, [currentFull, t, navigateTo, managerSpaceId, directory]);
+  const failedInitialLoad = failedManagerRead.current;
+  const isEmpty = !managerQuery.isFetching && filteredRows.length === 0;
   const emptyMessage = failedInitialLoad
     ? t("rework.resources.empty.loadError")
-    : currentFull === baseFull && !baseFull
+    : !currentFull
       ? t("rework.resources.empty.createLibrary")
       : t("rework.resources.empty.folder");
-
   // The upload drawer targets whichever folder triggered it: a drop target
   // (dropTargetNode) when opened by dragging files onto a folder row, or the
   // currently-viewed folder for the toolbar's "+"/manual upload.
   const uploadTargetNode = dropTargetNode ?? currentNode;
-  const uploadTargetTag = uploadTargetNode.tagsHere[0] ?? null;
-
-  // Walks/creates the tag chain for one dropped subdirectory under the upload
-  // target, returning the leaf's tag id — how a dropped folder keeps its
-  // on-disk structure as nested tags (the drawer calls this once per distinct
-  // subdirectory before uploading). Existing levels are resolved from the
-  // loaded tree or the pendingFolderTagIds cache; missing ones are created
-  // like CreateFolderModal would (same TagCreate shape). A 409 means the tag
-  // exists server-side but not in the loaded tree (stale list, concurrent
-  // creation elsewhere) — refetch and read its id from the fresh list.
-  const ensureFolderPath = useCallback(
-    async (segments: string[]): Promise<string | null> => {
-      let parentFull = uploadTargetNode.full;
-      let parentNode: TagNode | null = uploadTargetNode;
-      let tagId: string | null = uploadTargetNode.tagsHere[0]?.id ?? null;
-      for (const segment of segments) {
-        const full = parentFull ? `${parentFull}/${segment}` : segment;
-        const node: TagNode | null = parentNode?.children.get(segment) ?? null;
-        let id = pendingFolderTagIds.current.get(full) ?? node?.tagsHere[0]?.id ?? null;
-        if (!id) {
-          try {
-            const created = await createTag({
-              tagCreate: {
-                name: segment,
-                path: parentFull || null,
-                type: "document",
-                team_id: isPersonalTeam ? null : teamId,
-              },
-            }).unwrap();
-            id = created.id;
-          } catch (err) {
-            if ((err as { status?: number | string })?.status === 409) {
-              const fresh = await refetchTags().unwrap();
-              id = (fresh ?? []).find((tag) => tag.type === "document" && fullPath(tag) === full)?.id ?? null;
-            }
-            if (!id) {
-              const detail = (err as { data?: { detail?: string } })?.data?.detail;
-              throw new Error(detail ?? t("rework.resources.folderModal.error"));
-            }
-          }
-        }
-        pendingFolderTagIds.current.set(full, id);
-        parentFull = full;
-        parentNode = node;
-        tagId = id;
-      }
-      return tagId;
-    },
-    [uploadTargetNode, createTag, isPersonalTeam, teamId, refetchTags, t],
-  );
-
-  // The full page is a drop surface for the folder being viewed — the drill-down
-  // model shows one folder at a time, so "drop anywhere" reads as "add to this
-  // folder". Folder rows keep their own (more specific) drop target above this
-  // one. Same CAN_UPDATE_RESOURCES gate as the toolbar upload action. At the
-  // corpus root there is no tag to attach plain files to, so only dropped
-  // FOLDERS are accepted there — each one becomes a library mirroring its
-  // structure (openDrawerWithDroppedFiles filters loose files out).
-  const atRoot = currentFull === baseFull;
-  const pageDroppable = canCreateFolder && (!!managerSpaceId || !!currentTag || atRoot);
+  const atRoot = currentFull === null;
+  const pageDroppable = canCreateFolder;
   const pageDropProps = pageDroppable
     ? {
         onDragOver: (event: React.DragEvent) => {
@@ -2137,7 +985,6 @@ function DocumentWorkspace({
       }
     : {};
   const pageDragActive = pageDroppable && pageDragOver && !dragOverFolder;
-
   return (
     <div className={styles.workspace} data-page-drag-over={pageDragActive || undefined} {...pageDropProps}>
       <Dialog
@@ -2149,7 +996,7 @@ function DocumentWorkspace({
         onCancel={() => answerProfile(undefined)}
       >
         <p>{t("rework.resources.relaunchProfileHelp")}</p>
-        <Select<IngestionProcessingProfile>
+        <Select<Profile>
           size="medium"
           label={t("rework.resources.relaunchProfileLabel")}
           value={relaunchProfile}
@@ -2177,10 +1024,8 @@ function DocumentWorkspace({
           value: search,
           onChange: (value) => {
             setSearch(value);
-            if (managerSpaceId) {
-              setFolderOffset(0);
-              setSelectedKeys(new Set());
-            }
+            setFolderOffset(0);
+            setSelectedKeys(new Set());
           },
           placeholder: t("rework.resources.search.placeholder"),
           ariaLabel: t("rework.resources.search.ariaLabel"),
@@ -2190,22 +1035,13 @@ function DocumentWorkspace({
           hasSelection ? (
             <BulkActionsBar
               selectedCount={selectedDocs.length + selectedFolders.length}
-              disabledReason={
-                managerSpaceId
-                  ? {
-                      download: t("rework.resources.documentsUnavailable"),
-                      search: t("rework.resources.documentsUnavailable"),
-                      processing: directory?.processing_enabled ? undefined : t("rework.documentStorage.noProcessing"),
-                    }
-                  : undefined
-              }
-              // Selection survives read-only because bulk download is a read:
-              // only the actions that write drop out, so the same rows can
-              // still be picked and fetched as a ZIP.
+              disabledReason={{
+                processing: directory?.processing_enabled ? undefined : t("rework.documentStorage.noProcessing"),
+              }}
               onDelete={canCreateFolder ? bulkDelete : undefined}
               deleteLoading={bulkDeleting}
               relaunch={
-                canCreateFolder && relaunchableSelection.length > 0
+                canCreateFolder && directory?.processing_enabled && relaunchableSelection.length > 0
                   ? {
                       count: relaunchableSelection.length,
                       onClick: () => void bulkRelaunch(),
@@ -2215,10 +1051,7 @@ function DocumentWorkspace({
               }
               onClearSelection={() => setSelectedKeys(new Set())}
               searchToggle={
-                // A folder-containing selection can't be resolved to a single
-                // direction cheaply (#2446): offer "exclude" only, resolved on
-                // click. A file-only selection keeps the directional toggle.
-                !canCreateFolder
+                !canCreateFolder || !directory?.processing_enabled
                   ? undefined
                   : selectedFolders.length > 0
                     ? { mode: "exclude", onClick: () => void bulkExcludeSelection(), loading: bulkExcluding }
@@ -2226,13 +1059,11 @@ function DocumentWorkspace({
                       ? { mode: searchToggleMode, onClick: bulkToggleSearchable }
                       : undefined
               }
-              onDownload={() => void bulkDownload()}
-              downloadLoading={bulkDownloading}
             />
           ) : (
             <>
               {/* Outside the write gate on purpose: refreshing the view is not
-                  a mutation, and a read-only member needs it as much as anyone. */}
+              a mutation, and a read-only member needs it as much as anyone. */}
               <Tooltip text={t("rework.resources.action.refresh")}>
                 <IconButton
                   variant="icon"
@@ -2256,11 +1087,7 @@ function DocumentWorkspace({
                     />
                   </Tooltip>
                   <Tooltip
-                    text={
-                      (managerSpaceId ? currentFull : currentTag)
-                        ? t("rework.resources.action.addFile")
-                        : t("rework.resources.action.addFileHint")
-                    }
+                    text={currentFull ? t("rework.resources.action.addFile") : t("rework.resources.action.addFileHint")}
                   >
                     <IconButton
                       color="primary"
@@ -2268,7 +1095,7 @@ function DocumentWorkspace({
                       size="medium"
                       icon={{ category: "outlined", type: "upload_file" }}
                       aria-label={t("rework.resources.action.addFile")}
-                      disabled={managerSpaceId ? !currentFull || !directory : !currentTag}
+                      disabled={!currentFull || !directory}
                       onClick={() => setUploadOpen(true)}
                     />
                   </Tooltip>
@@ -2277,11 +1104,7 @@ function DocumentWorkspace({
             </>
           )
         }
-        loading={
-          managerSpaceId
-            ? managerQuery.isFetching && !directory
-            : tagsLoading || Boolean(currentTag && (!page || (page.loading && !page.loaded)))
-        }
+        loading={managerQuery.isFetching && !directory}
         loadingMessage={t("rework.resources.loading")}
         empty={isEmpty}
         emptyMessage={emptyMessage}
@@ -2291,33 +1114,19 @@ function DocumentWorkspace({
         selectedKeys={selectedKeys}
         onSelectedKeysChange={setSelectedKeys}
         serverPagination={
-          managerSpaceId
-            ? directory
-              ? {
-                  totalCount: directory?.total ?? 0,
-                  offset: folderOffset,
-                  limit: rowsPerPage,
-                  onOffsetChange: (offset) => {
-                    setFolderOffset(offset);
-                    setSelectedKeys(new Set());
-                  },
-                  onLimitChange: handleRowsPerPageChange,
-                }
-              : undefined
-            : currentTag
-              ? {
-                  totalCount: page?.total ?? 0,
-                  offset: page?.offset ?? 0,
-                  limit: rowsPerPage,
-                  onOffsetChange: (offset) => void loadTagPage(currentTag.id, offset),
-                  onLimitChange: handleRowsPerPageChange,
-                }
-              : undefined
+          directory
+            ? {
+                totalCount: directory?.total ?? 0,
+                offset: folderOffset,
+                limit: rowsPerPage,
+                onOffsetChange: (offset) => {
+                  setFolderOffset(offset);
+                  setSelectedKeys(new Set());
+                },
+                onLimitChange: handleRowsPerPageChange,
+              }
+            : undefined
         }
-        // Controlled: the server ordered the whole tag before cutting this
-        // page, so the table must not re-sort the rows it was handed. And the
-        // active header only ever flips direction — clearing would have to fall
-        // back to a default column, which reads as the sort jumping elsewhere.
         sortState={sortStateFromOrdering(ordering, columnLabel)}
         onSortChange={handleSortChange}
         sortClearable={false}
@@ -2334,115 +1143,84 @@ function DocumentWorkspace({
         </div>
       )}
 
-      <DocumentPreviewDrawer target={commands.previewTarget} onClose={commands.closePreview} />
+      <DocumentPreviewDrawer target={previewTarget} onClose={() => setPreviewTarget(null)} />
       <DocumentUploadDrawer
         isOpen={uploadOpen}
         onClose={() => {
           setUploadOpen(false);
           setDroppedFiles(undefined);
           setDropTargetNode(null);
-          pendingFolderTagIds.current.clear();
           managerFolderPaths.current.clear();
         }}
         initialFiles={droppedFiles}
         teamId={teamId}
         importScopeId={importScopeId}
-        destinationPath={
-          managerSpaceId ? (dropTargetNode?.name ?? displayPath) || undefined : uploadTargetNode.full || undefined
-        }
-        managerDestination={
-          managerSpaceId
-            ? {
-                spaceId: managerSpaceId,
-                folderId: uploadTargetNode.managerFolder?.id,
-                processingEnabled: directory?.processing_enabled,
-              }
-            : undefined
-        }
-        metadata={{ tags: uploadTargetTag ? [uploadTargetTag.id] : [] }}
-        ensureFolderPath={canCreateFolder ? (managerSpaceId ? ensureManagerFolderPath : ensureFolderPath) : undefined}
-        requireFolderPerFile={managerSpaceId ? !uploadTargetNode.managerFolder : !uploadTargetTag}
+        destinationPath={(dropTargetNode?.managerFolder?.path ?? displayPath) || undefined}
+        managerDestination={{
+          spaceId: managerSpaceId,
+          folderId: uploadTargetNode.managerFolder?.id,
+          processingEnabled: directory?.processing_enabled,
+        }}
+        ensureFolderPath={canCreateFolder ? ensureManagerFolderPath : undefined}
+        requireFolderPerFile={!uploadTargetNode.managerFolder}
         // Reached long after the drawer closed — the transfer is detached, and
         // by then this workspace may be gone. Refetching a query whose
         // subscription has ended throws, so nothing is refreshed once it is:
         // the next mount fetches anyway.
         onUploadComplete={() => {
           if (!mounted.current) return;
-          if (managerSpaceId) {
-            void managerQuery.refetch();
-            onDocumentsChanged?.();
-            return;
-          }
-          if (uploadTargetTag) void loadTagPage(uploadTargetTag.id, perTag[uploadTargetTag.id]?.offset ?? 0);
-          void refetchTags();
+          void managerQuery.refetch();
+          onDocumentsChanged?.();
+          return;
         }}
       />
       <CreateFolderModal
-        key={managerSpaceId ? location : undefined}
+        key={location}
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         parentPath={displayPath ?? undefined}
-        maxDepth={managerSpaceId ? 15 : undefined}
-        onSubmit={
-          managerSpaceId
-            ? async (name) => {
-                if (!canCreateFolder) throw new Error("forbidden");
-                await createManagerFolder({
-                  createFolder: { space_id: managerSpaceId, parent_id: currentFull, name },
-                }).unwrap();
-              }
-            : undefined
-        }
-        teamId={isPersonalTeam ? undefined : teamId}
-        onCreated={() => {
-          if (!managerSpaceId) void refetchTags();
+        maxDepth={15}
+        onSubmit={async (name) => {
+          if (!canCreateFolder) throw new Error("forbidden");
+          await createManagerFolder({
+            createFolder: { space_id: managerSpaceId, parent_id: currentFull, name },
+          }).unwrap();
         }}
+        onCreated={() => void managerQuery.refetch()}
       />
       {renameTarget && (
         <RenameModal
-          key={managerSpaceId ? location : undefined}
+          key={location}
           open={!!renameTarget}
           onClose={() => setRenameTarget(null)}
-          initialName={renameTarget.kind === "folder" ? renameTarget.node.name : documentDisplayName(renameTarget.doc)}
-          lockedSuffix={renameTarget.kind === "document" ? documentExtension(renameTarget.doc) : undefined}
+          initialName={renameTarget.name}
           onSubmit={async (newName) => {
-            if (renameTarget.kind === "folder") {
-              if (renameTarget.node.managerFolder) {
-                try {
-                  await renameManagerFolder({
-                    id: renameTarget.node.managerFolder.id,
-                    rename: { name: newName },
-                  }).unwrap();
-                } catch (e) {
-                  if (mounted.current && locationRef.current === location)
-                    showError?.({
-                      summary: t("validation.error"),
-                      detail:
-                        (e as { data?: { detail?: string } }).data?.detail ?? t("rework.resources.folderModal.error"),
-                    });
-                  throw e;
-                }
-              } else await commands.renameFolder(renameTarget.node, newName);
-            } else {
-              await commands.renameDocument(renameTarget.doc, newName, currentTag?.id);
+            if (renameTarget.managerFolder) {
+              try {
+                await renameManagerFolder({
+                  id: renameTarget.managerFolder.id,
+                  rename: { name: newName },
+                }).unwrap();
+              } catch (e) {
+                if (mounted.current && locationRef.current === location)
+                  showError?.({
+                    summary: t("validation.error"),
+                    detail:
+                      (
+                        e as {
+                          data?: {
+                            detail?: string;
+                          };
+                        }
+                      ).data?.detail ?? t("rework.resources.folderModal.error"),
+                  });
+                throw e;
+              }
             }
-          }}
-        />
-      )}
-      {labelsTarget && (
-        <ManageLabelsModal
-          open={!!labelsTarget}
-          onClose={() => setLabelsTarget(null)}
-          doc={labelsTarget}
-          onMutate={async (patch) => {
-            const next = await commands.mutateLabels(labelsTarget, patch);
-            if (next) patchDocLabels(labelsTarget.identity.document_uid, next);
-            return next;
           }}
         />
       )}
     </div>
   );
 }
-
 export default DocumentWorkspace;

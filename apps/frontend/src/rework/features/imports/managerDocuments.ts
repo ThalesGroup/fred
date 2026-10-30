@@ -1,36 +1,17 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 import type { Document, FailureCode, StorageSummary, Summary } from "../../../slices/controlPlane/controlPlaneOpenApi";
-import type { DocumentMetadata, ResourceTypeStatsEntry } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import { handlePlatformAccessResponse } from "../../../common/platformAccess";
 import { downloadFile } from "../../../utils/downloadUtils";
 import { managerActor } from "./managerImportRun";
 
-export type ResourceDocument = DocumentMetadata & { managerDocument?: Document; managerProcessing?: Summary };
-/** Presentation only: no tags, ingestion results or KF identifiers are synthesized. */
+export type ResourceDocument = Document & { processing?: Summary };
 export function presentManagerDocument(document: Document, processing?: Summary): ResourceDocument {
-  return {
-    managerDocument: document,
-    managerProcessing: processing,
-    identity: { document_uid: document.id, document_name: document.name, uploaded_by: document.created_by },
-    source: { source_type: "push", date_added_to_kb: document.created_at, retrievable: document.retrievable },
-    file: { file_size_bytes: document.size, mime_type: document.mime, sha256: document.sha256 },
-    processing: {
-      profile: processing?.profile,
-      stages: {
-        raw: "done",
-        ...(processing?.status === "succeeded"
-          ? {
-              preview: "done" as const,
-              ...(processing.vectors > 0 ? { vector: "done" as const } : {}),
-              ...(processing.rows !== null ? { sql: "done" as const } : {}),
-            }
-          : {}),
-      },
-    },
-  };
+  return { ...document, processing };
 }
+/** Display buckets, aggregated from Control Plane MIME usage. */
+export type ResourceUsageBucket = { bucket: string; count: number; size_bytes: number };
 const processingFailureKeys = {
   unsupported_input: "unsupported_input",
   access_changed: "access_changed",
@@ -55,9 +36,9 @@ export function managerProcessingErrors(processing: Summary | undefined, t: (key
   if (processing?.status !== "failed") return undefined;
   return { [processing.stage]: managerProcessingFailure(processing.error_code, t) };
 }
-export function managerTypeStats(summary?: StorageSummary): ResourceTypeStatsEntry[] | undefined {
+export function managerTypeStats(summary?: StorageSummary): ResourceUsageBucket[] | undefined {
   if (!summary) return undefined;
-  const buckets = new Map<string, ResourceTypeStatsEntry>();
+  const buckets = new Map<string, ResourceUsageBucket>();
   for (const row of summary.types) {
     const mime = row.mime.toLowerCase();
     const bucket = mime.includes("pdf")

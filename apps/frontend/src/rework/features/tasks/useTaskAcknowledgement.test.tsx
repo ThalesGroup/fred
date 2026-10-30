@@ -34,7 +34,7 @@ vi.mock("../../../security/KeycloakService", () => ({
 
 import { knowledgeFlowApi } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { legacyControlPlaneApi } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
-import { taskRegistered, taskSlice, taskSnapshotsReceived } from "./taskSlice";
+import { taskRegistered, taskSlice } from "./taskSlice";
 import { useTaskAcknowledgement } from "./useTaskAcknowledgement";
 
 const makeStore = () =>
@@ -89,20 +89,10 @@ afterEach(() => {
 });
 
 describe("useTaskAcknowledgement", () => {
-  it("dismisses an untracked task locally, without asking a server that no longer knows it", async () => {
-    store.dispatch(taskSnapshotsReceived({ requestedIds: ["t1"], tasks: [] }));
-
+  it("dismisses a browser activity locally", async () => {
     await act(() => acknowledge("t1", "migration", false));
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(store.getState().tasks.byId.t1.acknowledgedAt).not.toBeNull();
-  });
-
-  it("records a known task's acknowledgement on the backend that owns it", async () => {
-    await act(() => acknowledge("t1", "migration", false));
-
-    const request = fetchMock.mock.calls[0][0] as Request;
-    expect(new URL(request.url, "http://localhost").pathname).toBe("/control-plane/v1/tasks/t1/ack");
     expect(store.getState().tasks.byId.t1.acknowledgedAt).not.toBeNull();
   });
 });

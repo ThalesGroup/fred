@@ -13,15 +13,13 @@
 // limitations under the License.
 
 import Icon from "@shared/atoms/Icon/Icon.tsx";
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
-import { useTranslation } from "react-i18next";
 import { fileIconSpec } from "../../../../utils/fileIconSpec.ts";
-import { DocumentMetadata } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
-import { documentDisplayName, embeddedTitle } from "./documentNaming.ts";
+import { Document } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { documentDisplayName } from "./documentNaming.ts";
 import styles from "./DocumentNameCell.module.css";
 
 export interface DocumentNameCellProps {
-  doc: DocumentMetadata;
+  doc: Document;
 }
 
 /** How a document is named wherever one is listed.
@@ -31,9 +29,7 @@ export interface DocumentNameCellProps {
  * same hint when the file's own metadata claims a different title.
  */
 export default function DocumentNameCell({ doc }: DocumentNameCellProps) {
-  const { t } = useTranslation();
-  const spec = fileIconSpec(doc.file?.file_type);
-  const title = embeddedTitle(doc);
+  const spec = fileIconSpec(doc.name.split(".").pop());
 
   return (
     <span className={styles.nameCell}>
@@ -41,19 +37,6 @@ export default function DocumentNameCell({ doc }: DocumentNameCellProps) {
         <Icon category="outlined" type={spec.type} filled={spec.filled} />
       </span>
       <span>{documentDisplayName(doc)}</span>
-      {title && (
-        <span className={styles.titleHintWrapper}>
-          <Tooltip text={t("rework.resources.embeddedTitleHint", { title })}>
-            <span
-              className={styles.titleHintIcon}
-              tabIndex={0}
-              aria-label={t("rework.resources.embeddedTitleHint", { title })}
-            >
-              <Icon category="outlined" type="info" />
-            </span>
-          </Tooltip>
-        </span>
-      )}
     </span>
   );
 }

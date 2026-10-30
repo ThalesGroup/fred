@@ -136,45 +136,9 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
 vi.mock("react-redux", () => ({ useDispatch: () => vi.fn(), useSelector: () => [] }));
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
-  // The rollup reads the team's terminal ingestion history (#2384); no
-  // history in these fixtures, so it falls back to the live task feed.
-  useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
-  useListTagsQuery: (_args: unknown, options: { skip: boolean }) => {
-    if (!options.skip) probe.legacyRequests.push("tags");
-    return { data: undefined, isLoading: false, refetch: vi.fn() };
-  },
-  useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [
-    (_arg: unknown) => {
-      probe.legacyRequests.push("browse");
-      return { unwrap: async () => ({ documents: [], total: 0 }) };
-    },
-  ],
-  useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [() => probe.legacyRequests.push("sizes")],
-  useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [() => probe.legacyRequests.push("process")],
-  useCreateTagMutation: () => [() => probe.legacyRequests.push("createTag"), {}],
-  useDeleteTagMutation: () => [() => probe.legacyRequests.push("deleteTag")],
-  useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [vi.fn()],
-  useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation: () => [
-    vi.fn(() => ({ unwrap: async () => ({}) })),
-  ],
-}));
 vi.mock("../../../../features/tasks/taskSlice", () => ({ selectActiveTasks: () => [], selectAllTasks: () => [] }));
 vi.mock("../../../../features/tasks/useRefetchOnTaskSettled", () => ({ useRefetchOnTaskSettled: () => {} }));
 vi.mock("../../../../features/tasks/useNotifyOnNewTaskTarget", () => ({ useNotifyOnNewTaskTarget: () => {} }));
-vi.mock("../../../../../components/documents/common/useDocumentCommands", () => ({
-  useDocumentCommands: ({ setRetrievable }: { setRetrievable: (doc: any, value: boolean) => Promise<unknown> }) => ({
-    previewTarget: null,
-    closePreview: () => {},
-    preview: () => {},
-    download: async () => {},
-    toggleRetrievable: async (doc: any) => {
-      await setRetrievable(doc, !doc.source.retrievable);
-      return !doc.source.retrievable;
-    },
-    removeFromLibrary: async () => {},
-  }),
-}));
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
   useConfirmationDialog: () => ({
     showConfirmationDialog: (value: typeof probe.confirm) => {
@@ -478,7 +442,7 @@ it("shows the uploader name the manager listing resolved, and the subject otherw
   expect(probe.legacyRequests).toEqual([]);
 });
 
-it("keeps document bulk deletion available while ZIP and search remain unavailable", async () => {
+it("keeps document bulk deletion available while ZIP and unavailable processing controls are hidden", async () => {
   probe.folders = probe.folders.filter((f) => !f.parent_id);
   probe.documents = [
     {
@@ -513,12 +477,8 @@ it("keeps document bulk deletion available while ZIP and search remain unavailab
   await act(async () => {
     (container.querySelectorAll('input[type="checkbox"]')[1] as HTMLInputElement).click();
   });
-  for (const name of ["download", "includeInSearch"]) {
-    const button = action(`bulkActions.${name}`) as HTMLButtonElement;
-    expect(button).not.toBeNull();
-    expect(button.disabled).toBe(true);
-    await act(async () => button.click());
-  }
+  expect(action("bulkActions.download")).toBeNull();
+  expect(action("bulkActions.includeInSearch")).toBeNull();
   expect(probe.deletes).toEqual([]);
   expect(probe.confirm).toBeUndefined();
   expect((action("bulkActions.delete") as HTMLButtonElement).disabled).toBe(false);

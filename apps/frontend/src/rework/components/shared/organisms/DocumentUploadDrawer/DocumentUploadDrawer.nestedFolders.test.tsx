@@ -32,14 +32,14 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const probe = vi.hoisted(() => ({
-  scheduled: [] as { name: string; metadata: Record<string, unknown> }[],
+  scheduled: [] as { name: string; folderId: string }[],
   showError: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
-vi.mock("react-redux", () => ({ useDispatch: () => () => {} }));
+vi.mock("react-redux", () => ({ useDispatch: () => (value: unknown) => value }));
 vi.mock("react-dropzone", () => ({
   useDropzone: () => ({ getRootProps: () => ({}), getInputProps: () => ({}), isDragActive: false }),
 }));
@@ -48,25 +48,31 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ sho
 vi.mock("@shared/molecules/Select/Select", () => ({ default: () => null }));
 vi.mock("@shared/molecules/UploadWarningBanner/UploadWarningBanner", () => ({ default: () => null }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
-vi.mock("../../../../../slices/streamDocumentUpload", () => ({
-  leafFileName: (file: File) => file.name.split("/").pop() || file.name,
-  streamUploadOrProcessDocument: (files: File[], _mode: string, metadata: Record<string, unknown>) => {
-    for (const file of files) probe.scheduled.push({ name: file.name, metadata });
-    return Promise.resolve([]);
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  enhancedControlPlaneApi: {
+    endpoints: {
+      preflight: {
+        initiate: () => ({
+          unwrap: async () => ({
+            conflicts: [],
+            storage: {
+              uploads_enabled: true,
+              processing_enabled: true,
+              max_file_bytes: 104857600,
+              used_bytes: 0,
+              reserved_bytes: 0,
+              quota_bytes: 1000,
+            },
+          }),
+        }),
+      },
+    },
   },
 }));
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
-  // Precheck answers "allowed" so saves proceed; the denial path has its own
-  // coverage in DocumentUploadDrawer.quotaPrecheck.test.tsx.
-  useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation: () => [
-    () => ({ unwrap: () => Promise.resolve({ conflicts: [] }) }),
-  ],
-  useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation: () => [
-    () => ({ unwrap: () => Promise.resolve({ allowed: true }) }),
-  ],
-}));
-vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
-  useGetTeamQuery: () => ({ data: undefined }),
+vi.mock("../../../../features/imports/managerImportRun", () => ({
+  runManagerImport: async (_dispatch: unknown, _space: string, files: { file: File; folderId: string }[]) => {
+    for (const { file, folderId } of files) probe.scheduled.push({ name: file.name, folderId });
+  },
 }));
 
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
@@ -117,9 +123,9 @@ describe("DocumentUploadDrawer nested-folder saves", () => {
     const ensureFolderPath = vi.fn(async (segments: string[]) => `tag-${segments.join("-")}`);
     render(
       <DocumentUploadDrawer
+        managerDestination={{ spaceId: "space", folderId: "folder", processingEnabled: true }}
         isOpen
         onClose={() => {}}
-        metadata={{ tags: ["tag-base"] }}
         ensureFolderPath={ensureFolderPath}
         initialFiles={[
           fileAt("root.pdf", "./root.pdf"),
@@ -133,16 +139,17 @@ describe("DocumentUploadDrawer nested-folder saves", () => {
     await clickSave();
 
     expect(ensureFolderPath.mock.calls.map(([segments]) => segments)).toEqual([["batch"], ["batch", "sub"]]);
-    const byName = Object.fromEntries(probe.scheduled.map((s) => [s.name, s.metadata.tags]));
-    expect(byName["root.pdf"]).toEqual(["tag-base"]);
-    expect(byName["a.pdf"]).toEqual(["tag-batch"]);
-    expect(byName["b.pdf"]).toEqual(["tag-batch-sub"]);
-    expect(byName["c.pdf"]).toEqual(["tag-batch-sub"]);
+    const byName = Object.fromEntries(probe.scheduled.map((s) => [s.name, s.folderId]));
+    expect(byName["root.pdf"]).toBe("folder");
+    expect(byName["a.pdf"]).toBe("tag-batch");
+    expect(byName["b.pdf"]).toBe("tag-batch-sub");
+    expect(byName["c.pdf"]).toBe("tag-batch-sub");
   });
 
   it("shows the subfolder hint only when structured files and a resolver are both present", () => {
     render(
       <DocumentUploadDrawer
+        managerDestination={{ spaceId: "space", folderId: "folder", processingEnabled: true }}
         isOpen
         onClose={() => {}}
         ensureFolderPath={async () => null}
@@ -152,13 +159,21 @@ describe("DocumentUploadDrawer nested-folder saves", () => {
     expect(container.textContent).toContain("documentLibrary.nestedFoldersHint");
     expect(container.textContent).toContain("batch/a.pdf");
 
-    render(<DocumentUploadDrawer isOpen onClose={() => {}} initialFiles={[fileAt("a.pdf", "/batch/a.pdf")]} />);
+    render(
+      <DocumentUploadDrawer
+        managerDestination={{ spaceId: "space", folderId: "folder", processingEnabled: true }}
+        isOpen
+        onClose={() => {}}
+        initialFiles={[fileAt("a.pdf", "/batch/a.pdf")]}
+      />,
+    );
     expect(container.textContent).not.toContain("documentLibrary.nestedFoldersHint");
   });
 
   it("filters loose files out of the seed when requireFolderPerFile is set (tagless destination)", async () => {
     render(
       <DocumentUploadDrawer
+        managerDestination={{ spaceId: "space", folderId: "folder", processingEnabled: true }}
         isOpen
         onClose={() => {}}
         requireFolderPerFile
@@ -172,13 +187,14 @@ describe("DocumentUploadDrawer nested-folder saves", () => {
 
     await clickSave();
     expect(probe.scheduled.map((s) => s.name)).toEqual(["a.pdf"]);
-    expect(probe.scheduled[0].metadata.tags).toEqual(["tag-batch"]);
+    expect(probe.scheduled[0].folderId).toBe("tag-batch");
   });
 
   it("aborts the save (nothing uploaded, drawer open) when folder resolution fails", async () => {
     const onClose = vi.fn();
     render(
       <DocumentUploadDrawer
+        managerDestination={{ spaceId: "space", folderId: "folder", processingEnabled: true }}
         isOpen
         onClose={onClose}
         ensureFolderPath={async () => {

@@ -48,20 +48,6 @@ vi.mock("@shared/molecules/Select/Select", () => ({ default: () => null }));
 // Not under test here — and its bootstrap query (RTK) would need a Redux Provider.
 vi.mock("@shared/molecules/UploadWarningBanner/UploadWarningBanner", () => ({ default: () => null }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
-vi.mock("../../../../../slices/streamDocumentUpload", () => ({
-  leafFileName: (file: File) => file.name.split("/").pop() || file.name,
-  streamUploadOrProcessDocument: vi.fn(),
-}));
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
-  // Precheck answers "allowed" so saves proceed; the denial path has its own
-  // coverage in DocumentUploadDrawer.quotaPrecheck.test.tsx.
-  useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation: () => [
-    () => ({ unwrap: () => Promise.resolve({ conflicts: [] }) }),
-  ],
-  useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation: () => [
-    () => ({ unwrap: () => Promise.resolve({ allowed: true }) }),
-  ],
-}));
 vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: undefined }),
 }));
@@ -91,6 +77,7 @@ describe("DocumentUploadDrawer initialFiles seeding", () => {
   it("opens with the provided files already listed and save enabled", () => {
     render(
       <DocumentUploadDrawer
+        managerDestination={{ spaceId: "space", folderId: "folder", processingEnabled: true }}
         isOpen
         onClose={() => {}}
         initialFiles={[new File(["a"], "a.pdf"), new File(["b"], "b.docx")]}
@@ -109,7 +96,13 @@ describe("DocumentUploadDrawer initialFiles seeding", () => {
   });
 
   it("still opens on the empty dropzone without initialFiles", () => {
-    render(<DocumentUploadDrawer isOpen onClose={() => {}} />);
+    render(
+      <DocumentUploadDrawer
+        managerDestination={{ spaceId: "space", folderId: "folder", processingEnabled: true }}
+        isOpen
+        onClose={() => {}}
+      />,
+    );
 
     expect(container.textContent).toContain("documentLibrary.dropFiles");
     // Nothing picked yet: no count to give, so the button just names the act.
@@ -122,6 +115,7 @@ describe("DocumentUploadDrawer initialFiles seeding", () => {
 it("keeps the original panel and picked files visible while manager document sending is unavailable", () => {
   render(
     <DocumentUploadDrawer
+      managerDestination={{ spaceId: "space", folderId: "folder", processingEnabled: true }}
       isOpen
       onClose={() => {}}
       initialFiles={[new File(["a"], "report.pdf")]}

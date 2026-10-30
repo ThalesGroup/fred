@@ -33,12 +33,6 @@ const PAGES: OrganizationAdminPage[] = [
     requires: "admin",
   },
   {
-    to: "/admin/tasks",
-    labelKey: "rework.sidebar.admin.menu.tasks",
-    icon: { category: "outlined", type: "build", filled: false },
-    requires: "admin",
-  },
-  {
     to: "/admin/analytics",
     labelKey: "rework.sidebar.admin.menu.analytics",
     icon: { category: "outlined", type: "analytics", filled: false },
@@ -72,24 +66,6 @@ const PAGES: OrganizationAdminPage[] = [
     to: "/admin/marketplaces",
     labelKey: "rework.sidebar.admin.menu.marketplaces",
     icon: { category: "outlined", type: "storefront", filled: false },
-    requires: "admin",
-  },
-  {
-    to: "/admin/migration",
-    labelKey: "rework.sidebar.admin.menu.migration",
-    icon: { category: "outlined", type: "sync_alt", filled: false },
-    requires: "admin",
-  },
-  {
-    to: "/admin/corpus-audit",
-    labelKey: "rework.sidebar.admin.menu.corpusAudit",
-    icon: { category: "outlined", type: "find_in_page", filled: false },
-    requires: "admin",
-  },
-  {
-    to: "/admin/self-test",
-    labelKey: "rework.sidebar.admin.menu.selftest",
-    icon: { category: "outlined", type: "check_circle", filled: false },
     requires: "admin",
   },
   {
