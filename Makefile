@@ -1,5 +1,5 @@
-CODE_QUALITY_DIRS := libs/fred-pod libs/fred-core libs/fred-sdk libs/fred-runtime libs/capabilities/fred-capability-writable-document libs/capabilities/fred-capability-ppt-filler libs/capabilities/fred-capability-platform-ops libs/capabilities/fred-capability-html-artifact libs/capabilities/fred-capability-team-wiki libs/capabilities/fred-capability-documents libs/capabilities/fred-capability-document-access libs/capabilities/fred-capability-web-research libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
-TEST_DIRS := libs/fred-pod libs/fred-core libs/fred-sdk libs/fred-runtime libs/capabilities/fred-capability-writable-document libs/capabilities/fred-capability-ppt-filler libs/capabilities/fred-capability-platform-ops libs/capabilities/fred-capability-html-artifact libs/capabilities/fred-capability-team-wiki libs/capabilities/fred-capability-documents libs/capabilities/fred-capability-document-access libs/capabilities/fred-capability-web-research libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
+CODE_QUALITY_DIRS := libs/fred-pod libs/fred-core libs/fred-sdk libs/fred-runtime libs/capabilities/fred-capability-writable-document libs/capabilities/fred-capability-ppt-filler libs/capabilities/fred-capability-platform-ops libs/capabilities/fred-capability-html-artifact libs/capabilities/fred-capability-spreadsheet libs/capabilities/fred-capability-team-wiki libs/capabilities/fred-capability-documents libs/capabilities/fred-capability-document-access libs/capabilities/fred-capability-web-research libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
+TEST_DIRS := libs/fred-pod libs/fred-core libs/fred-sdk libs/fred-runtime libs/capabilities/fred-capability-writable-document libs/capabilities/fred-capability-ppt-filler libs/capabilities/fred-capability-platform-ops libs/capabilities/fred-capability-html-artifact libs/capabilities/fred-capability-spreadsheet libs/capabilities/fred-capability-team-wiki libs/capabilities/fred-capability-documents libs/capabilities/fred-capability-document-access libs/capabilities/fred-capability-web-research libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
 DOCKER_BUILD_DIRS := apps/fred-agents apps/knowledge-flow-backend apps/control-plane-backend apps/frontend
 RUN_DIRS := apps/control-plane-backend apps/fred-agents apps/knowledge-flow-backend apps/frontend
 ENV_APPS := apps/control-plane-backend apps/fred-agents apps/knowledge-flow-backend
@@ -201,6 +201,7 @@ PYPI_PACKAGES := \
 	libs/capabilities/fred-capability-mcp \
 	libs/capabilities/fred-capability-platform-ops \
 	libs/capabilities/fred-capability-ppt-filler \
+	libs/capabilities/fred-capability-spreadsheet \
 	libs/capabilities/fred-capability-team-wiki \
 	libs/capabilities/fred-capability-web-research \
 	libs/capabilities/fred-capability-writable-document
@@ -310,10 +311,12 @@ CP_DIR               := apps/control-plane-backend
 KF_DIR               := apps/knowledge-flow-backend
 RT_DIR               := libs/fred-runtime
 WD_DIR               := libs/capabilities/fred-capability-writable-document
+SS_DIR               := libs/capabilities/fred-capability-spreadsheet
 CP_UV                := $(CP_DIR)/.venv/bin/uv
 KF_UV                := $(KF_DIR)/.venv/bin/uv
 RT_UV                := $(RT_DIR)/.venv/bin/uv
 WD_UV                := $(WD_DIR)/.venv/bin/uv
+SS_UV                := $(SS_DIR)/.venv/bin/uv
 
 .PHONY: db-check-combined-heads
 db-check-combined-heads: ## assert each Alembic tree has exactly one head (no branch conflicts)
@@ -321,6 +324,7 @@ db-check-combined-heads: ## assert each Alembic tree has exactly one head (no br
 	$(MAKE) -C $(KF_DIR) db-check-heads
 	$(MAKE) -C $(RT_DIR) db-check-heads
 	$(MAKE) -C $(WD_DIR) db-check-heads
+	$(MAKE) -C $(SS_DIR) db-check-heads
 
 .PHONY: db-check-combined-postgres-up
 db-check-combined-postgres-up: ## start the PostgreSQL container for combined migration checks
@@ -338,12 +342,15 @@ db-check-combined-sqlite: ## upgrade every Alembic tree against the same SQLite 
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory $(KF_DIR) alembic upgrade head
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory $(RT_DIR) alembic upgrade head
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WD_UV) run --directory $(WD_DIR) alembic upgrade head
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(SS_UV) run --directory $(SS_DIR) alembic upgrade head
 	@echo "=== Combined SQLite migration check: drift check ==="
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory $(CP_DIR) alembic check
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory $(KF_DIR) alembic check
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory $(RT_DIR) alembic check
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WD_UV) run --directory $(WD_DIR) alembic check
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(SS_UV) run --directory $(SS_DIR) alembic check
 	@echo "=== Combined SQLite migration check: downgrade ==="
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(SS_UV) run --directory $(SS_DIR) alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WD_UV) run --directory $(WD_DIR) alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory $(KF_DIR) alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory $(CP_DIR) alembic downgrade base
@@ -358,12 +365,15 @@ db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-po
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory $(KF_DIR) alembic upgrade head
 	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory $(RT_DIR) alembic upgrade head
 	DATABASE_URL="$(PG_COMBINED_URL)" $(WD_UV) run --directory $(WD_DIR) alembic upgrade head
+	DATABASE_URL="$(PG_COMBINED_URL)" $(SS_UV) run --directory $(SS_DIR) alembic upgrade head
 	@echo "=== Combined migration check: drift check ==="
 	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory $(CP_DIR) alembic check
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory $(KF_DIR) alembic check
 	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory $(RT_DIR) alembic check
 	DATABASE_URL="$(PG_COMBINED_URL)" $(WD_UV) run --directory $(WD_DIR) alembic check
+	DATABASE_URL="$(PG_COMBINED_URL)" $(SS_UV) run --directory $(SS_DIR) alembic check
 	@echo "=== Combined migration check: downgrade ==="
+	DATABASE_URL="$(PG_COMBINED_URL)" $(SS_UV) run --directory $(SS_DIR) alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(WD_UV) run --directory $(WD_DIR) alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory $(KF_DIR) alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory $(CP_DIR) alembic downgrade base

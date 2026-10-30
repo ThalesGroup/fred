@@ -63,6 +63,7 @@ export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
 export const CAP_PPT_FILLER = "ppt_filler";
 export const CAP_HTML_ARTIFACT = "html_artifact";
+export const CAP_SPREADSHEET = "spreadsheet";
 // Both document packs grant the reading tools; Advanced keeps separate toggles.
 export const CAP_DOCUMENT_VERBATIM = "document_verbatim";
 export const CAP_DOCUMENT_EXTRACT = "document_extract";
@@ -145,6 +146,14 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         descriptionKey: "rework.teams.formAgent.capabilities.packs.powerpointDocument.description",
         includes: [{ capabilityId: CAP_PPT_FILLER, labelKey: "capability.ppt_filler.name" }],
         enablesCapabilityIds: [CAP_PPT_FILLER],
+      },
+      {
+        id: "spreadsheet",
+        icon: "table_chart",
+        titleKey: "rework.teams.formAgent.capabilities.packs.spreadsheet.title",
+        descriptionKey: "rework.teams.formAgent.capabilities.packs.spreadsheet.description",
+        includes: [{ capabilityId: CAP_SPREADSHEET, labelKey: "capability.spreadsheet.name" }],
+        enablesCapabilityIds: [CAP_SPREADSHEET],
       },
       {
         id: "web_page",

@@ -121,6 +121,55 @@ dupliqué ou copié dans une autre équipe emporte son propre exemplaire du mod�
 **Un exemple** — un modèle de revue mensuelle en cinq diapositives, que l'agent
 remplit chaque mois à partir des documents de la période.
 
+### Générer un fichier Excel
+
+**Ce qu'elle fait** — l'agent transforme des données de la conversation en un
+fichier Excel que vous téléchargez depuis le chat. Chaque feuille a une ligne
+d'en-tête qui reste visible et sert de filtre ; les colonnes sont mises en
+forme en texte, nombres, pourcentages, montants avec leur devise ou dates au
+format de votre ordinateur. L'agent peut ajouter une ligne de totaux calculée
+par Excel (somme, moyenne, minimum, maximum, nombre), ainsi que des colonnes
+calculées ligne par ligne à partir d'autres colonnes, avec de vraies formules
+Excel : addition, soustraction, multiplication, division ou part du total (par
+exemple « une colonne TTC égale à HT × 1,2 »). Il peut aussi écrire d'autres
+formules Excel : recherches dans un autre onglet, sommes sous condition,
+statistiques (écart type, centiles, rang), calculs de prêt et
+d'investissement, mise en forme de texte, jours ouvrés et autres dates, ou un
+onglet de synthèse qui reprend les autres (« ajoute un onglet Synthèse avec le
+total de chaque onglet »). Les fichiers gardent leurs formules et affichent
+leurs résultats même dans une visionneuse qui ne recalcule pas. La date du
+jour est celle de la création du fichier, indiquée par **Calculé le** dans
+l'aperçu ; Excel la met à jour à l'ouverture.
+
+**Modifier le dernier fichier** — demandez simplement le changement :
+« ajoute une colonne Écart », « ajoute une ligne avec ces valeurs », « sépare
+ce tableau en 2 onglets, avec le Nord dans le premier ». L'agent ne modifie
+que ce que vous demandez, le reste du fichier ne change pas, et les formules
+suivent les lignes et colonnes déplacées. Chaque modification produit une
+nouvelle version (« Budget-v2.xlsx », « Budget-v3.xlsx ») ; la carte de la plus
+récente porte la mention **Dernière version**, et les précédentes restent
+téléchargeables. Cela fonctionne même longtemps après la création du fichier,
+dans la même conversation.
+
+**Ses limites** — l'agent écrit lui-même chaque valeur, le fichier reste donc
+de taille modeste : au plus 10 feuilles, 5 000 lignes par feuille et 50 000
+cellules en tout ; au-delà, l'agent vous le dit et propose de découper les
+données. Les graphiques ne sont pas encore disponibles : ajoutez-les dans Excel
+à partir des données. Pas de couleurs selon les valeurs, pas de macro. Seul le
+dernier fichier créé dans la conversation peut être modifié ; l'agent ne
+reprend pas un fichier que vous avez modifié vous-même dans Excel. Certaines
+formules ne sont pas disponibles, comme les nombres aléatoires, les liens vers des
+sites ou vers d'autres fichiers. Supprimer la conversation ne
+supprime pas encore les fichiers qu'elle a produits.
+
+**L'aperçu** — le bouton **Aperçu** de la carte du fichier ouvre le classeur à
+côté de la conversation : une feuille par onglet, les montants et les dates au
+format de votre langue, la ligne de totaux en gras. L'aperçu montre les 500
+premières lignes de chaque feuille ; téléchargez le fichier pour voir le reste.
+
+**Un exemple** — « Mets les dépenses que nous venons de lister dans un fichier
+Excel, une feuille par mois, avec les montants en euros et un total en bas. »
+
 ### Générer une page web (HTML/CSS)
 
 **Ce qu'elle fait** — l'agent produit une page ou un composant web, affiché

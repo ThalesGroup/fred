@@ -218,9 +218,10 @@ The order is **mandatory** and is defined by `PYPI_PACKAGES` in the root
 8. `fred-capability-mcp`
 9. `fred-capability-platform-ops`
 10. `fred-capability-ppt-filler`
-11. `fred-capability-team-wiki`
-12. `fred-capability-web-research`
-13. `fred-capability-writable-document`
+11. `fred-capability-spreadsheet`
+12. `fred-capability-team-wiki`
+13. `fred-capability-web-research`
+14. `fred-capability-writable-document`
 
 Selected packages floor newly prepared FRED dependencies at their corresponding
 versions; unchanged packages retain compatible older floors. Publishing out of

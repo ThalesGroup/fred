@@ -114,6 +114,49 @@ copied to another team takes its own copy of the template.
 **An example** — a five-slide monthly review template, which the agent fills
 each month from the period's documents.
 
+### Generate an Excel file
+
+**What it does** — the agent turns data from the conversation into an Excel
+file you download from the chat. Each sheet has a header row that stays
+visible and filters; columns are formatted as text, numbers, percentages,
+amounts with their currency, or dates shown in your computer's date format.
+The agent can add a totals row that Excel computes (sum, average, minimum,
+maximum, count), and columns calculated row by row from other columns with
+real Excel formulas: add, subtract, multiply, divide or share of the total (for
+example "a Total incl. VAT column equal to Excl. VAT × 1.2"). It can also
+write other Excel formulas: lookups in another sheet, conditional sums,
+statistics (standard deviation, percentiles, rank), loan and investment
+calculations, text formatting, working days and other dates, or a summary sheet
+that reads the others ("add a Summary sheet with the total of each sheet"). The
+files keep their formulas and show their results even in a viewer that does not
+recalculate. Today's date is the date the file was created, shown as
+**Calculated on** in the preview; Excel updates it when the file opens.
+
+**Changing the last file** — just ask for the change: "add a Variance column",
+"add a row with these values", "split this table into 2 sheets, with North in
+the first one". The agent changes only what you ask, the rest of the file stays
+the same, and formulas follow the rows and columns that move. Each change
+produces a new version ("Budget-v2.xlsx", "Budget-v3.xlsx"); the card of the
+newest one shows **Latest version**, and earlier ones can still be downloaded.
+This works long after the file was created, in the same conversation.
+
+**Its limits** — the agent writes every value itself, so the file stays modest
+in size: at most 10 sheets, 5,000 rows per sheet and 50,000 cells in all;
+beyond that, the agent tells you and suggests splitting the data. Charts are
+not available yet: add them in Excel from the data. No colors by value, no
+macros. Only the last file created in the conversation can be changed; the agent
+does not pick up a file you edited yourself in Excel. Some formulas are not
+available, such as random numbers and links to websites or other files. Deleting the
+conversation does not yet delete the files it produced.
+
+**The preview** — the **Preview** button on the file card opens the workbook
+beside the conversation: one tab per sheet, amounts and dates in your
+language's format, the totals row in bold. The preview shows the first 500
+rows of each sheet; download the file to see the rest.
+
+**An example** — "Put the expenses we have just listed into an Excel file, one
+sheet per month, with the amounts in euros and a total at the bottom."
+
 ### Generate a web page (HTML/CSS)
 
 **What it does** — the agent produces a web page or component, shown in a

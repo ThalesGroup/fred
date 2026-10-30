@@ -797,6 +797,7 @@ dependencies = [
     { name = "fred-capability-mcp" },
     { name = "fred-capability-platform-ops" },
     { name = "fred-capability-ppt-filler" },
+    { name = "fred-capability-spreadsheet" },
     { name = "fred-capability-team-wiki" },
     { name = "fred-capability-web-research" },
     { name = "fred-capability-writable-document" },
@@ -845,6 +846,7 @@ requires-dist = [
     { name = "fred-capability-mcp", editable = "../../libs/capabilities/fred-capability-mcp" },
     { name = "fred-capability-platform-ops", editable = "../../libs/capabilities/fred-capability-platform-ops" },
     { name = "fred-capability-ppt-filler", editable = "../../libs/capabilities/fred-capability-ppt-filler" },
+    { name = "fred-capability-spreadsheet", editable = "../../libs/capabilities/fred-capability-spreadsheet" },
     { name = "fred-capability-team-wiki", editable = "../../libs/capabilities/fred-capability-team-wiki" },
     { name = "fred-capability-web-research", editable = "../../libs/capabilities/fred-capability-web-research" },
     { name = "fred-capability-writable-document", editable = "../../libs/capabilities/fred-capability-writable-document" },
@@ -1100,6 +1102,54 @@ dev = [
     { name = "bandit", specifier = ">=1.8.6" },
     { name = "basedpyright", specifier = "==1.31.0" },
     { name = "detect-secrets", specifier = ">=1.5.0" },
+    { name = "pytest", specifier = ">=8.4.2" },
+    { name = "pytest-asyncio", specifier = ">=1.2.0" },
+    { name = "pytest-cov", specifier = ">=6.2.1" },
+    { name = "pytest-socket", specifier = ">=0.7.0" },
+    { name = "ruff", specifier = ">=0.12.5" },
+]
+
+[[package]]
+name = "fred-capability-spreadsheet"
+version = "4.5.1"
+source = { editable = "../../libs/capabilities/fred-capability-spreadsheet" }
+dependencies = [
+    { name = "fred-core" },
+    { name = "fred-sdk", extra = ["agents"] },
+    { name = "langchain-core" },
+    { name = "pydantic" },
+    { name = "sqlalchemy" },
+    { name = "xlsxwriter" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.8.6" },
+    { name = "basedpyright", marker = "extra == 'dev'", specifier = "==1.31.0" },
+    { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
+    { name = "fred-core", editable = "../../libs/fred-core" },
+    { name = "fred-runtime", marker = "extra == 'dev'", editable = "../../libs/fred-runtime" },
+    { name = "fred-sdk", extras = ["agents"], editable = "../../libs/fred-sdk" },
+    { name = "langchain-core", specifier = ">=0.3.0" },
+    { name = "openpyxl", marker = "extra == 'dev'", specifier = ">=3.1.5" },
+    { name = "pydantic", specifier = ">=2.7.0,<3.0.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.2.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
+    { name = "pytest-socket", marker = "extra == 'dev'", specifier = ">=0.7.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
+    { name = "sqlalchemy", specifier = ">=2.0" },
+    { name = "xlsxwriter", specifier = ">=3.2.0" },
+]
+provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "bandit", specifier = ">=1.8.6" },
+    { name = "basedpyright", specifier = "==1.31.0" },
+    { name = "detect-secrets", specifier = ">=1.5.0" },
+    { name = "fred-runtime", editable = "../../libs/fred-runtime" },
+    { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
     { name = "pytest-cov", specifier = ">=6.2.1" },
