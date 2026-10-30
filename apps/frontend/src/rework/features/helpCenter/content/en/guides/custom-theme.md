@@ -66,7 +66,7 @@ Icons are SVG files in `images/`, given **without** the `.svg` extension.
 Without these fields the tab keeps its usual title and icon. Switching to
 another theme also gives the tab its own back.
 
-Keep `id` unchanged when publishing a new ZIP for the same theme. Fred saves
+Keep `id` unchanged when publishing a new ZIP for the same theme. {{siteDisplayName}} saves
 this ID in each user's preferences, and a frontend restart does not generate
 a new one. The archive rejects duplicate IDs and IDs reserved for Pebble,
 Cobalt or Cloud. Use a new ID only when introducing a different theme.

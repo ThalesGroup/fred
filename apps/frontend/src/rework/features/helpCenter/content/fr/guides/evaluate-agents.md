@@ -11,7 +11,7 @@ Comment savoir si un agent répond bien — et s'il s'améliore quand vous ajust
 sa configuration ? En le mesurant, plutôt qu'en s'en remettant à une impression
 formée sur quelques questions.
 
-> L’evaluator autonome doit être déployé, enregistré dans Fred et activé pour
+> L’evaluator autonome doit être déployé, enregistré dans {{siteDisplayName}} et activé pour
 > votre équipe. S’il manque dans **Apps**, contactez votre administrateur.
 
 ## 1. Créer l'évaluation

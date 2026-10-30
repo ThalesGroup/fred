@@ -60,7 +60,7 @@ arrow leads to the earlier ones, and the mark between them (for example
 From your first sign-in you have a **personal space**: a team you are the only
 member of. You can drop documents there and try agents out without anyone else
 reaching them — not even a platform administrator. It is the place to get
-familiar with the platform.
+familiar with {{siteDisplayName}}.
 
 ## Joining a team
 

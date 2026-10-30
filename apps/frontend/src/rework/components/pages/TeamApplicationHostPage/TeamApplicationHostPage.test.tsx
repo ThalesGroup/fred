@@ -55,6 +55,10 @@ vi.mock("react-router-dom", () => ({
   useParams: () => ({ teamId: h.teamId, appId: h.appId, "*": h.subPath }),
   useNavigate: () => h.navigate,
 }));
+vi.mock("../../../../hooks/useFrontendProperties.ts", () => ({
+  useFrontendProperties: () => ({ siteDisplayName: "Acme" }),
+}));
+
 vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
   useSelectedTeam: () => ({
     teamId: h.teamId,
