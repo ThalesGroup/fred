@@ -262,48 +262,60 @@ describe("TeamContentNavbar — the team avatar", () => {
   });
 });
 
-describe("TeamContentNavbar — deferred knowledge bases", () => {
-  it("keeps unported knowledge bases out of the menu even with cached definitions", () => {
+describe("TeamContentNavbar — knowledge bases and beta badges", () => {
+  beforeEach(() => {
     h.canUseKnowledgeBases = true;
+    h.knowledgeBases = { currentData: undefined, isError: false };
+    h.wikiEnabled = true;
+  });
+
+  it("shows enabled definitions even before any instance is created, with beta after each label", () => {
+    h.knowledgeBases.currentData = [{ definition_id: "source", name: "Source", description: "" }];
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    for (const [route, label] of [
+      ["knowledge-bases", "knowledgeBases"],
+      ["wiki", "wiki"],
+    ]) {
+      const entry = html.split(`href="/team/team-1/${route}"`)[1]?.split("</a>")[0];
+      expect(entry).toBeDefined();
+      expect(entry).toContain("aria-label=");
+      expect(entry!.indexOf("aria-label=")).toBeGreaterThan(entry!.indexOf(`rework.sidebar.team.menu.${label}`));
+    }
+  });
+
+  it.each([
+    { currentData: undefined, isError: false },
+    { currentData: undefined, isError: true },
+    { currentData: [], isError: false },
+  ])("keeps the porting entry when the old catalog is unavailable: %j", (result) => {
+    h.knowledgeBases = result;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain("/team/team-1/knowledge-bases");
+  });
+
+  it("keeps the last known definitions when a refresh fails", () => {
+    h.knowledgeBases = {
+      currentData: [{ definition_id: "source", name: "Source", description: "" }],
+      isError: true,
+    };
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain("/team/team-1/knowledge-bases");
+  });
+
+  it("requires team permission even with cached enabled definitions", () => {
+    h.canUseKnowledgeBases = false;
     h.knowledgeBases.currentData = [{ definition_id: "source", name: "Source", description: "" }];
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("/team/team-1/knowledge-bases");
   });
 });
 
-describe("TeamContentNavbar Responsibilities entry", () => {
-  beforeEach(() => {
-    h.pathname = "/team/team-1/settings/members";
-    h.relations = ["team_admin"];
-  });
-
-  it("shows the entry when the charter is enabled", () => {
-    h.charterEnabled = true;
-    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/settings/responsibilities"');
-  });
-
-  it("also shows the entry to a pending admin when enabled", () => {
-    h.charterEnabled = true;
-    h.relations = ["pending_team_admin"];
-    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/settings/responsibilities"');
-  });
-
-  it("hides the entry when the charter is disabled or bootstrap is unavailable", () => {
-    h.charterEnabled = false;
-    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/settings/responsibilities"');
-
-    h.charterEnabled = undefined;
-    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/settings/responsibilities"');
-  });
-});
-
-describe("retired evaluation navigation", () => {
-  it("keeps Members but removes Evaluations for an agent editor", () => {
-    h.pathname = "/team/team-1/settings/members";
-    h.relations = ["team_editor"];
+describe("TeamContentNavbar — pending knowledge base entry", () => {
+  it("does not poll the removed Swift catalog", () => {
+    h.knowledgeBasesQuery.mockClear();
+    h.refetchKnowledgeBases.mockClear();
+    h.canUseKnowledgeBases = true;
     const html = renderToStaticMarkup(<TeamContentNavbar />);
-    expect(html).toContain('href="/team/team-1/settings/members"');
-    expect(html).not.toContain("/settings/evaluations");
-    expect(html).not.toContain("rework.teamSettings.navigation.evaluations");
+    expect(html).toContain("/weaver/features");
+    expect(h.knowledgeBasesQuery).not.toHaveBeenCalled();
+    expect(h.refetchKnowledgeBases).not.toHaveBeenCalled();
   });
 });
 
@@ -315,6 +327,7 @@ it("skips legacy sidebar reads and shows the Weaver chat list on agent managemen
   expect(h.flags).toHaveBeenLastCalledWith("enableApplications", true);
   expect(h.applications).toHaveBeenLastCalledWith("team-1", true);
   expect(h.wiki).toHaveBeenLastCalledWith({ teamId: "team-1" }, { skip: true });
+  expect(h.knowledgeBasesQuery).not.toHaveBeenCalled();
   expect(html).toContain("data-chat-list");
   expect(html).not.toContain("rework.weaverAgents.chatUnavailable");
 });

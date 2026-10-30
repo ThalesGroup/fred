@@ -21,7 +21,7 @@
 
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type { SearchPolicyName } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { SearchPolicyName } from "../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { EnumSelectRow, type EnumSelectOption } from "@shared/molecules/EnumSelectRow/EnumSelectRow";
 import type { CapabilityChatTurnControlProps } from "../types";
 

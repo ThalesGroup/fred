@@ -125,11 +125,9 @@ export default function TeamContentNavbar() {
     { skip: agentManagement || !teamId },
   );
   const showWiki = wikiAvailability?.enabled === true;
-  // Enablement is an administration decision taken elsewhere, so this
-  // always-mounted subscription refreshes like the application catalog does.
-  // A failed refresh keeps the last known answer: an entry that vanishes on one
-  // bad poll and returns a minute later reads worse than a stale one, and the
-  // control-plane refuses the routes anyway.
+  // Porting entry only: it does not depend on the removed Swift catalog.
+  const showKnowledgeBases = !!space || capabilities.canUseTeamKnowledgeBases;
+
   // #2100: which roles the current user holds on this team, "Admin · Analyst"
   // style — `permissions` alone cannot answer this (can_run_evaluations/
   // can_manage_evaluation_corpus are granted to team_analyst AND team_admin,
@@ -223,6 +221,21 @@ export default function TeamContentNavbar() {
       linkProps: { to: `/team/${teamId}/prompts` },
     },
   ];
+  navigationItems.push({
+    type: "link",
+    label: t("rework.weaver.title"),
+    icon: { category: "outlined", type: "build", filled: false },
+    linkProps: { to: "/weaver/features" },
+  });
+  if (showKnowledgeBases) {
+    navigationItems.push({
+      type: "link",
+      label: t("rework.sidebar.team.menu.knowledgeBases"),
+      trailingBadge: <BetaBadge label={t("rework.weaver.pending")} />,
+      icon: { category: "outlined", type: "database", filled: true },
+      linkProps: { to: `/team/${teamId}/knowledge-bases` },
+    });
+  }
   if (showWiki) {
     navigationItems.push({
       type: "link",
@@ -277,6 +290,16 @@ export default function TeamContentNavbar() {
       label: t("rework.teamSettings.navigation.responsibilities"),
       icon: { category: "outlined", type: "admin_panel_settings", filled: false },
       linkProps: { to: `${settingsBase}/responsibilities` },
+    });
+  }
+  if (canSeeActivity) {
+    // Same "build" icon as the platform admin Tasks entry — one shared surface,
+    // identical ergonomy at both levels (OPS-04 §3.4).
+    settingsItems.push({
+      type: "link",
+      label: t("rework.teamSettings.navigation.activity"),
+      icon: { category: "outlined", type: "build", filled: false },
+      linkProps: { to: `${settingsBase}/activity` },
     });
   }
   if (canSeeActivity) {

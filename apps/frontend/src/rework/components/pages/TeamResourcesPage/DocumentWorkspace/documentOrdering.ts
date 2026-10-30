@@ -22,11 +22,11 @@
  */
 
 import type { SortState } from "@shared/molecules/DataTable/DataTable.tsx";
-import type { EntryOrder } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { BrowseDocumentsByTagRequest } from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 
 /** The contract's own field names — never re-declared, read off the generated client. */
-export type DocumentSortField = EntryOrder extends `${infer Field}_${string}` ? Field : never;
-export type DocumentSortOrder = EntryOrder extends `${string}_${infer Order}` ? Order : never;
+export type DocumentSortField = NonNullable<BrowseDocumentsByTagRequest["sort_by"]>;
+export type DocumentSortOrder = NonNullable<BrowseDocumentsByTagRequest["sort_order"]>;
 
 export interface DocumentOrdering {
   by: DocumentSortField;

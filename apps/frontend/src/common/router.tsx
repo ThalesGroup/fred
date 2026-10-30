@@ -1,3 +1,4 @@
+import WeaverFeaturePage from "@rework/features/weaver/WeaverFeaturePage";
 import { isAgentManagementRoute } from "@core/utils/agentManagementRoute";
 import PlatformAccessPage from "@components/pages/admin/PlatformAccessPage/PlatformAccessPage";
 import PlatformAccessDeniedPage from "@components/pages/PlatformAccessPage/PlatformAccessDeniedPage";
@@ -151,6 +152,7 @@ const applicationRoutes: RouteObject[] = [
     path: "/",
     element: <MainLayout />,
     children: [
+      { path: "weaver/features", element: <WeaverFeaturePage /> },
       {
         // Bare `/` lands on the Home dashboard (#2298). The team switcher lives
         // in the Home nav panel; the personal-space agents page is reached from
@@ -180,6 +182,14 @@ const applicationRoutes: RouteObject[] = [
       {
         path: "team/:teamId/resources",
         element: <TeamResourcesPage />,
+      },
+      {
+        path: "team/:teamId/knowledge-bases",
+        element: <WeaverFeaturePage feature="knowledge-bases" />,
+      },
+      {
+        path: "team/:teamId/knowledge-bases/:instanceId",
+        element: <WeaverFeaturePage feature="knowledge-documents" />,
       },
       {
         path: "team/:teamId/wiki",
@@ -298,6 +308,14 @@ const applicationRoutes: RouteObject[] = [
         ),
       },
       {
+        path: "admin/tasks",
+        element: (
+          <Protected requires="admin">
+            <WeaverFeaturePage feature="tasks" />
+          </Protected>
+        ),
+      },
+      {
         path: "admin/analytics",
         element: (
           <Protected requires="observer">
@@ -343,6 +361,33 @@ const applicationRoutes: RouteObject[] = [
         element: (
           <Protected requires="admin">
             <MarketplacesPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/self-test",
+        element: (
+          <Protected requires="admin">
+            <WeaverFeaturePage feature="diagnostics" />
+          </Protected>
+        ),
+      },
+      {
+        // Corpus audit (#2112): platform-admin-only surface over the document
+        // store audit/fix endpoints (`CAN_MANAGE_PLATFORM`) — same gate as the
+        // other admin-only pages above.
+        path: "admin/corpus-audit",
+        element: (
+          <Protected requires="admin">
+            <WeaverFeaturePage feature="audit" />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/migration",
+        element: (
+          <Protected requires="admin">
+            <WeaverFeaturePage feature="migration" />
           </Protected>
         ),
       },

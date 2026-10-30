@@ -1,0 +1,386 @@
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// The activity surface must never read a failed or cancelled task as done, and
+// must surface a repeatedly-failing (stalled) task. `t` is mocked to echo its
+// key, so we assert on which key each row uses.
+
+import { renderToStaticMarkup } from "react-dom/server";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { TaskSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+
+const h = vi.hoisted(() => ({
+  tasks: [] as TaskSummary[],
+  kfTasks: [] as TaskSummary[],
+  acknowledge: vi.fn(),
+  acknowledging: null as string | null,
+}));
+
+// Faithful enough to RTK Query's real `skip` contract for this test's
+// purposes: a skipped query never contributes data, matching how a kind
+// filter narrows TaskActivity down to the one backend that owns it.
+function mockListTasks(tasks: () => TaskSummary[]) {
+  return (_args: unknown, opts?: { skip?: boolean }) =>
+    opts?.skip
+      ? { data: undefined, isLoading: false, isError: false }
+      : { data: { tasks: tasks() }, isLoading: false, isError: false };
+}
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+}));
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
+  useListTasksControlPlaneV1TasksGetQuery: mockListTasks(() => h.tasks),
+}));
+vi.mock("../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () => ({
+  useListTasksKnowledgeFlowV1TasksGetQuery: mockListTasks(() => h.kfTasks),
+}));
+vi.mock("@shared/atoms/TaskStateBadge/TaskStateBadge", () => ({
+  TaskStateBadge: ({ state }: { state: string }) => <span data-badge={state} />,
+}));
+vi.mock("@shared/atoms/TaskProgressBar/TaskProgressBar", () => ({
+  TaskProgressBar: () => <span data-progress />,
+}));
+vi.mock("@shared/atoms/Button/Button.tsx", () => ({
+  default: ({
+    children,
+    onClick,
+    disabled,
+  }: {
+    children: React.ReactNode;
+    onClick?: () => void;
+    disabled?: boolean;
+  }) => (
+    <button data-testid="ack-button" onClick={onClick} disabled={disabled}>
+      {children}
+    </button>
+  ),
+}));
+vi.mock("@rework/features/tasks/useTaskAcknowledgement", () => ({
+  useTaskAcknowledgement: () => ({
+    acknowledge: h.acknowledge,
+    isAcknowledging: (taskId: string) => h.acknowledging === taskId,
+  }),
+}));
+
+import TaskActivity from "./TaskActivity";
+
+function task(over: Partial<TaskSummary> & Pick<TaskSummary, "task_id" | "state">): TaskSummary {
+  return {
+    kind: "erasure",
+    progress: null,
+    step: null,
+    error: null,
+    target: { type: "conversation", id: over.task_id, label: "chat" },
+    created_by: "alice",
+    team_id: "nb",
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    scheduled_for: null,
+    ...over,
+  } as TaskSummary;
+}
+
+function render(props: { scope?: "platform" | "team"; teamId?: string; kind?: string } = {}): string {
+  return renderToStaticMarkup(
+    <TaskActivity scope={props.scope ?? "platform"} teamId={props.teamId} kind={props.kind} />,
+  );
+}
+
+describe("TaskActivity completed-row labelling", () => {
+  it("labels a succeeded task 'completed'", () => {
+    h.tasks = [task({ task_id: "s1", state: "succeeded" })];
+    const html = render();
+    expect(html).toContain("rework.taskActivity.completedOn");
+    expect(html).not.toContain("rework.taskActivity.failedOn");
+  });
+
+  it("labels a FAILED task 'failed', never 'completed'", () => {
+    h.tasks = [task({ task_id: "s2", state: "failed" })];
+    const html = render();
+    expect(html).toContain("rework.taskActivity.failedOn");
+    expect(html).not.toContain("rework.taskActivity.completedOn");
+  });
+
+  it("labels a CANCELLED task 'cancelled', never 'completed'", () => {
+    h.tasks = [task({ task_id: "s3", state: "cancelled" })];
+    const html = render();
+    expect(html).toContain("rework.taskActivity.cancelledOn");
+    expect(html).not.toContain("rework.taskActivity.completedOn");
+  });
+});
+
+describe("TaskActivity stalled surfacing", () => {
+  it("flags a running task whose step is 'stalled'", () => {
+    h.tasks = [task({ task_id: "s4", state: "running", step: "stalled", progress: 0.5 })];
+    const html = render();
+    expect(html).toContain("rework.taskActivity.stalled");
+  });
+
+  it("does not flag a normally-running task", () => {
+    h.tasks = [task({ task_id: "s5", state: "running", step: "erasing", progress: 0.5 })];
+    const html = render();
+    expect(html).not.toContain("rework.taskActivity.stalled");
+  });
+});
+
+// AUTHZ-07 Step 3 — the migration terminal result must be observable, durable,
+// and never read as a silent success when partial.
+
+function migrationTask(over: Partial<TaskSummary> & Pick<TaskSummary, "task_id" | "state">): TaskSummary {
+  return task({ kind: "migration", target: { type: "platform_import", id: "imp-1", label: "demo.zip" }, ...over });
+}
+
+const CLEAN_RESULT = {
+  import_id: "imp-1",
+  source_platform: "swift",
+  identities_created: 15,
+  users_processed: 15,
+  users_skipped: [],
+  teams_imported: 3,
+  teams_skipped: 0,
+  teams_provisioned: 3,
+  team_roles_granted: 14,
+  team_roles_skipped: 0,
+  platform_roles_granted: 2,
+  agents_imported: 4,
+  agents_skipped: 0,
+  agents_gap: 0,
+  tags_imported: 2,
+  tags_skipped: 0,
+  docs_imported: 1,
+  docs_skipped: 0,
+  warnings: [] as string[],
+};
+
+describe("TaskActivity migration result (AUTHZ-07 Step 3)", () => {
+  it("renders a clean success with no 'with warnings' flag", () => {
+    h.tasks = [
+      migrationTask({
+        task_id: "m1",
+        state: "succeeded",
+        detail: { step_id: "done", processed: 1, total: 1, failed: 0, result: CLEAN_RESULT },
+      }),
+    ];
+    const html = render();
+    expect(html).toContain("rework.taskActivity.completedOn");
+    expect(html).not.toContain("rework.taskActivity.withWarnings");
+  });
+
+  it("explicitly flags a succeeded import that produced warnings, distinct from a clean success", () => {
+    h.tasks = [
+      migrationTask({
+        task_id: "m2",
+        state: "succeeded",
+        detail: {
+          step_id: "done",
+          processed: 1,
+          total: 1,
+          failed: 0,
+          result: { ...CLEAN_RESULT, agents_gap: 1, warnings: ["agent x: no swift template for v2.custom"] },
+        },
+      }),
+    ];
+    const html = render();
+    expect(html).toContain("rework.taskActivity.completedOn");
+    expect(html).toContain("rework.taskActivity.withWarnings");
+  });
+
+  it("exposes structured counters and warnings inside the accessible disclosure", () => {
+    h.tasks = [
+      migrationTask({
+        task_id: "m3",
+        state: "succeeded",
+        detail: {
+          step_id: "done",
+          processed: 1,
+          total: 1,
+          failed: 0,
+          result: { ...CLEAN_RESULT, warnings: ["agent x: no swift template for v2.custom"] },
+        },
+      }),
+    ];
+    const html = render();
+    // Warnings default the disclosure open, so its content is present without
+    // simulating a click (this test harness renders static markup only).
+    expect(html).toContain("agent x: no swift template for v2.custom");
+    expect(html).toContain("rework.taskActivity.migration.counter.identities_created");
+    expect(html).toContain("15");
+  });
+
+  it("shows a non-zero *_skipped counter and users_processed, not just the granted/imported ones", () => {
+    h.tasks = [
+      migrationTask({
+        task_id: "m3b",
+        state: "succeeded",
+        detail: {
+          step_id: "done",
+          processed: 1,
+          total: 1,
+          failed: 0,
+          result: {
+            ...CLEAN_RESULT,
+            team_roles_skipped: 2,
+            agents_skipped: 1,
+            // Non-empty warnings default the disclosure open, so its content is
+            // present without simulating a click (static-markup test harness).
+            warnings: ["team fredlab: 2 roles skipped"],
+          },
+        },
+      }),
+    ];
+    const html = render();
+    expect(html).toContain("rework.taskActivity.migration.counter.team_roles_skipped");
+    expect(html).toContain("rework.taskActivity.migration.counter.agents_skipped");
+    expect(html).toContain("rework.taskActivity.migration.counter.users_processed");
+  });
+
+  it("never shows counters/warnings for a task with no result yet (e.g. still running)", () => {
+    h.tasks = [migrationTask({ task_id: "m4", state: "running", progress: 0.4 })];
+    const html = render();
+    expect(html).not.toContain("rework.taskActivity.migration.detailsTitle");
+  });
+
+  it("shows the failed task's error message, never the success text", () => {
+    h.tasks = [migrationTask({ task_id: "m5", state: "failed", error: "OpenFGA unreachable" })];
+    const html = render();
+    expect(html).toContain("OpenFGA unreachable");
+    expect(html).toContain("rework.taskActivity.failedOn");
+    expect(html).not.toContain("rework.taskActivity.completedOn");
+  });
+
+  it("uses the backend label, never a raw task id, when a target is present", () => {
+    h.tasks = [migrationTask({ task_id: "m6", state: "succeeded" })];
+    const html = render();
+    expect(html).toContain("demo.zip");
+    expect(html).not.toContain(">m6<");
+  });
+
+  it("does not regress a non-migration task (no migration-only markup leaks in)", () => {
+    h.tasks = [
+      task({
+        task_id: "e1",
+        state: "succeeded",
+        kind: "erasure",
+        target: { type: "conversation", id: "e1", label: "chat" },
+      }),
+    ];
+    const html = render();
+    expect(html).toContain("rework.taskActivity.completedOn");
+    expect(html).not.toContain("rework.taskActivity.migration.detailsTitle");
+    expect(html).not.toContain("rework.taskActivity.withWarnings");
+  });
+
+  it("renders the disclosure toggle as a native, keyboard-operable button with an accessible name", () => {
+    h.tasks = [
+      migrationTask({
+        task_id: "m7",
+        state: "succeeded",
+        detail: { step_id: "done", processed: 1, total: 1, failed: 0, result: CLEAN_RESULT },
+      }),
+    ];
+    const html = render();
+    // Disclosure.tsx renders a native <button aria-expanded=...>; a native
+    // button is keyboard-operable (Enter/Space) without extra wiring, and its
+    // visible text content ("Import details") is its accessible name.
+    expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*>/);
+    expect(html).toContain("rework.taskActivity.migration.detailsTitle");
+  });
+});
+
+// #2123 review — the persisted, shared activity surface must expose the same
+// acknowledge affordance as the session-local TaskCard/TaskDetailPopover, or
+// the server-side acknowledgement feature is unreachable from its primary
+// dashboard.
+
+describe("TaskActivity acknowledge action", () => {
+  beforeEach(() => {
+    h.acknowledge.mockClear();
+    h.acknowledging = null;
+  });
+
+  it("shows the acknowledge button on a failed, not-yet-acknowledged task", () => {
+    h.tasks = [task({ task_id: "a1", state: "failed", acknowledged_at: null })];
+    const html = render();
+    expect(html).toContain('data-testid="ack-button"');
+    expect(html).toContain("rework.taskActivity.acknowledge");
+  });
+
+  it("shows the acknowledge button on a cancelled, not-yet-acknowledged task", () => {
+    h.tasks = [task({ task_id: "a2", state: "cancelled", acknowledged_at: null })];
+    const html = render();
+    expect(html).toContain('data-testid="ack-button"');
+  });
+
+  it("hides the acknowledge button once the task is acknowledged", () => {
+    h.tasks = [task({ task_id: "a3", state: "failed", acknowledged_at: "2026-01-02T00:00:00Z" })];
+    const html = render();
+    expect(html).not.toContain('data-testid="ack-button"');
+  });
+
+  it("never shows the acknowledge button on a succeeded task", () => {
+    h.tasks = [task({ task_id: "a4", state: "succeeded", acknowledged_at: null })];
+    const html = render();
+    expect(html).not.toContain('data-testid="ack-button"');
+  });
+
+  it("disables the acknowledge button while that task's acknowledgement is in flight", () => {
+    h.tasks = [task({ task_id: "a5", state: "failed", acknowledged_at: null })];
+    h.acknowledging = "a5";
+    const html = render();
+    expect(html).toMatch(/data-testid="ack-button"[^>]*disabled/);
+  });
+});
+
+// #2123 review — kind="ingestion" used to always query control-plane, which
+// never has ingestion tasks (they live in knowledge-flow); the ingestion
+// panel was silently always empty. No kind filter must aggregate every
+// backend; a kind filter must narrow to (only) the backend that owns it.
+
+// Distinct label per fixture so assertions can tell rows apart — the default
+// task() target label ("chat") is the same for every task otherwise.
+function labelled(task_id: string): { type: "conversation"; id: string; label: string } {
+  return { type: "conversation", id: task_id, label: task_id };
+}
+
+describe("TaskActivity multi-backend aggregation", () => {
+  beforeEach(() => {
+    h.tasks = [];
+    h.kfTasks = [];
+  });
+
+  it("merges control-plane and knowledge-flow tasks when no kind filter is given", () => {
+    h.tasks = [task({ task_id: "cp1", state: "succeeded", kind: "erasure", target: labelled("cp1") })];
+    h.kfTasks = [task({ task_id: "kf1", state: "succeeded", kind: "ingestion", target: labelled("kf1") })];
+    const html = render();
+    expect(html).toContain(">cp1<");
+    expect(html).toContain(">kf1<");
+  });
+
+  it("kind='ingestion' queries only knowledge-flow, never control-plane", () => {
+    h.tasks = [task({ task_id: "cp2", state: "succeeded", kind: "erasure", target: labelled("cp2") })];
+    h.kfTasks = [task({ task_id: "kf2", state: "succeeded", kind: "ingestion", target: labelled("kf2") })];
+    const html = render({ kind: "ingestion" });
+    expect(html).toContain(">kf2<");
+    expect(html).not.toContain(">cp2<");
+  });
+
+  it("kind='migration' queries only control-plane, never knowledge-flow", () => {
+    h.tasks = [task({ task_id: "cp3", state: "succeeded", kind: "migration", target: labelled("cp3") })];
+    h.kfTasks = [task({ task_id: "kf3", state: "succeeded", kind: "ingestion", target: labelled("kf3") })];
+    const html = render({ kind: "migration" });
+    expect(html).toContain(">cp3<");
+    expect(html).not.toContain(">kf3<");
+  });
+});

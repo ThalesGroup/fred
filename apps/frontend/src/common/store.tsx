@@ -17,6 +17,7 @@ import { combineReducers, configureStore, createReducer, isFulfilled, isPending,
 import { legacyControlPlaneApi } from "../slices/legacyControlPlane/legacyControlPlaneApi.ts";
 import { controlPlaneApi } from "../slices/controlPlane/controlPlaneApi.ts";
 import { knowledgeFlowApi } from "../slices/knowledgeFlow/knowledgeFlowApi.ts";
+import { knowledgeFlowApi as legacyKnowledgeFlowApi } from "../slices/legacyKnowledgeFlow/knowledgeFlowApi";
 import { taskSlice } from "../rework/features/tasks/taskSlice.ts";
 import { capabilityRoutingSlice } from "./capabilityRoutingSlice.ts";
 import { writableDocumentCapabilityApi } from "../rework/features/capabilities/writable_document/api/writableDocumentCapabilityApi.ts";
@@ -51,6 +52,7 @@ const combinedReducer = combineReducers({
       .addCase("decrementIgnoredRefresh", (state) => state - 1),
   ),
   [knowledgeFlowApi.reducerPath]: knowledgeFlowApi.reducer,
+  [legacyKnowledgeFlowApi.reducerPath]: legacyKnowledgeFlowApi.reducer,
   [legacyControlPlaneApi.reducerPath]: legacyControlPlaneApi.reducer,
   [controlPlaneApi.reducerPath]: controlPlaneApi.reducer,
   tasks: taskSlice.reducer,
@@ -69,6 +71,7 @@ export const store = configureStore({
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
       knowledgeFlowApi.middleware,
+      legacyKnowledgeFlowApi.middleware,
       legacyControlPlaneApi.middleware,
       controlPlaneApi.middleware,
       writableDocumentCapabilityApi.middleware,

@@ -261,7 +261,7 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
 vi.mock("../../../../security/KeycloakService", () => ({
   KeyCloakService: { GetUserGivenName: () => "Ada", GetSessionIdentity: () => "alice-session" },
 }));
-vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+vi.mock("../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () => ({
   useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation: () => [() => ({ unwrap: async () => ({}) })],
 }));
 vi.mock("../../../core/hooks/useUploadWarningAcknowledgement", () => ({

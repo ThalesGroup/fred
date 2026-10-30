@@ -1,0 +1,137 @@
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import Button from "@shared/atoms/Button/Button.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { TaskStateBadge } from "@shared/atoms/TaskStateBadge/TaskStateBadge.tsx";
+import { TaskProgressBar } from "@shared/atoms/TaskProgressBar/TaskProgressBar.tsx";
+import type { TaskState } from "../../../../features/tasks/taskTypes";
+import type { StepReport, StepStatus } from "../../../../features/pipeline/types";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
+import { buildReport } from "./report";
+import styles from "./SelfTestPage.module.css";
+
+// The Task atoms speak the fred-core TaskState vocabulary; map the pipeline
+// step verdicts onto it so we can reuse the badge and progress bar as-is.
+const STEP_TO_TASK_STATE: Record<StepStatus, TaskState> = {
+  pending: "pending",
+  running: "running",
+  passed: "succeeded",
+  failed: "failed",
+  skipped: "cancelled",
+};
+
+function overallState(steps: StepReport[], isRunning: boolean): TaskState | "partial" {
+  if (isRunning || steps.length === 0) return "running";
+  if (steps.some((s) => s.status === "failed")) return "failed";
+  // A run that skipped out before validating anything reports as cancelled, the
+  // same verdict its own steps carry: there is nothing to call a failure.
+  const validated = steps.some((s) => s.status === "passed" || s.status === "running");
+  if (!validated && steps.some((s) => s.status === "skipped")) return "cancelled";
+  if (steps.some((s) => s.status === "skipped" && !s.optional)) return "partial";
+  return "succeeded";
+}
+
+interface StepReportPanelProps {
+  steps: StepReport[];
+  isRunning: boolean;
+  /** Shown instead of the step list before the first run. */
+  emptyLabel: string;
+}
+
+/**
+ * Renders one run's live progress, step list and copy-to-clipboard report.
+ * Shared by every family on the page, so the report looks the same whichever
+ * scenario produced it.
+ */
+export function StepReportPanel({ steps, isRunning, emptyLabel }: StepReportPanelProps) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
+
+  const passed = steps.filter((s) => s.status === "passed").length;
+  const failed = steps.filter((s) => s.status === "failed").length;
+  const skipped = steps.filter((s) => s.status === "skipped").length;
+  const verdict = overallState(steps, isRunning);
+  const state = verdict === "partial" ? "cancelled" : verdict;
+  const total = steps.length;
+  const completed = steps.filter((s) => s.status !== "running").length;
+  const progress = total > 0 ? completed / total : null;
+
+  const handleCopy = async () => {
+    const ok = await writeRichClipboard("", buildReport(steps));
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    }
+  };
+
+  if (total === 0) {
+    return <div className={styles.empty}>{emptyLabel}</div>;
+  }
+
+  return (
+    <section className={styles.section}>
+      <div className={styles.summary}>
+        {verdict === "partial" || verdict === "succeeded" ? (
+          <span>
+            <TaskStateBadge state={state} showLabel={false} size="md" />{" "}
+            {t(verdict === "partial" ? "rework.selftest.report.partial" : "rework.selftest.report.verified")}
+          </span>
+        ) : (
+          <TaskStateBadge state={state} size="md" />
+        )}
+        <span className={styles.counts}>{t("rework.selftest.report.counts", { passed, failed, skipped, total })}</span>
+        <IconButton
+          icon={{ category: "outlined", type: collapsed ? "expand_more" : "expand_less" }}
+          variant="icon"
+          size="small"
+          onClick={() => setCollapsed((c) => !c)}
+          aria-label={t(collapsed ? "rework.selftest.report.expand" : "rework.selftest.report.collapse")}
+          aria-expanded={!collapsed}
+        />
+        <Button
+          color="secondary"
+          variant="outlined"
+          size="small"
+          icon={{ category: "outlined", type: "content_copy", filled: false }}
+          onClick={handleCopy}
+          className={styles.copyBtn}
+        >
+          {copied ? t("rework.selftest.report.copied") : t("rework.selftest.report.copy")}
+        </Button>
+      </div>
+      <TaskProgressBar state={state} progress={progress} />
+
+      {!collapsed && (
+        <ul className={styles.steps}>
+          {steps.map((step) => (
+            <li key={step.id} className={styles.step}>
+              <TaskStateBadge state={STEP_TO_TASK_STATE[step.status]} showLabel={false} size="md" />
+              <div className={styles.stepBody}>
+                <span className={styles.stepTitle}>{step.title}</span>
+                {(step.error || step.detail) && (
+                  <span className={step.error ? styles.stepError : styles.stepDetail}>{step.error ?? step.detail}</span>
+                )}
+              </div>
+              {step.durationMs != null && <span className={styles.duration}>{step.durationMs} ms</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}

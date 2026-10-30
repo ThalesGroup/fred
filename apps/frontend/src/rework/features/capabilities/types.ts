@@ -23,7 +23,7 @@ import type { ComponentType } from "react";
 import type { IconType } from "@shared/utils/Type";
 import type { RawUiPart } from "@rework/types/parts";
 import type { PendingToolCall } from "../../../slices/runtime/runtimeOpenApi";
-import type { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { SearchPolicyName } from "../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 
 export interface UiPartRendererProps {
   /** The raw part; renderers narrow it to their generated type. */

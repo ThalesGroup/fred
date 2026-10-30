@@ -12,15 +12,62 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useDispatch } from "react-redux";
-import { taskAcknowledged } from "./taskSlice";
+import { useState } from "react";
+import { useDispatch, useStore } from "react-redux";
+import { useAcknowledgeTaskMutation } from "../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import { useAcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostMutation } from "../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
+import { taskBackendFor } from "./taskKinds";
+import { taskAcknowledged, type TasksState } from "./taskSlice";
 
-/** Browser-only activities have no server task record. Durable upload receipts
- * are acknowledged by the Control Plane import controller. */
+/**
+ * Shared per-task acknowledgement — `POST /tasks/{id}/ack`
+ * (TASK-EVENT-STREAM-RFC.md §2.10), a server-persisted record visible to
+ * every other admin of that scope, replacing the old per-browser
+ * `failuresAcknowledged` bulk flag. Shared by task detail and migration
+ * surfaces so the call and local store update happen in one place.
+ *
+ * Routed by `taskBackendFor` (same map `useTaskPolling` reads progress by)
+ * — this used to always call control-plane regardless of which
+ * backend actually owns the task, so a failed ingestion task's ack 404'd
+ * and silently left the button visible (#2123 review).
+ *
+ * `localOnly` tasks (e.g. a chat-attachment fast-ingest failure — see
+ * `useChatAttachments.addFiles`) never had a server-side task record created
+ * for them in the first place (the fast-ingest route is synchronous and
+ * registers no task), so POSTing an ack for one always 404s. Acknowledging
+ * one is a purely local Redux update instead of a network call — the same
+ * reason `useTaskPolling` never reads `localOnly` tasks.
+ */
 export function useTaskAcknowledgement() {
   const dispatch = useDispatch();
-  const acknowledge = async (taskId: string, _kind: string | null, _localOnly?: boolean) => {
-    dispatch(taskAcknowledged({ taskId, acknowledgedAt: new Date().toISOString() }));
+  const store = useStore<{ tasks: TasksState }>();
+  const [ackControlPlane] = useAcknowledgeTaskMutation();
+  const [ackKnowledgeFlow] = useAcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostMutation();
+  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
+
+  const acknowledge = async (taskId: string, kind: string | null, localOnly?: boolean) => {
+    // An untracked task is no longer known to the server either: its ack would 404.
+    if (localOnly || store.getState().tasks.byId[taskId]?.untracked) {
+      dispatch(taskAcknowledged({ taskId, acknowledgedAt: new Date().toISOString() }));
+      return;
+    }
+    const backend = taskBackendFor(kind);
+    setPendingTaskId(taskId);
+    try {
+      const result = await (
+        backend === "control-plane" ? ackControlPlane({ taskId }) : ackKnowledgeFlow({ taskId })
+      ).unwrap();
+      dispatch(taskAcknowledged({ taskId, acknowledgedAt: result.acknowledged_at }));
+    } catch {
+      // 409 (already acknowledged, e.g. by another admin) or a transient
+      // network error — nothing actionable beyond letting the user retry;
+      // the button simply stays visible.
+    } finally {
+      setPendingTaskId(null);
+    }
   };
-  return { acknowledge, isAcknowledging: (_taskId: string) => false };
+
+  const isAcknowledging = (taskId: string) => pendingTaskId === taskId;
+
+  return { acknowledge, isAcknowledging };
 }

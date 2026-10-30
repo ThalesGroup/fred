@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { SearchPolicyName } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { SearchPolicyName } from "../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import type { RuntimeContext } from "../../../../slices/runtime/runtimeOpenApi";
 
 type RagScope = "corpus_only" | "hybrid" | "general_only";

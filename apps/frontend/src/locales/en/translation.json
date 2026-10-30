@@ -4785,6 +4785,53 @@
         "deadline_exceeded": "Processing exceeded the allowed time. You can retry.",
         "worker_failed": "Processing failed. The original is preserved and can be processed again."
       }
+    },
+    "weaver": {
+      "title": "Weaver migration",
+      "description": "These journeys are preserved for incremental migration. They are not yet available in Weaver.",
+      "pending": "Pending migration",
+      "all": "All features",
+      "previewTitle": "Swift preview — fictional data",
+      "previewStart": "Locally, run make swift-preview in apps/frontend, then open a preview.",
+      "openPreview": "Open Swift screen (local development)",
+      "previewDisclaimer": "No real data. Audit, renaming, labels and acknowledgement use in-memory fixtures. Unmodelled interactions return an explicit error. Reload resets the examples.",
+      "dictationHint": "The microphone stays local; transcription always returns a fictional sentence without sending audio.",
+      "dictatedText": "This is a fictional transcription for revisiting dictation.",
+      "choose": "Choose a feature above.",
+      "features": {
+        "audit": {
+          "title": "Corpus audit",
+          "next": "Read anomalies first, then authorized repair in a separate increment."
+        },
+        "tasks": {
+          "title": "Tasks and activity",
+          "next": "List scoped Weaver operations and their states; then add acknowledgement and cancellation."
+        },
+        "diagnostics": {
+          "title": "Diagnostics",
+          "next": "Port one scenario at a time and verify its Weaver contracts before enabling execution."
+        },
+        "migration": {
+          "title": "Platform import and export",
+          "next": "Define export scope; port reads before write operations."
+        },
+        "knowledge-bases": {
+          "title": "Knowledge Bases",
+          "next": "Connect the catalog, then source configuration and permissions."
+        },
+        "knowledge-documents": {
+          "title": "Knowledge Base documents",
+          "next": "Connect a library to a read-only Control Plane folder."
+        },
+        "documents": {
+          "title": "Advanced document actions",
+          "next": "Separate increments: renaming, labels, ZIP, import replacement and folder totals. Control Plane browsing and imports stay active outside preview."
+        },
+        "dictation": {
+          "title": "Dictation",
+          "next": "Define and connect transcription; verify errors and cancellation."
+        }
+      }
     }
   },
   "runtime": {

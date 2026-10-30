@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { createSelector, createSlice, type PayloadAction } from "@reduxjs/toolkit";
+import type { TaskSummary } from "../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { TERMINAL_STATES, type AnyTaskEvent, type ImportStage, type TaskTarget, type TaskViewModel } from "./taskTypes";
 
 export interface TasksState {
@@ -228,6 +229,33 @@ export const taskSlice = createSlice({
       }
     },
 
+    /** The owning backend's current state for the tasks a read asked about.
+     *
+     *  A task that has an outcome keeps it: following ends there, as the
+     *  stream did when it closed on it. A task the answer leaves out is marked
+     *  untracked: its outcome is unknown, never assumed. */
+    taskSnapshotsReceived(state, action: PayloadAction<{ requestedIds: string[]; tasks: TaskSummary[] }>) {
+      const returned = new Map(action.payload.tasks.map((task) => [task.task_id, task]));
+      for (const taskId of action.payload.requestedIds) {
+        const vm = state.byId[taskId];
+        if (!vm || vm.untracked || TERMINAL_STATES.has(vm.state)) continue;
+        const task = returned.get(taskId);
+        if (!task) {
+          vm.untracked = true;
+          continue;
+        }
+        vm.state = task.state;
+        // Same sparse-field rule as `taskEventReceived`.
+        if (task.progress != null) vm.progress = task.progress;
+        if (task.step != null) vm.step = task.step;
+        vm.error = task.error ?? null;
+        if (task.target) vm.target = task.target;
+        const result = task.kind === "migration" && task.detail && "result" in task.detail ? task.detail.result : null;
+        if (result && "warnings" in result && result.warnings) vm.warnings = result.warnings;
+        if (TERMINAL_STATES.has(task.state) && vm.terminalAt === null) vm.terminalAt = Date.now();
+      }
+    },
+
     taskEvicted(state, action: PayloadAction<string>) {
       delete state.byId[action.payload];
     },
@@ -274,6 +302,7 @@ export const {
   uploadFinished,
   uploadFailed,
   taskEventReceived,
+  taskSnapshotsReceived,
   taskEvicted,
   importPanelOpenRequested,
   taskAcknowledged,

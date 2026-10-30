@@ -15,7 +15,7 @@
 import { useTranslation } from "react-i18next";
 import BarChart from "@shared/molecules/BarChart/BarChart.tsx";
 import { SERIES_COLORS } from "@shared/molecules/MultiSeriesLineChart/MultiSeriesLineChart.tsx";
-import type { ResourceUsageBucket } from "../../../../features/imports/managerDocuments";
+import type { ResourceTypeStatsEntry } from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { formatBytes } from "@shared/utils/formatBytes.ts";
 import SizeByTypeBar from "./SizeByTypeBar.tsx";
 import styles from "./ResourceStatsCards.module.css";
@@ -36,7 +36,7 @@ const BUCKET_COLOR: Record<(typeof BUCKET_ORDER)[number], string> = {
 };
 
 interface ResourceStatsCardsProps {
-  entries: ResourceUsageBucket[] | undefined;
+  entries: ResourceTypeStatsEntry[] | undefined;
   isLoading: boolean;
   isError: boolean;
 }

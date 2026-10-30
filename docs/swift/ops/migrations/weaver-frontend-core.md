@@ -9,6 +9,11 @@ no_action_reason: "This pre-release UI cleanup requires no data migration or add
 
 ## Applicability
 
+The source-removal approach below is superseded by
+[Preserve Swift screens](weaver-preserved-ui-previews.md). The pending journeys
+remain unavailable in the normal UI, but their sources and development previews
+are preserved for incremental porting.
+
 Weaver frontend builds following the Knowledge Flow v2 client regeneration.
 Dimitri approved temporarily withdrawing unported journeys on 2026-10-30.
 

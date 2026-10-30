@@ -12,16 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { Summary } from "../../../slices/controlPlane/controlPlaneOpenApi";
-/** Browser upload/processing state, including a local cancellation before handoff. */
-export type TaskState = Summary["status"] | "cancelling" | "cancelled";
-/** A browser activity's display target, not a server task contract. */
-export interface TaskTarget {
-  type: string;
-  id: string;
-  label?: string | null;
-}
+import type { TaskState, TaskTarget } from "../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import type { MigrationResult } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+export type { TaskState, TaskTarget };
 
 export const TERMINAL_STATES: ReadonlySet<TaskState> = new Set(["succeeded", "failed", "cancelled"]);
 

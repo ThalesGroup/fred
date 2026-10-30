@@ -316,3 +316,7 @@ FRONTEND_APPLICATIONS_JSON ?= []
 # Shell-compatible .env files quote JSON to protect it while sourcing. GNU make
 # preserves those outer quotes, so remove them before recipes quote the raw JSON.
 FRONTEND_APPLICATIONS_JSON_VALUE = $(patsubst '%',%,$(strip $(FRONTEND_APPLICATIONS_JSON)))
+
+.PHONY: swift-preview
+swift-preview: check-node node_modules ## Browse preserved Swift screens with local fixtures, no backend
+	npx vite --config vite.swift-preview.config.ts --mode swift-preview --open /swift-preview.html

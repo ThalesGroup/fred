@@ -31,11 +31,15 @@ describe("organizationAdminPages", () => {
       "/admin/supervision",
       "/admin/teams",
       "/admin/platform-roles",
+      "/admin/tasks",
       "/admin/analytics",
       "/admin/platform-prompt",
       "/admin/annonces",
       "/admin/interface",
       "/admin/marketplaces",
+      "/admin/migration",
+      "/admin/corpus-audit",
+      "/admin/self-test",
       "/admin/platform-access",
     ]);
   });

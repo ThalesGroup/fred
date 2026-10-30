@@ -15,7 +15,7 @@
 import type { DocumentLibrarySelection } from "@shared/molecules/DocumentLibraryScopePicker/documentLibrarySelection";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SearchPolicyName } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { SearchPolicyName } from "../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import type { ChatControlDescriptor, PreparationModels } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { modelChoiceKey, offerLabel } from "../../../features/capabilities/modelChoice";
 
