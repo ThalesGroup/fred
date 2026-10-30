@@ -390,3 +390,20 @@ def test_llm_diagnostics_export_fixed_labels_and_long_buckets(monkeypatch):
     assert 'le="300000.0"' in text
     assert "private-" not in text
     assert "llm_first_chunk_ms_sum" in text
+
+
+def test_prometheus_store_keeps_capability_id_out_of_tool_labels() -> None:
+    """Tool KPIs carry the providing capability for analytics only (OpenSearch)."""
+    store = PrometheusKPIStore(delegate=_RecordingKPIStore())
+    metric_name = f"test.tool_capability_{uuid4().hex}"
+    event = KPIEvent(
+        metric=Metric(name=metric_name, type="timer", value=1.0, unit="ms"),
+        dims={"tool_name": "search", "capability_id": "documents"},
+    )
+
+    store.index_event(event)
+
+    resolved_name = store._resolve_metric_name(metric_name)
+    label_names = set(store._label_names[(resolved_name, "timer")])
+    assert "tool_name" in label_names
+    assert "capability_id" not in label_names

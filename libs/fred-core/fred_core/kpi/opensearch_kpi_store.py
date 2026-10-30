@@ -72,6 +72,8 @@ KPI_INDEX_MAPPING: Dict[str, Any] = {
                     "agent_id": {"type": "keyword"},
                     "agent_step": {"type": "keyword"},
                     "tool_name": {"type": "keyword"},
+                    # Capability that provided the tool (tool KPIs; analytics only).
+                    "capability_id": {"type": "keyword"},
                     "skill_name": {"type": "keyword"},
                     "skill_origin": {"type": "keyword"},
                     "model": {"type": "keyword"},
@@ -123,6 +125,8 @@ KPI_INDEX_MAPPING: Dict[str, Any] = {
                     "vectors": {"type": "integer"},
                     "input_tokens": {"type": "long"},
                     "output_tokens": {"type": "long"},
+                    "cache_read_tokens": {"type": "long"},
+                    "tool_count": {"type": "integer"},
                 }
             },
             "labels": {"type": "keyword"},
