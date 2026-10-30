@@ -15,59 +15,62 @@
  */
 
 .card {
-  display: grid;
-  grid-template-rows: auto 1fr;
+  display: flex;
+  position: relative;
+  flex-direction: column;
   gap: var(--spacing-2xs);
   border-radius: var(--radius-m);
   background: var(--surface-container);
   padding: var(--spacing-m);
   min-width: 140px;
   min-height: 72px;
+  color: var(--on-surface);
+}
+
+.card[data-nested] {
+  border-radius: var(--radius-ms);
+  background: var(--surface-container-high);
 }
 
 .label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-3xs);
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+}
+
+/* The info icon sits in the corner; the label keeps clear of it. */
+.card[data-hint] .label {
+  padding-inline-end: var(--spacing-l);
+}
+
+.hintCorner {
+  position: absolute;
+  top: var(--spacing-m);
+  right: var(--spacing-m);
 }
 
 .hint {
   display: inline-flex;
   cursor: help;
+  color: var(--on-surface-muted);
   font-size: 1rem;
 }
 
 .value {
-  display: flex;
-  justify-content: center;
-  align-items: center;
   color: var(--on-surface);
-  font: var(--font-title-large-emphasized);
-  font-size: 1.5rem;
-  line-height: 1;
+  font: var(--font-headline-small-emphasized);
 }
 
-.valueRow {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  align-self: center;
-  gap: var(--spacing-s);
+.card[data-size="large"] .value {
+  font: var(--font-headline-medium-emphasized);
 }
 
 .caption {
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
-  text-align: center;
 }
 
 .state {
   display: flex;
-  justify-content: center;
   align-items: center;
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
@@ -75,7 +78,6 @@
 
 .stateError {
   display: flex;
-  justify-content: center;
   align-items: center;
   color: var(--error);
   font: var(--font-body-medium);
@@ -83,17 +85,17 @@
 
 .deltaPositive {
   color: var(--success);
-  font: var(--font-label-large);
+  font: var(--font-label-medium);
 }
 
 .deltaNegative {
   color: var(--error);
-  font: var(--font-label-large);
+  font: var(--font-label-medium);
 }
 
 .deltaNeutral {
   color: var(--on-surface-retreat);
-  font: var(--font-label-large);
+  font: var(--font-label-medium);
 }
 
 .card[data-tone="success"] .value {

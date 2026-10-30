@@ -30,6 +30,13 @@ export const downloadFile = (blob: Blob, filename: string) => {
   URL.revokeObjectURL(url);
 };
 
+/** The filename of an `attachment` Content-Disposition header, if any. */
+export const filenameFromDisposition = (header: string | null): string | null => {
+  if (!header) return null;
+  const match = /filename="?([^"]+)"?/.exec(header);
+  return match ? match[1] : null;
+};
+
 /**
  * Authenticated fetch → Blob, without saving — the building block shared by
  * `downloadAuthed` (single file) and `downloadManyAsZip` (bulk: every file

@@ -20,7 +20,7 @@ from typing import Any
 
 from fastapi import Request
 from fred_core import KeycloakUser
-from fred_core.kpi import estimate_green_cost
+from fred_core.kpi import estimate_green_cost, usd_to_eur
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.kpi.presets.base import PresetDef
@@ -123,7 +123,7 @@ async def query_user_token_usage_over_time(
                 value=bucket["sum_input"]["value"] + bucket["sum_output"]["value"],
                 co2e_grams=co2e_grams,
                 kwh=kwh,
-                cost_usd=cost_usd,
+                cost_eur=usd_to_eur(cost_usd),
             )
         )
 

@@ -1571,92 +1571,24 @@
         "empty": "Aucun chargement de skill enregistré sur cette période.",
         "truncated": "Les 100 skills les plus chargés sont affichés. Le tri porte sur ces résultats."
       },
-      "activeUsers": {
-        "title": "Utilisateurs actifs",
-        "uniqueTotal": "Utilisateurs uniques",
-        "valueLabel": "Utilisateurs uniques"
-      },
       "agents": {
-        "deltaLabel": "Variation sur la période",
         "promptLengthDistribution": {
           "empty": "Aucune donnée d'agent sur cette période.",
           "title": "Distribution de la longueur des prompts systèmes",
-          "valueLabel": "Agents"
-        },
-        "topByConversations": {
-          "title": "Agents les plus sollicités",
-          "valueLabel": "Messages"
-        },
-        "total": "Nombre d'agents total"
-      },
-      "conversations": {
-        "title": "Conversations",
-        "total": "Nombre de conversations total",
-        "valueLabel": "Sessions"
+          "valueLabel": "Agents",
+          "agentCount_one": "sur {{value}} agent",
+          "agentCount_other": "sur {{value}} agents"
+        }
       },
       "conversationsByScope": {
         "empty": "Aucune conversation sur cette période.",
         "personal": "Espace personnel",
-        "team": "Équipe",
-        "title": "Conversations personnelles vs équipes"
-      },
-      "documents": {
-        "deltaLabel": "Variation sur la période",
-        "total": "Documents téléversés"
-      },
-      "engagement": {
-        "agentsPerUser": {
-          "empty": "Aucune activité utilisateur sur cette période.",
-          "medianLabel": "Médiane d'agents par utilisateur",
-          "title": "Agents par utilisateur",
-          "valueLabel": "Utilisateurs"
-        },
-        "agentsPerUserTrend": {
-          "empty": "Pas assez d'activité sur cette période pour tracer une tendance.",
-          "title": "Agents par utilisateur dans le temps",
-          "valueLabel": "Médiane d'agents par utilisateur ({{window}})"
-        },
-        "conversationDepth": {
-          "empty": "Aucune conversation sur cette période.",
-          "medianLabel": "Médiane de messages par conversation",
-          "title": "Profondeur des conversations",
-          "valueLabel": "Conversations"
-        },
-        "conversationDepthTrend": {
-          "empty": "Pas assez de conversations sur cette période pour tracer une tendance.",
-          "title": "Profondeur des conversations dans le temps",
-          "valueLabel": "Médiane de messages par conversation ({{window}})"
-        },
-        "conversationsPerUser": {
-          "empty": "Aucune activité utilisateur sur cette période.",
-          "medianLabel": "Médiane de conversations par utilisateur",
-          "title": "Conversations par utilisateur",
-          "valueLabel": "Utilisateurs"
-        },
-        "conversationsPerUserTrend": {
-          "empty": "Pas assez d'activité sur cette période pour tracer une tendance.",
-          "title": "Conversations par utilisateur dans le temps",
-          "valueLabel": "Médiane de conversations par utilisateur ({{window}})"
-        },
-        "description": "Ne couvre que les utilisateurs actifs sur la période sélectionnée — ceux ayant démarré au moins une conversation. Les utilisateurs inactifs ne sont pas comptés.",
-        "trendTitleWithWindow": "{{title}} ({{window}})",
-        "trendWindow": {
-          "day_one": "{{count}} jour glissant",
-          "day_other": "{{count}} jours glissants",
-          "hour_one": "{{count}} heure glissante",
-          "hour_other": "{{count}} heures glissantes",
-          "minute_one": "{{count}} minute glissante",
-          "minute_other": "{{count}} minutes glissantes",
-          "second_one": "{{count}} seconde glissante",
-          "second_other": "{{count}} secondes glissantes"
-        }
-      },
-      "error": "Impossible de charger les données.",
-      "loading": "Chargement...",
-      "messages": {
-        "title": "Messages",
-        "total": "Nombre de messages total",
-        "valueLabel": "Tours"
+        "team": "Espaces d'équipe",
+        "teamCount_one": "{{value}} conversation en équipe",
+        "teamCount_other": "{{value}} conversations en équipe",
+        "personalCount_one": "{{value}} conversation personnelle",
+        "personalCount_other": "{{value}} conversations personnelles",
+        "shareChange": "{{change}} de part d'équipe vs période précédente"
       },
       "presets": {
         "last24h": "24 dernières heures",
@@ -1664,49 +1596,13 @@
         "last7d": "7 derniers jours",
         "thisMonth": "Ce mois-ci",
         "thisWeek": "Cette semaine",
-        "today": "Aujourd'hui"
-      },
-      "refresh": "Actualiser",
-      "refreshing": "Actualisation...",
-      "sections": {
-        "administration": "Administration de la plateforme",
-        "agents": "Agents",
-        "conversations": "Conversations & Messages",
-        "engagement": "Engagement",
-        "overview": "Vue d'ensemble",
-        "resources": "Ressources",
-        "tokenUsage": "Consommation de tokens",
-        "users": "Utilisateurs",
-        "webResearch": "Recherche web"
-      },
-      "administration": {
-        "modelsGovernanceLink": "Gérer les modèles",
-        "storageByTeam": {
-          "empty": "Aucune équipe proche de son quota de stockage.",
-          "title": "Stockage par équipe (% du quota utilisé)",
-          "valueLabel": "% du quota"
-        }
+        "today": "Aujourd'hui",
+        "last3Months": "3 mois",
+        "last12Months": "12 mois"
       },
       "tokenUsage": {
         "byAgent": {
-          "empty": "Aucune consommation d'agent sur cette période.",
-          "creationAssistant": "Assistant de création",
-          "title": "Consommation de tokens par agent",
-          "valueLabel": "Tokens"
-        },
-        "byModel": {
-          "empty": "Aucune consommation de modèle sur cette période.",
-          "title": "Consommation de tokens par modèle",
-          "valueLabel": "Tokens"
-        },
-        "creationAssistant": {
-          "drafts_one": "{{count, number}} utilisation",
-          "drafts_other": "{{count, number}} utilisations",
-          "label": "Assistant de création"
-        },
-        "overTime": {
-          "title": "Consommation de tokens dans le temps",
-          "valueLabel": "Tokens"
+          "creationAssistant": "Assistant de création"
         }
       },
       "timeRange": {
@@ -1718,18 +1614,10 @@
         "until": "Jusqu'à"
       },
       "title": "Analytiques",
-      "topTeams": {
-        "empty": "Aucune conversation d'équipe sur cette période.",
-        "title": "Équipes avec le plus de conversations",
-        "valueLabel": "Conversations"
-      },
       "webResearch": {
-        "estimatedCost": "Coût moteur estimé ($)",
-        "blocked": "Bloquées (sécurité)",
-        "saturated": "Refusées (saturation)",
-        "failed": "Autres échecs",
-        "p95": "Latence p95 (ms)",
-        "users": "Utilisateurs distincts",
+        "estimatedCost": "Coût moteur estimé",
+        "refused": "Refusés / saturés / en échec",
+        "p95": "Latence p95",
         "reasonsTitle": "Requêtes refusées ou en échec, par motif",
         "noRefusal": "Aucune requête refusée ni en échec sur la période.",
         "reasons": {
@@ -1755,12 +1643,493 @@
           "toolCalls": "Recherches + lectures de pages. Compté depuis le déploiement de cette version.",
           "searches": "Appels web_search au moteur de recherche : les seuls facturés par le fournisseur.",
           "fetches": "Appels fetch_url : lecture directe du site, non facturée par le moteur (coûte des tokens LLM).",
-          "estimatedCost": "Recherches réussies × cost_per_1000_searches ÷ 1 000. Hors nouvelles tentatives, offres gratuites et tokens LLM.",
-          "blocked": "Refusées par sécurité : adresse non publique, redirections, contenu ou taille. Détail : API d'activité restreinte.",
-          "saturated": "Refusées faute de place (busy) : augmenter max_concurrency ou les réplicas.",
-          "failed": "Moteur, proxy ou site en échec, ou délai dépassé.",
-          "p95": "95 % des appels durent moins que cette valeur.",
-          "users": "Utilisateurs ayant lancé au moins un appel."
+          "estimatedCost": "Recherches réussies × cost_per_1000_searches ÷ 1 000, converti en euros au taux configuré avec les prix des modèles. Hors nouvelles tentatives, offres gratuites et tokens LLM.",
+          "refused": "Refusés pour sécurité (adresse non publique, redirections, contenu ou taille) / faute de capacité (augmenter max_concurrency ou les réplicas) / échec du fournisseur, du proxy ou du site, ou délai dépassé.",
+          "p95": "95 % des appels durent moins que cette valeur."
+        },
+        "pagesPerSearch": "{{value}} pages lues par recherche",
+        "shareOfCalls": "{{value}} des appels"
+      },
+      "about": "Usage et adoption de la plateforme sur la période choisie. Chaque indicateur se compare à la période précédente de même durée.",
+      "aboutTeam": "Usage et adoption de l'équipe sur la période choisie. Chaque indicateur se compare à la période précédente de même durée.",
+      "aboutLabel": "À propos de cette page",
+      "export": "Exporter",
+      "exporting": "Export en cours…",
+      "exportError": "L'export n'a pas abouti. Réessayez dans un instant.",
+      "howToRead": "Comment le lire :",
+      "moreInfo": "Plus d'informations : {{label}}",
+      "tabsLabel": "Thèmes",
+      "tabs": {
+        "overview": "Vue d'ensemble",
+        "adoption": "Adoption",
+        "usage": "Usage",
+        "teams": "Équipes",
+        "agents": "Agents et outils",
+        "cost": "Qualité et coût",
+        "tech": "Technique"
+      },
+      "scope": {
+        "title": "Périmètre",
+        "platform": "Toute la plateforme",
+        "teamsSelected_one": "{{count}} équipe sélectionnée",
+        "teamsSelected_other": "{{count}} équipes sélectionnées",
+        "search": "Rechercher une équipe",
+        "searchPlaceholder": "Nom d'équipe",
+        "clearSearch": "Effacer la recherche",
+        "selected": "Sélectionnées",
+        "otherTeams": "Autres équipes",
+        "noTeams": "Aucune équipe ne correspond.",
+        "members_one": "{{count, number}} membre",
+        "members_other": "{{count, number}} membres",
+        "membersTotal_one": "{{count, number}} membre au total",
+        "membersTotal_other": "{{count, number}} membres au total",
+        "more_one": "+ {{count}} autre",
+        "more_other": "+ {{count}} autres",
+        "apply": "Appliquer",
+        "cancel": "Annuler",
+        "notForTeams": "Non disponible pour une sélection d'équipes : ces données ne sont pas rattachées à une équipe.",
+        "notForTeamsShort": "Non disponible pour une sélection d'équipes"
+      },
+      "userFilter": {
+        "title": "Filtre utilisateurs",
+        "active_one": "Filtre utilisateurs ({{count}} condition)",
+        "active_other": "Filtre utilisateurs ({{count}} conditions)",
+        "intro": "Limite tous les chiffres aux utilisateurs dont les attributs de compte correspondent. Seuls les attributs enregistrés par la règle d'accès à la plateforme sont disponibles, avec leur dernière valeur connue.",
+        "empty": "Aucune condition : tous les utilisateurs sont comptés.",
+        "noFields": "Aucun attribut enregistré : la règle d'accès à la plateforme n'en utilise aucun.",
+        "fieldUsers_one": "{{count, number}} utilisateur renseigné",
+        "fieldUsers_other": "{{count, number}} utilisateurs renseignés",
+        "inRule": "règle d'accès",
+        "counting": "Comptage…",
+        "matched_one": "{{count, number}} utilisateur correspond",
+        "matched_other": "{{count, number}} utilisateurs correspondent",
+        "noData_one": "{{count, number}} sans donnée",
+        "noData_other": "{{count, number}} sans donnée",
+        "invalid": "Ce filtre ne peut pas être évalué. Vérifiez les conditions, notamment les expressions régulières.",
+        "tooLong": "Ce filtre est trop long. Retirez une condition ou raccourcissez une valeur.",
+        "clear": "Retirer le filtre",
+        "condition": "{{field}} {{operator}} « {{value}} »",
+        "and": "et",
+        "or": "ou",
+        "notFiltered": "Les chiffres d'activité ne comptent que les utilisateurs correspondants. Restent non filtrés : les agents existants, les agents équipés par capacité, le nombre de membres des équipes, le stockage et la longueur des prompts. « Sans donnée » : utilisateurs pour qui un attribut filtré n'est pas enregistré, par exemple parce qu'ils ne se sont pas connectés depuis que la règle d'accès l'utilise."
+      },
+      "sections": {
+        "reach": {
+          "eyebrow": "Portée",
+          "title": "Combien de personnes utilisent la plateforme ?"
+        },
+        "volumes": {
+          "eyebrow": "Volumes",
+          "title": "Combien d'échanges sur la période ?",
+          "def": "Messages envoyés par les utilisateurs aux agents. Les réponses des agents ne sont pas comptées.",
+          "how": "à rapprocher du nombre d'utilisateurs actifs : si les messages montent plus vite que les utilisateurs, l'usage s'intensifie."
+        },
+        "frequency": {
+          "eyebrow": "Fréquence",
+          "title": "Est-ce devenu une habitude ?"
+        },
+        "distribution": {
+          "eyebrow": "Répartition",
+          "title": "L'usage est-il réparti ou porté par quelques personnes ?",
+          "def": "Utilisateurs actifs regroupés selon le nombre de conversations qu'ils ont ouvertes sur la période. Chaque barre compte des personnes, pas des conversations.",
+          "how": "si quelques personnes concentrent l'essentiel des conversations, l'usage repose sur une poignée de champions et reste fragile. Une répartition étalée montre une habitude installée chez beaucoup de monde."
+        },
+        "collective": {
+          "eyebrow": "Usage collectif",
+          "title": "Travaille-t-on seul ou en équipe ?",
+          "def": "Répartition des conversations selon l'espace où elles ont lieu : l'espace personnel de l'utilisateur, ou l'espace d'une équipe (avec ses agents et ses corpus partagés).",
+          "how": "une part d'équipe qui grandit montre que la plateforme devient un outil collectif, au-delà d'un assistant individuel."
+        },
+        "diffusion": {
+          "eyebrow": "Diffusion",
+          "title": "Quelles équipes utilisent la plateforme ?"
+        },
+        "agents": {
+          "eyebrow": "Agents",
+          "title": "Combien d'agents servent vraiment, et lesquels ?"
+        },
+        "skills": {
+          "eyebrow": "Skills",
+          "title": "Quels skills sont mobilisés ?",
+          "def": "Un skill est un ensemble d'instructions qu'un agent charge pour une tâche précise. Il peut être demandé par l'utilisateur (commande) ou chargé de lui-même par le modèle.",
+          "how": "un skill surtout chargé par le modèle est bien décrit et trouvé seul. Un skill jamais chargé est à revoir ou à retirer."
+        },
+        "knowledge": {
+          "eyebrow": "Connaissances",
+          "title": "Les équipes alimentent-elles leurs corpus, et s'en servent-elles ?"
+        },
+        "cost": {
+          "eyebrow": "Coût et empreinte",
+          "title": "À quel prix, et où part-il ?",
+          "def": "Tokens envoyés aux modèles (messages, historique et documents transmis) et tokens générés dans les réponses, pour chaque intervalle de la période.",
+          "how": "les tokens envoyés pèsent le plus dans le coût. S'ils montent plus vite que les messages, les conversations s'allongent ou les documents transmis grossissent."
+        },
+        "webResearch": {
+          "eyebrow": "Recherche web",
+          "title": "Combien coûte la recherche web, et tient-elle la charge ?"
+        },
+        "storage": {
+          "eyebrow": "Stockage par équipe",
+          "title": "Quelles équipes approchent de leur quota ?",
+          "def": "Espace occupé aujourd'hui par les documents et ressources de chaque équipe, rapporté au quota qui lui est attribué.",
+          "how": "à partir de 80 %, prévenir l'équipe ou relever son quota avant que les imports ne soient bloqués."
+        },
+        "agentBuild": {
+          "eyebrow": "Agents",
+          "title": "Comment les agents sont-ils construits ?",
+          "def": "Taille des instructions (prompt système) de chaque agent, en tokens. Elle est renvoyée au modèle à chaque message.",
+          "how": "des prompts très longs augmentent le coût de chaque échange et peuvent noyer les consignes importantes."
+        },
+        "capabilities": {
+          "eyebrow": "Capabilities",
+          "title": "Activées sur les agents, ou réellement utilisées ?"
+        },
+        "quality": {
+          "eyebrow": "Qualité perçue",
+          "title": "Les réponses sont-elles utiles ?"
+        },
+        "activation": {
+          "eyebrow": "Activation et rétention",
+          "title": "Les nouveaux démarrent-ils, et reviennent-ils ?"
+        },
+        "members": {
+          "eyebrow": "Diffusion",
+          "title": "Qui, dans l'équipe, se sert de la plateforme ?",
+          "def": "\"Membres actifs\" : membres de l'équipe qui ont envoyé au moins un message dans un espace de cette équipe sur la période. Les membres sont comptés à aujourd'hui (pas d'historique des arrivées)."
+        }
+      },
+      "tiles": {
+        "conversations": {
+          "label": "Conversations",
+          "caption": "ouvertes sur la période",
+          "def": "Nombre de conversations démarrées sur la période, tous agents et espaces confondus."
+        },
+        "messages": {
+          "label": "Messages envoyés",
+          "caption": "par les utilisateurs aux agents",
+          "def": "Messages écrits par les utilisateurs. Les réponses des agents ne sont pas comptées.",
+          "how": "le détail dans le temps est dans l'onglet Usage."
+        },
+        "conversationsPerUser": {
+          "label": "Conversations par utilisateur actif",
+          "caption": "médiane sur la période",
+          "def": "Nombre de conversations ouvertes par un utilisateur actif sur la période (médiane)."
+        },
+        "messagesPerConversation": {
+          "label": "Messages par conversation",
+          "caption": "médiane sur la période",
+          "def": "Nombre de messages envoyés par l'utilisateur dans une conversation (médiane).",
+          "how": "1 à 2 messages : des questions ponctuelles. Au-delà de 4 : un travail itératif avec l'agent (rédaction, analyse)."
+        },
+        "creationAssistant": {
+          "label": "Assistant de création",
+          "caption": "brouillons générés sur la période · {{tokens, number}} tokens",
+          "def": "Brouillons d'agent proposés par l'assistant de création, et tokens consommés pour les produire.",
+          "how": "rapporté aux agents créés, montre si l'assistant aide vraiment à démarrer un agent."
+        },
+        "activeUsers": {
+          "label": "Utilisateurs actifs",
+          "caption": "ont envoyé au moins un message",
+          "def": "Personnes distinctes qui ont envoyé au moins un message à un agent sur la période. Se connecter sans écrire ne compte pas.",
+          "how": "c'est la mesure principale de l'adoption. Rapportée au nombre d'utilisateurs enregistrés, elle donne le taux d'adoption."
+        },
+        "activeTeams": {
+          "label": "Équipes actives",
+          "caption_one": "sur {{count}} équipe",
+          "caption_other": "sur {{count}} équipes",
+          "def": "Équipes dont au moins un membre a envoyé un message dans un espace de l'équipe sur la période.",
+          "how": "mesure la diffusion dans l'organisation, indépendamment de la taille des équipes. Le détail est dans l'onglet Équipes."
+        },
+        "cost": {
+          "label": "Coût estimé",
+          "caption": "soit {{value}} par utilisateur actif",
+          "def": "Tokens consommés multipliés par le prix configuré de chaque modèle.",
+          "how": "le coût par utilisateur actif est plus parlant que le total : il doit rester stable quand l'adoption monte."
+        },
+        "activeUsersPerWorkday": {
+          "label": "Utilisateurs actifs par jour",
+          "caption": "moyenne des jours ouvrés",
+          "def": "Nombre moyen de personnes qui envoient au moins un message un jour ouvré donné. Les week-ends sont exclus pour ne pas tirer la moyenne vers le bas."
+        },
+        "daysPerWeek": {
+          "label": "Jours d'usage par semaine",
+          "caption": "médiane des utilisateurs actifs",
+          "def": "Nombre de jours différents où un utilisateur actif envoie au moins un message, sur une semaine. La moitié des utilisateurs est au-dessus, l'autre en dessous.",
+          "how": "au-dessus de 2, la plateforme fait partie du travail courant. Autour de 1, l'usage reste ponctuel."
+        },
+        "dailyUsage": {
+          "label": "Usage quotidien",
+          "caption": "des utilisateurs actifs envoient un message un jour donné",
+          "def": "Utilisateurs actifs par jour (moyenne) divisés par les utilisateurs actifs de la période.",
+          "how": "au-delà de 20 %, l'usage est installé. Sous 10 %, la plateforme reste un outil d'appoint."
+        },
+        "agentsUsed": {
+          "label": "Agents utilisés",
+          "caption_one": "sur {{count}} agent existant",
+          "caption_other": "sur {{count}} agents existants",
+          "def": "Agents qui ont reçu au moins un message sur la période.",
+          "how": "les agents jamais utilisés encombrent le catalogue : à archiver ou à mieux faire connaître."
+        },
+        "agentsCreated": {
+          "label": "Agents créés",
+          "caption": "sur la période",
+          "def": "Agents créés sur la période, et parmi eux ceux partagés sur la marketplace.",
+          "how": "des créations régulières montrent que les équipes s'approprient la plateforme au-delà des agents fournis.",
+          "published_one": "dont {{count}} publié sur la marketplace",
+          "published_other": "dont {{count}} publiés sur la marketplace"
+        },
+        "documentsAdded": {
+          "label": "Documents ajoutés",
+          "caption": "dans les corpus d'équipe",
+          "def": "Documents importés dans les corpus des équipes sur la période."
+        },
+        "teamsFeedingCorpus": {
+          "label": "Équipes qui alimentent un corpus",
+          "caption": "au moins un document ajouté sur la période",
+          "def": "Équipes qui ont ajouté au moins un document à l'un de leurs corpus sur la période.",
+          "how": "un corpus non alimenté vieillit : les réponses s'appuient alors sur des documents périmés."
+        },
+        "corpusSearches": {
+          "label": "Recherches dans les corpus",
+          "caption": "faites par les agents pour répondre",
+          "def": "Nombre de fois où un agent a cherché dans un corpus pour construire sa réponse.",
+          "how": "rapporté aux documents ajoutés, montre si les corpus servent réellement ou dorment."
+        },
+        "failedAnswers": {
+          "label": "Réponses en échec",
+          "caption": "n'ont pas abouti à cause d'une erreur",
+          "def": "Part des réponses interrompues par une erreur technique (modèle indisponible, outil en échec, délai dépassé).",
+          "how": "au-delà de 3 %, les utilisateurs le ressentent."
+        },
+        "singleExchange": {
+          "label": "Conversations d'un seul échange",
+          "caption": "un message, une réponse, puis plus rien",
+          "def": "Part des conversations où l'utilisateur n'a envoyé qu'un seul message.",
+          "how": "à lire avec prudence : ce peut être une question vite résolue comme un abandon. Une hausse brutale mérite d'aller voir les agents concernés."
+        },
+        "tokens": {
+          "label": "Tokens traités",
+          "caption": "entrée {{sent}} - sortie {{generated}}",
+          "def": "Volume de texte traité par les modèles, en tokens (environ trois quarts de mot). Entrée : la question, le contexte de la conversation et les extraits de documents envoyés au modèle d'IA. Sortie : le texte que le modèle génère."
+        },
+        "footprint": {
+          "label": "Empreinte estimée (kg CO2e)",
+          "caption": "environ {{value}} kWh",
+          "def": "Estimation à partir des tokens et de facteurs d'impact moyens par modèle.",
+          "how": "un ordre de grandeur, pas une mesure : utile pour comparer les périodes et les modèles entre eux."
+        },
+        "newUsers": {
+          "label": "Nouveaux utilisateurs",
+          "caption": "premier passage sur la période",
+          "def": "Personnes venues pour la première fois sur la plateforme pendant cette période.",
+          "how": "montre si la plateforme continue d'attirer. Une baisse durable alors que l'adoption reste faible signale que la diffusion plafonne."
+        },
+        "nextMonthReturn": {
+          "label": "Retour le mois suivant",
+          "caption": "des nouveaux du mois dernier sont revenus",
+          "def": "Parmi les personnes arrivées le mois précédent, part de celles qui ont envoyé au moins un message ce mois-ci (le mois où se termine la période).",
+          "how": "au-dessus de 50 %, la première expérience convainc. En dessous, regarder l'onboarding et les agents proposés par défaut."
+        },
+        "firstMessageWithin7Days": {
+          "label": "Premier message sous 7 jours",
+          "caption": "des nouveaux visiteurs ont écrit dans leur première semaine",
+          "def": "Parmi les personnes connectées pour la première fois sur la période, part de celles qui ont envoyé un message dans les 7 jours.",
+          "how": "en dessous de 50 %, les nouveaux arrivent sans savoir quoi demander : un message d'accueil ou des suggestions peuvent aider."
+        },
+        "daysToFirstMessage": {
+          "label": "Délai avant le premier message",
+          "caption": "médiane",
+          "def": "Temps écoulé entre la première connexion et le premier message, pour la moitié des nouveaux utilisateurs."
+        }
+      },
+      "charts": {
+        "messagesOverTime": {
+          "valueLabel": "Messages",
+          "title": {
+            "hour": "Messages envoyés par heure",
+            "day": "Messages envoyés par jour",
+            "week": "Messages envoyés par semaine",
+            "month": "Messages envoyés par mois"
+          },
+          "def": "Messages envoyés par les utilisateurs aux agents dans chaque intervalle. Le dernier intervalle peut être encore en cours."
+        },
+        "conversationDistribution": {
+          "users_one": "{{value}} utilisateur · {{share}}",
+          "users_other": "{{value}} utilisateurs · {{share}}",
+          "bucket": {
+            "exact_one": "{{value}} conversation",
+            "exact_other": "{{value}} conversations",
+            "range": "{{low}} à {{high}} conversations",
+            "atLeast": "{{low}} conversations ou plus"
+          },
+          "title": "Utilisateurs actifs par nombre de conversations",
+          "empty": "Aucune activité utilisateur sur cette période.",
+          "topDecile": {
+            "lead": "Les 10 % les plus actifs font",
+            "rest": "des conversations · {{users}} utilisateurs actifs sur la période"
+          },
+          "def": "Utilisateurs actifs regroupés par nombre de conversations ouvertes sur la période, avec la part de chaque groupe parmi les utilisateurs actifs."
+        },
+        "activityOverTime": {
+          "title": {
+            "hour": "Utilisateurs actifs et visiteurs par heure",
+            "day": "Utilisateurs actifs et visiteurs par jour",
+            "week": "Utilisateurs actifs et visiteurs par semaine",
+            "month": "Utilisateurs actifs et visiteurs par mois"
+          },
+          "activeUsers": "Utilisateurs actifs",
+          "visitors": "Visiteurs",
+          "valueLabel": "Personnes",
+          "def": "Barres : personnes qui ont envoyé au moins un message à un agent dans l'intervalle. Ligne : personnes qui se sont connectées, même sans écrire. Le dernier intervalle est celui en cours."
+        },
+        "tokensOverTime": {
+          "title": {
+            "hour": "Tokens traités par heure",
+            "day": "Tokens traités par jour",
+            "week": "Tokens traités par semaine",
+            "month": "Tokens traités par mois"
+          },
+          "sent": "Entrée (envoyés au modèle)",
+          "generated": "Sortie (générés par le modèle)",
+          "valueLabel": "Tokens",
+          "def": "Entrée (la question, le contexte de la conversation et les extraits de documents envoyés au modèle) et sortie (le texte qu'il génère), empilées ; le total est écrit au-dessus de chaque barre.",
+          "periodTotals": "Sur la période : {{sent}} en entrée · {{generated}} en sortie"
+        },
+        "topAgents": {
+          "title": "Agents les plus utilisés",
+          "empty": "Aucun agent utilisé sur la période.",
+          "def": "Agents classés par nombre de conversations menées avec eux sur la période ; à égalité, par nombre de personnes distinctes qui leur ont envoyé au moins un message.",
+          "conversations_one": "{{value}} conversation",
+          "conversations_other": "{{value}} conversations",
+          "users_one": "{{value}} utilisateur",
+          "users_other": "{{value}} utilisateurs"
+        }
+      },
+      "tables": {
+        "teams": {
+          "title": "Activité par équipe",
+          "def": "\"Membres actifs\" : membres de l'équipe qui ont envoyé au moins un message dans un espace de cette équipe sur la période. Les membres sont comptés à aujourd'hui (pas d'historique des arrivées).",
+          "how": "une grande équipe avec une faible part de membres actifs est un bon candidat pour une session de prise en main.",
+          "empty": "Aucune équipe sur ce périmètre.",
+          "team": "Équipe",
+          "members": "Membres",
+          "active": "Membres actifs",
+          "share": "Part de membres actifs",
+          "messages": "Messages envoyés",
+          "change": "Évolution des messages",
+          "activeTeams_one": "{{active}} équipe(s) active(s) sur {{count}}",
+          "activeTeams_other": "{{active}} équipes actives sur {{count}}"
+        },
+        "capabilities": {
+          "title": "Usage par capability",
+          "def": "\"Agents équipés\" : agents qui ont la capability activée aujourd'hui. \"Agents qui l'ont utilisée\" : agents dont le modèle a appelé au moins un outil de cette capability sur la période. Les appels enregistrés avant le suivi par capability ne sont pas comptés.",
+          "how": "un taux d'utilisation sous 30 % signale une capability surtout activée \"au cas où\". Elle alourdit l'agent sans servir : à retirer, ou à mieux décrire dans les instructions de l'agent.",
+          "empty": "Aucun agent n'a de capability activée.",
+          "capability": "Capability",
+          "equipped": "Agents équipés",
+          "used": "Agents qui l'ont utilisée",
+          "usageRate": "Taux d'utilisation",
+          "calls": "Appels",
+          "users": "Utilisateurs touchés",
+          "failed": "Appels en échec"
+        },
+        "models": {
+          "title": "Par modèle",
+          "empty": "Aucun modèle utilisé sur la période.",
+          "model": "Modèle",
+          "share": "Part des messages",
+          "tokens": "Tokens traités",
+          "cost": "Coût estimé",
+          "footprint": "Empreinte"
+        },
+        "agentCost": {
+          "title": "Par agent",
+          "def": "Agents qui ont consommé le plus de tokens sur la période, avec le coût estimé correspondant.",
+          "how": "un agent cher avec peu d'utilisateurs mérite un regard : modèle trop puissant pour la tâche, ou documents trop volumineux transmis à chaque message.",
+          "empty": "Aucune consommation sur la période.",
+          "agent": "Agent",
+          "tokens": "Tokens traités",
+          "cost": "Coût estimé",
+          "perUser": "Coût par utilisateur"
+        },
+        "cohorts": {
+          "title": "Retour par mois d'arrivée",
+          "def": "Chaque ligne suit les personnes arrivées un même mois. Chaque case donne la part d'entre elles qui a envoyé au moins un message 1, 2 ou 3 mois plus tard.",
+          "how": "une part qui se stabilise (par exemple autour de 40 %) montre un noyau d'utilisateurs installé. Comparer les lignes indique si l'onboarding s'améliore.",
+          "empty": "Aucune arrivée sur ces mois.",
+          "month": "Arrivés en",
+          "size": "Nouveaux",
+          "monthPlus": "Mois +{{n}}",
+          "notYet": "Pas encore"
+        },
+        "storage": {
+          "title": "Stockage par équipe",
+          "empty": "Aucune équipe dans ce périmètre.",
+          "team": "Équipe",
+          "used": "Espace utilisé",
+          "quota": "Quota",
+          "share": "% utilisé"
+        },
+        "skills": {
+          "title": "Chargements de skills",
+          "empty": "Aucun chargement de skill enregistré sur cette période.",
+          "skill": "Skill",
+          "loads": "Chargements",
+          "split": "Chargé par l'utilisateur / par le modèle",
+          "byUser": "Par l'utilisateur",
+          "byModel": "Par le modèle"
+        }
+      },
+      "delta": {
+        "relative": "{{value}} vs période précédente",
+        "points": "{{value}} pts",
+        "absolute": "{{value}}"
+      },
+      "buckets": {
+        "week": "S{{week}}"
+      },
+      "units": {
+        "kgCo2e": "{{value}} kg CO2e"
+      },
+      "funnel": {
+        "title": "De l'accès à l'usage",
+        "def": "Chaque étape compte les personnes de la précédente qui sont allées plus loin sur la période : autorisées à utiliser la plateforme, venues au moins une fois, puis ayant envoyé au moins un message.",
+        "how": "la plus grosse perte indique quoi faire. Des gens qui ne viennent pas : un sujet de communication. Des visiteurs qui n'écrivent pas : il leur manque des cas d'usage ou des agents prêts à l'emploi.",
+        "unknown": "Non disponible",
+        "steps": {
+          "peopleWithAccess": {
+            "label": "Utilisateurs enregistrés",
+            "def": "Personnes qui se sont déjà connectées au moins une fois, dans le périmètre sélectionné. Si l'accès est restreint : celles que la règle d'accès admet encore ou ajoutées individuellement. Pour une sélection d'équipes : leurs membres actuels. Les personnes autorisées mais jamais venues ne sont pas comptées.",
+            "how": "c'est la base de calcul du taux d'adoption ; elle grandit à chaque première connexion."
+          },
+          "visitors": {
+            "label": "Visiteurs",
+            "def": "Personnes qui se sont connectées au moins une fois sur la période, même sans envoyer de message."
+          },
+          "activeUsers": {
+            "label": "Utilisateurs actifs",
+            "def": "Personnes distinctes qui ont envoyé au moins un message à un agent sur la période. Se connecter sans écrire ne compte pas."
+          }
+        },
+        "rates": {
+          "visitRate": {
+            "name": "Taux de visite",
+            "text": "sont venus au moins une fois",
+            "def": "Part des utilisateurs enregistrés qui sont venus au moins une fois sur la période.",
+            "how": "un taux faible est un sujet de communication : les gens ne savent pas que l'outil existe ou à quoi il sert."
+          },
+          "visitorToActive": {
+            "name": "Visiteurs passés à l'usage",
+            "text": "des visiteurs ont envoyé au moins un message",
+            "def": "Part des personnes connectées sur la période qui ont aussi envoyé au moins un message.",
+            "how": "une baisse signale des visiteurs qui ne trouvent pas quoi faire : mettre en avant des cas d'usage ou des agents prêts à l'emploi."
+          }
+        },
+        "adoption": {
+          "label": "Taux d'adoption",
+          "text": "des utilisateurs enregistrés ont envoyé au moins un message",
+          "def": "Utilisateurs actifs de la période divisés par le nombre d'utilisateurs enregistrés.",
+          "how": "l'indicateur à suivre dans le temps. Le reste est le potentiel à aller chercher."
         }
       }
     },
@@ -1839,12 +2208,12 @@
     },
     "tokenUsageImpact": {
       "costTitle": "Coût estimé",
-      "costValue": "{{cost}} $ (estimé)",
+      "costValue": "{{cost}} (estimé)",
       "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimé)"
     },
     "teamUsage": {
       "personalSkillsSectionTitle": "Mon utilisation des skills",
-      "title": "Mon utilisation",
+      "title": "Ma consommation",
       "personalSectionTitle": "Ma consommation",
       "tokensOverTime": {
         "title": "Consommation de tokens dans le temps",
@@ -1859,27 +2228,6 @@
         "empty": "Aucune consommation de modèle sur cette période.",
         "title": "Consommation par modèle",
         "valueLabel": "Tokens"
-      },
-      "team": {
-        "skillsSectionTitle": "Utilisation des skills de l’équipe",
-        "pageTitle": "Consommation de l'équipe",
-        "sectionTitle": "Consommation de l'équipe",
-        "membersLabel": "Membres",
-        "agentsLabel": "Agents",
-        "documentsLabel": "Documents",
-        "quota": {
-          "empty": "Aucun quota de stockage configuré pour cette équipe.",
-          "title": "Quota de stockage (% utilisé)",
-          "valueLabel": "% du quota"
-        },
-        "conversationsOverTime": {
-          "title": "Conversations dans le temps",
-          "valueLabel": "Conversations"
-        },
-        "mostActiveAgents": {
-          "title": "Agents les plus actifs",
-          "valueLabel": "Messages"
-        }
       }
     },
     "agentTodoPanel": {
@@ -3194,7 +3542,6 @@
         "members": "Membres",
         "settings": "Paramètres",
         "activity": "Activité",
-        "usage": "Consommation",
         "responsibilities": "Responsabilités",
         "routing": "Modèles",
         "retention": "Rétention"

@@ -1,0 +1,174 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Its own container: rows reflow with the space the list gets, wherever it sits. */
+.conditions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  container-type: inline-size;
+  min-width: 0;
+}
+/* One track list for the heading line and every condition, so fields line up like table rows. */
+.conditionRow {
+  display: grid;
+  grid-template-columns:
+    var(--spacing-l) minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 1.4fr)
+    minmax(0, 0.8fr) var(--spacing-xl);
+  align-items: start;
+  gap: var(--spacing-xs);
+}
+.conditionLabels {
+  border: 1px solid transparent;
+  padding: 0 var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+.conditionLabels > :nth-child(5) {
+  text-align: center;
+}
+.condition {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: var(--surface-main);
+  padding: var(--spacing-xs) var(--spacing-s);
+  min-width: 0;
+}
+.condition > p {
+  margin: 0;
+  padding-inline-start: calc(var(--spacing-l) + var(--spacing-xs));
+  color: var(--on-surface-retreat);
+}
+.conditionNumber {
+  display: flex;
+  align-items: center;
+  min-height: 2rem;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+}
+.conditionCell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+/* Per-condition labels only show once the shared heading line is dropped (narrow widths). */
+.conditionCell > span,
+.conditionToggle > label:first-child {
+  display: none;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+.conditionToggle {
+  justify-content: center;
+  align-items: center;
+  min-height: 2rem;
+}
+@container (max-width: 700px) {
+  .conditionLabels {
+    display: none;
+  }
+  .conditionRow {
+    grid-template-columns: var(--spacing-l) minmax(0, 1fr) minmax(0, 1fr) var(--spacing-xl);
+  }
+  .conditionRow > :nth-child(2) {
+    grid-row: 1;
+    grid-column: 2 / 4;
+  }
+  .conditionRow > :nth-child(6) {
+    grid-row: 1;
+    grid-column: 4;
+  }
+  .conditionRow > :nth-child(3) {
+    grid-row: 2;
+    grid-column: 2;
+  }
+  .conditionRow > :nth-child(4) {
+    grid-row: 2;
+    grid-column: 3;
+  }
+  .conditionRow > :nth-child(5) {
+    grid-row: 3;
+    grid-column: 2 / 4;
+  }
+  .conditionCell > span,
+  .conditionToggle > label:first-child {
+    display: block;
+  }
+  .conditionToggle {
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    gap: var(--spacing-xs);
+  }
+}
+@container (max-width: 400px) {
+  .conditionRow > :nth-child(3) {
+    grid-column: 2 / 4;
+  }
+  .conditionRow > :nth-child(4) {
+    grid-row: 3;
+    grid-column: 2 / 4;
+  }
+  .conditionRow > :nth-child(5) {
+    grid-row: 4;
+  }
+}
+.fieldChoice {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--radius-ms);
+  background: transparent;
+  padding: 0;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 2rem;
+  color: var(--primary);
+  font: var(--font-body-medium);
+  text-align: start;
+}
+.fieldName {
+  display: inline-block;
+  border-radius: var(--radius-ms);
+  background: var(--primary-container);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--on-primary-container);
+  font-family: var(--font-family-mono, monospace);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fieldChoice > span {
+  flex-shrink: 0;
+}
+.fieldChoice:not(:disabled):hover .fieldName {
+  background:
+    linear-gradient(var(--state-on-primary-container-hover), var(--state-on-primary-container-hover)),
+    var(--primary-container);
+}
+.fieldChoice:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.fieldChoice:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.screenReaderOnly {
+  position: absolute;
+  clip-path: inset(50%);
+  margin: -1px;
+  padding: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+}

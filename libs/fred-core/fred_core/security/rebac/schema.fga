@@ -156,6 +156,10 @@ type team
     # -> must be member
     define can_read_members: team_member
 
+    # Can read the team's usage analytics (KPI presets and export scoped to the
+    # team): governance reading, team_admin only, not every member
+    define can_read_analytics: team_admin
+
     # Can list own conversations within the team
     # -> must be member (public visibility does not grant access to conversations)
     define can_read_conversations: team_member

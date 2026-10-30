@@ -69,6 +69,23 @@ def load_model_impact_factors() -> dict[str, ModelImpactFactors]:
     return factors
 
 
+_DEFAULT_USD_PER_EUR = 1.12
+
+
+@lru_cache(maxsize=1)
+def load_usd_per_eur() -> float:
+    """USD value of one euro, from `model_impact_factors.yaml` (default 1.12)."""
+    raw = yaml.safe_load(_FACTORS_YAML_PATH.read_text(encoding="utf-8")) or {}
+    rate = float(raw.get("usd_per_eur", _DEFAULT_USD_PER_EUR))
+    if rate <= 0:
+        raise ValueError("usd_per_eur must be greater than 0")
+    return rate
+
+
+def usd_to_eur(usd: float) -> float:
+    return usd / load_usd_per_eur()
+
+
 def estimate_green_cost(
     model_name: str | None,
     *,

@@ -24,14 +24,12 @@ export interface PageHeaderProps {
    *  header. Omit to render nothing. */
   titleAction?: ReactNode;
   actions?: ReactNode;
+  /** Optional filters (scope, period…) next to the title; `actions` stays at the far end. */
+  filters?: ReactNode;
   /** Optional "you are here" trail or one-off link rendered above the title row. */
   breadcrumb?: ReactNode;
   /** Optional tab strip or filter control rendered below the title row, full width. */
   tabs?: ReactNode;
-  /** Keeps the header pinned to the top of the scrolling content — for dashboards whose `actions`
-   *  (e.g. a time range) must stay reachable next to the charts far down the page. Assumes the
-   *  page's `--spacing-xl` gutter, which the header bleeds over to hide what scrolls under it. */
-  sticky?: boolean;
 }
 
 /**
@@ -49,18 +47,19 @@ export default function PageHeader({
   subtitle,
   titleAction,
   actions,
+  filters,
   breadcrumb,
   tabs,
-  sticky = false,
 }: PageHeaderProps) {
   return (
-    <div className={sticky ? `${styles.wrapper} ${styles.sticky}` : styles.wrapper}>
+    <div className={styles.wrapper}>
       {breadcrumb && <div className={styles.breadcrumb}>{breadcrumb}</div>}
       <div className={subtitle ? `${styles.header} ${styles.headerWithSubtitle}` : styles.header}>
         <div className={styles.titleBlock}>
           <div className={styles.titleRow}>
             <h1 className={styles.title}>{title}</h1>
             {titleAction}
+            {filters && <div className={styles.filters}>{filters}</div>}
           </div>
           {subtitle && <p className={styles.subtitle}>{subtitle}</p>}
         </div>

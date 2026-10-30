@@ -17,7 +17,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TimeRangeSelector from "./TimeRangeSelector";
-import { resolvePreset, type TimeRange } from "./timeRange.types";
+import { resolvePreset, type TimePresetKey, type TimeRange } from "./timeRange.types";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en-US" } }),
@@ -33,12 +33,12 @@ let container: HTMLDivElement;
 let root: Root;
 const onChange = vi.fn();
 
-function render(value: TimeRange) {
+function render(value: TimeRange, presetKeys?: TimePresetKey[]) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root.render(<TimeRangeSelector value={value} onChange={onChange} />);
+    root.render(<TimeRangeSelector value={value} onChange={onChange} presetKeys={presetKeys} />);
   });
 }
 
@@ -116,5 +116,26 @@ describe("TimeRangeSelector", () => {
     openDropdown();
     expect(button("December 2025").getAttribute("aria-pressed")).toBe("true");
     expect(button("September 2026").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("offers only the presets it is given, in their order", () => {
+    render(resolvePreset("last30d"), ["last7d", "last3Months", "last12Months"]);
+    openDropdown();
+    const text = container.textContent ?? "";
+    expect(text).not.toContain("rework.analytics.presets.last24h");
+    expect(text.indexOf("rework.analytics.presets.last3Months")).toBeLessThan(
+      text.indexOf("rework.analytics.presets.last12Months"),
+    );
+
+    click(
+      [...container.querySelectorAll("button")].find((b) => b.textContent === "rework.analytics.presets.last3Months")!,
+    );
+    expect(onChange).toHaveBeenCalledWith(resolvePreset("last3Months"));
+  });
+
+  it("labels a shifted month window by its dates", () => {
+    const range = resolvePreset("last3Months", -1, new Date(2026, 9, 27, 10));
+    render(range);
+    expect(container.textContent).toContain("Apr 27 – Jul 27");
   });
 });

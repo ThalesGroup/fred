@@ -21,12 +21,21 @@
   border-radius: var(--radius-m);
   background: var(--surface-container);
   padding: var(--spacing-l);
+  color: var(--on-surface);
+}
+
+.section[data-flat] {
+  border-radius: 0;
+  background: none;
+  padding: 0;
 }
 
 .header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: var(--spacing-m);
 }
 
 .title {
@@ -34,10 +43,8 @@
   align-items: center;
   gap: var(--spacing-s);
   margin: 0;
-  color: var(--on-surface-retreat);
-  font: var(--font-label-medium);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  color: var(--on-surface);
+  font: var(--font-title-small);
 }
 
 .intervalBadge {
@@ -48,7 +55,6 @@
   font: var(--font-label-small);
   font-size: 0.65rem;
   letter-spacing: 0.04em;
-  text-transform: none;
 }
 
 .state {
@@ -59,4 +65,35 @@
 .stateError {
   color: var(--error);
   font: var(--font-body-medium);
+}
+
+/* Legend in the header: a square swatch for a bar series, a short line for a line series. */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--spacing-s);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.swatchBar {
+  border-radius: var(--radius-xs);
+  width: var(--spacing-s);
+  height: var(--spacing-s);
+}
+
+.swatchLine {
+  border-radius: var(--radius-full);
+  width: var(--spacing-m);
+  height: var(--spacing-3xs);
 }

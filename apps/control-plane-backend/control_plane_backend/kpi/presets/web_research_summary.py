@@ -14,22 +14,27 @@
 
 """
 Web research volume, estimated provider cost and refusals, from the
-content-free `web_research.request` event emitted by Fred Agents.
+content-free `web_research.request` event emitted by Fred Agents. Nothing is
+returned while the capability is enabled for no team and no personal space.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
 from fastapi import Request
-from fred_core import KeycloakUser
+from fred_core import KeycloakUser, RebacDisabledResult
 from fred_core.common import TeamId
+from fred_core.kpi import usd_to_eur
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
+from fred_core.security.rebac.capability_authz import CapabilityEnablementFacts
 from pydantic import AwareDatetime, BaseModel
 
+from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.kpi.presets.base import PresetDef
-from control_plane_backend.kpi.presets.common import LabelValuePoint
+from control_plane_backend.kpi.presets.common import LabelValuePoint, scope_filter
 
 # Policy refusals: Fred decided not to read the destination.
 BLOCKED_CODES = frozenset(
@@ -43,12 +48,33 @@ BLOCKED_CODES = frozenset(
 )
 
 
+WEB_RESEARCH_CAPABILITY_ID = "web_research"
+
+
+async def web_research_enabled(request: Request) -> bool:
+    """Usable somewhere: a default-on or personal-space marker, or a team grant.
+    Read from the capability's ReBAC tuples through the dashboard's 45 s cache."""
+    from control_plane_backend.capabilities.enablement import (
+        get_capability_relations_cached,
+    )
+
+    rebac = get_application_container(request).get_rebac_engine()
+    relations = await get_capability_relations_cached(rebac, WEB_RESEARCH_CAPABILITY_ID)
+    if isinstance(relations, RebacDisabledResult):
+        return True  # no ReBAC: every capability is usable
+    facts = CapabilityEnablementFacts.from_relations(relations)
+    return facts.default_on or facts.personal_on or bool(facts.enabled)
+
+
 class WebResearchSummaryResponse(BaseModel):
+    # False when the capability is enabled nowhere: every figure is zero and
+    # nothing about web research is to be shown.
+    available: bool = True
     tool_calls: int
     searches: int
     fetches: int
     billable_searches: int
-    estimated_cost_usd: float
+    estimated_cost_eur: float
     blocked: int
     saturated: int
     failed: int
@@ -66,17 +92,34 @@ async def query_web_research_summary(
     since: datetime,
     until: datetime,
     request: Request,
-    team_id: TeamId | None = None,
+    team_ids: Sequence[TeamId] = (),
+    user_ids: Sequence[str] | None = None,
 ) -> WebResearchSummaryResponse:
     # Authorization already resolved by the router (kpi/api.py, KpiScope).
-    del user, request
+    del user
+    if not await web_research_enabled(request):
+        return WebResearchSummaryResponse(
+            available=False,
+            tool_calls=0,
+            searches=0,
+            fetches=0,
+            billable_searches=0,
+            estimated_cost_eur=0.0,
+            blocked=0,
+            saturated=0,
+            failed=0,
+            unique_users=0,
+            p95_ms=None,
+            by_reason=[],
+            since=since,
+            until=until,
+        )
 
     filters: list[dict[str, Any]] = [
         {"range": {"@timestamp": {"gte": since.isoformat(), "lte": until.isoformat()}}},
         {"term": {"metric.name": "web_research.request"}},
     ]
-    if team_id is not None:
-        filters.append({"term": {"dims.team_id": str(team_id)}})
+    filters.extend(scope_filter(team_ids, user_ids))
 
     body: dict[str, Any] = {
         "size": 0,
@@ -112,7 +155,9 @@ async def query_web_research_summary(
         searches=by_tool.get("web_search", 0),
         fetches=by_tool.get("fetch_url", 0),
         billable_searches=billable.get("doc_count", 0),
-        estimated_cost_usd=round(billable.get("usd", {}).get("value") or 0.0, 4),
+        estimated_cost_eur=round(
+            usd_to_eur(billable.get("usd", {}).get("value") or 0.0), 4
+        ),
         blocked=blocked,
         saturated=saturated,
         failed=aggs.get("errors", {}).get("doc_count", 0) - blocked - saturated,
@@ -130,5 +175,5 @@ WEB_RESEARCH_SUMMARY_PRESET = PresetDef(
     handler=query_web_research_summary,
     summary="Web research volume, estimated provider cost, refusals and latency",
     team_scopable=True,
-    platform_admin_only=True,
+    user_filterable=True,
 )

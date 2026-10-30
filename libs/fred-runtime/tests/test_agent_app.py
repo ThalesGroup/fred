@@ -2820,8 +2820,8 @@ def test_emit_turn_completed_carries_session_id(monkeypatch, tmp_path) -> None:
     `agent.turn_completed` must carry `dims.session_id` (issue #2426).
 
     Why this exists:
-    - control-plane's `conversation_depth` preset groups turns by
-      `dims.session_id`; without the dim the whole preset returns nothing, and
+    - control-plane's `analytics_usage` preset groups turns by
+      `dims.session_id`; without the dim its per-conversation figures are empty, and
       nothing else in this suite asserts the dim reaches the KPI writer
     - the ring-buffer record sources `session_id` from the same `turn_dims`
       dict, and `KpiTurnRecord` requires that key while the surrounding `cast`

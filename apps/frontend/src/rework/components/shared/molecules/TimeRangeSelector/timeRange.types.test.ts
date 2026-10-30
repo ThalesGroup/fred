@@ -13,7 +13,14 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import { canShiftForward, refreshTimeRange, resolvePreset, shiftTimeRange, startOfUnit } from "./timeRange.types";
+import {
+  addMonths,
+  canShiftForward,
+  refreshTimeRange,
+  resolvePreset,
+  shiftTimeRange,
+  startOfUnit,
+} from "./timeRange.types";
 
 // Wednesday 16 September 2026, 15:30 local time.
 const NOW = new Date(2026, 8, 16, 15, 30);
@@ -49,6 +56,27 @@ describe("resolvePreset", () => {
     expect(resolvePreset("today", -1, NOW)).toMatchObject({ since: local(2026, 8, 15), until: local(2026, 8, 16) });
   });
 
+  it("covers rolling months from the same day and time, then the same length before", () => {
+    expect(resolvePreset("last3Months", 0, NOW)).toMatchObject({
+      since: new Date(2026, 5, 16, 15, 30).toISOString(),
+      until: NOW.toISOString(),
+    });
+    expect(resolvePreset("last3Months", -1, NOW)).toMatchObject({
+      since: new Date(2026, 2, 16, 15, 30).toISOString(),
+      until: new Date(2026, 5, 16, 15, 30).toISOString(),
+    });
+    expect(resolvePreset("last12Months", 0, NOW)).toMatchObject({
+      since: new Date(2025, 8, 16, 15, 30).toISOString(),
+      until: NOW.toISOString(),
+    });
+  });
+
+  it("ends a month window on the last day of a shorter month", () => {
+    expect(addMonths(new Date(2026, 4, 31, 9), -3).toISOString()).toBe(new Date(2026, 1, 28, 9).toISOString());
+    expect(addMonths(new Date(2024, 1, 29), -12).toISOString()).toBe(local(2023, 1, 28));
+    expect(addMonths(new Date(2026, 0, 31), 1).toISOString()).toBe(local(2026, 1, 28));
+  });
+
   it("steps a rolling window back by its own length", () => {
     const range = resolvePreset("last30d", -1, NOW);
     expect(range.until).toBe(new Date(NOW.getTime() - 30 * DAY).toISOString());
@@ -61,6 +89,17 @@ describe("shiftTimeRange", () => {
     const previous = shiftTimeRange(resolvePreset("thisMonth", 0, NOW), -1, NOW);
     expect(previous).toMatchObject({ presetKey: "thisMonth", offset: -1, since: local(2026, 7, 1) });
     expect(shiftTimeRange(previous, 1, NOW)).toEqual(resolvePreset("thisMonth", 0, NOW));
+  });
+
+  it("steps the 3- and 12-month presets back and forward again", () => {
+    for (const key of ["last3Months", "last12Months"] as const) {
+      const current = resolvePreset(key, 0, NOW);
+      expect(canShiftForward(current, NOW)).toBe(false);
+      const previous = shiftTimeRange(current, -1, NOW);
+      expect(previous).toEqual(resolvePreset(key, -1, NOW));
+      expect(canShiftForward(previous, NOW)).toBe(true);
+      expect(shiftTimeRange(previous, 1, NOW)).toEqual(current);
+    }
   });
 
   it("never steps a preset into the future", () => {

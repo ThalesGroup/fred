@@ -54,8 +54,11 @@ export function useObservabilityDeps(): ObservabilityDeps {
           id: "kpi-messages",
           title: "The messages KPI can be read",
           read: async () =>
-            (await dispatch(cp.handlerControlPlaneV1KpiPresetsMessagesOverTimeGet.initiate(lastDay(), FRESH)).unwrap())
-              .rows.length,
+            (
+              await dispatch(
+                cp.handlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGet.initiate(lastDay(), FRESH),
+              ).unwrap()
+            ).points.length,
         },
         {
           id: "kpi-tokens",
@@ -63,9 +66,9 @@ export function useObservabilityDeps(): ObservabilityDeps {
           read: async () =>
             (
               await dispatch(
-                cp.handlerControlPlaneV1KpiPresetsTokenUsageOverTimeGet.initiate(lastDay(), FRESH),
+                cp.handlerControlPlaneV1KpiPresetsAnalyticsQualityCostGet.initiate(lastDay(), FRESH),
               ).unwrap()
-            ).rows.length,
+            ).models.length,
         },
       ],
       searchHealth: () =>

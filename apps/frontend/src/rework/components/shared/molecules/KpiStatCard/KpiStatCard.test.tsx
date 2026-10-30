@@ -61,7 +61,7 @@ it("retains neutral styling by default and accepts outcome tones", () => {
   }
 });
 
-it("shows an optional hint as a focusable info bubble beside the label", () => {
+it("shows an optional hint as a focusable info bubble in the corner", () => {
   const html = renderToStaticMarkup(
     <KpiStatCard label="Searches" hint="Billed by the provider" value={2} isLoading={false} isError={false} />,
   );
@@ -90,4 +90,55 @@ it("shows the caption under the value, including a zero value, and hides it whil
   } finally {
     act(() => root.unmount());
   }
+});
+
+it("shows a preformatted value and change with the tone the caller picks", () => {
+  const html = renderToStaticMarkup(
+    <KpiStatCard
+      label="Failed answers"
+      value={0.018}
+      displayValue="1.8%"
+      deltaLabel="-0.6 pts"
+      deltaTone="positive"
+      isLoading={false}
+      isError={false}
+    />,
+  );
+  expect(html).toContain("1.8%");
+  expect(html).toMatch(/class="[^"]*deltaPositive[^"]*">-0.6 pts</);
+});
+
+it("puts the change on its own line with a direction glyph that reads without colour", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    act(() =>
+      root.render(
+        <KpiStatCard
+          label="Failed answers"
+          value={0.018}
+          displayValue="1.8%"
+          deltaLabel="-0.6 pts"
+          deltaTone="positive"
+          deltaDirection="down"
+          isLoading={false}
+          isError={false}
+        />,
+      ),
+    );
+    const value = [...container.querySelectorAll("span")].find((el) => el.textContent === "1.8%")!;
+    expect(value.nextElementSibling?.textContent).toBe("▼ -0.6 pts");
+    expect(value.nextElementSibling?.querySelector('[aria-hidden="true"]')?.textContent).toBe("▼ ");
+    act(() => root.render(<KpiStatCard label="Runs" value={4} delta={2} isLoading={false} isError={false} />));
+    expect(container.textContent).toBe("Runs4▲ +2");
+  } finally {
+    act(() => root.unmount());
+  }
+});
+
+it("sizes the value as asked, medium by default", () => {
+  const html = (size?: "medium" | "large") =>
+    renderToStaticMarkup(<KpiStatCard label="Users" value={3} size={size} isLoading={false} isError={false} />);
+  expect(html()).toContain('data-size="medium"');
+  expect(html("large")).toContain('data-size="large"');
 });

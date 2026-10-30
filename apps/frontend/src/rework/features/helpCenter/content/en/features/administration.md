@@ -103,14 +103,55 @@ request has to be addressed to the platform.
 When a function an agent already uses is closed again, that agent is
 **suspended** until it is restored.
 
+## The Analytics page
+
+The **Analytics** page shows how the platform is used over a period you choose
+(7 or 30 days, the last 3 or 12 months, a month or your own dates; the arrows move to
+the previous or next period). Each figure is compared with the previous period
+of the same length.
+
+Its tabs: **Overview**, **Adoption** (who has access, who comes, who sends
+messages, and whether newcomers come back), **Usage**, **Teams**, **Agents and
+tools**, **Quality and cost** (failed answers, tokens, estimated cost in euros
+and footprint) and **Technical** (storage, web research, instructions length).
+Each indicator has a short explanation behind its info icon.
+
+**Scope** narrows the page to a few teams, or comes back to **Whole platform**.
+Some figures are not attached to a team and say so when teams are selected.
+
+**User filter** limits every figure to people whose account attributes match
+conditions, built like a platform access rule (for example "organisation
+equals …"). Only the attributes the access rule records are offered, with
+their last known value. Before you apply it, the filter shows how many people
+match and how many are "without data": those who have not signed in since the
+rule started using that attribute. A few configuration figures (agents
+existing, team members, storage) are not filtered; the filter's info icon
+lists them.
+
+**Export** downloads the current period and scope as a workbook, with
+the same figures and explanations. It contains no names, emails or messages.
+
+## A team's analytics
+
+A team's **Analytics** page (in its settings) shows a team **Admin** the same
+analytics as the **Analytics** page, limited to their team: the same tabs
+except **Technical**, the same periods and comparisons, costs in euros. There
+is no scope choice: the page always shows the selected team. Figures that
+only make sense across teams (active teams, share of team conversations, the
+teams table) are left out; the **Teams** tab shows the team's members, how
+many are active and their share.
+
+**Export** downloads the workbook of that team only. It says nothing
+about the platform's other teams.
+
+The last tab, **My usage**, shows your own token usage, by agent and by
+model, with its footprint and estimated cost. The team's Editors, Analysts and
+Members see only this personal part, under the name **My usage** in the
+team's settings, and in your personal space it comes with your skills.
+
 ## Two usage pages, not to be confused
 
-- **Your team's usage** — the team's **Usage** page: consumption over time, by
-  agent and by model, plus your own share. The team-wide view requires the
-  **Admin**, **Editor** or **Analyst** role; a plain Member sees only their own
-  consumption.
-- **The platform's usage** — the console's **Analytics** page, across all users.
-  It requires the **Platform observer** role.
-
-The two pages therefore do not duplicate one another: their scopes and their
-access conditions differ.
+- **Your team's usage** — the team's **Analytics** page, whose team part is for
+  the team's **Admins**.
+- **The platform's usage** — the console's **Analytics** page, across all users
+  or the chosen teams. It requires the **Platform observer** role.

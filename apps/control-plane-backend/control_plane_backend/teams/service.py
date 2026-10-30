@@ -2105,6 +2105,21 @@ async def _bulk_team_membership(
     return admin_ids_map, member_ids_map, my_relations_map, pending_admin_ids_map
 
 
+async def team_member_ids(
+    rebac: RebacEngine, team_ids: list[TeamId]
+) -> dict[TeamId, set[str]]:
+    """Member ids per team, from the same cached relation reads as the team list."""
+    _, member_ids_map, _, _ = await _bulk_team_membership(rebac, team_ids, "")
+    return {team_id: set(member_ids_map.get(team_id, set())) for team_id in team_ids}
+
+
+async def team_member_counts(
+    rebac: RebacEngine, team_ids: list[TeamId]
+) -> dict[TeamId, int]:
+    members = await team_member_ids(rebac, team_ids)
+    return {team_id: len(ids) for team_id, ids in members.items()}
+
+
 async def _enrich_teams_with_membership(
     rebac: RebacEngine,
     user: KeycloakUser,

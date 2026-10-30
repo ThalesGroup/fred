@@ -4479,10 +4479,10 @@ needs them, and per-turn tracing already has them in history rows and SSE logs.
 in `KPI_INDEX_MAPPING` (added for the CTRLP-12 A3 erasure `update_by_query`), so
 the new dim is `term`-aggregatable on existing indexes with no migration.
 
-**Consumer.** Control-plane's `conversation_depth` KPI preset (`GET
-/kpi/presets/conversation_depth`) — a `terms` agg on `dims.session_id` behind an
-`exists` filter, so pre-#2426 turn rows are excluded rather than collapsing into
-one bucket.
+**Consumer.** Control-plane's `analytics_usage` KPI preset (messages per
+conversation and the conversation distribution; `conversation_depth` until
+2026-10-28, see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §74) — a `terms` agg on `dims.session_id`; pre-#2426 turn rows,
+which lack it, fall outside every bucket rather than collapsing into one.
 
 ---
 

@@ -14,7 +14,7 @@
 
 // Renders inline, next to any token-usage widget — never as a separate panel
 // (KPI-ANALYTICS-RFC.md §2.7). CO2e/kWh are shown unconditionally (essential);
-// $ cost sits behind the Disclosure atom (optional/collapsible, secondary).
+// the euro cost sits behind the Disclosure atom (optional/collapsible, secondary).
 // One component reused at every scope (platform, team, personal) that shows
 // token usage, so the same figures aren't computed three times over.
 
@@ -25,7 +25,7 @@ import styles from "./TokenUsageImpact.module.css";
 interface ImpactRow {
   co2e_grams?: number | null;
   kwh?: number | null;
-  cost_usd?: number | null;
+  cost_eur?: number | null;
 }
 
 interface TokenUsageImpactProps {
@@ -34,13 +34,19 @@ interface TokenUsageImpactProps {
 }
 
 export default function TokenUsageImpact({ rows, isLoading }: TokenUsageImpactProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   if (isLoading || !rows || rows.length === 0) return null;
 
   const co2eGrams = rows.reduce((acc, r) => acc + (r.co2e_grams ?? 0), 0);
   const kwh = rows.reduce((acc, r) => acc + (r.kwh ?? 0), 0);
-  const costUsd = rows.reduce((acc, r) => acc + (r.cost_usd ?? 0), 0);
+  const costEur = rows.reduce((acc, r) => acc + (r.cost_eur ?? 0), 0);
+  // Personal costs are often cents: keep enough digits for them not to read as zero.
+  const cost = new Intl.NumberFormat(i18n.language, {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: costEur < 1 ? 4 : 2,
+  }).format(costEur);
 
   return (
     <div className={styles.impact}>
@@ -48,7 +54,7 @@ export default function TokenUsageImpact({ rows, isLoading }: TokenUsageImpactPr
         {t("rework.tokenUsageImpact.summary", { co2e: co2eGrams.toFixed(1), kwh: kwh.toFixed(2) })}
       </span>
       <Disclosure title={t("rework.tokenUsageImpact.costTitle")}>
-        <span className={styles.cost}>{t("rework.tokenUsageImpact.costValue", { cost: costUsd.toFixed(4) })}</span>
+        <span className={styles.cost}>{t("rework.tokenUsageImpact.costValue", { cost })}</span>
       </Disclosure>
     </div>
   );
