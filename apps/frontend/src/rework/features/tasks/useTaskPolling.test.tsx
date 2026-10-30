@@ -13,10 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Following imports end to end, short of the network: the polling loop, the
+// Following preserved Swift imports, short of the network: the polling loop, the
 // generated clients and their base query (token refresh, 401 retry), the task
 // store, and the two places a user reads progress — the import panel and the
 // document row. The server is a table of task states behind a fake fetch.
+// Weaver does not mount this legacy loop; its production transport stays blocked.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -45,6 +46,21 @@ vi.mock("../../../security/KeycloakService", () => ({
     CallLogout: vi.fn(),
   },
 }));
+
+// Exercise the historical HTTP contract against fakeFetch without weakening the
+// normal app's refusal of Swift requests (covered by knowledgeFlowApi.test.ts).
+vi.mock("../../../slices/legacyKnowledgeFlow/knowledgeFlowApi", async () => {
+  const { createApi } = await import("@reduxjs/toolkit/query/react");
+  const { createDynamicBaseQuery } = await import("../../../common/dynamicBaseQuery");
+  return {
+    knowledgeFlowApi: createApi({
+      reducerPath: "legacyKnowledgeFlowApi",
+      baseQuery: createDynamicBaseQuery(),
+      tagTypes: ["Team", "TeamMember"],
+      endpoints: () => ({}),
+    }),
+  };
+});
 
 import { knowledgeFlowApi } from "../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { legacyControlPlaneApi } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";

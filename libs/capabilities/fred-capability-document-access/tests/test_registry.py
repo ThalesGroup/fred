@@ -131,6 +131,7 @@ def test_inert_library_binding_sets_no_ceiling() -> None:
 
 
 def test_config_without_a_document_source_is_rejected() -> None:
+    # Attachments are enabled by default; disable both sources explicitly.
     result = evaluate_capability_chat_controls(
         _registry(),
         capability_id=_CAPABILITY_ID,
@@ -138,6 +139,7 @@ def test_config_without_a_document_source_is_rejected() -> None:
             {
                 "bind_libraries": True,
                 "library_tag_ids": [_FOLDER_ID],
+                "attachments": False,
                 "team_documents": False,
             }
         ),
