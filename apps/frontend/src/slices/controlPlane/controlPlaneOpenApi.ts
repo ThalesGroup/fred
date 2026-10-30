@@ -916,8 +916,7 @@ export type ErrorBody = {
   detail: string;
 };
 export type CreateOrganization = {
-  /** Accounts that become the organization's direct administrators; a repeated name grants once. */
-  admin_usernames: string[];
+  admin_username: string;
   name: string;
   owner_username: string;
 };
@@ -935,8 +934,6 @@ export type OrganizationDetail = {
   owners: UserSummary[];
 };
 export type UpdateOrganization = {
-  /** The complete set of direct administrators: missing ones are added, others revoked. */
-  admin_usernames?: string[] | null;
   name?: string | null;
   owner_username?: string | null;
 };

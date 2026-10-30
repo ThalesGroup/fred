@@ -949,9 +949,7 @@ async fn search_organization_candidates(
 struct CreateOrganization {
     name: String,
     owner_username: String,
-    /// Accounts that become the organization's direct administrators; a repeated name grants once.
-    #[schema(min_items = 1, max_items = 50)]
-    admin_usernames: Vec<String>,
+    admin_username: String,
 }
 
 #[utoipa::path(
@@ -980,7 +978,7 @@ async fn create_organization(
         &user.uid,
         &req.name,
         &req.owner_username,
-        &req.admin_usernames,
+        &req.admin_username,
     )
     .await?;
     Ok((StatusCode::CREATED, Json(org)))
@@ -1052,15 +1050,13 @@ async fn get_organization(
     Ok(Json(organization_detail(&s, organization).await?))
 }
 
-/// Absent fields stay unchanged. The named owner becomes the sole direct owner.
+/// Absent fields stay unchanged. A named owner becomes the sole direct owner; admins
+/// are granted and revoked by the organization's own governance.
 #[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 struct UpdateOrganization {
     name: Option<String>,
     owner_username: Option<String>,
-    /// The complete set of direct administrators: missing ones are added, others revoked.
-    #[schema(min_items = 1, max_items = 50)]
-    admin_usernames: Option<Vec<String>>,
 }
 
 #[utoipa::path(
@@ -1094,7 +1090,6 @@ async fn update_organization(
         spaces::OrganizationChange {
             name: req.name.as_deref(),
             owner_username: req.owner_username.as_deref(),
-            admin_usernames: req.admin_usernames.as_deref(),
         },
     )
     .await?;

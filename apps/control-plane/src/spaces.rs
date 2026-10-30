@@ -43,11 +43,6 @@ const PERSONAL_FIXED: &str = "a personal space has a fixed single member";
 const CHILDREN_FIRST: &str = "remove dependent child roles and personal-space eligibility first";
 const OWNER_NOT_FOUND: &str = "organization owner account was not found";
 const ADMIN_NOT_FOUND: &str = "organization administrator account was not found";
-/// Bounds the request entries, hence the directory lookups made before locking.
-pub const MAX_ORGANIZATION_ADMINS: usize = 50;
-/// Role grants and revocations one edit can publish: one Write takes 100 tuple
-/// operations, four of which fence the platform and organization guards.
-const MAX_ROLE_CHANGES: usize = 96;
 
 async fn require(fga: &Fga, user: &str, permission: Permission, space: Uuid) -> AppResult<()> {
     if fga.check(user, permission, space).await? {
@@ -454,46 +449,9 @@ pub struct OrganizationGovernance {
 pub struct OrganizationChange<'a> {
     pub name: Option<&'a str>,
     pub owner_username: Option<&'a str>,
-    /// The complete set of direct administrators.
-    pub admin_usernames: Option<&'a [String]>,
 }
 
-fn validate_admins(usernames: &[String]) -> AppResult<()> {
-    if usernames.is_empty() || usernames.len() > MAX_ORGANIZATION_ADMINS {
-        return Err(AppError::Unprocessable(format!(
-            "an organization needs 1..{MAX_ORGANIZATION_ADMINS} administrator entries"
-        )));
-    }
-    usernames
-        .iter()
-        .try_for_each(|username| validate_username(username))
-}
-
-/// Distinct administrator subjects in request order; an owner named again, with its
-/// subject, is not looked up twice.
-async fn resolve_admins(
-    directory: &crate::users::Directory<'_>,
-    usernames: &[String],
-    owner: Option<(&str, &str)>,
-) -> AppResult<Vec<String>> {
-    let mut admins: Vec<String> = Vec::new();
-    let mut seen = BTreeSet::new();
-    for username in usernames {
-        if !seen.insert(username.as_str()) {
-            continue;
-        }
-        let subject = match owner {
-            Some((name, subject)) if name == username => subject.to_owned(),
-            _ => resolve_account(directory, username, ADMIN_NOT_FOUND).await?,
-        };
-        if !admins.contains(&subject) {
-            admins.push(subject);
-        }
-    }
-    Ok(admins)
-}
-
-/// HTTP governance creates only the explicitly selected roles, never content access.
+/// HTTP governance creates only the two explicitly selected roles, never content access.
 pub async fn create_managed_organization(
     pool: &PgPool,
     fga: &Fga,
@@ -501,23 +459,24 @@ pub async fn create_managed_organization(
     caller: &str,
     name: &str,
     owner_username: &str,
-    admin_usernames: &[String],
+    admin_username: &str,
 ) -> AppResult<Space> {
     crate::platform::require_owner(fga, caller).await?;
     let name = &validate_space_name(name)?;
-    validate_username(owner_username)?;
-    validate_admins(admin_usernames)?;
+    for username in [owner_username, admin_username] {
+        validate_username(username)?;
+    }
     // Resolve before taking the global mutation lock. No directory write is performed.
     let owner = resolve_account(directory, owner_username, OWNER_NOT_FOUND).await?;
-    let admins = resolve_admins(
-        directory,
-        admin_usernames,
-        Some((owner_username, owner.as_str())),
-    )
-    .await?;
-    let initial_roles: Vec<_> = std::iter::once((owner.as_str(), Role::OrganizationOwner))
-        .chain(admins.iter().map(|admin| (admin.as_str(), Role::Admin)))
-        .collect();
+    let admin = if admin_username == owner_username {
+        owner.clone()
+    } else {
+        resolve_account(directory, admin_username, ADMIN_NOT_FOUND).await?
+    };
+    let initial_roles = [
+        (owner.as_str(), Role::OrganizationOwner),
+        (admin.as_str(), Role::Admin),
+    ];
     let id = Uuid::new_v4();
     let org = Space::from(SpaceRow {
         id,
@@ -553,9 +512,9 @@ pub async fn create_managed_organization(
     Ok(org)
 }
 
-/// Renames an organization, makes the named owner its sole direct owner and/or makes
-/// the named administrators its exact set of direct admins, with the same authority,
-/// validation and locking as creation. SQL commits only after OpenFGA accepted the delta.
+/// Renames an organization and/or makes the named account its sole direct owner, with
+/// the same authority, validation and locking as creation. Admins stay with the
+/// organization's own governance. SQL commits only after OpenFGA accepted the delta.
 pub async fn update_managed_organization(
     pool: &PgPool,
     fga: &Fga,
@@ -566,25 +525,15 @@ pub async fn update_managed_organization(
 ) -> AppResult<OrganizationGovernance> {
     crate::platform::require_owner(fga, caller).await?;
     let name = change.name.map(validate_space_name).transpose()?;
-    if name.is_none() && change.owner_username.is_none() && change.admin_usernames.is_none() {
+    if name.is_none() && change.owner_username.is_none() {
         return Err(AppError::Unprocessable(
             "no organization change requested".into(),
         ));
     }
-    if let Some(username) = change.owner_username {
-        validate_username(username)?;
-    }
-    if let Some(usernames) = change.admin_usernames {
-        validate_admins(usernames)?;
-    }
-    let new_owner = match change.owner_username {
-        Some(username) => Some(resolve_account(directory, username, OWNER_NOT_FOUND).await?),
-        None => None,
-    };
-    let new_admins = match change.admin_usernames {
-        Some(usernames) => {
-            let owner = change.owner_username.zip(new_owner.as_deref());
-            Some(resolve_admins(directory, usernames, owner).await?)
+    let owner = match change.owner_username {
+        Some(username) => {
+            validate_username(username)?;
+            Some(resolve_account(directory, username, OWNER_NOT_FOUND).await?)
         }
         None => None,
     };
@@ -605,38 +554,23 @@ pub async fn update_managed_organization(
         fga.space_holders(id, Role::OrganizationOwner),
         fga.space_holders(id, Role::Admin),
     )?;
-    let mut desired = Vec::new();
-    if let Some(owner) = &new_owner {
-        desired.push((
-            Role::OrganizationOwner,
-            std::slice::from_ref(owner),
-            &owners,
-        ));
-    }
-    if let Some(targets) = &new_admins {
-        desired.push((Role::Admin, targets.as_slice(), &admins));
-    }
-    let (mut writes, mut deletes, mut attached) = (Vec::new(), Vec::new(), BTreeSet::new());
-    for (role, targets, current) in &desired {
-        for target in targets.iter() {
-            if !current.contains(target) {
-                if attached.insert(target) {
-                    may_attach(&mut *tx, fga, target, id).await?;
-                }
-                writes.push(Tuple {
-                    user: target,
-                    role: *role,
-                    space: id,
-                });
-            }
+    let (mut writes, mut deletes) = (Vec::new(), Vec::new());
+    if let Some(target) = &owner {
+        if !owners.contains(target) {
+            may_attach(&mut *tx, fga, target, id).await?;
+            writes.push(Tuple {
+                user: target,
+                role: Role::OrganizationOwner,
+                space: id,
+            });
         }
         deletes.extend(
-            current
+            owners
                 .iter()
-                .filter(|holder| !targets.contains(holder))
+                .filter(|holder| *holder != target)
                 .map(|holder| Tuple {
                     user: holder,
-                    role: *role,
+                    role: Role::OrganizationOwner,
                     space: id,
                 }),
         );
@@ -648,11 +582,6 @@ pub async fn update_managed_organization(
             .execute(&mut *tx)
             .await?;
         organization.name = name;
-    }
-    if writes.len() + deletes.len() > MAX_ROLE_CHANGES {
-        return Err(AppError::Unprocessable(format!(
-            "an edit can grant or revoke at most {MAX_ROLE_CHANGES} roles"
-        )));
     }
     fga.write(&mut guard, &writes, &deletes).await?;
     for (tuple, granted) in writes
@@ -671,8 +600,8 @@ pub async fn update_managed_organization(
     tx.commit().await?;
     Ok(OrganizationGovernance {
         organization,
-        owners: new_owner.map_or(owners, |owner| vec![owner]),
-        admins: new_admins.unwrap_or(admins),
+        owners: owner.map_or(owners, |owner| vec![owner]),
+        admins,
     })
 }
 

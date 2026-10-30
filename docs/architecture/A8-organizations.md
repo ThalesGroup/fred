@@ -260,13 +260,12 @@ UI controls, with French and English translations.
 The platform registry exposes active organizations, independently of content
 membership, in pages of at most 100 names/identifiers. Only admitted platform owners
 can list or create them. The form searches candidates after two characters and
-lets the owner select one owner and up to 50 admins. Keycloak searches the realm;
+lets the owner select each contact independently. Keycloak searches the realm;
 the local OIDC directory searches personal profiles already observed during
 authenticated onboarding, before or after consent, by literal case-insensitive prefix
 of username, first name, last name or email. HTTP creation resolves the exact existing owner/admin
-usernames and writes those direct roles, with no implicit member grant. One
-account may hold both roles. Editing sends the complete admin list; at least one
-admin remains. Name uniqueness and each nominee's single organization
+usernames and writes those two direct roles, with no implicit member grant. One
+account may hold both roles. Name uniqueness and each nominee's single organization
 attachment are rechecked under the platform lock before guarded publication.
 Retired organizations reserve their name until cleanup, and are absent from the list.
 Organization creation does not create a personal space.

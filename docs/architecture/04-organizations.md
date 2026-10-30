@@ -75,7 +75,7 @@ separately. Published counts describe recorded results, not live storage health.
 
 ## Platform organization administration
 
-A platform owner creates an organization and appoints its owner and admins.
+A platform owner creates an organization and appoints its owner and admin.
 Those responsibilities do not automatically grant access to documents. Provisioning
 can also import accounts, teams, projects and explicit roles together; the
 [user journey](02.1-user-journeys.md) illustrates this setup.

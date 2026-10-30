@@ -33,74 +33,63 @@ const userLabel = (user: UserSummary) => {
   return name ? `${name} (${handle})` : handle;
 };
 
-// Mirrors the server's bound on administrators per organization.
-const MAX_ORGANIZATION_ADMINS = 50;
-
-// Chosen accounts as chips; the search field stays until `max` accounts are chosen.
+// One account per role: the search field gives way to the chosen person's chip.
 function AccountPicker({
   label,
   value,
   onChange,
-  max = 1,
 }: {
   label: string;
-  value: UserSummary[];
-  onChange: (users: UserSummary[]) => void;
-  max?: number;
+  value: UserSummary | null;
+  onChange: (user: UserSummary | null) => void;
 }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const trimmedQuery = query.trim();
-  const full = value.length >= max;
   // `currentData`, not `data`: results of a previous search must not stay selectable while a new one loads.
   const { currentData, isFetching, isError } = useSearchOrganizationCandidatesQuery(
     { query: trimmedQuery },
-    { skip: full || trimmedQuery.length < 2 },
+    { skip: !!value || trimmedQuery.length < 2 },
   );
   return (
     <div className={styles.adminsField}>
       <span className={styles.adminsLabel}>{label} *</span>
-      <div className={styles.adminsPicker}>
-        {!full && (
-          <Autocomplete<UserSummary>
-            textInput={{
-              placeholder: t("rework.adminTeams.createTeam.adminsPlaceholder"),
-              size: "small",
-              icon: { category: "outlined", type: "search" },
-              "aria-label": label,
-            }}
-            minQueryLength={2}
-            onFieldValueChange={setQuery}
-            noOptionsMessage={t(
-              isFetching
-                ? "rework.adminTeams.createTeam.adminsSearching"
-                : isError
-                  ? "rework.organizations.searchFailed"
-                  : "rework.adminTeams.createTeam.adminsNoMatch",
-            )}
-            options={(trimmedQuery.length >= 2 && !isError ? (currentData ?? []) : [])
-              .filter((user) => !!user.username && !value.some((chosen) => chosen.id === user.id))
-              .map((user) => ({ label: userLabel(user), value: user, key: user.id }))}
-            onSelect={(user) => {
-              onChange([...value, user]);
-              setQuery("");
-            }}
-          />
-        )}
-        {value.length > 0 && (
-          <ul className={styles.adminChipList}>
-            {value.map((user) => (
-              <li key={user.id}>
-                <Chip
-                  label={userLabel(user)}
-                  removeAriaLabel={t("rework.adminTeams.createTeam.adminRemove", { name: user.username ?? user.id })}
-                  onRemove={() => onChange(value.filter((other) => other.id !== user.id))}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {value ? (
+        <ul className={styles.adminChipList}>
+          <li>
+            <Chip
+              label={userLabel(value)}
+              removeAriaLabel={t("rework.adminTeams.createTeam.adminRemove", { name: value.username ?? value.id })}
+              onRemove={() => onChange(null)}
+            />
+          </li>
+        </ul>
+      ) : (
+        <Autocomplete<UserSummary>
+          textInput={{
+            placeholder: t("rework.adminTeams.createTeam.adminsPlaceholder"),
+            size: "small",
+            icon: { category: "outlined", type: "search" },
+            "aria-label": label,
+          }}
+          minQueryLength={2}
+          onFieldValueChange={setQuery}
+          noOptionsMessage={t(
+            isFetching
+              ? "rework.adminTeams.createTeam.adminsSearching"
+              : isError
+                ? "rework.organizations.searchFailed"
+                : "rework.adminTeams.createTeam.adminsNoMatch",
+          )}
+          options={(trimmedQuery.length >= 2 && !isError ? (currentData ?? []) : [])
+            .filter((user) => !!user.username)
+            .map((user) => ({ label: userLabel(user), value: user, key: user.id }))}
+          onSelect={(user) => {
+            onChange(user);
+            setQuery("");
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -128,9 +117,6 @@ function SeveralOwners({ owners }: { owners?: UserSummary[] }) {
   );
 }
 
-const sameAccounts = (a: UserSummary[], b: UserSummary[]) =>
-  a.length === b.length && a.every((user) => b.some((other) => other.id === user.id));
-
 interface OrganizationFormDialogProps {
   /** The organization to edit; absent to create one. */
   organization?: Space;
@@ -138,7 +124,10 @@ interface OrganizationFormDialogProps {
   onClose: () => void;
 }
 
-/** Create or edit an organization's name, owner and administrators. An edit sends only what changed. */
+/**
+ * Create an organization with its owner and first administrator, or edit its name and owner.
+ * Later admins are the organization's own governance. An edit sends only what changed.
+ */
 export default function OrganizationFormDialog({ organization, onSaved, onClose }: OrganizationFormDialogProps) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
@@ -156,7 +145,7 @@ export default function OrganizationFormDialog({ organization, onSaved, onClose 
   const [detail, setDetail] = useState<OrganizationDetail>();
   const [name, setName] = useState("");
   const [owner, setOwner] = useState<UserSummary | null>(null);
-  const [admins, setAdmins] = useState<UserSummary[]>([]);
+  const [admin, setAdmin] = useState<UserSummary | null>(null);
   // Pre-fill once, from this open's own fetch rather than a cached copy; a later refetch
   // must not overwrite what the admin typed.
   const fresh = !detailQuery.isFetching && detailQuery.requestId !== cachedRequestId;
@@ -164,21 +153,15 @@ export default function OrganizationFormDialog({ organization, onSaved, onClose 
     setDetail(detailQuery.currentData);
     setName(detailQuery.currentData.organization.name);
     setOwner(detailQuery.currentData.owners[0] ?? null);
-    setAdmins(detailQuery.currentData.admins);
   }
   const ready = !organization || !!detail;
 
   const trimmedName = name.trim();
-  // Owners can have several direct holders: saving makes the chosen account the only one.
-  // Administrators are sent as the complete list, only when it changed.
-  const adminsChanged = !detail || !sameAccounts(admins, detail.admins);
-  // A holder the directory no longer names cannot be sent back in a changed list.
-  const unnamedAdminBlocks = adminsChanged && admins.some((user) => !user.username);
+  // An organization can have several direct owners: saving makes the chosen account the only one.
   const changes: UpdateOrganization = {};
   if (detail) {
     if (trimmedName !== detail.organization.name) changes.name = trimmedName;
     if (owner?.username && owner.id !== detail.owners[0]?.id) changes.owner_username = owner.username;
-    if (adminsChanged) changes.admin_usernames = admins.map((user) => user.username!);
   }
   // An untouched holder is kept as is, even one the directory no longer names.
   const kept = (user: UserSummary | null, current?: UserSummary) =>
@@ -187,8 +170,7 @@ export default function OrganizationFormDialog({ organization, onSaved, onClose 
     ready &&
     trimmedName !== "" &&
     kept(owner, detail?.owners[0]) &&
-    admins.length > 0 &&
-    !unnamedAdminBlocks &&
+    (!!organization || !!admin?.username) &&
     !isCreating &&
     !isUpdating &&
     (!organization || Object.keys(changes).length > 0);
@@ -203,7 +185,7 @@ export default function OrganizationFormDialog({ organization, onSaved, onClose 
               createOrganization: {
                 name: trimmedName,
                 owner_username: owner.username!,
-                admin_usernames: admins.map((user) => user.username!),
+                admin_username: admin!.username!,
               },
             }).unwrap(),
       onSuccess: (saved) => {
@@ -253,23 +235,9 @@ export default function OrganizationFormDialog({ organization, onSaved, onClose 
             autoFocus={!!organization}
             required
           />
-          <AccountPicker
-            label={t("rework.organizations.owner")}
-            value={owner ? [owner] : []}
-            onChange={(users) => setOwner(users[0] ?? null)}
-          />
+          <AccountPicker label={t("rework.organizations.owner")} value={owner} onChange={setOwner} />
           <SeveralOwners owners={detail?.owners} />
-          <AccountPicker
-            label={t("rework.organizations.admin")}
-            value={admins}
-            onChange={setAdmins}
-            max={MAX_ORGANIZATION_ADMINS}
-          />
-          {unnamedAdminBlocks && (
-            <p role="note" className={styles.sectionDescription}>
-              {t("rework.organizations.editOrganization.unnamedAdmins")}
-            </p>
-          )}
+          {!organization && <AccountPicker label={t("rework.organizations.admin")} value={admin} onChange={setAdmin} />}
         </div>
       )}
     </Dialog>

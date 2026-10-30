@@ -174,25 +174,12 @@ it("names a holder the directory no longer describes by id, and still saves a re
   expect(await requests[1].json()).toEqual({ name: "Renamed" });
 });
 
-it("warns that a new owner replaces every current one, and lists every administrator", async () => {
-  replies.push(async () => json(detail("Demo", [person("olivia"), person("oscar")], [person("adam"), person("ada")])));
+it("warns that a new holder replaces every current one", async () => {
+  replies.push(async () => json(detail("Demo", [person("olivia"), person("oscar")])));
   open(ORG);
   await waitForForm();
   const notes = [...dialog().querySelectorAll('[role="note"]')].map((n) => n.textContent);
   expect(notes).toEqual(["rework.organizations.editOrganization.severalOwners olivia, oscar"]);
-  expect(dialog().textContent).toContain("adam");
-  expect(dialog().textContent).toContain("ada");
-});
-
-it("cannot change the administrators while one of them has no username to send", async () => {
-  replies.push(async () => json(detail("Demo", [person("olivia")], [person("subject-2", null), person("adam")])));
-  open(ORG);
-  await waitForForm();
-  const remove = [...dialog().querySelectorAll("button")].find((b) => b.getAttribute("aria-label")?.includes("adam"))!;
-  act(() => remove.click());
-  expect(save().disabled).toBe(true);
-  const notes = [...dialog().querySelectorAll('[role="note"]')].map((n) => n.textContent);
-  expect(notes).toEqual(["rework.organizations.editOrganization.unnamedAdmins"]);
 });
 
 it.each([
