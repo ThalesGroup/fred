@@ -213,7 +213,8 @@ imports. Your team keeps using and editing the agent as usual. After a change,
 editors and the team admin see **Marketplace update needed**: the
 marketplace still shows the previous version. An Editor who saves a change
 can choose **Update** to replace the published version; **Ignore** keeps the previous
-version listed.
+version listed. When the change comes from someone else, the person who published
+the agent also gets a [notification](/help/en/features/notifications).
 
 ### Removal from the marketplace
 
@@ -229,7 +230,8 @@ The agent is also removed **automatically** when:
 
 After an automatic removal, the card shows **Removed from the marketplace**.
 Click it to see why, when, and the administrator's message if there is one.
-Editors and the team admin can **Hide** this notice for the whole team.
+Editors and the team admin can **Hide** this notice for the whole team. The person
+who published the agent also gets a [notification](/help/en/features/notifications).
 Publishing the agent again puts it back on the marketplace.
 
 ### Likes
