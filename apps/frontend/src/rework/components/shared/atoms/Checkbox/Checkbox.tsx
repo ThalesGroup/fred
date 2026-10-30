@@ -21,7 +21,13 @@ export interface CheckboxProps extends ComponentPropsWithRef<"input"> {
   indeterminate?: boolean;
 }
 
-export default function Checkbox({ ref: externalRef, indeterminate = false, className, ...rest }: CheckboxProps) {
+export default function Checkbox({
+  ref: externalRef,
+  indeterminate = false,
+  className,
+  onChange,
+  ...rest
+}: CheckboxProps) {
   const containerClasses = [styles["checkbox-container"]];
   if (className) containerClasses.push(className);
 
@@ -48,6 +54,11 @@ export default function Checkbox({ ref: externalRef, indeterminate = false, clas
         aria-checked={indeterminate ? "mixed" : undefined}
         data-indeterminate={indeterminate || undefined}
         {...rest}
+        onChange={(event) => {
+          // Native activation clears this property even if the controlled prop stays true.
+          event.currentTarget.indeterminate = indeterminate;
+          onChange?.(event);
+        }}
       />
       <div className={styles["box"]}>
         <div className={styles["state-layer"]}>

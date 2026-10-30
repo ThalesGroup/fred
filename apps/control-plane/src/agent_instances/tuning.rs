@@ -288,33 +288,14 @@ async fn validate_capability(
     config: Value,
 ) -> AppResult<Value> {
     let unavailable = || AppError::Unavailable("Pod capability validation unavailable.".into());
-    let source = platform
-        .runtime_catalog_sources
-        .iter()
-        .find(|source| source.enabled && source.runtime_id == template.source_runtime_id)
-        .ok_or_else(unavailable)?;
-    static CLIENT: OnceLock<Result<reqwest::Client, reqwest::Error>> = OnceLock::new();
-    let client = CLIENT
-        .get_or_init(|| {
-            reqwest::Client::builder()
-                .timeout(Duration::from_secs(10))
-                .redirect(reqwest::redirect::Policy::none())
-                .build()
-        })
-        .as_ref()
-        .map_err(|_| unavailable())?;
     // Weaver sends neither assets nor a team_id alias: the pod validates config alone.
-    let mut request = client
-        .post(format!(
-            "{}/agents/capabilities/{id}/validate-config",
-            source.base_url.trim_end_matches('/')
-        ))
-        .form(&[("config", config.to_string())]);
-    if let Some(authorization) = authorization {
-        let mut authorization = authorization.clone();
-        authorization.set_sensitive(true);
-        request = request.header(header::AUTHORIZATION, authorization);
-    }
+    let request = capability_request(
+        platform,
+        &template.source_runtime_id,
+        authorization,
+        &format!("{id}/validate-config"),
+    )?
+    .form(&[("config", config.to_string())]);
     let mut response = request.send().await.map_err(|_| unavailable())?;
     match response.status() {
         StatusCode::OK => {}
@@ -359,8 +340,43 @@ async fn validate_capability(
     Ok(stored)
 }
 
+/// Shared authenticated transport for capability operations on the configured pod.
+pub(super) fn capability_request(
+    platform: &PlatformConfig,
+    runtime_id: &str,
+    authorization: Option<&HeaderValue>,
+    operation: &str,
+) -> AppResult<reqwest::RequestBuilder> {
+    let unavailable = || AppError::Unavailable("Pod capability validation unavailable.".into());
+    let source = platform
+        .runtime_catalog_sources
+        .iter()
+        .find(|source| source.enabled && source.runtime_id == runtime_id)
+        .ok_or_else(unavailable)?;
+    static CLIENT: OnceLock<Result<reqwest::Client, reqwest::Error>> = OnceLock::new();
+    let client = CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .timeout(Duration::from_secs(10))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+        })
+        .as_ref()
+        .map_err(|_| unavailable())?;
+    let mut request = client.post(format!(
+        "{}/agents/capabilities/{operation}",
+        source.base_url.trim_end_matches('/')
+    ));
+    if let Some(authorization) = authorization {
+        let mut authorization = authorization.clone();
+        authorization.set_sensitive(true);
+        request = request.header(header::AUTHORIZATION, authorization);
+    }
+    Ok(request)
+}
+
 /// The body, or `None` when it exceeds `max` bytes or the stream fails.
-async fn read_limited(response: &mut reqwest::Response, max: usize) -> Option<Vec<u8>> {
+pub(super) async fn read_limited(response: &mut reqwest::Response, max: usize) -> Option<Vec<u8>> {
     if response
         .content_length()
         .is_some_and(|size| size > max as u64)

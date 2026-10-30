@@ -292,7 +292,7 @@ def _build_test_config(
                 },
             },
             "ai": {
-                "knowledge_flow_url": "http://localhost:8111/knowledge-flow/v1",
+                "knowledge_flow_url": "http://localhost:8111/knowledge-flow/v2",
             },
             "observability": {
                 "kpi": {
@@ -1178,7 +1178,7 @@ def test_delete_session_filesystem_reports_storage_failures(
             "get_runtime_context",
             lambda: FredRuntimeContext(
                 RuntimeConfig(
-                    knowledge_flow_url="http://localhost:8111/knowledge-flow/v1",
+                    knowledge_flow_url="http://localhost:8111/knowledge-flow/v2",
                     filesystem=cast(Any, _FailingFilesystem()),
                 )
             ),
@@ -2634,6 +2634,9 @@ def test_build_runtime_services_uses_persisted_document_source_settings(
     class DocumentConfig(BaseModel):
         attachments: bool = True
         team_documents: bool = True
+        bind_libraries: bool = False
+        library_tag_ids: list[str] = []
+        document_uids: list[str] | None = None
 
     class Registry:
         def __contains__(self, capability_id: str) -> bool:
@@ -2689,10 +2692,7 @@ def test_build_runtime_services_uses_persisted_document_source_settings(
         )
 
     assert isinstance(services.tool_provider, agent_app_module.FredMcpToolProvider)
-    assert services.tool_provider._agent.document_access_config == {
-        "attachments": True,
-        "team_documents": False,
-    }
+    assert services.tool_provider._agent._document_scope.is_empty
 
 
 @pytest.mark.asyncio
@@ -5759,3 +5759,94 @@ async def test_web_activity_endpoints_restrict_readers_and_erasers(
     assert result == (
         [] if endpoint_name == "list_web_research_activity" else {"deleted": 0}
     )
+
+
+@pytest.mark.usefixtures("empty_runtime_context")
+@pytest.mark.parametrize(
+    "turn_documents", [None, [], ["00000000-0000-0000-0000-000000000101"]]
+)
+def test_document_ceiling_is_shared_by_all_services_and_child_invoker(
+    turn_documents,
+) -> None:
+    from fred_core.documents.selection import DocumentScope
+    from fred_sdk.contracts.models import AgentTuning, StoredCapabilityConfig
+    from pydantic import BaseModel
+    from weaver_fixtures import INSTANCE_ID, SPACE_ID
+
+    folder = "00000000-0000-0000-0000-000000000201"
+    explicit = "00000000-0000-0000-0000-000000000102"
+
+    class DocumentConfig(BaseModel):
+        attachments: bool = False
+        team_documents: bool = True
+        bind_libraries: bool = False
+        library_tag_ids: list[str] = []
+        document_uids: list[str] | None = None
+
+    class Registry:
+        def __contains__(self, capability_id: str) -> bool:
+            return capability_id == "document_access"
+
+        def capability(self, capability_id: str) -> Any:
+            assert capability_id == "document_access"
+            return SimpleNamespace(ConfigModel=DocumentConfig)
+
+    registry = cast(Any, Registry())
+    definition = _EchoAgent()
+    tuning = AgentTuning(
+        role=definition.role,
+        description=definition.description,
+        capability_config={
+            "document_access": StoredCapabilityConfig(
+                schema_version="0.3.0",
+                config={
+                    "bind_libraries": True,
+                    "library_tag_ids": [folder],
+                    "document_uids": [explicit],
+                },
+            )
+        },
+    )
+    binding = BoundRuntimeContext(
+        runtime_context=RuntimeContext(
+            user_id="alice",
+            session_id="s",
+            space_id=SPACE_ID,
+            agent_instance_id=INSTANCE_ID,
+        ),
+        portable_context=PortableContext(
+            request_id="r",
+            correlation_id="c",
+            actor="alice",
+            tenant=SPACE_ID,
+            environment=PortableEnvironment.DEV,
+        ),
+    )
+    services = agent_app_module._build_runtime_services(
+        definition,
+        binding,
+        tuning=tuning,
+        registry={definition.agent_id: definition},
+        capability_registry=registry,
+        turn_options={"document_access": {"document_uids": turn_documents}},
+        bound_library_ids=[folder],
+    )
+    expected = DocumentScope.from_ids([folder], [explicit]).intersect(
+        DocumentScope.from_ids(document_ids=turn_documents)
+    )
+    for port in (
+        services.document_search,
+        services.document_markdown,
+        services.document_extraction,
+        services.document_summarize,
+        services.agent_invoker,
+    ):
+        assert getattr(port, "_document_scope") == expected
+    assert isinstance(services.tool_provider, agent_app_module.FredMcpToolProvider)
+    assert services.tool_provider._agent._document_scope == expected
+    # The builtin must not add a folder-only ceiling excluding explicit documents.
+    invoker = services.tool_invoker
+    builtin = getattr(invoker, "_fallback", invoker)
+    assert isinstance(builtin, agent_app_module.FredKnowledgeSearchToolInvoker)
+    assert builtin._document_scope == expected
+    assert builtin._bound_library_ids is None

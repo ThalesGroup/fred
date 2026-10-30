@@ -305,3 +305,31 @@ describe("plain packs and included capability status", () => {
     );
   });
 });
+
+describe("combined document restriction", () => {
+  it("disabling restriction clears folders and nulls documents; enabling an empty scope stays empty", () => {
+    const state = {
+      selectedCapabilityIds: [CAP_DOCUMENT_ACCESS],
+      capabilityConfigValues: {
+        [CAP_DOCUMENT_ACCESS]: {
+          team_documents: true,
+          bind_libraries: true,
+          library_tag_ids: ["folder"],
+          document_uids: ["doc"],
+        },
+      },
+    };
+    const disabled = applyDocumentAccessConfigChange(state, "bind_libraries", false);
+    expect(disabled.capabilityConfigValues[CAP_DOCUMENT_ACCESS]).toMatchObject({
+      bind_libraries: false,
+      library_tag_ids: [],
+      document_uids: null,
+    });
+    const enabled = applyDocumentAccessConfigChange(disabled, "bind_libraries", true);
+    expect(enabled.capabilityConfigValues[CAP_DOCUMENT_ACCESS]).toMatchObject({
+      bind_libraries: true,
+      library_tag_ids: [],
+      document_uids: [],
+    });
+  });
+});

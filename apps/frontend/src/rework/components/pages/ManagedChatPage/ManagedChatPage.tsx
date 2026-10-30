@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import {
+  type DocumentLibrarySelection,
+  DOCUMENT_SELECTION_SUPPORTED,
+} from "@shared/molecules/DocumentLibraryScopePicker/documentLibrarySelection";
 import { DragEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
@@ -579,24 +583,29 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
   const documentScopeParams = chat.chatControls.find((c) => c.widget === "document_scope")?.params as
     | { libraries?: boolean; documents?: boolean; bound_library_ids?: string[] | null }
     | undefined;
+  const documentConfig = chat.agentInstance?.capability_config?.document_access?.config;
+  const configuredSelection: DocumentLibrarySelection | null =
+    documentConfig && (documentConfig.bind_libraries === true || Array.isArray(documentConfig.document_uids))
+      ? {
+          folderIds:
+            documentConfig.bind_libraries && Array.isArray(documentConfig.library_tag_ids)
+              ? documentConfig.library_tag_ids
+              : [],
+          documentIds: Array.isArray(documentConfig.document_uids) ? documentConfig.document_uids : [],
+        }
+      : null;
   const documentScopeBoundLibraryIds = documentScopeParams?.bound_library_ids ?? [];
-  const documentScopeHasBound = documentScopeBoundLibraryIds.length > 0;
-  // A ponctual (per-turn) narrowing exists when the user selected something
-  // beyond the agent's configured scope. A bound agent can't change libraries
-  // (read-only), so only a document narrowing counts there. Drives the tune
-  // badge and the panel's reset-enabled state.
-  const hasPonctualDocumentScope =
-    (!documentScopeHasBound && chat.selectedLibraryIds.length > 0) || chat.selectedDocumentUids.length > 0;
+
+  // Empty is a deliberate turn restriction too; only null inherits the agent.
+  // This drives both the badge and reset action.
+  const hasPonctualDocumentScope = DOCUMENT_SELECTION_SUPPORTED && chat.documentSelection !== null;
 
   // Shared composer state read/written by every chat-turn control, mounted in
   // both the "add" (primary) and "tune" (tools) popovers.
   const composerState = {
     teamId,
     onAttach: () => fileInputRef.current?.click(),
-    selectedLibraryIds: chat.selectedLibraryIds,
-    onSelectedLibraryIdsChange: chat.setSelectedLibraryIds,
-    selectedDocumentUids: chat.selectedDocumentUids,
-    onSelectedDocumentUidsChange: chat.setSelectedDocumentUids,
+    documentSelection: chat.documentSelection,
     // The document_scope tune row calls this to open the side panel (#2259).
     onOpenDocumentScopePanel: () => setActivePushDrawer({ kind: "document-scope" }),
     onOpenPromptLibraryPanel: undefined,
@@ -705,6 +714,14 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
 
   const composer = (
     <>
+      {chat.agentConfigurationChanged && (
+        <div className={styles.modelPreparationNotice} role="status">
+          <p>{t("chatbot.agentConfigurationChanged")}</p>
+          <Button color="primary" variant="outlined" size="medium" onClick={chat.startNewConversation}>
+            {t("chatbot.newConversation")}
+          </Button>
+        </div>
+      )}
       {chat.modelPreparationError && !chat.executionDisabled && (
         <div className={styles.modelPreparationNotice}>
           <ServiceNotice
@@ -931,7 +948,7 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
                         {t("chatbot.conversationTokenUsage.total", { count: conversationTokens.total_tokens })}
                       </span>
                     )}
-                    {chat.sessionId && !chat.executionDisabled && (
+                    {chat.sessionId && (!chat.executionDisabled || chat.agentConfigurationChanged) && (
                       <Tooltip text={t("chatbot.newConversation")}>
                         <IconButton
                           variant="outlined"
@@ -1229,23 +1246,19 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
             document_scope row, sharing the single push-drawer slot above so it
             never stacks with the attachments / capability panels. Only mounted
             when the agent exposes the control. */}
-          {!chat.executionDisabled && documentScopeParams && (
+          {!chat.executionDisabled && DOCUMENT_SELECTION_SUPPORTED && documentScopeParams && (
             <DocumentScopePanel
               open={activePushDrawer?.kind === "document-scope"}
               onClose={() => setActivePushDrawer((v) => (v?.kind === "document-scope" ? null : v))}
-              teamId={teamId}
+              spaceId={space.id}
               showLibraries={documentScopeParams.libraries === true}
               showDocuments={documentScopeParams.documents === true}
               boundLibraryIds={documentScopeBoundLibraryIds}
-              selectedLibraryIds={chat.selectedLibraryIds}
-              onSelectedLibraryIdsChange={chat.setSelectedLibraryIds}
-              selectedDocumentUids={chat.selectedDocumentUids}
-              onSelectedDocumentUidsChange={chat.setSelectedDocumentUids}
+              configuredSelection={configuredSelection}
+              selection={chat.documentSelection}
+              onSelectionChange={chat.setDocumentSelection}
               canReset={hasPonctualDocumentScope}
-              onReset={() => {
-                chat.setSelectedLibraryIds([]);
-                chat.setSelectedDocumentUids([]);
-              }}
+              onReset={() => chat.setDocumentSelection(null)}
             />
           )}
         </div>

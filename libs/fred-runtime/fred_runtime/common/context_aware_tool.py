@@ -16,9 +16,7 @@
 import asyncio
 import json
 import logging
-from copy import deepcopy
-from typing import Any, Callable, Optional, cast
-from urllib.parse import quote
+from typing import Any, Callable, Optional
 
 import httpx  # ← we log/inspect HTTP errors coming from MCP adapters
 from fred_core.common import OwnerFilter
@@ -34,19 +32,16 @@ from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.tools import BaseTool
 from pydantic import Field
 
-from fred_runtime.common.kf_base_client import KfBaseClient, KnowledgeFlowAgentContext
 from fred_runtime.common.mcp_utils import MCP_DELEGATED_METADATA_KEY
 from fred_runtime.common.structures import AgentSettingsLike
 from fred_runtime.common.token_expiry import (
     is_expired_httpx_status_error,
     unwrap_httpx_status_error,
 )
-from fred_runtime.runtime_context import get_runtime_context
 from fred_runtime.runtime_support import (
     RuntimeContextProvider,
     get_document_library_tags_ids,
     get_document_uids,
-    get_rag_knowledge_scope,
     get_vector_search_scopes,
 )
 from fred_runtime.runtime_support.authority import AuthorityLostError
@@ -55,12 +50,7 @@ AgentSettingsProvider = Callable[[], AgentSettingsLike]
 
 logger = logging.getLogger(__name__)
 
-_READ_QUERY_TOOL_NAME = "read_query"
-
-
-def _unwrap_httpx_status_error(exc: BaseException) -> Optional[httpx.HTTPStatusError]:
-    # Backward compatibility for existing callers
-    return unwrap_httpx_status_error(exc)
+_QUERY_TABULAR_DOCUMENTS_TOOL_NAME = "query_tabular_documents"
 
 
 def _build_tool_error_message(
@@ -77,14 +67,14 @@ def _build_tool_error_message(
     """
     if inner is None:
         parsed = _parse_fastapi_mcp_http_error(exc, tool_name=tool_name)
-        if parsed is not None and tool_name == _READ_QUERY_TOOL_NAME:
+        if parsed is not None and tool_name == _QUERY_TABULAR_DOCUMENTS_TOOL_NAME:
             status_code, detail = parsed
             if status_code == 400:
                 return scrub_grant_text(f"Error: {detail}")
         return scrub_grant_text(f"Error: {exc}")
     code = inner.response.status_code if inner.response is not None else "?"
     detail = _http_error_detail(inner)
-    if tool_name == _READ_QUERY_TOOL_NAME and code == 400:
+    if tool_name == _QUERY_TABULAR_DOCUMENTS_TOOL_NAME and code == 400:
         return scrub_grant_text(f"Error: {detail}")
     return scrub_grant_text(f"Error: HTTP {code}: {detail}")
 
@@ -157,18 +147,18 @@ def _build_tool_error_artifact(
     """Return Fred's trusted failure signal for one caught MCP exception.
 
     Raw provider text stays out of generic user-facing errors. The sole curated
-    exception is Knowledge Flow's ``read_query`` HTTP 400 contract: its ``detail``
+    exception is Knowledge Flow's ``query_tabular_documents`` HTTP 400 contract: its ``detail``
     has already been classified and redacted by Knowledge Flow. The SQL remains
     in the paired tool-call arguments; the frontend joins those two trusted
-    fields only for its dedicated ``read_query`` failure view.
+    fields only for its dedicated ``query_tabular_documents`` failure view.
     """
-    is_read_query = (
-        tool_name == _READ_QUERY_TOOL_NAME
+    is_query_tabular_documents = (
+        tool_name == _QUERY_TABULAR_DOCUMENTS_TOOL_NAME
         and isinstance(kwargs.get("sql"), str)
         and bool(str(kwargs["sql"]).strip())
     )
     detail: str | None = None
-    if is_read_query and inner is not None and inner.response is not None:
+    if is_query_tabular_documents and inner is not None and inner.response is not None:
         if inner.response.status_code == 400:
             try:
                 body = inner.response.json()
@@ -176,7 +166,7 @@ def _build_tool_error_artifact(
                 body = None
             if isinstance(body, dict) and isinstance(body.get("detail"), str):
                 detail = body["detail"]
-    elif is_read_query:
+    elif is_query_tabular_documents:
         parsed = _parse_fastapi_mcp_http_error(exc, tool_name=tool_name)
         if parsed is not None and parsed[0] == 400:
             detail = parsed[1]
@@ -274,14 +264,11 @@ class ContextAwareTool(BaseTool):
         ..., description="Function that provides agent settings"
     )
 
-    agent_context: object | None = Field(default=None, exclude=True)
-
     def __init__(
         self,
         base_tool: BaseTool,
         context_provider: RuntimeContextProvider,
         agent_settings_provider: AgentSettingsProvider,
-        agent_context: object | None = None,
     ) -> None:
         # Preserve tool identity (name/description) so LLM can pick it properly.
         super().__init__(
@@ -289,116 +276,7 @@ class ContextAwareTool(BaseTool):
             base_tool=base_tool,
             context_provider=context_provider,
             agent_settings_provider=agent_settings_provider,
-            agent_context=agent_context,
         )
-
-        if "attachment_uids" in self._get_tool_properties():
-            if isinstance(base_tool.args_schema, dict):
-                schema = deepcopy(base_tool.args_schema)
-            else:
-                input_model = base_tool.get_input_schema()
-                schema_factory = getattr(
-                    input_model, "model_json_schema", None
-                ) or getattr(input_model, "schema")
-                schema = deepcopy(schema_factory())
-            private_fields = {
-                "attachment_uids",
-                "corpus_document_uids",
-                "include_session_scope",
-                "include_corpus_scope",
-                "owner_filter",
-                "team_id",
-                "session_id",
-                "document_library_tags_ids",
-            }
-            for key in private_fields:
-                schema.get("properties", {}).pop(key, None)
-            schema["required"] = [
-                key for key in schema.get("required", []) if key not in private_fields
-            ]
-            self.args_schema = schema
-
-    async def _inject_tabular_scope(self, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """Bind tabular calls to enabled sources and the persisted conversation."""
-        context = self.context_provider()
-        if context is None:
-            raise ValueError("Tabular discovery requires a runtime context")
-        settings = self.agent_settings_provider()
-        sources = getattr(self.agent_context, "document_access_config", None) or {}
-        session, corpus = get_vector_search_scopes(context)
-        session = session and bool(sources.get("attachments", True))
-        corpus = corpus and bool(sources.get("team_documents", True))
-        if get_rag_knowledge_scope(context) == "general_only":
-            session = corpus = False
-        kwargs["include_corpus_scope"] = corpus
-        kwargs["corpus_document_uids"] = get_document_uids(context)
-        bound_documents = sources.get("document_uids")
-        if bound_documents:
-            selected = kwargs["corpus_document_uids"]
-            kwargs["corpus_document_uids"] = [
-                uid for uid in bound_documents if selected is None or uid in selected
-            ]
-        libraries = get_document_library_tags_ids(context)
-        bound = (
-            sources.get("library_tag_ids") if sources.get("bind_libraries") else None
-        )
-        if bound:
-            libraries = [uid for uid in bound if libraries is None or uid in libraries]
-        kwargs["document_library_tags_ids"] = libraries
-        documents = kwargs["corpus_document_uids"]
-        if (
-            (libraries is not None or documents is not None)
-            and not libraries
-            and not documents
-        ):
-            kwargs["include_corpus_scope"] = False
-        kwargs["owner_filter"] = (
-            "personal"
-            if is_personal_team_id(settings.team_id) or not settings.team_id
-            else "team"
-        )
-        kwargs["team_id"] = (
-            None if kwargs["owner_filter"] == "personal" else settings.team_id
-        )
-        # The model cannot supply a conversation or expand its attachment set.
-        kwargs.pop("session_id", None)
-        kwargs["attachment_uids"] = []
-        if session and context.session_id:
-            if self.agent_context is None or not context.team_id:
-                raise ValueError(
-                    "Conversation attachment discovery requires an authenticated team context"
-                )
-            config = get_runtime_context().config
-            if not config.control_plane_url or config.control_plane_http_client is None:
-                raise ValueError(
-                    "Conversation attachment discovery requires the control-plane client"
-                )
-            client = KfBaseClient(
-                frozenset({"GET"}),
-                agent=cast(KnowledgeFlowAgentContext, self.agent_context),
-            )
-            client.base_url = config.control_plane_url.rstrip("/")
-            client.client = config.control_plane_http_client
-            response = await client._request_with_token_refresh(
-                "GET",
-                f"/teams/{quote(context.team_id, safe='')}/sessions/{quote(context.session_id, safe='')}/attachments",
-                phase_name="tabular_attachment_scope",
-            )
-            inventory = response.json()
-            if not isinstance(inventory, list) or len(inventory) > 1000:
-                raise ValueError(
-                    "Invalid or oversized conversation attachment inventory"
-                )
-            kwargs["attachment_uids"] = list(
-                dict.fromkeys(
-                    entry["document_uid"]
-                    for entry in inventory
-                    if isinstance(entry, dict)
-                    and isinstance(entry.get("document_uid"), str)
-                )
-            )
-        kwargs["include_session_scope"] = bool(session and kwargs["attachment_uids"])
-        return kwargs
 
     def _inject_context_if_needed(self, kwargs: dict[str, Any]) -> dict[str, Any]:
         """
@@ -578,6 +456,27 @@ class ContextAwareTool(BaseTool):
         if isinstance(structured, dict) and structured.get("cause") == "authority_lost":
             raise AuthorityLostError() from None
 
+    def _normalize_result(self, result: Any) -> Any:
+        result = normalize_mcp_content(result)
+        if (
+            isinstance(result, tuple)
+            and len(result) == 2
+            and isinstance(result[1], dict)
+            and set(result[1]) == {"structured_content"}
+            and isinstance(result[1]["structured_content"], dict)
+        ):
+            # MCP structured content is data, never trusted Fred status or UI metadata.
+            return result[0], ToolInvocationResult(
+                tool_ref=self.name,
+                blocks=(
+                    ToolContentBlock(
+                        kind=ToolContentKind.JSON,
+                        data=result[1]["structured_content"],
+                    ),
+                ),
+            )
+        return result
+
     def _run(self, **kwargs: Any) -> Any:
         """Sync execution with context injection + robust HTTP(401) tracing.
 
@@ -592,10 +491,6 @@ class ContextAwareTool(BaseTool):
         kwargs = self._inject_context_if_needed(kwargs)
         kwargs = self._sanitize_tool_kwargs(kwargs)
         try:
-            if "attachment_uids" in self._get_tool_properties():
-                raise ValueError(
-                    "Conversation-scoped tabular tools require async invocation"
-                )
             result = self.base_tool._run(**kwargs)
             self._check_delegated_result(result)
         except Exception as e:
@@ -609,7 +504,7 @@ class ContextAwareTool(BaseTool):
             ) == "Tool access was refused.":
                 raise AuthorityLostError() from None
             # Check for HTTP status in the exception chain for better logs
-            inner = _unwrap_httpx_status_error(e)
+            inner = unwrap_httpx_status_error(e)
 
             if inner:
                 _log_http_error(self.name, inner)
@@ -625,7 +520,7 @@ class ContextAwareTool(BaseTool):
                 return msg, _build_tool_error_artifact(self.name, kwargs, e, inner)
             return msg
         else:
-            return normalize_mcp_content(result)
+            return self._normalize_result(result)
 
     async def _arun(self, config=None, **kwargs: Any) -> Any:
         """Async execution with context injection + robust HTTP(401) tracing.
@@ -636,9 +531,6 @@ class ContextAwareTool(BaseTool):
         kwargs = self._inject_context_if_needed(kwargs)
         kwargs = self._sanitize_tool_kwargs(kwargs)
         try:
-            if "attachment_uids" in self._get_tool_properties():
-                kwargs = await self._inject_tabular_scope(kwargs)
-                kwargs = self._sanitize_tool_kwargs(kwargs)
             result = await self.base_tool._arun(config=config, **kwargs)
             self._check_delegated_result(result)
         except asyncio.CancelledError:
@@ -656,7 +548,7 @@ class ContextAwareTool(BaseTool):
             ) == "Tool access was refused.":
                 raise AuthorityLostError() from None
             # Check for HTTP status in the exception chain for better logs
-            inner = _unwrap_httpx_status_error(e)
+            inner = unwrap_httpx_status_error(e)
 
             if inner:
                 _log_http_error(self.name, inner)
@@ -671,4 +563,4 @@ class ContextAwareTool(BaseTool):
                 return msg, _build_tool_error_artifact(self.name, kwargs, e, inner)
             return msg
         else:
-            return normalize_mcp_content(result)
+            return self._normalize_result(result)

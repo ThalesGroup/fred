@@ -25,12 +25,15 @@ Directives:
     include <path> [lang]   the file, verbatim, in a fenced block
     mermaid <path>          a generated .mmd file as a mermaid block
     routes <path> <base>    the HTTP routes of an axum router
-    openapi <path>          operations and schemas of an OpenAPI 3.1 document
+    openapi <path> [groups...] operations and schemas, optionally filtered by route group
     invariants              each invariant of the dossier and the tests proving it
 
 `check` fails when a block differs from its sources, when an invariant has no test,
 or when a test cites an unknown invariant. `tidy-er <file>` shortens the relationship
 labels of a tbls mermaid output. Stdlib only.
+
+`generate [markdown paths...]` and `check [markdown paths...]` can target technical
+references outside the dossier. Without paths, check also verifies its invariants.
 """
 
 from __future__ import annotations
@@ -48,7 +51,9 @@ BLOCK = re.compile(
     re.S,
 )
 INVARIANT_ROW = re.compile(r"^\| (I\d+) \|", re.M)
-PROVES = re.compile(r"//\s*Proves:\s*([I\d, ]+)\n(?:\s*#\[[^\n]*\]\n)*\s*(?:pub )?(?:async )?fn (\w+)")
+PROVES = re.compile(
+    r"//\s*Proves:\s*([I\d, ]+)\n(?:\s*#\[[^\n]*\]\n)*\s*(?:pub )?(?:async )?fn (\w+)"
+)
 # Rust sources that may prove an invariant; extend as components are ported.
 TEST_SOURCES = ["apps/control-plane/src", "apps/control-plane/tests"]
 
@@ -79,8 +84,14 @@ def routes(path: str, base: str) -> str:
 
 
 METHODS = ["get", "post", "put", "patch", "delete"]
-LIMITS = {"minimum": ">=", "maximum": "<=", "minLength": "min length", "maxLength": "max length",
-          "minItems": "min items", "maxItems": "max items"}
+LIMITS = {
+    "minimum": ">=",
+    "maximum": "<=",
+    "minLength": "min length",
+    "maxLength": "max length",
+    "minItems": "min items",
+    "maxItems": "max items",
+}
 
 
 def anchor(heading: str) -> str:
@@ -104,14 +115,20 @@ def type_of(schema: dict) -> str:
         return ", ".join(f"`{v}`" for v in schema["enum"])
     kinds = schema.get("type", "any")
     nullable = isinstance(kinds, list) and "null" in kinds
-    kind = next((k for k in kinds if k != "null"), "null") if isinstance(kinds, list) else kinds
+    kind = (
+        next((k for k in kinds if k != "null"), "null")
+        if isinstance(kinds, list)
+        else kinds
+    )
     if kind == "array":
         text = f"array of {type_of(schema.get('items', {}))}"
     elif kind == "object" and isinstance(schema.get("additionalProperties"), dict):
         text = f"map of {type_of(schema['additionalProperties'])}"
     else:
         text = f"{kind} ({schema['format']})" if "format" in schema else kind
-    text += "".join(f", {label} {schema[key]}" for key, label in LIMITS.items() if key in schema)
+    text += "".join(
+        f", {label} {schema[key]}" for key, label in LIMITS.items() if key in schema
+    )
     return text + (" or null" if nullable else "")
 
 
@@ -123,10 +140,22 @@ def fields(schema: dict) -> list[str]:
     required = set(schema.get("required", []))
     lines = [row("Field", "Type", "Required", "Description"), row(*["---"] * 4)]
     lines += [
-        row(f"`{name}`", type_of(field), "yes" if name in required else "", prose(field.get("description")))
+        row(
+            f"`{name}`",
+            type_of(field),
+            "yes" if name in required else "",
+            field_description(field),
+        )
         for name, field in sorted(schema["properties"].items())
     ]
     return lines + [""]
+
+
+def field_description(schema: dict) -> str:
+    text = prose(schema.get("description"))
+    if "default" in schema:
+        text += f" Default: `{json.dumps(schema['default'])}`."
+    return text.strip()
 
 
 def variant_label(schema: dict) -> str:
@@ -159,19 +188,31 @@ def schema_section(name: str, schema: dict) -> list[str]:
             if "properties" in variant:
                 lines += fields(variant)
         return lines
-    return lines + [f"{'One of: ' if 'enum' in schema else 'Type: '}{type_of(schema)}.", ""]
+    return lines + [
+        f"{'One of: ' if 'enum' in schema else 'Type: '}{type_of(schema)}.",
+        "",
+    ]
 
 
-def body(content: dict) -> str:
+def body(content: dict, *, show_media: bool = False) -> str:
     rendered = []
     for media, value in content.items():
         text = type_of(value.get("schema", {}))
-        rendered.append(text if media == "application/json" else f"{text} (`{media}`)")
+        rendered.append(
+            text
+            if media == "application/json" and not show_media
+            else f"{text} (`{media}`)"
+        )
     return " or ".join(rendered) or "no body"
 
 
 def summary_of(op: dict) -> str:
-    return prose(" ".join(filter(None, [op.get("summary"), op.get("description")])))
+    summary, description = op.get("summary"), op.get("description")
+    return prose(
+        f"{summary.rstrip('.')}. {description}"
+        if summary and description
+        else summary or description
+    )
 
 
 def overview(operations: list[tuple[str, str, dict]]) -> list[str]:
@@ -179,7 +220,13 @@ def overview(operations: list[tuple[str, str, dict]]) -> list[str]:
     lines = [row("Method", "Path", "Summary"), row(*["---"] * 3)]
     for path, method, op in operations:
         first = summary_of(op).split(". ", 1)[0].rstrip(".")
-        lines.append(row(method.upper(), f"[{path}](#{anchor(f'{method.upper()} {path}')})", first))
+        lines.append(
+            row(
+                method.upper(),
+                f"[{path}](#{anchor(f'{method.upper()} {path}')})",
+                first,
+            )
+        )
     return lines + [""]
 
 
@@ -191,10 +238,22 @@ def operation_section(path: str, method: str, op: dict) -> list[str]:
     public = " · public, no bearer token" if op.get("security") == [{}] else ""
     lines += [f"Operation `{op['operationId']}`{public}.", ""]
     if op.get("parameters"):
-        lines += [row("Parameter", "In", "Type", "Required", "Description"), row(*["---"] * 5)]
         lines += [
-            row(f"`{p['name']}`", p["in"], type_of(p.get("schema", {})),
-                "yes" if p.get("required") else "", prose(p.get("description")))
+            row("Parameter", "In", "Type", "Required", "Description"),
+            row(*["---"] * 5),
+        ]
+        lines += [
+            row(
+                f"`{p['name']}`",
+                p["in"],
+                body(p["content"], show_media=True)
+                if "content" in p
+                else type_of(p.get("schema", {})),
+                "yes" if p.get("required") else "",
+                field_description(
+                    {**p.get("schema", {}), "description": p.get("description")}
+                ),
+            )
             for p in op["parameters"]
         ]
         lines.append("")
@@ -209,19 +268,38 @@ def operation_section(path: str, method: str, op: dict) -> list[str]:
         text = body(response.get("content", {})) + (f" — {meaning}" if meaning else "")
         grouped.setdefault(text, []).append(status)
     lines += [f"- {', '.join(statuses)}: {text}" for text, statuses in grouped.items()]
+    for status, response in sorted(op["responses"].items()):
+        for name, header in response.get("headers", {}).items():
+            lines += [
+                "",
+                f"Response {status} header `{name}`: {type_of(header.get('schema', {}))}. {prose(header.get('description'))}",
+            ]
+        for media, value in response.get("content", {}).items():
+            for name, example in value.get("examples", {}).items():
+                if "value" in example:
+                    lines += [
+                        "",
+                        f"Response {status} example `{name}` (`{media}`):",
+                        "",
+                        fenced("json", json.dumps(example["value"], indent=2)).rstrip(),
+                    ]
     return lines + [""]
 
 
-def openapi(path: str) -> str:
+def openapi(path: str, *selected_groups: str) -> str:
     spec = json.loads((ROOT / path).read_text())
     paths = spec["paths"]
     shared = takewhile(lambda s: len(set(s)) == 1, zip(*(p.split("/") for p in paths)))
     prefix = "/".join(s[0] for s in shared)
     groups: dict[str, list[tuple[str, str, dict]]] = {}
     for route, item in sorted(paths.items()):
-        relative = route[len(prefix):]
-        for method in sorted(item, key=METHODS.index):
-            groups.setdefault(relative.split("/")[1], []).append((relative, method, item[method]))
+        relative = route[len(prefix) :]
+        if selected_groups and relative.split("/")[1] not in selected_groups:
+            continue
+        for method in sorted((m for m in item if m in METHODS), key=METHODS.index):
+            groups.setdefault(relative.split("/")[1], []).append(
+                (relative, method, item[method])
+            )
     contents = [f"[`/{g}`](#{anchor(f'/{g} routes')})" for g in sorted(groups)]
     lines = [f"Paths are relative to `{prefix}`.", ""]
     lines += [f"Operations: {' · '.join(contents)}. [Schemas](#schemas).", ""]
@@ -250,7 +328,9 @@ def proofs() -> dict[str, list[str]]:
         for file in sorted((ROOT / base).rglob("*.rs")):
             for ids, name in PROVES.findall(file.read_text()):
                 for invariant in re.findall(r"I\d+", ids):
-                    cited.setdefault(invariant, []).append(f"{file.relative_to(ROOT)}::{name}")
+                    cited.setdefault(invariant, []).append(
+                        f"{file.relative_to(ROOT)}::{name}"
+                    )
     return cited
 
 
@@ -272,18 +352,20 @@ def render(directive: str) -> str:
     if kind == "routes":
         return routes(args[0], args[1])
     if kind == "openapi":
-        return openapi(args[0])
+        return openapi(*args)
     if kind == "invariants":
         return invariants()
     raise ValueError(f"unknown directive: {directive}")
 
 
 def regenerate(text: str) -> str:
-    return BLOCK.sub(lambda m: m.group(1) + render(m.group("directive")) + m.group(4), text)
+    return BLOCK.sub(
+        lambda m: m.group(1) + render(m.group("directive")) + m.group(4), text
+    )
 
 
-def generate() -> None:
-    for chapter in chapters():
+def generate(paths: list[str]) -> None:
+    for chapter in [ROOT / path for path in paths] if paths else chapters():
         text = chapter.read_text()
         updated = regenerate(text)
         if updated != text:
@@ -291,16 +373,27 @@ def generate() -> None:
             print(f"updated {chapter.relative_to(ROOT)}")
 
 
-def check() -> int:
+def check(paths: list[str]) -> int:
     problems = []
-    for chapter in chapters():
+    for chapter in [ROOT / path for path in paths] if paths else chapters():
         text = chapter.read_text()
         if regenerate(text) != text:
-            problems.append(f"{chapter.relative_to(ROOT)}: generated blocks are stale (make generate)")
-    defined, cited = defined_invariants(), proofs()
-    problems += [f"invariant {i} is defined twice" for i in set(defined) if defined.count(i) > 1]
-    problems += [f"invariant {i} has no test citing it" for i in defined if i not in cited]
-    problems += [f"{t} cites unknown invariant {i}" for i, ts in cited.items() if i not in defined for t in ts]
+            problems.append(
+                f"{chapter.relative_to(ROOT)}: generated blocks are stale (make generate)"
+            )
+    defined, cited = ([], {}) if paths else (defined_invariants(), proofs())
+    problems += [
+        f"invariant {i} is defined twice" for i in set(defined) if defined.count(i) > 1
+    ]
+    problems += [
+        f"invariant {i} has no test citing it" for i in defined if i not in cited
+    ]
+    problems += [
+        f"{t} cites unknown invariant {i}"
+        for i, ts in cited.items()
+        if i not in defined
+        for t in ts
+    ]
     for problem in problems:
         print(problem, file=sys.stderr)
     return 1 if problems else 0
@@ -309,16 +402,18 @@ def check() -> int:
 def tidy_er(path: str) -> None:
     """Shorten tbls relationship labels to the referencing columns."""
     file = ROOT / path
-    text = re.sub(r'"FOREIGN KEY \(([^)]*)\) REFERENCES [^"]*"', r'"\1"', file.read_text())
+    text = re.sub(
+        r'"FOREIGN KEY \(([^)]*)\) REFERENCES [^"]*"', r'"\1"', file.read_text()
+    )
     file.write_text(text.replace('"public.', '"').replace("uuid__", "uuid_array"))
 
 
 if __name__ == "__main__":
     command, *rest = sys.argv[1:] or ["check"]
     if command == "generate":
-        generate()
+        generate(rest)
     elif command == "check":
-        sys.exit(check())
+        sys.exit(check(rest))
     elif command == "tidy-er":
         tidy_er(rest[0])
     else:

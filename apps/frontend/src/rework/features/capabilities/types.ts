@@ -30,6 +30,9 @@ export interface UiPartRendererProps {
   part: RawUiPart;
 }
 
+/** The object a part shows (a document id, a file href), or undefined when it has none. */
+export type UiPartIdentity = (part: RawUiPart) => string | undefined;
+
 /** Renders ONE chat part of the kind it is registered under. */
 export type UiPartRenderer = ComponentType<UiPartRendererProps>;
 
@@ -79,19 +82,17 @@ export type RagScopeName = "corpus_only" | "hybrid" | "general_only";
  * Shared composer state threaded to every mounted chat-turn control (RFC §9
  * item 2). This is the same per-session state `SearchConfig` drove before its
  * rows were extracted into the stock kit (CAPAB-01 #1976) — the values keep
- * traveling to the pod exactly as before (`RuntimeContext` for the MCP stock
- * widgets today); `turn_options` is the generic per-capability path for other
- * capabilities, none of which are stock yet.
+ * traveling to the pod via their canonical contract. The combined document
+ * selection belongs to the composer and travels only in document_access turn_options.
  */
 export interface ChatTurnControlComposerState {
   /** Scopes the document/library picker's queries. */
   teamId: string;
   /** Opens the native file picker (composer attachment flow). */
   onAttach: () => void;
-  selectedLibraryIds: string[];
-  onSelectedLibraryIdsChange: (ids: string[]) => void;
-  selectedDocumentUids: string[];
-  onSelectedDocumentUidsChange: (uids: string[]) => void;
+  documentSelection:
+    | import("@shared/molecules/DocumentLibraryScopePicker/documentLibrarySelection").DocumentLibrarySelection
+    | null;
   /**
    * Opens the right-side document-scope panel (#2259). The `document_scope`
    * tune-menu row calls this instead of expanding its own inline popover; the
@@ -208,6 +209,11 @@ export interface CapabilityUiPlugin {
    * and warns.
    */
   partRenderers?: Record<string, UiPartRenderer>;
+  /**
+   * The object each part kind shows, keyed by part `type`. A message renders one
+   * card per object, its last version. Kinds without an entry are never merged.
+   */
+  partIdentities?: Record<string, UiPartIdentity>;
   /**
    * Agent-creation form widgets keyed by `ui.widget` id (RFC §9 item 4,
    * #1903). A config field whose `ui.widget` resolves here renders through the

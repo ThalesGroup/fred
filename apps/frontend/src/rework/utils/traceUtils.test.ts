@@ -326,7 +326,7 @@ describe("groupTraceEntries", () => {
 describe("entryLabel localization", () => {
   const entry = {
     kind: "combo" as const,
-    call: toolCallMsg("c1", "mcp__knowledge_flow__read_query"),
+    call: toolCallMsg("c1", "mcp__knowledge_flow__query_tabular_documents"),
     result: toolResultMsg("c1", "result"),
   };
 
@@ -992,8 +992,16 @@ describe("traceRows", () => {
 
   it("numbers tool steps 1-based in arrival order", () => {
     const entries = [
-      { kind: "combo" as const, call: toolCallMsg("c1", "read_query"), result: toolResultMsg("c1", "{}", true, 100) },
-      { kind: "combo" as const, call: toolCallMsg("c2", "read_query"), result: toolResultMsg("c2", "{}", true, 200) },
+      {
+        kind: "combo" as const,
+        call: toolCallMsg("c1", "query_tabular_documents"),
+        result: toolResultMsg("c1", "{}", true, 100),
+      },
+      {
+        kind: "combo" as const,
+        call: toolCallMsg("c2", "query_tabular_documents"),
+        result: toolResultMsg("c2", "{}", true, 200),
+      },
     ];
     expect(traceRows(entries).map((r) => r.index)).toEqual([1, 2]);
   });
@@ -1030,7 +1038,7 @@ describe("traceRows", () => {
         toolCallMsg("c1", "search"),
         toolResultMsg("c1", "found", true, 50),
         thoughtMsg("second", { phase: "reflection" }),
-        toolCallMsg("c2", "read_query"),
+        toolCallMsg("c2", "query_tabular_documents"),
         toolResultMsg("c2", "rows", true, 20),
       ]),
     );
@@ -1192,7 +1200,7 @@ describe("toolDiscriminator", () => {
 
   it("reports the row count of a SQL result", () => {
     const result = toolResultMsg("c1", JSON.stringify({ sql_query: "SELECT 1", rows: [{ a: 1 }, { a: 2 }] }));
-    expect(toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "read_query"), result })).toEqual({
+    expect(toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "query_tabular_documents"), result })).toEqual({
       kind: "rows",
       count: 2,
     });
@@ -1208,7 +1216,7 @@ describe("toolDiscriminator", () => {
 
   it("reports 0 rows for an empty SQL result instead of going bare", () => {
     const result = toolResultMsg("c1", JSON.stringify({ sql_query: "SELECT 1", rows: [] }));
-    expect(toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "read_query"), result })).toEqual({
+    expect(toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "query_tabular_documents"), result })).toEqual({
       kind: "rows",
       count: 0,
     });
@@ -1216,13 +1224,17 @@ describe("toolDiscriminator", () => {
 
   it("does not report a row count for a failed SQL result", () => {
     const result = toolResultMsg("c1", JSON.stringify({ sql_query: "SELECT 1", rows: [], error: "syntax error" }));
-    expect(toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "read_query"), result })).toBeNull();
+    expect(toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "query_tabular_documents"), result })).toBeNull();
   });
 
   it("does not claim 0 rows when a successful query result has an unreadable shape", () => {
     const opaque = toolResultMsg("c1", "Tool error: binder error on column CA");
     expect(
-      toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "mcp__knowledge_flow__read_query"), result: opaque }),
+      toolDiscriminator({
+        kind: "combo",
+        call: toolCallMsg("c1", "mcp__knowledge_flow__query_tabular_documents"),
+        result: opaque,
+      }),
     ).toBeNull();
   });
 
@@ -1237,10 +1249,10 @@ describe("toolDiscriminator", () => {
 });
 
 describe("asFailedSqlQueryResult", () => {
-  it("pairs a failed read_query with its submitted SQL and engine error", () => {
+  it("pairs a failed query_tabular_documents with its submitted SQL and engine error", () => {
     const entry = {
       kind: "combo" as const,
-      call: toolCallMsg("c1", "mcp__knowledge_flow__read_query", {
+      call: toolCallMsg("c1", "mcp__knowledge_flow__query_tabular_documents", {
         sql: "SELECT amount_typo FROM d_sales",
       }),
       result: toolResultMsg(
@@ -1263,7 +1275,7 @@ describe("asFailedSqlQueryResult", () => {
   it("never opens the curated SQL view for a successful or unrelated tool", () => {
     const successful = {
       kind: "combo" as const,
-      call: toolCallMsg("c1", "read_query", { sql: "SELECT 1" }),
+      call: toolCallMsg("c1", "query_tabular_documents", { sql: "SELECT 1" }),
       result: toolResultMsg("c1", "opaque", true),
     };
     const unrelated = {

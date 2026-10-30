@@ -144,7 +144,7 @@ remains future work.
 | `FRED_CONFIG_PATH` | `../apps/control-plane/tests/fixtures/import_export/demo_provisioning/users.json` | Source of truth for users/roles |
 | `FRED_TEST_TEAM` | `fredlab` | Collaborative team used for isolation checks |
 | `FRED_TEST_AGENT_ID` | `fred.github.test_assistant` | Public no-LLM agent used for deterministic runtime execution |
-| `FRED_KNOWLEDGE_FLOW_URL` | `http://localhost:8111/knowledge-flow/v1` | knowledge-flow-backend base, started manually like the other apps. Required by `test_document_access.py`; checked lazily, not at session start. |
+| `FRED_KNOWLEDGE_FLOW_URL` | `http://localhost:8111/knowledge-flow/v2` | knowledge-flow-backend base, started manually like the other apps. Required by `test_document_access.py`; checked lazily, not at session start. |
 
 ## The complete-matrix demo users
 
@@ -216,8 +216,8 @@ above before running either target.
 
 | Target | Control Plane | Knowledge Flow | Runtime origin | Keycloak realm |
 | --- | --- | --- | --- | --- |
-| `integration-test-docker` | `localhost:8222/control-plane/v1` | `localhost:8111/knowledge-flow/v1` | `localhost:8000` | `localhost:8080/realms/app` |
-| `integration-test-k3d` | `localhost:8088/control-plane/v1` | `localhost:8088/knowledge-flow/v1` | `localhost:8088` | `keycloak:8080/realms/app` |
+| `integration-test-docker` | `localhost:8222/control-plane/v1` | `localhost:8111/knowledge-flow/v2` | `localhost:8000` | `localhost:8080/realms/app` |
+| `integration-test-k3d` | `localhost:8088/control-plane/v1` | `localhost:8088/knowledge-flow/v2` | `localhost:8088` | `keycloak:8080/realms/app` |
 
 All these default URLs use HTTP. A named profile replaces previously exported
 endpoint variables so stale Docker ports cannot affect a k3d run. Explicit Make
@@ -233,7 +233,7 @@ profile. The targets are also available via `make -C validation`.
 FRED_REALM_URL=http://localhost:8080/realms/app
 FRED_CONTROL_PLANE_URL=http://localhost:8222/control-plane/v1
 FRED_RUNTIME_PUBLIC_BASE=http://localhost:8000
-FRED_KNOWLEDGE_FLOW_URL=http://localhost:8111/knowledge-flow/v1
+FRED_KNOWLEDGE_FLOW_URL=http://localhost:8111/knowledge-flow/v2
 ```
 
 Override `FRED_RUNTIME_PUBLIC_BASE` with the frontend/proxy origin when the goal is
@@ -426,7 +426,7 @@ make integration-test-k3d VALIDATION_ARGS="scenarios/test_document_access.py" \
 make validation-report \
   FRED_REALM_URL=http://keycloak:8080/realms/app \
   FRED_CONTROL_PLANE_URL=http://localhost:8088/control-plane/v1 \
-  FRED_KNOWLEDGE_FLOW_URL=http://localhost:8088/knowledge-flow/v1 \
+  FRED_KNOWLEDGE_FLOW_URL=http://localhost:8088/knowledge-flow/v2 \
   FRED_RUNTIME_PUBLIC_BASE=http://localhost:8088
 ```
 

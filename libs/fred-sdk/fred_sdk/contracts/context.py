@@ -505,6 +505,11 @@ class RuntimeContext(BaseModel):
     access_token_expires_at: Optional[int] = None
 
     # Group C — Per-turn retrieval selections (core; set by frontend, read by retrieval)
+    # Weaver folder/document UUIDs. The two lists form one union; both None reset
+    # to the configured agent scope, while present empty lists select nothing.
+    # Folders cover direct contents only; a subtree is represented by its folders.
+    # Runtime intersects this union with agent config and capability turn options.
+    # These filters never confer permission to a space or document.
     selected_document_libraries_ids: list[str] | None = None
     selected_document_uids: list[str] | None = None
     context_prompt_text: str | None = None

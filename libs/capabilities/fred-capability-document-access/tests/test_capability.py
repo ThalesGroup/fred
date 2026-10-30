@@ -34,6 +34,7 @@ from collections.abc import Sequence
 from importlib.metadata import EntryPoint
 from types import SimpleNamespace
 from typing import Any
+from uuid import UUID
 
 import pytest
 from fred_capability_document_access import (
@@ -42,6 +43,7 @@ from fred_capability_document_access import (
     DocumentAccessConfig,
     narrow_scope_ids,
 )
+from fred_core.documents.selection import DocumentScope
 from fred_core.store.vector_search import DATASET_POINTER_CHUNK_KIND, VectorSearchHit
 from fred_runtime.capabilities import (
     CapabilityRegistry,
@@ -117,6 +119,7 @@ class _FakePort(DocumentSearchPort):
         query: str,
         *,
         top_k: int = 8,
+        document_scope=None,
         library_tag_ids=None,
         document_uids=None,
         search_policy=None,
@@ -127,6 +130,7 @@ class _FakePort(DocumentSearchPort):
             {
                 "query": query,
                 "top_k": top_k,
+                "document_scope": document_scope,
                 "library_tag_ids": library_tag_ids,
                 "document_uids": document_uids,
                 "search_policy": search_policy,
@@ -177,6 +181,7 @@ class _FakeTreePort(DocumentTreePort):
         self,
         *,
         working_directory: str | None = None,
+        document_scope=None,
         library_tag_ids=None,
         document_uids=None,
         max_chars: int = 20_000,
@@ -184,6 +189,7 @@ class _FakeTreePort(DocumentTreePort):
         self.calls.append(
             {
                 "working_directory": working_directory,
+                "document_scope": document_scope,
                 "library_tag_ids": library_tag_ids,
                 "document_uids": document_uids,
                 "max_chars": max_chars,
@@ -221,7 +227,7 @@ async def _invoke_tool(cap: DocumentAccessCapability, ctx: CapabilityContext[Any
     return await _invoke_named_tool(
         cap,
         ctx,
-        "search_documents_using_vectorization",
+        "search_documents",
         {"question": "what is fred?"},
     )
 
@@ -366,8 +372,6 @@ async def test_validate_config_accepts_the_defaults() -> None:
     "stored,reason",
     [
         ({"attachments": True}, "Session attachments are not available"),
-        ({"bind_libraries": True}, "Library or document selections"),
-        ({"document_uids": ["doc-1"]}, "Library or document selections"),
     ],
 )
 async def test_validate_config_refuses_sources_weaver_does_not_serve(
@@ -384,12 +388,22 @@ def test_chat_control_document_scope_bound_to_config_libraries() -> None:
     # (upgrade validator), and binding pins the picker read-only.
     cap = DocumentAccessCapability()
     controls = cap.chat_controls(
-        DocumentAccessConfig.model_validate({"library_tag_ids": ["A", "B"]})
+        DocumentAccessConfig.model_validate(
+            {
+                "library_tag_ids": [
+                    "00000000-0000-0000-0000-00000000012d",
+                    "00000000-0000-0000-0000-00000000012e",
+                ]
+            }
+        )
     )
     scope = next(c for c in controls if c.widget == "document_scope")
     assert scope.params is not None
     params = scope.params.model_dump()
-    assert params["bound_library_ids"] == ["A", "B"]
+    assert params["bound_library_ids"] == [
+        "00000000-0000-0000-0000-00000000012d",
+        "00000000-0000-0000-0000-00000000012e",
+    ]
     # Bound → the libraries row shows (pinned) even without free selection.
     assert params["libraries"] is True
 
@@ -399,7 +413,13 @@ def test_bound_libraries_inert_while_binding_is_off() -> None:
     # is off — same semantics as the legacy tool.
     cap = DocumentAccessCapability()
     config = DocumentAccessConfig.model_validate(
-        {"bind_libraries": False, "library_tag_ids": ["A", "B"]}
+        {
+            "bind_libraries": False,
+            "library_tag_ids": [
+                "00000000-0000-0000-0000-00000000012d",
+                "00000000-0000-0000-0000-00000000012e",
+            ],
+        }
     )
     scope = next(c for c in cap.chat_controls(config) if c.widget == "document_scope")
     assert scope.params is not None
@@ -442,11 +462,36 @@ def test_chat_controls_config_values_become_picker_defaults() -> None:
 
 def test_narrow_scope_ids_primitive() -> None:
     # inner empty → inherit outer
-    assert narrow_scope_ids(["A", "B"], None) == ["A", "B"]
+    assert narrow_scope_ids(
+        [
+            "00000000-0000-0000-0000-00000000012d",
+            "00000000-0000-0000-0000-00000000012e",
+        ],
+        None,
+    ) == [
+        "00000000-0000-0000-0000-00000000012d",
+        "00000000-0000-0000-0000-00000000012e",
+    ]
     # outer empty (unbounded) → keep inner
-    assert narrow_scope_ids(None, ["A"]) == ["A"]
+    assert narrow_scope_ids(None, ["00000000-0000-0000-0000-00000000012d"]) == [
+        "00000000-0000-0000-0000-00000000012d"
+    ]
     # both present → intersection, order of inner preserved
-    assert narrow_scope_ids(["A", "B", "C"], ["C", "A", "Z"]) == ["C", "A"]
+    assert narrow_scope_ids(
+        [
+            "00000000-0000-0000-0000-00000000012d",
+            "00000000-0000-0000-0000-00000000012e",
+            "00000000-0000-0000-0000-00000000012f",
+        ],
+        [
+            "00000000-0000-0000-0000-00000000012f",
+            "00000000-0000-0000-0000-00000000012d",
+            "00000000-0000-0000-0000-000000000131",
+        ],
+    ) == [
+        "00000000-0000-0000-0000-00000000012f",
+        "00000000-0000-0000-0000-00000000012d",
+    ]
 
 
 @pytest.mark.asyncio
@@ -457,16 +502,48 @@ async def test_turn_option_bounded_by_capability_config() -> None:
         cap,
         identity=_identity(),
         services=RuntimeServices(document_search=port),
-        config={"library_tag_ids": ["A", "B", "X"], "document_uids": ["u1", "u2"]},
-        turn_options={"library_tag_ids": ["A", "X", "Z"]},
+        config={
+            "library_tag_ids": [
+                "00000000-0000-0000-0000-00000000012d",
+                "00000000-0000-0000-0000-00000000012e",
+                "00000000-0000-0000-0000-000000000130",
+            ],
+            "document_uids": [
+                "00000000-0000-0000-0000-000000000132",
+                "00000000-0000-0000-0000-000000000133",
+            ],
+        },
+        turn_options={
+            "library_tag_ids": [
+                "00000000-0000-0000-0000-00000000012d",
+                "00000000-0000-0000-0000-000000000130",
+                "00000000-0000-0000-0000-000000000131",
+            ]
+        },
     )
 
     message = await _invoke_tool(cap, ctx)
 
-    # turn ∩ config: Z dropped (not in config); order follows the turn list.
-    assert port.calls[0]["library_tag_ids"] == ["A", "X"]
-    # turn omits document_uids → inherit the config scope unchanged.
-    assert port.calls[0]["document_uids"] == ["u1", "u2"]
+    # Preserve both unions for intersection by actual document coverage in KF.
+    assert port.calls[0]["document_scope"] == DocumentScope.from_ids(
+        [
+            "00000000-0000-0000-0000-00000000012d",
+            "00000000-0000-0000-0000-00000000012e",
+            "00000000-0000-0000-0000-000000000130",
+        ],
+        [
+            "00000000-0000-0000-0000-000000000132",
+            "00000000-0000-0000-0000-000000000133",
+        ],
+    ).intersect(
+        DocumentScope.from_ids(
+            [
+                "00000000-0000-0000-0000-00000000012d",
+                "00000000-0000-0000-0000-000000000130",
+                "00000000-0000-0000-0000-000000000131",
+            ]
+        )
+    )
     # sources ride the tool artifact for the chat Sources panel.
     assert message.artifact.tool_ref == DOCUMENT_ACCESS_TOOL_REF
     assert message.artifact.sources[0].uid == "d1"
@@ -512,10 +589,16 @@ async def test_unbound_library_scope_not_applied_at_search_time() -> None:
         cap,
         identity=_identity(),
         services=RuntimeServices(document_search=port),
-        config={"bind_libraries": False, "library_tag_ids": ["A", "B"]},
+        config={
+            "bind_libraries": False,
+            "library_tag_ids": [
+                "00000000-0000-0000-0000-00000000012d",
+                "00000000-0000-0000-0000-00000000012e",
+            ],
+        },
     )
     await _invoke_tool(cap, ctx)
-    assert port.calls[0]["library_tag_ids"] is None
+    assert port.calls[0]["document_scope"] == DocumentScope()
 
 
 @pytest.mark.asyncio
@@ -641,14 +724,42 @@ async def test_capability_narrows_scope_before_calling_the_port() -> None:
         config={
             "attachments": False,
             "bind_libraries": True,
-            "library_tag_ids": ["A", "B", "X"],
-            "document_uids": ["u1", "u2"],
+            "library_tag_ids": [
+                "00000000-0000-0000-0000-00000000012d",
+                "00000000-0000-0000-0000-00000000012e",
+                "00000000-0000-0000-0000-000000000130",
+            ],
+            "document_uids": [
+                "00000000-0000-0000-0000-000000000132",
+                "00000000-0000-0000-0000-000000000133",
+            ],
         },
-        turn_options={"library_tag_ids": ["A", "X"]},
+        turn_options={
+            "library_tag_ids": [
+                "00000000-0000-0000-0000-00000000012d",
+                "00000000-0000-0000-0000-000000000130",
+            ]
+        },
     )
     await _invoke_tool(cap, ctx)
-    assert port.calls[0]["library_tag_ids"] == ["A", "X"]
-    assert port.calls[0]["document_uids"] == ["u1", "u2"]
+    assert port.calls[0]["document_scope"] == DocumentScope.from_ids(
+        [
+            "00000000-0000-0000-0000-00000000012d",
+            "00000000-0000-0000-0000-00000000012e",
+            "00000000-0000-0000-0000-000000000130",
+        ],
+        [
+            "00000000-0000-0000-0000-000000000132",
+            "00000000-0000-0000-0000-000000000133",
+        ],
+    ).intersect(
+        DocumentScope.from_ids(
+            [
+                "00000000-0000-0000-0000-00000000012d",
+                "00000000-0000-0000-0000-000000000130",
+            ]
+        )
+    )
 
 
 @pytest.mark.asyncio
@@ -678,7 +789,7 @@ async def test_stored_binding_is_inert_without_team_documents() -> None:
         "attachments": True,
         "team_documents": False,
         "bind_libraries": True,
-        "library_tag_ids": ["A"],
+        "library_tag_ids": ["00000000-0000-0000-0000-00000000012d"],
     }
     ctx = build_capability_context(
         cap,
@@ -688,11 +799,13 @@ async def test_stored_binding_is_inert_without_team_documents() -> None:
     )
     await _invoke_tool(cap, ctx)
 
-    assert port.calls[0]["library_tag_ids"] is None
+    assert port.calls[0]["document_scope"].is_empty
     config = DocumentAccessConfig.model_validate(stored)
     assert "document_scope" not in _widgets(cap.chat_controls(config))
     # Kept in storage for when team documents is turned back on.
-    assert config.model_dump()["library_tag_ids"] == ["A"]
+    assert config.model_dump()["library_tag_ids"] == [
+        "00000000-0000-0000-0000-00000000012d"
+    ]
 
 
 def _rag_params(config: DocumentAccessConfig) -> dict[str, Any]:
@@ -777,7 +890,7 @@ def test_missing_tree_port_omits_tree_tool() -> None:
         services=RuntimeServices(document_search=_FakePort()),
         config={"attachments": False},
     )
-    assert list(_capability_tools(cap, ctx)) == ["search_documents_using_vectorization"]
+    assert list(_capability_tools(cap, ctx)) == ["search_documents"]
 
 
 def test_both_tools_registered_by_default() -> None:
@@ -786,7 +899,7 @@ def test_both_tools_registered_by_default() -> None:
         cap, identity=_identity(), services=_full_services(), config={}
     )
     assert set(_capability_tools(cap, ctx)) == {
-        "search_documents_using_vectorization",
+        "search_documents",
         "list_document_tree",
     }
 
@@ -802,7 +915,7 @@ def test_team_documents_off_drops_the_tree_tool() -> None:
         services=_full_services(),
         config={"attachments": True, "team_documents": False},
     )
-    assert list(_capability_tools(cap, ctx)) == ["search_documents_using_vectorization"]
+    assert list(_capability_tools(cap, ctx)) == ["search_documents"]
 
     ctx = build_capability_context(
         cap,
@@ -826,12 +939,14 @@ async def test_tree_tool_carries_the_turn_document_selection() -> None:
         identity=_identity(),
         services=_full_services(tree=tree_port),
         config={},
-        turn_options={"document_uids": ["u1"]},
+        turn_options={"document_uids": ["00000000-0000-0000-0000-000000000132"]},
     )
 
     await _invoke_named_tool(cap, ctx, "list_document_tree", {})
 
-    assert tree_port.calls[0]["document_uids"] == ["u1"]
+    assert tree_port.calls[0]["document_scope"] == DocumentScope.from_ids(
+        document_ids=["00000000-0000-0000-0000-000000000132"]
+    )
 
 
 @pytest.mark.asyncio
@@ -842,7 +957,13 @@ async def test_tree_tool_scopes_by_bound_libraries_and_clamps_budget() -> None:
         cap,
         identity=_identity(),
         services=_full_services(tree=tree_port),
-        config={"bind_libraries": True, "library_tag_ids": ["A", "B"]},
+        config={
+            "bind_libraries": True,
+            "library_tag_ids": [
+                "00000000-0000-0000-0000-00000000012d",
+                "00000000-0000-0000-0000-00000000012e",
+            ],
+        },
     )
 
     message = await _invoke_named_tool(
@@ -855,7 +976,9 @@ async def test_tree_tool_scopes_by_bound_libraries_and_clamps_budget() -> None:
     call = tree_port.calls[0]
     assert call["working_directory"] == "Sales"
     # Hard binding flows to the port as the capability-side scope.
-    assert call["library_tag_ids"] == ["A", "B"]
+    assert call["document_scope"] == DocumentScope.from_ids(
+        ["00000000-0000-0000-0000-00000000012d", "00000000-0000-0000-0000-00000000012e"]
+    )
     # No document narrowing configured or ticked: the tree stays library-scoped.
     assert call["document_uids"] is None
     # 50 is under the endpoint's floor — clamped, not 422ed.
@@ -945,9 +1068,7 @@ async def test_search_tool_failure_returns_is_error_result() -> None:
         cap, identity=_identity(), services=_full_services(search=port), config={}
     )
 
-    message = await _invoke_named_tool(
-        cap, ctx, "search_documents_using_vectorization", {"question": "q"}
-    )
+    message = await _invoke_named_tool(cap, ctx, "search_documents", {"question": "q"})
 
     assert message.artifact.is_error is True
     assert "HTTP 401" in message.content
@@ -979,9 +1100,7 @@ async def test_search_authority_loss_escapes_instead_of_becoming_an_artifact(
     )
 
     with pytest.raises(AuthorityLostError):
-        await _invoke_named_tool(
-            cap, ctx, "search_documents_using_vectorization", {"question": "q"}
-        )
+        await _invoke_named_tool(cap, ctx, "search_documents", {"question": "q"})
 
 
 @pytest.mark.asyncio
@@ -1007,17 +1126,26 @@ async def test_tree_adapter_narrows_by_session_binding_and_team_seam(
 
     binding = _binding(
         session_id="s-1",
-        selected_document_libraries_ids=["A", "B"],
+        selected_document_libraries_ids=[
+            "00000000-0000-0000-0000-00000000012d",
+            "00000000-0000-0000-0000-00000000012e",
+        ],
     )
     adapter = adapters_module.DocumentTreeAdapter(
         binding=binding, settings=_settings(team_id="team-9")
     )
 
-    result = await adapter.tree(library_tag_ids=["B", "X"], max_chars=900)
+    result = await adapter.tree(
+        library_tag_ids=[
+            "00000000-0000-0000-0000-00000000012e",
+            "00000000-0000-0000-0000-000000000130",
+        ],
+        max_chars=900,
+    )
 
     call = captured["client"].calls[0]
     # capability ∩ session binding: X dropped.
-    assert call["tag_ids"] == ["B"]
+    assert call["tag_ids"] == ["00000000-0000-0000-0000-00000000012e"]
     assert call["max_chars"] == 900
     assert call["owner_filter"].value == "team"
     assert call["team_id"] == "team-9"
@@ -1089,9 +1217,43 @@ def test_copy_to_another_scope_drops_the_library_restriction_switch() -> None:
     # Copied with its list emptied, a switch left on would hide the chat's
     # library picker while restricting nothing.
     stored = DocumentAccessConfig(
-        bind_libraries=True, library_tag_ids=["lib-1"], default_top_k=5
+        bind_libraries=True,
+        library_tag_ids=["00000000-0000-0000-0000-000000000134"],
+        default_top_k=5,
     )
     copied = reset_scope_private(stored)
     assert copied.bind_libraries is False
     assert copied.library_tag_ids == []
     assert copied.default_top_k == 5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "stored",
+    [
+        {"bind_libraries": True, "library_tag_ids": [str(UUID(int=201))]},
+        {"document_uids": [str(UUID(int=101))]},
+        {"bind_libraries": True},
+        {"document_uids": []},
+    ],
+)
+async def test_validate_config_accepts_weaver_selections_including_empty(
+    stored: dict[str, Any],
+) -> None:
+    cap = DocumentAccessCapability()
+    config = DocumentAccessConfig.model_validate(stored)
+    assert (
+        await cap.validate_config(
+            config, {}, SaveContext(identity=_identity(), services=_full_services())
+        )
+        == config
+    )
+
+
+def test_invalid_weaver_identifiers_are_rejected() -> None:
+    from fred_capability_document_access.capability import DocumentAccessTurnOptions
+
+    with pytest.raises(ValueError):
+        DocumentAccessConfig(document_uids=["not-a-weaver-id"])
+    with pytest.raises(ValueError):
+        DocumentAccessTurnOptions(library_tag_ids=["old-tag"])

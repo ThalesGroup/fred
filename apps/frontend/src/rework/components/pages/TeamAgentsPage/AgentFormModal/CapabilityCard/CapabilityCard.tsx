@@ -19,6 +19,7 @@ import { Fragment, type PropsWithChildren, type ReactNode, useState } from "reac
 import { useTranslation } from "react-i18next";
 import { configWidgetFor } from "../../../../../features/capabilities/configWidgetRegistry.ts";
 import type { CapabilityCatalogEntry } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
+import { DOCUMENT_SELECTION_SUPPORTED } from "@shared/molecules/DocumentLibraryScopePicker/documentLibrarySelection";
 import { TuningFieldRenderer } from "../TuningFieldRenderer.tsx";
 import styles from "./CapabilityCard.module.css";
 
@@ -122,6 +123,10 @@ export function CapabilityConfigForm({
 }) {
   const { t } = useTranslation();
   const effectiveValues = Object.fromEntries(configFields.map((f) => [f.key, configValues[f.key] ?? f.default]));
+  if (capability.id === "document_access" && Array.isArray(configValues.document_uids)) {
+    effectiveValues.bind_libraries = true;
+    if (!configValues.bind_libraries) effectiveValues.library_tag_ids = [];
+  }
   // A gate hidden by its own gate hides its dependants too (a stored
   // `bind_libraries` must not show the picker while team documents is off).
   const fieldsByKey = new Map(configFields.map((f) => [f.key, f]));
@@ -165,6 +170,16 @@ export function CapabilityConfigForm({
           </Fragment>
         );
       }
+      const unavailableSelection =
+        !DOCUMENT_SELECTION_SUPPORTED &&
+        capability.id === "document_access" &&
+        [
+          "bind_libraries",
+          "library_tag_ids",
+          "document_uids",
+          "show_library_selection",
+          "show_document_selection",
+        ].includes(field.key);
       return (
         <Fragment key={field.key}>
           {index > 0 && field.ui?.group !== fields[index - 1].ui?.group && <hr className={styles.sectionDivider} />}
@@ -173,13 +188,37 @@ export function CapabilityConfigForm({
           <div className={field.ui?.visible_when ? styles.dependentField : undefined}>
             <TuningFieldRenderer
               field={field}
-              value={configValues[field.key]}
+              value={field.key === "bind_libraries" ? effectiveValues[field.key] : configValues[field.key]}
               onChange={onConfigChange}
-              disabled={disabled}
+              disabled={disabled || unavailableSelection}
               teamId={teamId}
               allValues={effectiveValues}
+              documentSelection={
+                capability.id === "document_access" && field.ui?.widget === "document_libraries"
+                  ? {
+                      folderIds: Array.isArray(effectiveValues.library_tag_ids)
+                        ? (effectiveValues.library_tag_ids as string[])
+                        : [],
+                      documentIds: Array.isArray(configValues.document_uids)
+                        ? (configValues.document_uids as string[])
+                        : [],
+                    }
+                  : undefined
+              }
+              onDocumentSelectionChange={
+                capability.id === "document_access" && field.ui?.widget === "document_libraries"
+                  ? (selection) => {
+                      onConfigChange("bind_libraries", true);
+                      onConfigChange("library_tag_ids", selection.folderIds);
+                      onConfigChange("document_uids", selection.documentIds);
+                    }
+                  : undefined
+              }
               switchSize="small"
             />
+            {unavailableSelection && field.ui?.widget !== "document_libraries" && (
+              <p>{t("rework.weaverAgents.documentSelectionUnavailable")}</p>
+            )}
           </div>
         </Fragment>
       );

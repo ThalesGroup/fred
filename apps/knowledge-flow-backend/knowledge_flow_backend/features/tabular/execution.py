@@ -249,6 +249,11 @@ class _TabularExecutionGuard:
 _GUARD = _TabularExecutionGuard()
 
 
+def close_tabular_execution() -> None:
+    """Release the process-local DuckDB executor at API shutdown."""
+    _GUARD.reset()
+
+
 def reset_execution_state_for_tests() -> None:
     """
     Drop the process-wide pool and admission counter.

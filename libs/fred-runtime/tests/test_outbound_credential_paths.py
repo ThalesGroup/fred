@@ -879,3 +879,20 @@ async def test_shared_client_context_is_per_invocation_and_redirects_are_confine
         "correlation_id": "second"
     }
     assert CONTEXT_HEADER not in seen[2].headers
+
+
+@pytest.mark.asyncio
+async def test_kf_post_keeps_delegation_outside_the_business_body(monkeypatch):
+    identity = MockIdentityProvider(monkeypatch)
+    client, seen = kf_client(ok, credentials=admitted_provider(identity.provider))
+    payload = {"question": "q", "top_k": 10}
+    try:
+        await client._request_with_token_refresh(
+            "POST", "/documents/search", phase_name="test", json=payload
+        )
+    finally:
+        await client.client.aclose()
+    assert json.loads(seen[0].content) == payload
+    assert seen[0].url.params["person"] == "alice"
+    assert seen[0].url.params["run"]
+    assert seen[0].url.params["agent"]

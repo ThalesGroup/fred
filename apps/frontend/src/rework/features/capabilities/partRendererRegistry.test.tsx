@@ -16,8 +16,8 @@
 // geo) and capability plugin kinds; unknown kinds resolve to undefined (skip).
 
 import { describe, expect, it, vi } from "vitest";
-import { buildPartRendererRegistry, rendererForPartKind } from "./partRendererRegistry";
-import type { CapabilityUiPlugin, UiPartRendererProps } from "./types";
+import { buildPartRendererRegistry, latestPartPerObject, rendererForPartKind } from "./partRendererRegistry";
+import type { CapabilityUiPlugin, UiPartIdentity, UiPartRendererProps } from "./types";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (value: string) => value }),
@@ -63,5 +63,37 @@ describe("partRendererRegistry (#1977)", () => {
     expect(rendererForPartKind("link")).toBeDefined();
     expect(rendererForPartKind("geo")).toBeDefined();
     expect(rendererForPartKind("nope")).toBeUndefined();
+  });
+});
+
+describe("latestPartPerObject", () => {
+  const byId = new Map<string, UiPartIdentity>([
+    ["card", (part) => (typeof part.id === "string" ? part.id : undefined)],
+  ]);
+
+  it("keeps only the last version of an object, in place", () => {
+    const v1 = { type: "card", id: "a", version: 1 };
+    const other = { type: "card", id: "b", version: 1 };
+    const v2 = { type: "card", id: "a", version: 2 };
+    const geo = { type: "geo" };
+
+    expect(latestPartPerObject([v1, other, geo, v2], byId)).toEqual([other, geo, v2]);
+  });
+
+  it("never merges parts without an identity, nor the same id across kinds", () => {
+    const parts = [{ type: "geo" }, { type: "geo" }, { type: "card", id: "a" }, { type: "note", id: "a" }];
+    expect(latestPartPerObject(parts, byId)).toEqual(parts);
+  });
+
+  it("merges the capability cards that update one object: deck, document, artifact", () => {
+    const parts = [
+      { type: "ppt_preview", preview_id: "deck", version: "1" },
+      { type: "writable_document", document_id: "doc", updated_at: "1" },
+      { type: "html_artifact", artifact_id: "art", version: "1" },
+      { type: "ppt_preview", preview_id: "deck", version: "2" },
+      { type: "writable_document", document_id: "doc", updated_at: "2" },
+      { type: "html_artifact", artifact_id: "art", version: "2" },
+    ];
+    expect(latestPartPerObject(parts)).toEqual(parts.slice(3));
   });
 });

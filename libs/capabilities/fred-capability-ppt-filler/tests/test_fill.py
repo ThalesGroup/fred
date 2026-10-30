@@ -1082,7 +1082,7 @@ async def test_middleware_overlays_fill_instructions_when_template_configured():
     assert "PPT, PowerPoint, presentation, deck, or slides" in merged
     # Document-access companionship: search the document base FIRST, and
     # surface the missing capability instead of inventing values.
-    assert "search_documents_using_vectorization" in merged
+    assert "search_documents" in merged
     assert "missing the Document access capability" in merged
 
 

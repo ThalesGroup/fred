@@ -35,7 +35,7 @@ import httpx
 import pytest
 from fred_runtime.integrations.v2_runtime.adapters import _wrap_document_port_error
 
-KF_URL = "http://knowledge-flow:8111/knowledge-flow/v1/vector/search"
+KF_URL = "http://knowledge-flow:8111/knowledge-flow/v2/documents/search"
 
 
 def _status_error(code: int, url: str = KF_URL) -> httpx.HTTPStatusError:
@@ -59,7 +59,7 @@ def test_status_error_detail_carries_no_host_port_or_route() -> None:
 
     assert "knowledge-flow" not in detail
     assert "8111" not in detail
-    assert "/knowledge-flow/v1/" not in detail
+    assert "/knowledge-flow/v2/" not in detail
     assert "http://" not in detail
 
 

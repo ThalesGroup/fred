@@ -23,6 +23,7 @@
 // `params.bound_library_ids` (when non-null) still means the library scope is
 // pinned read-only — surfaced by the panel, not here.
 
+import { DOCUMENT_SELECTION_SUPPORTED } from "@shared/molecules/DocumentLibraryScopePicker/documentLibrarySelection";
 import { useTranslation } from "react-i18next";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 import type { CapabilityChatTurnControlProps } from "../types";
@@ -45,14 +46,15 @@ export function DocumentScopeControl({ params: rawParams, composer, onRequestClo
 
   const boundLibraryIds = params.bound_library_ids ?? [];
   const hasBoundLibraries = boundLibraryIds.length > 0;
-  const effectiveLibraryIds = hasBoundLibraries ? boundLibraryIds : composer.selectedLibraryIds;
+  const effectiveLibraryIds = composer.documentSelection?.folderIds ?? (hasBoundLibraries ? boundLibraryIds : []);
 
   const title = showDocuments
     ? t("chatbot.composerSettings.documentPickerTitle")
     : t("agentTuning.fields.chat_options_libraries_selection.title");
 
   const label = (() => {
-    const { selectedDocumentUids } = composer;
+    if (composer.documentSelection === null) return t("chatbot.documentScopePanel.agentScope");
+    const selectedDocumentUids = composer.documentSelection.documentIds;
     if (effectiveLibraryIds.length > 0 && selectedDocumentUids.length > 0) {
       return `${t("chatbot.composerSettings.librariesCount", { count: effectiveLibraryIds.length })}, ${t(
         "chatbot.composerSettings.documentsCount",
@@ -72,7 +74,8 @@ export function DocumentScopeControl({ params: rawParams, composer, onRequestClo
     <MenuPopoverItem
       icon={{ category: "outlined", type: "description" }}
       label={title}
-      value={label}
+      value={DOCUMENT_SELECTION_SUPPORTED ? label : t("rework.weaverAgents.documentSelectionUnavailable")}
+      disabled={!DOCUMENT_SELECTION_SUPPORTED}
       aria-haspopup="dialog"
       onClick={() => {
         composer.onOpenDocumentScopePanel?.();

@@ -24,6 +24,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from fred_core import KeycloakUser
 from fred_core.documents.access import Candidate, SearchScope, resolve_scope, verify_candidates
+from fred_core.documents.selection import DocumentScope
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.security.delegation import AssertedUser
 from fred_core.store import VectorSearchHit
@@ -261,6 +262,7 @@ class VectorSearchService:
         k: int,
         library_tags_ids: List[str] | None,
         metadata_terms_extra: Optional[dict[str, Any]] = None,
+        metadata_any: tuple[dict[str, list[str]], ...] = (),
     ) -> Sequence[BaseVectorHit]:
         """
         Perform a semantic search using the ANN (Approximate Nearest Neighbors) strategy.
@@ -280,7 +282,7 @@ class VectorSearchService:
         if metadata_terms_extra:
             metadata_terms.update(metadata_terms_extra)
 
-        sf = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else library_tags_ids, metadata_terms=metadata_terms)
+        sf = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else library_tags_ids, metadata_terms=metadata_terms, metadata_any=metadata_any)
 
         base_dims = self._kpi_search_dims(policy="semantic")
         with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
@@ -318,6 +320,7 @@ class VectorSearchService:
         k: int,
         library_tags_ids: List[str] | None,
         metadata_terms_extra: Optional[dict[str, Any]] = None,
+        metadata_any: tuple[dict[str, list[str]], ...] = (),
     ) -> Sequence[BaseVectorHit]:
         """
         Perform a strict search using BM25 (Best Matching 25).
@@ -348,13 +351,14 @@ class VectorSearchService:
                 k=k,
                 library_tags_ids=library_tags_ids,
                 metadata_terms_extra=metadata_terms_extra,
+                metadata_any=metadata_any,
             )
         full_text_store = cast(SupportsFullTextSearch, self.vector_store)
 
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
         if metadata_terms_extra:
             metadata_terms.update(metadata_terms_extra)
-        search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else library_tags_ids, metadata_terms=metadata_terms)
+        search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else library_tags_ids, metadata_terms=metadata_terms, metadata_any=metadata_any)
 
         base_dims = self._kpi_search_dims(policy="strict")
         with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
@@ -393,6 +397,7 @@ class VectorSearchService:
         k: int,
         library_tags_ids: List[str] | None,
         metadata_terms_extra: Optional[dict[str, Any]] = None,
+        metadata_any: tuple[dict[str, list[str]], ...] = (),
     ) -> Sequence[BaseVectorHit]:
         """
         Hybrid search strategy that combines vector similarity and keyword matching.
@@ -423,13 +428,14 @@ class VectorSearchService:
                 k=k,
                 library_tags_ids=library_tags_ids,
                 metadata_terms_extra=metadata_terms_extra,
+                metadata_any=metadata_any,
             )
         hybrid_store = cast(SupportsHybridSearch, self.vector_store)
 
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
         if metadata_terms_extra:
             metadata_terms.update(metadata_terms_extra)
-        search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else library_tags_ids, metadata_terms=metadata_terms)
+        search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else library_tags_ids, metadata_terms=metadata_terms, metadata_any=metadata_any)
 
         base_dims = self._kpi_search_dims(policy="hybrid")
         with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
@@ -471,6 +477,7 @@ class VectorSearchService:
         top_k: int,
         policy_name: Optional[SearchPolicyName],
         space_id: UUID,
+        document_scope: DocumentScope | None = None,
     ) -> List[VectorSearchHit]:
         """Search one Weaver space and its ancestors; the caller checked the space read.
 
@@ -480,7 +487,9 @@ class VectorSearchService:
         await self._require_corpus_ready()
         engine = ApplicationContext.get_instance().get_pg_async_engine()
         async with engine.connect() as conn:
-            scope = await resolve_scope(conn, space_id)
+            scope = await resolve_scope(conn, space_id, document_scope)
+        if scope.document_scope.is_empty:
+            return []
         policy_key = policy_name or SearchPolicyName.hybrid
         strategy = {
             SearchPolicyName.strict: self._strict,
@@ -493,6 +502,7 @@ class VectorSearchService:
             k=top_k,
             library_tags_ids=None,
             metadata_terms_extra={"space_id": [str(value) for value in scope.space_ids]},
+            metadata_any=scope.selection_terms,
         )
         hits = await self._visible_hits(scope, [(hit.document, hit.score) for hit in candidates], user)
         stats_policy = policy_key
@@ -569,6 +579,7 @@ class VectorSearchService:
         user: AssertedUser,
         document_uid: str,
         space_id: UUID,
+        document_scope: DocumentScope | None = None,
         limit: int,
     ) -> List[VectorSearchHit]:
         """Return a document's published chunks in chunk_index order, capped at `limit`.
@@ -594,7 +605,7 @@ class VectorSearchService:
         raw_chunks.sort(key=_order)
         engine = ApplicationContext.get_instance().get_pg_async_engine()
         async with engine.connect() as conn:
-            scope = await resolve_scope(conn, space_id)
+            scope = await resolve_scope(conn, space_id, document_scope)
         documents = [(Document(page_content=entry.get("text") or "", metadata=entry.get("metadata") or {}), 0.0) for entry in raw_chunks]
         hits = await self._visible_hits(scope, documents, user)
         logger.info(

@@ -24,11 +24,17 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker.tsx", () => ({
-  DocumentLibraryScopePicker: () => <div data-testid="folder-tree" />,
+  DocumentLibraryScopePicker: ({ value, showDocuments }: { value: unknown; showDocuments?: boolean }) => (
+    <div data-testid="folder-tree" data-value={JSON.stringify(value)} data-documents={showDocuments} />
+  ),
 }));
 
 vi.mock("../../AgentCreateEditModal/SwitchRow/SwitchRow.tsx", () => ({
-  SwitchRow: ({ label, checked }: { label: string; checked: boolean }) => <div data-checked={checked}>{label}</div>,
+  SwitchRow: ({ label, checked, disabled }: { label: string; checked: boolean; disabled: boolean }) => (
+    <div data-checked={checked} data-disabled={disabled}>
+      {label}
+    </div>
+  ),
 }));
 
 import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions";
@@ -47,8 +53,21 @@ describe("DocumentAccessPackOptions", () => {
     expect(html).not.toContain("capability.document_access.fields.attachments");
   });
 
+  it("enables binding now that Weaver enforces document selection", () => {
+    const html = render({ bind_libraries: false });
+    expect(html).toContain('data-disabled="false"');
+    expect(html).not.toContain("documentSelectionUnavailable");
+  });
+
   it("hides the folder tree until libraries are bound", () => {
     expect(render({ bind_libraries: false })).not.toContain("folder-tree");
     expect(render({ bind_libraries: true })).toContain("folder-tree");
   });
+});
+
+it("exposes documents alongside folders, including document-only restriction on reopen", () => {
+  const html = render({ bind_libraries: false, document_uids: ["doc"] });
+  expect(html).toContain('data-checked="true"');
+  expect(html).toContain('data-documents="true"');
+  expect(html).toContain("doc");
 });

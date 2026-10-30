@@ -19,7 +19,7 @@ Internal HTTP MCPs declare their backend and a path relative to its API:
 
 ```yaml
 service: knowledge_flow
-path: mcp-tabular
+path: mcp/tabular
 ```
 
 `fred_sdk.contracts.services` defines `FredService` and `ServiceEndpointsPort`.
@@ -27,7 +27,7 @@ At boot, the runtime passes `ConfiguredServiceEndpoints` to each catalog loader.
 Its `get_base_url(service)` reads `ai.knowledge_flow_url` or
 `platform.control_plane_url`, preserving the configured scheme, host, port and API
 prefix. For example, `https://kf.example:9443/custom/v2/` produces
-`https://kf.example:9443/custom/v2/mcp-tabular`. No address is stored in the
+`https://kf.example:9443/custom/v2/mcp/tabular`. No address is stored in the
 package catalog. Local document search is supplied by the native `document_access`
 capability; the MCP catalog no longer advertises that tool or the unimplemented
 GitHub adapter. Local tools use capabilities rather than an MCP transport.

@@ -77,7 +77,7 @@ def search(
 ) -> list[Json]:
     return checked(
         client.post(
-            "/vector/search",
+            "/documents/search",
             json={
                 "question": PROBE,
                 "top_k": 100,

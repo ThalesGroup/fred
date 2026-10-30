@@ -134,7 +134,7 @@ def _openapi_pod_config():
                 },
                 "authorized_origins": [],
             },
-            "ai": {"knowledge_flow_url": "http://localhost:8111/knowledge-flow/v1"},
+            "ai": {"knowledge_flow_url": "http://localhost:8111/knowledge-flow/v2"},
             "storage": {
                 "postgres": {"sqlite_path": "~/.fred/tests/chat-parts.sqlite3"}
             },

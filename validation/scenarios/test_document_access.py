@@ -210,11 +210,10 @@ def test_foreign_document_direct_read_is_denied(
     path = (
         f"/documents/metadata/{c.uid_b}"
         if surface == "metadata"
-        else "/vector/document-chunks"
+        else f"/documents/{c.uid_b}/chunks"
     )
-    params = {} if surface == "metadata" else {"document_uid": c.uid_b}
-    checked(kf(c.other_reader).get(path, params=params))
-    assert kf(c.reader).get(path, params=params).status_code in (403, 404)
+    checked(kf(c.other_reader).get(path))
+    assert kf(c.reader).get(path).status_code in (403, 404)
 
 
 @pytest.fixture(scope="module")
@@ -268,10 +267,9 @@ def test_revocation_also_blocks_direct_read(
         path = (
             f"/documents/metadata/{uid}"
             if surface == "metadata"
-            else "/vector/document-chunks"
+            else f"/documents/{uid}/chunks"
         )
-        params = {} if surface == "metadata" else {"document_uid": uid}
-        assert client.get(path, params=params).status_code in (403, 404)
+        assert client.get(path).status_code in (403, 404)
 
 
 @dataclass
@@ -330,8 +328,7 @@ class Conversation:
         response = execute(request)
         events = runtime_events(response)
         assert any(
-            e.get("kind") == "tool_result"
-            and e.get("tool_name") == "search_documents_using_vectorization"
+            e.get("kind") == "tool_result" and e.get("tool_name") == "search_documents"
             for e in events
         ), (
             "The document capability did not execute; an empty answer cannot prove isolation"

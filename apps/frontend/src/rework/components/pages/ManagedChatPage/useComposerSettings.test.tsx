@@ -50,12 +50,14 @@ function Host({
   session,
   facts,
   controls,
+  scope = "",
 }: {
   session: string | null;
   facts?: PreparationModels;
   controls: ChatControlDescriptor[];
+  scope?: string;
 }) {
-  latest = useComposerSettings(session, controls, facts);
+  latest = useComposerSettings(session, controls, facts, scope);
   return null;
 }
 function render(
@@ -119,4 +121,125 @@ describe("Weaver composer choices (prepared, not executed in M5c)", () => {
     expect(() => parseModelChoice("chat.small")).toThrow();
     expect(() => parseModelChoice('["source"]')).toThrow();
   });
+});
+
+const combinedSelection = { folderIds: ["folder"], documentIds: ["root-document"] };
+function reload(session: string | null, scope = "") {
+  act(() => root.unmount());
+  root = createRoot(container);
+  act(() => root.render(<Host session={session} facts={models} controls={[]} scope={scope} />));
+}
+
+describe("document selection ownership", () => {
+  it("preserves a draft through refresh, session binding and conversation reload", () => {
+    render(null);
+    act(() => latest.setDocumentSelection(combinedSelection));
+    reload(null);
+    expect(latest.documentSelection).toEqual(combinedSelection);
+    act(() => latest.bindSession("created"));
+    reload("created");
+    expect(latest.documentSelection).toEqual(combinedSelection);
+    reload(null);
+    expect(latest.documentSelection).toBeNull();
+  });
+  it("binds a selection made immediately before session allocation", () => {
+    render(null);
+    act(() => {
+      latest.setDocumentSelection(combinedSelection);
+      latest.bindSession("created");
+    });
+    reload("created");
+    expect(latest.documentSelection).toEqual(combinedSelection);
+  });
+  it("persists an empty selection and reset as distinct states", () => {
+    render("conversation");
+    act(() => latest.setDocumentSelection({ folderIds: [], documentIds: [] }));
+    reload("conversation");
+    expect(latest.documentSelection).toEqual({ folderIds: [], documentIds: [] });
+    act(() => latest.setDocumentSelection(null));
+    reload("conversation");
+    expect(latest.documentSelection).toBeNull();
+  });
+  it("restores each conversation's selection without leaking into another", () => {
+    render("one");
+    act(() => latest.setDocumentSelection(combinedSelection));
+    render("two");
+    act(() => latest.reset("two", []));
+    expect(latest.documentSelection).toBeNull();
+    render("one");
+    act(() => latest.reset("one", []));
+    expect(latest.documentSelection).toEqual(combinedSelection);
+  });
+  it("isolates agent and space changes, including a draft with no session id", () => {
+    reload(null, "space-a:agent-a");
+    act(() => latest.setDocumentSelection(combinedSelection));
+    reload(null, "space-a:agent-b");
+    expect(latest.documentSelection).toBeNull();
+    reload(null, "space-b:agent-a");
+    expect(latest.documentSelection).toBeNull();
+    reload(null, "space-a:agent-a");
+    expect(latest.documentSelection).toEqual(combinedSelection);
+  });
+  it("starts an explicit new conversation without reviving a previous draft", () => {
+    render(null);
+    act(() => latest.setDocumentSelection(combinedSelection));
+    reload("existing");
+    act(() => {
+      latest.discardDraft();
+      latest.reset(null, []);
+    });
+    expect(latest.documentSelection).toBeNull();
+    reload(null);
+    expect(latest.documentSelection).toBeNull();
+  });
+  it("keeps a selection through a fresh preparation response", () => {
+    render(null);
+    act(() => latest.setDocumentSelection(combinedSelection));
+    render(null, models, [{ capability_id: "document_access", widget: "document_scope", params: {} }]);
+    expect(latest.documentSelection).toEqual(combinedSelection);
+  });
+});
+
+it("pins draft choices across preparation refresh and browser reload", () => {
+  render(null);
+  act(() => latest.acceptPreparation(4, []));
+  act(() => latest.setDocumentSelection({ folderIds: ["library"], documentIds: ["document"] }));
+  act(() => latest.setReasoning(true));
+  expect(() => latest.acceptPreparation(5, [])).toThrow();
+  expect(latest.agentConfigurationRevision).toBe(4);
+  act(() => root.unmount());
+  root = createRoot(container);
+  render(null);
+  expect(latest.agentConfigurationRevision).toBe(4);
+  expect(latest.documentSelection).toEqual({ folderIds: ["library"], documentIds: ["document"] });
+  expect(() => latest.acceptPreparation(5, [])).toThrow();
+  act(() => latest.bindSession("saved"));
+  act(() => latest.reset("saved", []));
+  expect(latest.agentConfigurationRevision).toBe(4);
+});
+
+it("starts a new draft from current defaults without restoring prior choices", () => {
+  render(null);
+  act(() => latest.acceptPreparation(4, []));
+  act(() => latest.setDocumentSelection({ folderIds: ["library"], documentIds: [] }));
+  act(() => latest.setReasoning(true));
+  act(() => latest.setChatProfileId(modelChoiceKey(first)));
+  act(() => latest.bindSession("old"));
+  act(() => {
+    latest.discardDraft();
+    latest.reset(null, []);
+  });
+  act(() =>
+    latest.acceptPreparation(5, [
+      { capability_id: "search", widget: "search_policy", params: { default: "semantic" } },
+    ]),
+  );
+  expect(latest.agentConfigurationRevision).toBe(5);
+  expect(latest.documentSelection).toBeNull();
+  expect(latest.chatProfileId).toBeNull();
+  expect(latest.reasoning).toBe(false);
+  expect(latest.searchPolicy).toBe("semantic");
+  act(() => latest.reset("old", []));
+  expect(latest.agentConfigurationRevision).toBe(4);
+  expect(latest.documentSelection?.folderIds).toEqual(["library"]);
 });

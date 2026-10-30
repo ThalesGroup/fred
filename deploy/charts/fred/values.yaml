@@ -764,7 +764,7 @@ applications:
           connect_timeout_seconds: 5
 
       ai:
-        knowledge_flow_url: &kf-url "http://knowledge-flow-backend:8000/knowledge-flow/v1"
+        knowledge_flow_url: &kf-url "http://knowledge-flow-backend:8000/knowledge-flow/v2"
         timeout:
           connect: 5
           read: 15
@@ -1197,7 +1197,7 @@ applications:
         data:
           failureThreshold: 10
           httpGet:
-            path: /knowledge-flow/v1/healthz
+            path: /knowledge-flow/v2/healthz
             port: 8111
           periodSeconds: 10
       readinessProbe:
@@ -1205,7 +1205,7 @@ applications:
         data:
           failureThreshold: 10
           httpGet:
-            path: /knowledge-flow/v1/ready
+            path: /knowledge-flow/v2/ready
             port: 8111
           periodSeconds: 10
       startupProbe:
@@ -1235,7 +1235,7 @@ applications:
     configuration:
       app:
         name: "Knowledge Flow Backend"
-        base_url: "/knowledge-flow/v1"
+        base_url: "/knowledge-flow/v2"
         address: "127.0.0.1"
         port: 8111
         log_level: "info"
@@ -1481,7 +1481,7 @@ applications:
     configuration:
       app:
         name: "Knowledge Flow Backend"
-        base_url: "/knowledge-flow/v1"
+        base_url: "/knowledge-flow/v2"
         address: "127.0.0.1"
         port: 8112
         log_level: "info"

@@ -782,3 +782,61 @@ def test_legacy_listing_preview_expiry_and_clear_do_not_touch_derived_bucket(mon
     assert buckets["legacy"] == {}
     assert buckets["derived"] == {derived: b"manager"}
     assert "derived" not in calls
+
+
+@pytest.mark.parametrize("kind,done,expected", [("single", True, True), ("multi", True, True), ("single", False, False), ("none", True, False)])
+def test_indexing_publishes_tabular_inclusion_without_vectors(monkeypatch, descriptor, tmp_path, kind, done, expected):
+    from fred_core.documents.document_structures import DocumentMetadata, FileInfo, Identity, ProcessingStage, SourceInfo, SourceType
+
+    from knowledge_flow_backend.features.manager_processing import service as module
+    from knowledge_flow_backend.features.manager_processing.contracts import Manifest
+    from knowledge_flow_backend.features.tabular.artifacts import TabularArtifactV1, TabularTableArtifactV1
+
+    table = TabularArtifactV1(
+        dataset_uid=str(descriptor.work.document_id),
+        object_key="datasets/table.parquet",
+        source_revision=descriptor.work.original_sha256,
+        row_count=2,
+        generated_at="2026-01-01T00:00:00Z",
+        file_size_bytes=100,
+    )
+    extensions = {}
+    if kind == "single":
+        extensions["tabular_v1"] = table.model_dump()
+    if kind == "multi":
+        extensions["tabular_multi_v1"] = {"tables": [TabularTableArtifactV1(**table.model_dump(), query_alias="sales", sheet="Sales", table_id="t1").model_dump()]}
+    metadata = DocumentMetadata(
+        identity=Identity(document_uid=str(descriptor.work.document_id), document_name="table.csv"),
+        source=SourceInfo(source_type=SourceType.PUSH),
+        file=FileInfo(row_count=2, sha256=descriptor.work.original_sha256),
+        extensions=extensions,
+    )
+    if done:
+        metadata.mark_stage_done(ProcessingStage.SQL_INDEXED)
+    published, commits = [], []
+
+    def publish(d, output, **counts):
+        published.append(json.loads((output / "metadata.json").read_text()))
+        return Manifest(generation=d.generation, artifacts=[], **counts)
+
+    class Client:
+        def __init__(self, *_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def post(self, path, body):
+            commits.append(body)
+
+    monkeypatch.setattr(module, "ManagerClient", Client)
+    instance = module.ManagedIngestionService.__new__(module.ManagedIngestionService)
+    instance.descriptor, instance.settings, instance.vectors = descriptor, object(), None
+    instance.artifacts = SimpleNamespace(publish=publish)
+    instance._commit(tmp_path, metadata)
+    assert published[0]["source"]["retrievable"] is expected
+    assert commits[0].manifest.vectors == 0
+    assert commits[0].manifest.rows == 2

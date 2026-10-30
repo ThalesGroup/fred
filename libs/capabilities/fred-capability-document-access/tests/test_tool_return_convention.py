@@ -81,6 +81,7 @@ class _FakePort(DocumentSearchPort):
         query: str,
         *,
         top_k: int = 8,
+        document_scope=None,
         library_tag_ids=None,
         document_uids=None,
         search_policy=None,
@@ -106,7 +107,7 @@ def _document_access_tool():
     )
     tools = cap.tools(ctx)
     by_name = {t.name: t for t in tools}
-    return by_name["search_documents_using_vectorization"]
+    return by_name["search_documents"]
 
 
 # ---------------------------------------------------------------------------

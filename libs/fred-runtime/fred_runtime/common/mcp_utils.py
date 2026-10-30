@@ -233,6 +233,13 @@ async def get_connected_mcp_client_for_agent(
                         provider,
                         refresh=refresh_token_cb if not provider.delegated else None,
                         refresh_owner=refresh_owner,
+                        document_context=(
+                            getattr(refresh_owner, "document_context", None)
+                            if server.id == "mcp-knowledge-flow-mcp-tabular"
+                            and _normalize_auth_mode(server.auth_mode)
+                            == AUTH_MODE_DELEGATED
+                            else None
+                        ),
                     )
                     if _normalize_auth_mode(server.auth_mode) != AUTH_MODE_NO_TOKEN
                     else None

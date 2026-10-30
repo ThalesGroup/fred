@@ -257,10 +257,10 @@ class _QueryArgs(BaseModel):
     dataset_uids: list[str] | None = None
 
 
-def _read_query_tool() -> StructuredTool:
+def _query_tabular_documents_tool() -> StructuredTool:
     return StructuredTool.from_function(
         func=lambda **kwargs: None,
-        name="read_query",
+        name="query_tabular_documents",
         description="Execute one read-only SQL query",
         args_schema=_QueryArgs,
     )
@@ -273,9 +273,9 @@ def test_a_tool_contributes_its_argument_schema() -> None:
     that drops it hides the contract tool calls are generated against (#2412).
     """
 
-    [entry] = serialize_tools([_read_query_tool()])
+    [entry] = serialize_tools([_query_tabular_documents_tool()])
 
-    assert entry["name"] == "read_query"
+    assert entry["name"] == "query_tabular_documents"
     assert entry["description"] == "Execute one read-only SQL query"
     schema = json.loads(entry["parameters"])
     assert schema["properties"]["sql"]["type"] == "string"
@@ -340,7 +340,7 @@ def test_an_mcp_tool_carries_its_dict_schema() -> None:
     """
 
     class _McpStyleTool:
-        name = "read_query"
+        name = "query_tabular_documents"
         description = "Execute one read-only SQL query"
         args_schema = {
             "type": "object",
@@ -362,7 +362,7 @@ def test_an_argument_schema_is_one_truncatable_string_not_a_nested_tree() -> Non
     truncatable unit, so the cap applies to tools as it does to message content.
     """
 
-    [entry] = serialize_tools([_read_query_tool()])
+    [entry] = serialize_tools([_query_tabular_documents_tool()])
     assert isinstance(entry["parameters"], str)
 
     bounded = _truncate_payload({"tools": [entry]}, 100)
@@ -430,7 +430,7 @@ def test_a_request_with_tools_carries_messages_and_tools() -> None:
     payload = serialize_model_request(
         [HumanMessage(content="combien de voitures ?")],
         system_prompt="you are fred",
-        tools=[_read_query_tool()],
+        tools=[_query_tabular_documents_tool()],
     )
 
     assert isinstance(payload, dict)
@@ -438,7 +438,7 @@ def test_a_request_with_tools_carries_messages_and_tools() -> None:
         {"role": "system", "content": "you are fred"},
         {"role": "user", "content": "combien de voitures ?"},
     ]
-    assert [tool["name"] for tool in payload["tools"]] == ["read_query"]
+    assert [tool["name"] for tool in payload["tools"]] == ["query_tabular_documents"]
 
 
 def test_messages_precede_tools_so_truncation_spends_on_them_first() -> None:
@@ -449,7 +449,7 @@ def test_messages_precede_tools_so_truncation_spends_on_them_first() -> None:
     """
 
     payload = serialize_model_request(
-        [HumanMessage(content="hi")], tools=[_read_query_tool()]
+        [HumanMessage(content="hi")], tools=[_query_tabular_documents_tool()]
     )
 
     assert isinstance(payload, dict)
@@ -499,7 +499,7 @@ def test_each_request_field_is_measured_separately() -> None:
     sizes = model_request_char_sizes(
         [HumanMessage(content="combien de voitures ?")],
         system_prompt="you are fred",
-        tools=[_read_query_tool()],
+        tools=[_query_tabular_documents_tool()],
     )
 
     assert set(sizes) == set(CHAR_USAGE_KEYS)

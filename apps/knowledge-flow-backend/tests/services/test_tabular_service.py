@@ -14,18 +14,14 @@
 
 from __future__ import annotations
 
-import asyncio
 import resource
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from types import SimpleNamespace
 
 import duckdb
 import pytest
-from fred_core import DocumentPermission, KeycloakUser, RebacDisabledResult, TagPermission, is_service_agent
-from fred_core.common import OwnerFilter
-from fred_core.documents.document_store import BaseDocumentMetadataStore as BaseMetadataStore
+from fred_core import KeycloakUser
 from fred_core.documents.document_structures import (
     DocumentMetadata,
     FileInfo,
@@ -37,14 +33,12 @@ from fred_core.documents.document_structures import (
     SourceType,
     Tagging,
 )
-from fred_core.security.delegation import holds_caller_role
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tabular.artifacts import (
-    FAST_INGEST_SOURCE_TAG,
     TABULAR_EXTENSION_KEY,
     TABULAR_MULTI_EXTENSION_KEY,
     document_artifact_prefix,
@@ -53,9 +47,9 @@ from knowledge_flow_backend.features.tabular.artifacts import (
     read_tabular_artifact,
 )
 from knowledge_flow_backend.features.tabular.execution import open_duckdb_connection
-from knowledge_flow_backend.features.tabular.service import TabularDatasetAccessUnsupportedError, TabularDatasetReadError, TabularService
-from knowledge_flow_backend.features.tabular.structures import TabularQueryRequest, TabularSearchRequest
-from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
+from knowledge_flow_backend.features.tabular.service import TabularDatasetReadError
+from knowledge_flow_backend.features.tabular.structures import TabularQueryRequest
+from tests.services.tabular_engine import TabularEngineHarness
 
 
 def _user(uid: str = "u-1") -> KeycloakUser:
@@ -80,18 +74,6 @@ def _metadata(
         file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
         tags=Tagging(tag_ids=_library_of(document_uid) if tag_ids is None else tag_ids, tag_names=tag_names or []),
     )
-
-
-def _rows_store(rows: list[DocumentMetadata]) -> SimpleNamespace:
-    """Uid and folder lookups over fixed rows, for resolver-level tests."""
-
-    async def by_uids(uids):
-        return [row for row in rows if row.document_uid in uids]
-
-    async def in_tags(tag_ids):
-        return [row for row in rows if set(row.tags.tag_ids or []) & set(tag_ids)]
-
-    return SimpleNamespace(get_metadata_by_uids=by_uids, metadata_in_tags=in_tags)
 
 
 def _library_of(document_uid: str) -> list[str]:
@@ -120,38 +102,6 @@ async def _ingest_csv(
         tag_names=tag_names,
     )
     processed_metadata = processor.process(str(csv_path), metadata)
-    await MetadataService().save_document_metadata(_user(), processed_metadata)
-    return processed_metadata
-
-
-def _attachment_metadata(*, document_uid: str, file_name: str, uploaded_by: str) -> DocumentMetadata:
-    """Metadata shaped like a fast-ingested chat attachment: no tags (so no
-    ReBAC tuple gets created — see `_persist_metadata_and_follow_up`), marked
-    with the same `source_tag` the vector chunks carry."""
-    metadata = DocumentMetadata(
-        identity=Identity(document_name=file_name, document_uid=document_uid, title=file_name),
-        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
-        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
-        tags=Tagging(tag_ids=[], tag_names=[]),
-    )
-    metadata.identity.uploaded_by = uploaded_by
-    return metadata
-
-
-async def _ingest_attachment_csv(
-    *,
-    tmp_path: Path,
-    document_uid: str,
-    file_name: str,
-    content: str,
-    uploaded_by: str,
-) -> DocumentMetadata:
-    csv_path = tmp_path / file_name
-    csv_path.write_text(content, encoding="utf-8")
-
-    processor = TabularProcessor()
-    metadata = _attachment_metadata(document_uid=document_uid, file_name=file_name, uploaded_by=uploaded_by)
-    processed_metadata = processor.process(str(csv_path), metadata, emit_pointer_chunk=False)
     await MetadataService().save_document_metadata(_user(), processed_metadata)
     return processed_metadata
 
@@ -199,198 +149,6 @@ async def _ingest_excel_workbook(*, tmp_path: Path, document_uid: str, extra_tab
     metadata = ExcelTableRegistrationProcessor().process(str(output_dir / "output.md"), metadata)
     await MetadataService().save_document_metadata(_user(), metadata)
     return metadata, output_dir
-
-
-class _FakeRebac:
-    """Keep folder discovery separate from authoritative document permissions."""
-
-    def __init__(self, readable_document_uids: set[str], readable_tag_ids: set[str] | None = None):
-        self.readable_document_uids = readable_document_uids
-        self.readable_tag_ids = {tag for uid in readable_document_uids for tag in _library_of(uid)} if readable_tag_ids is None else readable_tag_ids
-        self.checked_document_uids: list[str] = []
-
-    async def lookup_user_resources(self, user, permission):
-        del user
-        assert permission is TagPermission.READ, f"readable {permission.__class__.__name__} must not be enumerated"
-        return [SimpleNamespace(id=tag_id) for tag_id in sorted(self.readable_tag_ids)]
-
-    async def has_user_permission(self, user, permission, resource_id):
-        del user
-        assert permission is DocumentPermission.READ
-        self.checked_document_uids.append(resource_id)
-        return resource_id in self.readable_document_uids
-
-
-class _FakeRebacDisabled:
-    """Simulates a ReBAC-disabled deployment: `lookup_user_resources` returns
-    the marker `RebacDisabledResult()` rather than a real resource list.
-    `has_user_permission` intentionally answers `True` unconditionally here —
-    the adversarial case for the fix under test: even if the "forbidden vs.
-    not found" fallback in `describe_documents`/`_select_query_datasets`
-    also treats a disabled ReBAC as permit-all, it must never be reachable
-    for a fast-ingest attachment a non-owner explicitly names, because the
-    ownership check ahead of it is what actually decides access, not this."""
-
-    async def lookup_user_resources(self, user, permission):
-        del user, permission
-        return RebacDisabledResult()
-
-    async def has_user_permission(self, user, permission, resource_id):
-        del user, permission, resource_id
-        return True
-
-
-class _FakeTagService:
-    """
-    Minimal tag service stub used to emulate team/personal tabular scope.
-
-    Why this exists:
-    - Tabular tests need deterministic scope resolution without booting full tag
-      ReBAC fixtures.
-
-    How to use:
-    - Configure readable tags globally and optional team-specific subsets.
-    - Assign the instance to `service.tag_service`.
-    """
-
-    def __init__(
-        self,
-        *,
-        readable_tag_ids: set[str],
-        team_scopes: dict[str, set[str]] | None = None,
-        personal_scope: set[str] | None = None,
-    ) -> None:
-        self.readable_tag_ids = readable_tag_ids
-        self.team_scopes = team_scopes or {}
-        self.personal_scope = personal_scope or set()
-
-    async def list_authorized_tags_ids(self, user, owner_filter, team_id):
-        """Like `TagService`: scope folders are narrowed to readable ones, except
-        for the evaluation worker, which reads its team's folders."""
-        if owner_filter is None:
-            return set(self.readable_tag_ids)
-        if owner_filter == OwnerFilter.TEAM:
-            if not team_id:
-                raise MissingTeamIdError("team_id is required when owner_filter is 'team'")
-            scope = set(self.team_scopes.get(team_id, set()))
-        else:
-            scope = set(self.personal_scope)
-        if is_service_agent(user) and not holds_caller_role(user):
-            return scope if owner_filter == OwnerFilter.TEAM else set()
-        return scope & self.readable_tag_ids
-
-
-class _TrackingMetadataStore(BaseMetadataStore):
-    """
-    Delegate wrapper that records targeted vs full metadata reads.
-
-    Why this exists:
-    - Tabular authorization should read the documents of the authorized
-      folders in one targeted query, never the whole metadata table.
-
-    How to use:
-    - Wrap the real metadata store, assign it to `service.metadata_store`, then
-      inspect the recorded calls after one request.
-
-    Example:
-    - `service.metadata_store = _TrackingMetadataStore(metadata_store)`
-    """
-
-    def __init__(self, delegate) -> None:
-        self._delegate = delegate
-        self.get_all_metadata_calls = 0
-        self.metadata_in_tags_calls: list[list[str]] = []
-        self.get_metadata_by_uids_calls: list[list[str]] = []
-        self.get_metadata_by_uid_calls: list[str] = []
-
-    async def get_all_metadata(self, filters: dict, session=None):
-        self.get_all_metadata_calls += 1
-        return await self._delegate.get_all_metadata(filters, session=session)
-
-    async def metadata_in_tags(self, tag_ids: list[str], session=None):
-        self.metadata_in_tags_calls.append(sorted(tag_ids))
-        return await self._delegate.metadata_in_tags(tag_ids, session=session)
-
-    async def get_metadata_by_uids(self, document_uids: list[str], session=None):
-        self.get_metadata_by_uids_calls.append(list(document_uids))
-        return await self._delegate.get_metadata_by_uids(document_uids, session=session)
-
-    async def get_metadata_by_uid(self, document_uid: str, session=None) -> DocumentMetadata | None:
-        self.get_metadata_by_uid_calls.append(document_uid)
-        return await self._delegate.get_metadata_by_uid(document_uid, session=session)
-
-    async def get_metadata_in_tag(self, tag_id: str, session=None) -> list[DocumentMetadata]:
-        return await self._delegate.get_metadata_in_tag(tag_id, session=session)
-
-    async def list_by_source_library(self, source_library_id: str, *, limit: int, session=None) -> list[DocumentMetadata]:
-        return await self._delegate.list_by_source_library(source_library_id, limit=limit, session=session)
-
-    async def save_metadata(self, metadata: DocumentMetadata, session=None) -> None:
-        await self._delegate.save_metadata(metadata, session=session)
-
-    async def delete_metadata(self, document_uid: str, session=None) -> bool:
-        return await self._delegate.delete_metadata(document_uid, session=session)
-
-    async def clear(self, session=None) -> None:
-        await self._delegate.clear(session=session)
-
-    def __getattr__(self, name):
-        return getattr(self._delegate, name)
-
-
-class _PresignedLocalContentStore:
-    """
-    Local content store wrapper that advertises presigned URLs.
-
-    Why this exists:
-    - Tests need a remote-style dataset location without requiring a live S3
-      service.
-
-    How to use:
-    - Wrap the test local content store and override `get_presigned_url(...)`.
-    """
-
-    def __init__(self, delegate) -> None:
-        self._delegate = delegate
-        self.public_presigned_calls = 0
-        self.internal_presigned_calls = 0
-
-    def get_presigned_url(self, key, expires=None) -> str:
-        del expires
-        self.public_presigned_calls += 1
-        return f"https://signed.example.invalid/{key}"
-
-    def get_presigned_url_internal(self, key, expires=None) -> str:
-        del expires
-        self.internal_presigned_calls += 1
-        return f"https://internal-signed.example.invalid/{key}"
-
-    def __getattr__(self, name):
-        return getattr(self._delegate, name)
-
-
-class _UnsupportedRemoteContentStore:
-    """
-    Remote-style content store wrapper with no DuckDB-readable location support.
-
-    Why this exists:
-    - GCS can stream objects through the Python client while still lacking
-      backend-internal signed URLs for DuckDB Parquet reads.
-
-    How to use:
-    - Wrap the local test content store to exercise the unsupported remote
-      access path without a live object-storage service.
-    """
-
-    def __init__(self, delegate) -> None:
-        self._delegate = delegate
-
-    def get_presigned_url_internal(self, key, expires=None) -> str:
-        del key, expires
-        raise NotImplementedError("backend-internal signed URLs are unavailable")
-
-    def __getattr__(self, name):
-        return getattr(self._delegate, name)
 
 
 @pytest.mark.asyncio
@@ -786,7 +544,7 @@ async def test_tabular_service_lists_context_and_queries_datasets(tmp_path):
         content="city,target\nParis,15\nLyon,25\n",
     )
 
-    service = TabularService()
+    service = TabularEngineHarness()
     datasets = await service.list_datasets(_user())
     assert {dataset.document_uid for dataset in datasets} == {"doc-sales", "doc-targets"}
 
@@ -848,666 +606,13 @@ async def test_tabular_service_rejects_duckdb_table_functions_outside_authorized
         content="city,amount\nParis,10\nLyon,20\n",
     )
 
-    service = TabularService()
+    service = TabularEngineHarness()
 
     with pytest.raises(ValueError, match=r"unauthorized datasets: read_parquet\(\)"):
         await service.query_read(
             _user(),
             request=TabularQueryRequest(
                 sql="SELECT * FROM read_parquet('/tmp/forbidden.parquet')",
-            ),
-        )
-
-
-@pytest.mark.asyncio
-async def test_tabular_service_rejects_explicit_dataset_requests_without_rebac_access(tmp_path, metadata_store):
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    visible_metadata = await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-visible",
-        file_name="visible.csv",
-        content="city,amount\nParis,10\n",
-    )
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-hidden",
-        file_name="hidden.csv",
-        content="city,amount\nLyon,20\n",
-    )
-
-    service = TabularService()
-    service.rebac = _FakeRebac({"doc-visible"})
-
-    datasets = await service.list_datasets(_user())
-    assert [dataset.document_uid for dataset in datasets] == [visible_metadata.document_uid]
-
-    with pytest.raises(PermissionError, match="doc-hidden"):
-        await service.query_read(
-            _user(),
-            request=TabularQueryRequest(
-                sql="SELECT 1",
-                dataset_uids=["doc-hidden"],
-            ),
-        )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("denied_uid", ["sales.csv", "sales_alias", "doc-hidden"])
-async def test_tabular_service_denial_points_a_wrong_identifier_at_the_listing_tool(tmp_path, metadata_store, denied_uid):
-    """Wrong identifiers must point agents to real UIDs without leaking existence."""
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-sales",
-        file_name="sales.csv",
-        content="city,amount\nParis,10\n",
-    )
-
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-hidden",
-        file_name="hidden.csv",
-        content="city,amount\nLyon,20\n",
-    )
-
-    service = TabularService()
-    service.rebac = _FakeRebac({"doc-sales"})
-
-    with pytest.raises(PermissionError) as query_error:
-        await service.query_read(
-            _user(),
-            request=TabularQueryRequest(
-                sql="SELECT 1",
-                dataset_uids=[denied_uid],
-            ),
-        )
-    assert denied_uid in str(query_error.value)
-    assert "not valid document uids" in str(query_error.value)
-    assert "not a file name and not a SQL table alias" in str(query_error.value)
-    assert "list_tabular_documents" in str(query_error.value)
-
-    with pytest.raises(PermissionError, match="list_tabular_documents"):
-        await service.describe_documents(_user(), [denied_uid])
-
-    with pytest.raises(PermissionError, match="list_tabular_documents"):
-        await service._get_dataset_or_raise(user=_user(), document_uid=denied_uid)
-
-
-@pytest.mark.asyncio
-async def test_resolve_owned_attachment_dataset_authorizes_the_uploader_without_rebac(tmp_path, metadata_store):
-    """
-    ATTACH-TAB-01: a fast-ingested attachment carries no ReBAC tuple by
-    design, so its uploader must still be authorized via ownership metadata
-    — the same equality check `is_own_session_chunk` already applies to its
-    vector chunks (DESIGN.md, "Session-Scoped Attachment Datasets").
-    """
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    await _ingest_attachment_csv(
-        tmp_path=tmp_path,
-        document_uid="doc-attachment",
-        file_name="sales.csv",
-        content="city,amount\nParis,10\n",
-        uploaded_by="u-1",
-    )
-
-    service = TabularService()
-    service.rebac = _FakeRebac(set())  # no ReBAC access to anything
-
-    dataset = await service._resolve_owned_attachment_dataset(_user(), "doc-attachment")
-    assert dataset is not None
-    assert dataset.metadata.document_uid == "doc-attachment"
-
-
-@pytest.mark.asyncio
-async def test_excel_attachment_uses_corpus_tables_and_roadmap(tmp_path, metadata_store, monkeypatch):
-    from openpyxl import Workbook
-
-    from knowledge_flow_backend.core.processors.input.excel_processor.excel_processor import ExcelProcessor
-    from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
-    from knowledge_flow_backend.features.tabular.artifacts import read_tabular_multi_artifact
-
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-    monkeypatch.setattr(ExcelProcessor, "recalc", False)
-
-    workbook = Workbook()
-    first = workbook.active
-    assert first is not None
-    first.title = "Ventes"
-    first.append(["city", "amount"])
-    for index in range(30):
-        first.append([f"city-{index}", index])
-    second = workbook.create_sheet("Cibles")
-    second.append(["city", "target"])
-    second.append(["Paris", 42])
-    path = tmp_path / "attachment.xlsx"
-    workbook.save(path)
-
-    controller = IngestionController.__new__(IngestionController)
-    controller.service = SimpleNamespace(metadata_service=MetadataService())
-    roadmap = await controller._build_attachment_excel_dataset(user=_user(), document_uid="excel-attachment", filename=path.name, raw_path=path)
-    metadata = await metadata_store.get_metadata_by_uid("excel-attachment")
-    assert metadata is not None
-    multi = read_tabular_multi_artifact(metadata)
-    assert multi is not None and len(multi.tables) == 2
-    assert "Ventes" in roadmap and "Cibles" in roadmap
-    assert content_store.get_output_artifact("excel-attachment/output/output.md").decode() == roadmap
-
-    service = TabularService()
-    service.rebac = _FakeRebac(set())
-    inventory = await service.list_documents(_user(), attachment_uids=["excel-attachment"])
-    assert len(inventory) == 1 and inventory[0].source_kind == "conversation_attachment"
-    assert [table.query_alias for table in inventory[0].tables] == [table.query_alias for table in multi.tables]
-    schemas = await service.describe_documents(_user(), ["excel-attachment"])
-    assert len(schemas[0].tables) == 2
-    assert schemas[0].markdown == roadmap
-    response = await service.query_read(
-        _user(),
-        request=TabularQueryRequest(
-            sql=f"SELECT COUNT(*) AS n FROM {multi.tables[0].query_alias}",
-            dataset_uids=["excel-attachment"],
-        ),
-    )
-    assert response.rows == [{"n": 30}]
-    search = await service.search_values(_user(), request=TabularSearchRequest(keyword="city-29", dataset_uids=["excel-attachment"]))
-    assert len(search.matches) == 1
-    assert search.matches[0].document_uid == "excel-attachment"
-    with pytest.raises(PermissionError):
-        await service.describe_documents(_user("different-user"), ["excel-attachment"])
-
-    service.rebac = _FakeRebacDisabled()
-    assert "excel-attachment" not in {item.document_uid for item in await service.list_datasets(_user("different-user"))}
-    with pytest.raises(FileNotFoundError):
-        await service.query_read(
-            _user("different-user"),
-            request=TabularQueryRequest(sql=f"SELECT * FROM {multi.tables[0].query_alias}", dataset_uids=["excel-attachment"]),
-        )
-
-
-@pytest.mark.asyncio
-async def test_resolve_owned_attachment_dataset_denies_a_different_user(tmp_path, metadata_store):
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    await _ingest_attachment_csv(
-        tmp_path=tmp_path,
-        document_uid="doc-attachment",
-        file_name="sales.csv",
-        content="city,amount\nParis,10\n",
-        uploaded_by="someone-else",
-    )
-
-    service = TabularService()
-    service.rebac = _FakeRebac(set())
-
-    dataset = await service._resolve_owned_attachment_dataset(_user(), "doc-attachment")
-    assert dataset is None
-
-
-@pytest.mark.asyncio
-async def test_resolve_owned_attachment_dataset_ignores_a_tagged_document_even_with_the_fast_ingest_source_tag(tmp_path, metadata_store):
-    """
-    Hardening: `source_tag` is an operator-configured, client-suppliable
-    string with nothing reserving "fast_ingest" against an operator naming a
-    real corpus source the same way. A genuine attachment is always tagless
-    by construction, so a same-named but tagged document — even one owned by
-    the caller — must never be authorized through this fallback.
-    """
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    csv_path = tmp_path / "sales.csv"
-    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
-    metadata = DocumentMetadata(
-        identity=Identity(document_name="sales.csv", document_uid="doc-collision", title="sales.csv"),
-        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
-        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
-        tags=Tagging(tag_ids=["team-tag"]),
-    )
-    metadata.identity.uploaded_by = "u-1"
-    processed = TabularProcessor().process(str(csv_path), metadata, emit_pointer_chunk=False)
-    await MetadataService().save_document_metadata(_user(), processed)
-
-    service = TabularService()
-    dataset = await service._resolve_owned_attachment_dataset(_user(), "doc-collision")
-    assert dataset is None
-
-
-@pytest.mark.asyncio
-async def test_resolve_owned_attachment_dataset_ignores_corpus_documents(tmp_path, metadata_store):
-    # A tagged corpus document is never authorized through this fallback,
-    # even for its own uploader — it must go through ReBAC like any other
-    # corpus document.
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-corpus",
-        file_name="sales.csv",
-        content="city,amount\nParis,10\n",
-    )
-
-    service = TabularService()
-    dataset = await service._resolve_owned_attachment_dataset(_user(), "doc-corpus")
-    assert dataset is None
-
-
-@pytest.mark.asyncio
-async def test_query_read_authorizes_an_owned_attachment_dataset_with_no_rebac_tuple(tmp_path, metadata_store):
-    """
-    End-to-end: `query_read` on an explicitly requested attachment dataset
-    succeeds via ownership metadata alone — the exact case a fail-closed
-    ReBAC check could never resolve for an untagged document, now handled
-    without minting any ReBAC tuple.
-    """
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    metadata = await _ingest_attachment_csv(
-        tmp_path=tmp_path,
-        document_uid="doc-attachment",
-        file_name="sales.csv",
-        content="city,amount\nParis,10\nLyon,20\n",
-        uploaded_by="u-1",
-    )
-
-    service = TabularService()
-    service.rebac = _FakeRebac(set())
-    dataset = await service._resolve_owned_attachment_dataset(_user(), metadata.document_uid)
-    assert dataset is not None
-
-    response = await service.query_read(
-        _user(),
-        request=TabularQueryRequest(
-            sql=f"SELECT COUNT(*) AS n FROM {dataset.query_alias}",
-            dataset_uids=[metadata.document_uid],
-        ),
-    )
-    assert response.rows == [{"n": 2}]
-
-
-@pytest.mark.asyncio
-async def test_rebac_disabled_listing_excludes_fast_ingest_attachments(tmp_path, metadata_store):
-    """
-    P1 (codex review): the ReBAC-disabled branch of `_resolve_authorized_datasets`
-    lists every metadata record unconditionally (`get_all_metadata({})`) —
-    a deliberate "no authorization enforced" mode for corpus documents, predating
-    ATTACH-TAB-01. Fast-ingest attachments are session-scoped by design and were
-    never meant to depend on ReBAC being enabled for that isolation (they carry
-    no ReBAC tuple at all, ever); without excluding them here, a ReBAC-disabled
-    deployment would enumerate every user's session-scoped attachment to every
-    other user via `list_documents`/`list_datasets`.
-    """
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    corpus_metadata = await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-corpus",
-        file_name="quarterly.csv",
-        content="city,amount\nParis,10\n",
-    )
-    await _ingest_attachment_csv(
-        tmp_path=tmp_path,
-        document_uid="doc-alice-attachment",
-        file_name="sales.csv",
-        content="city,amount\nLyon,20\n",
-        uploaded_by="alice",
-    )
-
-    service = TabularService()
-    service.rebac = _FakeRebacDisabled()
-
-    # A completely different user, in a ReBAC-disabled deployment: the corpus
-    # document is visible (that mode's whole point), Alice's attachment must not be.
-    datasets = await service.list_datasets(_user("bob"))
-    visible_uids = {dataset.document_uid for dataset in datasets}
-    assert corpus_metadata.document_uid in visible_uids
-    assert "doc-alice-attachment" not in visible_uids
-
-
-@pytest.mark.asyncio
-async def test_rebac_disabled_listing_keeps_a_tagged_corpus_document_with_a_colliding_source_tag(tmp_path, metadata_store):
-    """
-    `source_tag` alone was checked here, not tags -- but `source_tag` is an
-    operator-configured, client-suppliable string (`document_sources`) with
-    nothing reserving "fast_ingest" against a real corpus source named the
-    same way (the same collision every other attachment-classification check
-    in this module already guards against). Excluding on source_tag alone
-    would have hidden a genuine tagged corpus document from a ReBAC-disabled
-    deployment's listing, contradicting that mode's whole point.
-    """
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    csv_path = tmp_path / "quarterly.csv"
-    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
-    metadata = DocumentMetadata(
-        identity=Identity(document_name="quarterly.csv", document_uid="doc-tagged-colliding", title="quarterly.csv"),
-        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
-        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
-        tags=Tagging(tag_ids=["team-tag"]),
-    )
-    processed = TabularProcessor().process(str(csv_path), metadata)
-    await MetadataService().save_document_metadata(_user(), processed)
-
-    service = TabularService()
-    service.rebac = _FakeRebacDisabled()
-
-    datasets = await service.list_datasets(_user("bob"))
-    visible_uids = {dataset.document_uid for dataset in datasets}
-    assert "doc-tagged-colliding" in visible_uids
-
-
-@pytest.mark.asyncio
-async def test_rebac_disabled_still_denies_non_owner_explicit_attachment_query(tmp_path, metadata_store):
-    """
-    Closes the loop on the fix above: even with ReBAC fully disabled AND
-    `has_user_permission` answering `True` unconditionally (the worst case,
-    see `_FakeRebacDisabled`), a non-owner explicitly naming another user's
-    attachment uid in `query_read` must still be refused — the ownership
-    check (`_resolve_owned_attachment_dataset`), not ReBAC, is what actually
-    decides access for this document class, and that check never depends on
-    whether ReBAC itself is enabled.
-    """
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    metadata = await _ingest_attachment_csv(
-        tmp_path=tmp_path,
-        document_uid="doc-alice-attachment",
-        file_name="sales.csv",
-        content="city,amount\nLyon,20\n",
-        uploaded_by="alice",
-    )
-
-    service = TabularService()
-    service.rebac = _FakeRebacDisabled()
-
-    # `has_user_permission` answers True unconditionally in this fake (see its
-    # docstring), so the caller is never flagged "forbidden" — it falls
-    # through to "not found" instead. Either way, the point under test is
-    # that mallory never gets alice's data back.
-    with pytest.raises(FileNotFoundError, match="doc-alice-attachment"):
-        await service.query_read(
-            _user("mallory"),
-            request=TabularQueryRequest(
-                sql="SELECT 1",
-                dataset_uids=[metadata.document_uid],
-            ),
-        )
-
-
-@pytest.mark.asyncio
-async def test_rebac_disabled_owner_can_still_query_their_own_attachment(tmp_path, metadata_store):
-    """The ownership fallback still works for the real owner even when ReBAC
-    is disabled — the fix above only removes attachments from blind
-    enumeration, it does not break explicit-uid access to one's own data."""
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    metadata = await _ingest_attachment_csv(
-        tmp_path=tmp_path,
-        document_uid="doc-alice-attachment",
-        file_name="sales.csv",
-        content="city,amount\nLyon,20\n",
-        uploaded_by="alice",
-    )
-
-    service = TabularService()
-    service.rebac = _FakeRebacDisabled()
-    dataset = await service._resolve_owned_attachment_dataset(_user("alice"), metadata.document_uid)
-    assert dataset is not None
-
-    response = await service.query_read(
-        _user("alice"),
-        request=TabularQueryRequest(
-            sql=f"SELECT COUNT(*) AS n FROM {dataset.query_alias}",
-            dataset_uids=[metadata.document_uid],
-        ),
-    )
-    assert response.rows == [{"n": 1}]
-
-
-@pytest.mark.asyncio
-async def test_tabular_service_lists_authorized_datasets_with_targeted_metadata_lookup(tmp_path, metadata_store):
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-visible",
-        file_name="visible.csv",
-        content="city,amount\nParis,10\n",
-    )
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-hidden",
-        file_name="hidden.csv",
-        content="city,amount\nLyon,20\n",
-    )
-
-    service = TabularService()
-    tracking_store = _TrackingMetadataStore(metadata_store)
-    service.metadata_store = tracking_store
-    service.rebac = _FakeRebac({"doc-visible"})
-
-    datasets = await service.list_datasets(_user())
-
-    assert [dataset.document_uid for dataset in datasets] == ["doc-visible"]
-    assert tracking_store.get_all_metadata_calls == 0
-    assert tracking_store.metadata_in_tags_calls == [["lib-doc-visible"]]
-
-
-@pytest.mark.asyncio
-async def test_describe_documents_resolves_owned_attachments_with_one_batch_lookup(tmp_path, metadata_store):
-    """
-    The ownership fallback used to run one concurrent
-    `get_metadata_by_uid` per requested uid — an unbounded caller-supplied
-    list (`dataset_uids`/`document_uids`) fanned out that many concurrent
-    metadata-store round trips at once. It must resolve through a single
-    batch `get_metadata_by_uids` call instead (chunked internally by the
-    store, so it stays bounded regardless of how many uids are requested).
-    """
-    await _ingest_attachment_csv(
-        tmp_path=tmp_path,
-        document_uid="doc-attachment-a",
-        file_name="a.csv",
-        content="city,amount\nParis,10\n",
-        uploaded_by="alice",
-    )
-    await _ingest_attachment_csv(
-        tmp_path=tmp_path,
-        document_uid="doc-attachment-b",
-        file_name="b.csv",
-        content="city,amount\nLyon,20\n",
-        uploaded_by="alice",
-    )
-
-    service = TabularService()
-    tracking_store = _TrackingMetadataStore(metadata_store)
-    service.metadata_store = tracking_store
-    # Attachments carry no ReBAC tuple by design, so an empty readable set
-    # still forces every uid through the ownership fallback being tested.
-    service.rebac = _FakeRebac(set())
-
-    schemas = await service.describe_documents(_user("alice"), ["doc-attachment-a", "doc-attachment-b"])
-
-    assert {schema.document_uid for schema in schemas} == {"doc-attachment-a", "doc-attachment-b"}
-    assert tracking_store.get_metadata_by_uid_calls == []
-    assert tracking_store.get_metadata_by_uids_calls == [["doc-attachment-a", "doc-attachment-b"]]
-
-
-@pytest.mark.asyncio
-async def test_tabular_service_requires_httpfs_for_remote_locations(tmp_path, metadata_store):
-    """
-    Verify remote tabular access fails clearly when `httpfs` cannot be loaded.
-
-    Why this exists:
-    - Remote S3-compatible access must stay `httpfs`-only with no hidden local
-      copy fallback.
-
-    How to use:
-    - Wrap the local content store with presigned URLs and force
-      `_ensure_httpfs_ready(...)` to fail.
-    """
-
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-sales",
-        file_name="sales.csv",
-        content="city,amount\nParis,10\nLyon,20\n",
-    )
-
-    service = TabularService()
-    service.content_store = _PresignedLocalContentStore(content_store)
-    service._ensure_httpfs_ready = lambda connection: (_ for _ in ()).throw(  # type: ignore[method-assign]
-        RuntimeError("DuckDB httpfs is required for remote tabular dataset access.")
-    )
-
-    dataset = (await service.list_datasets(_user()))[0]
-    with pytest.raises(RuntimeError, match="DuckDB httpfs is required"):
-        await service.query_read(
-            _user(),
-            request=TabularQueryRequest(
-                sql=f"SELECT city, amount FROM {dataset.query_alias} ORDER BY amount DESC",
-            ),
-        )
-
-    with pytest.raises(RuntimeError, match="DuckDB httpfs is required"):
-        await service.read_dataset_frame(_user(), "doc-sales")
-
-    assert service.content_store.internal_presigned_calls >= 2
-    assert service.content_store.public_presigned_calls == 0
-
-
-@pytest.mark.asyncio
-async def test_tabular_service_fails_cleanly_without_signed_url_or_local_path(tmp_path, metadata_store):
-    """
-    Verify unsupported content stores fail as an explicit tabular capability error.
-
-    Why this exists:
-    - GCS Workload Identity deployments can write Parquet artifacts before GCS
-      V4 signed URLs are implemented, but DuckDB cannot read those artifacts
-      through `get_object_stream(...)`.
-
-    How to use:
-    - The API layer maps this service exception to an unsupported-operation
-      response instead of a generic 500.
-    """
-
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-sales",
-        file_name="sales.csv",
-        content="city,amount\nParis,10\nLyon,20\n",
-    )
-
-    service = TabularService()
-    service.content_store = _UnsupportedRemoteContentStore(content_store)
-
-    with pytest.raises(TabularDatasetAccessUnsupportedError, match="Unsupported operation"):
-        await service.read_dataset_frame(_user(), "doc-sales")
-
-
-@pytest.mark.asyncio
-async def test_tabular_service_scopes_datasets_to_active_team_and_libraries(tmp_path, metadata_store):
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-team-a",
-        file_name="sales-team-a.csv",
-        content="city,amount\nParis,10\n",
-        tag_ids=["tag-team-a"],
-        tag_names=["Team A"],
-    )
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-team-b",
-        file_name="sales-team-b.csv",
-        content="city,amount\nLyon,20\n",
-        tag_ids=["tag-team-b"],
-        tag_names=["Team B"],
-    )
-
-    service = TabularService()
-    service.tag_service = _FakeTagService(
-        readable_tag_ids={"tag-team-a", "tag-team-b"},
-        team_scopes={"team-a": {"tag-team-a"}, "team-b": {"tag-team-b"}},
-    )
-
-    team_a_datasets = await service.list_datasets(
-        _user(),
-        owner_filter=OwnerFilter.TEAM,
-        team_id="team-a",
-    )
-    assert [dataset.document_uid for dataset in team_a_datasets] == ["doc-team-a"]
-
-    [scoped_schema] = await service.describe_documents(
-        _user(),
-        ["doc-team-a"],
-        owner_filter=OwnerFilter.TEAM,
-        team_id="team-a",
-    )
-    assert scoped_schema.document_uid == "doc-team-a"
-    assert scoped_schema.kind == "csv"
-
-    assert (
-        await service.list_datasets(
-            _user(),
-            owner_filter=OwnerFilter.TEAM,
-            team_id="team-a",
-            document_library_tags_ids=["tag-team-b"],
-        )
-    ) == []
-
-    all_datasets = await service.list_datasets(_user())
-    alias_by_uid = {dataset.document_uid: dataset.query_alias for dataset in all_datasets}
-
-    scoped_rows = await service.query_read(
-        _user(),
-        request=TabularQueryRequest(
-            sql=f"SELECT city, amount FROM {alias_by_uid['doc-team-a']}",
-            owner_filter=OwnerFilter.TEAM,
-            team_id="team-a",
-        ),
-    )
-    assert scoped_rows.rows == [{"city": "Paris", "amount": 10}]
-
-    with pytest.raises(ValueError, match="unauthorized datasets"):
-        await service.query_read(
-            _user(),
-            request=TabularQueryRequest(
-                sql=f"SELECT city, amount FROM {alias_by_uid['doc-team-b']}",
-                owner_filter=OwnerFilter.TEAM,
-                team_id="team-a",
             ),
         )
 
@@ -1542,7 +647,7 @@ async def test_tabular_service_expands_excel_workbook_into_multiple_datasets(tmp
     assert {stored.key for stored in content_store.list_objects(prefix)} == {table.object_key for table in multi.tables}
 
     # Le service éclate le document en un dataset par table, alias stockés
-    service = TabularService()
+    service = TabularEngineHarness()
     datasets = await service.list_datasets(_user())
     ventes_alias = build_table_query_alias(document_uid, "Ventes", 1)
     cibles_alias = build_table_query_alias(document_uid, "Cibles", 1)
@@ -1590,7 +695,7 @@ async def test_tabular_service_lists_documents_mixing_csv_and_spreadsheet(tmp_pa
     )
     await _ingest_excel_workbook(tmp_path=tmp_path, document_uid="doc-excel")
 
-    service = TabularService()
+    service = TabularEngineHarness()
     documents = await service.list_documents(_user())
     documents_by_uid = {document.document_uid: document for document in documents}
     assert set(documents_by_uid) == {"doc-sales", "doc-excel"}
@@ -1634,7 +739,7 @@ async def test_tabular_service_describes_documents_in_batch_with_all_tables(tmp_
     metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
     await MetadataService().save_document_metadata(_user(), metadata)
 
-    service = TabularService()
+    service = TabularEngineHarness()
     schemas = await service.describe_documents(_user(), ["doc-sales", "doc-excel"])
     assert [schema.document_uid for schema in schemas] == ["doc-sales", "doc-excel"]
 
@@ -1664,11 +769,9 @@ async def test_tabular_service_describes_documents_in_batch_with_all_tables(tmp_
     with pytest.raises(ValueError, match="At least one document uid"):
         await service.describe_documents(_user(), [])
 
-    service.rebac = _FakeRebac({"doc-sales", "doc-excel", "doc-unknown"})
-    with pytest.raises(FileNotFoundError, match="doc-unknown"):
+    with pytest.raises(PermissionError, match="doc-unknown"):
         await service.describe_documents(_user(), ["doc-sales", "doc-unknown"])
 
-    service.rebac = _FakeRebac({"doc-sales"})
     with pytest.raises(PermissionError, match="doc-hidden"):
         await service.describe_documents(_user(), ["doc-sales", "doc-hidden"])
 
@@ -1708,7 +811,7 @@ async def test_describe_documents_reads_values_instead_of_legacy_metadata(tmp_pa
                 column.pop("max_value", None)
     await MetadataService().save_document_metadata(_user(), excel_metadata)
 
-    service = TabularService()
+    service = TabularEngineHarness()
     descriptions = await service.describe_documents(_user(), ["doc-sales", "doc-excel"])
     csv_columns = {column.name: column for column in descriptions[0].tables[0].columns}
     assert csv_columns["city"].sample_values == ["Lyon", "Paris"]
@@ -1736,7 +839,7 @@ async def test_describe_documents_reads_current_values_on_every_call(tmp_path, m
     artifact = read_tabular_artifact(metadata)
     assert artifact is not None
 
-    service = TabularService()
+    service = TabularEngineHarness()
     first = (await service.describe_documents(_user(), ["doc-current"]))[0].tables[0].columns
     assert first[0].sample_values == ["Lyon", "Paris"]
     assert (first[1].min_value, first[1].max_value) == (-1.5, 2.25)
@@ -1769,42 +872,17 @@ async def test_describe_documents_reads_all_twenty_workbook_tables(tmp_path, met
     metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
     await MetadataService().save_document_metadata(_user(), metadata)
 
-    tables = (await TabularService().describe_documents(_user(), ["doc-twenty"]))[0].tables
+    tables = (await TabularEngineHarness().describe_documents(_user(), ["doc-twenty"]))[0].tables
     assert len(tables) == 20
     assert all(table.columns[0].sample_values == ["Lyon", "Paris"] for table in tables)
     assert [(table.columns[1].min_value, table.columns[1].max_value) for table in tables[:2]] == [(10, 20), (15, 25)]
     assert [(table.columns[1].min_value, table.columns[1].max_value) for table in tables[2:]] == [(index, index + 10) for index in range(18)]
 
-    limited_service = TabularService()
+    limited_service = TabularEngineHarness()
     limited_service.tabular_config = limited_service.tabular_config.model_copy(update={"query": limited_service.tabular_config.query.model_copy(update={"max_selected_datasets": 19})})
     monkeypatch.setattr(limited_service, "_resolve_dataset_location", lambda *_: pytest.fail("No table scan above the configured limit"))
     with pytest.raises(ValueError, match="above the limit of 19"):
         await limited_service.describe_documents(_user(), ["doc-twenty"])
-
-
-@pytest.mark.asyncio
-async def test_describe_documents_checks_all_uids_before_reading_tables(tmp_path, metadata_store, monkeypatch):
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-allowed",
-        file_name="allowed.csv",
-        content="city,amount\nParis,10\nLyon,20\n",
-    )
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-denied",
-        file_name="denied.csv",
-        content="city,amount\nParis,30\nLyon,40\n",
-    )
-    service = TabularService()
-    monkeypatch.setattr(service, "rebac", _FakeRebac({"doc-allowed"}))
-    monkeypatch.setattr(service, "_resolve_dataset_location", lambda *_: pytest.fail("No Parquet read before all UIDs are authorized"))
-    with pytest.raises(PermissionError):
-        await service.describe_documents(_user(), ["doc-allowed", "doc-denied"])
 
 
 @pytest.mark.asyncio
@@ -1824,7 +902,7 @@ async def test_describe_documents_fails_when_a_table_artifact_is_missing(tmp_pat
     (content_store.object_root / artifact.object_key).unlink()
 
     with pytest.raises(FileNotFoundError, match="Tabular artifact"):
-        await TabularService().describe_documents(_user(), ["doc-missing-artifact"])
+        await TabularEngineHarness().describe_documents(_user(), ["doc-missing-artifact"])
 
 
 @pytest.mark.asyncio
@@ -1845,7 +923,7 @@ async def test_describe_documents_checks_artifacts_without_value_columns(tmp_pat
     (content_store.object_root / artifact.object_key).unlink()
 
     with pytest.raises(FileNotFoundError, match="Tabular artifact"):
-        await TabularService().describe_documents(_user(), ["doc-plain-strings"])
+        await TabularEngineHarness().describe_documents(_user(), ["doc-plain-strings"])
 
 
 @pytest.mark.asyncio
@@ -1868,7 +946,7 @@ async def test_describe_documents_redacts_signed_url_from_parquet_errors(tmp_pat
         def from_parquet(self, _location):
             raise duckdb.IOException(f"Could not read {signed_url}")
 
-    service = TabularService()
+    service = TabularEngineHarness()
     monkeypatch.setattr(service, "_resolve_dataset_location", lambda *_: signed_url)
     monkeypatch.setattr(service, "_ensure_httpfs_ready", lambda *_: None)
     monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.open_duckdb_connection", lambda *_args, **_kwargs: FailingConnection())
@@ -1878,46 +956,6 @@ async def test_describe_documents_redacts_signed_url_from_parquet_errors(tmp_pat
         await service.describe_documents(_user(), ["doc-signed"])
     assert "secret" not in str(exc_info.value)
     assert "<redacted-signed-url>" in str(exc_info.value)
-
-
-@pytest.mark.asyncio
-async def test_tabular_service_requires_ready_excel_catalog(tmp_path, metadata_store):
-    """
-    A workbook description fails when its catalog is not ready or stored;
-    CSV descriptions never need a markdown artifact.
-    """
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-sales",
-        file_name="sales.csv",
-        content="city,amount\nParis,10\nLyon,20\n",
-    )
-    metadata, output_dir = await _ingest_excel_workbook(tmp_path=tmp_path, document_uid="doc-excel")
-
-    service = TabularService()
-    [csv_description] = await service.describe_documents(_user(), ["doc-sales"])
-    assert csv_description.markdown is None
-
-    with pytest.raises(FileNotFoundError, match="Preview not ready"):
-        await service.describe_documents(_user(), ["doc-excel"])
-
-    metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
-    await MetadataService().save_document_metadata(_user(), metadata)
-    with pytest.raises(FileNotFoundError, match="output.md"):
-        await service.describe_documents(_user(), ["doc-excel"])
-
-    content_store.save_output("doc-excel", output_dir)
-    [description] = await service.describe_documents(_user(), ["doc-excel"])
-    assert description.markdown is not None
-    assert "# Extraction summary" in description.markdown
-
-    service.rebac = _FakeRebac(set())
-    with pytest.raises(PermissionError, match="doc-excel"):
-        await service.describe_documents(_user(), ["doc-excel"])
 
 
 def test_tabular_service_httpfs_install_is_attempted_after_load_failure():
@@ -1947,7 +985,7 @@ def test_tabular_service_httpfs_install_is_attempted_after_load_failure():
                 self._first_load = False
                 raise RuntimeError("missing extension")
 
-    service = TabularService()
+    service = TabularEngineHarness()
     connection = _ConnectionProbe()
 
     service._ensure_httpfs_ready(connection)  # type: ignore[arg-type]
@@ -2029,7 +1067,7 @@ def test_tabular_processor_emits_dataset_pointer_chunk_when_enabled(tmp_path):
     assert "[DATASET POINTER" in text
     assert "[END DATASET POINTER]" in text
     assert "city" in text and "amount" in text
-    assert "read_query" in text
+    assert "query_tabular_documents" in text
     assert "dataset_uid=doc-pointer" in text
     # Increment 1 explicitly excludes sample values (§2.4) — guard against
     # accidentally reintroducing real cell values into the pointer text.
@@ -2132,7 +1170,7 @@ async def test_query_mounts_only_the_datasets_the_sql_references(tmp_path):
             content=f"city,amount\nParis,{index}\n",
         )
 
-    service = TabularService()
+    service = TabularEngineHarness()
     datasets = await service.list_datasets(_user())
     assert len(datasets) == 4
     target_alias = {dataset.document_uid: dataset.query_alias for dataset in datasets}["doc-2"]
@@ -2178,7 +1216,7 @@ async def test_query_referencing_no_dataset_is_rejected(tmp_path):
         content="city,amount\nParis,10\n",
     )
 
-    service = TabularService()
+    service = TabularEngineHarness()
     with pytest.raises(ValueError, match="references no authorized dataset"):
         await service.query_read(_user(), request=TabularQueryRequest(sql="SELECT 1"))
 
@@ -2207,7 +1245,7 @@ async def test_query_referencing_more_datasets_than_the_cap_is_rejected(tmp_path
             content="city\nParis\n",
         )
 
-    service = TabularService()
+    service = TabularEngineHarness()
     service.tabular_config = service.tabular_config.model_copy(update={"query": service.tabular_config.query.model_copy(update={"max_selected_datasets": 2})})
     aliases = [dataset.query_alias for dataset in await service.list_datasets(_user())]
     union_sql = " UNION ALL ".join(f"SELECT city FROM {alias}" for alias in aliases)
@@ -2238,7 +1276,7 @@ async def test_duckdb_resource_limits_are_applied_on_the_query_path(tmp_path, mo
         content="city,amount\nParis,10\n",
     )
 
-    service = TabularService()
+    service = TabularEngineHarness()
     alias = (await service.list_datasets(_user()))[0].query_alias
     response = await service.query_read(
         _user(),
@@ -2261,7 +1299,7 @@ async def test_query_cannot_read_outside_its_local_dataset(tmp_path, monkeypatch
         content="city,amount\nParis,10\n",
     )
 
-    service = TabularService()
+    service = TabularEngineHarness()
     original_mount = service._mount_datasets
 
     def inspect_mount(*, connection, datasets, handle):
@@ -2335,7 +1373,7 @@ async def test_query_reads_only_its_signed_parquet_url(tmp_path, monkeypatch):
     thread.start()
     signed_url = f"http://127.0.0.1:{server.server_port}/data.parquet?signature=test"
     try:
-        service = TabularService()
+        service = TabularEngineHarness()
         monkeypatch.setattr(service, "_resolve_dataset_location", lambda _key: signed_url)
         original_mount = service._mount_datasets
 
@@ -2359,206 +1397,3 @@ async def test_query_reads_only_its_signed_parquet_url(tmp_path, monkeypatch):
     finally:
         server.shutdown()
         server.server_close()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("rebac_disabled", [False, True])
-@pytest.mark.parametrize(("session", "corpus"), [(True, True), (True, False), (False, True), (False, False)])
-async def test_document_discovery_unions_scoped_sources(tmp_path, metadata_store, monkeypatch, rebac_disabled, session, corpus):
-    async def persist(_service, _user, metadata):
-        await metadata_store.save_metadata(metadata)
-
-    monkeypatch.setattr(MetadataService, "save_document_metadata", persist)
-    await _ingest_csv(tmp_path=tmp_path, metadata_store=metadata_store, document_uid="corpus", file_name="sales.csv", content="city,amount\nParis,10\n", tag_ids=["finance"], tag_names=["Finance"])
-    await _ingest_attachment_csv(tmp_path=tmp_path, document_uid="attached", file_name="sales.csv", content="city,amount\nLyon,20\n", uploaded_by="u-1")
-    await _ingest_attachment_csv(tmp_path=tmp_path, document_uid="other-session", file_name="private.csv", content="city,amount\nRome,30\n", uploaded_by="u-1")
-    await _ingest_attachment_csv(tmp_path=tmp_path, document_uid="other-user", file_name="foreign.csv", content="city,amount\nBerlin,40\n", uploaded_by="u-2")
-    service = TabularService()
-    service.rebac = _FakeRebacDisabled() if rebac_disabled else _FakeRebac({"corpus"}, readable_tag_ids={"finance"})
-    scope = dict(attachment_uids=["attached", "attached", "other-user", "missing"], include_session_scope=session, include_corpus_scope=corpus)
-    documents = await service.list_documents(_user(), **scope)
-    expected = ({"attached"} if session else set()) | ({"corpus"} if corpus else set())
-    assert {document.document_uid for document in documents} == expected
-    assert len(documents) == len(expected)
-    for document in documents:
-        assert document.source_kind == ("conversation_attachment" if document.document_uid == "attached" else "corpus")
-    if session:
-        descriptions = await service.describe_documents(_user(), ["attached"], **scope)
-        alias = descriptions[0].tables[0].query_alias
-        result = await service.query_read(_user(), request=TabularQueryRequest(sql=f'SELECT SUM(amount) AS total FROM "{alias}"', dataset_uids=["attached"], **scope))
-        assert result.rows == [{"total": 20}]
-    with pytest.raises((PermissionError, FileNotFoundError)):
-        await service.describe_documents(_user(), ["other-session"], **scope)
-    with pytest.raises((PermissionError, FileNotFoundError)):
-        await service.query_read(_user(), request=TabularQueryRequest(sql="SELECT 1", dataset_uids=["other-session"], **scope))
-    with pytest.raises((PermissionError, FileNotFoundError)):
-        await service.search_values(_user(), request=TabularSearchRequest(keyword="Rome", dataset_uids=["other-session"], **scope))
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("libraries", "documents", "expected"),
-    [
-        (["lib-A"], ["doc-B"], {"doc-A", "doc-B"}),
-        (["lib-A"], ["outside-owner"], {"doc-A"}),
-        ([], ["doc-B"], {"doc-B"}),
-        (["lib-A"], [], {"doc-A"}),
-        (None, ["doc-B"], {"doc-B"}),
-    ],
-)
-async def test_corpus_selection_union_remains_inside_owner_scope(monkeypatch, libraries, documents, expected):
-    from unittest.mock import AsyncMock
-
-    service = object.__new__(TabularService)
-    service.rebac = _FakeRebac({"doc-A", "doc-B", "outside-owner"})
-    rows = [_metadata(document_uid=uid, file_name=uid + ".csv", tag_ids=[tag]) for uid, tag in [("doc-A", "lib-A"), ("doc-B", "lib-B"), ("outside-owner", "lib-foreign")]]
-    service.metadata_store = _rows_store(rows)
-    service._resolve_scope_tag_ids = AsyncMock(return_value={"lib-A", "lib-B"})
-    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: object())
-    datasets = await service._resolve_authorized_datasets(
-        _user(), include_session_scope=False, owner_filter=OwnerFilter.TEAM, team_id="team-1", document_library_tags_ids=libraries, corpus_document_uids=documents
-    )
-    assert {dataset.metadata.document_uid for dataset in datasets} == expected
-
-
-@pytest.mark.asyncio
-async def test_scoped_inventory_excludes_unready_legacy_and_removed_attachments(monkeypatch):
-    from unittest.mock import AsyncMock
-
-    service = object.__new__(TabularService)
-    rows = [_attachment_metadata(document_uid=uid, file_name=uid + ".csv", uploaded_by=owner) for uid, owner in [("ready", "u-1"), ("unready", "u-1"), ("legacy", "u-1"), ("foreign", "u-2")]]
-    rows[0].mark_stage_done(ProcessingStage.SQL_INDEXED)
-    rows[3].mark_stage_done(ProcessingStage.SQL_INDEXED)
-    service.metadata_store = SimpleNamespace(get_metadata_by_uids=AsyncMock(return_value=rows))
-    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: None if metadata.document_uid == "legacy" else object())
-    requested = [row.document_uid for row in rows]
-    datasets = await service._resolve_authorized_datasets(_user(), include_corpus_scope=False, attachment_uids=requested)
-    assert [dataset.metadata.document_uid for dataset in datasets] == ["ready"]
-    assert service.metadata_store.get_metadata_by_uids.await_count == 1
-    service.metadata_store.get_metadata_by_uids.return_value = []
-    assert await service._resolve_authorized_datasets(_user(), include_corpus_scope=False, attachment_uids=requested) == []
-
-
-@pytest.mark.asyncio
-async def test_corpus_grant_does_not_replace_attachment_ownership(monkeypatch):
-    from unittest.mock import AsyncMock
-
-    service = object.__new__(TabularService)
-    service.rebac = _FakeRebac({"foreign"})
-    foreign = _attachment_metadata(document_uid="foreign", file_name="private.csv", uploaded_by="u-2")
-    service.metadata_store = _rows_store([foreign])
-    service._resolve_scope_tag_ids = AsyncMock(return_value=None)
-    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: object())
-    assert await service._resolve_authorized_datasets(_user(), attachment_uids=["foreign"]) == []
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("readable_documents", [1500, 3000])
-async def test_workbook_past_the_first_thousand_readable_documents_stays_usable(tmp_path, metadata_store, readable_documents):
-    """OpenFGA's plain document inventory stops at 1,000 objects; the target sorts
-    after them and must stay listable, describable, queryable and searchable."""
-    ApplicationContext.get_instance().get_content_store().clear()
-    for index in range(readable_documents - 1):
-        await metadata_store.save_metadata(_metadata(document_uid=f"doc-{index:05}", file_name=f"note-{index}.txt", tag_ids=["team-lib"]))
-    await _ingest_csv(tmp_path=tmp_path, metadata_store=metadata_store, document_uid="zz-target", file_name="sales.csv", content="city,amount\nParis,10\n", tag_ids=["team-lib"])
-
-    service = TabularService()
-    service.rebac = _FakeRebac({"zz-target"}, readable_tag_ids={"team-lib"})
-    service.tag_service = _FakeTagService(readable_tag_ids={"team-lib"}, team_scopes={"team-a": {"team-lib"}})
-
-    for scope in ({"owner_filter": OwnerFilter.TEAM, "team_id": "team-a"}, {}):
-        assert [document.document_uid for document in await service.list_documents(_user(), **scope)] == ["zz-target"]
-        [description] = await service.describe_documents(_user(), ["zz-target"], **scope)
-        alias = description.tables[0].query_alias
-        result = await service.query_read(_user(), request=TabularQueryRequest(sql=f'SELECT SUM(amount) AS total FROM "{alias}"', dataset_uids=["zz-target"], **scope))
-        assert result.rows == [{"total": 10}]
-        search = await service.search_values(_user(), request=TabularSearchRequest(keyword="Paris", **scope))
-        assert [match.document_uid for match in search.matches] == ["zz-target"]
-    assert service.rebac.checked_document_uids == ["zz-target"] * 8
-
-
-_CANDIDATE_SCOPES = [
-    pytest.param({}, id="unscoped"),
-    pytest.param({"owner_filter": OwnerFilter.TEAM, "team_id": "team-a"}, id="team"),
-    pytest.param({"owner_filter": OwnerFilter.PERSONAL}, id="personal"),
-    pytest.param({"document_library_tags_ids": ["shared-library"]}, id="library"),
-    pytest.param({"corpus_document_uids": ["denied"]}, id="selected-document"),
-    pytest.param({"corpus_document_uids": [], "document_library_tags_ids": ["shared-library"]}, id="selected-library-union"),
-]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("scope", _CANDIDATE_SCOPES)
-async def test_tabular_stored_membership_does_not_override_document_denial(tmp_path, metadata_store, scope):
-    """A failed parent write can leave readable-folder membership in SQL only."""
-    ApplicationContext.get_instance().get_content_store().clear()
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="denied",
-        file_name="confidential.csv",
-        content="secret,amount\nPRIVATE,10\n",
-        tag_ids=["shared-library"],
-    )
-    service = TabularService()
-    service.rebac = _FakeRebac(set(), readable_tag_ids={"shared-library"})
-    service.tag_service = _FakeTagService(readable_tag_ids={"shared-library"}, team_scopes={"team-a": {"shared-library"}}, personal_scope={"shared-library"})
-
-    assert await service.list_documents(_user(), **scope) == []
-    with pytest.raises(PermissionError, match="denied"):
-        await service.describe_documents(_user(), ["denied"], **scope)
-    with pytest.raises(PermissionError, match="denied"):
-        await service.query_read(_user(), request=TabularQueryRequest(sql="SELECT * FROM confidential", dataset_uids=["denied"], **scope))
-    with pytest.raises(PermissionError, match="denied"):
-        await service.search_values(_user(), request=TabularSearchRequest(keyword="PRIVATE", dataset_uids=["denied"], **scope))
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("scope", _CANDIDATE_SCOPES)
-async def test_tabular_candidate_authorization_failure_propagates(monkeypatch, scope):
-    from unittest.mock import AsyncMock
-
-    service = object.__new__(TabularService)
-    service.metadata_store = _rows_store([_metadata(document_uid="denied", file_name="confidential.csv", tag_ids=["shared-library"])])
-    service.rebac = _FakeRebac(set(), readable_tag_ids={"shared-library"})
-    service.rebac.has_user_permission = AsyncMock(side_effect=RuntimeError("authorization unavailable"))
-    service.tag_service = _FakeTagService(readable_tag_ids={"shared-library"}, team_scopes={"team-a": {"shared-library"}}, personal_scope={"shared-library"})
-    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: object())
-
-    with pytest.raises(RuntimeError, match="authorization unavailable"):
-        await service._resolve_authorized_datasets(_user(), include_session_scope=False, **scope)
-
-
-@pytest.mark.asyncio
-async def test_tabular_checks_each_workbook_once_with_bounded_concurrency(monkeypatch):
-    rows = [_metadata(document_uid=f"workbook-{index}", file_name=f"workbook-{index}.xlsx", tag_ids=["shared-library"]) for index in range(23)]
-    non_tabular = _metadata(document_uid="plain-document", file_name="note.txt", tag_ids=["shared-library"])
-    service = object.__new__(TabularService)
-    service.metadata_store = _rows_store([*rows, non_tabular])
-    rebac = _FakeRebac({row.document_uid for row in rows}, readable_tag_ids={"shared-library"})
-    service.rebac = rebac
-    active = peak = 0
-    check = rebac.has_user_permission
-
-    async def slow_check(user, permission, resource_id):
-        nonlocal active, peak
-        active += 1
-        peak = max(peak, active)
-        try:
-            await asyncio.sleep(0)
-            return await check(user, permission, resource_id)
-        finally:
-            active -= 1
-
-    rebac.has_user_permission = slow_check
-    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: None)
-    monkeypatch.setattr(
-        "knowledge_flow_backend.features.tabular.service.read_tabular_multi_artifact",
-        lambda metadata: None if metadata.document_uid == "plain-document" else SimpleNamespace(tables=[SimpleNamespace(query_alias=f"{metadata.document_uid}_{index}") for index in range(2)]),
-    )
-
-    datasets = await service._resolve_authorized_datasets(_user(), include_session_scope=False)
-
-    assert len(datasets) == 46
-    assert sorted(rebac.checked_document_uids) == sorted(row.document_uid for row in rows)
-    assert 1 < peak <= 10

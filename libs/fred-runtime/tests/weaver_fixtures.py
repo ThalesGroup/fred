@@ -75,6 +75,7 @@ def resolved_binding(
                 runtime_id="pod",
                 template_id="00000000-0000-0000-0000-000000000004",
                 template_key="template",
+                configuration_revision=1,
                 configuration_updated_at="2026-10-26T00:00:00Z",
                 configuration={"role": "Assistant", "description": "Example"},
             ),

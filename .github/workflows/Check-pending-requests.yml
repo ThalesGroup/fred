@@ -115,6 +115,7 @@ jobs:
               - 'apps/frontend/src/rework/components/shared/molecules/Dialog/DialogPrimitive.tsx'
               - 'apps/frontend/src/rework/components/shared/molecules/Dialog/Dialog.module.css'
               - 'apps/frontend/src/rework/components/shared/utils/Portal.tsx'
+              - 'apps/frontend/src/rework/components/shared/utils/useFocusHandoff.ts'
               - 'apps/frontend/src/rework/components/shared/utils/viewport.ts'
               - 'apps/frontend/src/index.scss'
               - 'apps/frontend/src/styles/index.css'
@@ -490,6 +491,7 @@ jobs:
           - check: type-check
           - check: format-check
           - check: lint
+          - check: test
           # - check: knip
           #   continue-on-error: true
     name: Code Quality - frontend - ${{ matrix.check }}

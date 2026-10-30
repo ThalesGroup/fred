@@ -1618,6 +1618,10 @@ export type Directory = {
   };
   processing_enabled: boolean;
   total: number;
+  /** Display names of the listed documents' `created_by`; unknown users are absent. */
+  uploaders: {
+    [key: string]: string;
+  };
 };
 export type EntryOrder = "name_asc" | "name_desc" | "created_asc" | "created_desc" | "size_asc" | "size_desc";
 export type ModelOptions = {
@@ -1785,8 +1789,8 @@ export type PreparationModels = {
   requires_reselection: boolean;
 };
 export type ExecutionPreparation = {
+  agent_configuration_revision: number;
   agent_instance_id: string;
-  /** Only controls supported by the current model facts are advertised. */
   chat_controls: ChatControlDescriptor[];
   execute_stream_url: string;
   execute_url: string;
@@ -1808,6 +1812,7 @@ export type RuntimeAgent = {
   /** Saved tuning, excluding the legacy profile reference exposed in models for diagnostics.
     No refresh from the catalog; fields, values and capability envelopes are preserved. */
   configuration: any;
+  configuration_revision: number;
   configuration_updated_at: string;
   instance_id: string;
   runtime_id: string;
@@ -1893,6 +1898,8 @@ export type AgentTemplateSummary = {
   template_id: string;
 };
 export type SessionDetails = {
+  agent_configuration_changed: boolean;
+  agent_configuration_revision: number;
   agent_deleted: boolean;
   agent_disabled: boolean;
   /** Current name, or the registration snapshot after instance removal. */
@@ -1910,6 +1917,7 @@ export type SessionDetails = {
   updated_at: string;
 };
 export type CreateSessionRequest = {
+  agent_configuration_revision: number;
   agent_instance_id: string;
   /** Frontend-generated identifier, retained verbatim. */
   session_id: string;

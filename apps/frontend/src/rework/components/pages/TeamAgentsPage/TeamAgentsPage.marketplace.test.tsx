@@ -18,6 +18,17 @@ vi.mock("../../../../hooks/useFrontendProperties", () => ({
     agentIconName: "smart_toy",
   }),
 }));
+const formScopes = vi.hoisted(() => [] as (string | undefined)[]);
+vi.mock("./AgentFormModal/AgentFormModal", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./AgentFormModal/AgentFormModal")>();
+  return {
+    ...actual,
+    default: (props: Parameters<typeof actual.default>[0]) => {
+      formScopes.push(props.teamId);
+      return <actual.default {...props} />;
+    },
+  };
+});
 const notices = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), confirm: vi.fn() }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }) }));
 vi.mock("../../../../security/KeycloakService", () => ({
@@ -83,6 +94,7 @@ const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
 
 beforeEach(() => {
+  formScopes.length = 0;
   rows = [structuredClone(INSTANCE)];
   writable = true;
   catalogEmpty = false;
@@ -305,6 +317,17 @@ describe("Weaver agent management and unavailable adjacent actions", () => {
     expect(rows[0].selected_capability_ids).toBeNull();
     expect(rows[0].capability_config).toEqual(INSTANCE.capability_config);
   });
+  it("passes the canonical space to the picker on create and edit", async () => {
+    await mount();
+    await click("rework.teams.agents.create");
+    expect(formScopes[formScopes.length - 1]).toBe(SPACE_A);
+  });
+  it("passes the canonical space when reopening an agent", async () => {
+    await mount();
+    await menu("rework.agentCard.edit");
+    expect(formScopes[formScopes.length - 1]).toBe(SPACE_A);
+  });
+
   it("edits metadata even with no catalog", async () => {
     catalogEmpty = true;
     await mount();

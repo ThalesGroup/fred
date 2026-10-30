@@ -36,7 +36,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from fred_sdk.support.builtins.catalog import TOOL_REF_KNOWLEDGE_SEARCH
-from weaver_fixtures import active_turn
+from weaver_fixtures import INSTANCE_ID, SPACE_ID, active_turn
 
 
 class _FakeSettings:
@@ -70,7 +70,13 @@ class _FakeSearchClientWithNoise:
 
 def _binding() -> BoundRuntimeContext:
     return BoundRuntimeContext(
-        runtime_context=RuntimeContext(session_id="s-1", team_id="team-1"),
+        runtime_context=RuntimeContext(
+            user_id="alice",
+            session_id="s-1",
+            team_id="team-1",
+            space_id=SPACE_ID,
+            agent_instance_id=INSTANCE_ID,
+        ),
         portable_context=PortableContext(
             request_id="request-1",
             correlation_id="correlation-1",
@@ -93,7 +99,7 @@ async def test_low_relevance_hit_excluded_from_knowledge_search_sources(
         binding=binding, settings=_FakeSettings()
     )
 
-    with active_turn("agent-1"):
+    with active_turn("agent-1", session="s-1"):
         result = await invoker.invoke(
             ToolInvocationRequest(
                 tool_ref=TOOL_REF_KNOWLEDGE_SEARCH,

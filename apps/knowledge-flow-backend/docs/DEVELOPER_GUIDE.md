@@ -6,77 +6,140 @@ This guide explains how to understand, extend, and contribute to the Knowledge F
 
 ## API Structure: REST and MCP
 
-The `knowledge_flow_app` exposes two API namespaces for different purposes:
+Weaver's `main.py` mounts the capability backend under the configurable
+`app.base_url`, defaulting to `/knowledge-flow/v2`. This is the Knowledge Flow
+API contract version, independent of Fred 5.x, SDK package versions and the MCP
+protocol version. Agent pods configure the matching `ai.knowledge_flow_url`.
 
----
+The mounted operations are:
 
-### 1. REST API
+| Method | Path relative to the configured prefix | operationId |
+| --- | --- | --- |
+| POST | `/documents/search` | `search_documents` |
+| GET | `/documents/{document_uid}/chunks` | `get_document_chunks` |
+| GET | `/documents/{document_uid}/markdown` | `get_document_markdown` |
+| POST | `/documents/{document_uid}/summarize` | `summarize_document` |
+| POST | `/documents/{document_uid}/extract` | `extract_document` |
+| GET | `/tabular/documents` | `list_tabular_documents` |
+| GET | `/tabular/documents/schemas` | `describe_tabular_documents` |
+| POST | `/tabular/query` | `query_tabular_documents` |
+| POST | `/tabular/search` | `search_tabular_values` |
 
-- **Base URL**: `/knowledge-flow/v1`
-- **Used by**: React frontend, CLI tools, admin scripts
-- **Includes**:
-  - Ingestion endpoints
-  - Metadata management
-  - Vector search
-  - Tabular schema/query
-  - Raw content access
+`document_uid` is a path parameter for document reads. Swagger UI and OpenAPI
+are available at `<app.base_url>/docs` and `<app.base_url>/openapi.json` when enabled.
+All nine operations require the document context described below.
 
-You can access the Swagger UI at:
+The generated [API reference](API_REFERENCE.md) covers their schemas, defaults,
+limits and error responses. [SDK-free integration examples](INTEGRATION.md)
+show the REST wire contract. Both are code-derived technical documentation,
+not evidence of functional validation. Regenerate with
+`make -C docs/architecture knowledge-flow-reference` from the repository root.
 
-```
-http://localhost:8111/knowledge-flow/v1/docs
-```
+`mount_fastapi_tools` in `mcp_mount.py` uses FastMCP to project the four REST
+operations tagged `Tabular` at `<app.base_url>/mcp/tabular`. Their explicit
+operationIds are the MCP tool names. No separate tabular business service is
+introduced by this projection. The catalog keeps capability ID
+`mcp-knowledge-flow-mcp-tabular` and resolves its relative `mcp/tabular` path
+against the configured Knowledge Flow URL.
 
----
+These declarations describe the mounted code contract, not end-to-end Weaver
+validation. The document drive and ingestion admission belong to Control Plane.
 
-### 2. MCP API
+## Document context contract
 
-- **Base URL**: mounted under `/knowledge-flow/v1` as one MCP server per capability
-- **Used by**: Agents that follow the MCP runtime exposed by Fred
-- **Examples**:
-  - `/knowledge-flow/v1/mcp-text`
-  - `/knowledge-flow/v1/mcp-tabular`
-- **Tabular MCP tools** expose the dataset-centric operations tagged `Tabular`, notably:
-  - `list_tabular_datasets`
-  - `get_tabular_dataset_schema`
-  - `read_query`
+After the existing delegated authentication, all nine operations receive exactly
+one `DocumentAccessContext` in `x-fred-document-context`. Its value is a JSON
+object, serialized once directly into the HTTP header, without URL encoding or
+base64. OpenAPI declares the header as required, with `content: application/json`
+and a reference to `#/components/schemas/DocumentAccessContext`; its nested
+`DocumentScope` and `DocumentSelection` schemas are included.
 
-Mounted via `FastApiMCP` in `main.py`:
-
-```python
-mcp = FastApiMCP(
-    app,
-    name="Knowledge Flow MCP",
-    description="MCP server for Knowledge Flow",
-    include_tags=["Vector Search", "Tabular"],
-    describe_all_responses=True,
-    describe_full_response_schema=True,
-)
-mcp.mount()  # Mounts the /mcp namespace
-```
-
-### Design Rationale
-
-We deliberately **separate REST and MCP namespaces**:
-
-- ✅ Easier to distinguish agent-facing endpoints
-- ✅ Enables differential access control, observability, or documentation
-- ✅ Keeps the REST API clean and focused on user/UI/system integrations
-
-As a result, REST controllers keep their normal `/knowledge-flow/v1/...` routes, while MCP mounts expose the selected
-operations through dedicated MCP servers. For the recommended tabular runtime, the REST surface is dataset-centric:
-
-```txt
-GET  /knowledge-flow/v1/tabular/datasets
-GET  /knowledge-flow/v1/tabular/datasets/{document_uid}/schema
-POST /knowledge-flow/v1/tabular/query
+```json
+{"space_id":"00000000-0000-0000-0000-000000000001","document_scope":{"selections":[{"folder_ids":["00000000-0000-0000-0000-000000000002"],"document_ids":[]}]}}
 ```
 
-Agents do not see presigned object-store URLs directly. They receive only authorized dataset metadata plus SQL aliases,
-while Knowledge Flow resolves Parquet locations and mounts them in DuckDB internally. For MinIO/S3-compatible
-deployments, these DuckDB reads use backend-internal presigned URLs rather than browser-facing links.
+The runtime takes the space from the admitted turn, intersects the configured
+agent scope with the turn selection, and constructs the header outside model
+arguments. Document identifiers supplied to a tool and `dataset_uids` only narrow
+that context. KF still checks the represented person's space permission and the
+placement, publication and lifecycle of the requested documents. No per-tool
+Control Plane authority resolution is introduced.
 
-This approach is consistent and scalable across all agent-facing interfaces.
+```mermaid
+flowchart TD
+    A[fred-agents: admitted turn and agent configuration] --> B[Runtime intersects document selections]
+    B --> C[Document capabilities and REST clients]
+    B --> D[Tabular capability and MCPHTTPAuth]
+    C -->|Bearer, delegation query, JSON context header| F[KF REST: five document operations]
+    D -->|Bearer, delegation query, JSON context header| E[KF MCP /mcp/tabular]
+    E -->|Verified outer identity and context header| G[KF REST: four tabular operations]
+    F --> H[Delegated authentication then common context validation]
+    G --> H
+    H --> I[Space permission, document scope, published and live data]
+```
+
+MCP hides the header from tool schemas, removes any inner supplied value, and
+forwards only the outer request's value after the existing delegation check.
+Only the four tabular operations are projected into MCP. REST callers need no
+Fred Python dependency; an already authorized delegated caller can use:
+
+```sh
+curl --get "$KF_BASE_URL/documents/$DOCUMENT_UID/markdown" \
+  --data-urlencode "person=$PERSON_ID" \
+  --data-urlencode "run=$RUN_ID" \
+  --data-urlencode "agent=$AGENT_ID" \
+  --header "Authorization: Bearer $WORKLOAD_ACCESS_TOKEN" \
+  --header 'x-fred-document-context: {"space_id":"00000000-0000-0000-0000-000000000001","document_scope":{"selections":[]}}'
+```
+
+`KF_BASE_URL` includes the configured prefix, normally `/knowledge-flow/v2`.
+The workload token must satisfy existing delegation policy; this example grants
+no new identity or authorization exception. REST clients send `person`, `run`
+and `agent` in the existing query envelope for GET and POST, leaving business
+JSON bodies strict. Neither the body nor query supplies document context.
+
+### Missing, invalid and explicitly empty values
+
+These context errors apply after delegated authentication:
+
+| Input | Result |
+| --- | --- |
+| No `x-fred-document-context`, even with old context fields in query/body | 403, `document_context_required` |
+| Empty header, malformed JSON, `null`, invalid UUID, missing required field or extra context field | 400, `invalid_document_context` |
+| Valid context and `space_id` or `document_scope` in a business POST body | 422, forbidden extra field |
+| Explicit `document_scope: {}` or `{"selections":[]}` | No additional selection filter; space, publication and lifecycle checks still apply |
+| Explicit `document_scope: {"selections":[{}]}` | No documents selected; never falls back to the corpus |
+| Requested `dataset_uids` outside the authorized selection | Existing tabular 403; no partial authorization of the requested list |
+
+An empty scope (zero selection clauses) and an empty selection (one clause with
+no folder or document) have different meanings. A missing context is neither.
+Searching all authorized documents, even in a million-document corpus, transmits
+the space UUID and an explicit unfiltered scope; it does not enumerate the corpus.
+A folder selection carries folder UUIDs, not every contained document UUID.
+
+### Request isolation and transport size
+
+The shared REST connection pool carries no mutable document context. Each call
+creates its own header dictionary; KF parses a fresh frozen context, containing
+frozen scopes and tuple selections. Document controllers pass it as a local
+argument; the tabular dependency builds a service for that request. Runtime
+services are built per pod request, and admitted turns and verified MCP grants
+use task-local `ContextVar` storage. MCP forwarding edits the individual outgoing
+request, never shared client headers. Credential retries retain that request's
+context. This describes code inspection, not an executed concurrency validation.
+
+There is no Fred-specific header length cap or truncation. Header size grows
+with explicit selection clauses and identifiers, not corpus size. A compact
+context with one selection of 1,000 document UUIDs and no folder UUIDs occupies
+39,120 ASCII bytes. The installed h11 implementation defaults to a 16 KiB bound
+on incomplete request-line/header events: fragmented headers of that size can
+be rejected before KF's context validation. Uvicorn's automatic protocol uses
+httptools when installed (as in the current environment and the standard runtime
+dependencies), otherwise h11. No deployment-independent limit is established
+here for httptools or intervening proxies, and no live transport-size test was
+run. Large explicit selections therefore need verification against the actual
+HTTP server and proxy configuration; this lot adds no cap, compression, context
+storage or reference mechanism.
 
 ## Processor Architecture
 
@@ -343,7 +406,7 @@ pytest tests/test_vector_search_service.py
 
 ## 📚 Docs and Swagger
 
-Docs available at: [http://localhost:8111/knowledge-flow/v1/docs](http://localhost:8111/knowledge-flow/v1/docs)
+Docs available at: [http://localhost:8111/knowledge-flow/v2/docs](http://localhost:8111/knowledge-flow/v2/docs)
 
 ---
 

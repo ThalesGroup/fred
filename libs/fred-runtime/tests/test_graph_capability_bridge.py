@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Sequence
 
 import pytest
 from fred_core.store.vector_search import VectorSearchHit
@@ -26,6 +27,7 @@ from fred_runtime.capabilities import (
     build_capability_context,
 )
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
+from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.graph.graph_runtime import (
     _capability_tools,
 )
@@ -40,6 +42,7 @@ from fred_sdk.contracts.context import (
     ToolContentKind,
     ToolInvocationResult,
 )
+from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from fred_sdk.contracts.runtime import (
     RuntimeEvent,
     RuntimeServices,
@@ -141,6 +144,43 @@ def test_capability_tool_sources_survive_invoke_runtime_tool() -> None:
     assert isinstance(result, dict)
     assert result["sources"][0]["uid"] == "d1"
     assert result["is_error"] is False
+
+
+@pytest.mark.asyncio
+async def test_mcp_structured_content_survives_graph_runtime_and_events() -> None:
+    payload = {"result": [{"document_uid": "cars"}]}
+
+    class Settings:
+        id: str = "agent-1"
+        team_id: str | None = None
+        tuning: AgentTuning | None = None
+        active_mcp_servers: Sequence[MCPServerRef] = ()
+
+    @lc_tool("list_tabular_documents", response_format="content_and_artifact")
+    async def provider() -> tuple[str, dict[str, object]]:
+        """Return an MCP structured result without a duplicate text block."""
+        return "", {"structured_content": payload}
+
+    wrapper = ContextAwareTool(
+        base_tool=provider,
+        context_provider=lambda: None,
+        agent_settings_provider=Settings,
+    )
+    events: list[RuntimeEvent] = []
+    result = await _node_context(
+        {wrapper.name: wrapper}, events=events
+    ).invoke_runtime_tool(wrapper.name, {})
+
+    assert isinstance(result, dict)
+    assert result["blocks"][0]["data"] == payload
+    assert result["is_error"] is False
+    tool_result = next(
+        event for event in events if isinstance(event, ToolResultRuntimeEvent)
+    )
+    assert json.loads(tool_result.content) == result
+    assert tool_result.is_error is False
+    assert tool_result.sources == ()
+    assert tool_result.ui_parts == ()
 
 
 def test_capability_tool_answer_survives_invoke_runtime_tool() -> None:

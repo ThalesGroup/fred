@@ -121,7 +121,7 @@ def test_tool_prompt_suffix_keeps_only_the_opening_paragraph() -> None:
 
 def test_tool_prompt_suffix_keeps_a_hand_wrapped_opening_sentence_whole() -> None:
     # A summary sentence wrapped across two source lines (this repo's normal
-    # docstring style, e.g. `search_documents_using_vectorization`) must not
+    # docstring style, e.g. `search_documents`) must not
     # be cut mid-sentence by the paragraph boundary — only a blank line ends
     # the summary, and internal newlines/indentation collapse to one space so
     # the rendered bullet stays on a single line.
@@ -134,18 +134,18 @@ def test_tool_prompt_suffix_keeps_a_hand_wrapped_opening_sentence_whole() -> Non
     suffix = build_runtime_tool_prompt_suffix(
         [
             BoundTool(
-                runtime_name="search_documents_using_vectorization",
+                runtime_name="search_documents",
                 description=wrapped_description,
                 tool=cast(
                     BaseTool,
-                    SimpleNamespace(name="search_documents_using_vectorization"),
+                    SimpleNamespace(name="search_documents"),
                 ),
             )
         ]
     )
 
     assert (
-        "- search_documents_using_vectorization: Search the selected document "
+        "- search_documents: Search the selected document "
         "libraries using semantic similarity (RAG) — call this BEFORE "
         "answering any factual question."
     ) in suffix
@@ -188,7 +188,7 @@ def test_tool_prompt_suffix_groups_tools_by_mcp_server_with_a_title_header() -> 
     # list.
     suffix = build_runtime_tool_prompt_suffix(
         [
-            _grouped_tool("read_query", "mcp-tabular"),
+            _grouped_tool("query_tabular_documents", "mcp-tabular"),
             _grouped_tool("search_documents", "mcp-text"),
         ],
         mcp_prompt_groups=[
@@ -203,7 +203,7 @@ def test_tool_prompt_suffix_groups_tools_by_mcp_server_with_a_title_header() -> 
 
     tabular_header = suffix.index("Tools for tabular action:")
     text_header = suffix.index("Tools for document search:")
-    assert "- read_query:" in suffix[tabular_header:text_header]
+    assert "- query_tabular_documents:" in suffix[tabular_header:text_header]
     assert "- search_documents:" not in suffix[tabular_header:text_header]
     assert "- search_documents:" in suffix[text_header:]
 
@@ -213,7 +213,7 @@ def test_tool_prompt_suffix_inlines_agent_instructions_immediately_after_its_gro
 ):
     suffix = build_runtime_tool_prompt_suffix(
         [
-            _grouped_tool("read_query", "mcp-tabular"),
+            _grouped_tool("query_tabular_documents", "mcp-tabular"),
             _grouped_tool("search_documents", "mcp-text"),
         ],
         mcp_prompt_groups=[
@@ -236,7 +236,7 @@ def test_tool_prompt_suffix_inlines_agent_instructions_immediately_after_its_gro
 
 def test_tool_prompt_suffix_skips_agent_instructions_block_when_none_declared() -> None:
     suffix = build_runtime_tool_prompt_suffix(
-        [_grouped_tool("read_query", "mcp-tabular")],
+        [_grouped_tool("query_tabular_documents", "mcp-tabular")],
         mcp_prompt_groups=[
             McpPromptGroup(
                 server_id="mcp-tabular", title="tabular action", agent_instructions=None
@@ -244,7 +244,9 @@ def test_tool_prompt_suffix_skips_agent_instructions_block_when_none_declared() 
         ],
     )
 
-    assert suffix.rstrip().endswith("- read_query: Do read_query things.")
+    assert suffix.rstrip().endswith(
+        "- query_tabular_documents: Do query_tabular_documents things."
+    )
 
 
 def test_tool_prompt_suffix_places_ungrouped_tools_under_other_tools_when_a_group_is_present() -> (
@@ -257,7 +259,7 @@ def test_tool_prompt_suffix_places_ungrouped_tools_under_other_tools_when_a_grou
                 description="A native, non-MCP tool.",
                 tool=cast(BaseTool, SimpleNamespace(name="local_tool")),
             ),
-            _grouped_tool("read_query", "mcp-tabular"),
+            _grouped_tool("query_tabular_documents", "mcp-tabular"),
         ],
         mcp_prompt_groups=[
             McpPromptGroup(
@@ -279,19 +281,19 @@ def test_tool_prompt_suffix_keeps_flat_list_with_no_header_when_mcp_prompt_group
     # tool must still render as a plain flat bullet, no "Other tools:" noise,
     # byte-identical to a caller with no grouping concept at all.
     suffix = build_runtime_tool_prompt_suffix(
-        [_grouped_tool("read_query", "mcp-tabular")]
+        [_grouped_tool("query_tabular_documents", "mcp-tabular")]
     )
 
     assert "Other tools:" not in suffix
     assert "Tools for" not in suffix
-    assert "- read_query: Do read_query things." in suffix
+    assert "- query_tabular_documents: Do query_tabular_documents things." in suffix
 
 
 def test_tool_prompt_suffix_skips_a_group_with_no_currently_bound_tools() -> None:
     # An active capability whose tools didn't resolve this turn shouldn't
     # leave an empty header for the model to puzzle over.
     suffix = build_runtime_tool_prompt_suffix(
-        [_grouped_tool("read_query", "mcp-tabular")],
+        [_grouped_tool("query_tabular_documents", "mcp-tabular")],
         mcp_prompt_groups=[
             McpPromptGroup(
                 server_id="mcp-tabular", title="tabular action", agent_instructions=None
@@ -313,7 +315,7 @@ def test_tool_prompt_suffix_orders_groups_by_the_given_mcp_prompt_groups_sequenc
     suffix = build_runtime_tool_prompt_suffix(
         [
             _grouped_tool("search_documents", "mcp-text"),
-            _grouped_tool("read_query", "mcp-tabular"),
+            _grouped_tool("query_tabular_documents", "mcp-tabular"),
         ],
         mcp_prompt_groups=[
             McpPromptGroup(
@@ -341,7 +343,7 @@ def test_tool_prompt_suffix_includes_capability_tools_under_other_tools() -> Non
     # `bound_tools` — without `capability_tools` they were invisible in this
     # directory even though the model could call them.
     suffix = build_runtime_tool_prompt_suffix(
-        [_grouped_tool("read_query", "mcp-tabular")],
+        [_grouped_tool("query_tabular_documents", "mcp-tabular")],
         mcp_prompt_groups=[
             McpPromptGroup(
                 server_id="mcp-tabular", title="tabular action", agent_instructions=None
@@ -413,7 +415,7 @@ def test_block_tags_are_the_reserved_tags_in_prompt_order() -> None:
 
 def test_tabular_tools_bound_is_true_when_the_tabular_mcp_server_is_bound() -> None:
     assert tabular_tools_bound(
-        [_grouped_tool("read_query", MCP_SERVER_KNOWLEDGE_FLOW_TABULAR)]
+        [_grouped_tool("query_tabular_documents", MCP_SERVER_KNOWLEDGE_FLOW_TABULAR)]
     )
 
 

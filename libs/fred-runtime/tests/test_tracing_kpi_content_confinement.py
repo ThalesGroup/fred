@@ -195,7 +195,7 @@ def test_the_captured_prompt_carries_the_tools_the_model_was_given() -> None:
         tools=[
             StructuredTool.from_function(
                 func=lambda **kwargs: None,
-                name="read_query",
+                name="query_tabular_documents",
                 description="Execute one read-only SQL query",
                 args_schema=_Args,
             )
@@ -214,7 +214,7 @@ def test_the_captured_prompt_carries_the_tools_the_model_was_given() -> None:
 
     payload = captured.get("input")
     assert isinstance(payload, dict), "tools present: payload must carry both fields"
-    assert [tool["name"] for tool in payload["tools"]] == ["read_query"]
+    assert [tool["name"] for tool in payload["tools"]] == ["query_tabular_documents"]
     assert "sql" in str(payload["tools"][0]["parameters"])
 
     # Character sizes ride as attributes, never as usage details: Langfuse

@@ -47,7 +47,7 @@ Example `config/configuration.yaml`:
         - "http://localhost:5173"
 
     ai:
-      knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
+      knowledge_flow_url: "http://localhost:8111/knowledge-flow/v2"
       timeout:
         connect: 5
         read: 30
@@ -188,10 +188,10 @@ class PodAIConfig(BaseModel):
       into the pod config contract
 
     Example:
-    - `PodAIConfig(knowledge_flow_url="http://localhost:8111/knowledge-flow/v1", timeout=RuntimeTimeouts(connect=20, read=60))`
+    - `PodAIConfig(knowledge_flow_url="http://localhost:8111/knowledge-flow/v2", timeout=RuntimeTimeouts(connect=20, read=60))`
     """
 
-    knowledge_flow_url: str = "http://localhost:8111/knowledge-flow/v1"
+    knowledge_flow_url: str = "http://localhost:8111/knowledge-flow/v2"
     timeout: RuntimeTimeouts = Field(
         default_factory=RuntimeTimeouts,
         description=(

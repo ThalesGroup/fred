@@ -30,6 +30,7 @@ const probe = vi.hoisted(() => ({
   queryOptions: {} as Record<string, unknown>,
   processingEnabled: false,
   processing: {} as Record<string, import("../../../../../slices/controlPlane/controlPlaneOpenApi").Summary>,
+  uploaders: {} as Record<string, string>,
   inclusion: vi.fn().mockResolvedValue({}),
   starts: vi.fn().mockResolvedValue({}),
   documents: [] as import("../../../../../slices/controlPlane/controlPlaneOpenApi").Document[],
@@ -88,6 +89,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
         can_write: probe.canWrite,
         processing_enabled: probe.processingEnabled,
         processing: probe.processing,
+        uploaders: probe.uploaders,
       },
       isSuccess: !probe.error,
       isError: probe.error,
@@ -248,6 +250,7 @@ beforeEach(async () => {
   probe.createConflict = false;
   probe.processingEnabled = false;
   probe.processing = {};
+  probe.uploaders = {};
   probe.starts.mockClear();
   probe.folders = [
     {
@@ -447,6 +450,31 @@ it("keeps a root-row file drop targeted at that folder in the original upload pa
   expect(drawer.destinationPath).toBe("Library");
   expect(drawer.managerDestination).toEqual({ spaceId: "space-1", folderId: "root-id", processingEnabled: false });
   expect(drawer.unavailableReason).toBeUndefined();
+  expect(probe.legacyRequests).toEqual([]);
+});
+
+it("shows the uploader name the manager listing resolved, and the subject otherwise", async () => {
+  probe.folders = probe.folders.filter((f) => !f.parent_id);
+  const document = (id: string, created_by: string) => ({
+    id,
+    retrievable: true,
+    retrievable_pending: false,
+    space_id: "space-1",
+    folder_id: "root-id",
+    name: `${id}.txt`,
+    mime: "text/plain",
+    size: 5,
+    sha256: "a".repeat(64),
+    created_by,
+    created_at: "2026-10-19T08:00:00Z",
+  });
+  probe.documents = [document("named", "writer"), document("unknown", "ghost")];
+  probe.uploaders = { writer: "Priya Nair" };
+  await render();
+  await click(namedButton("Library"));
+  expect(container.textContent).toContain("Priya Nair");
+  expect(container.textContent).not.toContain("writer");
+  expect(container.textContent).toContain("ghost");
   expect(probe.legacyRequests).toEqual([]);
 });
 

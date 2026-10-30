@@ -32,6 +32,7 @@ pub struct CreateSessionRequest {
     /// Frontend-generated identifier, retained verbatim.
     pub session_id: Uuid,
     pub agent_instance_id: Uuid,
+    pub agent_configuration_revision: i64,
     #[schema(max_length = 500)]
     pub title: Option<String>,
 }
@@ -51,6 +52,8 @@ pub(crate) struct SessionRecord {
     session_id: Uuid,
     space_id: Uuid,
     agent_instance_id: Uuid,
+    agent_configuration_revision: i64,
+    current_agent_configuration_revision: Option<i64>,
     template_id: Uuid,
     runtime_id: String,
     agent_display_name: String,
@@ -66,6 +69,7 @@ pub struct SessionDetails {
     pub session_id: Uuid,
     pub space_id: Uuid,
     pub agent_instance_id: Uuid,
+    pub agent_configuration_revision: i64,
     pub template_id: Uuid,
     pub runtime_id: String,
     /// Current name, or the registration snapshot after instance removal.
@@ -76,6 +80,7 @@ pub struct SessionDetails {
     pub updated_at: DateTime<Utc>,
     pub agent_deleted: bool,
     pub agent_disabled: bool,
+    pub agent_configuration_changed: bool,
     /// Public history destination, independent of instance/template execution state.
     /// Null if this runtime has no enabled, platform-approved public route.
     #[schema(required = true)]
@@ -83,6 +88,7 @@ pub struct SessionDetails {
 }
 
 const SELECT: &str = "select s.session_id, s.user_id, s.space_id, s.agent_instance_id,
+    s.agent_configuration_revision, a.configuration_revision as current_agent_configuration_revision,
     s.template_id, s.runtime_id, coalesce(a.display_name, s.agent_display_name) as agent_display_name,
     s.title, s.created_at, s.updated_at, a.agent_instance_id is null as agent_deleted,
     coalesce(not a.enabled, false) as agent_disabled
@@ -133,7 +139,10 @@ pub(crate) async fn require_association<'e>(
     {
         return Err(association_conflict());
     }
-    Ok(())
+    agent_instances::require_revision(
+        record.agent_configuration_revision,
+        instance.configuration_revision,
+    )
 }
 
 fn association_conflict() -> AppError {
@@ -152,6 +161,10 @@ fn details(state: &AppState, record: SessionRecord) -> SessionDetails {
         session_id: record.session_id,
         space_id: record.space_id,
         agent_instance_id: record.agent_instance_id,
+        agent_configuration_revision: record.agent_configuration_revision,
+        agent_configuration_changed: record
+            .current_agent_configuration_revision
+            .is_some_and(|revision| revision != record.agent_configuration_revision),
         template_id: record.template_id,
         runtime_id: record.runtime_id,
         agent_display_name: record.agent_display_name,
@@ -206,14 +219,18 @@ async fn create_session(
         if !s.fga.can_use_agent(instance.template_id, &space).await? {
             return Err(AppError::NotFound);
         }
+        agent_instances::require_revision(
+            body.agent_configuration_revision,
+            instance.configuration_revision,
+        )?;
         agent_instances::require_executable(&s, &space, &instance)?;
         s.fga.fence(&mut guard).await?;
         let inserted = sqlx::query("insert into session_metadata
-            (session_id, user_id, space_id, agent_instance_id, template_id, runtime_id, agent_display_name, title)
-            values ($1,$2,$3,$4,$5,$6,$7,$8) on conflict (session_id) do nothing")
+            (session_id, user_id, space_id, agent_instance_id, template_id, runtime_id, agent_display_name, title, agent_configuration_revision)
+            values ($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict (session_id) do nothing")
             .bind(body.session_id).bind(&user.uid).bind(space_id).bind(instance.agent_instance_id)
             .bind(instance.template_id).bind(&instance.source_runtime_id).bind(&instance.display_name)
-            .bind(&body.title).execute(&mut *tx).await?;
+            .bind(&body.title).bind(instance.configuration_revision).execute(&mut *tx).await?;
         if inserted.rows_affected() == 1 {
             status = StatusCode::CREATED;
         }
@@ -223,6 +240,13 @@ async fn create_session(
     let record = owned(&mut *tx, space_id, &user.uid, body.session_id).await?;
     if record.agent_instance_id != body.agent_instance_id {
         return Err(association_conflict());
+    }
+    agent_instances::require_revision(
+        body.agent_configuration_revision,
+        record.agent_configuration_revision,
+    )?;
+    if let Some(current) = record.current_agent_configuration_revision {
+        agent_instances::require_revision(record.agent_configuration_revision, current)?;
     }
     tx.commit().await?;
     Ok((

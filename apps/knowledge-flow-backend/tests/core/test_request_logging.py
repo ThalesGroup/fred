@@ -92,7 +92,7 @@ def _register_probe(router: APIRouter, *, failure: Literal["uncaught", "caught"]
 def _request() -> bytes:
     claims = base64.urlsafe_b64encode(json.dumps({"sub": _CLAIM_CANARY, "azp": _CLAIM_CANARY}).encode()).decode().rstrip("=")
     person, run, agent = _GRANT_CANARIES
-    target = f"/knowledge-flow/v1/probe/{_PATH_CANARY}?ordinary={_QUERY_CANARY}&person={person}&run={run}&agent={agent}"
+    target = f"/knowledge-flow/v2/probe/{_PATH_CANARY}?ordinary={_QUERY_CANARY}&person={person}&run={run}&agent={agent}"
     lines = [
         f"GET {target} HTTP/1.1",
         "Host: knowledge-flow.invalid",
@@ -191,7 +191,7 @@ async def test_under_delegation_a_request_has_one_safe_completion(app_context: A
     access = [record for record in records if record.name == "http"]
     assert len(access) == 1
     assert access[0].http_status == 200
-    assert access[0].route == "/knowledge-flow/v1/probe/{name}"
+    assert access[0].route == "/knowledge-flow/v2/probe/{name}"
     for record in records:
         leaked = [canary for canary in _CANARIES if canary in repr(record.__dict__)]
         assert leaked == [], f"{record.name}: {leaked}"
@@ -205,5 +205,5 @@ async def test_without_delegation_the_request_logger_writes_its_response_line(ap
     completion = [record for record in records if record.name == "http"]
     assert len(completion) == 1
     assert completion[0].http_status == 200
-    assert completion[0].route == "/knowledge-flow/v1/probe/{name}"
+    assert completion[0].route == "/knowledge-flow/v2/probe/{name}"
     assert all(canary not in repr(record.__dict__) for record in records for canary in _CANARIES)

@@ -1542,7 +1542,7 @@ async def document_step(
 
     try:
         result = await context.invoke_runtime_tool(
-            "search_documents_using_vectorization",
+            "search_documents",
             {"question": question, "top_k": 3},
         )
     except RuntimeError as exc:

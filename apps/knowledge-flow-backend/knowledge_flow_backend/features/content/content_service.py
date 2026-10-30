@@ -157,21 +157,14 @@ class ContentService:
         return preview_str
 
     def _get_tabular_service(self):
-        """
-        Lazily return the tabular service used for Parquet-backed previews.
+        """A caller must provide a service already bound to its trusted scope.
 
-        Why this exists:
-        - Content previews need tabular runtime access only for CSV documents.
-        - Lazy initialization keeps the default content-service setup light in
-          tests that never touch tabular previews.
-
-        How to use:
-        - Call before rendering one tabular preview from a Parquet artifact.
+        Weaver serves published previews through Control Plane and the published
+        markdown controller; this unmounted Swift controller cannot construct an
+        unscoped tabular service.
         """
         if self._tabular_service is None:
-            from knowledge_flow_backend.features.tabular.service import TabularService
-
-            self._tabular_service = TabularService()
+            raise RuntimeError("Tabular previews require a server-bound TabularService")
         return self._tabular_service
 
     async def _render_tabular_preview(self, user: KeycloakUser, metadata: DocumentMetadata) -> str:

@@ -730,7 +730,7 @@ class SchedulerConfig(BaseModel):
 
 class AppConfig(BaseModel):
     name: Optional[str] = "Knowledge Flow Backend"
-    base_url: str = "/knowledge-flow/v1"
+    base_url: str = "/knowledge-flow/v2"
     address: str = "127.0.0.1"
     port: int = 8000
     log_level: str = "info"

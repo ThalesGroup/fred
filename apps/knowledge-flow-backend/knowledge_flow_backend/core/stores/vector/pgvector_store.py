@@ -519,6 +519,12 @@ class PgVectorStoreAdapter(BaseVectorStore):
                 # Equality filter; best-effort match on the list
                 filt["tag_ids"] = list(search_filter.tag_ids)
 
+        selection_clauses = []
+        for clause in search_filter.metadata_any if search_filter else ():
+            alternatives = [{key: {"$in": list(values)}} for key, values in clause.items() if values]
+            selection_clauses.append({"$or": alternatives} if len(alternatives) > 1 else alternatives[0] if alternatives else {"document_uid": "__empty_selection__"})
+        if selection_clauses:
+            filt = {"$and": ([filt] if filt else []) + selection_clauses}
         filter_arg = filt or None
         candidate_k = min(max(k * 4, k), 200)
         logger.info(
@@ -549,7 +555,7 @@ class PgVectorStoreAdapter(BaseVectorStore):
                 if not _matches_tag_ids(md, list(search_filter.tag_ids) if search_filter.tag_ids else None):
                     filtered_out += 1
                     continue
-                if not _matches_metadata_terms(md, search_filter.metadata_terms):
+                if not search_filter.matches_selection(md) or not _matches_metadata_terms(md, search_filter.metadata_terms):
                     filtered_out += 1
                     continue
             results.append(AnnHit(document=doc, score=score))

@@ -1,33 +1,16 @@
 # Copyright Thales 2026
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# SPDX-License-Identifier: Apache-2.0
+"""Tabular operations bound to the authenticated delegated service's document context."""
 
-import logging
-from typing import Annotated, List
+from contextlib import contextmanager
+from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from fred_core import KeycloakUser, get_current_user
-from fred_core.common import OwnerFilter
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fred_core.documents.transport import DocumentAccessContext
+from fred_core.security.delegation import AssertedUser
 
-from knowledge_flow_backend.features.tabular.execution import (
-    TabularCapacityExceededError,
-    TabularExecutionTimeoutError,
-)
-from knowledge_flow_backend.features.tabular.service import (
-    TabularDatasetAccessUnsupportedError,
-    TabularQueryError,
-    TabularService,
-)
+from knowledge_flow_backend.features.document_scope import document_access_context
+from knowledge_flow_backend.features.tabular.service import TabularService
 from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
     TabularDocumentDescriptionResponse,
@@ -37,288 +20,100 @@ from knowledge_flow_backend.features.tabular.structures import (
     TabularSearchRequest,
     TabularSearchResponse,
 )
-from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
+from knowledge_flow_backend.security.weaver_admission import delegated_person
 
-logger = logging.getLogger(__name__)
+
+def tabular_service(context: DocumentAccessContext = Depends(document_access_context)) -> TabularService:
+    return TabularService(space_id=context.space_id, document_scope=context.document_scope)
+
+
+@contextmanager
+def tabular_errors():
+    try:
+        yield
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Dataset access refused; call list_tabular_documents for available documents.") from None
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="dataset_not_found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    # Capacity/timeouts retain the shared 503/504 policy. Infrastructure errors
+    # propagate as server failures; never expose their URLs or credentials.
 
 
 class TabularController:
-    """API controller for document-centric tabular operations (CSV and spreadsheets)."""
-
     def __init__(self, router: APIRouter):
-        self.service = TabularService()
-        self._register_routes(router)
-
-    def _register_routes(self, router: APIRouter):
         @router.get(
             "/tabular/documents",
-            response_model=List[TabularDocumentListResponse],
+            response_model=list[TabularDocumentListResponse],
             response_model_exclude_none=True,
             tags=["Tabular"],
-            summary="List document names and Excel tables",
+            summary="List published tabular documents in the active document selection",
             operation_id="list_tabular_documents",
+            description="Lists authorized published CSV/Excel documents. Empty selection returns an empty array. No pagination parameter or fixed response-count cap. Excel includes table identities; CSV omits tables in this compact listing. Use describe_tabular_documents to obtain exact SQL aliases and columns.",
         )
-        async def list_documents(
-            document_library_tags_ids: Annotated[
-                list[str] | None,
-                Query(description="Optional library tag IDs used to keep documents inside selected libraries."),
-            ] = None,
-            owner_filter: Annotated[
-                OwnerFilter | None,
-                Query(description="Optional ownership scope: 'personal' or 'team'."),
-            ] = None,
-            team_id: Annotated[
-                str | None,
-                Query(description="Team ID, required when owner_filter is 'team'."),
-            ] = None,
-            attachment_uids: Annotated[list[str] | None, Query(max_length=1000, description="Explicit uploader-owned attachment UIDs.")] = None,
-            include_session_scope: bool = True,
-            include_corpus_scope: bool = True,
-            corpus_document_uids: Annotated[list[str] | None, Query()] = None,
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            """
-            List visible tabular document names and their technical identifiers.
-
-            Why this exists:
-            - Excel workbooks include their table aliases, sheets and titles.
-              CSV documents expose only their name and document UID.
-            - Team/personal and library scope must be enforced before table
-              aliases are exposed.
-
-            How to use:
-            - The runtime supplies the current conversation attachment UIDs.
-            - Direct calls without attachment scope list only corpus documents.
-            - Follow up with `/tabular/documents/schemas` for a spreadsheet's
-              catalog and every document's typed tables.
-            """
-
-            try:
-                documents = await self.service.list_documents(
-                    user,
-                    document_library_tags_ids=document_library_tags_ids,
-                    owner_filter=owner_filter,
-                    team_id=team_id,
-                    attachment_uids=attachment_uids,
-                    include_session_scope=include_session_scope,
-                    include_corpus_scope=include_corpus_scope,
-                    corpus_document_uids=corpus_document_uids,
-                )
+        async def list_documents(person: AssertedUser = Depends(delegated_person), service: TabularService = Depends(tabular_service)):
+            with tabular_errors():
+                documents = await service.list_documents(person)
                 return [
                     TabularDocumentListResponse(
-                        document_uid=document.document_uid,
-                        document_name=document.document_name,
-                        source_kind=document.source_kind,
-                        tag_names=document.tag_names or None,
-                        tables=(
-                            [
-                                TabularDocumentListTableResponse(
-                                    query_alias=table.query_alias,
-                                    sheet=table.sheet,
-                                    title=table.title,
-                                )
-                                for table in document.tables
-                            ]
-                            if document.kind == "spreadsheet"
-                            else None
-                        ),
+                        document_uid=doc.document_uid,
+                        document_name=doc.document_name,
+                        source_kind=doc.source_kind,
+                        tables=[TabularDocumentListTableResponse(query_alias=t.query_alias, sheet=t.sheet, title=t.title) for t in doc.tables] if doc.kind == "spreadsheet" else None,
                     )
-                    for document in documents
+                    for doc in documents
                 ]
-            except MissingTeamIdError as e:
-                raise HTTPException(status_code=400, detail=str(e))
-            except Exception as e:
-                logger.exception("Failed to list tabular documents")
-                raise HTTPException(status_code=500, detail=str(e))
 
         @router.get(
             "/tabular/documents/schemas",
-            response_model=List[TabularDocumentDescriptionResponse],
+            response_model=list[TabularDocumentDescriptionResponse],
             tags=["Tabular"],
-            summary="Read the catalog and typed tables of one or several tabular documents",
+            summary="Read extraction catalogs and typed tables of selected documents",
             operation_id="describe_tabular_documents",
         )
         async def describe_documents(
             document_uids: Annotated[
                 list[str],
-                Query(min_length=1, description="Document UIDs to describe (repeat the parameter for several documents)."),
+                Query(
+                    min_length=1,
+                    max_length=1000,
+                    description="Document UUIDs from listing, encoded as repeated document_uids query parameters. All requested documents must be in scope; 1 to 1000 identifiers.",
+                ),
             ],
-            document_library_tags_ids: Annotated[
-                list[str] | None,
-                Query(description="Optional library tag IDs used to keep documents inside selected libraries."),
-            ] = None,
-            owner_filter: Annotated[
-                OwnerFilter | None,
-                Query(description="Optional ownership scope: 'personal' or 'team'."),
-            ] = None,
-            team_id: Annotated[
-                str | None,
-                Query(description="Team ID, required when owner_filter is 'team'."),
-            ] = None,
-            attachment_uids: Annotated[list[str] | None, Query(max_length=1000, description="Explicit uploader-owned attachment UIDs.")] = None,
-            include_session_scope: bool = True,
-            include_corpus_scope: bool = True,
-            corpus_document_uids: Annotated[list[str] | None, Query()] = None,
-            user: KeycloakUser = Depends(get_current_user),
+            person: AssertedUser = Depends(delegated_person),
+            service: TabularService = Depends(tabular_service),
         ):
-            """
-            Return the extraction catalog and typed tables of authorized documents.
+            """Use document UIDs from list_tabular_documents. Returns exact SQL aliases,
+            column types, categorical values and numeric ranges; Excel includes its catalog.
+            Every requested document must belong to the active document selection. The
+            configured max_selected_datasets also bounds the total tables described;
+            a workbook may contain multiple tables. CSV markdown is null; Excel
+            returns its published extraction catalog. Category/range analysis is
+            subject to the same tabular execution budgets."""
+            with tabular_errors():
+                return await service.describe_documents(person, document_uids=document_uids)
 
-            Why this exists:
-            - Schema inspection must expose every table of a multi-table
-              workbook and follow the same document-level access rules as
-              query execution.
-            - For Excel, the `output.md` catalog comes before the typed tables.
-              Read it to identify relevant sheets and context, then check each
-              selected column's type before constructing SQL filters.
-            - CSV documents have no extraction catalog; their tables still
-              include every column's exact name and type.
-            - Categorical string columns list every distinct value in
-              `sample_values`; integer and float columns include finite
-              `min_value` and `max_value` when available.
-            - One batch call keeps agent round trips low when a SQL query
-              joins tables from several documents.
+        @router.post("/tabular/query", response_model=RawSQLResponse, tags=["Tabular"], summary="Execute one read-only SELECT on authorized published datasets", operation_id="query_tabular_documents")
+        async def query(request: TabularQueryRequest, person: AssertedUser = Depends(delegated_person), service: TabularService = Depends(tabular_service)):
+            """Use exact aliases from describe_tabular_documents. dataset_uids narrows the
+            active selection; a workbook UID includes all its tables. SQL must reference
+            at least one dataset. Execution, memory, row and dataset limits apply.
+            Results are row-limited without a truncation flag or pagination token;
+            reaching the row limit does not prove completeness. Dataset, memory,
+            concurrency and timeout ceilings come from storage.tabular_store.query.
+            Retry capacity 503 with bounded backoff; for 504 narrow the query."""
+            with tabular_errors():
+                return await service.query_read(person, request=request)
 
-            How to use:
-            - Pass one or several `document_uids` from `/tabular/documents`.
-            - Reuse the same scope parameters as the list endpoint when the
-              caller is bound to one active area.
-            """
-
-            try:
-                return await self.service.describe_documents(
-                    user,
-                    document_uids=document_uids,
-                    document_library_tags_ids=document_library_tags_ids,
-                    owner_filter=owner_filter,
-                    team_id=team_id,
-                    attachment_uids=attachment_uids,
-                    include_session_scope=include_session_scope,
-                    include_corpus_scope=include_corpus_scope,
-                    corpus_document_uids=corpus_document_uids,
-                )
-            except MissingTeamIdError as e:
-                raise HTTPException(status_code=400, detail=str(e))
-            except PermissionError as e:
-                raise HTTPException(status_code=403, detail=str(e))
-            except FileNotFoundError as e:
-                raise HTTPException(status_code=404, detail=str(e))
-            except (TabularCapacityExceededError, TabularExecutionTimeoutError):
-                raise
-            except ValueError as e:
-                raise HTTPException(status_code=400, detail=str(e))
-            except TabularDatasetAccessUnsupportedError as e:
-                raise HTTPException(status_code=501, detail=str(e))
-            except Exception as e:
-                logger.exception("Failed to describe tabular documents %s", document_uids)
-                raise HTTPException(status_code=500, detail=str(e))
-
-        @router.post(
-            "/tabular/query",
-            response_model=RawSQLResponse,
-            tags=["Tabular"],
-            summary="Execute one read-only SQL query on authorized datasets",
-            operation_id="read_query",
-        )
-        async def raw_sql_read(
-            request: TabularQueryRequest = Body(..., description="Dataset-centric SQL query payload"),
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            """
-            Execute one read-only SQL query against authorized datasets.
-
-            Why this exists:
-            - Dataset-scoped queries now run in an ephemeral DuckDB session with
-              only authorized views mounted.
-
-            How to use:
-            - Send `sql` and optional `dataset_uids` (document uids; one
-              spreadsheet uid makes every table of the workbook available).
-            - Only the aliases your SQL references are mounted. The query must
-              name at least one dataset alias in its `FROM` clause: a query
-              reading no dataset returns 400, as does one joining more datasets
-              than the server allows per request.
-            - 503 means the server is momentarily at capacity and 504 that the
-              query exceeded its time budget; both are worth one retry, and a
-              504 is a hint to add filters or aggregate. 400 with a memory
-              message means the query needs more memory than one request may
-              use — narrow it rather than retrying.
-            """
-
-            try:
-                return await self.service.query_read(user, request=request)
-            except MissingTeamIdError as e:
-                raise HTTPException(status_code=400, detail=str(e))
-            except PermissionError as e:
-                raise HTTPException(status_code=403, detail=str(e))
-            except FileNotFoundError as e:
-                raise HTTPException(status_code=404, detail=str(e))
-            except (TabularCapacityExceededError, TabularExecutionTimeoutError):
-                # Re-raise for the app-level handlers registered in main.py. This
-                # branch exists only because of the `except Exception` catch-all
-                # below, which would otherwise turn overload into a 500 before
-                # the handler ever sees it.
-                raise
-            except TabularQueryError as e:
-                # Invalid SQL (binder/parser/type error) is a caller fault, not a
-                # server failure: return 400 without a stack trace. Must precede
-                # the ValueError branch since TabularQueryError subclasses it.
-                raise HTTPException(status_code=400, detail=str(e))
-            except ValueError as e:
-                raise HTTPException(status_code=400, detail=str(e))
-            except TabularDatasetAccessUnsupportedError as e:
-                raise HTTPException(status_code=501, detail=str(e))
-            except Exception as e:
-                logger.exception("Read SQL query failed")
-                raise HTTPException(status_code=500, detail=str(e))
-
-        @router.post(
-            "/tabular/search",
-            response_model=TabularSearchResponse,
-            tags=["Tabular"],
-            summary="Locate a keyword across authorized tabular datasets",
-            operation_id="search_tabular_values",
-        )
-        async def search_values(
-            request: TabularSearchRequest = Body(..., description="Keyword value-locator payload"),
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            """
-            Locate a precise value across the tables of authorized documents.
-
-            Why this exists:
-            - The catalog and schemas describe a workbook's structure but not its
-              cell values. This finds which table(s) and column(s) hold a value,
-              so an agent can then run one targeted `read_query` instead of
-              scanning every table.
-
-            How to use:
-            - Send a precise `keyword` and, ideally, a `dataset_uids` subset (one
-              spreadsheet uid covers all its tables).
-            - Matching is case/accent/whitespace-insensitive over every column;
-              numeric columns are searchable too. `tables_truncated` /
-              `row_truncated` flag a partial result.
-            """
-
-            try:
-                return await self.service.search_values(user, request=request)
-            except MissingTeamIdError as e:
-                raise HTTPException(status_code=400, detail=str(e))
-            except PermissionError as e:
-                raise HTTPException(status_code=403, detail=str(e))
-            except FileNotFoundError as e:
-                raise HTTPException(status_code=404, detail=str(e))
-            except (TabularCapacityExceededError, TabularExecutionTimeoutError):
-                # Same reason as read_query: the catch-all below would mask these.
-                raise
-            except TabularQueryError as e:
-                # A DuckDB authoring error is a caller fault (400), not a server
-                # failure — same classification as read_query.
-                raise HTTPException(status_code=400, detail=str(e))
-            except ValueError as e:
-                raise HTTPException(status_code=400, detail=str(e))
-            except TabularDatasetAccessUnsupportedError as e:
-                raise HTTPException(status_code=501, detail=str(e))
-            except Exception as e:
-                logger.exception("Tabular value search failed")
-                raise HTTPException(status_code=500, detail=str(e))
+        @router.post("/tabular/search", response_model=TabularSearchResponse, tags=["Tabular"], summary="Locate a precise value in authorized published datasets", operation_id="search_tabular_values")
+        async def search(request: TabularSearchRequest, person: AssertedUser = Depends(delegated_person), service: TabularService = Depends(tabular_service)):
+            """Case/accent/whitespace-insensitive search, including numeric columns.
+            Use dataset_uids to narrow the search. The stripped keyword must have at
+            least two characters and must remain nonempty after normalization.
+            Up to 5 rows per table and 30 matching tables; callers may lower these
+            caps. The configured dataset scan ceiling can further restrict work.
+            Inspect tables_truncated and each match's rows_truncated; an empty
+            matches list with truncation is not proof the value is absent."""
+            with tabular_errors():
+                return await service.search_values(person, request=request)

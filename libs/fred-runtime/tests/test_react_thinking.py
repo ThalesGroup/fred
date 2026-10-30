@@ -521,9 +521,11 @@ async def test_stream_reports_real_duration_ms_for_tool_use_thought() -> None:
 
     tool_call = AIMessage(
         content="",
-        tool_calls=[{"id": "call-1", "name": "read_query", "args": {}}],
+        tool_calls=[{"id": "call-1", "name": "query_tabular_documents", "args": {}}],
     )
-    tool_result = ToolMessage(content="ok", tool_call_id="call-1", name="read_query")
+    tool_result = ToolMessage(
+        content="ok", tool_call_id="call-1", name="query_tabular_documents"
+    )
     final_message = AIMessage(content="done")
 
     events = [
@@ -554,9 +556,11 @@ async def test_stream_closes_the_reasoning_block_at_each_tool_round() -> None:
 
     tool_call = AIMessage(
         content="",
-        tool_calls=[{"id": "call-1", "name": "read_query", "args": {}}],
+        tool_calls=[{"id": "call-1", "name": "query_tabular_documents", "args": {}}],
     )
-    tool_result = ToolMessage(content="ok", tool_call_id="call-1", name="read_query")
+    tool_result = ToolMessage(
+        content="ok", tool_call_id="call-1", name="query_tabular_documents"
+    )
     final_message = AIMessage(content="done")
 
     events = [
@@ -625,9 +629,12 @@ async def test_stream_keeps_a_tool_round_preamble_as_reasoning() -> None:
     """
 
     tool_call = AIMessage(
-        content="", tool_calls=[{"id": "call-1", "name": "read_query", "args": {}}]
+        content="",
+        tool_calls=[{"id": "call-1", "name": "query_tabular_documents", "args": {}}],
     )
-    tool_result = ToolMessage(content="ok", tool_call_id="call-1", name="read_query")
+    tool_result = ToolMessage(
+        content="ok", tool_call_id="call-1", name="query_tabular_documents"
+    )
 
     events = [
         _stream_frame("I will query "),

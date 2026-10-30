@@ -104,7 +104,7 @@ def _build_config(tmp_path) -> AgentPodConfig:
                 },
                 "authorized_origins": [],
             },
-            "ai": {"knowledge_flow_url": "http://localhost:8111/knowledge-flow/v1"},
+            "ai": {"knowledge_flow_url": "http://localhost:8111/knowledge-flow/v2"},
             "observability": {
                 "kpi": {
                     "log": {"enabled": True},
@@ -992,7 +992,7 @@ def test_delete_session_passes_caller_uid_to_store(monkeypatch, tmp_path) -> Non
     mock_store.delete_session = AsyncMock(return_value=3)
     mock_ctx = RuntimeContext(
         RuntimeConfig(
-            knowledge_flow_url="http://localhost:8111/knowledge-flow/v1",
+            knowledge_flow_url="http://localhost:8111/knowledge-flow/v2",
             history_store=mock_store,
         )
     )

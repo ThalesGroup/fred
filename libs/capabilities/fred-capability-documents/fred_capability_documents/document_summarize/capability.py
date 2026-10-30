@@ -24,7 +24,7 @@ Why this module exists:
   agent selecting `document_access` does NOT get this tool for free) — the
   admission control that governs it today.
 - commonly paired with `document_access` (its `list_document_tree` /
-  `search_documents_using_vectorization` hits are the usual source of the
+  `search_documents` hits are the usual source of the
   `document_uid` this tool's caller needs), but there is no runtime coupling:
   the uid can equally come from the conversation's attached-files list.
 
@@ -248,7 +248,7 @@ class DocumentSummarizeCapability(
             documents) and returns just the summary.
 
             `document_uid` MUST be the document's opaque uid, not its name or
-            title. Get it from a prior search_documents_using_vectorization
+            title. Get it from a prior search_documents
             hit's 'uid' field, from list_document_tree (the value shown in
             '[...]' after each document name), or from the conversation's
             attached-files list (the bracketed value after the file name). If

@@ -66,6 +66,12 @@ class SearchFilter:
     # Use Mapping for covariance to allow callers to pass dict[str, list[bool]] safely.
     metadata_terms: Optional[Mapping[str, Sequence[Union[str, int, float, bool]]]] = None
 
+    # Each mapping is a union of exact terms; mappings intersect. Empty = deny.
+    metadata_any: tuple[Mapping[str, Sequence[str]], ...] = ()
+
+    def matches_selection(self, metadata: Mapping[str, Any]) -> bool:
+        return all(any(metadata.get(key) in values for key, values in clause.items()) for clause in self.metadata_any)
+
 
 class BaseVectorHit(BaseModel):
     document: Document

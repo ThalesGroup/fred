@@ -38,6 +38,18 @@ def test_validate_read_query_collects_natural_join_relations():
     assert validated.referenced_relations == frozenset({"d_sales", "d_targets"})
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        "WITH scoped AS (SELECT * FROM d_targets) SELECT * FROM scoped",
+        "WITH scoped AS (WITH nested AS (SELECT * FROM d_targets) SELECT * FROM nested) SELECT * FROM scoped",
+    ],
+)
+def test_validate_read_query_rejects_unauthorized_datasets_inside_ctes(query: str):
+    with pytest.raises(ValueError, match=r"unauthorized datasets: d_targets"):
+        validate_read_query(query, allowed_relations={"d_sales"})
+
+
 def test_validate_read_query_reports_only_the_referenced_subset_of_allowed_relations():
     """The mount set must follow the query, not the whole authorized selection."""
 

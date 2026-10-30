@@ -6,7 +6,10 @@
 # under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
 # CONDITIONS OF ANY KIND, either express or implied.
 
-"""SQL folder membership selects candidates; ReBAC parents authorize reads."""
+"""Legacy metadata/resource listings follow folder-derived access.
+
+Weaver tabular publication and space access are covered in test_weaver_tabular.
+"""
 
 import asyncio
 from collections.abc import AsyncIterator
@@ -27,8 +30,6 @@ from knowledge_flow_backend.core.stores.resources.postgres_resource_store import
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.resources.service import ResourceService
 from knowledge_flow_backend.features.resources.structures import Resource, ResourceKind, ResourceUpdate
-from knowledge_flow_backend.features.tabular.artifacts import TABULAR_EXTENSION_KEY, TabularArtifactV1
-from knowledge_flow_backend.features.tabular.service import TabularService
 from knowledge_flow_backend.features.tag.tag_item_service import DocumentTagItemService, ResourceTagItemService
 from knowledge_flow_backend.models.base import Base as KnowledgeBase
 
@@ -40,7 +41,7 @@ PUBLIC_DOCUMENTS = ["10-visible", "20-visible"]
 EDITOR = SimpleNamespace(uid="editor", roles=[])
 READER_A = SimpleNamespace(uid="reader-a", roles=[])
 READER_B = SimpleNamespace(uid="reader-b", roles=[])
-DOCUMENT_SURFACES = ["documents", "labels", "label-uids", "label-documents", "label-page", "tabular-datasets", "tabular-documents", "tabular-explicit"]
+DOCUMENT_SURFACES = ["documents", "labels", "label-uids", "label-documents", "label-page"]
 
 
 class _FolderRebac:
@@ -82,22 +83,12 @@ class _FolderRebac:
         self.parents[relation.resource.id].discard(relation.subject.id)
 
 
-def _doc(uid: str, tags: list[str], *, tabular: bool = False) -> DocumentMetadata:
-    doc = DocumentMetadata(
-        identity=Identity(document_uid=uid, document_name=f"{uid}.csv" if tabular else f"{uid}.txt"),
+def _doc(uid: str, tags: list[str]) -> DocumentMetadata:
+    return DocumentMetadata(
+        identity=Identity(document_uid=uid, document_name=f"{uid}.txt"),
         source=SourceInfo(source_type=SourceType.PUSH, source_tag="uploads"),
         tags=Tagging(tag_ids=tags),
     )
-    if tabular:
-        doc.extensions = {
-            TABULAR_EXTENSION_KEY: TabularArtifactV1(
-                dataset_uid=uid,
-                object_key=f"tabular/{uid}/data.parquet",
-                source_revision="revision",
-                generated_at="2026-10-20T00:00:00+00:00",
-            ).model_dump(mode="json")
-        }
-    return doc
 
 
 @pytest.mark.parametrize(("readable_tags", "expected"), [({"lib-a"}, ["in-a", "in-a-and-b"]), (None, ["in-a", "in-a-and-b", "in-b", "untagged"])])
@@ -142,11 +133,8 @@ async def stored_services() -> AsyncIterator[SimpleNamespace]:
         resources = ResourceService.__new__(ResourceService)
         resources._resource_store = PostgresResourceStore(engine)
         resources.rebac = rebac
-        tabular = TabularService.__new__(TabularService)
-        tabular.metadata_store = metadata.metadata_store
-        tabular.rebac = rebac
         for uid, tags in [(DOCUMENT, [A, B]), *((uid, [A]) for uid in PUBLIC_DOCUMENTS)]:
-            await metadata.metadata_store.save_metadata(_doc(uid, tags, tabular=True))
+            await metadata.metadata_store.save_metadata(_doc(uid, tags))
             await metadata.metadata_store.add_label(uid, "shared")
             await metadata.metadata_store.add_label(uid, "secret-label" if uid == DOCUMENT else "public-label")
         now = datetime.now(timezone.utc)
@@ -163,7 +151,7 @@ async def stored_services() -> AsyncIterator[SimpleNamespace]:
                 library_tags=[A, B],
             )
         )
-        yield SimpleNamespace(metadata=metadata, resources=resources, tabular=tabular, rebac=rebac)
+        yield SimpleNamespace(metadata=metadata, resources=resources, rebac=rebac)
     finally:
         await engine.dispose()
 
@@ -186,12 +174,6 @@ async def _assert_document_surface(services: SimpleNamespace, user: SimpleNamesp
             rows = await metadata.get_documents_metadata(user, {})
         elif surface == "label-documents":
             rows = await metadata.get_documents_with_label(user, "shared")
-        elif surface == "tabular-datasets":
-            rows = await services.tabular.list_datasets(user)
-        elif surface == "tabular-documents":
-            rows = await services.tabular.list_documents(user)
-        elif surface == "tabular-explicit":
-            rows = await services.tabular.list_documents(user, corpus_document_uids=[DOCUMENT, *PUBLIC_DOCUMENTS])
         else:
             raise AssertionError(surface)
         assert sorted(doc.document_uid for doc in rows) == expected
@@ -226,7 +208,7 @@ async def test_stale_document_save_cannot_restore_read_access(stored_services: S
     if mutation == "title":
         update = service.update_document_title(EDITOR, DOCUMENT, "Renamed", "stale-editor")
     elif mutation == "name":
-        update = service.rename_document(EDITOR, DOCUMENT, "renamed.csv", "stale-editor")
+        update = service.rename_document(EDITOR, DOCUMENT, "renamed.txt", "stale-editor")
     else:
         update = service.update_document_retrievable(EDITOR, DOCUMENT, False, "stale-editor")
     pending = asyncio.create_task(update)
@@ -247,7 +229,7 @@ async def test_stale_document_save_cannot_restore_read_access(stored_services: S
     if mutation == "title":
         assert persisted.identity.title == "Renamed"
     elif mutation == "name":
-        assert persisted.document_name == "renamed.csv"
+        assert persisted.document_name == "renamed.txt"
     else:
         assert persisted.source.retrievable is False
     with pytest.raises(PermissionError):
@@ -316,7 +298,7 @@ async def test_listing_propagates_authorization_failure(stored_services: SimpleN
             await _assert_document_surface(stored_services, READER_A, surface)
 
 
-@pytest.mark.parametrize("surface", ["documents", "resources", "tabular-datasets"])
+@pytest.mark.parametrize("surface", ["documents", "resources"])
 async def test_listing_bounds_concurrent_authorization_checks(stored_services: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, surface: str) -> None:
     services = stored_services
     for index in range(23):
@@ -326,7 +308,7 @@ async def test_listing_bounds_concurrent_authorization_checks(stored_services: S
             resource = (await services.resources._resource_store.get_resource_by_id(RESOURCE)).model_copy(update={"id": uid})
             await services.resources._resource_store.create_resource(resource)
         else:
-            await services.metadata.metadata_store.save_metadata(_doc(uid, [A], tabular=surface == "tabular-datasets"))
+            await services.metadata.metadata_store.save_metadata(_doc(uid, [A]))
     active = maximum = calls = 0
     saturated, resume = asyncio.Event(), asyncio.Event()
     has_permission = services.rebac.has_user_permission
@@ -348,10 +330,8 @@ async def test_listing_bounds_concurrent_authorization_checks(stored_services: S
     monkeypatch.setattr(services.rebac, "has_user_permission", paused_check)
     if surface == "resources":
         listing = services.resources.list_resources_by_kind(kind=ResourceKind.PROMPT, user=READER_A)
-    elif surface == "documents":
-        listing = services.metadata.get_documents_metadata(READER_A, {})
     else:
-        listing = services.tabular.list_datasets(READER_A)
+        listing = services.metadata.get_documents_metadata(READER_A, {})
     pending = asyncio.create_task(listing)
     try:
         await asyncio.wait_for(saturated.wait(), timeout=5)

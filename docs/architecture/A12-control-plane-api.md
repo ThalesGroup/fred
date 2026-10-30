@@ -1524,6 +1524,7 @@ One of: `source_guarantee`, `api_metadata`.
 | `processing` | map of [`Summary`](#summary) | yes |  |
 | `processing_enabled` | boolean | yes |  |
 | `total` | integer (int64) | yes |  |
+| `uploaders` | map of string | yes | Display names of the listed documents' `created_by`; unknown users are absent. |
 
 ### Document
 
@@ -1594,7 +1595,7 @@ JSON error envelope shared by application, authentication and import failures.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `agent_instance_id` | string (uuid) | yes |  |
-| `chat_controls` | array of [`ChatControlDescriptor`](#chatcontroldescriptor) | yes | Only controls supported by the current model facts are advertised. |
+| `chat_controls` | array of [`ChatControlDescriptor`](#chatcontroldescriptor) | yes |  |
 | `execute_stream_url` | string | yes |  |
 | `execute_url` | string | yes |  |
 | `execution_transport` | [`ExecutionTransport`](#executiontransport) | yes |  |

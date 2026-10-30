@@ -20,7 +20,7 @@ Why this file exists:
   request whose first non-system message is a tool result with no preceding
   `tool_calls`, which crashes the whole turn instead of answering the user.
 - This regression is triggered when one reasoning step fans out more tool calls
-  than `max_history_messages`, e.g. a batch of failed `read_query` calls: the
+  than `max_history_messages`, e.g. a batch of failed `query_tabular_documents` calls: the
   tail slice then contains only orphan ToolMessages.
 
 All tests are offline — no model or network required.
@@ -40,7 +40,10 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 def _ai_with_calls(*call_ids: str) -> AIMessage:
     return AIMessage(
         content="",
-        tool_calls=[{"name": "read_query", "args": {}, "id": cid} for cid in call_ids],
+        tool_calls=[
+            {"name": "query_tabular_documents", "args": {}, "id": cid}
+            for cid in call_ids
+        ],
     )
 
 
@@ -63,7 +66,9 @@ def _ai_proposing_write_document(call_id: str, content_markdown: str) -> AIMessa
 
 
 def _tool_result(call_id: str) -> ToolMessage:
-    return ToolMessage(content="err", tool_call_id=call_id, name="read_query")
+    return ToolMessage(
+        content="err", tool_call_id=call_id, name="query_tabular_documents"
+    )
 
 
 def test_short_history_is_returned_unchanged() -> None:
@@ -172,10 +177,10 @@ def test_char_budget_advances_to_human_boundary_like_message_trim() -> None:
     messages = [
         HumanMessage(content="q" * 5),
         _ai_with_calls("a", "b", "c", "d"),
-        ToolMessage(content="r" * 10, tool_call_id="a", name="read_query"),
-        ToolMessage(content="r" * 10, tool_call_id="b", name="read_query"),
-        ToolMessage(content="r" * 10, tool_call_id="c", name="read_query"),
-        ToolMessage(content="r" * 10, tool_call_id="d", name="read_query"),
+        ToolMessage(content="r" * 10, tool_call_id="a", name="query_tabular_documents"),
+        ToolMessage(content="r" * 10, tool_call_id="b", name="query_tabular_documents"),
+        ToolMessage(content="r" * 10, tool_call_id="c", name="query_tabular_documents"),
+        ToolMessage(content="r" * 10, tool_call_id="d", name="query_tabular_documents"),
     ]
     # Budget only fits the trailing orphan ToolMessages (mid tool-round): a
     # naive tail slice would start on a bare tool result with no preceding

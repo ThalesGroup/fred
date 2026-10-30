@@ -25,10 +25,10 @@ class ServiceEndpoints:
     [
         "https://kf.example:9443/custom/v2/",
         "https://kf.example/custom/v2",
-        "http://[::1]:8112/knowledge-flow/v1",
+        "http://[::1]:8112/knowledge-flow/v2",
     ],
 )
-@pytest.mark.parametrize("path", ["mcp-tabular", "/mcp-tabular"])
+@pytest.mark.parametrize("path", ["mcp/tabular", "/mcp/tabular"])
 def test_service_reference_preserves_configured_address(
     tmp_path: Path, base_url: str, path: str
 ) -> None:
@@ -40,7 +40,7 @@ def test_service_reference_preserves_configured_address(
         catalog_path, services=ServiceEndpoints(base_url)
     ).servers[0]
 
-    assert server.url == f"{base_url.rstrip('/')}/mcp-tabular"
+    assert server.url == f"{base_url.rstrip('/')}/mcp/tabular"
     assert "service" not in server.model_dump()
     assert "path" not in server.model_dump()
 

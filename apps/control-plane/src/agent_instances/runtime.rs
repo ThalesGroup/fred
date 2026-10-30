@@ -154,6 +154,7 @@ pub struct RuntimeAgent {
     /// Organization-qualified OpenFGA identity, distinct from the registry key.
     pub template_id: Uuid,
     pub template_key: String,
+    pub configuration_revision: i64,
     pub configuration_updated_at: chrono::DateTime<chrono::Utc>,
     /// Saved tuning, excluding the legacy profile reference exposed in models for diagnostics.
     /// No refresh from the catalog; fields, values and capability envelopes are preserved.
@@ -223,6 +224,9 @@ async fn resolve_runtime(
     let mut record = super::get_for_space(&mut *tx, space_id, instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
+    if let Some(conversation) = &query.conversation {
+        crate::sessions::require_association(&mut *tx, subject, conversation, &record).await?;
+    }
     require_executable(&state, &space, &record)?;
     // Organization revocation is observed here, at the next turn, never during one.
     let policy = enablement::Policy::load(&mut *tx, space.organization).await?;
@@ -232,9 +236,6 @@ async fn resolve_runtime(
         &record.source_runtime_id,
         &super::tuning::saved_selection(&record.tuning.0)?,
     )?;
-    if let Some(conversation) = &query.conversation {
-        crate::sessions::require_association(&mut *tx, subject, conversation, &record).await?;
-    }
     record
         .tuning
         .0
@@ -280,6 +281,7 @@ async fn resolve_runtime(
             runtime_id: record.source_runtime_id,
             template_id: record.template_id,
             template_key: record.source_agent_id,
+            configuration_revision: record.configuration_revision,
             configuration_updated_at: record.updated_at,
             configuration: record.tuning.0,
         },

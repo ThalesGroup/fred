@@ -32,8 +32,11 @@ import logging
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence
+from uuid import UUID
 
 from fred_core.common import OwnerFilter
+from fred_core.documents.selection import DocumentScope
+from fred_core.documents.transport import DOCUMENT_CONTEXT_HEADER, DocumentAccessContext
 from pydantic import BaseModel
 
 from fred_runtime.common.kf_base_client import (
@@ -165,11 +168,17 @@ class KfDocumentClient(KfBaseClient):
             size=len(content),
         )
 
-    async def fetch_markdown(self, *, document_uid: str, space_id: str) -> str:
+    async def fetch_markdown(
+        self,
+        *,
+        document_uid: str,
+        space_id: str,
+        document_scope: DocumentScope = DocumentScope(),
+    ) -> str:
         """Fetch a document's FULL parsed markdown (``output.md``) by uid.
 
         Wire format (matches controller):
-          GET /markdown/{document_uid}?space_id=...
+          GET /documents/{document_uid}/markdown
           -> {"content": "<full markdown text>"}
 
         Returns the whole document verbatim; the adapter owns pagination (this
@@ -178,9 +187,13 @@ class KfDocumentClient(KfBaseClient):
         """
         r = await self._request_with_token_refresh(
             method="GET",
-            path=f"/markdown/{document_uid}",
+            path=f"/documents/{document_uid}/markdown",
             phase_name="kf_document_markdown_fetch",
-            params={"space_id": space_id},
+            headers={
+                DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(
+                    space_id=UUID(space_id), document_scope=document_scope
+                ).model_dump_json()
+            },
             # Only a single document segment may opt in: model-supplied path
             # syntax must not extend recovery to another endpoint.
             recover_permission_refusal=(
@@ -276,6 +289,7 @@ class KfDocumentClient(KfBaseClient):
         *,
         document_uid: str,
         space_id: str,
+        document_scope: DocumentScope = DocumentScope(),
         instruction: Optional[str] = None,
         max_chars: int = 2000,
     ) -> SummarizeDocumentResult:
@@ -283,12 +297,13 @@ class KfDocumentClient(KfBaseClient):
         Wire format (matches controller):
           POST /documents/{document_uid}/summarize
           {
-            "space_id": str,
             "instruction": str?,
             "max_chars": int
           }
         """
-        payload: Dict[str, Any] = {"space_id": space_id, "max_chars": max_chars}
+        payload: Dict[str, Any] = {
+            "max_chars": max_chars,
+        }
         if instruction:
             payload["instruction"] = instruction
 
@@ -299,6 +314,11 @@ class KfDocumentClient(KfBaseClient):
             method="POST",
             path=f"/documents/{document_uid}/summarize",
             phase_name="kf_document_summarize",
+            headers={
+                DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(
+                    space_id=UUID(space_id), document_scope=document_scope
+                ).model_dump_json()
+            },
             json=payload,
             read_timeout=self._summarize_read_timeout,
         )
@@ -310,12 +330,13 @@ class KfDocumentClient(KfBaseClient):
         *,
         document_uid: str,
         space_id: str,
+        document_scope: DocumentScope = DocumentScope(),
         instruction: str,
     ) -> ExtractDocumentResult:
         """
         Wire format (matches controller):
           POST /documents/{document_uid}/extract
-          { "space_id": str, "instruction": str }
+          { "instruction": str }
 
         Exhaustive server-side map-reduce over the whole document — long-running,
         so it uses the same extended read timeout as summarize.
@@ -324,7 +345,14 @@ class KfDocumentClient(KfBaseClient):
             method="POST",
             path=f"/documents/{document_uid}/extract",
             phase_name="kf_document_extract",
-            json={"space_id": space_id, "instruction": instruction},
+            headers={
+                DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(
+                    space_id=UUID(space_id), document_scope=document_scope
+                ).model_dump_json()
+            },
+            json={
+                "instruction": instruction,
+            },
             read_timeout=self._summarize_read_timeout,
         )
         r.raise_for_status()

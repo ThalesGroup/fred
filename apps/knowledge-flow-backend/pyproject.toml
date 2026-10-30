@@ -26,6 +26,8 @@ dependencies = [
   "pypandoc-binary==1.15",
   "pypandoc==1.15",
   "pandas==2.2.3",
+  # Parquet engine required by the Excel processor's pandas exports.
+  "pyarrow==23.0.1",
   "pypdf==6.21.2",
   "pypdfium2>=5.10.1",
   "python-pptx==1.0.2",

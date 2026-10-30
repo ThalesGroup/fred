@@ -110,6 +110,6 @@ export function normalizeApiError(error: unknown): NormalizedApiError {
     kind: kindFromStatus(statusValue),
     status: statusValue,
     detail: getDetailFromData(data),
-    code: isRecord(data) ? asString(data.code) : undefined,
+    code: (isRecord(data) ? asString(data.code) : undefined) ?? asString(error.code),
   };
 }

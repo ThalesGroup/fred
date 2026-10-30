@@ -14,10 +14,9 @@
 
 from enum import Enum
 from typing import List, Optional
-from uuid import UUID
 
 from fred_core.store import VectorSearchHit
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class DocumentSource(BaseModel):
@@ -58,18 +57,15 @@ class SearchPolicyName(str, Enum):
 
 
 class SearchRequest(BaseModel):
-    """Corpus search in one Weaver space and its ancestors.
+    """Search arguments; document authority comes from the authenticated header."""
 
-    The agent pod's delegation grant (person, run, agent) rides in the same body.
-    """
-
-    question: str
+    model_config = ConfigDict(extra="forbid")
+    question: str = Field(description="Natural-language search query. This operation returns chunks, not a generated answer.")
     top_k: int = Field(default=10, ge=1, le=100, description="Number of results to return.")
     search_policy: Optional[SearchPolicyName] = Field(
         default=None,
         description="Optional search policy preset. If omitted, defaults to 'hybrid'.",
     )
-    space_id: UUID = Field(description="The turn's space, from the agent pod's trusted binding.")
 
 
 class RerankRequest(BaseModel):

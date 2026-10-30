@@ -50,6 +50,7 @@ from fred_core.common.fastapi_handlers import (
     DENIAL_CAUSE_HEADER,
 )
 from fred_core.common.team_id import is_personal_team_id
+from fred_core.documents.selection import DocumentScope
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.propagation import outbound_context_headers
@@ -896,13 +897,17 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         binding: BoundRuntimeContext,
         settings: AgentSettingsLike,
         credentials: OutboundCredentialProvider | None = None,
+        document_scope: DocumentScope = DocumentScope(),
         bound_library_ids: Sequence[str] | None = None,
     ) -> None:
+        self._document_scope = document_scope
         self._credentials = credentials
         self._settings = settings
         # The agent instance's library binding, resolved server-side from its
         # stored capability config: the client's selection can only narrow it.
-        self._bound_library_ids = list(bound_library_ids or ()) or None
+        self._bound_library_ids = (
+            list(bound_library_ids) if bound_library_ids is not None else None
+        )
         self.rebind(binding)
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
@@ -965,24 +970,17 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             )
 
         runtime_context = self._binding.runtime_context
+        authority = current_turn()
+        authority.check_context(runtime_context, authority.binding.agent.template_key)
         if get_rag_knowledge_scope(runtime_context) == "general_only":
             return _no_hits("Corpus retrieval skipped in general-only mode.")
 
-        # Bound libraries are a ceiling: the turn's selection only narrows them.
-        library_ids = _narrow_scope_ids(
-            self._bound_library_ids, get_document_library_tags_ids(runtime_context)
-        )
-        # Document picks are not narrowed: they still search when no selected
-        # library is bound.
-        document_uids = get_document_uids(runtime_context) or None
-        if _matches_nothing(library_ids, document_uids):
-            return _no_hits("None of the selected libraries is bound to this agent.")
-
+        document_scope = _effective_document_scope(
+            runtime_context, self._document_scope
+        ).intersect(DocumentScope.from_ids(self._bound_library_ids))
+        if document_scope.is_empty:
+            return _no_hits("The document selection is empty.")
         _, include_corpus_scope = get_vector_search_scopes(runtime_context)
-        if library_ids or document_uids:
-            raise RuntimeError(
-                "Library and document selections are not available on Weaver"
-            )
         if not include_corpus_scope:
             return _no_hits("Corpus retrieval is disabled for this turn.")
         space_id = str(current_turn().binding.space.id)
@@ -990,12 +988,16 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
 
         async def chunks(*, document_uid: str, limit: int) -> list[VectorSearchHit]:
             return await client.get_document_chunks(
-                document_uid=document_uid, space_id=space_id, limit=limit
+                document_uid=document_uid,
+                space_id=space_id,
+                limit=limit,
+                document_scope=document_scope,
             )
 
         hits = await client.search(
             question=query,
             space_id=space_id,
+            document_scope=document_scope,
             top_k=top_k,
             search_policy=get_search_policy(runtime_context),
         )
@@ -1351,27 +1353,46 @@ def _matches_nothing(
     return library_ids is not None or document_uids is not None
 
 
+def _effective_document_scope(
+    runtime_context: RuntimeContext | None, bound: DocumentScope
+) -> DocumentScope:
+    return bound.intersect(
+        DocumentScope.from_ids(
+            get_document_library_tags_ids(runtime_context),
+            get_document_uids(runtime_context),
+        )
+    )
+
+
 def _ensure_uid_in_turn_scope(
-    runtime_context: RuntimeContext | None, document_uid: str
-) -> None:
-    """Apply the turn's selection; attachments are unavailable on Weaver."""
+    runtime_context: RuntimeContext | None,
+    document_uid: str,
+    bound: DocumentScope = DocumentScope(),
+) -> DocumentScope:
+    """Reject obvious misses locally; KF resolves folder membership and authorization."""
+    authority = current_turn()
+    if runtime_context is None:
+        raise AuthorityLostError()
+    authority.check_context(runtime_context, authority.binding.agent.template_key)
+    scope = _effective_document_scope(runtime_context, bound)
     if document_uid in get_attachment_uids(runtime_context):
         raise DocumentScopeRefusedError(
-            "attachments are not supported on Weaver",
-            requested_uids=[document_uid],
+            "attachments are not supported on Weaver", requested_uids=[document_uid]
         )
-
-    selected = get_document_uids(runtime_context)
-    if not selected:
-        return
-    if get_document_library_tags_ids(runtime_context):
-        return
-    if document_uid in selected:
-        return
-    raise DocumentScopeRefusedError(
-        "the requested document is not part of this conversation's scope",
-        requested_uids=[document_uid],
-    )
+    _, corpus = get_vector_search_scopes(runtime_context)
+    if get_rag_knowledge_scope(runtime_context) == "general_only" or not corpus:
+        raise DocumentScopeRefusedError(
+            "Corpus access is disabled for this turn", requested_uids=[document_uid]
+        )
+    for selection in scope.selections:
+        if not selection.folder_ids and document_uid not in {
+            str(id) for id in selection.document_ids
+        }:
+            raise DocumentScopeRefusedError(
+                "the requested document is outside the document selection",
+                requested_uids=[document_uid],
+            )
+    return scope
 
 
 class DocumentSearchAdapter(DocumentSearchPort):
@@ -1388,7 +1409,9 @@ class DocumentSearchAdapter(DocumentSearchPort):
         binding: BoundRuntimeContext,
         settings: AgentSettingsLike,
         credentials: OutboundCredentialProvider | None = None,
+        document_scope: DocumentScope = DocumentScope(),
     ) -> None:
+        self._document_scope = document_scope
         self._credentials = credentials
         self._settings = settings
         self.rebind(binding)
@@ -1408,6 +1431,7 @@ class DocumentSearchAdapter(DocumentSearchPort):
         query: str,
         *,
         top_k: int = 8,
+        document_scope: DocumentScope | None = None,
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
         search_policy: str | None = None,
@@ -1426,30 +1450,29 @@ class DocumentSearchAdapter(DocumentSearchPort):
             )
         if not (turn_corpus and include_team_documents):
             return DocumentSearchResult(hits=())
-        # Swift library/document selections must not be read as the whole corpus.
-        if (
-            library_tag_ids
-            or document_uids
-            or get_document_library_tags_ids(runtime_context)
-            or get_document_uids(runtime_context)
-        ):
-            raise DocumentScopeRefusedError(
-                "Library and document selections are not available on Weaver"
-            )
-        if _matches_nothing(library_tag_ids, document_uids):
+        document_scope = (
+            _effective_document_scope(runtime_context, self._document_scope)
+            .intersect(document_scope or DocumentScope())
+            .intersect(DocumentScope.from_ids(library_tag_ids, document_uids))
+        )
+        if document_scope.is_empty:
             return DocumentSearchResult(hits=())
         space_id = str(authority.binding.space.id)
         client = self._search_client
 
         async def chunks(*, document_uid: str, limit: int) -> list[VectorSearchHit]:
             return await client.get_document_chunks(
-                document_uid=document_uid, space_id=space_id, limit=limit
+                document_uid=document_uid,
+                space_id=space_id,
+                limit=limit,
+                document_scope=document_scope,
             )
 
         try:
             hits = await client.search(
                 question=query,
                 space_id=space_id,
+                document_scope=document_scope,
                 top_k=top_k if isinstance(top_k, int) and top_k > 0 else 8,
                 search_policy=search_policy or get_search_policy(runtime_context),
             )
@@ -1748,7 +1771,7 @@ def _wrap_document_port_error(exc: Exception) -> DocumentPortCallError:
     )
     # `str(exc)` on an httpx error embeds the full request URL — for
     # HTTPStatusError, "Client error '401 Unauthorized' for url
-    # 'http://knowledge-flow:8111/knowledge-flow/v1/vector/search'". This detail
+    # 'http://knowledge-flow:8111/knowledge-flow/v2/documents/search'". This detail
     # is rendered into the model-facing tool message AND persisted in chat
     # history, so the internal service host, port and route would reach the LLM
     # context and the trace of every user who triggers a downstream failure.
@@ -1796,10 +1819,15 @@ class DocumentTreeAdapter(DocumentTreePort):
         self,
         *,
         working_directory: str | None = None,
+        document_scope: DocumentScope | None = None,
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
         max_chars: int = 20_000,
     ) -> DocumentTreeResult:
+        if document_scope is not None and document_scope.selections:
+            raise DocumentScopeRefusedError(
+                "Scoped document tree is not available on Weaver"
+            )
         runtime_context = self._binding.runtime_context
         effective_libs = _narrow_port_scope_ids(
             get_document_library_tags_ids(runtime_context), library_tag_ids
@@ -1862,7 +1890,9 @@ class DocumentSummarizeAdapter(DocumentSummarizePort):
         binding: BoundRuntimeContext,
         settings: AgentSettingsLike,
         credentials: OutboundCredentialProvider | None = None,
+        document_scope: DocumentScope = DocumentScope(),
     ) -> None:
+        self._document_scope = document_scope
         self._credentials = credentials
         self._settings = settings
         self.rebind(binding)
@@ -1884,11 +1914,14 @@ class DocumentSummarizeAdapter(DocumentSummarizePort):
         instruction: str | None = None,
         max_chars: int = 2000,
     ) -> DocumentSummaryResult:
-        _ensure_uid_in_turn_scope(self._binding.runtime_context, document_uid)
+        document_scope = _ensure_uid_in_turn_scope(
+            self._binding.runtime_context, document_uid, self._document_scope
+        )
         try:
             result = await self._client.summarize(
                 document_uid=document_uid,
                 space_id=str(current_turn().binding.space.id),
+                document_scope=document_scope,
                 instruction=instruction,
                 max_chars=max_chars,
             )
@@ -1963,7 +1996,9 @@ class DocumentMarkdownAdapter(DocumentMarkdownPort):
         binding: BoundRuntimeContext,
         settings: AgentSettingsLike,
         credentials: OutboundCredentialProvider | None = None,
+        document_scope: DocumentScope = DocumentScope(),
     ) -> None:
+        self._document_scope = document_scope
         self._credentials = credentials
         self._settings = settings
         self.rebind(binding)
@@ -1977,7 +2012,7 @@ class DocumentMarkdownAdapter(DocumentMarkdownPort):
                 credentials=self._credentials,
             )
         )
-        self._cache: dict[str, str] = {}
+        self._cache: dict[tuple[str, DocumentScope], str] = {}
 
     async def fetch_markdown(
         self,
@@ -1986,17 +2021,21 @@ class DocumentMarkdownAdapter(DocumentMarkdownPort):
         offset: int = 0,
         max_chars: int = DEFAULT_MARKDOWN_PAGE_CHARS,
     ) -> DocumentMarkdownResult:
-        _ensure_uid_in_turn_scope(self._binding.runtime_context, document_uid)
-        full = self._cache.get(document_uid)
+        document_scope = _ensure_uid_in_turn_scope(
+            self._binding.runtime_context, document_uid, self._document_scope
+        )
+        cache_key = (document_uid, document_scope)
+        full = self._cache.get(cache_key)
         if full is None:
             try:
                 full = await self._client.fetch_markdown(
                     document_uid=document_uid,
                     space_id=str(current_turn().binding.space.id),
+                    document_scope=document_scope,
                 )
             except httpx.HTTPError as exc:
                 raise _wrap_document_port_error(exc) from exc
-            self._cache[document_uid] = full
+            self._cache[cache_key] = full
         return paginate_markdown(
             document_uid=document_uid,
             full=full,
@@ -2014,7 +2053,9 @@ class DocumentExtractionAdapter(DocumentExtractionPort):
         binding: BoundRuntimeContext,
         settings: AgentSettingsLike,
         credentials: OutboundCredentialProvider | None = None,
+        document_scope: DocumentScope = DocumentScope(),
     ) -> None:
+        self._document_scope = document_scope
         self._credentials = credentials
         self._settings = settings
         self.rebind(binding)
@@ -2032,11 +2073,14 @@ class DocumentExtractionAdapter(DocumentExtractionPort):
     async def extract(
         self, document_uid: str, *, instruction: str
     ) -> DocumentExtractionResult:
-        _ensure_uid_in_turn_scope(self._binding.runtime_context, document_uid)
+        document_scope = _ensure_uid_in_turn_scope(
+            self._binding.runtime_context, document_uid, self._document_scope
+        )
         try:
             result = await self._client.extract(
                 document_uid=document_uid,
                 space_id=str(current_turn().binding.space.id),
+                document_scope=document_scope,
                 instruction=instruction,
             )
         except httpx.HTTPError as exc:
@@ -2066,14 +2110,14 @@ class FredMcpToolProvider(ToolProviderPort):
         binding: BoundRuntimeContext,
         settings: AgentSettingsLike,
         credentials: OutboundCredentialProvider | None = None,
-        document_access_config: dict[str, Any] | None = None,
+        document_scope: DocumentScope = DocumentScope(),
     ) -> None:
         self._settings = settings
         self._agent = _McpRuntimeAgentShim(
             binding=binding,
             settings=settings,
             credentials=credentials,
-            document_access_config=document_access_config,
+            document_scope=document_scope,
         )
         self._mcp_runtime: MCPRuntime | None = None
 
@@ -2280,12 +2324,33 @@ class _McpRuntimeAgentShim:
         binding: BoundRuntimeContext,
         settings: AgentSettingsLike,
         credentials: OutboundCredentialProvider | None = None,
-        document_access_config: dict[str, Any] | None = None,
+        document_scope: DocumentScope = DocumentScope(),
     ) -> None:
-        self.document_access_config = document_access_config
+        self._document_scope = document_scope
         self.runtime_context = binding.runtime_context
         self.agent_settings = settings
         self.credential_provider = credentials
+
+    def document_context(self) -> str:
+        from fred_core.documents.transport import DocumentAccessContext
+
+        # The admitted turn owns the space, and service assembly owns the agent
+        # ceiling. Rebinding/credential renewal cannot replace that ceiling.
+        authority = current_turn()
+        authority.check_context(
+            self.runtime_context, authority.binding.agent.template_key
+        )
+        scope = _effective_document_scope(self.runtime_context, self._document_scope)
+        _, corpus = get_vector_search_scopes(self.runtime_context)
+        if (
+            not corpus
+            or get_rag_knowledge_scope(self.runtime_context) == "general_only"
+        ):
+            scope = scope.intersect(DocumentScope.from_ids([], []))
+        return DocumentAccessContext(
+            space_id=authority.binding.space.id,
+            document_scope=scope,
+        ).model_dump_json()
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
         self.runtime_context = binding.runtime_context

@@ -14,7 +14,7 @@
 """
 Library binding resolution and the legacy tree port's "empty scope finds nothing" rule.
 
-The builtin `knowledge.search` refuses library and document selections on Weaver;
+The builtin `knowledge.search` carries Weaver folder/document selections;
 its corpus search is covered by test_document_search_source_ceilings.py.
 """
 

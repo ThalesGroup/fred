@@ -1741,6 +1741,9 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         if not f:
             return None
         filters: List[Dict] = []
+        for clause in f.metadata_any:
+            alternatives = [{"terms": {f"metadata.{key}": list(values)}} for key, values in clause.items() if values]
+            filters.append({"bool": {"should": alternatives, "minimum_should_match": 1}} if alternatives else {"match_none": {}})
         if f.tag_ids is not None:
             filters.append({"terms": {"metadata.tag_ids": list(f.tag_ids)}})
         if f.metadata_terms:

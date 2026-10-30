@@ -24,13 +24,15 @@ introduced to prevent.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from fred_core import KeycloakUser, get_current_user
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.features.tabular.controller import TabularController
+from knowledge_flow_backend.features.tabular.controller import TabularController, tabular_service
 from knowledge_flow_backend.features.tabular.execution import (
     TabularCapacityExceededError,
     TabularExecutionTimeoutError,
@@ -44,6 +46,7 @@ from knowledge_flow_backend.features.tabular.structures import (
     TabularTableSchema,
     TabularTableSummary,
 )
+from knowledge_flow_backend.security.weaver_admission import delegated_person
 
 
 def _user() -> KeycloakUser:
@@ -55,9 +58,11 @@ def tabular_client(app_context: ApplicationContext):
     app = FastAPI()
     register_tabular_exception_handlers(app)
     router = APIRouter()
-    controller = TabularController(router)
+    TabularController(router)
+    controller = SimpleNamespace(service=SimpleNamespace())
     app.include_router(router)
-    app.dependency_overrides[get_current_user] = _user
+    app.dependency_overrides[delegated_person] = _user
+    app.dependency_overrides[tabular_service] = lambda: controller.service
     with TestClient(app) as client:
         yield client, controller
 
@@ -73,7 +78,7 @@ def tabular_client(app_context: ApplicationContext):
         (FileNotFoundError("gone"), 404),
     ],
 )
-def test_read_query_maps_each_failure_to_its_own_status(tabular_client, raised, expected_status):
+def test_query_tabular_documents_maps_each_failure_to_its_own_status(tabular_client, raised, expected_status):
     client, controller = tabular_client
 
     async def _raise(*_args, **_kwargs):
@@ -86,7 +91,7 @@ def test_read_query_maps_each_failure_to_its_own_status(tabular_client, raised, 
     assert response.status_code == expected_status
 
 
-def test_read_query_403_body_names_the_document_listing_tool(tabular_client):
+def test_query_tabular_documents_403_body_names_the_document_listing_tool(tabular_client):
     """The HTTP denial preserves the recovery hint for an LLM caller."""
     client, controller = tabular_client
 
@@ -127,12 +132,11 @@ def test_document_list_returns_only_names_identifiers_and_excel_tables(tabular_c
     response = client.get("/tabular/documents")
     assert response.status_code == 200
     assert response.json() == [
-        {"document_uid": "csv-uid", "document_name": "Sales.csv", "source_kind": "corpus", "tag_names": ["Finance"]},
+        {"document_uid": "csv-uid", "document_name": "Sales.csv", "source_kind": "corpus"},
         {
             "document_uid": "excel-uid",
             "document_name": "Budget.xlsx",
             "source_kind": "corpus",
-            "tag_names": ["Finance"],
             "tables": [{"query_alias": "q1-alias", "sheet": "Q1", "title": "Revenue"}],
         },
     ]

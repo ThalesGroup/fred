@@ -61,7 +61,10 @@ const REASONING: ChatMessage = msg({
 
 const TRACE: ChatMessage[] = [
   REASONING,
-  msg({ channel: "tool_call", parts: [{ type: "tool_call", call_id: "c1", name: "read_query", args: {} }] }),
+  msg({
+    channel: "tool_call",
+    parts: [{ type: "tool_call", call_id: "c1", name: "query_tabular_documents", args: {} }],
+  }),
   msg({
     channel: "tool_result",
     role: "tool",
@@ -75,7 +78,10 @@ const TRACE: ChatMessage[] = [
       },
     ],
   }),
-  msg({ channel: "tool_call", parts: [{ type: "tool_call", call_id: "c2", name: "read_query", args: {} }] }),
+  msg({
+    channel: "tool_call",
+    parts: [{ type: "tool_call", call_id: "c2", name: "query_tabular_documents", args: {} }],
+  }),
   msg({
     channel: "tool_result",
     role: "tool",

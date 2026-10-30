@@ -112,7 +112,7 @@ def _build_test_config(
                 },
                 "authorized_origins": [],
             },
-            "ai": {"knowledge_flow_url": "http://localhost:8111/knowledge-flow/v1"},
+            "ai": {"knowledge_flow_url": "http://localhost:8111/knowledge-flow/v2"},
             "observability": {
                 "kpi": {
                     "log": {"enabled": True},

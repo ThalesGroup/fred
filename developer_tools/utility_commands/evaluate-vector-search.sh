@@ -23,12 +23,12 @@
 #   ./run_vector_searches.sh --hybrid
 #   ./run_vector_searches.sh --semantic --top-k 5
 #   ./run_vector_searches.sh --strict --tags 111aaa,222bbb
-#   ./run_vector_searches.sh --hybrid --endpoint http://localhost:8111/knowledge-flow/v1/vector/search
+#   ./run_vector_searches.sh --hybrid --endpoint http://localhost:8111/knowledge-flow/v2/documents/search
 #
 # Flags:
 #   --hybrid | --semantic | --strict  (required: choose exactly one)
 #   --top-k N                         (default: 3)
-#   --endpoint URL                    (default: http://localhost:8111/knowledge-flow/v1/vector/search)
+#   --endpoint URL                    (default: http://localhost:8111/knowledge-flow/v2/documents/search)
 #   --tags id1,id2,...                (optional: document_library_tags_ids)
 
 set -euo pipefail
@@ -36,7 +36,7 @@ set -euo pipefail
 # ---------- Defaults ----------
 POLICY=""
 TOP_K=3
-ENDPOINT="http://localhost:8111/knowledge-flow/v1/vector/search"
+ENDPOINT="http://localhost:8111/knowledge-flow/v2/documents/search"
 TAGS_CSV=""
 
 # ---------- Parse args ----------

@@ -15,8 +15,10 @@
 import logging
 
 from fastapi import APIRouter, Depends
+from fred_core.documents.transport import DocumentAccessContext
 from fred_core.security.delegation import AssertedUser
 
+from knowledge_flow_backend.features.document_scope import document_access_context
 from knowledge_flow_backend.features.extract.service import (
     ExtractDocumentRequest,
     ExtractDocumentResponse,
@@ -38,20 +40,23 @@ class ExtractController:
         @router.post(
             "/documents/{document_uid}/extract",
             tags=["Documents"],
-            summary="Exhaustively extract information from a document",
+            summary="Extract information from a document",
             response_model=ExtractDocumentResponse,
+            operation_id="extract_document",
             description="""
-        Exhaustively extracts every item matching an `instruction` from an
-        already-ingested document — "list ALL the requirements", "every
-        deadline". Unlike summarize (lossy, selective), this maps over EVERY
-        chunk and de-duplicates the results without compressing, so nothing is
-        silently dropped. The map phase runs with bounded concurrency and
-        429-aware backoff, server-side, in one call.
+        Extracts items matching an instruction from authorized published markdown,
+        using bounded map calls and deduplication. Input above 2,000,000 characters
+        is reduced to its first and last 1,000,000 characters and flagged truncated.
+        Individual model-call failures are logged and contribute no items; they
+        do not set truncated or necessarily fail the HTTP request. A successful
+        response is therefore not proof of exhaustive extraction. Use a verbatim
+        read when the exact source text is required.
         """,
         )
         async def extract_document(
             document_uid: str,
             request: ExtractDocumentRequest,
+            context: DocumentAccessContext = Depends(document_access_context),
             user: AssertedUser = Depends(delegated_person),
         ):
-            return await self.service.extract_document(user, document_uid, request)
+            return await self.service.extract_document(user, document_uid, request, context)

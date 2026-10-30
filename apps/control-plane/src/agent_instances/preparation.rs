@@ -7,7 +7,7 @@
 use axum::{
     Json,
     extract::State,
-    http::{StatusCode, header},
+    http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
@@ -124,6 +124,7 @@ pub struct ChatControlDescriptor {
 
 #[derive(Serialize, ToSchema)]
 pub struct ExecutionPreparation {
+    pub agent_configuration_revision: i64,
     pub agent_instance_id: Uuid,
     pub space_id: Uuid,
     pub runtime_id: String,
@@ -138,7 +139,6 @@ pub struct ExecutionPreparation {
     pub supports_ui_parts: bool,
     #[schema(required = true)]
     pub max_chat_input_chars: Option<u64>,
-    /// Only controls supported by the current model facts are advertised.
     pub chat_controls: Vec<ChatControlDescriptor>,
     pub models: PreparationModels,
     /// Echo of the requested choice; binds this diagnostic to the current composer selection.
@@ -193,6 +193,7 @@ async fn prepare_execution(
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, instance_id)): ApiPath<(Uuid, Uuid)>,
     ApiQuery(query): ApiQuery<PreparationQuery>,
+    headers: HeaderMap,
 ) -> AppResult<impl IntoResponse> {
     let space = spaces::authorize(&s.pool, &s.fga, &user.uid, space_id, Permission::Read).await?;
     super::http::require_instance_space(space.kind)?;
@@ -202,7 +203,6 @@ async fn prepare_execution(
     if !s.fga.can_use_agent(initial.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
-    super::require_executable(&s, &space, &initial)?;
     let base = public_base(&s.agent_catalog, &initial.source_runtime_id).ok_or_else(|| {
         AppError::problem(
             StatusCode::CONFLICT,
@@ -210,9 +210,6 @@ async fn prepare_execution(
             "No approved public route is configured for this runtime.",
         )
     })?;
-    if let Some(session_id) = &query.session_id {
-        sessions::require_association(&s.pool, &user.uid, session_id, &initial).await?;
-    }
     // Discovery supplies current template support/input policy, never destinations.
     // It runs outside SQL and has the existing timeout and no-redirect policy.
     let template = agents::editable_template(
@@ -243,10 +240,10 @@ async fn prepare_execution(
     let current = super::get_for_space(&mut *tx, space_id, instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    super::require_executable(&s, &space, &current)?;
     if let Some(session_id) = &query.session_id {
         sessions::require_association(&mut *tx, &user.uid, session_id, &current).await?;
     }
+    super::require_executable(&s, &space, &current)?;
     let selected = require_available_capabilities(&current.tuning.0, &template)?;
     let policy = enablement::Policy::load(&mut *tx, space.organization).await?;
     enablement::require_usable(&policy, &space, &current.source_runtime_id, &selected)?;
@@ -260,19 +257,26 @@ async fn prepare_execution(
         return Err(AppError::NotFound);
     }
     let models: PreparationModels = models.into();
-    let chat_controls = if models.offers.iter().any(|offer| offer.reasoning_enabled) {
-        vec![ChatControlDescriptor {
+    let mut chat_controls = super::chat_controls::resolve(
+        &s.agent_catalog,
+        &template,
+        &current.tuning.0,
+        &selected,
+        headers.get(header::AUTHORIZATION),
+    )
+    .await;
+    if models.offers.iter().any(|offer| offer.reasoning_enabled) {
+        chat_controls.push(ChatControlDescriptor {
             capability_id: "platform".into(),
             widget: "reasoning_toggle".into(),
             params: Some(std::collections::BTreeMap::from([(
                 "default".into(),
                 serde_json::json!(false),
             )])),
-        }]
-    } else {
-        Vec::new()
-    };
+        });
+    }
     let result = ExecutionPreparation {
+        agent_configuration_revision: current.configuration_revision,
         agent_instance_id: instance_id,
         space_id,
         runtime_id: current.source_runtime_id,

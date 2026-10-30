@@ -31,7 +31,6 @@ from fred_runtime.common.kf_http_client import get_shared_kf_async_client
 from fred_runtime.common.outbound_credentials import (
     DelegatedCredentialProvider,
     OutboundCredentialProvider,
-    attach_grant,
     resolve_credential_provider,
 )
 from fred_runtime.common.structures import (
@@ -253,7 +252,13 @@ class KfBaseClient:
             headers["Authorization"] = credentials.authorization
         if credentials.delegated:
             headers.update(outbound_context_headers())
-        kwargs = attach_grant(kwargs, credentials.parameters)
+        # KF's strict business bodies carry no identity fields. Delegation uses
+        # the already-supported query envelope for both GET and POST.
+        if credentials.parameters:
+            kwargs["params"] = {
+                **dict(kwargs.get("params") or {}),
+                **credentials.parameters,
+            }
 
         # httpx>=0.28 path: build a Request then send it with explicit stream mode.
         stream = bool(kwargs.pop("stream", False))

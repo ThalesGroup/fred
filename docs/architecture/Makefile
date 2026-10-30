@@ -39,6 +39,19 @@ openapi: ## Regenerate apps/control-plane/openapi.json (unversioned) from the co
 generate: er openapi ## Rewrite every generated block from its sources
 	$(PYTHON) tools/docs.py generate
 
+# Code-derived reference only: this does not validate a journey for the dossier.
+KF_REFERENCE := apps/knowledge-flow-backend/docs/API_REFERENCE.md
+
+.PHONY: knowledge-flow-openapi knowledge-flow-reference check-knowledge-flow-reference
+knowledge-flow-openapi:
+	$(MAKE) --no-print-directory -C $(ROOT)/apps/knowledge-flow-backend generate-openapi
+
+knowledge-flow-reference: knowledge-flow-openapi ## Generate the KF technical reference outside the validated dossier
+	$(PYTHON) tools/docs.py generate $(KF_REFERENCE)
+
+check-knowledge-flow-reference: knowledge-flow-openapi ## Check KF reference freshness (static only)
+	$(PYTHON) tools/docs.py check $(KF_REFERENCE)
+
 .PHONY: check
 check: er openapi ## Fail if a generated block is stale, an invariant lacks a test, or a diagram does not render
 	$(PYTHON) tools/docs.py check

@@ -1073,7 +1073,7 @@ async def test_hitl_resume_two_sequential_prompts_get_different_interrupt_ids() 
 
 @dataclass(frozen=True)
 class _ToolCallTextIncident:
-    """Redacted evidence plus a reconstructed completed model message."""
+    """Redacted incident shape replayed with current canonical tool names."""
 
     name: str
     session_id: str
@@ -1109,8 +1109,8 @@ _TOOL_CALL_TEXT_INCIDENTS = (
         observation_id="73d1e5558f82c3b6",
         reconstructed_content=[
             *_redacted_thinking_blocks(37),
-            {"type": "text", "text": "read"},
-            {"type": "text", "text": "_query"},
+            {"type": "text", "text": "query"},
+            {"type": "text", "text": "_tabular_documents"},
             _RECONSTRUCTED_REFERENCE_BLOCK,
             {
                 "type": "text",
@@ -1122,18 +1122,18 @@ _TOOL_CALL_TEXT_INCIDENTS = (
             },
         ],
         observed_history_projection=(
-            "read\n_query\n{'type': 'reference', 'reference_ids': []}\n"
+            "query\n_tabular_documents\n{'type': 'reference', 'reference_ids': []}\n"
             '{"sql": "SELECT * FROM <redacted_table> LIMIT 5", '
             '"dataset_uids": ["<redacted_dataset>"]} list_tabular_documents{}'
         ),
         observed_trace_thinking_blocks=37,
         observed_trace_after_thinking=(
-            'read_query[reference]{"sql": "SELECT * FROM <redacted_table> LIMIT 5", '
+            'query_tabular_documents[reference]{"sql": "SELECT * FROM <redacted_table> LIMIT 5", '
             '"dataset_uids": ["<redacted_dataset>"]} list_tabular_documents{}'
         ),
         native_calls=(
             {
-                "name": "read_query",
+                "name": "query_tabular_documents",
                 "args": {
                     "sql": "SELECT * FROM fake_table LIMIT 5",
                     "dataset_uids": ["fake-dataset"],
@@ -1245,11 +1245,14 @@ _TOOL_CALL_TEXT_INCIDENTS = (
 def _replay_tools(recorder: list[dict[str, Any]]) -> list[StructuredTool]:
     """Build no-I/O fakes for every tool named by the three incidents."""
 
-    def read_query(sql: str, dataset_uids: list[str]) -> str:
+    def query_tabular_documents(sql: str, dataset_uids: list[str]) -> str:
         """Return fake query rows."""
 
         recorder.append(
-            {"name": "read_query", "args": {"sql": sql, "dataset_uids": dataset_uids}}
+            {
+                "name": "query_tabular_documents",
+                "args": {"sql": sql, "dataset_uids": dataset_uids},
+            }
         )
         return "five fake rows"
 
@@ -1286,7 +1289,7 @@ def _replay_tools(recorder: list[dict[str, Any]]) -> list[StructuredTool]:
         return "fake todos updated"
 
     return [
-        StructuredTool.from_function(read_query),
+        StructuredTool.from_function(query_tabular_documents),
         StructuredTool.from_function(list_tabular_documents),
         StructuredTool.from_function(task),
         StructuredTool.from_function(ls),
@@ -1418,12 +1421,12 @@ async def test_mixed_mistral_fragments_execute_and_pair_two_calls() -> None:
     invocations: list[dict[str, Any]] = []
     content: list[str | dict[str, Any]] = [
         {"type": "thinking", "thinking": "<redacted>"},
-        {"type": "text", "text": "read"},
-        "_query",
+        {"type": "text", "text": "query"},
+        "_tabular_documents",
         {"type": "reference", "reference_ids": []},
         {"type": "text", "text": '{"sql":"'},
         'SELECT COUNT(*) FROM fake_fleet","dataset_uids":["fake"]} '
-        + 'read_query{"sql":"SELECT COUNT(*) FROM fake_vehicles","dataset_uids":["fake"]}',
+        + 'query_tabular_documents{"sql":"SELECT COUNT(*) FROM fake_vehicles","dataset_uids":["fake"]}',
     ]
     model = RecordingModel(
         script=[

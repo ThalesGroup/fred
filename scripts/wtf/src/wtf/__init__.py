@@ -669,7 +669,7 @@ def generate_ports_md(branch: str, ports: dict[str, int]) -> str:
         | Service                 | Port  | URL                                                          |
         |-------------------------|-------|--------------------------------------------------------------|
         | Fred Agents             | {ports["fred-agents"]} | http://localhost:{ports["fred-agents"]}/agentic/v1/docs                 |
-        | Knowledge Flow Backend  | {ports["knowledge-flow-backend"]} | http://localhost:{ports["knowledge-flow-backend"]}/knowledge-flow/v1/docs       |
+        | Knowledge Flow Backend  | {ports["knowledge-flow-backend"]} | http://localhost:{ports["knowledge-flow-backend"]}/knowledge-flow/v2/docs       |
         | Control Plane Backend   | {ports["control-plane"]} | http://localhost:{ports["control-plane"]}/control-plane/v1/docs         |
         | Frontend                | {ports["frontend"]} | http://localhost:{ports["frontend"]}                                     |
     """)
@@ -860,7 +860,7 @@ def create(
     click.echo(bar)
     click.echo(f"  {click.style('Dir:', bold=True)}      {wt}")
     click.echo(f"  {click.style('Agents:', bold=True)}   " + click.style(f"http://localhost:{ports['fred-agents']}/agentic/v1/docs", fg="cyan"))
-    click.echo(f"  {click.style('KF:', bold=True)}        " + click.style(f"http://localhost:{ports['knowledge-flow-backend']}/knowledge-flow/v1/docs", fg="cyan"))
+    click.echo(f"  {click.style('KF:', bold=True)}        " + click.style(f"http://localhost:{ports['knowledge-flow-backend']}/knowledge-flow/v2/docs", fg="cyan"))
     click.echo(f"  {click.style('CP:', bold=True)}        " + click.style(f"http://localhost:{ports['control-plane']}/control-plane/v1/docs", fg="cyan"))
     click.echo(f"  {click.style('Frontend:', bold=True)} " + click.style(f"http://localhost:{ports['frontend']}", fg="cyan"))
     click.echo()

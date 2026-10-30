@@ -3,7 +3,10 @@
 
 //! Administrative observations of configured pods, never execution readiness.
 
-use std::{collections::BTreeMap, sync::OnceLock};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::OnceLock,
+};
 
 use anyhow::{Context, Result, ensure};
 use axum::{Json, extract::State, http::StatusCode};
@@ -204,6 +207,7 @@ pub struct AffectedAgentInstance {
 }
 
 impl From<&SelectingInstance> for AffectedAgentInstance {
+    /// `owner_name` is filled by [`name_owners`], after the SQL snapshot.
     fn from(instance: &SelectingInstance) -> Self {
         Self {
             agent_instance_id: instance.agent_instance_id,
@@ -211,8 +215,45 @@ impl From<&SelectingInstance> for AffectedAgentInstance {
             space_id: instance.space.id,
             space_name: instance.space.name.clone(),
             space_kind: instance.space.kind,
-            owner_name: instance.owner_name.clone(),
+            owner_name: None,
         }
+    }
+}
+
+/// Personal-space owners by space, as subjects.
+fn personal_owners(instances: &[SelectingInstance]) -> HashMap<Uuid, String> {
+    instances
+        .iter()
+        .filter(|instance| instance.space.kind == SpaceKind::Personal)
+        .filter_map(|instance| Some((instance.space.id, instance.space.personal_owner.clone()?)))
+        .collect()
+}
+
+/// Names the listed instances' owners from the user directory; an unavailable one omits names.
+async fn name_owners<'a>(
+    s: &AppState,
+    owners: &HashMap<Uuid, String>,
+    affected: impl IntoIterator<Item = &'a mut AffectedAgentInstance>,
+) {
+    let affected: Vec<_> = affected.into_iter().collect();
+    let subjects = affected
+        .iter()
+        .filter_map(|item| owners.get(&item.space_id).cloned())
+        .collect();
+    let names = async {
+        crate::api::organization_directory(s)?
+            .display_names(subjects)
+            .await
+    };
+    let names = names.await.unwrap_or_else(|_| {
+        tracing::warn!("[CAPABILITIES] Owner names unavailable");
+        HashMap::new()
+    });
+    for item in affected {
+        item.owner_name = owners
+            .get(&item.space_id)
+            .and_then(|owner| names.get(owner))
+            .cloned();
     }
 }
 
@@ -298,6 +339,11 @@ async fn read_inventory(
         });
     }
     tx.commit().await?;
+    let unusable = items
+        .iter_mut()
+        .flat_map(|item| &mut item.capabilities)
+        .flat_map(|offer| &mut offer.unusable_instances);
+    name_owners(s, &personal_owners(&instances), unusable).await;
     Ok(items)
 }
 
@@ -538,7 +584,7 @@ async fn organization_capability_revoke_impact(
     let instances = agent_instances::selecting_in_organization(&mut *tx, organization_id).await?;
     tx.commit().await?;
     let revoked = policy.without(&runtime_id, &capability_id);
-    let affected = instances
+    let mut affected: Vec<AffectedAgentInstance> = instances
         .iter()
         .filter(|instance| {
             let usable_under = |policy| {
@@ -554,6 +600,7 @@ async fn organization_capability_revoke_impact(
         })
         .map(AffectedAgentInstance::from)
         .collect();
+    name_owners(&s, &personal_owners(&instances), &mut affected).await;
     authorize(&s, &user.uid, organization_id).await?;
     Ok(Json(affected))
 }

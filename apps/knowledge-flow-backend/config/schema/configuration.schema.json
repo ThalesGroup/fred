@@ -15,7 +15,7 @@
           "title": "Name"
         },
         "base_url": {
-          "default": "/knowledge-flow/v1",
+          "default": "/knowledge-flow/v2",
           "title": "Base Url",
           "type": "string"
         },

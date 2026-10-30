@@ -16,6 +16,7 @@ from fred_core.common.fastapi_handlers import (
     ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
     DENIAL_CAUSE_HEADER,
 )
+from fred_core.documents.transport import DOCUMENT_CONTEXT_HEADER
 from fred_core.logs.propagation import CONTEXT_HEADER, outbound_context_headers
 from fred_core.security.delegation import GRANT_PARAM_NAMES
 from fred_core.security.mcp_delegation import mcp_mount_auth, verified_grant
@@ -63,26 +64,30 @@ async def _forward_verified_identity(request: httpx2.Request) -> None:
     request.headers.pop(CONTEXT_HEADER, None)
 
     query = [(name, value) for name, value in request.url.params.multi_items() if name not in GRANT_PARAM_NAMES]
+    request.headers.pop(DOCUMENT_CONTEXT_HEADER, None)
     grant = verified_grant()
     if grant is not None:
+        document_context = outer.headers.get(DOCUMENT_CONTEXT_HEADER)
+        if document_context is not None:
+            request.headers[DOCUMENT_CONTEXT_HEADER] = document_context
         query.extend((("person", grant.person), ("run", grant.run), ("agent", grant.agent)))
         request.headers.update(outbound_context_headers())
     request.url = request.url.copy_with(query=str(httpx2.QueryParams(tuple(query))).encode())
 
 
 def _curate_tool(route: Any, tool: Any) -> None:
-    """Keep grants out of schemas shown to a model."""
+    """Keep delegated identity and document authority out of model arguments."""
 
     if route.summary and route.description and route.summary != route.description:
         tool.description = f"{route.summary}\n\n{route.description}"
 
     properties = tool.parameters.get("properties")
     if isinstance(properties, dict):
-        for name in GRANT_PARAM_NAMES:
+        for name in (*GRANT_PARAM_NAMES, DOCUMENT_CONTEXT_HEADER):
             properties.pop(name, None)
     required = tool.parameters.get("required")
     if isinstance(required, list):
-        tool.parameters["required"] = [name for name in required if name not in GRANT_PARAM_NAMES]
+        tool.parameters["required"] = [name for name in required if name not in (*GRANT_PARAM_NAMES, DOCUMENT_CONTEXT_HEADER)]
 
 
 class _ToolErrorPolicy(Middleware):
@@ -103,14 +108,14 @@ class _ToolErrorPolicy(Middleware):
                     structured_content={"cause": "authority_lost"},
                     is_error=True,
                 )
-            if status == 400 and context.message.name == "read_query":
+            if status == 400 and context.message.name == "query_tabular_documents":
                 try:
                     detail = response.json().get("detail")
                 except (ValueError, AttributeError):
                     detail = None
                 if isinstance(detail, str) and detail:
                     return ToolResult(
-                        content=("Error calling read_query. Status code: 400. Response: " + json.dumps({"detail": detail}, ensure_ascii=False)),
+                        content=("Error calling query_tabular_documents. Status code: 400. Response: " + json.dumps({"detail": detail}, ensure_ascii=False)),
                         is_error=True,
                     )
             return ToolResult(content="Tool request failed.", is_error=True)
@@ -135,7 +140,7 @@ def mount_fastapi_tools(
             RouteMap(mcp_type=MCPType.EXCLUDE),
         ],
         mcp_component_fn=_curate_tool,
-        cache_ttl=300,
+        cache_ttl=300,  # Protocol discovery only; tools/call results are not cached.
         cache_scope="private",
         httpx_client_kwargs={
             "follow_redirects": False,

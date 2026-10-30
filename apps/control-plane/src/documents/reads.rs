@@ -243,6 +243,7 @@ impl Storage {
             can_write,
             processing_enabled: false,
             processing,
+            uploaders: Default::default(),
         })
     }
 
