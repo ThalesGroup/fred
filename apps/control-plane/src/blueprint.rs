@@ -229,8 +229,7 @@ impl Bundle {
                 for (subject, grants) in &mut roles {
                     if !names.contains(subject)
                         || (kind != SpaceKind::Organization
-                            && (grants.contains(&Role::OrganizationOwner)
-                                || grants.contains(&Role::PersonalSpaceCreator)))
+                            && grants.contains(&Role::OrganizationOwner))
                     {
                         return Err(Invalid);
                     }

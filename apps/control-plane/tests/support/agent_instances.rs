@@ -760,7 +760,6 @@ async fn instances_discovery_concurrency_rechecks_and_isolation() {
             403
         );
     }
-    grant(&e, org.id, Role::PersonalSpaceCreator, "alice").await;
     let (personal, _) = spaces::create_personal_space(&e.pool, &e.fga, "alice", org.id)
         .await
         .unwrap();
@@ -980,7 +979,6 @@ async fn instances_retention_and_exact_space_purge() {
     let app = app(&e, &identity, &catalog, e.fga.clone()).await;
     let template = enable(&e, org.id, "custom", true).await;
     let instance = create(&app, &identity, team.id, creation(template, "Retained")).await;
-    grant(&e, org.id, Role::PersonalSpaceCreator, "alice").await;
     let (personal, _) = spaces::create_personal_space(&e.pool, &e.fga, "alice", org.id)
         .await
         .unwrap();

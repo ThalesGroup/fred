@@ -1393,7 +1393,7 @@ export type OnboardingStatus = {
 export type CreatePersonalSpace = {
   organization_id: string;
 };
-export type Role = "member" | "editor" | "admin" | "analyst" | "organization_owner" | "personal_space_creator";
+export type Role = "member" | "editor" | "admin" | "analyst" | "organization_owner";
 export type MySpace = Space & {
   /** The subset of `roles` held only through an ancestor. */
   inherited_roles: Role[];

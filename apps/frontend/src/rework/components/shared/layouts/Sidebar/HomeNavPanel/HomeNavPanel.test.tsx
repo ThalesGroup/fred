@@ -7,7 +7,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   user: "priya",
-  roles: ["member", "personal_space_creator"],
+  roles: ["member"],
   personal: false,
   organization: true,
   fail: false,
@@ -68,7 +68,7 @@ afterEach(async () => {
   node = undefined!;
   root = undefined!;
   state.user = "priya";
-  state.roles = ["member", "personal_space_creator"];
+  state.roles = ["member"];
   state.personal = false;
   state.organization = true;
   state.fail = false;
@@ -95,7 +95,7 @@ it("creates only on explicit action, blocks duplicate activation and ignores com
   await act(async () => resolve({ id: "private-priya" }));
   expect(state.navigate).not.toHaveBeenCalled();
 });
-it("allows reuse without creation eligibility and uses the returned UUID", async () => {
+it("reuses the existing personal space and uses the returned UUID", async () => {
   state.roles = ["member"];
   state.personal = true;
   state.open.mockReturnValue({ unwrap: async () => ({ id: "private-priya" }) });
@@ -104,11 +104,17 @@ it("allows reuse without creation eligibility and uses the returned UUID", async
   await act(async () => entry()!.click());
   expect(state.navigate).toHaveBeenCalledWith("/team/private-priya/agents");
 });
-it("hides the entry without eligibility or personal access and on authority failure", async () => {
-  state.roles = ["member"];
+it.each(["member", "editor", "admin", "analyst"])("offers a personal space to an organization %s", async (role) => {
+  state.roles = [role];
+  await render();
+  expect(entry()).not.toBeNull();
+  expect(state.open).not.toHaveBeenCalled();
+});
+it("hides the entry for governance-only users and on authority failure", async () => {
+  state.roles = ["organization_owner"];
   await render();
   expect(entry()).toBeNull();
-  state.roles.push("personal_space_creator");
+  state.roles = ["member"];
   state.fail = true;
   await render();
   expect(entry()).toBeNull();

@@ -684,7 +684,7 @@ A folder deleted while the caller waits SHALL return not-found without a fabrica
 For ordinary organization users, Fred SHALL provide its existing personal-space navigation entry using manager authority, with at most one personal space in the person's unique organization. No separate creation button, organization selector or redesigned screen SHALL be introduced. Personal-space identity SHALL come from its returned UUID and personal owner, never a synthesized Python identifier.
 
 #### Scenario: Priya opens her personal space after import
-- **WHEN** Priya accepts the active terms after demo provisioning and has explicit personal-space creation eligibility and activates the existing personal-space entry
+- **WHEN** Priya accepts the active terms after demo provisioning, holds an organization business role and activates the existing personal-space entry
 - **THEN** Fred opens her personal space, creating it if absent, through the existing Agents route and personal navigation presentation using the returned UUID
 - **AND** she retains navigation to fredlab with her admin, editor and analyst roles
 - **AND** merely logging in, accepting terms or listing spaces creates no space
@@ -697,10 +697,9 @@ For ordinary organization users, Fred SHALL provide its existing personal-space 
 ### Requirement: Repeated personal-space opening preserves current authority
 
 `POST /control-plane/v1/me/personal-space` SHALL require personal admission and
-current read authority on the person's server-resolved organization. A supplied
-organization identifier SHALL match that context. Creation SHALL additionally
-require an explicit OpenFGA entitlement; organization membership alone SHALL NOT
-provide it. It SHALL return 201 with a
+current membership authority on the person's server-resolved organization. A supplied
+organization identifier SHALL match that context. OpenFGA SHALL derive this right
+from the organization's member, editor, analyst or admin role. It SHALL return 201 with a
 new private space, or 200 with the same existing space when the caller currently
 can read it. Reuse SHALL NOT write grants, repair revoked roles or replace an
 inaccessible existing space. Creation SHALL retain the private member/editor
@@ -717,16 +716,13 @@ organization. Dependency failure SHALL not be reported as successful opening.
 #### Scenario: Revoked roles remain revoked
 - **WHEN** an administrator removes personal editor permission but leaves read access
 - **THEN** reopening returns the space without restoring editor permission
-- **WHEN** personal read access or organization read access is removed before the
+- **WHEN** personal read access or organization business membership is removed before the
   waiting opening request is authorized
 - **THEN** opening is refused without restoring a role or creating a replacement
 
-#### Scenario: Creation eligibility is absent or revoked
-- **WHEN** a person without a personal space lacks its creation entitlement
+#### Scenario: Organization membership is absent
+- **WHEN** a person without a personal space has no organization business role
 - **THEN** opening cannot create the space or its initial roles
-- **WHEN** the creation entitlement is revoked after a space exists
-- **THEN** that revocation alone neither deletes the space nor changes its roles
-- **AND** reuse still requires current organization and personal read authority
 
 #### Scenario: Account changes during opening
 - **WHEN** an opening request finishes after its originating account has changed
@@ -750,18 +746,33 @@ permissions or an extension of personal content scope.
 - **THEN** each response is limited to the caller's organization and permissions
 - **AND** neither personal path contains the organization or another space
 
-### Requirement: Personal creation eligibility is explicit
+### Requirement: Personal space follows organization membership
 
-The organization-only direct role `personal_space_creator` SHALL grant only
-`can_create_personal_space`, without inheritance or content access. Organization
-administrators SHALL manage it through existing role endpoints; bundles SHALL
-use their existing role declarations. Its grant SHALL require direct organization
-content membership, and the last such role SHALL not be removed while it remains.
+The organization's direct `member`, `editor`, `analyst` and `admin` roles SHALL
+grant `can_create_personal_space` without an additional role assignment. Team and
+project participants already require content membership on their ancestors.
+Organization admin alone SHALL suffice without granting organization content read.
+Organization owner and platform roles alone SHALL NOT grant this permission.
 
-#### Scenario: Eligibility is withheld or revoked
-- **WHEN** an organization member lacks the creation role and has no personal space
-- **THEN** opening a personal space is refused without writes
-- **AND** removing that role from a person with an existing readable personal space does not prevent reuse
+The UI SHALL offer Personal space to eligible members. The server SHALL create
+one space for the caller and organization only on explicit first opening, and
+SHALL reuse its identity thereafter. Membership checks SHALL remain scoped to the
+caller, without enumerating or provisioning every organization member. Personal
+content SHALL remain private and reopening SHALL NOT restore revoked permissions.
+
+#### Scenario: Member opens their personal space
+- **WHEN** an organization member, editor, analyst or admin opens Personal space
+- **THEN** their space is created on demand without an additional entitlement
+- **AND** an admin-only caller gains no read access to organization content
+- **AND** subsequent openings return the same space if personal read remains allowed
+
+#### Scenario: Technical governance does not grant a personal space
+- **WHEN** a caller holds only organization owner or platform roles
+- **THEN** personal creation is refused without writes
+
+#### Scenario: Personal access was revoked
+- **WHEN** an eligible member opens an existing personal space they can no longer read
+- **THEN** opening is refused without restoring roles or creating a replacement
 
 ### Requirement: No backward compatibility before the first production release
 

@@ -1238,8 +1238,7 @@
         "editor": "Editor",
         "admin": "Administrator",
         "analyst": "Analyst",
-        "organization_owner": "Organization owner",
-        "personal_space_creator": "Personal space creator"
+        "organization_owner": "Organization owner"
       }
     },
     "admin": {
@@ -4746,7 +4745,6 @@
         "project": "Project"
       },
       "roles": {
-        "personal_space_creator": "Personal space creation",
         "admin": "Administrator",
         "member": "Member",
         "editor": "Editor",

@@ -46,9 +46,8 @@ type space
     define can_manage_evaluation_corpus: effective_analyst or effective_admin
     define can_read_conversations_for_evaluation: effective_analyst
     define can_own_organization: organization_owner
-    # Explicit organization eligibility, without content access or inheritance.
-    define personal_space_creator: [user]
-    define can_create_personal_space: personal_space_creator
+    # Personal space is a benefit of organization membership, including admin-only users.
+    define can_create_personal_space: member or editor or analyst or admin
     # Contextual reverse links supplied only after resolving a team's organization.
     define template_team: [space]
     define template_personal_team: [space]

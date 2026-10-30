@@ -66,9 +66,12 @@ export default function HomeNavPanel() {
     };
   }, [me.data?.user_id]);
   const org = spaces.data?.find((space) => space.kind === "organization");
-  const personal = spaces.data?.find((space) => space.kind === "personal" && space.personal_owner === me.data?.user_id);
   const canOpen =
-    !spaces.isError && !me.isError && org && me.data && (org.roles.includes("personal_space_creator") || personal);
+    !spaces.isError &&
+    !me.isError &&
+    org &&
+    me.data &&
+    org.roles.some((role) => ["member", "editor", "admin", "analyst"].includes(role));
   const activatePersonal = async () => {
     if (!canOpen || pending.current) return;
     const user = me.data.user_id;

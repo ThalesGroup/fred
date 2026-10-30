@@ -628,17 +628,6 @@ async fn supervision_isolates_organizations_and_drains_role_pages() {
     )
     .await
     .unwrap();
-    spaces::grant(
-        &e.pool,
-        &e.fga,
-        &e.subjects(),
-        "alice",
-        org.id,
-        Role::PersonalSpaceCreator,
-        "alice",
-    )
-    .await
-    .unwrap();
     let (personal, _) = spaces::create_personal_space(&e.pool, &e.fga, "alice", org.id)
         .await
         .unwrap();

@@ -246,7 +246,6 @@ async fn lifecycle_retention_personal_scope_and_final_guard_commit_failure() {
         .await
         .unwrap();
     let (org, _) = org_and_team(&e).await;
-    grant(&e, org.id, Role::PersonalSpaceCreator, "alice").await;
     let (personal, _) = spaces::create_personal_space(&e.pool, &e.fga, "alice", org.id)
         .await
         .unwrap();

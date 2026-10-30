@@ -296,12 +296,30 @@
             "relation": "organization_owner"
           }
         },
-        "personal_space_creator": {
-          "this": {}
-        },
         "can_create_personal_space": {
-          "computedUserset": {
-            "relation": "personal_space_creator"
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "member"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "editor"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "analyst"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              }
+            ]
           }
         },
         "template_team": {
@@ -356,13 +374,6 @@
             ]
           },
           "organization_owner": {
-            "directly_related_user_types": [
-              {
-                "type": "user"
-              }
-            ]
-          },
-          "personal_space_creator": {
             "directly_related_user_types": [
               {
                 "type": "user"

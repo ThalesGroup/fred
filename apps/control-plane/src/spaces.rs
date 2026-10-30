@@ -40,7 +40,7 @@ const INVALID_SUBJECT: &str =
 const UNKNOWN_SUBJECT: &str = "the subject is not a known identity of the user directory";
 const OWNER_ON_ORGANIZATIONS: &str = "only an organization has owners";
 const PERSONAL_FIXED: &str = "a personal space has a fixed single member";
-const CHILDREN_FIRST: &str = "remove dependent child roles and personal-space eligibility first";
+const CHILDREN_FIRST: &str = "remove dependent child roles first";
 const OWNER_NOT_FOUND: &str = "organization owner account was not found";
 const ADMIN_NOT_FOUND: &str = "organization administrator account was not found";
 
@@ -698,7 +698,14 @@ pub async fn create_personal_space(
     let mut tx = pool.begin().await?;
     lock_organization(&mut tx, &org).await?;
     let mut guard = fga.guard(&[Scope::Organization(org.id)]).await?;
-    authorize_locked(&mut tx, fga, caller, org.id, Permission::Read).await?;
+    in_context(in_organization(&mut *tx, fga, caller, org.id).await?)?;
+    crate::lifecycle::store::require_active(&mut *tx, org.id).await?;
+    if !fga
+        .check_space(caller, SpacePermission::CreatePersonalSpace, org.id)
+        .await?
+    {
+        return Err(AppError::Forbidden);
+    }
     // SQL finds the one candidate; its OpenFGA link must still place it in this organization.
     if let Some(row) = db::personal_space(&mut *tx, org.id, caller).await? {
         if fga.link_of(row.id, true).await? != Some(org.id) {
@@ -708,12 +715,6 @@ pub async fn create_personal_space(
         }
         require(fga, caller, Permission::Read, row.id).await?;
         return Ok((Space::from(row), false));
-    }
-    if !fga
-        .check_space(caller, SpacePermission::CreatePersonalSpace, org.id)
-        .await?
-    {
-        return Err(AppError::Forbidden);
     }
     let id = Uuid::new_v4();
     let space = Space::from(SpaceRow {
@@ -776,18 +777,6 @@ pub async fn grant(
         && !holds_parent_content(fga, target, parent).await?
     {
         return Err(AppError::Conflict(PARENT_REQUIRED.into()));
-    }
-    if role == Role::PersonalSpaceCreator {
-        if space.kind != SpaceKind::Organization {
-            return Err(AppError::BadRequest(
-                "personal-space eligibility belongs to an organization".into(),
-            ));
-        }
-        if !holds_parent_content(fga, target, space.id).await? {
-            return Err(AppError::Conflict(
-                "personal-space eligibility requires direct organization content membership".into(),
-            ));
-        }
     }
     may_attach(&mut *tx, fga, target, space.organization).await?;
     fga.write(

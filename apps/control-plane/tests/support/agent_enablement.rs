@@ -45,17 +45,6 @@ async fn defaults_are_isolated_and_exceptions_remain_authoritative() {
     assert!(e.fga.can_use_agent(a1, &e1).await.unwrap());
     assert!(!e.fga.can_use_agent(a2, &e1).await.unwrap());
 
-    spaces::grant(
-        &e.pool,
-        &e.fga,
-        &e.subjects(),
-        "alice",
-        o1.id,
-        Role::PersonalSpaceCreator,
-        "alice",
-    )
-    .await
-    .unwrap();
     let (personal, _) = spaces::create_personal_space(&e.pool, &e.fga, "alice", o1.id)
         .await
         .unwrap();

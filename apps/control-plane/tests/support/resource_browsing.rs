@@ -46,7 +46,6 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
         grant(&e, org.id, Role::Member, user).await;
         grant(&e, team.id, role, user).await;
     }
-    grant(&e, org.id, Role::PersonalSpaceCreator, "reader").await;
     let personal = spaces::create_personal_space(&e.pool, &e.fga, "reader", org.id)
         .await
         .unwrap()
@@ -222,7 +221,6 @@ async fn sql_placement_matches_fga_hierarchy_and_context() {
     let e = env().await;
     let (org, team, project) = tree(&e).await;
     grant(&e, org.id, Role::Analyst, "reader").await;
-    grant(&e, org.id, Role::PersonalSpaceCreator, "reader").await;
     let (personal, _) = spaces::create_personal_space(&e.pool, &e.fga, "reader", org.id)
         .await
         .unwrap();
@@ -399,7 +397,6 @@ async fn folder_creation_governance_contract_and_request_budget() {
         grant(&e, team.id, role, user).await;
     }
     grant(&e, org.id, Role::Editor, "inherited").await;
-    grant(&e, org.id, Role::PersonalSpaceCreator, "writer").await;
     let personal = spaces::create_personal_space(&e.pool, &e.fga, "writer", org.id)
         .await
         .unwrap()

@@ -268,27 +268,6 @@ impl Importer<'_> {
             if organization.is_some_and(|o| resolved[i].0.organization != o) {
                 continue;
             }
-            for (username, roles) in &child.roles {
-                if roles.contains(&Role::PersonalSpaceCreator)
-                    && !roles.iter().any(|r| r.grants_content())
-                {
-                    let allowed =
-                        if let Some(subject) = subjects.get(username).filter(|_| !resolved[i].1) {
-                            self.fga
-                                .direct_roles_on(subject, resolved[i].0.id)
-                                .await?
-                                .iter()
-                                .any(|r| r.grants_content())
-                        } else {
-                            false
-                        };
-                    if !allowed {
-                        return Err(invalid(
-                            "personal-space eligibility requires direct organization content membership",
-                        ));
-                    }
-                }
-            }
             let Some(p) = child.parent else {
                 continue;
             };
@@ -469,7 +448,7 @@ impl Importer<'_> {
                         parent,
                     });
                 }
-                let mut grants: Vec<_> = declaration
+                let grants: Vec<_> = declaration
                     .roles
                     .iter()
                     .flat_map(|(username, roles)| {
@@ -481,8 +460,6 @@ impl Importer<'_> {
                         })
                     })
                     .collect();
-                // An acknowledged batch must never leave eligibility before its content prerequisite.
-                grants.sort_by_key(|tuple| tuple.role == Role::PersonalSpaceCreator);
                 wrote |= link.is_some() || !grants.is_empty();
                 self.grant_spaces(&mut guard, link, &grants, report).await?;
             }
