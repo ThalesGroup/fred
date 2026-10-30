@@ -220,8 +220,8 @@ impl Fga {
             .await
     }
 
-    pub async fn is_platform_owner(&self, user: &str) -> Result<bool> {
-        self.check_object(user, PlatformRole::PlatformOwner.relation(), PLATFORM)
+    pub async fn is_platform_admin(&self, user: &str) -> Result<bool> {
+        self.check_object(user, PlatformRole::PlatformAdmin.relation(), PLATFORM)
             .await
     }
 

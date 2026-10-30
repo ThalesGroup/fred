@@ -29,7 +29,7 @@ import { useTranslation } from "react-i18next";
 import { useHref, useLocation, useNavigate } from "react-router-dom";
 import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
 import { useOrganizationSupervisionAccess } from "@core/hooks/useOrganizationSupervisionAccess";
-import { useOrganizationAdmin } from "@core/hooks/useOrganizationAdmin";
+import { useOrganizationOwner } from "@core/hooks/useOrganizationOwner";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { canEnterAdminSection } from "@core/guards/Protected";
 import { isPlatformAdminRoute } from "@core/hooks/usePlatformArea";
@@ -60,7 +60,7 @@ function BusinessMainNavBar() {
       isPlatformAdminRoute(pathname) ||
       ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, "")),
   );
-  const organization = useOrganizationAdmin(pathname.replace(/\/$/, "") !== "/admin/supervision");
+  const organization = useOrganizationOwner(pathname.replace(/\/$/, "") !== "/admin/supervision");
   const supervision = useOrganizationSupervisionAccess();
   const manager = useManagerPlatformAdmin();
   // Basename-aware href — the Help Center opens in its own tab (HELP-01).
@@ -99,7 +99,7 @@ function BusinessMainNavBar() {
   if (
     supervision.allowed ||
     manager.isAdmin ||
-    canEnterAdminSection({ ...capabilities, canManageFeatures: organization.isAdmin })
+    canEnterAdminSection({ ...capabilities, canManageFeatures: organization.isOwner })
   ) {
     entries.push({
       key: "admin",
@@ -113,7 +113,7 @@ function BusinessMainNavBar() {
   return <NavRail entries={entries} />;
 }
 
-/** The same rail in every admin space; only a platform owner without an organization gets Admin alone. */
+/** The same rail in every admin space; only a platform admin without an organization gets Admin alone. */
 export default function MainNavBar({ platformOnly = false }: { platformOnly?: boolean }) {
   return platformOnly ? <PlatformMainNavBar /> : <BusinessMainNavBar />;
 }

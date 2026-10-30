@@ -24,7 +24,7 @@ const ORGANIZATION_ROUTES = new Set(["/admin", "/admin/features", "/admin/superv
 
 /**
  * Platform governance stays separate; organization routes have their own authority. A
- * platform owner who is also a member keeps their own pages, each guarded as for anyone.
+ * platform admin who is also a member keeps their own pages, each guarded as for anyone.
  */
 export default function ManagerArea({ children }: { children: (business: boolean) => ReactNode }) {
   const access = useManagerPlatformAdmin();

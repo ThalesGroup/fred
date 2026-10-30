@@ -20,11 +20,11 @@ import type { UserTeamRelation } from "../../../../../slices/legacyControlPlane/
 import { useTranslation } from "react-i18next";
 import { Link, type To } from "react-router-dom";
 
-// Same priority the team banner uses (#2100): admin first, then editor, then
-// analyst — so "Admin · Analyste" always reads in a stable order regardless of
+// Business owner first, then editor and analyst, in a stable order regardless of
 // the raw relation order the bootstrap returns. `team_member` is the implicit
 // baseline and is only shown (as the sole label) when no elevated role is held.
 const ROLE_PRIORITY: Record<string, number> = {
+  team_owner: 0,
   team_admin: 0,
   pending_team_admin: 0,
   team_editor: 1,

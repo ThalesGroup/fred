@@ -172,12 +172,12 @@ async function assertAccountPages({ page, context, bearer }, owner) {
   await expect(page).toHaveURL(origin + "/settings");
   await expect(page.getByText("Your profile", { exact: true })).toBeVisible();
   await expect(page.getByText(owner ? "Root Admin" : "Bob Rigg", { exact: true })).toBeVisible();
-  await expect(page.getByText(owner ? "root@example.com" : "bob@app.com", { exact: true })).toBeVisible();
+  await expect(page.getByText(owner ? "root@example.com" : "bob@acme.example", { exact: true })).toBeVisible();
   if (!owner) await expect(page.getByText("root@example.com", { exact: true })).toHaveCount(0);
   const roles = page.getByText(/^Platform roles:/);
-  await expect(roles).toContainText(owner ? "platform_owner" : "None");
+  await expect(roles).toContainText(owner ? "platform_admin" : "None");
   if (!owner) {
-    await expect(page.getByText(/platform_owner/)).toHaveCount(0);
+    await expect(page.getByText(/platform_admin/)).toHaveCount(0);
     await expect(page.getByText("Organization: Demo", { exact: true })).toBeVisible();
   }
   await expect(page.getByText("Profile picture", { exact: true })).toHaveCount(0);
@@ -279,14 +279,14 @@ try {
   const root = await login("root", "it-root", "/admin");
   if (process.env.CONTROL_PLANE_BROWSER_DOCUMENTS_ONLY === "1") {
     await importFile(root.page, bundle);
-    const priya = await login("priya", "Azerty123_", "/home");
-    const opening = priya.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));
-    await priya.page.getByRole("button", { name: "Personal space", exact: true }).click();
+    const carl = await login("carl", "Azerty123_", "/home");
+    const opening = carl.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));
+    await carl.page.getByRole("button", { name: "Personal space", exact: true }).click();
     const opened = await opening;
     assert.equal(opened.status(), 201);
     const personal = await opened.json();
-    await priya.page.goto(`${origin}/team/${personal.id}/resources`);
-    await documentStorageJourney({ ...priya, origin, space: personal.id, expect });
+    await carl.page.goto(`${origin}/team/${personal.id}/resources`);
+    await documentStorageJourney({ ...carl, origin, space: personal.id, expect });
     assert.deepEqual(pageErrors, [], "Browser application errors");
     console.log(
       "Manager document browser acceptance passed: original upload, lost acknowledgment, navigation, reload, conflict skip and identical download without processing services.",
@@ -328,8 +328,8 @@ try {
     await expect(root.page.getByRole("heading", { name: "Import completed" })).toHaveCount(0);
     release();
     const first = await firstPromise;
-    assert.equal(first.identities_resolved, 15);
-    assert.equal(first.identities_created, 15);
+    assert.equal(first.identities_resolved, 13);
+    assert.equal(first.identities_created, 13);
     assert.equal(first.spaces_reconciled, 4);
     const teamsBefore = await get(root.context, root.bearer, "/admin/teams");
     const grantsBefore = await get(root.context, root.bearer, "/users/platform-roles");
@@ -345,7 +345,7 @@ try {
     await writeFile(
       `${fixture}/projects.json`,
       JSON.stringify([
-        { ref: "browser-project", name: "Browser project", team: "northbridge", roles: { bob: ["admin", "member"] } },
+        { ref: "browser-project", name: "Browser project", team: "research", roles: { bob: ["owner", "member"] } },
       ]),
     );
     const projectZip = resolve(dirname(bundle), "project.zip");
@@ -420,10 +420,10 @@ try {
     await expect(bob.page.getByRole("link", { name: "Provisioning", exact: true })).toHaveCount(0);
     const spaces = await get(bob.context, bob.bearer, "/me/spaces");
     const project = spaces.find((space) => space.name === "Browser project");
-    const north = spaces.find((space) => space.name === "northbridge");
-    const organization = spaces.find((space) => space.name === "Demo");
+    const north = spaces.find((space) => space.name === "Research");
+    const organization = spaces.find((space) => space.name === "Acme");
     assert.deepEqual(project.path, [organization.id, north.id, project.id]);
-    assert.deepEqual([...project.roles].sort(), ["admin", "editor", "member"]);
+    assert.deepEqual([...project.roles].sort(), ["editor", "member", "owner"]);
     assert.deepEqual(project.inherited_roles, ["editor"]);
     assert.deepEqual(north.roles, ["editor"]);
     const denied = await bob.context.request.post(`${origin}/control-plane/v1/import-export/import`, {
@@ -438,20 +438,20 @@ try {
     await importFile(alice.page, bundle, 200);
     assert.deepEqual(await get(root.context, root.bearer, "/admin/teams"), teamsBefore);
     assert.deepEqual(await get(bob.context, bob.bearer, "/me/spaces"), spaces);
-    // Explicit eligibility: Bob has no entry and the real command denies creation.
+    // Project ownership also qualifies: Bob gained owner on Browser project.
     await bob.page.goto(origin + "/home");
-    await expect(bob.page.getByRole("button", { name: "Personal space", exact: true })).toHaveCount(0);
+    await expect(bob.page.getByRole("button", { name: "Personal space", exact: true })).toHaveCount(1);
     const bobOpen = await bob.context.request.post(`${origin}/control-plane/v1/me/personal-space`, {
       headers: { Authorization: bob.bearer },
       data: { organization_id: organization.id },
     });
-    assert.equal(bobOpen.status(), 403);
+    assert.equal(bobOpen.status(), 201);
 
-    const priya = await login("priya", "Azerty123_", "/home");
-    await assertAccountAtBottom(priya.page);
-    const beforePersonal = await get(priya.context, priya.bearer, "/me/spaces");
+    const carl = await login("carl", "Azerty123_", "/home");
+    await assertAccountAtBottom(carl.page);
+    const beforePersonal = await get(carl.context, carl.bearer, "/me/spaces");
     assert.equal(beforePersonal.filter((space) => space.personal_owner).length, 0);
-    const personalEntry = priya.page.getByRole("button", { name: "Personal space", exact: true });
+    const personalEntry = carl.page.getByRole("button", { name: "Personal space", exact: true });
     let personalCalls = 0;
     let releasePersonal;
     let enteredPersonal;
@@ -461,7 +461,7 @@ try {
     const personalEntering = new Promise((resolve) => {
       enteredPersonal = resolve;
     });
-    await priya.page.route(
+    await carl.page.route(
       "**/control-plane/v1/me/personal-space",
       async (route) => {
         personalCalls++;
@@ -471,44 +471,44 @@ try {
       },
       { times: 1 },
     );
-    const firstPersonal = priya.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));
+    const firstPersonal = carl.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));
     await personalEntry.focus();
-    await priya.page.keyboard.press("Enter");
+    await carl.page.keyboard.press("Enter");
     await personalEntering;
     await expect(personalEntry).toBeDisabled();
-    await priya.page.keyboard.press("Enter");
+    await carl.page.keyboard.press("Enter");
     releasePersonal();
     const createdPersonal = await firstPersonal;
     assert.equal(createdPersonal.status(), 201);
     const personal = await createdPersonal.json();
     assert.equal(personalCalls, 1);
-    await expect(priya.page).toHaveURL(origin + `/team/${personal.id}/agents`);
-    await expect(priya.page.getByText("Personal space", { exact: true })).toBeVisible();
-    const personalMembership = (await get(priya.context, priya.bearer, "/me/spaces")).find((s) => s.id === personal.id);
+    await expect(carl.page).toHaveURL(origin + `/team/${personal.id}/agents`);
+    await expect(carl.page.getByText("Personal space", { exact: true })).toBeVisible();
+    const personalMembership = (await get(carl.context, carl.bearer, "/me/spaces")).find((s) => s.id === personal.id);
     assert.equal(personalMembership.organization_id, organization.id);
     assert.deepEqual(personalMembership.path, [personal.id]);
-    await priya.page.getByRole("button", { name: "Home", exact: true }).click();
-    await priya.page.getByRole("link", { name: "fredlab", exact: true }).click();
-    await expect(priya.page.getByText("fredlab", { exact: true })).toBeVisible();
-    await expect(priya.page.getByRole("link", { name: "Prompts", exact: true })).toBeVisible();
-    await priya.page.getByRole("button", { name: "Home", exact: true }).click();
-    const repeated = priya.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));
+    await carl.page.getByRole("button", { name: "Home", exact: true }).click();
+    await carl.page.getByRole("link", { name: "Research", exact: true }).click();
+    await expect(carl.page.getByText("Research", { exact: true })).toBeVisible();
+    // Carl owns Research but receives no content permission from that role.
+    await carl.page.getByRole("button", { name: "Home", exact: true }).click();
+    const repeated = carl.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));
     await personalEntry.click();
     const reused = await repeated;
     assert.equal(reused.status(), 200);
     assert.equal((await reused.json()).id, personal.id);
-    await expect(priya.page).toHaveURL(origin + `/team/${personal.id}/agents`);
-    await priya.page.reload();
-    await expect(priya.page.getByText("Personal space", { exact: true })).toBeVisible();
-    await priya.page.screenshot({ path: "target/personal-space.png", fullPage: true });
-    await priya.page.setViewportSize({ width: 390, height: 844 });
+    await expect(carl.page).toHaveURL(origin + `/team/${personal.id}/agents`);
+    await carl.page.reload();
+    await expect(carl.page.getByText("Personal space", { exact: true })).toBeVisible();
+    await carl.page.screenshot({ path: "target/personal-space.png", fullPage: true });
+    await carl.page.setViewportSize({ width: 390, height: 844 });
     await expect
-      .poll(() => priya.page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth))
+      .poll(() => carl.page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth))
       .toBe(true);
-    await priya.page.screenshot({ path: "target/personal-space-narrow.png", fullPage: true });
-    await priya.page.getByRole("button", { name: "Home", exact: true }).click();
+    await carl.page.screenshot({ path: "target/personal-space-narrow.png", fullPage: true });
+    await carl.page.getByRole("button", { name: "Home", exact: true }).click();
     // A transport refusal stays visible and requires a fresh deliberate action.
-    await priya.page.route(
+    await carl.page.route(
       "**/control-plane/v1/me/personal-space",
       (route) =>
         route.fulfill({
@@ -519,16 +519,16 @@ try {
       { times: 1 },
     );
     await personalEntry.click();
-    await expect(priya.page.getByRole("alert")).toBeVisible();
+    await expect(carl.page.getByRole("alert")).toBeVisible();
     await expect(personalEntry).toBeEnabled();
     await personalEntry.click();
-    await expect(priya.page.getByRole("alert")).toHaveCount(0);
+    await expect(carl.page.getByRole("alert")).toHaveCount(0);
     // Retained navigation reaches the original Resources screen. Folder lifecycle
     // and visual parity have separate focused acceptance.
-    await priya.page.setViewportSize({ width: 1280, height: 900 });
-    await priya.page.getByRole("link", { name: "Resources", exact: true }).click();
-    await expect(priya.page).toHaveURL(origin + `/team/${personal.id}/resources`);
-    await documentStorageJourney({ ...priya, origin, space: personal.id, expect });
+    await carl.page.setViewportSize({ width: 1280, height: 900 });
+    await carl.page.getByRole("link", { name: "Resources", exact: true }).click();
+    await expect(carl.page).toHaveURL(origin + `/team/${personal.id}/resources`);
+    await documentStorageJourney({ ...carl, origin, space: personal.id, expect });
     assert(!(await get(bob.context, bob.bearer, "/me/spaces")).some((item) => item.id === personal.id));
     assert.deepEqual(pageErrors, [], "Browser application errors");
     console.log(

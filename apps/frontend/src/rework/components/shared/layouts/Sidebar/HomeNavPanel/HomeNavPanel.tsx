@@ -71,7 +71,9 @@ export default function HomeNavPanel() {
     !me.isError &&
     org &&
     me.data &&
-    org.roles.some((role) => ["member", "editor", "admin", "analyst"].includes(role));
+    spaces.data?.some(
+      (space) => space.kind !== "personal" && space.organization_id === org.id && space.roles.includes("owner"),
+    );
   const activatePersonal = async () => {
     if (!canOpen || pending.current) return;
     const user = me.data.user_id;

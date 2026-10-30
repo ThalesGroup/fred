@@ -93,7 +93,7 @@ async function authorize(org = "org") {
   await waitFor(() =>
     expect(requests.find((request) => request.path === "/authorize/space")?.body).toEqual({
       space_id: org,
-      permission: "own_organization",
+      permission: "administer_organization",
     }),
   );
   expect(requests.filter((request) => request.path.includes("supervision"))).toHaveLength(0);

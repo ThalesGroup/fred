@@ -8,7 +8,7 @@ import { formatBytes } from "@shared/utils/formatBytes";
 import type { Role, SupervisionCounts } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./OrganizationSupervisionPage.module.css";
 
-const roles: Role[] = ["member", "editor", "admin", "analyst", "organization_owner"];
+const roles: Role[] = ["member", "editor", "owner", "analyst", "organization_admin"];
 
 export function SupervisionSummary({ counts, activeTeams }: { counts: SupervisionCounts; activeTeams?: number }) {
   const { t, i18n } = useTranslation();

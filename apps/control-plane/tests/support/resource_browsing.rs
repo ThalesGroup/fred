@@ -41,11 +41,12 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
         ("reader", Role::Member),
         ("editor", Role::Editor),
         ("analyst", Role::Analyst),
-        ("admin", Role::Admin),
+        ("owner", Role::Owner),
     ] {
         grant(&e, org.id, Role::Member, user).await;
         grant(&e, team.id, role, user).await;
     }
+    grant(&e, org.id, Role::Owner, "reader").await;
     let personal = spaces::create_personal_space(&e.pool, &e.fga, "reader", org.id)
         .await
         .unwrap()
@@ -163,7 +164,7 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
         );
     }
     assert_eq!(
-        get(&app, &identity.token("admin"), &format!("{base}/entries"))
+        get(&app, &identity.token("owner"), &format!("{base}/entries"))
             .await
             .0,
         403
@@ -190,8 +191,9 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
         assert_eq!(fault.calls.get("check"), Some(&2));
         assert_eq!(fault.writes, 0);
         assert_eq!(fault.calls.len(), 2);
-        // Five direct-role pages, zero placement Reads for context or target.
-        assert_eq!(fault.calls.get("read"), Some(&5));
+        // Four direct-role pages: organization member, team member, personal member/editor.
+        // Zero placement Reads for context or target.
+        assert_eq!(fault.calls.get("read"), Some(&4));
         assert!(fault.reads.iter().any(|r| {
             r["continuation_token"]
                 .as_str()
@@ -221,6 +223,7 @@ async fn sql_placement_matches_fga_hierarchy_and_context() {
     let e = env().await;
     let (org, team, project) = tree(&e).await;
     grant(&e, org.id, Role::Analyst, "reader").await;
+    grant(&e, org.id, Role::Owner, "reader").await;
     let (personal, _) = spaces::create_personal_space(&e.pool, &e.fga, "reader", org.id)
         .await
         .unwrap();
@@ -391,12 +394,13 @@ async fn folder_creation_governance_contract_and_request_budget() {
         ("writer", Role::Editor),
         ("reader", Role::Member),
         ("analyst", Role::Analyst),
-        ("admin", Role::Admin),
+        ("owner", Role::Owner),
     ] {
         grant(&e, org.id, Role::Member, user).await;
         grant(&e, team.id, role, user).await;
     }
     grant(&e, org.id, Role::Editor, "inherited").await;
+    grant(&e, org.id, Role::Owner, "writer").await;
     let personal = spaces::create_personal_space(&e.pool, &e.fga, "writer", org.id)
         .await
         .unwrap()
@@ -498,7 +502,7 @@ async fn folder_creation_governance_contract_and_request_budget() {
     for (user, status) in [
         ("reader", 403),
         ("analyst", 403),
-        ("admin", 403),
+        ("owner", 403),
         ("alice", 403),
         ("outsider", 404),
     ] {
@@ -672,7 +676,7 @@ async fn space_names_match_organization_and_child_http_creation_contracts() {
         ));
         for (kind, parent) in [("team", org.id), ("project", team.id)] {
             let body =
-                serde_json::json!({"kind":kind,"parent_id":parent,"name":name,"admin":"alice"})
+                serde_json::json!({"kind":kind,"parent_id":parent,"name":name,"owner":"alice"})
                     .to_string();
             assert_eq!(
                 content_request(
@@ -694,7 +698,7 @@ async fn space_names_match_organization_and_child_http_creation_contracts() {
         .unwrap();
     // Inner spaces and slashes are kept; surrounding whitespace is not.
     assert_eq!(other.name, name.trim());
-    let body = serde_json::json!({"kind":"team","parent_id":org.id,"name":name,"admin":"alice"})
+    let body = serde_json::json!({"kind":"team","parent_id":org.id,"name":name,"owner":"alice"})
         .to_string();
     assert_eq!(
         content_request(app, &identity.token("alice"), "POST", "/spaces", &body).await,

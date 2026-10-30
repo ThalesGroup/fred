@@ -21,7 +21,7 @@ function useAccess() {
   useEffect(() => {
     if (!organizationId || !stamp || context.isFetching || context.isError) return;
     let active = true;
-    const request = authorize({ spaceCheck: { space_id: organizationId, permission: "own_organization" } });
+    const request = authorize({ spaceCheck: { space_id: organizationId, permission: "administer_organization" } });
     void request.unwrap().then(
       ({ allowed }) => {
         if (active) setDecision({ organizationId, stamp, allowed });

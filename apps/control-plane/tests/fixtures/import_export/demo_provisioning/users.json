@@ -48,6 +48,14 @@
     "platform_roles": []
   },
   {
+    "username": "lea",
+    "email": "lea@acme.example",
+    "first_name": "Léa",
+    "last_name": "Laurent",
+    "password": "Azerty123_",
+    "platform_roles": []
+  },
+  {
     "username": "olivia",
     "email": "olivia@globex.example",
     "first_name": "Olivia",

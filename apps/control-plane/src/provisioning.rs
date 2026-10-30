@@ -122,10 +122,10 @@ pub struct Importer<'a> {
     pub operator: &'a str,
 }
 impl Importer<'_> {
-    /// Recheck platform ownership at every mutation boundary, including after lock waits;
+    /// Recheck platform administration at every mutation boundary, including after lock waits;
     /// bearer expiry after admission does not bound the import's duration.
     async fn authorize(&self) -> Result<()> {
-        platform::require_owner(self.fga, self.operator).await?;
+        platform::require_admin(self.fga, self.operator).await?;
         Ok(())
     }
 
@@ -217,16 +217,16 @@ impl Importer<'_> {
                     }
                     existing
                 } else {
-                    if !declaration.roles.values().any(|r| r.contains(&Role::Admin)) {
-                        return Err(invalid("new space requires a declared admin"));
+                    if !declaration.roles.values().any(|r| r.contains(&Role::Owner)) {
+                        return Err(invalid("new space requires a declared owner"));
                     }
                     if declaration.kind == SpaceKind::Organization
                         && !declaration
                             .roles
                             .values()
-                            .any(|r| r.contains(&Role::OrganizationOwner))
+                            .any(|r| r.contains(&Role::OrganizationAdmin))
                     {
-                        return Err(invalid("new organization requires a declared owner"));
+                        return Err(invalid("new organization requires a declared admin"));
                     }
                     let id = Uuid::new_v4();
                     SpaceRow {
@@ -394,17 +394,17 @@ impl Importer<'_> {
             .await?;
         self.validate_organizations(&mut tx, bundle, &resolved, subjects, None)
             .await?;
-        // Verify every owner before publishing any subtree. External IAM deletion is
+        // Verify every admin before publishing any subtree. External IAM deletion is
         // not transactional with OpenFGA; this is an existence check, not an account lease.
-        let owners: std::collections::BTreeSet<_> = bundle
+        let admins: std::collections::BTreeSet<_> = bundle
             .spaces
             .iter()
             .flat_map(|s| &s.roles)
-            .filter(|(_, roles)| roles.contains(&Role::OrganizationOwner))
+            .filter(|(_, roles)| roles.contains(&Role::OrganizationAdmin))
             .map(|(username, _)| subjects[username].clone())
             .collect();
-        let owners: Vec<_> = owners.into_iter().collect();
-        for batch in owners.chunks(8) {
+        let admins: Vec<_> = admins.into_iter().collect();
+        for batch in admins.chunks(8) {
             let mut checks = tokio::task::JoinSet::new();
             for subject in batch {
                 let directory = self.directory.clone();
@@ -412,7 +412,7 @@ impl Importer<'_> {
                 checks.spawn(async move { directory.exists(&subject).await });
             }
             while let Some(result) = checks.join_next().await {
-                ensure!(result??, "identity disappeared before owner grant");
+                ensure!(result??, "identity disappeared before admin grant");
             }
         }
         for (org, is_new) in resolved

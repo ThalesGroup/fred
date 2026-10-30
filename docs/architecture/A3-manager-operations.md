@@ -74,13 +74,13 @@ or roles/spaces error and existing acknowledgment counters.
 
 Inspect the subject's direct OpenFGA roles and the committed SQL spaces, including
 personal links and governance-only roles. Agree the intended organization, then
-have admins authorized in each affected organization revoke its unwanted
+have owners authorized in each affected organization revoke its unwanted
 grants bottom-up:
-projects, teams/personal spaces, then organization. Keep the required admin
-in every non-personal space and an owner in every organization. Platform owners can correct organization
-owner grants through their independent platform authority. Revocation does not
+projects, teams/personal spaces, then organization. Keep the required owner
+in every non-personal space and an admin in every organization. Platform admins can correct organization
+admin grants through their independent platform authority. Revocation does not
 require the target to have a valid unique context; it still checks the caller.
-No role or content is deleted automatically, and granting platform ownership does
+No role or content is deleted automatically, and granting platform administration does
 not bypass content or ordinary space-administration checks.
 
 Upgrade all manager role writers together; an old writer can still create conflicting
@@ -224,7 +224,7 @@ credentials or raw transport diagnostics. User lookup encodes the subject as a p
 ## Import boundary and feedback
 
 The CLI reads the operator bearer from a file, separately from the service-client
-secret. HTTP accepts exactly one multipart `file` after verified platform-owner
+secret. HTTP accepts exactly one multipart `file` after verified platform-admin
 authority. The ZIP parser accepts stored/deflated entries without extraction,
 checks actual expanded bytes and rejects duplicate/path-bearing entries, inconsistent
 headers, symlinks, encryption and corrupt data. Archive size is 50 MiB; expanded
@@ -399,11 +399,12 @@ make import-provisioning BUNDLE=target/demo-provisioning-bundle.zip TOKEN_FILE=/
 `build-demo-bundle` packages the five checked-in JSON files with Python's standard
 ZIP library and atomically replaces its output. `DEMO_PROVISIONING_FIXTURE_DIR`
 and `DEMO_BUNDLE_FILE` override source/output paths, including paths with spaces;
-no running service is needed. `make bundle-demo-zip` invokes the same builder.
-The ZIP contains the twelve accounts from the [example roster](02-journeys.md#example-people-and-spaces),
-Acme/Research and Globex/Support, with no projects, platform grants or personal-space
-eligibility. Usernames are the lowercase first names; the demo password is
-`Azerty123_`. The `owner` account is created and bootstrapped separately and is
+no running service is needed. `make build-demo-zip` and `make bundle-demo-zip`
+invoke the same builder. The ZIP contains the thirteen accounts from the
+[example roster](02-journeys.md#example-people-and-spaces), Acme/Research and
+Globex/Support, with no projects, platform grants or personal spaces. Usernames
+are the lowercase, unaccented first names; the demo password is
+`Azerty123_`. The `admin` account is created and bootstrapped separately and is
 absent from the bundle. The manifest retains `source_platform: "swift"`, the value
 required by the current version-2 import format.
 
@@ -413,8 +414,8 @@ it preserves existing identities and grants, and does not rename old organizatio
 or remove their memberships. Use a fresh demo installation for this roster; an
 existing account attached elsewhere must be handled explicitly before import.
 
-The bearer must identify a current platform owner, who may declare any platform role
-and organization owners.
+The bearer must identify a current platform admin, who may declare any platform role
+and organization admins.
 The operator token is never used to administer Keycloak: that traffic uses the manager's
 service identity from `identities.yaml`. Token validity and authority are rechecked during
 import; replay after expiry uses a fresh operator token.

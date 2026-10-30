@@ -143,7 +143,7 @@ impl Documents {
             ("writer", Role::Editor),
             ("reader", Role::Member),
             ("analyst", Role::Analyst),
-            ("admin", Role::Admin),
+            ("owner", Role::Owner),
         ] {
             crate::grant(&e, org.id, Role::Member, user).await;
             crate::grant(&e, team.id, role, user).await;
@@ -749,7 +749,7 @@ async fn document_request_budget_is_independent_of_document_count_and_cleanup_is
 #[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
 async fn document_creation_reads_conflicts_receipts_and_safe_download() {
     let d = Documents::start(1024 * 1024).await;
-    for user in ["reader", "analyst", "admin", "stranger"] {
+    for user in ["reader", "analyst", "owner", "stranger"] {
         let (status, body) = d
             .upload(user, "denied.txt", b"bytes", Uuid::new_v4(), None)
             .await;
@@ -806,7 +806,7 @@ async fn document_creation_reads_conflicts_receipts_and_safe_download() {
         to_bytes(content.into_body(), 1024 * 1024).await.unwrap(),
         bytes
     );
-    for user in ["admin", "stranger"] {
+    for user in ["owner", "stranger"] {
         assert_eq!(
             d.json(
                 user,
@@ -816,7 +816,7 @@ async fn document_creation_reads_conflicts_receipts_and_safe_download() {
             )
             .await
             .0,
-            if user == "admin" { 403 } else { 404 }
+            if user == "owner" { 403 } else { 404 }
         );
     }
     assert_eq!(

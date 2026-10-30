@@ -5,7 +5,7 @@
     "organization": "acme",
     "roles": {
       "carl": [
-        "admin"
+        "owner"
       ],
       "elena": [
         "analyst"
@@ -15,6 +15,9 @@
       ],
       "bob": [
         "editor"
+      ],
+      "lea": [
+        "member"
       ]
     }
   },
@@ -24,7 +27,7 @@
     "organization": "globex",
     "roles": {
       "marc": [
-        "admin"
+        "owner"
       ],
       "nadia": [
         "analyst"

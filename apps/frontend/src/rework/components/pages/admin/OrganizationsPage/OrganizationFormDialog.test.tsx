@@ -67,10 +67,10 @@ const person = (id: string, username: string | null = id): UserSummary => ({
   email: null,
   avatar_image_url: null,
 });
-const detail = (name: string, owners = [person("olivia")], admins = [person("adam")]): OrganizationDetail => ({
+const detail = (name: string, admins = [person("olivia")], owners = [person("adam")]): OrganizationDetail => ({
   organization: { ...ORG, name },
-  owners,
   admins,
+  owners,
 });
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -179,7 +179,7 @@ it("warns that a new holder replaces every current one", async () => {
   open(ORG);
   await waitForForm();
   const notes = [...dialog().querySelectorAll('[role="note"]')].map((n) => n.textContent);
-  expect(notes).toEqual(["rework.organizations.editOrganization.severalOwners olivia, oscar"]);
+  expect(notes).toEqual(["rework.organizations.editOrganization.severalAdmins olivia, oscar"]);
 });
 
 it.each([
@@ -211,7 +211,7 @@ it.each([
 ])("shows our wording, never the server detail, for a creation refused with %i", async (status, key) => {
   open(undefined);
   act(() => type(nameInput()!, "New"));
-  for (const who of ["owner", "admin"]) {
+  for (const who of ["admin", "owner"]) {
     const field = dialog().querySelector<HTMLInputElement>(`input[aria-label="rework.organizations.${who}"]`)!;
     replies.push(async () => json([person(who)]));
     act(() => type(field, who));

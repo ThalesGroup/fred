@@ -137,11 +137,11 @@ pub struct Document {
 pub enum Role {
     Member,
     Editor,
-    Admin,
+    Owner,
     Analyst,
     /// Technical governance and aggregates; grants no document content access.
-    #[serde(rename = "organization_owner")]
-    OrganizationOwner,
+    #[serde(rename = "organization_admin")]
+    OrganizationAdmin,
 }
 
 impl Role {
@@ -149,9 +149,9 @@ impl Role {
         match self {
             Role::Member => "member",
             Role::Editor => "editor",
-            Role::Admin => "admin",
+            Role::Owner => "owner",
             Role::Analyst => "analyst",
-            Role::OrganizationOwner => "organization_owner",
+            Role::OrganizationAdmin => "organization_admin",
         }
     }
 
@@ -159,21 +159,21 @@ impl Role {
         match s {
             "member" => Some(Role::Member),
             "editor" => Some(Role::Editor),
-            "admin" => Some(Role::Admin),
+            "owner" => Some(Role::Owner),
             "analyst" => Some(Role::Analyst),
-            "organization_owner" => Some(Role::OrganizationOwner),
+            "organization_admin" => Some(Role::OrganizationAdmin),
             _ => None,
         }
     }
 
-    /// Admin is governance only: it grants no access to content.
+    /// Owner is governance only: it grants no access to content.
     pub fn grants_content(self) -> bool {
         matches!(self, Role::Member | Role::Editor | Role::Analyst)
     }
 
     /// Roles the model extends to every descendant space.
     pub fn descends(self) -> bool {
-        matches!(self, Role::Editor | Role::Admin | Role::Analyst)
+        matches!(self, Role::Editor | Role::Owner | Role::Analyst)
     }
 }
 
@@ -319,7 +319,7 @@ mod tests {
         assert!(revocation_blocked(Member, &[Member], true));
         assert!(!revocation_blocked(Member, &[Member], false));
         assert!(!revocation_blocked(Member, &[Member, Editor], true));
-        assert!(revocation_blocked(Editor, &[Editor, Admin], true));
-        assert!(!revocation_blocked(Admin, &[Admin], true));
+        assert!(revocation_blocked(Editor, &[Editor, Owner], true));
+        assert!(!revocation_blocked(Owner, &[Owner], true));
     }
 }

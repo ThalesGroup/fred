@@ -124,7 +124,7 @@ interface OrganizationFormDialogProps {
   onClose: () => void;
 }
 
-/** Create or edit an organization's name, owner and administrator. An edit sends only what changed. */
+/** Create or edit an organization's name, technical admin and business owner. An edit sends only what changed. */
 export default function OrganizationFormDialog({ organization, onSaved, onClose }: OrganizationFormDialogProps) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
@@ -141,16 +141,16 @@ export default function OrganizationFormDialog({ organization, onSaved, onClose 
   const [cachedRequestId] = useState(detailQuery.requestId);
   const [detail, setDetail] = useState<OrganizationDetail>();
   const [name, setName] = useState("");
-  const [owner, setOwner] = useState<UserSummary | null>(null);
   const [admin, setAdmin] = useState<UserSummary | null>(null);
+  const [owner, setOwner] = useState<UserSummary | null>(null);
   // Pre-fill once, from this open's own fetch rather than a cached copy; a later refetch
-  // must not overwrite what the admin typed.
+  // must not overwrite what the platform admin typed.
   const fresh = !detailQuery.isFetching && detailQuery.requestId !== cachedRequestId;
   if (detailQuery.currentData && fresh && !detail) {
     setDetail(detailQuery.currentData);
     setName(detailQuery.currentData.organization.name);
-    setOwner(detailQuery.currentData.owners[0] ?? null);
     setAdmin(detailQuery.currentData.admins[0] ?? null);
+    setOwner(detailQuery.currentData.owners[0] ?? null);
   }
   const ready = !organization || !!detail;
 
@@ -159,8 +159,8 @@ export default function OrganizationFormDialog({ organization, onSaved, onClose 
   const changes: UpdateOrganization = {};
   if (detail) {
     if (trimmedName !== detail.organization.name) changes.name = trimmedName;
-    if (owner?.username && owner.id !== detail.owners[0]?.id) changes.owner_username = owner.username;
     if (admin?.username && admin.id !== detail.admins[0]?.id) changes.admin_username = admin.username;
+    if (owner?.username && owner.id !== detail.owners[0]?.id) changes.owner_username = owner.username;
   }
   // An untouched holder is kept as is, even one the directory no longer names.
   const kept = (user: UserSummary | null, current?: UserSummary) =>
@@ -168,14 +168,14 @@ export default function OrganizationFormDialog({ organization, onSaved, onClose 
   const canSubmit =
     ready &&
     trimmedName !== "" &&
-    kept(owner, detail?.owners[0]) &&
     kept(admin, detail?.admins[0]) &&
+    kept(owner, detail?.owners[0]) &&
     !isCreating &&
     !isUpdating &&
     (!organization || Object.keys(changes).length > 0);
 
   const handleConfirm = async () => {
-    if (!canSubmit || !owner || !admin) return;
+    if (!canSubmit || !admin || !owner) return;
     await runMutationAction({
       action: async () =>
         organization
@@ -183,8 +183,8 @@ export default function OrganizationFormDialog({ organization, onSaved, onClose 
           : createOrganization({
               createOrganization: {
                 name: trimmedName,
-                owner_username: owner.username!,
                 admin_username: admin.username!,
+                owner_username: owner.username!,
               },
             }).unwrap(),
       onSuccess: (saved) => {
@@ -234,10 +234,10 @@ export default function OrganizationFormDialog({ organization, onSaved, onClose 
             autoFocus={!!organization}
             required
           />
-          <AccountPicker label={t("rework.organizations.owner")} value={owner} onChange={setOwner} />
-          <SeveralHolders holders={detail?.owners} messageKey="rework.organizations.editOrganization.severalOwners" />
           <AccountPicker label={t("rework.organizations.admin")} value={admin} onChange={setAdmin} />
           <SeveralHolders holders={detail?.admins} messageKey="rework.organizations.editOrganization.severalAdmins" />
+          <AccountPicker label={t("rework.organizations.owner")} value={owner} onChange={setOwner} />
+          <SeveralHolders holders={detail?.owners} messageKey="rework.organizations.editOrganization.severalOwners" />
         </div>
       )}
     </Dialog>

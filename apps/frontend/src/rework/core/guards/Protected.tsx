@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useOrganizationAdmin } from "@core/hooks/useOrganizationAdmin";
+import { useOrganizationOwner } from "@core/hooks/useOrganizationOwner";
 import { Navigate } from "react-router-dom";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import type { UserCapabilities } from "../../types/conversation.ts";
@@ -96,9 +96,9 @@ export const Protected = ({ children, requires }: ProtectedProps) =>
   );
 
 function OrganizationFeaturesGuard({ children }: { children: React.ReactNode }) {
-  const access = useOrganizationAdmin();
+  const access = useOrganizationOwner();
   if (access.isLoading || (access.isFetching && !access.currentData)) return null;
-  if (!access.isAdmin) return <Navigate to="/unauthorized" replace />;
+  if (!access.isOwner) return <Navigate to="/unauthorized" replace />;
   return <>{children}</>;
 }
 

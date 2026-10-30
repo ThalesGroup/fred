@@ -86,7 +86,7 @@ const OPEN = "rework.organizations.createOrganization.open";
 const SUBMIT = "rework.organizations.createOrganization.submit";
 const SAVE = "rework.organizations.editOrganization.submit";
 const user = (name: string) => ({ id: name, username: name, first_name: name, last_name: "" });
-const DETAIL = { organization: { id: "a", name: "Demo" }, owners: [user("olivia")], admins: [user("adam")] };
+const DETAIL = { organization: { id: "a", name: "Demo" }, admins: [user("olivia")], owners: [user("adam")] };
 beforeEach(() => {
   vi.clearAllMocks();
   Object.assign(h.access, { isAdmin: true, isLoading: false, isFetching: false, isError: false });
@@ -121,7 +121,7 @@ function type(input: HTMLInputElement, value: string) {
 function openAndFill() {
   act(() => button(OPEN)!.click());
   act(() => type(dialog()!.querySelector("input")!, " New Org "));
-  for (const who of ["owner", "admin"]) {
+  for (const who of ["admin", "owner"]) {
     const label = `rework.organizations.${who}`;
     act(() => type(dialog()!.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!, who));
     act(() => button(`Select ${who}`)!.click());
@@ -144,7 +144,7 @@ it("distinguishes unavailable, loading and successful empty lists without stale 
   render();
   expect(host.textContent).toContain("rework.organizations.empty");
 });
-it("hides the create button and skips the registry when platform ownership is absent", () => {
+it("hides the create button and skips the registry when platform adminship is absent", () => {
   h.access.isAdmin = false;
   render();
   expect(button(OPEN)).toBeUndefined();
@@ -159,7 +159,7 @@ it("creates from the dialog, closes it and resets to the first page", async () =
   openAndFill();
   await act(async () => button(SUBMIT)!.click());
   expect(h.submit).toHaveBeenCalledExactlyOnceWith({
-    createOrganization: { name: "New Org", owner_username: "owner", admin_username: "admin" },
+    createOrganization: { name: "New Org", admin_username: "admin", owner_username: "owner" },
   });
   expect(h.query).toHaveBeenLastCalledWith({ after: undefined }, expect.anything());
   expect(h.showSuccess).toHaveBeenCalledWith({
@@ -227,12 +227,12 @@ it("sends only the changed fields, then closes without reloading the list", asyn
   act(() =>
     [...dialog()!.querySelectorAll("button")].find((b) => b.getAttribute("aria-label")?.includes("adam"))!.click(),
   );
-  act(() => type(dialog()!.querySelector<HTMLInputElement>('input[aria-label="rework.organizations.admin"]')!, "zoe"));
+  act(() => type(dialog()!.querySelector<HTMLInputElement>('input[aria-label="rework.organizations.owner"]')!, "zoe"));
   act(() => button("Select zoe")!.click());
   await act(async () => button(SAVE)!.click());
   expect(h.update).toHaveBeenCalledExactlyOnceWith({
     id: "a",
-    updateOrganization: { name: "Renamed", admin_username: "zoe" },
+    updateOrganization: { name: "Renamed", owner_username: "zoe" },
   });
   expect(h.showSuccess).toHaveBeenCalledWith({
     summary: "rework.organizations.editOrganization.successSummary Renamed",

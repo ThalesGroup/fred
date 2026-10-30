@@ -29,8 +29,8 @@ the annexes. Validation records live in each lot's PR; remaining work in GitHub 
 
 | Question | Canonical explanation | Implementation entry |
 | --- | --- | --- |
-| Login, CGU, first platform owner | [Journey](02.1-user-journeys.md#from-an-empty-platform-to-an-organizations-first-user), [Security](03-security.md) | [Source map](../../apps/control-plane/src/README.md) rows authentication, CGU, bootstrap |
-| Organization owner/admin selection and creation | [Organization creation](02.1-user-journeys.md#a-platform-owner-creates-an-organization), [Organizations](04-organizations.md#platform-organization-administration) | Source map rows directory and organizations |
+| Login, CGU, first platform admin | [Journey](02.1-user-journeys.md#from-an-empty-platform-to-an-organizations-first-user), [Security](03-security.md) | [Source map](../../apps/control-plane/src/README.md) rows authentication, CGU, bootstrap |
+| Organization admin/admin selection and creation | [Organization creation](02.1-user-journeys.md#a-platform-admin-creates-an-organization), [Organizations](04-organizations.md#platform-organization-owneristration) | Source map rows directory and organizations |
 | Organization totals, team detail and their disclosure boundary | [Overview](04-organizations.md#organization-supervision), [Supervision contract](A8-organizations.md#organization-supervision), [Read budget](09-quality.md#organization-supervision-read-budget) | [Implementation trace](A8-organizations.md#pagination-freshness-and-implementation-trace); organization supervision page |
 | Import accounts, teams and roles | [Provisioning journey](02.1-user-journeys.md#provisioning-the-business-account), [ZIP contract](A2-manager-contracts.md#provisioning-declarations) | Source map row ZIP import |
 | What does each role mean, and where do current permissions differ? | [Roles and responsibility boundaries](A11-roles.md) | Role definitions, attribution and SSI comparison in the annex |

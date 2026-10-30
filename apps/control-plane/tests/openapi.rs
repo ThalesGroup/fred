@@ -244,9 +244,9 @@ fn schemas_preserve_serialized_roles_nullable_fields_and_flattening() {
         json!([
             Role::Member,
             Role::Editor,
-            Role::Admin,
+            Role::Owner,
             Role::Analyst,
-            Role::OrganizationOwner,
+            Role::OrganizationAdmin,
         ])
     );
     assert_eq!(
@@ -373,7 +373,7 @@ fn role_names_are_exact_and_unaliased() {
     assert_eq!(
         schema["components"]["schemas"]["PlatformRole"]["enum"],
         json!([
-            "platform_owner",
+            "platform_admin",
             "platform_observer",
             "feature_manager",
             "prompt_editor"
@@ -383,10 +383,10 @@ fn role_names_are_exact_and_unaliased() {
         schema["components"]["schemas"]["Role"]["enum"]
             .as_array()
             .unwrap()
-            .contains(&json!("organization_owner"))
+            .contains(&json!("organization_admin"))
     );
     for name in [
-        "platform_owner",
+        "platform_admin",
         "platform_observer",
         "feature_manager",
         "prompt_editor",
@@ -394,18 +394,18 @@ fn role_names_are_exact_and_unaliased() {
         assert_eq!(PlatformRole::parse(name).unwrap().relation(), name);
     }
     for refused in [
-        "owner",
-        "observer",
         "admin",
-        "platform_admin",
+        "observer",
+        "owner",
+        "platform_owner",
         "team_manager",
     ] {
         assert!(PlatformRole::parse(refused).is_none());
     }
-    assert!(Role::parse("owner").is_none());
+    assert!(Role::parse("admin").is_none());
     assert_eq!(
-        Role::parse("organization_owner").map(Role::as_str),
-        Some("organization_owner")
+        Role::parse("organization_admin").map(Role::as_str),
+        Some("organization_admin")
     );
 }
 

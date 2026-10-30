@@ -8,11 +8,11 @@ It is a distinct kind of space, not a collective team.
 ## Institutional governance and business work
 
 The organization is both an institutional boundary and a shared business workspace.
-Its admin manages the community and common resources, such as an organization corpus
+Its owner manages the community and common resources, such as an organization corpus
 or assistant, with analysts, editors and members. Teams and projects use these
 resources under their access rules.
 
-The owner's separate mandate is to execute limited steering committee decisions.
+The admin's separate mandate is to execute limited steering committee decisions.
 The [roles annex](A11-roles.md) defines that mandate and its differences from
 current permissions, including team creation and organization access.
 
@@ -51,7 +51,7 @@ Creating an account or organization does not automatically create a personal spa
 
 ## Organization supervision
 
-In the current implementation, the organization owner opens **Organization
+In the current implementation, the organization admin opens **Organization
 supervision** from Administration. This aggregate visibility is recorded as a
 [mandate question](A11-roles.md#responsibility-boundaries-and-current-enforcement).
 The summary covers documents, processing, published results and direct role counts,
@@ -60,7 +60,7 @@ in a side panel; Refresh reloads the summary and the open detail.
 
 ```mermaid
 flowchart TB
-    owner["Organization owner"] --> summary["Organization summary"]
+    owner["Organization admin"] --> summary["Organization summary"]
     summary --> direct["Organization's<br/>own resources"]
     summary --> teams["Teams and<br/>their projects"]
     summary --> personal["Personal spaces<br/>combined"]
@@ -73,15 +73,15 @@ Team details include their projects. Organization totals cover all teams,
 regardless of the page consulted. Retired documents awaiting purge are counted
 separately. Published counts describe recorded results, not live storage health.
 
-## Platform organization administration
+## Platform organization owneristration
 
-A platform owner creates an organization and appoints its owner and admin.
+A platform admin creates an organization and appoints its owner and admin.
 Those responsibilities do not automatically grant access to documents. Provisioning
 can also import accounts, teams, projects and explicit roles together; the
 [user journey](02.1-user-journeys.md) illustrates this setup.
 
-The current API also lets a platform owner retire a space and its descendants,
-beyond the agreed limited platform-owner remit: access closes first,
+The current API also lets a platform admin retire a space and its descendants,
+beyond the agreed limited platform-admin remit: access closes first,
 then cleanup follows. A scope containing documents cannot be retired through this
 operation. User accounts are retained.
 

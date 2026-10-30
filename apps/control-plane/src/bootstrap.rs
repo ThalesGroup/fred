@@ -29,7 +29,7 @@ pub const LOCK_KEY: i64 = 8728722653212751168;
 
 pub const INVALID: &str = "Invalid or disabled bootstrap secret.";
 pub const COMPLETED: &str = "Root bootstrap already completed — this endpoint is permanently \
-     disabled. Recovering from a lost platform_owner is a separate break-glass procedure, \
+     disabled. Recovering from a lost platform_admin is a separate break-glass procedure, \
      not a reopening of root bootstrap.";
 pub const AUTH_DISABLED: &str = "Authentication is disabled in this deployment — root \
      bootstrap cannot run without real Keycloak/OIDC validation. Enable authentication \
@@ -52,7 +52,7 @@ pub fn same_secret(a: &str, b: &str) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
-/// Grants platform owner to `uid`, the caller's own subject, in two steps under the same
+/// Grants platform admin to `uid`, the caller's own subject, in two steps under the same
 /// lock. Unlike the control-plane, the reservation naming the caller commits first, so an
 /// interrupted grant can only be finished by its claimant; the grant then re-reads the
 /// marker and records its completion under the lock, so a finished bootstrap never
@@ -80,14 +80,14 @@ pub async fn grant_root(pool: &PgPool, fga: &Fga, uid: &str) -> Result<(), AppEr
     fga.write_platform(
         &mut guard,
         uid,
-        crate::roles::PlatformRole::PlatformOwner,
+        crate::roles::PlatformRole::PlatformAdmin,
         true,
     )
     .await?;
     crate::logging::audit_relation(
         Some(uid),
         uid,
-        crate::roles::PlatformRole::PlatformOwner.relation(),
+        crate::roles::PlatformRole::PlatformAdmin.relation(),
         "platform:root",
         true,
     );

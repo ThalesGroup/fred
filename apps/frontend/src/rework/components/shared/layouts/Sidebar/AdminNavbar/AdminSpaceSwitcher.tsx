@@ -23,7 +23,7 @@ import styles from "./AdminSpaceSwitcher.module.css";
 
 export type AdminSpace = "platform" | "organization";
 
-const SHOWN_ROLES: Role[] = ["organization_owner", "admin", "analyst", "editor", "member"];
+const SHOWN_ROLES: Role[] = ["organization_admin", "owner", "analyst", "editor", "member"];
 // "/admin" opens the organization's first page the person can manage.
 const SPACE_HOME: Record<AdminSpace, string> = { platform: "/admin/organizations", organization: "/admin" };
 

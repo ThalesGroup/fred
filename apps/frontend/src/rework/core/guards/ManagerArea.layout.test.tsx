@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { expect, it, vi } from "vitest";
 
-const ORG = [{ id: "org-1", kind: "organization", name: "Acme", roles: ["admin"] }];
+const ORG = [{ id: "org-1", kind: "organization", name: "Acme", roles: ["owner"] }];
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("react-redux", () => ({ useSelector: () => 0 }));
 vi.mock("../../../common/config", () => ({ getConfig: () => ({ platform_access_enabled: false }) }));
@@ -23,8 +23,8 @@ vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({
     refetch: vi.fn(),
   }),
 }));
-vi.mock("@core/hooks/useOrganizationAdmin", () => ({
-  useOrganizationAdmin: () => ({ isAdmin: true, organizationId: "org-1", currentData: ORG }),
+vi.mock("@core/hooks/useOrganizationOwner", () => ({
+  useOrganizationOwner: () => ({ isOwner: true, organizationId: "org-1", currentData: ORG }),
 }));
 vi.mock("@core/hooks/useOrganizationSupervisionAccess", () => ({
   useOrganizationSupervisionAccess: () => ({ allowed: true }),

@@ -304,22 +304,22 @@ impl ModelPreparationErrorCode {
     fn diagnostic(self) -> ModelPreparationError {
         let message = match self {
             Self::SelectionMissing => {
-                "No model is selected and neither the agent nor the organization defines a default. Choose a model in the chat, or ask an organization administrator to set a default."
+                "No model is selected and neither the agent nor the organization defines a default. Choose a model in the chat, or ask an organization owner to set a default."
             }
             Self::ReselectionRequired => {
                 "This agent retains an old model profile. Choose an available model in the chat."
             }
             Self::OfferUnknown => {
-                "The selected model is not in this agent's available model catalog. Choose another model or ask an organization administrator to check the model policy."
+                "The selected model is not in this agent's available model catalog. Choose another model or ask an organization owner to check the model policy."
             }
             Self::OfferForbidden => {
-                "The selected model is no longer permitted by the organization. Choose a permitted model or ask an organization administrator to review the model policy."
+                "The selected model is no longer permitted by the organization. Choose a permitted model or ask an organization owner to review the model policy."
             }
             Self::OfferUnavailable => {
-                "The selected model is currently unavailable for this agent. Choose an available model or ask an organization administrator to check the model source and configuration."
+                "The selected model is currently unavailable for this agent. Choose an available model or ask an organization owner to check the model source and configuration."
             }
             Self::FallbackUnavailable => {
-                "The selected model was withdrawn and no permitted, usable fallback is configured. Choose an available model or ask an organization administrator to update the default or fallback."
+                "The selected model was withdrawn and no permitted, usable fallback is configured. Choose an available model or ask an organization owner to update the default or fallback."
             }
         };
         ModelPreparationError {

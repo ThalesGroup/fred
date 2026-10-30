@@ -47,8 +47,8 @@ kubectl --context k3d-fred-secondary -n fred get deploy
 `fred-agents` and `frontend` must be `1/1`. `make k3d-app` ends by printing the
 command that reads the bootstrap token.
 
-**2. Platform owner.** Open <http://secondary.localhost:18088>, register an
-`owner` account, accept the terms of use and activate platform ownership with the
+**2. Platform admin.** Open <http://secondary.localhost:18088>, register an
+`admin` account, accept the terms of use and activate platform administration with the
 bootstrap token ([journey](../../docs/architecture/02.1-user-journeys.md#from-an-empty-platform-to-an-organizations-first-user)).
 
 **3. Example people and spaces.** Build the demo bundle, then import it as the
@@ -58,7 +58,7 @@ owner in **Provisioning**:
 make -C apps/control-plane build-demo-bundle   # -> apps/control-plane/target/demo-provisioning-bundle.zip
 ```
 
-It creates Acme (team Research) and Globex (team Support) with the twelve
+It creates Acme (team Research) and Globex (team Support) with the thirteen
 accounts of the [example table](../../docs/architecture/02-journeys.md#example-people-and-spaces);
 each account's password is `Azerty123_`.
 
@@ -122,7 +122,7 @@ The inherited factory settings are retained:
 | Models | The control plane discovers the Mistral source; the pod retains only its inference credential binding. Both explicitly use `fred-model-credentials/OPENAI_API_KEY`. Discovery invokes no model. Web research stays disabled. |
 | Control Plane | Pod URL `http://control-plane-backend:8222/control-plane/v1` comes from the chart. The pod resolves each turn through the Rust resolver using trusted delegation. |
 
-After deploying, use organization administration -> Agents to find and activate
+After deploying, use organization owneristration -> Agents to find and activate
 `fred.github.assistant`, then verify the list after reload. The deployment does
 not enable templates in organizations, select models or alter instance settings.
 Ralph and its embedded execution path are unchanged. Unavailable template

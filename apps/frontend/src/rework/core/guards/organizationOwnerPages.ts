@@ -8,11 +8,11 @@ export interface OrganizationAdminPage {
   to: string;
   labelKey: string;
   icon: IconProps;
-  /** The route guard's requirement; "supervision" is the `own_organization` check. */
+  /** The route guard's requirement; "supervision" is the `administer_organization` check. */
   requires: ProtectedRequirement | "supervision";
 }
 
-/** The organization admin menu, in order. Its first visible page is also where Admin lands. */
+/** The organization owner menu, in order. Its first visible page is also where Admin lands. */
 const PAGES: OrganizationAdminPage[] = [
   {
     to: "/admin/supervision",
@@ -101,14 +101,14 @@ const PAGES: OrganizationAdminPage[] = [
 ];
 
 export interface OrganizationAdminAccess {
-  /** `canManageFeatures` carries the organization admin role. */
+  /** `canManageFeatures` carries the organization owner role. */
   capabilities: ProtectedCapabilities;
   supervision: boolean;
   platformAccessEnabled: boolean;
 }
 
-/** The organization admin pages this person can open, in menu order. */
-export function organizationAdminPages(access: OrganizationAdminAccess): OrganizationAdminPage[] {
+/** The organization owner pages this person can open, in menu order. */
+export function organizationOwnerPages(access: OrganizationAdminAccess): OrganizationAdminPage[] {
   return PAGES.filter((page) => {
     if (page.requires === "supervision") return access.supervision;
     if (page.to === "/admin/platform-access" && !access.platformAccessEnabled) return false;
@@ -118,5 +118,5 @@ export function organizationAdminPages(access: OrganizationAdminAccess): Organiz
 
 /** Admin opens the organization's first menu page; the platform space is one switch away. */
 export function adminIndexPath(access: OrganizationAdminAccess & { platformOwner: boolean }): string {
-  return organizationAdminPages(access)[0]?.to ?? (access.platformOwner ? "/admin/organizations" : "/unauthorized");
+  return organizationOwnerPages(access)[0]?.to ?? (access.platformOwner ? "/admin/organizations" : "/unauthorized");
 }

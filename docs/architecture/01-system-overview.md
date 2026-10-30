@@ -127,7 +127,7 @@ with Knowledge Flow.
 
 ## 1.4. Governance: administering resources by space
 
-The organization admin sets business choices, including permitted agents, models
+The organization owner sets business choices, including permitted agents, models
 and the capabilities each Agent Pod offers. Each person's
 space roles determine what they may
 manage, contribute to or read. The owner's separate institutional mandate and
@@ -135,7 +135,7 @@ the precise role boundaries are defined in the [roles annex](A11-roles.md).
 
 ```mermaid
 flowchart TB
-    admin["Organization admin"]
+    admin["Organization owner"]
     policy["Organization policy<br/>Permitted agents and models"]
     person["Person"]
     roles["Roles in a space<br/>Read / contribute / administer"]

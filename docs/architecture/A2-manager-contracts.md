@@ -22,7 +22,7 @@ unavailable.
 `GET /organizations/{organization_id}/agents` reuses runtime discovery after
 `spaces::authorize(..., Manage)` and an organization-kind check. The target must
 belong to the admitted caller's unique organization and be active. Organization
-ownership alone, team/project administration and platform roles confer no access.
+ownership alone, team/project owneristration and platform roles confer no access.
 The response contains `AgentEnablement` rows with runtime/template provenance and
 the OpenFGA `default_on` marker for this organization. The UI reuses the existing
 switch and confirmation with organization-scoped messages.
@@ -151,7 +151,7 @@ strict service-account protocol, then operation and actor checks.
 ### Organization supervision API
 
 These routes expose aggregate metadata through the existing Control Plane process.
-They require organization ownership, not content read permission. The
+They require organization attachment, not content read permission. The
 [supervision contract](A8-organizations.md#organization-supervision) defines
 disclosure boundaries, counters, failure behavior and pagination. Wire schemas
 come from [supervision/models.rs](../../apps/control-plane/src/supervision/models.rs)
@@ -196,7 +196,7 @@ with a `capability.default_changed` audit event when the decision changes.
 `usable_capability_ids` filters agent forms and gates enrollment and capability
 edits; chat preparation does not consult it.
 
-Model storage has a separate platform owner in
+Model storage has a separate platform admin in
 [`model_catalog`](../../apps/control-plane/src/model_catalog/mod.rs) and the `model_source` and `model_offer` tables of
 [`0001_schema.sql`](../../apps/control-plane/migrations/0001_schema.sql).
 Observations and retained offers use `(source_id, upstream_model_id)` and create no
@@ -209,7 +209,7 @@ rechecks admission/Manage and fences authorization after HTTP, preserving the M1
 configuration/token fences. Turn admission consumes this policy through the
 [model contract below](#chat-model-preparation-and-turn-admission); saving the policy
 alone does not prove provider connectivity or pod credential provisioning.
-The [component contract](../../apps/control-plane/README.md#platform-model-inventory-and-organization-administration)
+The [component contract](../../apps/control-plane/README.md#platform-model-inventory-and-organization-owneristration)
 defines source approval, payloads, eligibility, errors and concurrency.
 
 The organization Models tab is bound through
@@ -304,7 +304,7 @@ not a model-readiness guarantee, and creation does not require a recommendation.
 defines platform-approved discovery and inference destinations separately.
 Control Plane uses the configured discovery authentication; the inference
 connection contains a binding reference that the pod resolves locally, not a secret
-value. Alice, Acme's organization admin, may refresh an approved source and
+value. Alice, Acme's organization owner, may refresh an approved source and
 change Acme's model policy; this is business responsibility, not Oscar's owner
 mandate. Her organization role cannot rewrite platform connections. Dana must
 provision both discovery and inference access; discovering an offer proves neither permission nor
@@ -347,7 +347,7 @@ SQLx creates its history table itself; it is outside that generated diagram.
 | `document_upload` | UUID `id`, unique `(actor, request_key)`; upload reservation and receipt, object key, completion, retry and cleanup state. | Control-plane owns upload idempotency and reservations. Target space/folder IDs are historical references without foreign keys; the resulting document and retry predecessor have SQL links. |
 | `document_processing` | UUID `id`, unique `(actor, request_key)` and `workflow_id`; processing attempt, delivery lease, profile, generations, result and cleanup state. | Control-plane records processing orchestration. The document and space have SQL references. JSONB fields contain the submitted contract, settings and artifact metadata, not canonical authorization. |
 | `document_storage` | Boolean singleton; installation namespace, original/derived storage locations, inventory counters, cursor and lease. | Installation-wide storage binding and inventory progress, independent of any individual upload. |
-| `platform_bootstrap` | Boolean singleton; claimant, claim time and OpenFGA grant completion time. | Durable bootstrap receipt. `granted_at IS NULL` distinguishes an unfinished claim from a completed grant. This is not the platform-owner role store. |
+| `platform_bootstrap` | Boolean singleton; claimant, claim time and OpenFGA grant completion time. | Durable bootstrap receipt. `granted_at IS NULL` distinguishes an unfinished claim from a completed grant. This is not the platform-admin role store. |
 | `authorization_store` | Boolean singleton; configured/source/active OpenFGA store and published model ID. | Pins the installation's initialized authorization store/model. It contains no grants or permission matrix. |
 | `terms_acceptance` | Text `user_id`; accepted terms version and timestamp. | Consent belongs to the authenticated subject independently of directory profiles and space membership. |
 | `user_identity` | UUID `id`; username, email, first/last names and last observation time. | Local-directory profiles observed after authentication, including generic OIDC users. No passwords, bearer tokens or grants. Usernames are intentionally not unique; exact lookup rejects ambiguous matches. |
@@ -757,22 +757,22 @@ model
 
 type user
 
-# One object, platform:root. Platform owner is the technical platform role; platform roles grant
+# One object, platform:root. Platform admin is the technical platform role; platform roles grant
 # no access to any space's content.
 type platform
   relations
-    define platform_owner: [user]
-    define platform_observer: [user] or platform_owner
-    define feature_manager: [user] or platform_owner
-    define prompt_editor: [user] or platform_owner
+    define platform_admin: [user]
+    define platform_observer: [user] or platform_admin
+    define feature_manager: [user] or platform_admin
+    define prompt_editor: [user] or platform_admin
     define can_list_all_teams: feature_manager
-    define can_delete_team: platform_owner
-    define can_delete_space: platform_owner
-    define can_rescue_team_admin: platform_owner
-    define can_edit_agent_class_path: platform_owner
+    define can_delete_team: platform_admin
+    define can_delete_space: platform_admin
+    define can_rescue_team_owner: platform_admin
+    define can_edit_agent_class_path: platform_admin
     define can_observe_platform: platform_observer
-    define can_administer_users: platform_owner
-    define can_manage_platform: platform_owner
+    define can_administer_users: platform_admin
+    define can_manage_platform: platform_admin
     define can_manage_capabilities: feature_manager
     define can_edit_platform_prompt: prompt_editor
 
@@ -785,24 +785,24 @@ type space
     define organization: [space]
     define member: [user]
     define editor: [user]
-    define admin: [user]
+    define owner: [user]
     define analyst: [user]
-    # Technical role of an organization: names its admins, reads nothing, never descends.
-    define organization_owner: [user]
-    # Editor, admin and analyst reach every descendant; member stays local.
+    # Technical role of an organization: names its owners, reads nothing, never descends.
+    define organization_admin: [user]
+    # Editor, owner and analyst reach every descendant; member stays local.
     define effective_editor: editor or effective_editor from parent
-    define effective_admin: admin or effective_admin from parent
+    define effective_owner: owner or effective_owner from parent
     define effective_analyst: analyst or effective_analyst from parent
     define can_read: member or effective_editor or effective_analyst
     define can_write: effective_editor
-    define can_manage: effective_admin
-    define can_run_evaluations: effective_analyst or effective_admin
-    define can_manage_evaluation_corpus: effective_analyst or effective_admin
+    define can_manage: effective_owner
+    define can_run_evaluations: effective_analyst or effective_owner
+    define can_manage_evaluation_corpus: effective_analyst or effective_owner
     define can_read_conversations_for_evaluation: effective_analyst
-    define can_own_organization: organization_owner
-    # Explicit organization eligibility, without content access or inheritance.
-    define personal_space_creator: [user]
-    define can_create_personal_space: personal_space_creator
+    define can_administer_organization: organization_admin
+    # A direct business owner on an active organization, team or project is eligible.
+    # Control Plane resolves eligible scopes within the caller's organization.
+    define can_create_personal_space: owner
     # Contextual reverse links supplied only after resolving a team's organization.
     define template_team: [space]
     define template_personal_team: [space]
@@ -849,7 +849,7 @@ other files are arrays:
 | `projects.json` | `ref`, `name`, `team` reference, `roles`; empty array accepted |
 
 A roles object maps declared usernames to arrays of `member`, `editor`, `analyst`,
-`admin`, and on organizations `organization_owner`. Roles accumulate and equivalent grants are
+`owner`, and on organizations `organization_admin`. Roles accumulate and equivalent grants are
 deduplicated. Admin and owner confer no implicit content role. Every new space
 requires a declared admin, and every new organization a declared owner. Every child-role
 holder requires a declared or existing direct parent content role; inherited access
@@ -859,8 +859,8 @@ organization membership for team-role holders.
 References are nonempty and unique across the entire bundle. Parents and role
 subjects must be declared. Space names are nonempty and unique within each parent;
 homonyms under distinct parents remain distinct. Role names are exact, without
-aliases: `platform_owner`, `platform_observer`, `feature_manager`, `prompt_editor` and
-`organization_owner`. Unknown fields/roles,
+aliases: `platform_admin`, `platform_observer`, `feature_manager`, `prompt_editor` and
+`organization_admin`. Unknown fields/roles,
 duplicate JSON keys, usernames, references and sibling names are rejected. Legacy
 `teams`/`team_roles` user fields are not accepted. Old JSON and Python version-1 ZIPs,
 unknown versions/sections and multidisk formats return `not_yet_supported`.

@@ -1236,9 +1236,9 @@
       "roleNames": {
         "member": "Member",
         "editor": "Editor",
-        "admin": "Administrator",
         "analyst": "Analyst",
-        "organization_owner": "Organization owner"
+        "owner": "Owner",
+        "organization_admin": "Organization admin"
       }
     },
     "admin": {
@@ -1652,7 +1652,7 @@
         "title": "Copy {{name}} to another team",
         "subtitle": "Select the spaces to copy this agent into.",
         "confirm": "Copy",
-        "noEditableTeams": "You are not an editor of any team. Only an editor can copy an agent into one — ask a team administrator for that role.",
+        "noEditableTeams": "You are not an editor of any team. Only an editor can copy an agent into one — ask a team owner for that role.",
         "templateDisabled": "Agent template not enabled",
         "missingCapabilities_one": "{{count}} missing capability",
         "missingCapabilities_other": "{{count}} missing capabilities",
@@ -2331,7 +2331,7 @@
           "title": "Import this prompt into a team",
           "subtitle": "Select the spaces to import “{{name}}” into.",
           "confirm": "Import",
-          "noEditableTeams": "You are not an editor of any team. Only an editor can import a prompt into one — ask a team administrator for that role.",
+          "noEditableTeams": "You are not an editor of any team. Only an editor can import a prompt into one — ask a team owner for that role.",
           "successToast": "Prompt imported ({{count}})",
           "errorToast": "Import failed ({{count}})"
         },
@@ -2396,7 +2396,7 @@
           "title": "Import {{name}}",
           "subtitle": "Select the spaces to import this agent into.",
           "confirm": "Import",
-          "noEditableTeams": "You are not an editor of any team. Only an editor can import an agent into one — ask a team administrator for that role.",
+          "noEditableTeams": "You are not an editor of any team. Only an editor can import an agent into one — ask a team owner for that role.",
           "typeNotEnabled": "Agent type not enabled in this team",
           "loses_one": "Loses {{count}} capability",
           "loses_other": "Loses {{count}} capabilities",
@@ -2547,7 +2547,7 @@
         "personalSpace": "Personal space",
         "empty": "You are not a member of any team.",
         "role": {
-          "team_admin": "Admin",
+          "team_admin": "Owner",
           "team_editor": "Editor",
           "team_analyst": "Analyst",
           "team_member": "Member"
@@ -2974,7 +2974,7 @@
         "campaign": {
           "title": "Isolation and role campaign",
           "description": "Using the credentials above, perform at most 150 actual checks: each platform role alone, representative team profiles, isolation between users and private/public teams, and revocation. The dedicated test account's roles are temporarily changed, then restored; temporary resources are cleaned up. This campaign is separate from Run all.",
-          "limits": "Requires the bootstrap root and its accepted team administrator charter. Use a dedicated account: its platform access changes during the run. The charter determines whether the team administrator role is active or pending. Keep this page open and the test token valid. A local recovery record contains IDs and original roles, never credentials; browser closure requires recovery. Do not run concurrent role administration or campaigns from another browser.",
+          "limits": "Requires the bootstrap root and its accepted team owner charter. Use a dedicated account: its platform access changes during the run. The charter determines whether the team owner role is active or pending. Keep this page open and the test token valid. A local recovery record contains IDs and original roles, never credentials; browser closure requires recovery. Do not run concurrent role administration or campaigns from another browser.",
           "run": "Test roles and isolation",
           "confirmation": "Temporarily modify the platform roles of {{account}}, including platform administrator access? This must be a dedicated test account. Original roles will be restored when execution finishes; if interrupted, return here to recover. Existing team roles and identity provider settings are not changed.",
           "tokenAccount": "the account identified by the supplied API token",
@@ -3021,7 +3021,7 @@
         },
         "teams": {
           "title": "Teams",
-          "subtitle": "Creates a disposable team you administer, then deletes it. Skipped until you accept the team-admin charter; the run never accepts it for you. Checks that team admin alone cannot edit content, that the editor role opens and its revocation closes editing, a team prompt, folder and agent, wiki revisions and restore, the join link, model routing, copying the team agent to your personal space, and that nothing of the deleted team stays reachable."
+          "subtitle": "Creates a disposable team you administer, then deletes it. Skipped until you accept the team-admin charter; the run never accepts it for you. Checks that team owner alone cannot edit content, that the editor role opens and its revocation closes editing, a team prompt, folder and agent, wiki revisions and restore, the join link, model routing, copying the team agent to your personal space, and that nothing of the deleted team stays reachable."
         },
         "security": {
           "title": "Security",
@@ -3231,7 +3231,7 @@
         "title": "Create team",
         "nameLabel": "Team name",
         "namePlaceholder": "e.g. swiftpost",
-        "adminsLabel": "Team admin(s)",
+        "adminsLabel": "Team owner(s)",
         "adminsPlaceholder": "Enter a name, first name, or user ID",
         "adminsSearching": "Searching...",
         "adminsNoMatch": "No user matches this search.",
@@ -3259,7 +3259,7 @@
         }
       },
       "pendingAdmin": "Pending",
-      "pendingAdminHint": "{{name}} has not accepted the team administrator charter yet.",
+      "pendingAdminHint": "{{name}} has not accepted the team owner charter yet.",
       "refusals": {
         "teamNameTaken": "A team already has this name.",
         "lastActiveAdmin": "The team must keep at least one active admin.",
@@ -3275,7 +3275,7 @@
       "label": "Team description",
       "helper": "State your team's objectives regarding its use of AI. Everyone browsing the marketplace sees it.",
       "tooShort": "Write at least {{min}} characters.",
-      "placeholderDisplay": "Description to be completed by the team administrator.",
+      "placeholderDisplay": "Description to be completed by the team owner.",
       "reminder": {
         "title": "Describe your team",
         "description": "Your team still has a default description. State its objectives regarding its use of AI so everyone knows what it uses the platform for.",
@@ -3284,14 +3284,15 @@
       "maxReached": "{{max}} characters maximum"
     },
     "teamRoles": {
-      "team_admin": "Admin",
-      "pending_team_admin": "Admin (pending)",
+      "team_owner": "Owner",
+      "team_admin": "Owner",
+      "pending_team_admin": "Owner (pending)",
       "team_editor": "Editor",
       "team_analyst": "Analyst",
       "team_member": "Member",
       "descriptions": {
         "team_admin": "Governs the team: manages members and their roles, and sets the team policy (quotas, allowed models, MCP servers, storage limits). Grants no control over agents, prompts, or routing - that is the Editor role.",
-        "pending_team_admin": "Nominated admin who has not accepted the team administrator charter yet: a member until they accept it.",
+        "pending_team_admin": "Nominated owner who has not accepted the team owner charter yet: a member until they accept it.",
         "team_editor": "Manages what the team builds: agents, shared prompts, the routing policy, and the document corpus. Grants no control over members or the team policy.",
         "team_analyst": "Creates and runs agent evaluation campaigns, and manages the evaluation corpora.",
         "team_member": "Default access for everyone in the team: use the team's agents and prompts, and manage your own. No configuration or administration rights."
@@ -3303,7 +3304,7 @@
     "teamAdminCharter": {
       "accept": "Accept",
       "acceptedOn": "Accepted on {{date}}",
-      "pendingNotice": "Accept the team administrator charter to turn on your admin rights on this team.",
+      "pendingNotice": "Accept the team owner charter to turn on your admin rights on this team.",
       "review": "Read the charter"
     },
     "teamSettings": {
@@ -3372,7 +3373,7 @@
       "routing": {
         "title": "Models",
         "subtitle": "The models the platform allows this team: which ones members can use, the default one, and whether reasoning starts on.",
-        "readOnly": "Only team administrators can change the team's models.",
+        "readOnly": "Only team owners can change the team's models.",
         "emptyState": "The platform allows no model for this team yet. Ask a platform administrator to allow one.",
         "enabledTooltip": "Enabled for the team",
         "enabledLabel": "Enable {{model}} for the team",
@@ -3421,7 +3422,7 @@
           "open": "Open",
           "inviteOnly": "Invite only",
           "manual": "Manual only",
-          "privateSupport": "A private team is not listed on the marketplace: a team admin adds its members or shares an invite link."
+          "privateSupport": "A private team is not listed on the marketplace: a team owner adds its members or shares an invite link."
         },
         "visibility": {
           "label": "Team visibility",
@@ -3462,9 +3463,9 @@
       },
       "leaveTeam": {
         "title": "Leave this team?",
-        "message": "You will lose access to \"{{teamName}}\" and its conversations will be handled per the team's retention policy, exactly as if an admin had removed you.",
+        "message": "You will lose access to \"{{teamName}}\" and its conversations will be handled per the team's retention policy, exactly as if an owner had removed you.",
         "confirmLabel": "Leave",
-        "lastAdminTooltip": "You are the only admin of this team — promote another admin before leaving.",
+        "lastAdminTooltip": "You are the only owner of this team — promote another owner before leaving.",
         "errors": {
           "summary": "Failed to leave team",
           "fallbackDetail": "Could not leave the team."
@@ -3571,8 +3572,8 @@
             "label": "Recommended model",
             "hint": "New conversations with this agent start on this model. Members can still pick another model in the chat.",
             "teamDefault": "Team default model",
-            "teamDefaultCurrent": "Currently {{model}}. Follows changes made by the team admin.",
-            "teamDefaultFollows": "Follows changes made by the team admin.",
+            "teamDefaultCurrent": "Currently {{model}}. Follows changes made by the team owner.",
+            "teamDefaultFollows": "Follows changes made by the team owner.",
             "loadError": "The recommended model could not be checked. Saving will leave it unchanged."
           }
         },
@@ -4580,7 +4581,7 @@
       "loadFailed": "Unable to load organizations.",
       "name": "Organization name",
       "owner": "Organization owner",
-      "admin": "Organization administrator",
+      "admin": "Organization admin",
       "searchFailed": "User search failed.",
       "accountsHint": "Choose people who already have an account. One person can hold both roles. These roles give no access to content.",
       "editOrganization": {
@@ -4590,7 +4591,7 @@
         "successSummary": "Organization {{name}} updated",
         "loadFailed": "Unable to load this organization. Close and try again.",
         "severalOwners": "This organization currently has several owners: {{names}}. Choosing a new owner replaces all of them.",
-        "severalAdmins": "This organization currently has several administrators: {{names}}. Choosing a new administrator replaces all of them.",
+        "severalAdmins": "This organization currently has several admins: {{names}}. Choosing a new admin replaces all of them.",
         "errors": {
           "summary": "Failed to update the organization",
           "fallbackDetail": "Could not update the organization. Please try again.",
@@ -4745,7 +4746,7 @@
         "project": "Project"
       },
       "roles": {
-        "admin": "Administrator",
+        "organization_admin": "Admin",
         "member": "Member",
         "editor": "Editor",
         "analyst": "Analyst",

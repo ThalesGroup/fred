@@ -152,7 +152,7 @@ beforeEach(() => {
   state.authEnabled = true;
   state.spaces = [];
   state.spacesError = state.spacesFetching = false;
-  state.data = { user_id: "ada-id", username: "ada", platform_roles: ["platform_owner"] };
+  state.data = { user_id: "ada-id", username: "ada", platform_roles: ["platform_admin"] };
   state.isLoading = state.isFetching = state.isError = false;
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -168,7 +168,7 @@ describe("shared UserSettingsPage", () => {
     render();
     expect(container.textContent).toContain("Ada Lovelace");
     expect(container.textContent).toContain("ada@example.com");
-    expect(container.textContent).toContain("rework.userSettings.platformRoles: platform_owner");
+    expect(container.textContent).toContain("rework.userSettings.platformRoles: platform_admin");
     expect(container.querySelector('input[type="file"]')).toBeNull();
     expect(container.textContent).not.toContain("rework.userSettings.picture");
     expect([...container.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
@@ -183,7 +183,7 @@ describe("shared UserSettingsPage", () => {
     state.data!.platform_roles = [];
     render();
     expect(container.textContent).toContain("rework.userSettings.platformRoles: rework.userSettings.noPlatformRoles");
-    expect(container.textContent).not.toContain("platform_owner");
+    expect(container.textContent).not.toContain("platform_admin");
     expect(container.textContent).not.toContain("rework.userSettings.roleAdmin");
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });
@@ -193,7 +193,7 @@ describe("shared UserSettingsPage", () => {
       state[flag] = true;
       render();
       expect(container.querySelector('[role="status"]')?.textContent).toBe("common.loading");
-      expect(container.textContent).not.toContain("platform_owner");
+      expect(container.textContent).not.toContain("platform_admin");
       expect(container.textContent).not.toContain("rework.userSettings.noPlatformRoles");
     },
   );
@@ -201,7 +201,7 @@ describe("shared UserSettingsPage", () => {
     state.isError = true;
     render();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("rework.manager.unavailable");
-    expect(container.textContent).not.toContain("platform_owner");
+    expect(container.textContent).not.toContain("platform_admin");
     clickText("rework.provisioning.retryAuthority");
     expect(state.refetch).toHaveBeenCalledOnce();
   });
@@ -217,7 +217,7 @@ describe("shared UserSettingsPage", () => {
     expect(container.textContent).not.toContain("Ada Lovelace");
     expect(container.textContent).not.toContain("ada@example.com");
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
-    expect(container.textContent).not.toContain("platform_owner");
+    expect(container.textContent).not.toContain("platform_admin");
     state.data = { user_id: "bob-id", username: "bob", platform_roles: [] };
     render();
     expect(container.querySelector('[role="alert"]')).toBeNull();
@@ -234,10 +234,10 @@ describe("shared UserSettingsPage", () => {
   it("uses the manager mock subject in unauthenticated development mode", () => {
     state.authEnabled = false;
     state.userId = "dev";
-    state.data = { user_id: "admin", username: "admin", platform_roles: ["platform_owner"] };
+    state.data = { user_id: "admin", username: "admin", platform_roles: ["platform_admin"] };
     render();
     expect(container.querySelector('[role="alert"]')).toBeNull();
-    expect(container.textContent).toContain("rework.userSettings.platformRoles: platform_owner");
+    expect(container.textContent).toContain("rework.userSettings.platformRoles: platform_admin");
   });
   it("retains the offered themes and existing mode/language preference handlers", () => {
     render(["cobalt", "cloud"]);

@@ -27,8 +27,8 @@ const h = vi.hoisted(() => ({
 vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useMySpacesQuery: () => ({ ...h.spaces, data: h.spaces.currentData }),
 }));
-vi.mock("@core/hooks/useOrganizationAdmin", () => ({
-  useOrganizationAdmin: () => ({ isAdmin: false }),
+vi.mock("@core/hooks/useOrganizationOwner", () => ({
+  useOrganizationOwner: () => ({ isOwner: false }),
 }));
 vi.mock("@core/hooks/useOrganizationSupervisionAccess", () => ({
   useOrganizationSupervisionAccess: () => ({ allowed: false }),
@@ -107,10 +107,10 @@ function render(path = "/home") {
   );
 }
 const member = () => {
-  h.spaces.currentData = [{ id: "org-1", kind: "organization", name: "Acme", roles: ["admin"] }];
+  h.spaces.currentData = [{ id: "org-1", kind: "organization", name: "Acme", roles: ["owner"] }];
 };
 it.each(["/home", "/team/existing-membership/agents"])(
-  "keeps a platform owner without an organization in the platform area from %s",
+  "keeps a platform admin without an organization in the platform area from %s",
   (path) => {
     render(path);
     expect(host.textContent).toContain("Organizations");
@@ -118,7 +118,7 @@ it.each(["/home", "/team/existing-membership/agents"])(
   },
 );
 it.each(["/home", "/team/existing-membership/agents", "/settings"])(
-  "opens a member platform owner's own page %s without bouncing to the platform area",
+  "opens a member platform admin's own page %s without bouncing to the platform area",
   (path) => {
     member();
     render(path);
@@ -126,20 +126,20 @@ it.each(["/home", "/team/existing-membership/agents", "/settings"])(
     expect(host.querySelector("[data-business]")).not.toBeNull();
   },
 );
-it("keeps platform pages out of the business area for a member platform owner", () => {
+it("keeps platform pages out of the business area for a member platform admin", () => {
   member();
   render("/admin/organizations");
   expect(host.textContent).toContain("Organizations");
   expect(host.querySelector("[data-business]")).toBeNull();
 });
-it("waits for the membership before deciding a platform owner's area", () => {
+it("waits for the membership before deciding a platform admin's area", () => {
   h.spaces.isLoading = true;
   h.spaces.currentData = undefined;
   render("/home");
   expect(host.querySelector('[role="status"]')).not.toBeNull();
   expect(host.textContent).not.toContain("Organizations");
 });
-it("keeps a member platform owner on their page when a membership refetch fails", () => {
+it("keeps a member platform admin on their page when a membership refetch fails", () => {
   member();
   render("/home");
   h.spaces.isError = true;
@@ -148,7 +148,7 @@ it("keeps a member platform owner on their page when a membership refetch fails"
   expect(host.textContent).not.toContain("Organizations");
   expect(host.querySelector("[data-business]")).not.toBeNull();
 });
-it("keeps a platform owner in the platform area when the membership cannot be read", () => {
+it("keeps a platform admin in the platform area when the membership cannot be read", () => {
   h.spaces.isError = true;
   h.spaces.currentData = undefined;
   render("/home");

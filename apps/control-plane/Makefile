@@ -49,8 +49,8 @@ import-provisioning: dev ## Import a bundle as platform owner (BUNDLE=<zip path>
 DEMO_PROVISIONING_FIXTURE_DIR ?= tests/fixtures/import_export/demo_provisioning
 DEMO_BUNDLE_FILE ?= target/demo-provisioning-bundle.zip
 export DEMO_PROVISIONING_FIXTURE_DIR DEMO_BUNDLE_FILE
-.PHONY: build-demo-bundle bundle-demo-zip
-build-demo-bundle bundle-demo-zip: ## Build the Acme/Globex demo provisioning ZIP without running services
+.PHONY: build-demo-bundle build-demo-zip bundle-demo-zip
+build-demo-bundle build-demo-zip bundle-demo-zip: ## Build the Acme/Globex demo provisioning ZIP without running services
 	python3 tools/build_demo_bundle.py
 
 .PHONY: test-browser

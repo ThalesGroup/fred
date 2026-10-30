@@ -32,11 +32,11 @@ The HTTP prefix below is `/control-plane/v1`. Route registration is generated in
 
 ## Content actions
 
-No platform role, `organization_owner` or `personal_space_creator` grants any row
+No platform role or `organization_admin` grants any row
 in this table. Rights apply uniformly to the owning space: folders and documents
 have no separate ACL, sharing grant or role inheritance tree.
 
-| Action and HTTP entry | member | editor | admin | analyst | Extra condition / effect |
+| Action and HTTP entry | member | editor | owner | analyst | Extra condition / effect |
 | --- | --- | --- | --- | --- | --- |
 | Browse mixed directory - `GET /spaces/{id}/entries` | Yes, local | Yes | No | Yes | Same-space parent; bounded page, total, ancestors and current write decision |
 | Read storage summary - `GET /spaces/{id}/storage` | Yes, local | Yes | No | Yes | Space statistics and shared quota usage; no other space's filenames |
@@ -64,11 +64,11 @@ The ordinary admission and organization-isolation conditions above still apply.
 | Action | Required authority | Example / additional conditions |
 | --- | --- | --- |
 | Configure model sources and inference destinations | Platform deployment access | Dana provisions approved connections; no business content rights follow. |
-| Read model inventory/policy, refresh an approved source, change permitted models/default/fallback | `Manage` on the organization | Alice's Acme admin role qualifies. A team admin, editor or organization owner alone does not. |
+| Read model inventory/policy, refresh an approved source, change permitted models/default/fallback | `Manage` on the organization | Alice's Acme owner role qualifies. A team owner, editor or organization admin alone does not. |
 | Create or edit an agent instance | `Write` on its supported space, plus template-use permission | Bob's Research editor role qualifies when the template is authorized. |
 | Prepare a chat and see its model offers | `Read` on its supported space, plus template-use permission | The instance must be executable; a supplied session must belong to the person and instance. Browser offers contain no inference credentials. |
 | Resolve execution for an admitted turn | The person's `Read` and template-use permission, plus trusted delegation for a workload | A service token alone does not authorize Bob's turn; model policy and conversation binding remain enforced. |
-| Search documents through an assistant | An admitted turn, hence the person's `Read` on the space | Results are limited to that space and its ancestors, and to live, published, retrievable documents. Carl's admin role alone does not qualify. |
+| Search documents through an assistant | An admitted turn, hence the person's `Read` on the space | Results are limited to that space and its ancestors, and to live, published, retrievable documents. Carl's owner role alone does not qualify. |
 
 Sources: [`model_catalog/http.rs`](../../apps/control-plane/src/model_catalog/http.rs),
 [`agent_instances/http.rs`](../../apps/control-plane/src/agent_instances/http.rs),
@@ -81,57 +81,58 @@ conversation.
 
 ## Space governance and personal-space actions
 
-| Action | member | editor | admin | analyst | owner (organization) | personal_space_creator | Platform role granting this action |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Create team - `POST /spaces` | No | No | Yes, on parent organization | No | No | No | None |
-| Create project - `POST /spaces` | No | No | Yes, on parent non-personal team | No | No | No | None |
-| Grant/revoke `member`, `editor`, `analyst` - `PUT/DELETE /spaces/{id}/roles/{role}/{user}` | No | No | Yes, on target | No | No | No | None |
-| Grant/revoke team/project `admin` - same role routes | No | No | Yes, on target | No | No | No | None |
-| Grant/revoke organization `admin` - same role routes | No | No | Yes, on organization | No | Yes | No | None |
-| Read organization/team supervision - `GET /organizations/{organization_id}/supervision` and `/teams/{team_id}` suffix | No | No | No | No | Yes, on target organization | No | None |
-| Grant/revoke organization `personal_space_creator` - same role routes | No | No | Yes, on organization | No | No | No | None |
-| Grant/revoke `organization_owner` - same role routes | No | No | No | No | No | No | `platform_owner` |
-| First creation of own personal space - `POST /me/personal-space` | No alone | No alone | No | No alone | No | Yes, plus organization read | None |
-| Reuse existing own personal space - `POST /me/personal-space` | Conditional | Conditional | No alone | Conditional | No | No alone | None |
-| Add roles in a personal space - `PUT /spaces/{id}/roles/{role}/{user}` | No | No | No | No | No | No | None |
-| Remove a personal-space role - `DELETE /spaces/{id}/roles/{role}/{user}` | No | No | Yes, on its organization | No | No | No | None |
+| Action | member | editor | owner | analyst | admin (organization) | Platform role granting this action |
+| --- | --- | --- | --- | --- | --- | --- |
+| Create team - `POST /spaces` | No | No | Yes, on parent organization | No | No | None |
+| Create project - `POST /spaces` | No | No | Yes, on parent non-personal team | No | No | None |
+| Grant/revoke `member`, `editor`, `analyst` - `PUT/DELETE /spaces/{id}/roles/{role}/{user}` | No | No | Yes, on target | No | No | None |
+| Grant/revoke team/project `owner` - same role routes | No | No | Yes, on target | No | No | None |
+| Grant/revoke organization `owner` - same role routes | No | No | Yes, on organization | No | Yes | None |
+| Read organization/team supervision - `GET /organizations/{organization_id}/supervision` and `/teams/{team_id}` suffix | No | No | No | No | Yes, on target organization | None |
+| Grant/revoke `organization_admin` - same role routes | No | No | No | No | No | `platform_admin` |
+| First creation of own personal space - `POST /me/personal-space` | No | No | Yes, any active organization/team/project in the organization | No | No | None |
+| Reuse existing own personal space - `POST /me/personal-space` | No alone | No alone | Yes, plus personal read | No alone | No | None |
+| Add roles in a personal space - `PUT /spaces/{id}/roles/{role}/{user}` | No | No | No | No | No | None |
+| Remove a personal-space role - `DELETE /spaces/{id}/roles/{role}/{user}` | No | No | Yes, on its organization | No | No | None |
 
 Conditions are part of these rights:
 
-- Supervision requires `can_own_organization` after admission, unique matching
+- Supervision requires `can_administer_organization` after admission, unique matching
   organization context and lifecycle checks. It grants technical aggregates only,
   not content, downloads or named-user listings. Team detail accepts only a
   collective team in that organization. All OpenFGA pages must succeed; dependency
   failure returns 503 `dependency_unavailable`, never a partial result. Exact
   scopes, refusals and counters are in [the supervision contract](A8-organizations.md#organization-supervision).
 
-- For team/project creation, the nominated initial admin holds a direct content
+- For team/project creation, the nominated initial owner holds a direct content
   role (`member`, `editor` or `analyst`) on the parent. The creator gains no implicit
   content role. A project cannot be created under a personal space.
 - Role attribution, parent-membership requirements, eligibility, accumulation and
   last-owner/admin safeguards are defined in the
   [roles annex](A11-roles.md#attribution-accumulation-and-removal).
-- Personal-space creation requires eligibility and organization read; reuse needs
-  organization and personal read, without restoring removed roles.
+- Personal-space creation requires current owner eligibility at any active scope
+  in the organization; reuse also needs personal read, without restoring removed
+  roles. The same eligibility gates new Control Plane access to existing spaces.
 - Every grant names a subject usable as an OpenFGA user and known to the configured
   user directory, checked after authorization; otherwise 422 (I27).
 - Owner changes are platform operations and do not require the actor to belong to
-  the target organization. A new owner must exist in the configured Keycloak realm;
+  the target organization. A new organization admin must exist in the configured Keycloak realm;
   removal can clean up a deleted identity. The other space-role routes require the
   actor's matching organization context.
 - Mutation checks occur after the organization lock and before the OpenFGA fence
   and write. A previous UI permission response does not reserve a future right.
 
+
 ## Platform operations
 
 Space roles grant none of these operations.
 
-| Action and HTTP entry | platform_owner | platform_observer | feature_manager | prompt_editor | Extra condition |
+| Action and HTTP entry | platform_admin | platform_observer | feature_manager | prompt_editor | Extra condition |
 | --- | --- | --- | --- | --- | --- |
 | List direct platform-role grants - `GET /users/platform-roles` | Yes | No | No | No | Real authentication required; lists stored direct grants, not computed implications |
-| Grant platform role - `PUT /users/{user}/platform-roles/{role}` | Yes | No | No | No | Includes owner; real authentication, compatible Keycloak directory and existing target identity required |
-| Revoke platform role - `DELETE /users/{user}/platform-roles/{role}` | Yes | No | No | No | Includes root's owner grant; preserve at least one owner; real authentication required |
-| Grant/revoke organization owner - space role routes | Yes | No | No | No | Conditions above |
+| Grant platform role - `PUT /users/{user}/platform-roles/{role}` | Yes | No | No | No | Includes admin; real authentication, compatible Keycloak directory and existing target identity required |
+| Revoke platform role - `DELETE /users/{user}/platform-roles/{role}` | Yes | No | No | No | Includes root's admin grant; preserve at least one admin; real authentication required |
+| Grant/revoke organization admin - space role routes | Yes | No | No | No | Conditions above |
 | Import identities, organizations, teams, projects and roles - `POST /import-export/import` | Yes | No | No | No | Real authentication, CGU, compatible directory, valid bundle and parent dependencies |
 | Request project/team/organization deletion - `DELETE /spaces/{id}` | Yes | No | No | No | Real authentication and CGU; enabled lifecycle; no documents or pending uploads; complete subtree; no standalone personal deletion |
 | Read deletion receipt - `GET /deletions/{operation_id}` | Yes | No | No | No | Real authentication and CGU; remains available after cleanup and when lifecycle is disabled |
@@ -149,7 +150,7 @@ Import is additive. Its broader role-assignment authority is described in
 | Health - `GET /healthz` | Yes | Yes | Public |
 | Own onboarding - `GET /me/onboarding` | Yes | Yes | Authenticated human identity; no CGU yet |
 | Accept own CGU - `POST /gcu` | Yes | Yes | Authenticated human, current version; cannot act for another person |
-| Claim initial platform ownership - `POST /bootstrap/platform-admin` | Yes | Yes | Real human authentication, CGU, deployment secret, unfinished bootstrap; failed reservation retry belongs to claimant |
+| Claim initial platform administration - `POST /bootstrap/platform-admin` | Yes | Yes | Real human authentication, CGU, deployment secret, unfinished bootstrap; failed reservation retry belongs to claimant |
 | Own platform-role metadata - `GET /me` | Yes | Yes | Authenticated and CGU; returns own effective platform roles |
 | Own spaces - `GET /me/spaces` | Yes | Yes | Authenticated and CGU; own direct/inherited roles; empty allowed; contradictory organization attachment, or a space role without its parent membership, returns 409 |
 | Probe own platform permission - `POST /authorize/platform` | Yes | Yes | Authenticated and CGU; result may be false |
@@ -165,20 +166,21 @@ not positive authorization decisions.
 These rows describe the current authorization API's boolean answers. In particular,
 an evaluation permission answer does not run an evaluation or read a conversation.
 
-| Space permission queried | member | editor | admin | analyst | owner | personal_space_creator |
-| --- | --- | --- | --- | --- | --- | --- |
-| `run_evaluations` | No | No | Yes | Yes | No | No |
-| `manage_evaluation_corpus` | No | No | Yes | Yes | No | No |
-| `read_conversations_for_evaluation` | No | No | No | Yes | No | No |
-| `own_organization` | No | No | No | No | Yes, organization | No |
-| `create_personal_space` | No | No | No | No | No | Yes, organization |
+| Space permission queried | member | editor | owner | analyst | admin |
+| --- | --- | --- | --- | --- | --- |
+| `run_evaluations` | No | No | Yes | Yes | No |
+| `manage_evaluation_corpus` | No | No | Yes | Yes | No |
+| `read_conversations_for_evaluation` | No | No | No | Yes | No |
+| `administer_organization` | No | No | No | No | Yes, organization |
+| `create_personal_space` | No | No | Yes, any active scope in the organization | No | No |
 
-| Platform permission queried | platform_owner | platform_observer | feature_manager | prompt_editor |
+
+| Platform permission queried | platform_admin | platform_observer | feature_manager | prompt_editor |
 | --- | --- | --- | --- | --- |
 | `list_all_teams` | Yes | No | Yes | No |
 | `delete_team` | Yes | No | No | No |
 | `delete_space` | Yes | No | No | No |
-| `rescue_team_admin` | Yes | No | No | No |
+| `rescue_team_owner` | Yes | No | No | No |
 | `edit_agent_class_path` | Yes | No | No | No |
 | `observe_platform` | Yes | Yes | No | No |
 | `administer_users` | Yes | No | No | No |
@@ -187,16 +189,16 @@ an evaluation permission answer does not run an evaluation or read a conversatio
 | `edit_platform_prompt` | Yes | No | No | Yes |
 
 `read`, `write` and `manage` answers follow the corresponding space matrices above.
-`/authorize/document` also accepts `manage`: an effective admin can receive true
+`/authorize/document` also accepts `manage`: an effective owner can receive true
 without receiving read/write. The folder mutation handlers require write,
-not manage. Platform owner includes the other platform permissions through the
+not manage. Platform admin includes the other platform permissions through the
 OpenFGA model; that implication is not a stored grant of every role.
 
 ## Operator commands
 
 | Entry point | Authority and effect |
 | --- | --- |
-| `import-provisioning ... --token-file ...` | Authenticated bearer, CGU, platform owner and compatible directory; same provisioning engine as HTTP. |
+| `import-provisioning ... --token-file ...` | Authenticated bearer, CGU, platform admin and compatible directory; same provisioning engine as HTTP. |
 | `serve` | Verifies the SQL schema, then supervises HTTP and background tasks, including Temporal connections. |
 | `migrate` | Applies embedded SQLx migrations using database credentials only. |
 | `generate-openapi` | Offline schema generation, no service credentials needed. |

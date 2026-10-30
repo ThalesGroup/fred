@@ -146,7 +146,7 @@ pub struct RuntimeAttachment {
 pub struct RuntimeSpace {
     pub id: Uuid,
     pub kind: SpaceKind,
-    /// Canonical organization ownership, not inherited document scope for personal spaces.
+    /// Canonical organization attachment, not inherited document scope for personal spaces.
     #[schema(required = true)]
     pub organization_id: Option<Uuid>,
     #[schema(required = true)]

@@ -24,7 +24,7 @@ vi.mock("react-router-dom", () => ({
   useLocation: () => ({ pathname: h.pathname }),
   useHref: () => "/help",
 }));
-vi.mock("@core/hooks/useOrganizationAdmin", () => ({ useOrganizationAdmin: () => ({ isAdmin: true }) }));
+vi.mock("@core/hooks/useOrganizationOwner", () => ({ useOrganizationOwner: () => ({ isOwner: true }) }));
 vi.mock("@core/hooks/useOrganizationSupervisionAccess", () => ({
   useOrganizationSupervisionAccess: () => ({ allowed: true }),
 }));
@@ -78,7 +78,7 @@ describe("MainNavBar rail", () => {
   });
 
   it.each(["/admin/organizations", "/admin/features", "/home"])(
-    "keeps the same entries in every space for a member platform owner (%s)",
+    "keeps the same entries in every space for a member platform admin (%s)",
     (pathname) => {
       pointer(false);
       h.pathname = pathname;

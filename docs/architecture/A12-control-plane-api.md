@@ -178,11 +178,11 @@ Request: [`SpaceCheck`](#spacecheck).
 
 | Method | Path | Summary |
 | --- | --- | --- |
-| POST | [/bootstrap/platform-admin](#post-bootstrapplatform-admin) | Same contract as the control-plane's `POST /bootstrap/platform-admin`: the caller's own verified bearer plus the deploy-time secret, granting platform owner to the caller only, once ever |
+| POST | [/bootstrap/platform-admin](#post-bootstrapplatform-admin) | Same contract as the control-plane's `POST /bootstrap/platform-admin`: the caller's own verified bearer plus the deploy-time secret, granting platform admin to the caller only, once ever |
 
 ### POST /bootstrap/platform-admin
 
-Same contract as the control-plane's `POST /bootstrap/platform-admin`: the caller's own verified bearer plus the deploy-time secret, granting platform owner to the caller only, once ever.
+Same contract as the control-plane's `POST /bootstrap/platform-admin`: the caller's own verified bearer plus the deploy-time secret, granting platform admin to the caller only, once ever.
 
 Operation `bootstrap_platform_admin`.
 
@@ -869,6 +869,9 @@ Operation `team_supervision`.
 | GET | [/spaces/{space_id}/sessions/{session_id}](#get-spacesspace_idsessionssession_id) |  |
 | PATCH | [/spaces/{space_id}/sessions/{session_id}](#patch-spacesspace_idsessionssession_id) |  |
 | DELETE | [/spaces/{space_id}/sessions/{session_id}](#delete-spacesspace_idsessionssession_id) |  |
+| GET | [/spaces/{space_id}/sessions/{session_id}/attachments](#get-spacesspace_idsessionssession_idattachments) | The live attachments of the caller's conversation, oldest first, with their latest processing |
+| POST | [/spaces/{space_id}/sessions/{session_id}/attachments](#post-spacesspace_idsessionssession_idattachments) | Attach one file to the caller's conversation and request its `fast` processing atomically |
+| DELETE | [/spaces/{space_id}/sessions/{session_id}/attachments/{document_id}](#delete-spacesspace_idsessionssession_idattachmentsdocument_id) | Delete one attachment of the caller's conversation, as `DELETE /documents/{id}` does |
 
 ### POST /spaces
 
@@ -1134,6 +1137,64 @@ Operation `delete_session`.
 - 200, 202: [`Receipt`](#receipt)
 - 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
 
+### GET /spaces/{space_id}/sessions/{session_id}/attachments
+
+The live attachments of the caller's conversation, oldest first, with their latest processing.
+
+Operation `list_attachments`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `session_id` | path | string (uuid) | yes |  |
+
+- 200: array of [`Attachment`](#attachment)
+- 401, 403, 404, 409, 422, 503: [`ErrorBody`](#errorbody)
+
+### POST /spaces/{space_id}/sessions/{session_id}/attachments
+
+Attach one file to the caller's conversation and request its `fast` processing atomically. Same protocol as a folder upload; reading the space and owning the conversation suffice.
+
+Operation `upload_attachment`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `session_id` | path | string (uuid) | yes | The caller's conversation |
+| `Idempotency-Key` | header | string (uuid) | yes | Caller-chosen request UUID; replaying it is safe |
+| `retry_of` | query | string (uuid) |  | Request key of a failed upload of the same file to the same conversation |
+
+Request: [`FileUpload`](#fileupload) (`multipart/form-data`).
+
+- 200: [`UploadReceipt`](#uploadreceipt) — Replay of a stored request key
+- 201: [`UploadReceipt`](#uploadreceipt) — Stored
+- 400: [`ErrorBody`](#errorbody) — `invalid_multipart`: not one multipart `file` part
+- 401: [`ErrorBody`](#errorbody) — Missing token, or `token_expired` during the transfer
+- 403: [`ErrorBody`](#errorbody)
+- 404: [`ErrorBody`](#errorbody) — No such live conversation of the caller
+- 408: [`ErrorBody`](#errorbody) — `upload_timeout`: the transfer stalled or exceeded its deadline
+- 409: [`ErrorBody`](#errorbody) — `name_conflict`, `idempotency_conflict`, `upload_failed` (retry with `retry_of`), `invalid_retry`, `upload_expired`, `retry_superseded` (`Location` names the original receipt), or `upload_in_progress` (`Location` and `Retry-After`)
+- 413: [`ErrorBody`](#errorbody) — `file_too_large`: above `max_file_bytes`
+- 422: [`ErrorBody`](#errorbody) — `quota_exceeded`, `conversation_files_exceeded`, `conversation_bytes_exceeded`, or an invalid request key, filename or media type
+- 429: [`ErrorBody`](#errorbody) — `transfer_capacity`: all transfer slots are busy; honour `Retry-After`
+- 503: [`ErrorBody`](#errorbody) — `storage_unavailable` or `processing_unavailable`
+
+### DELETE /spaces/{space_id}/sessions/{session_id}/attachments/{document_id}
+
+Delete one attachment of the caller's conversation, as `DELETE /documents/{id}` does.
+
+Operation `delete_attachment`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `session_id` | path | string (uuid) | yes |  |
+| `document_id` | path | string (uuid) | yes |  |
+
+- 200, 202: [`Receipt`](#receipt)
+- 401, 403, 404, 422, 503: [`ErrorBody`](#errorbody)
+- 409: [`ErrorBody`](#errorbody) — `processing_active` while the attachment is processing
+
 ## /users routes
 
 | Method | Path | Summary |
@@ -1300,6 +1361,20 @@ Form-facing projection of a permitted runtime template, not execution readiness.
 | --- | --- | --- | --- |
 | `path` | string | yes |  |
 | `sha256` | string | yes |  |
+| `size` | integer (int64) | yes |  |
+
+### Attachment
+
+One live attachment of the caller's conversation.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `created_at` | string (date-time) | yes |  |
+| `document_id` | string (uuid) | yes |  |
+| `mime` | string | yes | MIME type reported by the client; metadata, not verified. |
+| `name` | string | yes | NFC-normalized filename, unique within the conversation. |
+| `processing` | [`Summary`](#summary) or null | yes |  |
+| `ready` | boolean | yes | Documentary eligibility at read time, independent of capability enablement or a running turn. |
 | `size` | integer (int64) | yes |  |
 
 ### AuthorizeDocument
@@ -1474,6 +1549,7 @@ One of: `source_guarantee`, `api_metadata`.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `agent_configuration_revision` | integer (int64) | yes |  |
 | `agent_instance_id` | string (uuid) | yes |  |
 | `session_id` | string (uuid) | yes | Frontend-generated identifier, retained verbatim. |
 | `title` | string, max length 500 or null |  |  |
@@ -1482,9 +1558,9 @@ One of: `source_guarantee`, `api_metadata`.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `admin` | string | yes | Initial administrator; creation grants the caller nothing on the new space. |
 | `kind` | [`SpaceKind`](#spacekind) | yes |  |
 | `name` | string | yes |  |
+| `owner` | string | yes | Initial business owner; creation grants the caller nothing on the new space. |
 | `parent_id` | string (uuid) | yes |  |
 
 ### Descriptor
@@ -1495,8 +1571,8 @@ One of: `source_guarantee`, `api_metadata`.
 | `committed` | [`Manifest`](#manifest) or null |  |  |
 | `expires_at` | string (date-time) | yes |  |
 | `file` | any | yes |  |
-| `folder_id` | string (uuid) | yes |  |
-| `folder_path` | string | yes |  |
+| `folder_id` | string (uuid) or null | yes |  |
+| `folder_path` | string or null | yes |  |
 | `generation` | string (uuid) | yes |  |
 | `max_artifacts` | integer (int32), >= 0 | yes |  |
 | `max_chunks` | integer (int32), >= 0 | yes |  |
@@ -1507,6 +1583,7 @@ One of: `source_guarantee`, `api_metadata`.
 | `output_prefix` | string | yes |  |
 | `predecessor` | [`Predecessor`](#predecessor) or null |  |  |
 | `profile_settings` | any | yes |  |
+| `session_id` | string (uuid) or null | yes |  |
 | `size` | integer (int64) | yes |  |
 | `space_id` | string (uuid) | yes |  |
 | `stage` | [`Stage`](#stage) | yes |  |
@@ -1594,6 +1671,7 @@ JSON error envelope shared by application, authentication and import failures.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `agent_configuration_revision` | integer (int64) | yes |  |
 | `agent_instance_id` | string (uuid) | yes |  |
 | `chat_controls` | array of [`ChatControlDescriptor`](#chatcontroldescriptor) | yes |  |
 | `execute_stream_url` | string | yes |  |
@@ -1815,7 +1893,7 @@ Extends [`Space`](#space) with:
 
 ### OrganizationDetail
 
-Governance view of one organization: its direct owners and administrators.
+Governance view of one organization: its technical admins and business owners.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -1893,11 +1971,11 @@ One of: `read`, `write`, `manage`.
 
 ### PlatformPermission
 
-One of: `list_all_teams`, `delete_team`, `delete_space`, `rescue_team_admin`, `edit_agent_class_path`, `observe_platform`, `administer_users`, `manage_platform`, `manage_capabilities`, `edit_platform_prompt`.
+One of: `list_all_teams`, `delete_team`, `delete_space`, `rescue_team_owner`, `edit_agent_class_path`, `observe_platform`, `administer_users`, `manage_platform`, `manage_capabilities`, `edit_platform_prompt`.
 
 ### PlatformRole
 
-One of: `platform_owner`, `platform_observer`, `feature_manager`, `prompt_editor`.
+One of: `platform_admin`, `platform_observer`, `feature_manager`, `prompt_editor`.
 
 ### PodCapabilityDescriptor
 
@@ -2111,7 +2189,7 @@ One of: `claim`, `applied`, `confirm`.
 
 Direct roles stored in OpenFGA.
 
-One of: `member`, `editor`, `admin`, `analyst`, `organization_owner`, `personal_space_creator`.
+One of: `member`, `editor`, `owner`, `analyst`, `organization_admin`.
 
 ### RoleAssignments
 
@@ -2125,17 +2203,27 @@ One of: `member`, `editor`, `admin`, `analyst`, `organization_owner`, `personal_
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `configuration` | any | yes | Saved tuning, excluding the legacy profile reference exposed in models for diagnostics. No refresh from the catalog; fields, values and capability envelopes are preserved. |
+| `configuration_revision` | integer (int64) | yes |  |
 | `configuration_updated_at` | string (date-time) | yes |  |
 | `instance_id` | string (uuid) | yes |  |
 | `runtime_id` | string | yes |  |
 | `template_id` | string (uuid) | yes | Organization-qualified OpenFGA identity, distinct from the registry key. |
 | `template_key` | string | yes |  |
 
+### RuntimeAttachment
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `document_id` | string (uuid) | yes |  |
+| `mime` | string | yes |  |
+| `name` | string | yes |  |
+
 ### RuntimeBinding
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `agent` | [`RuntimeAgent`](#runtimeagent) | yes |  |
+| `attachments` | array of [`RuntimeAttachment`](#runtimeattachment) | yes |  |
 | `conversation_id` | string or null | yes |  |
 | `models` | [`RuntimeModels`](#runtimemodels) | yes |  |
 | `run_id` | string or null | yes |  |
@@ -2201,7 +2289,7 @@ One of:
 | --- | --- | --- | --- |
 | `id` | string (uuid) | yes |  |
 | `kind` | [`SpaceKind`](#spacekind) | yes |  |
-| `organization_id` | string (uuid) or null | yes | Canonical organization ownership, not inherited document scope for personal spaces. |
+| `organization_id` | string (uuid) or null | yes | Canonical organization attachment, not inherited document scope for personal spaces. |
 | `project_id` | string (uuid) or null | yes |  |
 | `team_id` | string (uuid) or null | yes |  |
 
@@ -2215,6 +2303,8 @@ One of:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `agent_configuration_changed` | boolean | yes |  |
+| `agent_configuration_revision` | integer (int64) | yes |  |
 | `agent_deleted` | boolean | yes |  |
 | `agent_disabled` | boolean | yes |  |
 | `agent_display_name` | string | yes | Current name, or the registration snapshot after instance removal. |
@@ -2270,7 +2360,7 @@ One of: `organization`, `team`, `project`, `personal`.
 
 Evaluation is a space capability, never a document read/write permission.
 
-One of: `read`, `write`, `manage`, `run_evaluations`, `manage_evaluation_corpus`, `read_conversations_for_evaluation`, `own_organization`, `create_personal_space`.
+One of: `read`, `write`, `manage`, `run_evaluations`, `manage_evaluation_corpus`, `read_conversations_for_evaluation`, `administer_organization`, `create_personal_space`.
 
 ### Stage
 
@@ -2451,12 +2541,13 @@ Durable outcome of one upload request, readable by its request key.
 | `created_at` | string (date-time) | yes |  |
 | `document_id` | string (uuid) or null |  | Set once `stored`. |
 | `error_code` | string or null |  | Failure code when `failed`. |
-| `folder_id` | string (uuid) | yes |  |
+| `folder_id` | string (uuid) or null | yes | Destination folder; null for a conversation attachment. |
 | `mime` | string | yes | MIME type reported by the client; metadata, not verified. |
 | `name` | string | yes | NFC-normalized filename. |
 | `processing` | [`Summary`](#summary) or null |  |  |
 | `processing_profile` | [`Profile`](#profile) or null |  |  |
 | `request_key` | string (uuid) | yes | The `Idempotency-Key` that identifies this receipt. |
+| `session_id` | string (uuid) or null | yes | Destination conversation; null for a drive upload. |
 | `sha256` | string | yes | Hex SHA-256 of the received bytes. |
 | `size` | integer (int64) | yes | Bytes received. |
 | `space_id` | string (uuid) | yes |  |

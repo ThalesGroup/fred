@@ -10,7 +10,7 @@ all Fred components. Start with [User journeys](02.1-user-journeys.md) and
 ```mermaid
 flowchart LR
     client["Client<br/>browser application"]
-    operator["Platform owner<br/>CLI or HTTP ZIP import"]
+    operator["Platform admin<br/>CLI or HTTP ZIP import"]
     caller["Service acting for a user<br/>with the user's token"]
     manager["control-plane<br/>CLI and REST /control-plane/v1"]
     keycloak["Keycloak<br/>realm app"]
@@ -70,7 +70,7 @@ flowchart TB
     roles["roles.rs<br/>roles and capabilities"]
     directory["keycloak.rs<br/>service-account directory"]
     onboarding["onboarding.rs<br/>personal consent and admission"]
-    bootstrap["bootstrap.rs<br/>root platform owner"]
+    bootstrap["bootstrap.rs<br/>root platform admin"]
     domain["domain.rs<br/>types, placement rules"]
     db["db.rs<br/>SQL"]
     documents["documents<br/>originals, receipts, cleanup"]
@@ -151,10 +151,10 @@ There is no synthetic Python team or permission mapping. Non-migrated service
 consumers keep their original calls, including task polling and announcements;
 service failure does not remove routes. Theme presentation uses startup configuration.
 
-## Frontend organization administration
+## Frontend organization owneristration
 
 `ManagerArea`, after consent and bootstrap, resolves current `/me` authority.
-Platform owners enter `/admin/organizations`; business URLs redirect there even
+Platform admins enter `/admin/organizations`; business URLs redirect there even
 when the person also has organization/team roles. Organizations and Provisioning
 share the existing administration navigation. The boundary permits the same
 standalone profile/legal/release routes, skips business announcements/task/charter
@@ -328,15 +328,14 @@ sequenceDiagram
 
 Revocation also reads the target's roles and the space's children under the lock
 (and, for an organization, the personal spaces it manages), and refuses with 409
-when the target would keep a role there without direct content here, or retain
-personal creation eligibility without organization content membership. Removing the last admin of a non-personal space is refused with 409 (I14).
-Removing a role never grants a replacement content role. A personal space is managed from its organization: an organization admin may
+when the target would keep a child role there without direct content here. Removing the last owner of a non-personal space is refused with 409 (I14).
+Removing a role never grants a replacement content role. A personal space is managed from its organization: an organization owner may
 revoke its owner's roles, nobody may grant any (I6).
 
 
 <a id="root-platform-admin-bootstrap"></a>
 
-## Platform owner bootstrap
+## Platform admin bootstrap
 
 Two proofs: the caller's verified bearer and the deploy-time secret
 (`app.bootstrap_token_env_var`, compared in constant time). Two transactions under one
@@ -358,7 +357,7 @@ sequenceDiagram
     end
     M->>PG: lock again, re-read marker
     alt still pending for this caller
-        M->>FGA: write owner on platform:root
+        M->>FGA: write platform_admin on platform:root
         M->>PG: set granted_at, commit
         M-->>U: 200
     else granted meanwhile
@@ -439,18 +438,18 @@ other candidates. The loop neither publishes documents nor calls processing serv
 ## Platform administration and self checks
 
 `GET /me` returns effective platform roles, including the roles implied by platform
-owner. `GET /users/platform-roles` returns direct grants only, to platform owners.
+admin. `GET /users/platform-roles` returns direct grants only, to platform admins.
 `PUT` and `DELETE /users/{user}/platform-roles/{role}` acquire the bootstrap/platform
-lock and recheck the caller's platform-owner permission. Any platform owner grants or
-revokes platform owners; revoking the last one is refused with 409. Granting requires
+lock and recheck the caller's platform-admin permission. Any platform admin grants or
+revokes platform admins; revoking the last one is refused with 409. Granting requires
 a Keycloak subject that exists in the configured directory; revoking a stale direct
 grant does not require the identity to still exist (I15).
 
-Platform roles use canonical names `platform_owner`, `platform_observer`,
+Platform roles use canonical names `platform_admin`, `platform_observer`,
 `feature_manager` and `prompt_editor`; no other name is accepted.
-Deleting an absent direct grant returns 404, even when the role is effective through owner.
+Deleting an absent direct grant returns 404, even when the role is effective through platform admin.
 
-An organization's `organization_owner` is granted and revoked by platform owners, under the
+An organization's `organization_admin` is granted and revoked by platform admins, under the
 platform lock and guard as well as the organization's; owner on a team or project is
 refused with 409, as is revoking an organization's last owner (I14). Before granting,
 manager verifies the subject with its Keycloak service account in the same realm
@@ -469,7 +468,7 @@ resolve the space, returning 404 for an unknown id.
 team metadata records ordered by UUID, with placement from the same SQL query.
 `?after=<uuid>` continues after the last id; it confers no content access.
 
-`GET /admin/organizations` requires platform ownership and selects active organization
+`GET /admin/organizations` requires platform administration and selects active organization
 rows with a UUID keyset and 101-row SQL lookahead. It returns at most 100 `items` and
 an optional `next_cursor`, without FGA placement reads or directory enumeration.
 `POST /admin/organizations` requires the same authority and personal admission. It
@@ -483,8 +482,8 @@ orphan tuples on an uncommitted UUID confer no effective attachment or access.
 `GET /admin/organizations/{id}` and `PATCH /admin/organizations/{id}` require the same
 authority and answer the organization with its direct owners and admins as user
 summaries, read with two holder Reads on that organization only; the registry stays
-free of roster reads. `PATCH` takes any of `name`, `owner_username` and
-`admin_username`, validated and resolved as for creation. Under the platform and
+free of roster reads. `PATCH` takes any of `name`, `admin_username` and
+`owner_username`, validated and resolved as for creation. Under the platform and
 organization locks it rechecks caller ownership, re-reads the row, rechecks
 retirement, keeps names unique, reads both rosters and makes each named account the
 sole direct holder of its role, checking the new holder's attachment. The rename,
@@ -494,9 +493,9 @@ converges. The response is built from the row and rosters read under the locks;
 a directory failure after commit returns id-only summaries rather than an error.
 A missing or non-organization id answers 404.
 
-**Pending decision (review of #3319).** This `PATCH` is a platform-owner path to an
+**Pending decision (review of #3319).** This `PATCH` is a platform-admin path to an
 organization's governance roles that grant and revoke do not offer: it needs
-neither the caller's attachment to the organization nor `Manage`/`OwnOrganization`
+neither the caller's attachment to the organization nor `Manage`/`AdministerOrganization`
 on it, and replacing the admin revokes admins the organization's owners appointed.
 The alternative under review limits `PATCH` to the name and owner, leaving admins
 to the organization's own governance.
@@ -511,12 +510,12 @@ implicit role.
 
 `control-plane import-provisioning <bundle.zip> --token-file <path>` verifies the
 operator bearer, connects to SQL without migrating and verifies migration
-versions/checksums. It loads the published FGA store/model and checks platform owner.
+versions/checksums. It loads the published FGA store/model and checks platform admin.
 Multipart `POST /import-export/import` checks the authenticated caller's platform
 owner authority before reading exactly one `file` field. Both parse the same ZIP
 on a blocking worker and invoke `Importer` with the authenticated operator. A new
 organization requires a declared owner and admin. The bearer is verified once, at
-admission; every later boundary rechecks `platform_owner` in OpenFGA. Revoking that
+admission; every later boundary rechecks `platform_admin` in OpenFGA. Revoking that
 role stops the import at its next boundary; bearer expiry after admission does not.
 
 ```mermaid
@@ -526,7 +525,7 @@ sequenceDiagram
     participant PG as Postgres
     participant FGA as OpenFGA
     C->>KC: verify operator bearer using signing keys
-    C->>FGA: check platform owner before reading input
+    C->>FGA: check platform admin before reading input
     C->>C: bound and validate the complete ZIP
     C->>KC: preflight exact usernames, missing passwords and effective email conflicts
     C->>PG: lock platform, resolve roots, lock organizations in UUID order
@@ -537,20 +536,20 @@ sequenceDiagram
     C->>PG: release read-only locks
     loop each identity
         C->>PG: lock platform
-        C->>FGA: capture platform guard, recheck platform owner, consume guard
+        C->>FGA: capture platform guard, recheck platform admin, consume guard
         C->>KC: resolve or create with service credentials
         C->>PG: release lock
     end
     C->>PG: lock platform, resolve roots, lock organizations, resolve children
     C->>FGA: validate all parent requirements and attachments
-    C->>KC: verify distinct organization owner subjects, at most eight concurrently
+    C->>KC: verify distinct organization admin subjects, at most eight concurrently
     loop each organization subtree
         C->>FGA: initialize new guard, capture platform and organization revisions
-        C->>FGA: recheck platform owner, attachments and subtree parent requirements
+        C->>FGA: recheck platform admin, attachments and subtree parent requirements
         C->>PG: insert missing rows in parent-first order
         C->>FGA: guarded parent-first batches: a new space's parent link with its first grants, audit acknowledgments
     end
-    C->>FGA: capture platform guard, recheck platform owner and grant platform roles
+    C->>FGA: capture platform guard, recheck platform admin and grant platform roles
     C->>PG: commit space rows, release locks
     C-->>C: return completed counts
 ```
@@ -562,10 +561,10 @@ organization locks. Reconciliation retains those locks and the platform lock thr
 SQL commit. Meanwhile, role and platform mutations anywhere on the platform, and
 folder, team or project writes in the declared organizations, wait at most five
 seconds for their lock and then answer 503. It captures revisions before rechecking
-platform ownership and parent access,
+platform administration and parent access,
 then carries acknowledged revisions through batches of at most 96 link and space-role
 tuples plus four guard operations (I4, I5). A subtree with no role writes consumes its guard
-explicitly. Organization owners are checked once per distinct subject before subtree
+explicitly. Organization admins are checked once per distinct subject before subtree
 publication, in batches of at most eight concurrent directory lookups. Platform
 grants use the platform guard and recheck identity existence.
 
@@ -595,12 +594,12 @@ held SQL connection. No workflow is dispatched by the API.
 
 | Id | Decision | Because | Consequence |
 | --- | --- | --- | --- |
-| D1 | SQL records immutable placement at creation; matching OpenFGA links remain the model's authority for inherited permissions. Editor, admin and analyst descend, member does not. | OpenFGA decides permissions; SQL placement avoids per-role-space link Reads without storing grants. | One Check per permission decision, evaluated through at most two parents; context uses direct-role pages and one SQL query; structural enumeration still reads FGA links (I20). Chapter 09 records complete request budgets. |
+| D1 | SQL records immutable placement at creation; matching OpenFGA links remain the model's authority for inherited permissions. Editor, owner and analyst descend, member does not. | OpenFGA decides permissions; SQL placement avoids per-role-space link Reads without storing grants. | One Check per permission decision, evaluated through at most two parents; context uses direct-role pages and one SQL query; structural enumeration still reads FGA links (I20). Chapter 09 records complete request budgets. |
 | D2 | Organization > team > project; a personal space is a one-member team without parent. | One model for every container; a personal space stays private to its owner. | Personal spaces inherit nothing and have their own management rule (I6). |
 | D3 | Folders carry no rights. | Rights per folder bring back traversal and per-item lists. | Access granularity is the space. |
 | D4 | Space and content placement are immutable. | SQL constraints and OpenFGA links preserve ownership. | Folder renames preserve placement; the API exposes no move operation. |
 | D5 | A space's search scope is its ancestors and itself; levels only narrow it. | Content of a project stays out of its team's scope. | A project reads its team's and organization's content unless the caller removes those levels. |
-| D6 | Admin roles grant no content access. | Governing is not reading. | An admin who reads also holds a content role. |
+| D6 | Technical admin and business owner roles grant no content access. | Governing is not reading. | An admin or owner who reads also holds a content role. |
 | D7 | Organization mutations hold a Postgres advisory lock and consume an OpenFGA guard captured before checks. | SQL locks alone cannot stop a remote write after cancellation. | Live callers serialize; stale remote writes fail atomically. |
 | D8 | Root bootstrap in two steps under one lock: reservation committed, then grant and completion. | No double promotion, no reopening. | A failed grant can only be finished by its claimant. |
 | D9 | Configuration, secrets and log output follow Fred's service conventions. | One way to operate every Fred service. | `sourceLocation.function` holds the module path. |
@@ -646,7 +645,7 @@ they do not apply SQL migrations.
 
 ```mermaid
 sequenceDiagram
-    participant O as Platform owner
+    participant O as Platform admin
     participant A as Manager API
     participant SQL as PostgreSQL
     participant T as Temporal

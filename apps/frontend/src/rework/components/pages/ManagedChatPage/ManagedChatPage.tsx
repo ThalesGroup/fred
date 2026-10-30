@@ -242,7 +242,7 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
   const activeTeam = space.kind === "personal" ? { id: space.id, name: space.name } : undefined;
   const team = { id: space.id, name: space.name };
   const isAdmin =
-    space.kind === "personal" || space.roles.some((role) => role === "admin" || role === "organization_owner");
+    space.kind === "personal" || space.roles.some((role) => role === "owner" || role === "organization_admin");
   const chat = useManagedChat({ teamId, spaceId: space.id, agentInstanceId });
 
   // Opening a push drawer is a statement about ONE conversation, so switching

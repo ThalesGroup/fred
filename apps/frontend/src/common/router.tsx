@@ -52,7 +52,7 @@ import { createBrowserRouter, Navigate, RouteObject, useParams, Outlet, useLocat
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
 import { Protected } from "@core/guards/Protected";
-import { adminIndexPath } from "@core/guards/organizationAdminPages";
+import { adminIndexPath } from "@core/guards/organizationOwnerPages";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { PageError } from "@components/pages/PageError/PageError.tsx";
 import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.tsx";
@@ -60,7 +60,7 @@ import { getConfig } from "./config";
 
 import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
 import OrganizationsPage from "@components/pages/admin/OrganizationsPage/OrganizationsPage";
-import { useOrganizationAdmin } from "@core/hooks/useOrganizationAdmin";
+import { useOrganizationOwner } from "@core/hooks/useOrganizationOwner";
 import ManagerArea from "@core/guards/ManagerArea";
 import GcuGuard from "@core/guards/GcuGuard";
 import BootstrapGuard from "@core/guards/BootstrapGuard";
@@ -108,7 +108,7 @@ const ManagedChatPageRoute = () => {
 };
 
 const OrganizationFeaturesRoute = () => {
-  const { organizationId } = useOrganizationAdmin();
+  const { organizationId } = useOrganizationOwner();
   return organizationId ? <FeaturesPage organizationId={organizationId} /> : null;
 };
 
@@ -116,11 +116,11 @@ const AdminIndexRoute = () => {
   const supervision = useOrganizationSupervisionAccess();
   const { isLoading, ...capabilities } = useUserCapabilities();
   const manager = useManagerPlatformAdmin();
-  const organization = useOrganizationAdmin();
+  const organization = useOrganizationOwner();
   if (organization.isLoading || (organization.isFetching && !organization.currentData)) return null;
   if (isLoading || manager.isLoading || supervision.loading) return null;
   const target = adminIndexPath({
-    capabilities: { ...capabilities, canManageFeatures: organization.isAdmin },
+    capabilities: { ...capabilities, canManageFeatures: organization.isOwner },
     supervision: supervision.allowed,
     platformAccessEnabled: !!getConfig()?.platform_access_enabled,
     platformOwner: manager.isAdmin,

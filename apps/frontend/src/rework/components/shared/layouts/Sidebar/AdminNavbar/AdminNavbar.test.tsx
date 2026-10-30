@@ -21,7 +21,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   spaces: [] as { kind: string; name: string; roles: string[]; id: string }[] | undefined,
   platformOwner: true,
-  organizationAdmin: true,
+  organizationOwner: true,
   supervision: true,
 }));
 
@@ -38,8 +38,8 @@ vi.mock("@hooks/useUserCapabilities.ts", () => ({
 vi.mock("@core/hooks/useOrganizationSupervisionAccess", () => ({
   useOrganizationSupervisionAccess: () => ({ allowed: h.supervision }),
 }));
-vi.mock("@core/hooks/useOrganizationAdmin", () => ({
-  useOrganizationAdmin: () => ({ isAdmin: h.organizationAdmin, organizationId: "org-1", currentData: h.spaces }),
+vi.mock("@core/hooks/useOrganizationOwner", () => ({
+  useOrganizationOwner: () => ({ isOwner: h.organizationOwner, organizationId: "org-1", currentData: h.spaces }),
 }));
 vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({
   useManagerPlatformAdmin: () => ({ isAdmin: h.platformOwner }),
@@ -48,8 +48,8 @@ vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({
 import AdminNavbar from "./AdminNavbar";
 
 const ACME = [
-  { kind: "team", name: "Design", roles: ["admin"], id: "team-1" },
-  { kind: "organization", name: "Acme", roles: ["admin", "organization_owner"], id: "org-1" },
+  { kind: "team", name: "Design", roles: ["owner"], id: "team-1" },
+  { kind: "organization", name: "Acme", roles: ["owner", "organization_admin"], id: "org-1" },
 ];
 const PLATFORM_PAGES = ["/admin/organizations", "/admin/provisioning"];
 
@@ -57,7 +57,7 @@ let host: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  Object.assign(h, { spaces: [], platformOwner: true, organizationAdmin: true, supervision: true });
+  Object.assign(h, { spaces: [], platformOwner: true, organizationOwner: true, supervision: true });
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -106,7 +106,7 @@ describe("AdminNavbar", () => {
     expect(hrefs().filter((href) => PLATFORM_PAGES.includes(href!))).toEqual([]);
   });
 
-  it("names the platform space read-only for a platform owner only", () => {
+  it("names the platform space read-only for a platform admin only", () => {
     render("/admin/organizations");
     expect(trigger()).toBeNull();
     expect(host.querySelector("h2")?.textContent).toBe("rework.sidebar.admin.title");
@@ -143,7 +143,7 @@ describe("AdminNavbar", () => {
 
   it("keeps the switcher while the supervision check refetches", () => {
     h.spaces = ACME;
-    h.organizationAdmin = false;
+    h.organizationOwner = false;
     h.supervision = false;
     render("/admin/organizations");
     expect(trigger()).not.toBeNull();
@@ -151,7 +151,7 @@ describe("AdminNavbar", () => {
 
   it("shows no switcher to a plain organization member", () => {
     h.spaces = [{ kind: "organization", name: "Acme", roles: ["member"], id: "org-1" }];
-    h.organizationAdmin = false;
+    h.organizationOwner = false;
     h.supervision = false;
     render("/admin/organizations");
     expect(trigger()).toBeNull();
@@ -188,7 +188,7 @@ describe("AdminNavbar", () => {
     act(() => trigger()!.click());
     expect(items()[0].textContent).toContain("rework.sidebar.admin.spaces.platform");
     expect(items()[1].textContent).toContain(
-      "Acmerework.supervision.roleNames.organization_owner, rework.supervision.roleNames.admin",
+      "Acmerework.supervision.roleNames.organization_admin, rework.supervision.roleNames.owner",
     );
     expect(items().map((item) => item.getAttribute("aria-checked"))).toEqual(["false", "true"]);
     expect(document.activeElement).toBe(items()[1]);

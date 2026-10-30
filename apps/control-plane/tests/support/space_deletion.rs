@@ -144,7 +144,7 @@ async fn lifecycle_authority_retirement_documents_and_durable_receipts() {
             .iter()
             .all(|(id, _)| *id == org.id)
     );
-    assert!(e.fga.is_platform_owner("root").await.unwrap());
+    assert!(e.fga.is_platform_admin("root").await.unwrap());
     let recreated = spaces::create_space(
         &e.pool,
         &e.fga,
@@ -329,7 +329,7 @@ async fn lifecycle_retention_personal_scope_and_final_guard_commit_failure() {
             .unwrap(),
         None
     );
-    assert!(e.fga.is_platform_owner("root").await.unwrap());
+    assert!(e.fga.is_platform_admin("root").await.unwrap());
 }
 
 // Proves: I24, I4, I8
@@ -493,7 +493,7 @@ async fn lifecycle_waiters_recheck_retirement_and_authority_and_accept_once() {
     .unwrap();
     let identity = support::IdentityServer::start().await;
     let directory = identity.directory();
-    let bundle = parse_blueprint(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"TSN","roles":{"alice":["admin","member","organization_owner"]}}],"teams":[{"ref":"team","name":"BID","organization":"org","roles":{"alice":["admin"]}}],"projects":[]}"#).unwrap();
+    let bundle = parse_blueprint(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"TSN","roles":{"alice":["owner","member","organization_admin"]}}],"teams":[{"ref":"team","name":"BID","organization":"org","roles":{"alice":["owner"]}}],"projects":[]}"#).unwrap();
     let gate = std::sync::Arc::new(support::Gate::default());
     proxy.fault.lock().await.gate = Some(gate.clone());
     let pool = e.pool.clone();
@@ -611,7 +611,7 @@ async fn lifecycle_waiters_recheck_retirement_and_authority_and_accept_once() {
         .write_platform(
             &mut guard,
             "root",
-            control_plane::roles::PlatformRole::PlatformOwner,
+            control_plane::roles::PlatformRole::PlatformAdmin,
             false,
         )
         .await

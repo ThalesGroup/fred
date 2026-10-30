@@ -869,7 +869,7 @@ describe("ManagedChatPage restores a panel behind the conversation", () => {
     ["an admin", "team-1", ["full-reasoning", "debug"]],
     ["a member of a shared team", "personal-team", ["full-reasoning"]],
   ])("offers %s the full reasoning at the rail's foot", (_label, activeTeamId, keys) => {
-    spaceRoles.current = activeTeamId === "team-1" ? ["admin"] : ["member"];
+    spaceRoles.current = activeTeamId === "team-1" ? ["owner"] : ["member"];
     try {
       mount();
       expect(rail.footerLaunchers.map((l) => l.key)).toEqual(keys);

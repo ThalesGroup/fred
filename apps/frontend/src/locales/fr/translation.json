@@ -1236,9 +1236,9 @@
       "roleNames": {
         "member": "Membre",
         "editor": "Éditeur",
-        "admin": "Administrateur",
         "analyst": "Analyste",
-        "organization_owner": "Propriétaire de l'organisation"
+        "owner": "Responsable",
+        "organization_admin": "Admin de l'organisation"
       }
     },
     "admin": {
@@ -1652,7 +1652,7 @@
         "title": "Copier {{name}} dans une autre équipe",
         "subtitle": "Sélectionnez les espaces où copier cet agent.",
         "confirm": "Copier",
-        "noEditableTeams": "Vous n'êtes éditeur d'aucune équipe. Seul un éditeur peut y copier un agent — demandez ce rôle à un administrateur de l'équipe.",
+        "noEditableTeams": "Vous n'êtes éditeur d'aucune équipe. Seul un éditeur peut y copier un agent — demandez ce rôle à un responsable de l'équipe.",
         "templateDisabled": "Template d'agent non activé",
         "missingCapabilities_one": "{{count}} capacité manquante",
         "missingCapabilities_other": "{{count}} capacités manquantes",
@@ -2331,7 +2331,7 @@
           "title": "Importer ce prompt dans une équipe",
           "subtitle": "Sélectionnez les espaces où importer « {{name}} ».",
           "confirm": "Importer",
-          "noEditableTeams": "Vous n'êtes éditeur d'aucune équipe. Seul un éditeur peut y importer un prompt — demandez ce rôle à un administrateur de l'équipe.",
+          "noEditableTeams": "Vous n'êtes éditeur d'aucune équipe. Seul un éditeur peut y importer un prompt — demandez ce rôle à un responsable de l'équipe.",
           "successToast": "Prompt importé ({{count}})",
           "errorToast": "Échec de l'import ({{count}})"
         },
@@ -2396,7 +2396,7 @@
           "title": "Importer {{name}}",
           "subtitle": "Choisissez les espaces dans lesquels importer cet agent.",
           "confirm": "Importer",
-          "noEditableTeams": "Vous n'êtes éditeur d'aucune équipe. Seul un éditeur peut y importer un agent — demandez ce rôle à un administrateur d'équipe.",
+          "noEditableTeams": "Vous n'êtes éditeur d'aucune équipe. Seul un éditeur peut y importer un agent — demandez ce rôle à un responsable d'équipe.",
           "typeNotEnabled": "Type d'agent non activé dans cette équipe",
           "loses_one": "Perd {{count}} capacité",
           "loses_other": "Perd {{count}} capacités",
@@ -2547,7 +2547,7 @@
         "personalSpace": "Espace personnel",
         "empty": "Vous n'êtes membre d'aucune équipe.",
         "role": {
-          "team_admin": "Admin",
+          "team_admin": "Responsable",
           "team_editor": "Éditeur",
           "team_analyst": "Analyste",
           "team_member": "Membre"
@@ -2974,7 +2974,7 @@
         "campaign": {
           "title": "Campagne de segmentation et de rôles",
           "description": "Avec les identifiants ci-dessus, vérifier au maximum 150 contrôles réels : chaque rôle plateforme seul, les principaux profils d'équipe, la segmentation entre utilisateurs et équipes privées/publiques, et la révocation. Les rôles du compte de test dédié sont temporairement modifiés, puis restaurés ; les ressources temporaires sont nettoyées. Cette campagne est séparée de Tout lancer.",
-          "limits": "Nécessite l'admin qui a initialisé la plateforme et son acceptation de la charte administrateur d'équipe. Utiliser un compte dédié : ses accès plateforme changent pendant le run. La charte détermine si le rôle administrateur d'équipe est actif ou en attente. Garder cette page ouverte et le jeton de test valide. La sauvegarde locale contient les ID et les rôles initiaux, jamais les identifiants de connexion ; fermer le navigateur nécessite une reprise. Ne pas administrer les rôles ni lancer une autre campagne depuis un autre navigateur en parallèle.",
+          "limits": "Nécessite l'admin qui a initialisé la plateforme et son acceptation de la charte responsable d'équipe. Utiliser un compte dédié : ses accès plateforme changent pendant le run. La charte détermine si le rôle responsable d'équipe est actif ou en attente. Garder cette page ouverte et le jeton de test valide. La sauvegarde locale contient les ID et les rôles initiaux, jamais les identifiants de connexion ; fermer le navigateur nécessite une reprise. Ne pas administrer les rôles ni lancer une autre campagne depuis un autre navigateur en parallèle.",
           "run": "Tester les rôles et la segmentation",
           "confirmation": "Modifier temporairement les rôles plateforme de {{account}}, y compris l'accès administrateur plateforme ? Ce compte doit être dédié au test. Les rôles initiaux seront restaurés à la fin ; après une interruption, revenir ici pour les restaurer. Les rôles des équipes existantes et la configuration du fournisseur d'identité ne sont pas modifiés.",
           "tokenAccount": "l'utilisateur identifié par le jeton API fourni",
@@ -3021,7 +3021,7 @@
         },
         "teams": {
           "title": "Équipes",
-          "subtitle": "Crée une équipe jetable que vous administrez, puis la supprime. Ignorée tant que vous n'avez pas accepté la charte d'administrateur d'équipe ; l'exécution ne l'accepte jamais à votre place. Vérifie que le seul rôle d'admin ne permet pas de modifier le contenu, que le rôle d'éditeur ouvre la modification et que son retrait la referme, un prompt, un dossier et un agent d'équipe, les révisions et la restauration du wiki, le lien d'invitation, le routage des modèles, la copie de l'agent d'équipe vers votre espace personnel, et que rien de l'équipe supprimée ne reste accessible."
+          "subtitle": "Crée une équipe jetable que vous administrez, puis la supprime. Ignorée tant que vous n'avez pas accepté la charte de responsable d'équipe ; l'exécution ne l'accepte jamais à votre place. Vérifie que le seul rôle de responsable ne permet pas de modifier le contenu, que le rôle d'éditeur ouvre la modification et que son retrait la referme, un prompt, un dossier et un agent d'équipe, les révisions et la restauration du wiki, le lien d'invitation, le routage des modèles, la copie de l'agent d'équipe vers votre espace personnel, et que rien de l'équipe supprimée ne reste accessible."
         },
         "security": {
           "title": "Sécurité",
@@ -3231,7 +3231,7 @@
         "title": "Créer une équipe",
         "nameLabel": "Nom de l'équipe",
         "namePlaceholder": "ex. swiftpost",
-        "adminsLabel": "Administrateur(s) de l'équipe",
+        "adminsLabel": "Responsable(s) de l'équipe",
         "adminsPlaceholder": "Entrer un nom, prénom ou ID utilisateur",
         "adminsSearching": "Recherche en cours...",
         "adminsNoMatch": "Aucun utilisateur ne correspond à cette recherche.",
@@ -3254,15 +3254,15 @@
         "errors": {
           "summary": "Échec de la modification de l'équipe",
           "fallbackDetail": "Impossible de modifier l'équipe. Veuillez réessayer.",
-          "conflictDetail": "Ce nom est déjà pris, ou l'équipe resterait sans administrateur actif.",
+          "conflictDetail": "Ce nom est déjà pris, ou l'équipe resterait sans responsable actif.",
           "forbiddenDetail": "Seuls les administrateurs de la plateforme peuvent modifier les équipes."
         }
       },
       "pendingAdmin": "En attente",
-      "pendingAdminHint": "{{name}} n'a pas encore accepté la charte des administrateurs d'équipe.",
+      "pendingAdminHint": "{{name}} n'a pas encore accepté la charte des responsables d'équipe.",
       "refusals": {
         "teamNameTaken": "Une équipe porte déjà ce nom.",
-        "lastActiveAdmin": "L'équipe doit garder au moins un administrateur actif.",
+        "lastActiveAdmin": "L'équipe doit garder au moins un responsable actif.",
         "pendingCharter": "Le nouvel administrateur n'a pas encore accepté la charte : gardez l'administrateur actuel jusqu'à son acceptation."
       }
     },
@@ -3275,7 +3275,7 @@
       "label": "Description de l'équipe",
       "helper": "Indiquez les objectifs de votre équipe dans son usage de l'IA. Tous les utilisateurs de la marketplace la voient.",
       "tooShort": "Saisissez au moins {{min}} caractères.",
-      "placeholderDisplay": "Description à compléter par l'administrateur de l'équipe.",
+      "placeholderDisplay": "Description à compléter par le responsable de l'équipe.",
       "reminder": {
         "title": "Décrivez votre équipe",
         "description": "Votre équipe a encore une description par défaut. Indiquez ses objectifs dans son usage de l'IA pour que chacun sache à quoi elle utilise la plateforme.",
@@ -3284,14 +3284,15 @@
       "maxReached": "{{max}} caractères maximum"
     },
     "teamRoles": {
-      "team_admin": "Admin",
-      "pending_team_admin": "Admin (en attente)",
+      "team_owner": "Responsable",
+      "team_admin": "Responsable",
+      "pending_team_admin": "Responsable (en attente)",
       "team_editor": "Éditeur",
       "team_analyst": "Analyste",
       "team_member": "Membre",
       "descriptions": {
         "team_admin": "Gouverne l'équipe : gère les membres et leurs rôles, et définit la politique d'équipe (quotas, modèles autorisés, serveurs MCP, limites de stockage). Ne donne aucun droit sur les agents, les prompts ou le routage - c'est le rôle Éditeur.",
-        "pending_team_admin": "Admin nommé qui n'a pas encore accepté la charte de l'administrateur d'équipe : simple membre jusqu'à son acceptation.",
+        "pending_team_admin": "Responsable nommé qui n'a pas encore accepté la charte du responsable d'équipe : simple membre jusqu'à son acceptation.",
         "team_editor": "Gère ce que l'équipe construit : agents, prompts partagés, politique de routage et corpus documentaire. Ne donne aucun droit sur les membres ni sur la politique d'équipe.",
         "team_analyst": "Crée et lance les campagnes d'évaluation d'agents, et gère les corpus d'évaluation.",
         "team_member": "L'accès par défaut de toute personne de l'équipe : utiliser les agents et les prompts de l'équipe, et gérer les siens. Aucun droit de configuration ni d'administration."
@@ -3303,7 +3304,7 @@
     "teamAdminCharter": {
       "accept": "Accepter",
       "acceptedOn": "Acceptée le {{date}}",
-      "pendingNotice": "Acceptez la charte de l'administrateur d'équipe pour activer vos droits d'admin sur cette équipe.",
+      "pendingNotice": "Acceptez la charte du responsable d'équipe pour activer vos droits de responsable sur cette équipe.",
       "review": "Lire la charte"
     },
     "teamSettings": {
@@ -3325,7 +3326,7 @@
           "forbiddenDetail": "Vous n'avez pas les droits pour effectuer cette action.",
           "grantDetail": "{{name}} a été ajouté(e), mais le rôle {{role}} n'a pas pu lui être attribué.",
           "grantSummary": "Échec de l'attribution d'un rôle",
-          "lastOwnerDetail": "Une équipe doit conserver au moins un administrateur.",
+          "lastOwnerDetail": "Une équipe doit conserver au moins un responsable.",
           "removeMemberDetail": "Impossible de supprimer ce membre de l'équipe.",
           "removeMemberSummary": "Échec de la suppression du membre",
           "updateRoleDetail": "Impossible de mettre à jour le rôle du membre.",
@@ -3372,7 +3373,7 @@
       "routing": {
         "title": "Modèles",
         "subtitle": "Les modèles que la plateforme autorise pour cette équipe : ceux que les membres peuvent utiliser, celui par défaut, et si le raisonnement démarre activé.",
-        "readOnly": "Seuls les administrateurs de l'équipe peuvent modifier ses modèles.",
+        "readOnly": "Seuls les responsables de l'équipe peuvent modifier ses modèles.",
         "emptyState": "La plateforme n'autorise encore aucun modèle pour cette équipe. Demandez à un administrateur de la plateforme d'en autoriser un.",
         "enabledTooltip": "Activé pour l'équipe",
         "enabledLabel": "Activer {{model}} pour l'équipe",
@@ -3421,7 +3422,7 @@
           "open": "Ouverte",
           "inviteOnly": "Sur invitation",
           "manual": "Ajout manuel",
-          "privateSupport": "Une équipe privée n'apparaît pas sur la marketplace : un administrateur de l'équipe ajoute ses membres ou partage un lien d'invitation."
+          "privateSupport": "Une équipe privée n'apparaît pas sur la marketplace : un responsable de l'équipe ajoute ses membres ou partage un lien d'invitation."
         },
         "visibility": {
           "label": "Visibilité de l'équipe",
@@ -3464,7 +3465,7 @@
         "title": "Quitter cette équipe ?",
         "message": "Vous perdrez l'accès à « {{teamName}} » et ses conversations seront traitées selon la politique de rétention de l'équipe, exactement comme si un administrateur vous avait retiré.",
         "confirmLabel": "Quitter",
-        "lastAdminTooltip": "Vous êtes le seul administrateur de cette équipe — désignez un autre administrateur avant de la quitter.",
+        "lastAdminTooltip": "Vous êtes le seul responsable de cette équipe — désignez un autre responsable avant de la quitter.",
         "errors": {
           "summary": "Échec pour quitter l'équipe",
           "fallbackDetail": "Impossible de quitter l'équipe."
@@ -3571,8 +3572,8 @@
             "label": "Modèle conseillé",
             "hint": "Les nouvelles conversations avec cet agent démarrent sur ce modèle. Les membres peuvent toujours choisir un autre modèle dans le chat.",
             "teamDefault": "Modèle par défaut de l'équipe",
-            "teamDefaultCurrent": "Actuellement {{model}}. Suit les changements faits par l'admin d'équipe.",
-            "teamDefaultFollows": "Suit les changements faits par l'admin d'équipe.",
+            "teamDefaultCurrent": "Actuellement {{model}}. Suit les changements faits par le responsable d'équipe.",
+            "teamDefaultFollows": "Suit les changements faits par le responsable d'équipe.",
             "loadError": "Impossible de vérifier le modèle conseillé. La sauvegarde le laissera inchangé."
           }
         },
@@ -4579,8 +4580,8 @@
       "empty": "Aucune organisation pour le moment.",
       "loadFailed": "Impossible de charger les organisations.",
       "name": "Nom de l'organisation",
-      "owner": "Propriétaire de l'organisation",
-      "admin": "Administrateur de l'organisation",
+      "owner": "Responsable de l'organisation",
+      "admin": "Admin de l'organisation",
       "searchFailed": "La recherche d'utilisateurs a échoué.",
       "accountsHint": "Choisissez des personnes qui ont déjà un compte. Une même personne peut tenir les deux rôles. Ces rôles ne donnent accès à aucun contenu.",
       "editOrganization": {
@@ -4589,8 +4590,8 @@
         "submit": "Enregistrer",
         "successSummary": "Organisation {{name}} modifiée",
         "loadFailed": "Impossible de charger cette organisation. Fermez et réessayez.",
-        "severalOwners": "Cette organisation a actuellement plusieurs propriétaires : {{names}}. Choisir un nouveau propriétaire les remplace tous.",
-        "severalAdmins": "Cette organisation a actuellement plusieurs administrateurs : {{names}}. Choisir un nouvel administrateur les remplace tous.",
+        "severalOwners": "Cette organisation a plusieurs responsables : {{names}}. Choisir un nouveau responsable les remplace tous.",
+        "severalAdmins": "Cette organisation a plusieurs admins : {{names}}. Choisir un nouvel admin les remplace tous.",
         "errors": {
           "summary": "Échec de la modification de l'organisation",
           "fallbackDetail": "Impossible de modifier l'organisation. Veuillez réessayer.",
@@ -4745,11 +4746,11 @@
         "project": "Projet"
       },
       "roles": {
-        "admin": "Administrateur",
+        "organization_admin": "Admin",
         "member": "Membre",
         "editor": "Éditeur",
         "analyst": "Analyste",
-        "owner": "Propriétaire"
+        "owner": "Responsable"
       },
       "search": "Rechercher dans vos espaces",
       "missingSpace": "Cet espace ne figure pas dans vos appartenances.",

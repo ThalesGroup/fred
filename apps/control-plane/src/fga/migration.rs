@@ -1,10 +1,62 @@
 //! Store publication. Startup binds the published store and model, or publishes a fresh
-//! store for an empty installation. Any other published model requires a local reset.
+//! store for an empty installation. Model replacement is an explicit operator action.
 use super::*;
 use crate::bootstrap;
 use sqlx::PgPool;
 
 impl Fga {
+    /// Replace the pinned model after an operator has reviewed tuple compatibility and
+    /// stopped every consumer. This lock serializes publication, not running consumers.
+    pub async fn publish_model(self, pool: &PgPool, expected_model: &str) -> Result<Self> {
+        let mut tx = bootstrap::locked(pool).await?;
+        let (configured, active, previous) = binding(&mut *tx)
+            .await?
+            .context("initialize control-plane authorization with serve before publication")?;
+        anyhow::ensure!(
+            self.configured_store == configured,
+            "configured OpenFGA store differs from published authorization store"
+        );
+        anyhow::ensure!(
+            previous == expected_model,
+            "published OpenFGA model changed; inspect the binding before publication"
+        );
+        let mut destination = self;
+        destination.store = active;
+        let reply = destination
+            .get(&format!(
+                "/stores/{}/authorization-models/{previous}",
+                destination.store
+            ))
+            .await?;
+        let actual = &reply["authorization_model"];
+        anyhow::ensure!(actual["id"] == previous, "invalid published OpenFGA model");
+        let expected: Value = serde_json::from_str(include_str!("../../openfga/model.json"))?;
+        if !model_matches(actual, &expected, &previous) {
+            let reply = destination
+                .post(
+                    &format!("/stores/{}/authorization-models", destination.store),
+                    expected,
+                )
+                .await?;
+            let model = reply["authorization_model_id"]
+                .as_str()
+                .context("missing published model id")?;
+            destination = destination
+                .clone()
+                .bind((configured, destination.store.clone(), model.into()))
+                .await?;
+            sqlx::query("update authorization_store set model_id = $1 where singleton")
+                .bind(model)
+                .execute(&mut *tx)
+                .await?;
+        } else {
+            destination.model = Some(previous.clone());
+        }
+        tx.commit().await?;
+        tracing::info!(store_id=destination.store, previous_model_id=previous, model_id=?destination.model, "[REBAC] Authorization model published; restart all consumers");
+        Ok(destination)
+    }
+
     /// Bind an existing publication, or initialize only an entirely empty installation.
     pub async fn initialize(self, pool: &PgPool) -> Result<Self> {
         let mut tx = bootstrap::locked(pool).await?;
@@ -84,18 +136,22 @@ impl Fga {
         let actual = &reply["authorization_model"];
         let expected: Value = serde_json::from_str(include_str!("../../openfga/model.json"))?;
         anyhow::ensure!(
-            actual["id"] == model
-                && actual["schema_version"] == expected["schema_version"]
-                && normalized_model(actual["type_definitions"].clone())
-                    == normalized_model(expected["type_definitions"].clone())
-                && actual
-                    .get("conditions")
-                    .is_none_or(|c| c.is_null() || c.as_object().is_some_and(|m| m.is_empty())),
-            "published OpenFGA model is incompatible; reset local manager data"
+            model_matches(actual, &expected, &model),
+            "published OpenFGA model is incompatible; stop all consumers, review tuple compatibility, then run control-plane publish-authorization-model --expected-model {model}"
         );
         self.model = Some(model);
         Ok(self)
     }
+}
+
+fn model_matches(actual: &Value, expected: &Value, model: &str) -> bool {
+    actual["id"] == model
+        && actual["schema_version"] == expected["schema_version"]
+        && normalized_model(actual["type_definitions"].clone())
+            == normalized_model(expected["type_definitions"].clone())
+        && actual
+            .get("conditions")
+            .is_none_or(|c| c.is_null() || c.as_object().is_some_and(|m| m.is_empty()))
 }
 
 async fn binding<'e>(

@@ -22,21 +22,21 @@ use serde::{Deserialize, Serialize};
 )]
 #[serde(rename_all = "snake_case")]
 pub enum PlatformRole {
-    PlatformOwner,
+    PlatformAdmin,
     PlatformObserver,
     FeatureManager,
     PromptEditor,
 }
 impl PlatformRole {
     pub const ALL: [Self; 4] = [
-        Self::PlatformOwner,
+        Self::PlatformAdmin,
         Self::PlatformObserver,
         Self::FeatureManager,
         Self::PromptEditor,
     ];
     pub fn relation(self) -> &'static str {
         match self {
-            Self::PlatformOwner => "platform_owner",
+            Self::PlatformAdmin => "platform_admin",
             Self::PlatformObserver => "platform_observer",
             Self::FeatureManager => "feature_manager",
             Self::PromptEditor => "prompt_editor",
@@ -44,7 +44,7 @@ impl PlatformRole {
     }
     pub fn parse(s: &str) -> Option<Self> {
         match s {
-            "platform_owner" => Some(Self::PlatformOwner),
+            "platform_admin" => Some(Self::PlatformAdmin),
             "platform_observer" => Some(Self::PlatformObserver),
             "feature_manager" => Some(Self::FeatureManager),
             "prompt_editor" => Some(Self::PromptEditor),
@@ -59,7 +59,7 @@ pub enum PlatformPermission {
     ListAllTeams,
     DeleteTeam,
     DeleteSpace,
-    RescueTeamAdmin,
+    RescueTeamOwner,
     EditAgentClassPath,
     ObservePlatform,
     AdministerUsers,
@@ -72,7 +72,7 @@ impl PlatformPermission {
         Self::ListAllTeams,
         Self::DeleteTeam,
         Self::DeleteSpace,
-        Self::RescueTeamAdmin,
+        Self::RescueTeamOwner,
         Self::EditAgentClassPath,
         Self::ObservePlatform,
         Self::AdministerUsers,
@@ -85,7 +85,7 @@ impl PlatformPermission {
             Self::ListAllTeams => "can_list_all_teams",
             Self::DeleteTeam => "can_delete_team",
             Self::DeleteSpace => "can_delete_space",
-            Self::RescueTeamAdmin => "can_rescue_team_admin",
+            Self::RescueTeamOwner => "can_rescue_team_owner",
             Self::EditAgentClassPath => "can_edit_agent_class_path",
             Self::ObservePlatform => "can_observe_platform",
             Self::AdministerUsers => "can_administer_users",
@@ -107,7 +107,7 @@ pub enum SpacePermission {
     ManageEvaluationCorpus,
     ReadConversationsForEvaluation,
     /// Technical administration of an organization.
-    OwnOrganization,
+    AdministerOrganization,
     CreatePersonalSpace,
 }
 impl SpacePermission {
@@ -118,7 +118,7 @@ impl SpacePermission {
         Self::RunEvaluations,
         Self::ManageEvaluationCorpus,
         Self::ReadConversationsForEvaluation,
-        Self::OwnOrganization,
+        Self::AdministerOrganization,
         Self::CreatePersonalSpace,
     ];
     pub fn relation(self) -> &'static str {
@@ -129,7 +129,7 @@ impl SpacePermission {
             Self::RunEvaluations => "can_run_evaluations",
             Self::ManageEvaluationCorpus => "can_manage_evaluation_corpus",
             Self::ReadConversationsForEvaluation => "can_read_conversations_for_evaluation",
-            Self::OwnOrganization => "can_own_organization",
+            Self::AdministerOrganization => "can_administer_organization",
             Self::CreatePersonalSpace => "can_create_personal_space",
         }
     }

@@ -11,7 +11,7 @@ These contracts do not establish identical behavior for every other Fred service
 In the organization/team/project journey, the configured Keycloak or OIDC provider authenticates the person,
 PostgreSQL records their personal terms-of-use (CGU) acceptance and OpenFGA decides
 their rights.
-A valid login is not consent; consent is not a role; platform ownership is
+A valid login is not consent; consent is not a role; platform administration is
 not membership of an organization. The following rules describe this journey's
 manager authority, not a universal replacement for every Python security boundary.
 
@@ -84,18 +84,18 @@ Python and manager bootstrap records or roles.
 
 A person first accepts CGU, then presents their bearer and this secret. Comparison
 is constant-time; a token shorter than 16 characters is rejected with 422, a wrong
-secret with 403. The secret cannot nominate another person or bypass consent. The first owner is
+secret with 403. The secret cannot nominate another person or bypass consent. The first platform admin is
 a real authenticated IAM person, not a local account created by the secret.
 
 Manager commits a root reservation for that caller before the OpenFGA grant. A
 failed grant can be retried only by the claimant. Once completion is recorded,
 all later bootstrap attempts return 409, even if a role is subsequently removed.
-Rotating the secret does not reset completion. Root receives platform ownership,
+Rotating the secret does not reset completion. Root receives platform administration,
 with no organization, team, project or personal-space membership.
 
 The [reservation sequence](A1-manager-runtime.md#root-platform-admin-bootstrap)
 shows the two transactions and failure recovery (I9). Afterwards root is an ordinary
-platform owner: any platform owner grants or revokes platform owners, and the platform
+platform admin: any platform admin grants or revokes platform admins, and the platform
 always keeps one (I15).
 
 ## Roles, permissions and ReBAC
@@ -104,9 +104,9 @@ The [action/role matrix](A7-action-role-matrix.md) enumerates every manager HTTP
 action, operator entry point and evaluable permission, including additional gates. The following explains the security model.
 
 The [roles annex](A11-roles.md) defines the complete role inventory, inheritance
-(I20), owner/content separation (I21), required organization owners and admins
+(I20), owner/content separation (I21), required organization admins and owners
 (I14), and attribution constraints. It distinguishes the agreed responsibilities
-from the permissions currently enforced. Teams and projects have no owner role.
+from the permissions currently enforced. Teams and projects have no technical admin role.
 
 Every direct space-role grant checks, after authorization, that its subject is
 usable as an OpenFGA user (1..255 characters
@@ -155,7 +155,7 @@ HTTP organization creation and import share this platform serialization and
 guard, preventing competing assignments in different organizations. Team/personal
 creation and content mutations retain their organization lock and guard. Role revocation cannot silently leave a child role,
 or a personal space role in an organization, without a direct parent content role,
-nor remove a non-personal space's last admin.
+nor remove a non-personal space's last owner.
 
 I5 orders role publication and SQL commits, not HTTP response arrival. Keycloak
 creation is authorized at dispatch; cancellation or later
@@ -240,9 +240,9 @@ This security boundary is distinct from organization membership and from CGU.
 
 ## Space retirement and cleanup authority
 
-`platform.can_delete_space` is computed from `platform_owner` only. Request and receipt APIs
+`platform.can_delete_space` is computed from `platform_admin` only. Request and receipt APIs
 require real authentication and CGU admission, including for receipts whose target
-no longer exists. Deletion grants no content access. Organization ownership and
+no longer exists. Deletion grants no content access. Organization administration and
 space administration confer no implicit deletion power.
 
 Acceptance checks authority after acquiring the platform lock and capturing its

@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Organization-owner technical aggregates. No content or physical storage reads.
+//! Organization-admin technical aggregates. No content or physical storage reads.
 mod models;
 mod store;
 
@@ -132,7 +132,7 @@ async fn authorize(s: &AppState, user: &str, id: Uuid) -> AppResult<()> {
     crate::lifecycle::store::require_active(&s.pool, id).await?;
     if !s
         .fga
-        .check_space(user, SpacePermission::OwnOrganization, id)
+        .check_space(user, SpacePermission::AdministerOrganization, id)
         .await
         .map_err(|_| unavailable())?
     {

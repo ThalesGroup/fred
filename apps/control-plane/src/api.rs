@@ -218,7 +218,7 @@ struct BootstrapResponse {
 }
 
 /// Same contract as the control-plane's `POST /bootstrap/platform-admin`: the caller's
-/// own verified bearer plus the deploy-time secret, granting platform owner to the
+/// own verified bearer plus the deploy-time secret, granting platform admin to the
 /// caller only, once ever.
 #[utoipa::path(
     post, path = "/bootstrap/platform-admin",
@@ -254,7 +254,7 @@ async fn bootstrap_platform_admin(
     bootstrap::grant_root(&s.pool, &s.fga, &user.uid).await?;
     tracing::info!(
         user_id = user.uid,
-        "[BOOTSTRAP] Granted platform_owner via root bootstrap"
+        "[BOOTSTRAP] Granted platform_admin via root bootstrap"
     );
     Ok(Json(BootstrapResponse {
         user_id: user.uid,
@@ -332,8 +332,8 @@ struct CreateSpace {
     kind: SpaceKind,
     parent_id: Uuid,
     name: String,
-    /// Initial administrator; creation grants the caller nothing on the new space.
-    admin: String,
+    /// Initial business owner; creation grants the caller nothing on the new space.
+    owner: String,
 }
 
 #[utoipa::path(
@@ -362,7 +362,7 @@ async fn create_space(
         req.kind,
         req.parent_id,
         req.name,
-        &req.admin,
+        &req.owner,
     )
     .await?;
     Ok((StatusCode::CREATED, Json(space)))
@@ -430,14 +430,14 @@ async fn grant(
     ApiPath((id, role, target)): ApiPath<(Uuid, String, String)>,
 ) -> AppResult<StatusCode> {
     let role = parse_role(&role)?;
-    if role == Role::OrganizationOwner
+    if role == Role::OrganizationAdmin
         && !s
             .directory
             .as_ref()
             .is_some_and(|d| s.auth.directory_subjects_match(d.realm()))
     {
         return Err(AppError::Unavailable(
-            "owner grants require Keycloak sub mapping in the configured realm".into(),
+            "admin grants require Keycloak sub mapping in the configured realm".into(),
         ));
     }
     spaces::grant(
@@ -819,9 +819,16 @@ async fn authorize_space(
         let space = spaces::load(&s.pool, req.space_id).await?;
         let allowed = spaces::in_organization(&s.pool, &s.fga, &user.uid, space.organization)
             .await?
-            && s.fga
-                .check_space(&user.uid, req.permission, req.space_id)
-                .await?;
+            && if req.permission == SpacePermission::CreatePersonalSpace {
+                spaces::can_open_personal(&s.pool, &s.fga, &user.uid, space.organization).await?
+            } else {
+                (space.kind != SpaceKind::Personal
+                    || spaces::can_open_personal(&s.pool, &s.fga, &user.uid, space.organization)
+                        .await?)
+                    && s.fga
+                        .check_space(&user.uid, req.permission, req.space_id)
+                        .await?
+            };
         crate::lifecycle::store::require_active(&s.pool, space.id).await?;
         Ok(allowed)
     };
@@ -884,7 +891,7 @@ async fn organization_registry(
     AdmittedUser(user): AdmittedUser,
     ApiQuery(query): ApiQuery<RegistryQuery>,
 ) -> AppResult<Json<OrganizationPage>> {
-    platform::require_owner(&s.fga, &user.uid).await?;
+    platform::require_admin(&s.fga, &user.uid).await?;
     let mut rows: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, personal_owner, parent_id, organization_id from space where kind = 'organization' and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 101")
         .bind(query.after).fetch_all(&s.pool).await?;
     let next_cursor = (rows.len() > 100).then(|| rows[99].id);
@@ -933,7 +940,7 @@ async fn search_organization_candidates(
     AdmittedUser(user): AdmittedUser,
     ApiQuery(query): ApiQuery<CandidateQuery>,
 ) -> AppResult<Json<Vec<crate::users::UserSummary>>> {
-    platform::require_owner(&s.fga, &user.uid).await?;
+    platform::require_admin(&s.fga, &user.uid).await?;
     if query.query.chars().count() < 2 {
         return Err(AppError::Unprocessable(
             "query must contain at least 2 characters".into(),
@@ -948,8 +955,8 @@ async fn search_organization_candidates(
 #[serde(deny_unknown_fields)]
 struct CreateOrganization {
     name: String,
-    owner_username: String,
     admin_username: String,
+    owner_username: String,
 }
 
 #[utoipa::path(
@@ -977,31 +984,31 @@ async fn create_organization(
         &directory,
         &user.uid,
         &req.name,
-        &req.owner_username,
         &req.admin_username,
+        &req.owner_username,
     )
     .await?;
     Ok((StatusCode::CREATED, Json(org)))
 }
 
-/// Governance view of one organization: its direct owners and administrators.
+/// Governance view of one organization: its technical admins and business owners.
 #[derive(Serialize, utoipa::ToSchema)]
 struct OrganizationDetail {
     organization: Space,
-    owners: Vec<crate::users::UserSummary>,
     admins: Vec<crate::users::UserSummary>,
+    owners: Vec<crate::users::UserSummary>,
 }
 
 async fn organization_detail(s: &AppState, organization: Space) -> AppResult<OrganizationDetail> {
     let directory = organization_directory(s)?;
-    let (owners, admins) = tokio::try_join!(
+    let (admins, owners) = tokio::try_join!(
         s.fga
-            .space_holders(organization.id, Role::OrganizationOwner),
-        s.fga.space_holders(organization.id, Role::Admin),
+            .space_holders(organization.id, Role::OrganizationAdmin),
+        s.fga.space_holders(organization.id, Role::Owner),
     )?;
     Ok(OrganizationDetail {
-        owners: directory.summaries(&owners).await?,
         admins: directory.summaries(&admins).await?,
+        owners: directory.summaries(&owners).await?,
         organization,
     })
 }
@@ -1044,7 +1051,7 @@ async fn get_organization(
     AdmittedUser(user): AdmittedUser,
     ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<Json<OrganizationDetail>> {
-    platform::require_owner(&s.fga, &user.uid).await?;
+    platform::require_admin(&s.fga, &user.uid).await?;
     let organization = spaces::load_organization(&s.pool, id).await?;
     crate::lifecycle::store::require_active(&s.pool, id).await?;
     Ok(Json(organization_detail(&s, organization).await?))
@@ -1055,8 +1062,8 @@ async fn get_organization(
 #[serde(deny_unknown_fields)]
 struct UpdateOrganization {
     name: Option<String>,
-    owner_username: Option<String>,
     admin_username: Option<String>,
+    owner_username: Option<String>,
 }
 
 #[utoipa::path(
@@ -1089,14 +1096,14 @@ async fn update_organization(
         id,
         spaces::OrganizationChange {
             name: req.name.as_deref(),
-            owner_username: req.owner_username.as_deref(),
             admin_username: req.admin_username.as_deref(),
+            owner_username: req.owner_username.as_deref(),
         },
     )
     .await?;
     Ok(Json(OrganizationDetail {
-        owners: committed_summaries(&directory, &governance.owners).await,
         admins: committed_summaries(&directory, &governance.admins).await,
+        owners: committed_summaries(&directory, &governance.owners).await,
         organization: governance.organization,
     }))
 }
@@ -1287,7 +1294,7 @@ async fn import_blueprint(
     };
     let result = async {
         require_real_authentication(&s).map_err(IntoResponse::into_response)?;
-        match s.fga.is_platform_owner(&user.uid).await {
+        match s.fga.is_platform_admin(&user.uid).await {
             Ok(true) => (),
             Ok(false) => return Err(AppError::Forbidden.into_response()),
             Err(_) => return Err(AppError::Unavailable("authorization unavailable".into()).into_response()),

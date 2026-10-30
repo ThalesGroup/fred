@@ -229,7 +229,7 @@ impl Bundle {
                 for (subject, grants) in &mut roles {
                     if !names.contains(subject)
                         || (kind != SpaceKind::Organization
-                            && grants.contains(&Role::OrganizationOwner))
+                            && grants.contains(&Role::OrganizationAdmin))
                     {
                         return Err(Invalid);
                     }
@@ -397,10 +397,10 @@ mod tests {
     fn files() -> BTreeMap<String, Vec<u8>> {
         [
             ("manifest.json", r#"{"format_version":2,"users_schema_version":2,"source_platform":"swift"}"#),
-            ("users.json", r#"[{"username":"alice","platform_roles":["platform_owner","platform_observer","feature_manager","prompt_editor"]}]"#),
-            ("organizations.json", r#"[{"ref":"org","name":"Org","roles":{"alice":["admin","member","member"]}}]"#),
-            ("teams.json", r#"[{"ref":"team","name":"Team","organization":"org","roles":{"alice":["admin","analyst"]}}]"#),
-            ("projects.json", r#"[{"ref":"project","name":"Project","team":"team","roles":{"alice":["admin"]}}]"#),
+            ("users.json", r#"[{"username":"alice","platform_roles":["platform_admin","platform_observer","feature_manager","prompt_editor"]}]"#),
+            ("organizations.json", r#"[{"ref":"org","name":"Org","roles":{"alice":["owner","member","member"]}}]"#),
+            ("teams.json", r#"[{"ref":"team","name":"Team","organization":"org","roles":{"alice":["owner","analyst"]}}]"#),
+            ("projects.json", r#"[{"ref":"project","name":"Project","team":"team","roles":{"alice":["owner"]}}]"#),
         ].into_iter().map(|(k,v)| (k.into(),v.as_bytes().to_vec())).collect()
     }
     fn pack(files: &BTreeMap<String, Vec<u8>>, method: zip::CompressionMethod) -> Vec<u8> {
@@ -424,9 +424,9 @@ mod tests {
         ] {
             let b = Bundle::parse(&pack(&files(), method)).unwrap();
             assert_eq!(b.users[0].platform.len(), 4);
-            assert_eq!(b.spaces[0].roles["alice"], [Role::Admin, Role::Member]);
-            assert_eq!(b.spaces[1].roles["alice"], [Role::Admin, Role::Analyst]);
-            assert_eq!(b.spaces[2].roles["alice"], [Role::Admin]);
+            assert_eq!(b.spaces[0].roles["alice"], [Role::Owner, Role::Member]);
+            assert_eq!(b.spaces[1].roles["alice"], [Role::Owner, Role::Analyst]);
+            assert_eq!(b.spaces[2].roles["alice"], [Role::Owner]);
             assert_eq!(b.spaces[1].parent, Some(0));
             assert_eq!(b.spaces[2].parent, Some(1));
         }
@@ -537,15 +537,15 @@ mod tests {
             ("organizations.json", "[]"),
             (
                 "organizations.json",
-                r#"[{"ref":"org","name":"Org","roles":{"alice":["admin"],"alice":["member"]}}]"#,
+                r#"[{"ref":"org","name":"Org","roles":{"alice":["owner"],"alice":["member"]}}]"#,
             ),
             (
                 "organizations.json",
-                r#"[{"ref":"org","name":"Org","roles":{"absent":["admin"]}}]"#,
+                r#"[{"ref":"org","name":"Org","roles":{"absent":["owner"]}}]"#,
             ),
             (
                 "organizations.json",
-                r#"[{"ref":"org","name":"Org","roles":{"alice":["owner"]}}]"#,
+                r#"[{"ref":"org","name":"Org","roles":{"alice":["admin"]}}]"#,
             ),
             (
                 "teams.json",
@@ -660,6 +660,8 @@ mod tests {
         }
         assert!(Bundle::parse(b"not a zip").is_err());
     }
+    // Offline packaging regression for the checked-in demo, not arbitrary bundles.
+    // Keep roster assertions aligned with tests/fixtures/import_export/demo_provisioning/README.md.
     #[test]
     fn real_make_target_supports_space_paths_and_replaces_previous_entries() {
         let temp = std::env::temp_dir().join(format!("manager bundle {}", uuid::Uuid::new_v4()));
@@ -684,7 +686,7 @@ mod tests {
         assert!(status.success());
         let bytes = std::fs::read(&output).unwrap();
         let b = Bundle::parse(&bytes).unwrap();
-        assert_eq!(b.users.len(), 12);
+        assert_eq!(b.users.len(), 13);
         assert!(b.users.iter().all(|entry| entry.platform.is_empty()));
         assert!(
             b.users

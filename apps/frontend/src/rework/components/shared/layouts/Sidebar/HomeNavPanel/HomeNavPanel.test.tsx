@@ -7,7 +7,9 @@ import { afterEach, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   user: "priya",
-  roles: ["member"],
+  roles: ["owner"],
+  teamRoles: ["editor", "analyst"],
+  teamKind: "team",
   personal: false,
   organization: true,
   fail: false,
@@ -28,9 +30,9 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
   useMySpacesQuery: () => {
     const data = [
       ...(state.organization
-        ? [{ id: "org", kind: "organization", path: ["org"], name: "Demo", roles: state.roles }]
+        ? [{ id: "org", kind: "organization", path: ["org"], name: "Demo", organization_id: "org", roles: state.roles }]
         : []),
-      { id: "fredlab", kind: "team", name: "fredlab", roles: ["admin", "editor", "analyst"] },
+      { id: "fredlab", kind: state.teamKind, name: "fredlab", organization_id: "org", roles: state.teamRoles },
       ...(state.personal
         ? [{ id: "personal", kind: "personal", name: "priya", personal_owner: "priya", roles: ["member"] }]
         : []),
@@ -68,7 +70,9 @@ afterEach(async () => {
   node = undefined!;
   root = undefined!;
   state.user = "priya";
-  state.roles = ["member"];
+  state.roles = ["owner"];
+  state.teamRoles = ["editor", "analyst"];
+  state.teamKind = "team";
   state.personal = false;
   state.organization = true;
   state.fail = false;
@@ -96,7 +100,7 @@ it("creates only on explicit action, blocks duplicate activation and ignores com
   expect(state.navigate).not.toHaveBeenCalled();
 });
 it("reuses the existing personal space and uses the returned UUID", async () => {
-  state.roles = ["member"];
+  state.roles = ["owner"];
   state.personal = true;
   state.open.mockReturnValue({ unwrap: async () => ({ id: "private-priya" }) });
   await render();
@@ -104,17 +108,27 @@ it("reuses the existing personal space and uses the returned UUID", async () => 
   await act(async () => entry()!.click());
   expect(state.navigate).toHaveBeenCalledWith("/team/private-priya/agents");
 });
-it.each(["member", "editor", "admin", "analyst"])("offers a personal space to an organization %s", async (role) => {
-  state.roles = [role];
+it.each(["organization", "team", "project"])("offers a personal space to an owner at %s level", async (kind) => {
+  state.roles = kind === "organization" ? ["owner"] : ["member"];
+  state.teamRoles = kind === "organization" ? [] : ["owner"];
+  state.teamKind = kind === "project" ? "project" : "team";
   await render();
   expect(entry()).not.toBeNull();
   expect(state.open).not.toHaveBeenCalled();
 });
-it("hides the entry for governance-only users and on authority failure", async () => {
-  state.roles = ["organization_owner"];
+it.each(["member", "editor", "analyst", "organization_admin"])(
+  "hides the entry without business ownership (%s)",
+  async (role) => {
+    state.roles = [role];
+    state.personal = true;
+    await render();
+    expect(entry()).toBeNull();
+  },
+);
+it("allows mixed technical and business roles but hides the entry on authority failure", async () => {
+  state.roles = ["organization_admin", "owner"];
   await render();
-  expect(entry()).toBeNull();
-  state.roles = ["member"];
+  expect(entry()).not.toBeNull();
   state.fail = true;
   await render();
   expect(entry()).toBeNull();
@@ -176,12 +190,14 @@ it("does not select an absent UUID when refetch joins a stale pending query", as
 
 it("keeps the team list and ordinary agents destination without an organization row", async () => {
   state.organization = false;
+  state.teamRoles = ["owner", "editor", "analyst"];
   await render();
+  expect(node.textContent).toContain("rework.teamRoles.team_owner");
   expect(node.textContent).toContain("fredlab");
   expect(node.textContent).toContain("rework.home.yourTeams");
   expect(node.textContent).not.toContain("Demo");
   expect(node.querySelector('a[href="/team/fredlab/agents"]')).not.toBeNull();
-  expect(node.textContent).toContain("rework.teamRoles.team_admin");
+  expect(node.textContent).toContain("rework.teamRoles.team_editor");
   expect(node.textContent).not.toContain("rework.manager.hierarchy");
 });
 

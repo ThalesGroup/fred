@@ -20,10 +20,10 @@ import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
 import { useLocation } from "react-router-dom";
 import { useOrganizationSupervisionAccess } from "@core/hooks/useOrganizationSupervisionAccess";
-import { useOrganizationAdmin } from "@core/hooks/useOrganizationAdmin";
+import { useOrganizationOwner } from "@core/hooks/useOrganizationOwner";
 import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
-import { organizationAdminPages } from "@core/guards/organizationAdminPages";
+import { organizationOwnerPages } from "@core/guards/organizationOwnerPages";
 import { selectActiveCount } from "../../../../../features/tasks/taskSlice";
 import AdminSpaceSwitcher, { type AdminSpace } from "./AdminSpaceSwitcher";
 import styles from "./AdminNavbar.module.css";
@@ -37,10 +37,10 @@ function BusinessAdminNavbar() {
   const capabilities = useUserCapabilities(
     ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, "")),
   );
-  const organization = useOrganizationAdmin(pathname.replace(/\/$/, "") !== "/admin/supervision");
+  const organization = useOrganizationOwner(pathname.replace(/\/$/, "") !== "/admin/supervision");
   const supervision = useOrganizationSupervisionAccess();
-  const pages = organizationAdminPages({
-    capabilities: { ...capabilities, canManageFeatures: organization.isAdmin },
+  const pages = organizationOwnerPages({
+    capabilities: { ...capabilities, canManageFeatures: organization.isOwner },
     supervision: supervision.allowed,
     platformAccessEnabled: !!getConfig()?.platform_access_enabled,
   });
@@ -69,7 +69,7 @@ function AdminSpaceHeader({ current }: { current: AdminSpace }) {
   const { t } = useTranslation();
   const { pathname } = useLocation();
   const manager = useManagerPlatformAdmin();
-  const organization = useOrganizationAdmin(pathname.replace(/\/$/, "") !== "/admin/supervision");
+  const organization = useOrganizationOwner(pathname.replace(/\/$/, "") !== "/admin/supervision");
   const supervision = useOrganizationSupervisionAccess();
   // /me/spaces rows all belong to one organization; its own row carries the name and roles.
   const row = organization.currentData?.find((space) => space.kind === "organization");
@@ -81,7 +81,7 @@ function AdminSpaceHeader({ current }: { current: AdminSpace }) {
   // Display only, the pages keep their guards: the role names stay put while the
   // supervision check refetches, so the header does not flip between forms.
   const organizationSpace =
-    !!row && (row.roles.includes("admin") || row.roles.includes("organization_owner") || supervision.allowed);
+    !!row && (row.roles.includes("owner") || row.roles.includes("organization_admin") || supervision.allowed);
   if (manager.isAdmin && row && organizationSpace)
     return <AdminSpaceSwitcher current={current} identity={identity} organization={row} />;
   return <SpaceHeader {...identity} />;

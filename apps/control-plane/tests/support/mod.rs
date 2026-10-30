@@ -280,7 +280,7 @@ pub async fn member_organization(
     }
     let operator = format!("fixture-platform-{}", uuid::Uuid::new_v4());
     let mut guard = fga.guard(&[Scope::Platform]).await.unwrap();
-    fga.write_platform(&mut guard, &operator, PlatformRole::PlatformOwner, true)
+    fga.write_platform(&mut guard, &operator, PlatformRole::PlatformAdmin, true)
         .await
         .unwrap();
     let app = routes(AppState {
@@ -305,14 +305,14 @@ pub async fn member_organization(
                 )
                 .header("content-type", "application/json")
                 .body(axum::body::Body::from(
-                    json!({"name":name,"owner_username":owner,"admin_username":admin}).to_string(),
+                    json!({"name":name,"admin_username":owner,"owner_username":admin}).to_string(),
                 ))
                 .unwrap(),
         )
         .await
         .unwrap();
     let mut guard = fga.guard(&[Scope::Platform]).await.unwrap();
-    fga.write_platform(&mut guard, &operator, PlatformRole::PlatformOwner, false)
+    fga.write_platform(&mut guard, &operator, PlatformRole::PlatformAdmin, false)
         .await
         .unwrap();
     let status = response.status().as_u16();

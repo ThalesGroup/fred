@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { ProtectedCapabilities } from "./Protected";
-import { adminIndexPath, organizationAdminPages } from "./organizationAdminPages";
+import { adminIndexPath, organizationOwnerPages } from "./organizationOwnerPages";
 
 const NONE: ProtectedCapabilities = {
   canAdmin: false,
@@ -18,9 +18,9 @@ const access = (held: Partial<ProtectedCapabilities>, supervision = false, platf
   supervision,
   platformAccessEnabled,
 });
-const paths = (...args: Parameters<typeof access>) => organizationAdminPages(access(...args)).map((page) => page.to);
+const paths = (...args: Parameters<typeof access>) => organizationOwnerPages(access(...args)).map((page) => page.to);
 
-describe("organizationAdminPages", () => {
+describe("organizationOwnerPages", () => {
   it("puts Supervision first when the person may open it", () => {
     expect(paths({ canManageFeatures: true }, true)).toEqual(["/admin/supervision", "/admin/features"]);
   });
@@ -62,7 +62,7 @@ describe("adminIndexPath", () => {
     expect(adminIndexPath({ ...access({ canObservePlatform: true }), platformOwner: false })).toBe("/admin/analytics");
   });
 
-  it("opens the platform space for a platform owner with no organization page", () => {
+  it("opens the platform space for a platform admin with no organization page", () => {
     expect(adminIndexPath({ ...access({}), platformOwner: true })).toBe("/admin/organizations");
   });
 

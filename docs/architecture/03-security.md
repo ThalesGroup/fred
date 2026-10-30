@@ -20,11 +20,11 @@ not an authorization.
 
 ## 3.2. Governance and content access
 
-Business management and content access are separate. An **admin** manages the
-workspace and its community; the organization admin also manages model choices.
+Business management and content access are separate. An **owner** manages the
+workspace and its community; the organization owner also manages model choices.
 Reading or contributing to content requires a content role.
 
-An **owner** has a limited institutional mandate. The organization owner executes
+An **admin** has a limited institutional mandate. The organization admin executes
 express steering committee decisions, without a business role or right to know
 business data and agents. This agreed boundary is not fully enforced by current
 permissions: roles can accumulate and some actors can grant themselves other roles.
@@ -42,13 +42,17 @@ flowchart TB
     classDef default fill:#F1F5F9,stroke:#64748B,color:#0F172A
 ```
 
-**Editor, admin and analyst** roles apply to their space and its
+**Editor, owner and analyst** roles apply to their space and its
 descendants. **Member** applies only to the space where it is granted. Platform
-and organization-owner roles do not pass down as content rights.
+and organization-admin roles do not pass down as content rights.
 
 A person belongs to one organization. Folders and documents use their owning
 space's permissions. **Personal spaces inherit no content rights** from the
-organization or teams; creating one requires a separate entitlement.
+organization or teams. Opening or accessing one requires a current business
+owner role on an active organization, team or project in that organization.
+Technical admin roles alone do not qualify; a person who also holds an owner
+role does qualify. Losing the last owner role hides and closes access to the
+personal space without deleting its data.
 
 ## 3.4. Rights remain current
 
@@ -63,8 +67,8 @@ provides exact permissions, conditions and implementation references.
 
 ## 3.5. Model permission and conversation access
 
-Alice, Acme's organization admin, can authorize a model for Acme without being
-allowed to read Bob's Research conversation. Oscar's organization-owner role
+Alice, Acme's organization owner, can authorize a model for Acme without being
+allowed to read Bob's Research conversation. Oscar's organization-admin role
 does not grant model-management permission. Bob needs access to the space and
 permission to use its assistant;
 Carol's membership in the same Research team lets her read its shared documents,

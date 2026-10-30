@@ -70,25 +70,30 @@ compare this stored form, so names differing only by surrounding whitespace or U
 composition collide. Invalid API names return 422, and invalid ZIP
 declarations are rejected before external writes. Existing names are not rewritten.
 
-Editor, admin and analyst reach every descendant space; member stays local. An
+Editor, owner and analyst reach every descendant space; member stays local. An
 analyst of an organization therefore sees all its teams and projects, and a
-project cannot be hidden from its team's editors, admins or analysts.
-Management and content roles remain separate: an admin manages the space
+project cannot be hidden from its team's editors, owners or analysts.
+Management and content roles remain separate: an owner manages the space
 and its descendants and reads none of their content without a content role.
 
 A role on a child requires a direct content role on its parent: a person is a
 member of a team before holding a project role, even when an ancestor role already
 lets them read the team. A personal space accepts no additional member and inherits
 nothing; its organization can revoke its owner's access, and the owner leaves the
-organization only after leaving the personal space and removing creation eligibility. Every non-personal space
-retains an admin.
+organization only after leaving the personal space and removing their remaining organization roles. Every non-personal space
+retains an owner.
 
-Personal-space creation is an explicit organization entitlement. The basic demo
-grants none. First activation creates one private workspace; further activations
-reuse it under current read authority. A personal
-space whose organization link is missing is refused (409) rather than duplicated. Import and
-organization creation grant no implicit entitlement and create no personal space.
-See the [Bob journey](02.1-user-journeys.md#bob-opens-his-personal-space).
+Personal spaces are available to business owners of an active organization, team
+or project in their organization. Technical admins alone, members, editors and
+analysts do not qualify. Combining a technical admin role with business ownership
+is allowed. First activation creates one private workspace; later openings reuse
+it while ownership and personal read authority remain current. Losing the last
+owner role hides the space and refuses new Control Plane access without erasing
+its data; restoring ownership makes the same space available again. A missing
+organization link is refused (409) rather than repaired or duplicated. No personal
+space is created by import or organization creation.
+The demo makes Alice, Grace, Carl and Marc eligible through their existing owner
+roles. See the [personal-space journey](02.1-user-journeys.md#carl-opens-his-personal-space).
 
 SQL stores each space's identity, kind, name, personal owner and immutable placement:
 `organization_id` is the root's own ID for an organization, and the containing
@@ -147,17 +152,17 @@ identity snapshot; the supervision module itself makes no writes.
 
 `supervision::authorize` loads an organization, resolves the caller's unique
 organization through `spaces::in_organization`, checks retirement, then asks
-OpenFGA for `can_own_organization` on that organization. The model grants this
-permission only through `organization_owner`. No platform, admin or content role
-substitutes for it. A caller holding several roles is allowed when ownership is
+OpenFGA for `can_administer_organization` on that organization. The model grants this
+permission only through `organization_admin`. No platform, owner or content role
+substitutes for it. A caller holding several roles is allowed when technical administration is
 among them; no content permission is additionally required.
 
 Admission errors retain the shared contract. A missing/foreign organization or
 non-organization target gives 404; ambiguous caller context gives 409; a retired
-organization gives 409 `space_pending_deletion`; missing ownership in the matching
+organization gives 409 `space_pending_deletion`; missing technical administration in the matching
 context gives 403. After organization authorization, team detail rejects a missing,
 foreign or non-team target with 404 and a retired team with 409. A failed OpenFGA
-context read, owner Check or grant page gives 503 `dependency_unavailable` without
+context read, admin Check or grant page gives 503 `dependency_unavailable` without
 partial counts. SQL lifecycle is rechecked inside the collection transaction.
 
 Responses expose organization/team UUIDs, collective team names, collection
@@ -187,7 +192,7 @@ their remaining documents contribute to organization-level purge totals.
 | `published.documents`, `chunks`, `vectors` | Unique succeeded attempt per active document; committed column sums | Independent of latest attempt; no sum of generations, extracted fragments or physical index query |
 | `published.tabular_datasets` | Count of `datasets/*.parquet` paths in successful manifests, aggregated before joining document counts | Published artifacts, not CSV filenames or persistent SQL tables |
 | `known_rows`, `datasets_with_unknown_rows`, `total_rows` | Rows are attributable only when a successful manifest has exactly one Parquet and nonnull rows | Multiple Parquet artifacts or null rows make those datasets unknown; total is null if any are unknown. No dataset means zero; known zero remains zero |
-| `distinct_users`, `direct_roles` | All direct OpenFGA grants on active scoped spaces; distinct subjects and distinct `(subject, space, role)` assignments | All six canonical roles; omitted roles mean zero. No effective/inherited roles, SQL-owner-derived grants or IdP active-account inference |
+| `distinct_users`, `direct_roles` | All direct OpenFGA grants on active scoped spaces; distinct subjects and distinct `(subject, space, role)` assignments | All five canonical roles; omitted roles mean zero. No effective/inherited roles, SQL-owner-derived grants or IdP active-account inference |
 
 Distinct users are unioned, not summed across roles or compartments. Team role
 counts include direct grants on its projects but not inherited organization grants.
@@ -224,7 +229,7 @@ by the three `supervision_*` tests; source references are not execution evidence
 Its navigation entry precedes Features. The shared
 [access provider](../../apps/frontend/src/rework/core/hooks/useOrganizationSupervisionAccess.tsx)
 resolves the organization through `/me/spaces` and calls `/authorize/space` with
-`own_organization`; neither platform roles nor membership role names establish
+`administer_organization`; neither platform roles nor membership role names establish
 permission. The page applies the same decision for direct URL access. ManagerArea
 admits this independently guarded route for mixed platform/organization roles.
 No content role or selected team is required.
@@ -239,7 +244,7 @@ shared permission decision. Successful-load dates come from successful RTK resul
 
 Refresh and window focus recheck context and permission before metric subscriptions
 resume and refetch, including an open detail. There is no supervision polling;
-organization-admin navigation polling is disabled on this route. The team table
+organization-owner navigation polling is disabled on this route. The team table
 uses previous/next cursor navigation without global sorting or numbered pages.
 Organization totals come directly from the same summary response, independently
 of its team page. Detail collection timestamps remain separate.
@@ -255,12 +260,12 @@ row count. Personal spaces remain aggregated. Existing PageHeader, StatusBadge,
 DataTable, Disclosure, InlineDrawer, navigation, buttons and formatters provide the
 UI controls, with French and English translations.
 
-## Platform organization administration
+## Platform organization owneristration
 
 The platform registry exposes active organizations, independently of content
-membership, in pages of at most 100 names/identifiers. Only admitted platform owners
+membership, in pages of at most 100 names/identifiers. Only admitted platform admins
 can list or create them. The form searches candidates after two characters and
-lets the owner select each contact independently. Keycloak searches the realm;
+lets the platform admin select each contact independently. Keycloak searches the realm;
 the local OIDC directory searches personal profiles already observed during
 authenticated onboarding, before or after consent, by literal case-insensitive prefix
 of username, first name, last name or email. HTTP creation resolves the exact existing owner/admin
@@ -285,8 +290,8 @@ Organizations resolve by root name, teams by organization/name and projects by
 team/name. Existing identity fields, passwords, committed space IDs and undeclared
 roles are preserved. Requested grants are repaired; no content role or CGU
 acceptance is invented. A new organization declares at least one owner and one
-admin, possibly the same person; owner is refused on teams and projects. Import
-requires a platform owner, authenticated once at admission and rechecked before each
+admin, possibly the same person; organization admin is refused on teams and projects. Import
+requires a platform admin, authenticated once at admission and rechecked before each
 write; bearer expiry after admission does not interrupt it.
 
 Keycloak, PostgreSQL and OpenFGA do not share a transaction. An error can leave
@@ -298,7 +303,7 @@ details these boundaries.
 
 ## Leaving, deleting and transferring ownership
 
-A platform owner retires a project, an ordinary team with its projects, or an
+A platform admin retires a project, an ordinary team with its projects, or an
 organization with all ordinary and personal descendants. Retirement closes access
 immediately; physical cleanup follows the configured delay. Accounts, consent and
 platform roles survive. Document-bearing scopes are refused before any retirement.

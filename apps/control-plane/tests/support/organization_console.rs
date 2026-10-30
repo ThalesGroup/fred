@@ -50,8 +50,8 @@ async fn state(e: &Env, identity: &support::IdentityServer, fga: Fga) -> AppStat
         lifecycle: Default::default(),
     }
 }
-fn creation(name: &str, owner: &str, admin: &str) -> Value {
-    json!({"name":name, "owner_username":owner, "admin_username":admin})
+fn creation(name: &str, admin: &str, owner: &str) -> Value {
+    json!({"name":name, "admin_username":admin, "owner_username":owner})
 }
 
 // Proves: I1, I5, I23
@@ -60,7 +60,7 @@ fn creation(name: &str, owner: &str, admin: &str) -> Value {
 async fn organization_console_creation_authority_roles_failures_and_budget() {
     let e = env().await;
     let identity = support::IdentityServer::start().await;
-    for user in ["owner", "admin", "both", "free-owner", "free-admin"] {
+    for user in ["admin", "owner", "both", "free-owner", "free-admin"] {
         identity.users.lock().await.insert(user.into(), user.into());
     }
     bootstrap::grant_root(&e.pool, &e.fga, "root")
@@ -90,7 +90,7 @@ async fn organization_console_creation_authority_roles_failures_and_budget() {
                 actor,
                 "POST",
                 "/admin/organizations",
-                creation("A", "owner", "admin")
+                creation("A", "admin", "owner")
             )
             .await
             .0,
@@ -124,7 +124,7 @@ async fn organization_console_creation_authority_roles_failures_and_budget() {
             Some("root"),
             "POST",
             "/admin/organizations",
-            creation("A", "owner", "admin")
+            creation("A", "admin", "owner")
         )
         .await
         .0,
@@ -137,7 +137,7 @@ async fn organization_console_creation_authority_roles_failures_and_budget() {
         Some("root"),
         "POST",
         "/admin/organizations",
-        creation("A", "owner", "admin"),
+        creation("A", "admin", "owner"),
     )
     .await;
     assert_eq!(status, 201, "{org}");
@@ -148,14 +148,14 @@ async fn organization_console_creation_authority_roles_failures_and_budget() {
     assert!(!calls.contains_key("list-objects"));
     let id = Uuid::parse_str(org["id"].as_str().unwrap()).unwrap();
     assert_eq!(
-        e.fga.direct_roles_on("owner", id).await.unwrap(),
-        vec![Role::OrganizationOwner]
+        e.fga.direct_roles_on("admin", id).await.unwrap(),
+        vec![Role::OrganizationAdmin]
     );
     assert_eq!(
-        e.fga.direct_roles_on("admin", id).await.unwrap(),
-        vec![Role::Admin]
+        e.fga.direct_roles_on("owner", id).await.unwrap(),
+        vec![Role::Owner]
     );
-    for who in ["root", "owner", "admin"] {
+    for who in ["root", "admin", "owner"] {
         assert!(!reads(&e, who, id).await);
     }
     assert!(
@@ -168,7 +168,7 @@ async fn organization_console_creation_authority_roles_failures_and_budget() {
         request(
             &app,
             &identity,
-            Some("owner"),
+            Some("admin"),
             "GET",
             "/admin/organizations",
             Value::Null
@@ -179,7 +179,7 @@ async fn organization_console_creation_authority_roles_failures_and_budget() {
     );
     for (body, expected) in [
         (creation("A", "both", "both"), 409),
-        (creation("B", "owner", "both"), 409),
+        (creation("B", "admin", "both"), 409),
         (creation("B", "missing", "both"), 422),
         (creation("B", "both", "missing"), 422),
         (creation(" ", "both", "both"), 422),
@@ -217,8 +217,8 @@ async fn organization_console_creation_authority_roles_failures_and_budget() {
         .await
         .unwrap();
     assert_eq!(roles.len(), 2);
-    assert!(roles.contains(&Role::OrganizationOwner));
-    assert!(roles.contains(&Role::Admin));
+    assert!(roles.contains(&Role::OrganizationAdmin));
+    assert!(roles.contains(&Role::Owner));
     for after in [false, true] {
         *proxy.fault.lock().await = support::fga_proxy::Fault {
             fail_at: 2,
@@ -353,7 +353,7 @@ async fn organization_console_rechecks_waiting_creator_and_serializes_attachment
         .write_platform(
             &mut e.fga.guard(&[Scope::Platform]).await.unwrap(),
             "delegate",
-            PlatformRole::PlatformOwner,
+            PlatformRole::PlatformAdmin,
             true,
         )
         .await
@@ -378,7 +378,7 @@ async fn organization_console_rechecks_waiting_creator_and_serializes_attachment
         .await
     });
     wait_for_advisory_waiter(&e.pool).await;
-    delete_tuple(&e, "delegate", "platform_owner", "platform:root").await;
+    delete_tuple(&e, "delegate", "platform_admin", "platform:root").await;
     tx.commit().await.unwrap();
     assert!(matches!(pending.await.unwrap(), Err(AppError::Forbidden)));
     assert!(
@@ -404,10 +404,10 @@ async fn organization_console_rechecks_waiting_creator_and_serializes_attachment
 // Proves: I1, I23
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn organization_console_edit_replaces_name_owner_and_admin() {
+async fn organization_console_edit_replaces_name_admin_and_owner() {
     let e = env().await;
     let identity = support::IdentityServer::start().await;
-    for user in ["owner", "admin", "extra", "new-owner", "new-admin", "other"] {
+    for user in ["admin", "owner", "extra", "new-owner", "new-admin", "other"] {
         identity.users.lock().await.insert(user.into(), user.into());
     }
     bootstrap::grant_root(&e.pool, &e.fga, "root")
@@ -427,7 +427,7 @@ async fn organization_console_edit_replaces_name_owner_and_admin() {
         Some("root"),
         "POST",
         "/admin/organizations",
-        creation("A", "owner", "admin"),
+        creation("A", "admin", "owner"),
     )
     .await;
     let id = Uuid::parse_str(org["id"].as_str().unwrap()).unwrap();
@@ -445,11 +445,11 @@ async fn organization_console_edit_replaces_name_owner_and_admin() {
     assert_eq!(status, 200, "{detail}");
     assert_eq!(detail["organization"]["name"], "A");
     assert_eq!(
-        detail["owners"],
-        json!([{"id":"owner","username":"owner","first_name":null,"last_name":null,"email":null,"avatar_image_url":null}])
+        detail["admins"],
+        json!([{"id":"admin","username":"admin","first_name":null,"last_name":null,"email":null,"avatar_image_url":null}])
     );
-    assert_eq!(detail["admins"][0]["username"], "admin");
-    for actor in [None, Some("owner")] {
+    assert_eq!(detail["owners"][0]["username"], "owner");
+    for actor in [None, Some("admin")] {
         for method in ["GET", "PATCH"] {
             assert_eq!(
                 request(&app, &identity, actor, method, &path, json!({"name":"X"}))
@@ -465,10 +465,10 @@ async fn organization_console_edit_replaces_name_owner_and_admin() {
         (&path, json!({}), 422),
         (&path, json!({"name":" "}), 422),
         (&path, json!({"name":"B"}), 409),
-        (&path, json!({"owner_username":"missing"}), 422),
         (&path, json!({"admin_username":"missing"}), 422),
-        (&path, json!({"admin_username":"other"}), 409),
-        (&path, json!({"owner":"x"}), 422),
+        (&path, json!({"owner_username":"missing"}), 422),
+        (&path, json!({"owner_username":"other"}), 409),
+        (&path, json!({"admin":"x"}), 422),
     ] {
         assert_eq!(
             request(&app, &identity, Some("root"), "PATCH", path, body.clone())
@@ -483,7 +483,7 @@ async fn organization_console_edit_replaces_name_owner_and_admin() {
         fail_at: 1,
         ..Default::default()
     };
-    let rename = json!({"name":"A2", "owner_username":"new-owner", "admin_username":"new-admin"});
+    let rename = json!({"name":"A2", "admin_username":"new-owner", "owner_username":"new-admin"});
     assert_eq!(
         request(
             &app,
@@ -504,17 +504,17 @@ async fn organization_console_edit_replaces_name_owner_and_admin() {
             .is_none()
     );
     assert_eq!(
-        e.fga.direct_roles_on("owner", id).await.unwrap(),
-        vec![Role::OrganizationOwner]
+        e.fga.direct_roles_on("admin", id).await.unwrap(),
+        vec![Role::OrganizationAdmin]
     );
     // An administrator appointed inside the organization is replaced too.
     spaces::grant(
         &e.pool,
         &e.fga,
         &control_plane::users::Directory::Keycloak(Some(&identity.directory())),
-        "owner",
+        "admin",
         id,
-        Role::Admin,
+        Role::Owner,
         "extra",
     )
     .await
@@ -531,9 +531,9 @@ async fn organization_console_edit_replaces_name_owner_and_admin() {
     .await;
     assert_eq!(status, 200, "{detail}");
     assert_eq!(detail["organization"]["name"], "A2");
-    assert_eq!(detail["owners"][0]["username"], "new-owner");
-    assert_eq!(detail["admins"].as_array().unwrap().len(), 1);
-    assert_eq!(detail["admins"][0]["username"], "new-admin");
+    assert_eq!(detail["admins"][0]["username"], "new-owner");
+    assert_eq!(detail["owners"].as_array().unwrap().len(), 1);
+    assert_eq!(detail["owners"][0]["username"], "new-admin");
     // Two owner Checks; guard, holder and attachment Reads, none after commit; one Write.
     assert_eq!(
         proxy.fault.lock().await.calls,
@@ -542,7 +542,7 @@ async fn organization_console_edit_replaces_name_owner_and_admin() {
             .into_iter()
             .collect()
     );
-    for who in ["owner", "admin", "extra"] {
+    for who in ["admin", "owner", "extra"] {
         assert!(e.fga.direct_roles_on(who, id).await.unwrap().is_empty());
         assert!(
             spaces::organization(&e.pool, &e.fga, who)
@@ -553,7 +553,7 @@ async fn organization_console_edit_replaces_name_owner_and_admin() {
     }
     assert_eq!(
         e.fga.direct_roles_on("new-admin", id).await.unwrap(),
-        vec![Role::Admin]
+        vec![Role::Owner]
     );
     for who in ["root", "new-owner", "new-admin"] {
         assert!(!reads(&e, who, id).await);
@@ -593,18 +593,18 @@ async fn organization_console_edit_replaces_name_owner_and_admin() {
         Some("root"),
         "PATCH",
         &path,
-        json!({"owner_username":"flaky"}),
+        json!({"admin_username":"flaky"}),
     )
     .await;
     assert_eq!(status, 200, "{detail}");
     assert_eq!(
-        detail["owners"],
+        detail["admins"],
         json!([{"id":"unavailable","username":null,"first_name":null,"last_name":null,"email":null,"avatar_image_url":null}])
     );
-    assert_eq!(detail["admins"][0]["username"], "new-admin");
+    assert_eq!(detail["owners"][0]["username"], "new-admin");
     assert_eq!(
         e.fga.direct_roles_on("unavailable", id).await.unwrap(),
-        vec![Role::OrganizationOwner]
+        vec![Role::OrganizationAdmin]
     );
 }
 
@@ -696,7 +696,7 @@ async fn supervision_isolates_organizations_and_drains_role_pages() {
     assert!(
         roles
             .iter()
-            .any(|r| r["role"] == "admin" && r["assignments"] == 3)
+            .any(|r| r["role"] == "owner" && r["assignments"] == 3)
     );
     let fault = proxy.fault.lock().await;
     assert!(fault.reads.iter().any(|r| r["continuation_token"] != ""));

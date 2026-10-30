@@ -1029,7 +1029,7 @@ export type PlatformPermission =
   | "list_all_teams"
   | "delete_team"
   | "delete_space"
-  | "rescue_team_admin"
+  | "rescue_team_owner"
   | "edit_agent_class_path"
   | "observe_platform"
   | "administer_users"
@@ -1057,7 +1057,7 @@ export type SpacePermission =
   | "run_evaluations"
   | "manage_evaluation_corpus"
   | "read_conversations_for_evaluation"
-  | "own_organization"
+  | "administer_organization"
   | "create_personal_space";
 export type SpaceCheck = {
   permission: SpacePermission;
@@ -1373,7 +1373,7 @@ export type Report = {
 export type ProvisioningUpload = {
   file: Blob;
 };
-export type PlatformRole = "platform_owner" | "platform_observer" | "feature_manager" | "prompt_editor";
+export type PlatformRole = "platform_admin" | "platform_observer" | "feature_manager" | "prompt_editor";
 export type Me = {
   platform_roles: PlatformRole[];
   user_id: string;
@@ -1393,7 +1393,7 @@ export type OnboardingStatus = {
 export type CreatePersonalSpace = {
   organization_id: string;
 };
-export type Role = "member" | "editor" | "admin" | "analyst" | "organization_owner";
+export type Role = "member" | "editor" | "owner" | "analyst" | "organization_admin";
 export type MySpace = Space & {
   /** The subset of `roles` held only through an ancestor. */
   inherited_roles: Role[];
@@ -1642,10 +1642,10 @@ export type TeamSupervisionDetail = {
   team: TeamSupervision;
 };
 export type CreateSpace = {
-  /** Initial administrator; creation grants the caller nothing on the new space. */
-  admin: string;
   kind: SpaceKind;
   name: string;
+  /** Initial business owner; creation grants the caller nothing on the new space. */
+  owner: string;
   parent_id: string;
 };
 export type Entry =
@@ -1906,7 +1906,7 @@ export type RuntimeModels = {
 export type RuntimeSpace = {
   id: string;
   kind: SpaceKind;
-  /** Canonical organization ownership, not inherited document scope for personal spaces. */
+  /** Canonical organization attachment, not inherited document scope for personal spaces. */
   organization_id: string | null;
   project_id: string | null;
   team_id: string | null;

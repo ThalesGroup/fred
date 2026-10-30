@@ -22,7 +22,7 @@ make -C ../../docs/architecture check # the dossier still matches the code
 ## Organization supervision (API only)
 
 The existing Control Plane serves organization totals and team detail, gated by
-organization ownership. The [supervision contract](../../docs/architecture/A8-organizations.md#organization-supervision)
+organization attachment. The [supervision contract](../../docs/architecture/A8-organizations.md#organization-supervision)
 defines counters, privacy boundaries, pagination and failure behavior; the
 [read budget](../../docs/architecture/09-quality.md#organization-supervision-read-budget)
 documents SQL/OpenFGA costs. The [HTTP catalogue](../../docs/architecture/A2-manager-contracts.md#organization-supervision-api)
@@ -66,7 +66,7 @@ Open Fred, sign in, accept the CGU, then enter the deployment bootstrap secret i
 The k3d Fred values read the cluster secret `fred-secrets` key
 `CONTROL_PLANE_BOOTSTRAP_TOKEN`; use the value supplied by your deployment.
 
-The root is platform owner and has no organization membership. Open
+The root is platform admin and has no organization membership. Open
 **Provisioning**, import the ZIP built below, then sign out and sign in as an
 imported user. That person accepts their own CGU and sees their declared spaces.
 There is no automatic personal space or default-team enrollment.
@@ -118,7 +118,7 @@ is rejected, even when disabled.
 The existing Administration Console -> Features -> Agents tab reads this same
 catalog through `GET /control-plane/v1/organizations/{organization_id}/agents`.
 Admission, unique organization context, active lifecycle and `can_manage` on an
-organization are required; neither organization ownership alone nor platform
+organization are required; neither organization attachment alone nor platform
 roles bypass this check. The page reads projected template identities and their organization defaults.
 Its existing switch writes `PUT /organizations/{organization_id}/agents/{agent_id}/default-on`.
 The default starts off and is stored in OpenFGA, not SQL. Turning it off preserves
@@ -135,7 +135,7 @@ if any source fails, without printing a partial catalog. It does not start the A
 connect to SQL/OpenFGA, persist definitions or enroll instances. `serve` does not
 poll runtimes. This command does not enroll or execute agents.
 
-## Platform model inventory and organization administration
+## Platform model inventory and organization owneristration
 
 `platform.model_sources` defaults to `[]` in the schema. The host development
 configuration and checkout-owned k3d overlay opt into the Mistral test source;
@@ -487,32 +487,36 @@ their Temporal connections independently of HTTP serving.
 
 ## Platform and space roles
 
-`GET /me` reports effective platform roles. Platform owners list direct grants
+`GET /me` reports effective platform roles. Platform admins list direct grants
 with `GET /users/platform-roles`, and grant/revoke with
-`PUT`/`DELETE /users/{subject}/platform-roles/{role}`. Any platform owner names or
+`PUT`/`DELETE /users/{subject}/platform-roles/{role}`. Any platform admin names or
 removes other owners; the last one cannot be revoked. `platform_observer`,
 `feature_manager` and `prompt_editor` are also supported.
 
-Owner is technical: on the platform, and on each organization, where it names the
-organization's admins and reads nothing. Platform owners name organization owners.
-Space roles `member`, `editor`, `analyst` and `admin` are business roles. They are
-cumulative; admin alone does not read content. Editor, admin and analyst also apply
+Admin is technical: `platform_admin` governs the platform and
+`organization_admin` appoints its organization's business owners. Neither role
+reads content. `owner` is the business governance role (French: **Responsable**).
+Space roles `member`, `editor`, `analyst` and `owner` are business roles. They are
+cumulative; owner alone does not read content. Editor, owner and analyst also apply
 to every descendant space; member stays local, and a personal space inherits nothing.
 Personal spaces have `kind: personal`, an organization attachment and an owner,
 but no parent or child projects. `team` denotes collective teams only, including
 in scope filters and lifecycle policy selectors; use `[team, personal]` explicitly
-when both kinds are intended. Personal creation keeps its dedicated endpoint.
-Organization admins create teams, team admins create projects. The last admin of a
-non-personal space, and the last owner of an organization, cannot be revoked. Capability checks and their contracts are in the
+when both kinds are intended. Personal creation keeps its dedicated endpoint. Opening, listing and new Control
+Plane access require an owner role on an active organization, team or project.
+Technical admin alone is insufficient; mixed admin/owner roles qualify.
+The demo makes Alice, Grace, Carl and Marc eligible; it creates no personal spaces.
+Organization owners create teams, team owners create projects. The last owner of a
+non-personal space, and the last technical admin of an organization, cannot be revoked. Capability checks and their contracts are in the
 [runtime chapter](../../docs/architecture/A1-manager-runtime.md#platform-administration-and-self-checks).
 
 Organizations are created through the platform form (`POST /control-plane/v1/admin/organizations`)
 or a provisioning ZIP. Without the frontend, use the authenticated HTTP endpoint or
 `make import-provisioning BUNDLE=<zip> TOKEN_FILE=<bearer-file>` on an initialized
-installation. Both paths require a platform owner; creation does not restore a lost
-platform-owner role.
+installation. Both paths require a platform admin; creation does not restore a lost
+platform-admin role.
 
-Platform grants and organization-owner grants require the manager's service client. The factory
+Platform grants and organization-admin grants require the manager's service client. The factory
 provisions the `control-plane` client and its directory grants. The cluster uses
 `KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET` from `fred-secrets`. To reuse that identity
 on the host, set `security.m2m.client_id` to `control-plane`, set its
@@ -533,13 +537,15 @@ make build-demo-bundle DEMO_PROVISIONING_FIXTURE_DIR="/path/to/fixtures" DEMO_BU
 The ZIP contains exactly `manifest.json`, `users.json`, `organizations.json`,
 `teams.json` and `projects.json`. The manifest declares `format_version: 2`,
 `users_schema_version: 2`, `source_platform: "swift"`. The four data files are arrays.
-The demo contains 15 identities, one organization, three teams and an empty project
-array. Demo passwords are test credentials. The
+The demo contains 13 identities, two organizations (Acme and Globex), two teams
+(Research and Support) and an empty project array. Léa (`lea`) holds `member` on
+Acme and Research. `make build-demo-zip` invokes the same builder. Demo passwords
+are test credentials. The
 [declaration contract](../../docs/architecture/A2-manager-contracts.md#provisioning-declarations)
 defines explicit parent references and roles, including projects. Old JSON and
 Python version-1 ZIPs return `not_yet_supported`; no conversion is performed.
 
-After compatible initialization, personal CGU acceptance and root bootstrap, save a platform owner's
+After compatible initialization, personal CGU acceptance and root bootstrap, save a platform admin's
 access token in a private file and run:
 
 ```sh
@@ -552,7 +558,7 @@ The CLI uses the normal configuration and the manager's Keycloak service client.
 It needs neither the running HTTP server nor Temporal and never initializes or
 migrates SQL/OpenFGA. The HTTP equivalent is multipart
 `POST /control-plane/v1/import-export/import`, with exactly one field named `file`
-and the operator bearer. It checks platform ownership before reading the upload.
+and the operator bearer. It checks platform administration before reading the upload.
 A new organization declares at least one owner and one admin. Archive limits are 50 MiB compressed and
 100 MiB expanded, with no filesystem extraction.
 
@@ -573,10 +579,10 @@ imports a variant with a project.
 ## Import through the frontend
 
 Fred's existing administration console exposes **Provisioning** at
-`/admin/provisioning` to manager platform owners. Select the ZIP produced by `make build-demo-bundle`.
+`/admin/provisioning` to manager platform admins. Select the ZIP produced by `make build-demo-bundle`.
 The page displays the completed server counts or an error with explicit replay
 guidance. The existing Home and sidebar display own memberships, hierarchy and roles.
-The account menu permits logout before and after admission. Platform owners are restricted to governance/account routes. Business users retain
+The account menu permits logout before and after admission. Platform admins are restricted to governance/account routes. Business users retain
 the existing product UI; endpoints not yet reconstructed can fail.
 
 From `apps/frontend`, automate this journey without touching development data:

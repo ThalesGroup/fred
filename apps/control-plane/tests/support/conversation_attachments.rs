@@ -606,7 +606,7 @@ async fn reader_attaches_privately_to_own_conversation() {
     used += sibling["size"].as_i64().unwrap();
 
     // Other readers of the space find no such conversation; a team admin reads no content at all.
-    for (user, refused) in [("alice", 404), ("writer", 404), ("admin", 403)] {
+    for (user, refused) in [("alice", 404), ("writer", 404), ("owner", 403)] {
         assert_eq!(
             status(&d, user, "GET", &attachments(team, bob)).await,
             refused,

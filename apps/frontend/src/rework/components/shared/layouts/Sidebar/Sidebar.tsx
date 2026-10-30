@@ -30,7 +30,7 @@ export default function Sidebar({
   navigation?: boolean;
   /** The page belongs to the platform admin space. */
   platformArea?: boolean;
-  /** A platform owner with no organization membership: the rail has nothing else to offer. */
+  /** A platform admin with no organization membership: the rail has nothing else to offer. */
   platformOnly?: boolean;
   organizationArea?: boolean;
 }) {

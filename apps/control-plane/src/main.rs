@@ -20,14 +20,14 @@ use sqlx::postgres::PgPoolOptions;
 
 use control_plane::{api, auth, config::Configuration as Config, fga::Fga, logging};
 
-const USAGE: &str = "usage: control-plane [serve | discover-agents | migrate | generate-openapi | generate-config-schema | processing-schema | import-provisioning <bundle.zip> --token-file <path>]";
+const USAGE: &str = "usage: control-plane [serve | discover-agents | migrate | publish-authorization-model --expected-model <id> | generate-openapi | generate-config-schema | processing-schema | import-provisioning <bundle.zip> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args == ["--help"] || args == ["-h"] {
         println!(
-            "{USAGE}\nImport requires an operator bearer file and an initialized schema/model. Replay is additive."
+            "{USAGE}\nImport requires an operator bearer file and an initialized schema/model. Replay is additive.\nModel publication requires a backup, reviewed tuple compatibility and all consumers stopped. See openfga/README.md."
         );
         return Ok(());
     }
@@ -114,6 +114,13 @@ async fn main() -> Result<()> {
         .as_slice()
     {
         [] | ["serve"] => serve(config).await,
+        ["publish-authorization-model", "--expected-model", model] => {
+            let pool = pool(&config).await?;
+            let mut config = config;
+            config.security.rebac.create_store_if_needed = false;
+            fga(&config).await?.publish_model(&pool, model).await?;
+            Ok(())
+        }
         ["import-provisioning", bundle, "--token-file", token] => {
             import(config, bundle, token).await
         }
@@ -374,8 +381,8 @@ async fn import(config: Config, bundle_file: &str, token_file: &str) -> Result<(
         .load(&pool)
         .await?;
         anyhow::ensure!(
-            fga.is_platform_owner(&caller.uid).await?,
-            "import requires platform owner"
+            fga.is_platform_admin(&caller.uid).await?,
+            "import requires platform admin"
         );
         use tokio::io::AsyncReadExt;
         let file = tokio::fs::File::open(bundle_file)
@@ -412,7 +419,7 @@ fn import_setup_error(error: anyhow::Error) -> anyhow::Error {
         | "cannot read provisioning bundle"
         | "invalid or expired operator bearer"
         | "user_not_accept_gcu"
-        | "import requires platform owner"
+        | "import requires platform admin"
         | "import requires configured Keycloak service credentials"
         | "import requires enabled Keycloak subject authentication in the directory realm"
         | "import database unavailable"

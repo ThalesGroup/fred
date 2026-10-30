@@ -12,7 +12,7 @@ export const isPlatformAdminRoute = (pathname: string) => PLATFORM_ADMIN_ROUTES.
 
 /**
  * The route belongs to the platform area: a platform page, or any page for a platform
- * owner with no organization membership. A member keeps their own pages elsewhere.
+ * admin with no organization membership. A member keeps their own pages elsewhere.
  */
 export function usePlatformArea(skip = false) {
   const { pathname } = useLocation();
