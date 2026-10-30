@@ -49,6 +49,9 @@ pub struct Limits {
     pub personal_bytes: i64,
     pub team_bytes: i64,
     pub organization_bytes: i64,
+    pub conversation_files: u32,
+    /// Source file bytes, excluding retired documents and failed uploads.
+    pub conversation_bytes: i64,
     pub cleanup_backlog_bytes: i64,
     pub cleanup_interval_seconds: u64,
     pub cleanup_batch: u32,
@@ -68,6 +71,8 @@ impl Default for Limits {
             personal_bytes: 5 * 1024 * 1024 * 1024,
             team_bytes: 5 * 1024 * 1024 * 1024,
             organization_bytes: 5 * 1024 * 1024 * 1024,
+            conversation_files: 100,
+            conversation_bytes: 1024 * 1024 * 1024,
             cleanup_backlog_bytes: 1024 * 1024 * 1024,
             cleanup_interval_seconds: 30,
             cleanup_batch: 100,
@@ -151,11 +156,16 @@ impl ContentConfig {
                 l.personal_bytes,
                 l.team_bytes,
                 l.organization_bytes,
+                l.conversation_bytes,
                 l.cleanup_backlog_bytes
             ]
             .iter()
             .all(|&n| n > 0),
             "content quotas and cleanup budget must be positive"
+        );
+        ensure!(
+            l.conversation_files > 0,
+            "content conversation file limit must be positive"
         );
         ensure!(
             (1..=300).contains(&l.cleanup_interval_seconds)
@@ -238,5 +248,20 @@ mod tests {
         let mut bad = good;
         bad.prefix = "../other".into();
         assert!(bad.validate().is_err());
+    }
+
+    #[test]
+    fn conversation_limits_default_and_require_positive_values() {
+        let good = config();
+        assert_eq!(good.limits.conversation_files, 100);
+        assert_eq!(good.limits.conversation_bytes, 1024 * 1024 * 1024);
+        let mut bad = good.clone();
+        bad.limits.conversation_files = 0;
+        assert!(bad.validate().is_err());
+        for bytes in [0, -1] {
+            let mut bad = good.clone();
+            bad.limits.conversation_bytes = bytes;
+            assert!(bad.validate().is_err());
+        }
     }
 }

@@ -106,7 +106,7 @@ def _binding(**runtime_kwargs: Any) -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(
             user_id="alice",
-            session_id="s-1",
+            session_id=str(UUID(int=301)),
             team_id="team-1",
             space_id=SPACE_ID,
             agent_instance_id=INSTANCE_ID,
@@ -126,11 +126,24 @@ def _binding(**runtime_kwargs: Any) -> BoundRuntimeContext:
 async def _patch_client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(adapters_module, "KfDocumentClient", _RecordingKfClient)
     _RecordingKfClient.calls = []
-    authority = TurnAuthority(turn_binding("agent-1", session="s-1"), None)
+    authority = TurnAuthority(
+        turn_binding(
+            "agent-1",
+            session=str(UUID(int=301)),
+            attachments=[
+                dict(
+                    document_id=str(UUID(int=401)),
+                    name="notes.pdf",
+                    mime="application/pdf",
+                )
+            ],
+        ),
+        None,
+    )
     with RunScope.open() as run:
         run.turn_authority = authority
         authority.start(run)
-        yield
+        yield authority
 
 
 async def test_markdown_read_refuses_a_uid_outside_the_selection() -> None:
@@ -184,26 +197,57 @@ async def test_a_folder_pick_is_forwarded_for_server_membership_verification() -
 
     assert page.text == "the whole document"
     sent = _RecordingKfClient.calls[0][1]
-    assert sent["document_scope"] == DocumentScope.from_ids([FOLDER], [IN_SCOPE])
-    assert sent["space_id"] == SPACE_ID
-
-
-async def test_an_attached_file_remains_unavailable_under_a_corpus_selection() -> None:
-    """This lot preserves the Weaver refusal of session attachments."""
-
-    adapter = adapters_module.DocumentMarkdownAdapter(
-        binding=_binding(
-            selected_document_uids=[IN_SCOPE],
-            attachments_markdown=(
-                "## Attached files for this conversation\n"
-                "- notes.pdf [attached-1]: conversation document"
-            ),
-        ),
-        settings=_FakeSettings(),
+    assert sent["document_context"].document_scope == DocumentScope.from_ids(
+        [FOLDER], [IN_SCOPE]
     )
+    assert str(sent["document_context"].space_id) == SPACE_ID
 
-    with pytest.raises(DocumentScopeRefusedError, match="attachments"):
-        await adapter.fetch_markdown("attached-1")
+
+@pytest.mark.parametrize("operation", ["read", "summarize", "extract"])
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_attachment_access_is_independent_of_corpus_selection(
+    _patch_client, operation, enabled
+):
+    context = _binding(selected_document_uids=[])
+    _patch_client.bind_documents(
+        context.runtime_context, DocumentScope(), attachments_enabled=enabled
+    )
+    classes = {
+        "read": adapters_module.DocumentMarkdownAdapter,
+        "summarize": adapters_module.DocumentSummarizeAdapter,
+        "extract": adapters_module.DocumentExtractionAdapter,
+    }
+    adapter = classes[operation](binding=context, settings=_FakeSettings())
+
+    async def read():
+        uid = str(UUID(int=401))
+        if operation == "read":
+            return await adapter.fetch_markdown(uid)
+        if operation == "summarize":
+            return await adapter.summarize(uid)
+        return await adapter.extract(uid, instruction="all")
+
+    if enabled:
+        await read()
+        sent = _RecordingKfClient.calls[0][1]["document_context"]
+        assert sent.document_scope.is_empty
+        assert sent.attachment_ids == (UUID(int=401),)
+    else:
+        with pytest.raises(DocumentScopeRefusedError):
+            await read()
+        assert _RecordingKfClient.calls == []
+
+
+async def test_injected_attachment_cannot_expand_binding(_patch_client):
+    context = _binding(selected_document_uids=[])
+    _patch_client.bind_documents(
+        context.runtime_context, DocumentScope(), attachments_enabled=True
+    )
+    adapter = adapters_module.DocumentMarkdownAdapter(
+        binding=context, settings=_FakeSettings()
+    )
+    with pytest.raises(DocumentScopeRefusedError):
+        await adapter.fetch_markdown(str(UUID(int=999)))
     assert _RecordingKfClient.calls == []
 
 
@@ -294,7 +338,9 @@ async def test_folder_ceiling_and_explicit_document_turn_are_both_forwarded() ->
         document_scope=ceiling,
     )
     await adapter.fetch_markdown(IN_SCOPE)
-    assert _RecordingKfClient.calls[0][1]["document_scope"] == ceiling.intersect(
+    assert _RecordingKfClient.calls[0][1][
+        "document_context"
+    ].document_scope == ceiling.intersect(
         DocumentScope.from_ids(document_ids=[IN_SCOPE])
     )
 

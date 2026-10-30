@@ -460,7 +460,8 @@
       "image": "Image",
       "processing": "Traitement",
       "removeAria": "Retirer {{name}}",
-      "uploading": "Téléversement"
+      "uploading": "Téléversement",
+      "ready": "Prêt"
     },
     "fullReasoning": {
       "title": "Raisonnement complet",
@@ -490,7 +491,27 @@
       "processingFast": "Traitement rapide",
       "processingPrepare": "Préparation du traitement",
       "uploadWarningConfirm": "J'ai compris",
-      "uploadWarningTitle": "Avant d'ajouter des fichiers"
+      "uploadWarningTitle": "Avant d'ajouter des fichiers",
+      "waiting": "L’envoi attend le dépôt et le traitement des fichiers. Un fichier prêt après le démarrage d’un tour sera disponible au suivant.",
+      "listFailed": "Impossible de vérifier les pièces jointes. Réessayez pour pouvoir envoyer votre message.",
+      "retryUpload": "Réessayer le dépôt (sélectionner le même fichier)",
+      "processingUnavailable": "Ce fichier n’est pas exploitable par l’agent. Supprimez-le puis déposez-le à nouveau pour relancer le traitement.",
+      "errors": {
+        "upload_in_progress": "Le dépôt est encore en cours. Son reçu sera vérifié.",
+        "retry_superseded": "Une autre tentative a remplacé ce dépôt. Son reçu sera vérifié.",
+        "name_conflict": "Ce nom existe déjà dans la conversation. Renommez le fichier local ou supprimez le document existant.",
+        "quota_exceeded": "Le quota de stockage est atteint.",
+        "conversation_files_exceeded": "Le nombre maximal de fichiers de cette conversation est atteint.",
+        "conversation_bytes_exceeded": "La taille totale maximale des fichiers de cette conversation est atteinte.",
+        "file_too_large": "Ce fichier dépasse la taille autorisée.",
+        "transfer_capacity": "Le service de dépôt est occupé. Respectez le délai indiqué avant de réessayer.",
+        "processing_active": "Le traitement est encore actif : la suppression est refusée. Attendez sa fin.",
+        "not_ready": "Ce fichier n’est pas exploitable. Supprimez-le puis déposez-le à nouveau.",
+        "storage_unavailable": "Le service est indisponible. L’issue du dépôt reste à vérifier.",
+        "interrupted_before_send": "Aucun reçu trouvé. Sélectionnez le même fichier pour réessayer le dépôt.",
+        "wrong_file": "Sélectionnez le fichier original avec le même nom et la même taille."
+      },
+      "readyHint": "Les fichiers prêts sont pris en compte au début du prochain tour, selon les capacités activées de l’agent."
     },
     "composerActions": {
       "dialogAria": "Actions de conversation",

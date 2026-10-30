@@ -42,7 +42,7 @@ class VectorSearchController:
             "/documents/search",
             tags=["Vector Search"],
             summary="Search documents using vectorization",
-            description="Returns up to top_k ranked published chunks from the context space and its ancestors, intersected with the document selection. Fewer hits, including an empty array, are valid. No offset or pagination token. Scores depend on the search policy and are not probabilities. A hit is rechecked against publication and lifecycle facts.",
+            description="Returns up to top_k ranked published chunks from the selected corpus (context space and ancestors) and explicitly listed attachments in the exact owned conversation. Two active sources use reciprocal-rank fusion with chunk deduplication; a single source preserves its ranking and scores. Fewer hits, including an empty array, are valid. No offset or pagination token. Scores depend on the search policy and are not probabilities. A hit is rechecked against publication and lifecycle facts.",
             response_model=list[VectorSearchHit],
             operation_id="search_documents",
         )
@@ -59,8 +59,7 @@ class VectorSearchController:
                         user=person,
                         top_k=request.top_k,
                         policy_name=request.search_policy,
-                        space_id=context.space_id,
-                        document_scope=context.document_scope,
+                        context=context,
                     )
             except (SpaceNotFoundError, SpacePendingDeletionError) as exc:
                 raise _space_error(exc) from None
@@ -69,7 +68,7 @@ class VectorSearchController:
             "/documents/{document_uid}/chunks",
             tags=["Vector Search"],
             summary="Fetch a document's published chunks in index order",
-            description="Returns visible published chunks in chunk_index order, capped by limit (default 200, maximum 1000). No continuation token or truncation flag: reaching the limit does not establish completeness. An empty array also covers no visible chunks or a vector store without direct chunk-read support. This is not an existence check or a whole-document guarantee.",
+            description="Returns chunks from the published generation of a visible corpus document or explicitly authorized conversation attachment, in chunk_index order, capped by limit (default 200, maximum 1000). No continuation token or truncation flag: reaching the limit does not establish completeness. An empty array also covers no visible chunks or a vector store without direct chunk-read support. This is not an existence check or a whole-document guarantee.",
             response_model=List[VectorSearchHit],
             operation_id="get_document_chunks",
         )
@@ -85,8 +84,7 @@ class VectorSearchController:
                     return await self.service.get_document_chunks_ordered(
                         user=person,
                         document_uid=document_uid,
-                        space_id=context.space_id,
-                        document_scope=context.document_scope,
+                        context=context,
                         limit=limit,
                     )
             except (SpaceNotFoundError, SpacePendingDeletionError) as exc:

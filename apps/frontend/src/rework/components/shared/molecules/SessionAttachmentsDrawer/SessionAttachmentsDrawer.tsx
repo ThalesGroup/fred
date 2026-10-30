@@ -78,6 +78,7 @@ export function SessionAttachmentsDrawer({
         fill
       >
         <UploadWarningBanner />
+        <p className={styles.rowMeta}>{t("chatbot.attachments.readyHint")}</p>
         <div className={styles.list}>
           {isLoading && attachments.length === 0 ? (
             <div className={styles.empty}>{t("chatbot.sessionAttachments.loading")}</div>
@@ -105,6 +106,17 @@ export function SessionAttachmentsDrawer({
                         {attachment.name}
                       </span>
                       <span className={styles.rowMeta}>{metaLabel}</span>
+                      <span className={styles.rowMeta}>
+                        {t(
+                          `chatbot.attachmentChip.${attachment.status === "ready" ? "ready" : attachment.status === "ingesting" ? "processing" : "failed"}`,
+                        )}
+                      </span>
+                      {attachment.status === "error" && (
+                        <span className={styles.rowMeta}>
+                          {t("chatbot.attachments.processingUnavailable")}
+                          {attachment.error ? ` (${attachment.error})` : ""}
+                        </span>
+                      )}
                     </span>
                   </button>
                   {!readOnly && (

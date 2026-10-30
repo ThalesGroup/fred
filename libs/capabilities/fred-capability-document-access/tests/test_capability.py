@@ -281,9 +281,9 @@ LEGACY_SOURCES = [
         (True, True),
     ),
     ({"show_attach_files_control": True}, (True, True)),
-    # An absent paperclip key takes the attachments field default (off on Weaver).
-    ({"search_attachments_only": True}, (False, True)),
-    ({}, (False, True)),
+    # An absent paperclip key takes the attachments field default.
+    ({"search_attachments_only": True}, (True, False)),
+    ({}, (True, True)),
     # String booleans parse like the former bool fields, not as truthy text.
     ({"show_attach_files_control": "false"}, (False, True)),
     (
@@ -308,7 +308,7 @@ def test_new_source_keys_win_over_leftover_legacy_keys() -> None:
     config = DocumentAccessConfig.model_validate(
         {"team_documents": True, "search_attachments_only": True}
     )
-    assert (config.attachments, config.team_documents) == (False, True)
+    assert (config.attachments, config.team_documents) == (True, True)
     config = DocumentAccessConfig.model_validate(
         {"attachments": True, "show_attach_files_control": False}
     )
@@ -343,6 +343,7 @@ def _widgets(controls) -> list[str]:
 def test_chat_controls_default_to_the_corpus_controls() -> None:
     cap = DocumentAccessCapability()
     assert _widgets(cap.chat_controls(DocumentAccessConfig())) == [
+        "attach_files",
         "document_scope",
         "search_policy",
         "rag_scope",
@@ -353,10 +354,10 @@ def test_chat_controls_default_to_the_corpus_controls() -> None:
 
 def test_manifest_and_config_share_the_attachments_default() -> None:
     fields = {f.key: f for f in DocumentAccessCapability.manifest.config_fields}
-    assert fields["attachments"].default is False
+    assert fields["attachments"].default is True
     assert fields["team_documents"].default is True
     config = DocumentAccessConfig()
-    assert (config.attachments, config.team_documents) == (False, True)
+    assert (config.attachments, config.team_documents) == (True, True)
 
 
 @pytest.mark.asyncio
@@ -368,19 +369,16 @@ async def test_validate_config_accepts_the_defaults() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "stored,reason",
-    [
-        ({"attachments": True}, "Session attachments are not available"),
-    ],
-)
-async def test_validate_config_refuses_sources_weaver_does_not_serve(
-    stored: dict[str, Any], reason: str
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_validate_config_preserves_explicit_attachment_choice(
+    enabled: bool,
 ) -> None:
     cap = DocumentAccessCapability()
     ctx = SaveContext(identity=_identity(), services=_full_services())
-    with pytest.raises(ValueError, match=reason):
-        await cap.validate_config(DocumentAccessConfig.model_validate(stored), {}, ctx)
+    config = await cap.validate_config(
+        DocumentAccessConfig(attachments=enabled), {}, ctx
+    )
+    assert config.attachments is enabled
 
 
 def test_chat_control_document_scope_bound_to_config_libraries() -> None:

@@ -19,12 +19,11 @@ import logging
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Protocol, cast, runtime_checkable
-from uuid import UUID
 
 from fastapi import HTTPException
 from fred_core import KeycloakUser
 from fred_core.documents.access import Candidate, SearchScope, resolve_scope, verify_candidates
-from fred_core.documents.selection import DocumentScope
+from fred_core.documents.transport import DocumentAccessContext
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.security.delegation import AssertedUser
 from fred_core.store import VectorSearchHit
@@ -70,6 +69,21 @@ def _coerce_chunk_index(raw: Any) -> Optional[int]:
         except ValueError:
             return None
     return None
+
+
+def _merge_rankings(rankings: Sequence[Sequence[BaseVectorHit]]) -> list[tuple[Document, float]]:
+    """Reciprocal ranks, with source/rank encounter order breaking ties."""
+    merged: dict[str, tuple[Document, float]] = {}
+    for ranking in rankings:
+        seen: set[str] = set()
+        for rank, hit in enumerate(ranking, 1):
+            uid = str(hit.document.metadata.get("chunk_uid") or "")
+            if not uid or uid in seen:
+                continue
+            seen.add(uid)
+            previous = merged.get(uid)
+            merged[uid] = (previous[0] if previous else hit.document, (previous[1] if previous else 0.0) + 1.0 / (60 + rank))
+    return sorted(merged.values(), key=lambda item: -item[1])
 
 
 class VectorSearchService:
@@ -476,8 +490,7 @@ class VectorSearchService:
         user: AssertedUser,
         top_k: int,
         policy_name: Optional[SearchPolicyName],
-        space_id: UUID,
-        document_scope: DocumentScope | None = None,
+        context: DocumentAccessContext,
     ) -> List[VectorSearchHit]:
         """Search one Weaver space and its ancestors; the caller checked the space read.
 
@@ -487,8 +500,8 @@ class VectorSearchService:
         await self._require_corpus_ready()
         engine = ApplicationContext.get_instance().get_pg_async_engine()
         async with engine.connect() as conn:
-            scope = await resolve_scope(conn, space_id, document_scope)
-        if scope.document_scope.is_empty:
+            scope = await resolve_scope(conn, context, user_id=user.uid)
+        if scope.document_scope.is_empty and not scope.attachment_ids:
             return []
         policy_key = policy_name or SearchPolicyName.hybrid
         strategy = {
@@ -496,15 +509,38 @@ class VectorSearchService:
             SearchPolicyName.hybrid: self._hybrid,
             SearchPolicyName.semantic: self._semantic,
         }.get(policy_key, self._hybrid)
-        candidates = await strategy(
-            question=question,
-            user=user,
-            k=top_k,
-            library_tags_ids=None,
-            metadata_terms_extra={"space_id": [str(value) for value in scope.space_ids]},
-            metadata_any=scope.selection_terms,
+        sources = []
+        if not scope.document_scope.is_empty:
+            sources.append(
+                (
+                    {"space_id": [str(value) for value in scope.space_ids], "session_id": [""]},
+                    scope.selection_terms,
+                )
+            )
+        if scope.attachment_ids:
+            sources.append(
+                (
+                    {"space_id": [str(context.space_id)], "session_id": [str(scope.conversation_id)], "document_uid": [str(value) for value in scope.attachment_ids]},
+                    (),
+                )
+            )
+        # Store interfaces embed per call: two active sources may embed twice.
+        rankings = await asyncio.gather(
+            *(
+                strategy(
+                    question=question,
+                    user=user,
+                    k=top_k,
+                    library_tags_ids=None,
+                    metadata_terms_extra=terms,
+                    metadata_any=selection,
+                )
+                for terms, selection in sources
+            )
         )
-        hits = await self._visible_hits(scope, [(hit.document, hit.score) for hit in candidates], user)
+        documents = [(hit.document, hit.score) for hit in rankings[0]] if len(rankings) == 1 else _merge_rankings(rankings)
+        # Verify the whole bounded union before applying the global limit.
+        hits = (await self._visible_hits(scope, documents, user))[:top_k]
         stats_policy = policy_key
         if (policy_key == SearchPolicyName.strict and not isinstance(self.vector_store, SupportsFullTextSearch)) or (
             policy_key == SearchPolicyName.hybrid and not isinstance(self.vector_store, SupportsHybridSearch)
@@ -578,8 +614,7 @@ class VectorSearchService:
         *,
         user: AssertedUser,
         document_uid: str,
-        space_id: UUID,
-        document_scope: DocumentScope | None = None,
+        context: DocumentAccessContext,
         limit: int,
     ) -> List[VectorSearchHit]:
         """Return a document's published chunks in chunk_index order, capped at `limit`.
@@ -605,8 +640,12 @@ class VectorSearchService:
         raw_chunks.sort(key=_order)
         engine = ApplicationContext.get_instance().get_pg_async_engine()
         async with engine.connect() as conn:
-            scope = await resolve_scope(conn, space_id, document_scope)
-        documents = [(Document(page_content=entry.get("text") or "", metadata=entry.get("metadata") or {}), 0.0) for entry in raw_chunks]
+            scope = await resolve_scope(conn, context, user_id=user.uid)
+        documents = [
+            (Document(page_content=entry.get("text") or "", metadata=entry.get("metadata") or {}), 0.0)
+            for entry in raw_chunks
+            if str((entry.get("metadata") or {}).get("document_uid")) == document_uid
+        ]
         hits = await self._visible_hits(scope, documents, user)
         logger.info(
             "[VECTOR][DOC_CHUNKS] document_uid=%s published=%d of %d truncated=%s",

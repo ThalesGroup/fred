@@ -166,7 +166,11 @@ impl Lifecycle {
             if !visible {
                 return Err(AppError::NotFound);
             }
-            let tx = document_writer(pool, fga, actor, space_id, conversation).await?;
+            if conversation.is_some_and(|(space, _)| space != space_id) {
+                return Err(AppError::NotFound);
+            }
+            let tx =
+                crate::documents::authorized_mutation(pool, fga, actor, space_id, session).await?;
             tx.commit().await?;
             return Ok(receipt);
         }
@@ -182,7 +186,11 @@ impl Lifecycle {
         .bind(session)
         .fetch_one(pool)
         .await?;
-        let mut tx = document_writer(pool, fga, actor, space_id, conversation).await?;
+        if conversation.is_some_and(|(space, _)| space != space_id) {
+            return Err(AppError::NotFound);
+        }
+        let mut tx =
+            crate::documents::authorized_mutation(pool, fga, actor, space_id, session).await?;
         let document: Option<Uuid> = sqlx::query_scalar(
             "select id from document where id = $1 and deletion_id is null for update",
         )
@@ -354,23 +362,6 @@ impl Lifecycle {
         Ok(receipt)
     }
 }
-/// A drive document needs write access to its space; an attachment, its conversation's ownership.
-async fn document_writer(
-    pool: &PgPool,
-    fga: &Fga,
-    actor: &str,
-    space_id: Uuid,
-    conversation: Option<(Uuid, Uuid)>,
-) -> AppResult<Transaction<'static, Postgres>> {
-    match conversation {
-        None => spaces::authorized_write(pool, fga, actor, space_id).await,
-        Some((space, session)) if space == space_id => {
-            crate::sessions::lock_owner(pool, fga, actor, space, session).await
-        }
-        Some(_) => Err(AppError::NotFound),
-    }
-}
-
 async fn mark(tx: &mut Transaction<'_, Postgres>, id: Uuid, operation: Uuid) -> AppResult<()> {
     require_active(&mut **tx, id).await?;
     let has_documents: bool =

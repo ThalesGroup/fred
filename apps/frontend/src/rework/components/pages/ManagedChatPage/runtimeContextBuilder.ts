@@ -34,7 +34,6 @@ export function buildComposerRuntimeContext(params: {
   searchPolicy: SearchPolicyName;
   ragScope: RagScope;
   boundLibraryIds?: string[] | null;
-  attachmentsMarkdown?: string | null;
   /** The reasoning row's value, `undefined` while the composer hides it (the key is then omitted). */
   reasoning?: boolean;
   askUser?: boolean;
@@ -46,7 +45,6 @@ export function buildComposerRuntimeContext(params: {
   | "selected_document_uids"
   | "search_policy"
   | "search_rag_scope"
-  | "attachments_markdown"
   | "reasoning"
   | "ask_user"
   | "chat_profile_id"
@@ -62,7 +60,6 @@ export function buildComposerRuntimeContext(params: {
     selected_document_uids: params.selectedDocumentUids.length > 0 ? params.selectedDocumentUids : null,
     search_policy: params.searchPolicy,
     search_rag_scope: params.ragScope,
-    ...(params.attachmentsMarkdown != null ? { attachments_markdown: params.attachmentsMarkdown } : {}),
     ...(params.reasoning !== undefined ? { reasoning: params.reasoning } : {}),
     ...(params.askUser !== undefined ? { ask_user: params.askUser } : {}),
     ...(params.chatProfileId ? { chat_profile_id: params.chatProfileId } : {}),

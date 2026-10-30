@@ -30947,6 +30947,18 @@
                                       "minimum": 0,
                                       "type": "integer"
                                     },
+                                    "conversation_bytes": {
+                                      "default": 1073741824,
+                                      "description": "Source file bytes, excluding retired documents and failed uploads.",
+                                      "format": "int64",
+                                      "type": "integer"
+                                    },
+                                    "conversation_files": {
+                                      "default": 100,
+                                      "format": "int32",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
                                     "downloads": {
                                       "default": 8,
                                       "format": "int32",
@@ -31442,6 +31454,18 @@
                                 "cleanup_interval_seconds": {
                                   "default": 30,
                                   "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "conversation_bytes": {
+                                  "default": 1073741824,
+                                  "description": "Source file bytes, excluding retired documents and failed uploads.",
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "conversation_files": {
+                                  "default": 100,
+                                  "format": "int32",
                                   "minimum": 0,
                                   "type": "integer"
                                 },
@@ -32883,6 +32907,18 @@
                                       "minimum": 0,
                                       "type": "integer"
                                     },
+                                    "conversation_bytes": {
+                                      "default": 1073741824,
+                                      "description": "Source file bytes, excluding retired documents and failed uploads.",
+                                      "format": "int64",
+                                      "type": "integer"
+                                    },
+                                    "conversation_files": {
+                                      "default": 100,
+                                      "format": "int32",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
                                     "downloads": {
                                       "default": 8,
                                       "format": "int32",
@@ -33378,6 +33414,18 @@
                                 "cleanup_interval_seconds": {
                                   "default": 30,
                                   "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "conversation_bytes": {
+                                  "default": 1073741824,
+                                  "description": "Source file bytes, excluding retired documents and failed uploads.",
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "conversation_files": {
+                                  "default": 100,
+                                  "format": "int32",
                                   "minimum": 0,
                                   "type": "integer"
                                 },

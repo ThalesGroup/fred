@@ -63,6 +63,7 @@ def resolved_binding(
             subject_id="person",
             run_id="run",
             conversation_id=None,
+            attachments=[],
             space=dict(
                 id="00000000-0000-0000-0000-000000000002",
                 kind="team",
@@ -109,10 +110,14 @@ SPACE_ID = "00000000-0000-0000-0000-000000000002"
 INSTANCE_ID = "00000000-0000-0000-0000-000000000003"
 
 
-def turn_binding(template, *, user="alice", session=None, run="run", tuning=None):
+def turn_binding(
+    template, *, user="alice", session=None, run="run", tuning=None, attachments=()
+):
     """A complete trusted response for a test's registered template."""
     data = resolved_binding().model_dump(mode="json")
-    data.update(subject_id=user, conversation_id=session, run_id=run)
+    data.update(
+        subject_id=user, conversation_id=session, run_id=run, attachments=attachments
+    )
     data["agent"].update(template_key=template, runtime_id="test-pod")
     if tuning is not None:
         data["agent"]["configuration"] = tuning
@@ -212,7 +217,7 @@ def create_managed_app(
 
 
 @contextmanager
-def active_turn(template, *, user="alice", session=None):
+def active_turn(template, *, user="alice", session=None, attachments=()):
     """Enter a real parent scope for tests of admitted local descendants."""
     from fred_runtime.model_routing.turn import TurnAuthority
     from fred_runtime.runtime_support.run_scope import RunScope
@@ -223,7 +228,8 @@ def active_turn(template, *, user="alice", session=None):
         template, user, session = context.agent_id, context.user_id, context.session_id
     with RunScope.open() as scope:
         authority = TurnAuthority(
-            turn_binding(template, user=user, session=session), None
+            turn_binding(template, user=user, session=session, attachments=attachments),
+            None,
         )
         authority.start(scope)
         scope.turn_authority = authority

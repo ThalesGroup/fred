@@ -7,7 +7,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from fred_core.documents.access import SpaceNotFoundError, SpacePendingDeletionError, published_artifact, resolve_scope
-from fred_core.documents.selection import DocumentScope
 from fred_core.documents.transport import DocumentAccessContext
 from fred_core.security.delegation import AssertedUser
 from minio.error import S3Error
@@ -19,12 +18,12 @@ from knowledge_flow_backend.features.manager_processing.contracts import Artifac
 from knowledge_flow_backend.security.weaver_admission import _space_error, delegated_person, require_space_read
 
 
-async def published_markdown(person: AssertedUser, space_id: UUID, document_uid: str, document_scope: DocumentScope | None = None) -> str:
-    await require_space_read(person, space_id)
+async def published_markdown(person: AssertedUser, document_uid: str, access: DocumentAccessContext) -> str:
+    await require_space_read(person, access.space_id)
     context = ApplicationContext.get_instance()
     try:
         async with context.get_pg_async_engine().connect() as conn:
-            scope = await resolve_scope(conn, space_id, document_scope)
+            scope = await resolve_scope(conn, access, user_id=person.uid)
             try:
                 document_id = UUID(document_uid)
             except ValueError:
@@ -59,11 +58,11 @@ class MarkdownController:
             response_model=MarkdownResponse,
             operation_id="get_document_markdown",
             summary="Read a document's full published markdown",
-            description="Returns the published output.md text after space, selection and lifecycle checks. Not an original binary download. Missing or non-visible documents return 404. No pagination; clients must budget for the whole response.",
+            description="Returns the published output.md text after shared space, corpus selection or explicit conversation attachment, ownership and lifecycle checks. Not an original binary download. Missing or non-visible documents return 404. No pagination; clients must budget for the whole response.",
         )
         async def markdown(
             document_uid: str,
             context: DocumentAccessContext = Depends(document_access_context),
             person: AssertedUser = Depends(delegated_person),
         ) -> MarkdownResponse:
-            return MarkdownResponse(content=await published_markdown(person, context.space_id, document_uid, context.document_scope))
+            return MarkdownResponse(content=await published_markdown(person, document_uid, context))

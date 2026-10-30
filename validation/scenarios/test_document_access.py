@@ -306,7 +306,6 @@ class Conversation:
                 team_id=self.team_id,
                 selected_document_libraries_ids=libraries,
                 selected_document_uids=documents,
-                attachments_markdown=attachments,
                 search_policy="semantic",
                 include_session_scope=attachments is not None,
                 include_corpus_scope=corpus,

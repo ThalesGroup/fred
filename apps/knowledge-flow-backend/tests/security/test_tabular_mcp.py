@@ -23,7 +23,7 @@ from knowledge_flow_backend.security.weaver_admission import delegated_person
 from tests.security.test_mcp_v2_mount import _META
 
 PERSON = AssertedUser(uid="alice", client_id="native-agent", run_id="run", agent_id="agent")
-SPACE, FOLDER = UUID(int=1), UUID(int=2)
+SPACE, FOLDER, CONVERSATION, ATTACHMENT = [UUID(int=i) for i in range(1, 5)]
 
 
 @pytest.mark.asyncio
@@ -61,9 +61,11 @@ async def test_tabular_mcp_initializes_and_forwards_only_outer_document_scope(mo
                 assert DOCUMENT_CONTEXT_HEADER not in tool["inputSchema"].get("required", [])
                 assert "space_id" not in tool["inputSchema"].get("properties", {})
                 assert "document_scope" not in tool["inputSchema"].get("properties", {})
+                assert "conversation_id" not in tool["inputSchema"].get("properties", {})
+                assert "attachment_ids" not in tool["inputSchema"].get("properties", {})
             assert not seen  # Greeting initialization needs neither datasets nor a database read.
             for scope in (DocumentScope.from_ids([str(FOLDER)]), DocumentScope.from_ids([], [])):
-                payload = DocumentAccessContext(space_id=SPACE, document_scope=scope).model_dump_json()
+                payload = DocumentAccessContext(space_id=SPACE, document_scope=scope, conversation_id=CONVERSATION, attachment_ids=(ATTACHMENT,)).model_dump_json()
                 response = await client.post(
                     "/mcp/tabular",
                     headers={**headers, "Mcp-Method": "tools/call", "Mcp-Name": "list_tabular_documents", DOCUMENT_CONTEXT_HEADER: payload},
@@ -71,7 +73,7 @@ async def test_tabular_mcp_initializes_and_forwards_only_outer_document_scope(mo
                 )
                 assert response.status_code == 200
                 assert not response.json()["result"].get("isError", False)
-                assert seen[-1] == {"space_id": SPACE, "document_scope": scope}
+                assert seen[-1] == {"context": DocumentAccessContext.model_validate_json(payload)}
             assert len(seen) == 2
 
 
@@ -107,3 +109,18 @@ async def test_inner_tool_request_cannot_replace_the_verified_header(monkeypatch
         request = httpx2.Request("GET", "http://kf/tabular/documents", headers={DOCUMENT_CONTEXT_HEADER: "from-tool"})
         await mcp_mount._forward_verified_identity(request)
         assert request.headers.get(DOCUMENT_CONTEXT_HEADER) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("delegated", [False, True])
+async def test_mcp_forwarding_discards_model_header_and_uses_only_verified_outer_context(monkeypatch, delegated):
+    from fastmcp.server import dependencies
+
+    context = DocumentAccessContext(space_id=SPACE, document_scope=DocumentScope.from_ids([], []), conversation_id=CONVERSATION, attachment_ids=(ATTACHMENT,))
+    outer = SimpleNamespace(headers={DOCUMENT_CONTEXT_HEADER: context.model_dump_json()})
+    monkeypatch.setattr(dependencies, "get_http_request", lambda: outer)
+    grant = DelegationGrant(person="alice", run="turn", agent="agent") if delegated else None
+    monkeypatch.setattr(mcp_mount, "verified_grant", lambda: grant)
+    request = httpx2.Request("GET", "http://internal/tabular/documents", headers={DOCUMENT_CONTEXT_HEADER: '{"attachment_ids":["injected"]}'})
+    await mcp_mount._forward_verified_identity(request)
+    assert request.headers.get(DOCUMENT_CONTEXT_HEADER) == (context.model_dump_json() if delegated else None)

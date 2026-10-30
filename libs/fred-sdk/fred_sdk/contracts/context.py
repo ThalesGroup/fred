@@ -470,7 +470,7 @@ class RuntimeContext(BaseModel):
       These are the core fields — set by the frontend per turn, read by retrieval logic.
       The platform-operator chat model binding is NOT here — it is never
       client-forwarded; see `BoundRuntimeContext.platform_chat_model_binding`.
-    - Group D (content/preferences): language, attachments_markdown. Will
+    - Group D (content/preferences): language. Will
       migrate to session preferences / identity over time.
     """
 
@@ -607,7 +607,6 @@ class RuntimeContext(BaseModel):
 
     # Group D — Content and preferences (will migrate to proper homes over time)
     language: Optional[str] = None
-    attachments_markdown: Optional[str] = None
     # Set when the turn was launched by a prompt command. Side data only: the
     # turn's text is still the full assembled text, and the agent never sees
     # this. It travels to the stored turn's metadata so the transcript can

@@ -22,11 +22,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Any
+from uuid import UUID
 
 import fred_runtime.common.table_hits as table_hits
 import fred_runtime.integrations.v2_runtime.adapters as adapters_module
 import pytest
 from fred_core.documents.selection import DocumentScope
+from fred_core.documents.transport import DocumentAccessContext
 from fred_core.store.vector_search import VectorSearchHit
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -241,9 +243,10 @@ async def test_truncated_table_is_refetched_whole_with_a_bounded_limit(
     assert calls == [
         {
             "document_uid": "d1",
-            "space_id": SPACE_ID,
             "limit": table_hits.TABLE_EXPANSION_MAX_CHUNKS,
-            "document_scope": DocumentScope(),
+            "document_context": DocumentAccessContext(
+                space_id=UUID(SPACE_ID), document_scope=DocumentScope()
+            ),
         }
     ]
     contents = [hit["content"] for hit in result.blocks[0].data["hits"]]

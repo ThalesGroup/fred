@@ -48,6 +48,8 @@ pub struct Attachment {
     pub mime: String,
     pub size: i64,
     pub created_at: DateTime<Utc>,
+    /// Documentary eligibility at read time, independent of capability enablement or a running turn.
+    pub ready: bool,
     /// Latest processing attempt.
     #[sqlx(skip)]
     #[schema(required = true)]
@@ -81,7 +83,7 @@ pub(super) fn routes() -> OpenApiRouter<AppState> {
         (status = 408, description = "`upload_timeout`: the transfer stalled or exceeded its deadline", body = crate::error::ErrorBody),
         (status = 409, description = "`name_conflict`, `idempotency_conflict`, `upload_failed` (retry with `retry_of`), `invalid_retry`, `upload_expired`, `retry_superseded` (`Location` names the original receipt), or `upload_in_progress` (`Location` and `Retry-After`)", body = crate::error::ErrorBody),
         (status = 413, description = "`file_too_large`: above `max_file_bytes`", body = crate::error::ErrorBody),
-        (status = 422, description = "`quota_exceeded`, or an invalid request key, filename or media type", body = crate::error::ErrorBody),
+        (status = 422, description = "`quota_exceeded`, `conversation_files_exceeded`, `conversation_bytes_exceeded`, or an invalid request key, filename or media type", body = crate::error::ErrorBody),
         (status = 429, description = "`transfer_capacity`: all transfer slots are busy; honour `Retry-After`", body = crate::error::ErrorBody),
         (status = 503, description = "`storage_unavailable` or `processing_unavailable`", body = crate::error::ErrorBody)))]
 async fn upload_attachment(
@@ -126,8 +128,11 @@ async fn list_attachments(
 ) -> AppResult<Json<Vec<Attachment>>> {
     super::require_owner(&s.pool, &s.fga, &user.uid, space_id, session_id).await?;
     let mut attachments: Vec<Attachment> = sqlx::query_as(
-        "select id as document_id, name, mime, size, created_at from document
-         where session_id = $1 and space_id = $2 and deletion_id is null order by created_at, id",
+        "select d.id as document_id, d.name, d.mime, d.size, d.created_at,
+         (g.id is not null and d.retrievable and not d.retrievable_pending) as ready
+         from document d left join generation g on g.id = d.published_generation
+         where d.session_id = $1 and d.space_id = $2 and d.deletion_id is null
+         order by d.created_at, d.id",
     )
     .bind(session_id)
     .bind(space_id)

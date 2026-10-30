@@ -17,11 +17,14 @@ from knowledge_flow_backend.features.manager_processing.contracts import Descrip
 
 def _placement(descriptor: Descriptor) -> dict[str, str]:
     """Placement is immutable in Control Plane SQL, so values written here stay true."""
-    return {
+    placement = {
         "organization_id": str(descriptor.organization_id),
         "space_id": str(descriptor.space_id),
-        "folder_path": descriptor.folder_path,
+        "session_id": str(descriptor.session_id) if descriptor.session_id is not None else "",
     }
+    if descriptor.folder_path is not None:
+        placement["folder_path"] = descriptor.folder_path
+    return placement
 
 
 class ScopedVectors:
@@ -51,6 +54,8 @@ class ScopedVectors:
         identifiers = []
         for document, logical_id in zip(documents, ids, strict=True):
             # Descriptor placement wins over extractor metadata of the same name.
+            if d.session_id is not None:
+                document.metadata.pop("folder_path", None)
             document.metadata.update(placement)
             if logical_id not in self.aliases:
                 ordinal = len(self.documents)
@@ -106,6 +111,7 @@ class ScopedVectors:
                 or metadata.get("document_uid") != str(d.work.document_id)
                 or metadata.get("chunk_uid") != identifier
                 or any(metadata.get(key) != value for key, value in placement.items())
+                or (d.session_id is not None and "folder_path" in metadata)
             ):
                 raise ManagerError("indexing_failed")
             records.append(to_json({"id": identifier, "text": document.page_content, "metadata": document.metadata}).decode("utf-8"))
@@ -182,7 +188,8 @@ def scoped_pipeline(context, descriptor: Descriptor, output: Path, artifacts: Ar
     """Instance-local dependencies; configured processor selection remains in the shared pipeline."""
     import copy
 
-    from knowledge_flow_backend.common.structures import ProcessingConfig
+    from knowledge_flow_backend.application_context import EXTENSION_CATEGORY
+    from knowledge_flow_backend.common.structures import IngestionProcessingProfile, ProcessingConfig
     from knowledge_flow_backend.core.processing_pipeline_manager import ProcessingPipelineManager
     from knowledge_flow_backend.core.processors.input.excel_processor.excel_processor import ExcelProcessor
 
@@ -190,21 +197,31 @@ def scoped_pipeline(context, descriptor: Descriptor, output: Path, artifacts: Ar
     scoped.configuration = context.configuration.model_copy(deep=True)
     profile = ProcessingConfig.ProfileConfig.model_validate_json((output / "policy.json").read_text())
     setattr(scoped.configuration.processing.profiles, descriptor.work.profile, profile)
+    scoped.configuration.processing.default_profile = IngestionProcessingProfile(descriptor.work.profile)
     scoped.input_processor_registry = scoped._load_input_processor_registry()
     scoped._input_processor_instances = {}
     scoped._output_processor_instances = {}
     scoped._inject_processor_context = True
     scoped.configuration.library_output_processors = []
+    if descriptor.session_id is not None:
+        scoped.configuration.storage.tabular_store.pointer_chunks_enabled = False
     settings = scoped.configuration.manager_processing
     if settings is None:
         raise ManagerError("worker_failed", permanent=True)
     scoped._content_store_instance = LocalTabularArtifacts(output, descriptor, settings.temporary_bytes)
     vectors = None
-    if include_output:
+    suffix = Path(descriptor.name).suffix.lower()
+    category = EXTENSION_CATEGORY.get(suffix)
+    if include_output and category != "spreadsheet" and (category != "tabular" or scoped.configuration.storage.tabular_store.pointer_chunks_enabled):
         underlying = context.get_manager_vector_store()
         vectors = ScopedVectors(underlying, descriptor, artifacts, output, scoped.get_text_splitter())
         scoped._vector_store_instance = vectors
-    pipeline = ProcessingPipelineManager.create_with_default(scoped, include_output=include_output)
+    # Construct only this document's output processor; tabular work needs no embedder.
+    pipeline = ProcessingPipelineManager.create_with_default(scoped, include_output=False)
+    if include_output:
+        selected = pipeline.get_pipeline_for_profile(descriptor.work.profile)
+        output_suffix = suffix if category in {"tabular", "spreadsheet"} else ".md"
+        selected.output_processors[output_suffix] = [scoped.get_output_processor_instance(output_suffix)]
     for item in pipeline.pipelines.values():
         for processor in item.input_processors.values():
             if isinstance(processor, ExcelProcessor):

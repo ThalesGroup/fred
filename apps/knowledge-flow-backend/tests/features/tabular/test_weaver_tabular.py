@@ -13,6 +13,7 @@ import pytest
 from fred_core.documents import access
 from fred_core.documents.document_structures import DocumentMetadata, FileInfo, Identity, ProcessingStage, SourceInfo, SourceType
 from fred_core.documents.selection import DocumentScope
+from fred_core.documents.transport import DocumentAccessContext
 from fred_core.security.delegation import AssertedUser
 
 from knowledge_flow_backend.common.structures import TabularStoreConfig
@@ -20,7 +21,7 @@ from knowledge_flow_backend.features.tabular import service as module
 from knowledge_flow_backend.features.tabular.artifacts import TabularArtifactV1, build_default_query_alias
 from knowledge_flow_backend.features.tabular.structures import TabularColumnSchema, TabularQueryRequest, TabularSearchRequest
 
-SPACE, OTHER_SPACE, A, B, D1, D2, D3 = [UUID(int=i) for i in range(1, 8)]
+SPACE, OTHER_SPACE, A, B, D1, D2, D3, CONVERSATION = [UUID(int=i) for i in range(1, 9)]
 PERSON = AssertedUser(uid="alice", client_id="fred-agents", run_id="turn", agent_id="agent")
 
 
@@ -41,6 +42,7 @@ class Rows:
 @pytest.fixture
 def published(tmp_path, monkeypatch):
     facts, objects = [], {}
+    session = dict(session_id=CONVERSATION, space_id=SPACE, user_id=PERSON.uid, deletion_id=None)
     for uid, folder in [(D1, A), (D2, A), (D3, B)]:
         path = f"datasets/{uid}.parquet"
         local = tmp_path / str(uid)
@@ -73,11 +75,15 @@ def published(tmp_path, monkeypatch):
                     sha256="a" * 64,
                     folder_id=folder,
                     space_id=SPACE,
+                    session_id=None,
                     deletion_id=None,
                     space_deletion_id=None,
                     retrievable=True,
                     retrievable_pending=False,
                     generation_id=uid,
+                    vector_ordinals=[],
+                    session_user_id=PERSON.uid,
+                    session_deletion_id=None,
                     prefix=prefix,
                     path=name,
                     size=len(data),
@@ -95,6 +101,13 @@ def published(tmp_path, monkeypatch):
                 return Rows([dict(id=SPACE, parent_id=None, organization_id=SPACE, deletion_id=None)])
             if statement is access._FOLDERS:
                 return Rows([dict(id=id, path=f"/{id}/") for id in params["folder_ids"] if id in (A, B)])
+            if statement is access._CONVERSATION:
+                visible = (
+                    session["session_id"] == params["conversation_id"] and session["space_id"] == params["space_id"] and session["user_id"] == params["user_id"] and session["deletion_id"] is None
+                )
+                return Rows([session] if visible else [])
+            if statement is access._DOCUMENTS:
+                return Rows(list({row["id"]: row for row in facts if row["id"] in params["document_ids"]}.values()))
             assert statement is access._TABULAR_DOCUMENTS
             # Model the SQL publication/space/page predicate, not the visibility filter.
             return Rows(
@@ -126,16 +139,29 @@ def published(tmp_path, monkeypatch):
     permission = AsyncMock()
     monkeypatch.setattr(module, "require_space_read", permission)
 
-    def service(scope=DocumentScope()):
-        return module.TabularService(space_id=SPACE, document_scope=scope)
+    def service(scope=DocumentScope(), *, attachments=(), conversation_id=None):
+        return module.TabularService(context=DocumentAccessContext(space_id=SPACE, document_scope=scope, conversation_id=conversation_id, attachment_ids=attachments))
 
-    return SimpleNamespace(service=service, facts=facts, reads=reads, permission=permission, objects=objects)
+    def attach(uid):
+        for row in facts:
+            if row["id"] == uid:
+                row.update(session_id=CONVERSATION, folder_id=None)
+
+    return SimpleNamespace(service=service, facts=facts, reads=reads, permission=permission, objects=objects, attach=attach, session=session)
 
 
 @pytest.mark.asyncio
-async def test_published_csv_supports_sql_schema_search_and_direct_reads(published):
-    service = published.service(DocumentScope.from_ids(document_ids=[str(D1)]))
+@pytest.mark.parametrize("is_attachment", [False, True])
+async def test_published_csv_supports_sql_schema_search_and_direct_reads(published, is_attachment):
+    if is_attachment:
+        published.attach(D1)
+    service = published.service(
+        DocumentScope.from_ids([], []) if is_attachment else DocumentScope.from_ids(document_ids=[str(D1)]),
+        conversation_id=CONVERSATION if is_attachment else None,
+        attachments=(D1,) if is_attachment else (),
+    )
     [document] = await service.list_documents(PERSON)
+    assert document.source_kind == ("conversation_attachment" if is_attachment else "corpus")
     alias = document.tables[0].query_alias
     result = await service.query_read(PERSON, request=TabularQueryRequest(sql=f"select sum(amount) as total from {alias}", dataset_uids=[str(D1)]))
     assert result.rows == [{"total": 20}]
@@ -187,7 +213,9 @@ async def test_known_uuid_and_multi_dataset_cannot_escape_selection(published, o
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("inventory", ["list_documents", "list_datasets"])
-@pytest.mark.parametrize("field,value", [("generation_id", None), ("deletion_id", D3), ("space_deletion_id", D3), ("space_id", OTHER_SPACE), ("retrievable", False), ("retrievable_pending", True)])
+@pytest.mark.parametrize(
+    "field,value", [("generation_id", None), ("deletion_id", D3), ("space_deletion_id", D3), ("space_id", OTHER_SPACE), ("retrievable", False), ("retrievable_pending", True), ("session_id", D3)]
+)
 async def test_each_read_rechecks_publication_lifecycle_and_space(published, field, value, inventory):
     service = published.service(DocumentScope.from_ids(document_ids=[str(D1)]))
     list_inventory = getattr(service, inventory)
@@ -216,7 +244,7 @@ async def test_each_inventory_rechecks_space_before_artifact_access(published, i
     assert published.permission.await_count == 2
 
 
-@pytest.mark.parametrize("key", ["document_scope", "space_id", "owner_filter", "attachment_uids", "corpus_document_uids"])
+@pytest.mark.parametrize("key", ["document_scope", "space_id", "owner_filter", "attachment_uids", "corpus_document_uids", "conversation_id", "attachment_ids"])
 def test_tool_arguments_cannot_supply_authority(key):
     from pydantic import ValidationError
 
@@ -256,7 +284,8 @@ async def test_weaver_resolution_preserves_sql_sandbox_and_explicit_empty_query(
 
 
 @pytest.mark.asyncio
-async def test_workbook_reads_every_published_table_and_its_catalog(published):
+@pytest.mark.parametrize("is_attachment", [False, True])
+async def test_workbook_reads_every_published_table_and_its_catalog(published, is_attachment):
     import json
 
     key = f"generation/{D1}/metadata.json"
@@ -270,8 +299,16 @@ async def test_workbook_reads_every_published_table_and_its_catalog(published):
     for row in published.facts:
         if row["id"] == D1 and row["path"] == "metadata.json":
             row.update(size=len(data), artifact_sha256=hashlib.sha256(data).hexdigest())
-    service = published.service(DocumentScope.from_ids(document_ids=[str(D1)]))
+    if is_attachment:
+        published.attach(D1)
+    service = published.service(
+        DocumentScope.from_ids([], []) if is_attachment else DocumentScope.from_ids(document_ids=[str(D1)]),
+        conversation_id=CONVERSATION if is_attachment else None,
+        attachments=(D1,) if is_attachment else (),
+    )
     [document] = await service.describe_documents(PERSON, [str(D1)])
+    [discovered] = await service.list_documents(PERSON)
+    assert discovered.source_kind == ("conversation_attachment" if is_attachment else "corpus")
     assert document.kind == "spreadsheet"
     assert document.markdown == "preview"
     assert {table.query_alias for table in document.tables} == {"sales_a", "sales_b"}
@@ -289,3 +326,85 @@ async def test_workbook_reads_every_published_table_and_its_catalog(published):
             row["retrievable"] = False
     with pytest.raises(PermissionError):
         await service.describe_documents(PERSON, [str(D1)])
+
+
+@pytest.mark.asyncio
+async def test_tabular_union_queries_corpus_and_attachment_but_never_mounts_outside(published):
+    published.attach(D3)
+    service = published.service(DocumentScope.from_ids(document_ids=[str(D1)]), conversation_id=CONVERSATION, attachments=(D1, D3))
+    docs = await service.list_documents(PERSON)
+    assert {d.document_uid for d in docs} == {str(D1), str(D3)}
+    assert {d.document_uid: d.source_kind for d in docs} == {str(D1): "corpus", str(D3): "conversation_attachment"}
+    aliases = {d.document_uid: d.tables[0].query_alias for d in docs}
+    result = await service.query_read(
+        PERSON,
+        request=TabularQueryRequest(
+            sql=f"select sum(a.amount + b.amount) as total from {aliases[str(D1)]} a join {aliases[str(D3)]} b on a.city=b.city",
+            dataset_uids=[str(D1), str(D3)],
+        ),
+    )
+    assert result.rows == [{"total": 40}]
+    matches = await service.search_values(PERSON, request=TabularSearchRequest(keyword="Paris", dataset_uids=[str(D3)]))
+    assert matches.searched_dataset_uids == [str(D3)]
+    with pytest.raises(PermissionError):
+        await service.query_read(PERSON, request=TabularQueryRequest(sql=f"select * from {aliases[str(D1)]}", dataset_uids=[str(D1), str(D2)]))
+    assert not any(f"/{D2}/" in key for key in published.reads)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field,value", [("user_id", "bob"), ("space_id", OTHER_SPACE), ("session_id", D2), ("deletion_id", D2)])
+async def test_conversation_owner_exact_space_identity_and_retirement_are_required(published, field, value):
+    published.attach(D1)
+    service = published.service(DocumentScope.from_ids([], []), conversation_id=CONVERSATION, attachments=(D1,))
+    assert len(await service.list_documents(PERSON)) == 1
+    published.session[field] = value
+    published.reads.clear()
+    assert await service.list_documents(PERSON) == []
+    assert published.reads == []
+    with pytest.raises(PermissionError):
+        await service.describe_documents(PERSON, [str(D1)])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field,value", [("session_user_id", "bob"), ("session_deletion_id", D2), ("session_id", D2), ("space_id", OTHER_SPACE), ("generation_id", None), ("deletion_id", D2)])
+async def test_attachment_document_facts_rechecked_on_every_tabular_read(published, field, value):
+    published.attach(D1)
+    service = published.service(DocumentScope.from_ids([], []), conversation_id=CONVERSATION, attachments=(D1,))
+    assert len(await service.list_documents(PERSON)) == 1
+    for row in published.facts:
+        if row["id"] == D1:
+            row[field] = value
+    published.reads.clear()
+    assert await service.list_documents(PERSON) == []
+    assert published.reads == []
+
+
+@pytest.mark.asyncio
+async def test_attachment_list_does_not_admit_another_document_or_all_conversation(published):
+    published.attach(D1)
+    published.attach(D2)
+    # D3 is injected into the list but is a corpus document outside the empty selection.
+    service = published.service(DocumentScope.from_ids([], []), conversation_id=CONVERSATION, attachments=(D1, D3))
+    assert [doc.document_uid for doc in await service.list_documents(PERSON)] == [str(D1)]
+    with pytest.raises(PermissionError):
+        await service.describe_documents(PERSON, [str(D2)])
+    assert await published.service(DocumentScope.from_ids([], []), conversation_id=CONVERSATION).list_documents(PERSON) == []
+
+
+@pytest.mark.asyncio
+async def test_attachment_metadata_cannot_mount_an_artifact_from_an_old_revision(published):
+    import json
+
+    published.attach(D1)
+    key = f"generation/{D1}/metadata.json"
+    metadata = json.loads(published.objects[key])
+    metadata["extensions"]["tabular_v1"]["source_revision"] = "b" * 64
+    data = json.dumps(metadata).encode()
+    published.objects[key] = data
+    for row in published.facts:
+        if row["id"] == D1 and row["path"] == "metadata.json":
+            row.update(size=len(data), artifact_sha256=hashlib.sha256(data).hexdigest())
+    service = published.service(DocumentScope.from_ids([], []), conversation_id=CONVERSATION, attachments=(D1,))
+    with pytest.raises(ValueError, match="artifact"):
+        await service.list_documents(PERSON)
+    assert all(not path.endswith(".parquet") for path in published.reads)

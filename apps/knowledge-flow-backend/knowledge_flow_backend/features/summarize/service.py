@@ -74,7 +74,7 @@ class SummarizeService:
 
     async def summarize_document(self, user: AssertedUser, document_uid: str, request: SummarizeDocumentRequest, context: DocumentAccessContext) -> SummarizeDocumentResponse:
         started = time.monotonic()
-        markdown = await published_markdown(user, context.space_id, document_uid, context.document_scope)
+        markdown = await published_markdown(user, document_uid, context)
         fetch_ms = (time.monotonic() - started) * 1000
         document = Document(page_content=markdown, metadata={})
 

@@ -1,50 +1,17 @@
 // Copyright Thales 2026
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
-import type { SessionAttachment } from "@rework/types/attachments";
-import { buildAttachmentsMarkdown, excludeDeletedAttachments } from "./useChatAttachments";
+import type { Attachment } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { attachmentStatus } from "./useChatAttachments";
 
-describe("buildAttachmentsMarkdown", () => {
-  it("announces persisted attachments to the runtime", () => {
-    const attachment = {
-      attachmentId: "attachment-1",
-      name: "report.pdf",
-    } as SessionAttachment;
-
-    expect(buildAttachmentsMarkdown([attachment], [])).toContain("- report.pdf: conversation document");
-  });
-
-  it("carries the internal document uid so document tools can resolve the file", () => {
-    const attachment = {
-      attachmentId: "attachment-1",
-      name: "report.pdf",
-      documentUid: "554ab873903c40fdad52f36e2cffb501",
-    } as SessionAttachment;
-
-    expect(buildAttachmentsMarkdown([attachment], [])).toContain(
-      "- report.pdf [554ab873903c40fdad52f36e2cffb501]: conversation document",
+describe("server attachment readiness", () => {
+  it.each(["sales.csv", "workbook.xlsx"])("accepts %s ready with zero vectors", (name) => {
+    expect(attachmentStatus({ name, ready: true, processing: { status: "succeeded", vectors: 0 } } as Attachment)).toBe(
+      "ready",
     );
   });
-
-  it("returns null once the last attachment has been deleted", () => {
-    const attachment = {
-      attachmentId: "attachment-1",
-      name: "report.pdf",
-    } as SessionAttachment;
-    const remaining = excludeDeletedAttachments([attachment], new Set(["attachment-1"]));
-
-    expect(buildAttachmentsMarkdown(remaining, [])).toBeNull();
+  it("does not derive readiness from processing success or a missing processing attempt", () => {
+    expect(attachmentStatus({ ready: false, processing: { status: "succeeded" } } as Attachment)).toBe("error");
+    expect(attachmentStatus({ ready: false, processing: null } as Attachment)).toBe("error");
   });
 });

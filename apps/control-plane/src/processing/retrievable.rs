@@ -290,7 +290,7 @@ fn published_tabular(metadata: &serde_json::Value, manifest: &Manifest) -> AppRe
     let single = extensions.get("tabular_v1");
     let multi = extensions.get("tabular_multi_v1");
     let tables: Vec<&serde_json::Value> = match (single, multi) {
-        (None, None) => return Ok(false),
+        (None, None) if manifest.rows.is_none() => return Ok(false),
         (Some(table), None) => vec![table],
         (None, Some(multi)) => multi["tables"]
             .as_array()
@@ -406,7 +406,10 @@ mod tests {
         empty["extensions"] = serde_json::json!({"tabular_multi_v1":{"tables":[]}});
         assert!(published_tabular(&empty, &manifest).is_err());
         empty["extensions"] = serde_json::json!({});
-        assert!(!published_tabular(&empty, &manifest).unwrap());
+        assert!(published_tabular(&empty, &manifest).is_err());
+        let mut text_only = manifest;
+        text_only.rows = None;
+        assert!(!published_tabular(&empty, &text_only).unwrap());
     }
 
     #[test]

@@ -12,7 +12,14 @@ async fn setup() -> (Documents, Arc<Processing>) {
 async fn setup_with_lifecycle(
     lifecycle: control_plane::lifecycle::Lifecycle,
 ) -> (Documents, Arc<Processing>) {
-    let mut d = Box::pin(Documents::start(1024 * 1024)).await;
+    setup_with_content_limits(lifecycle, Default::default()).await
+}
+
+async fn setup_with_content_limits(
+    lifecycle: control_plane::lifecycle::Lifecycle,
+    limits: control_plane::documents::config::Limits,
+) -> (Documents, Arc<Processing>) {
+    let mut d = Box::pin(Documents::start_with_limits(1024 * 1024, false, limits)).await;
     let derived = d.storage.config.clone();
     let config: ProcessingConfig = serde_json::from_value(json!({
         "enabled":true,"temporal":{"host":"localhost:7233","namespace":"default","task_queue":"ingestion"},
@@ -97,6 +104,16 @@ async fn expire_generations(pool: &sqlx::PgPool, processing: Uuid) {
         .bind(processing).execute(pool).await.unwrap();
 }
 async fn commit(p: &Processing, d: &Descriptor, files: &[(&str, &[u8])], chunks: i64) -> Summary {
+    commit_rows(p, d, files, chunks, None).await
+}
+
+async fn commit_rows(
+    p: &Processing,
+    d: &Descriptor,
+    files: &[(&str, &[u8])],
+    chunks: i64,
+    rows: Option<i64>,
+) -> Summary {
     let mut artifacts = vec![];
     for (name, bytes) in files {
         let metadata = json!({"identity":{"document_uid":d.work.document_id},"source":{"retrievable":chunks>0},"processing":{"stages":{"vector":if chunks>0 {"done"} else {"not_started"}}}}).to_string();
@@ -131,7 +148,7 @@ async fn commit(p: &Processing, d: &Descriptor, files: &[(&str, &[u8])], chunks:
             chunks,
             vectors: chunks,
             vector_ordinals: (0..chunks as u32).collect(),
-            rows: None,
+            rows,
         },
     }))
     .await

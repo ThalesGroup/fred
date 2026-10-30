@@ -23,6 +23,25 @@ async fn attach(
     name: &str,
     bytes: &[u8],
 ) -> (u16, Value) {
+    attach_request(
+        d,
+        user,
+        &attachments(space, session),
+        name,
+        bytes,
+        Uuid::new_v4(),
+    )
+    .await
+}
+
+async fn attach_request(
+    d: &Documents,
+    user: &str,
+    path: &str,
+    name: &str,
+    bytes: &[u8],
+    key: Uuid,
+) -> (u16, Value) {
     let mut body=format!("--fixture\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\nContent-Type: text/plain\r\n\r\n").into_bytes();
     body.extend_from_slice(bytes);
     body.extend_from_slice(b"\r\n--fixture--\r\n");
@@ -30,10 +49,10 @@ async fn attach(
         d.request(
             user,
             "POST",
-            &attachments(space, session),
+            path,
             Body::from(body),
             "multipart/form-data; boundary=fixture",
-            Some(Uuid::new_v4()),
+            Some(key),
         )
         .await,
     )
@@ -59,6 +78,471 @@ fn deletion() -> control_plane::lifecycle::Lifecycle {
     lifecycle.catalog.space_policies.purge.default.retention =
         serde_yaml_ng::from_str("PT0S").unwrap();
     lifecycle
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+async fn conversation_limits_include_concurrent_pending_reservations() {
+    use control_plane::documents::config::Limits;
+    for (files, bytes, code) in [
+        (1, 100, "conversation_files_exceeded"),
+        (100, 4, "conversation_bytes_exceeded"),
+    ] {
+        let limits = Limits {
+            conversation_files: files,
+            conversation_bytes: bytes,
+            ..Default::default()
+        };
+        let (d, _p) = Box::pin(setup_with_content_limits(deletion(), limits)).await;
+        let d = Arc::new(d);
+        let space = d.folder.space_id;
+        let session = conversation(&d, "reader", space).await;
+        let gate = Arc::new(crate::support::Gate::default());
+        d.proxy.fault.lock().await.hold_put = Some(gate.clone());
+        let sending = d.clone();
+        let first = tokio::spawn(async move {
+            attach(&sending, "reader", space, session, "first.csv", b"1234").await
+        });
+        tokio::time::timeout(Duration::from_secs(10), gate.entered.notified())
+            .await
+            .unwrap();
+        let second = attach(&d, "reader", space, session, "second.csv", b"5").await;
+        gate.release.notify_one();
+        let first = first.await.unwrap();
+        assert_eq!(first.0, 201, "{first:?}");
+        assert_eq!(second.0, 422, "{second:?}");
+        assert_eq!(second.1["code"], code);
+        let count: i64 =
+            sqlx::query_scalar("select count(*) from document_upload where session_id=$1")
+                .bind(session)
+                .fetch_one(&d.e.pool)
+                .await
+                .unwrap();
+        assert_eq!(count, 1);
+        // Limits are per conversation and do not apply to the drive.
+        let other = conversation(&d, "reader", space).await;
+        assert_eq!(
+            attach(&d, "reader", space, other, "first.csv", b"1234")
+                .await
+                .0,
+            201
+        );
+        assert_eq!(
+            d.upload("writer", "drive.csv", b"12345", Uuid::new_v4(), None)
+                .await
+                .0,
+            201
+        );
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+async fn conversation_limit_counts_stored_once_replays_full_and_releases_retired() {
+    let limits = control_plane::documents::config::Limits {
+        conversation_files: 2,
+        conversation_bytes: 6,
+        ..Default::default()
+    };
+    let (d, _p) = Box::pin(setup_with_content_limits(deletion(), limits)).await;
+    let space = d.folder.space_id;
+    let session = conversation(&d, "reader", space).await;
+    let path = attachments(space, session);
+    let key = Uuid::new_v4();
+    let first = attach_request(&d, "reader", &path, "first.csv", b"123", key).await;
+    assert_eq!(first.0, 201, "{first:?}");
+    assert_eq!(
+        attach(&d, "reader", space, session, "second.csv", b"456")
+            .await
+            .0,
+        201
+    );
+    assert_eq!(
+        attach(&d, "reader", space, session, "third.csv", b"7")
+            .await
+            .0,
+        422
+    );
+    let replay = attach_request(&d, "reader", &path, "first.csv", b"123", key).await;
+    assert_eq!(replay.0, 200, "{replay:?}");
+    assert_eq!(replay.1["document_id"], first.1["document_id"]);
+    let other = conversation(&d, "reader", space).await;
+    let misplaced = attach_request(
+        &d,
+        "reader",
+        &attachments(space, other),
+        "first.csv",
+        b"123",
+        key,
+    )
+    .await;
+    assert_eq!(misplaced.0, 409);
+    assert_eq!(misplaced.1["code"], "idempotency_conflict");
+    let document: Uuid = first.1["document_id"].as_str().unwrap().parse().unwrap();
+    finish_processing(&d, document).await;
+    assert_eq!(
+        status(&d, "reader", "DELETE", &format!("{path}/{document}")).await,
+        202
+    );
+    // Physical cleanup has not run, but logical capacity has already been released.
+    assert_eq!(
+        attach(&d, "reader", space, session, "replacement.csv", b"789")
+            .await
+            .0,
+        201
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+async fn failed_attachment_retry_reserves_once_and_keeps_idempotency() {
+    let limits = control_plane::documents::config::Limits {
+        conversation_files: 1,
+        conversation_bytes: 4,
+        ..Default::default()
+    };
+    let (d, _p) = Box::pin(setup_with_content_limits(deletion(), limits)).await;
+    let space = d.folder.space_id;
+    let session = conversation(&d, "reader", space).await;
+    let path = attachments(space, session);
+    let failed_key = Uuid::new_v4();
+    d.proxy.fault.lock().await.deny_put = true;
+    assert_eq!(
+        attach_request(&d, "reader", &path, "retry.csv", b"1234", failed_key)
+            .await
+            .0,
+        503
+    );
+    d.proxy.fault.lock().await.deny_put = false;
+    let retry_path = format!("{path}?retry_of={failed_key}");
+    let retry_key = Uuid::new_v4();
+    let (first, replay) = tokio::join!(
+        attach_request(&d, "reader", &retry_path, "retry.csv", b"1234", retry_key),
+        attach_request(&d, "reader", &retry_path, "retry.csv", b"1234", retry_key)
+    );
+    assert!(first.0 == 201 || replay.0 == 201, "{first:?} {replay:?}");
+    assert!([200, 201, 409].contains(&first.0) && [200, 201, 409].contains(&replay.0));
+    let replay = attach_request(&d, "reader", &retry_path, "retry.csv", b"1234", retry_key).await;
+    assert_eq!(replay.0, 200, "{replay:?}");
+    let superseded = attach_request(
+        &d,
+        "reader",
+        &retry_path,
+        "retry.csv",
+        b"1234",
+        Uuid::new_v4(),
+    )
+    .await;
+    assert_eq!(superseded.1["code"], "retry_superseded");
+    let count: i64 = sqlx::query_scalar("select count(*) from document where session_id=$1")
+        .bind(session)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+async fn tabular_attachments_publish_without_vectors_and_purge_all_artifacts() {
+    use control_plane::lifecycle::cleanup;
+    let (d, p) = Box::pin(setup_with_lifecycle(deletion())).await;
+    let space = d.folder.space_id;
+    let session = conversation(&d, "reader", space).await;
+    for name in ["sales.csv", "workbook.xlsx"] {
+        let (code, receipt) = attach(&d, "reader", space, session, name, b"source").await;
+        assert_eq!(code, 201, "{receipt}");
+        let operation = receipt["processing"]["id"]
+            .as_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        let work = store::row(&d.e.pool, operation)
+            .await
+            .unwrap()
+            .work(p.installation);
+        for stage in [Stage::Preparation, Stage::Extraction] {
+            let descriptor = p
+                .claim(claim(&work, stage, Uuid::new_v4(), 1))
+                .await
+                .unwrap();
+            commit(&p, &descriptor, &[("policy.json", b"{}")], 0).await;
+        }
+        let descriptor = p
+            .claim(claim(&work, Stage::Indexing, Uuid::new_v4(), 1))
+            .await
+            .unwrap();
+        let table_count = if name.ends_with("xlsx") { 2 } else { 1 };
+        let tables: Vec<Value> = (0..table_count).map(|i| json!({
+            "dataset_uid": work.document_id, "object_key":format!("datasets/{i}.parquet"),
+            "source_revision":work.original_sha256, "format":"parquet", "file_size_bytes":4,
+            "row_count":2, "query_alias":format!("table_{i}"), "sheet":format!("Sheet{i}"), "table_id":format!("t{i}")
+        })).collect();
+        let extensions = if table_count == 1 {
+            json!({"tabular_v1":tables[0]})
+        } else {
+            json!({"tabular_multi_v1":{"tables":tables}})
+        };
+        let rows = 2 * table_count;
+        let metadata = json!({"identity":{"document_uid":work.document_id}, "source":{"retrievable":true},
+            "file":{"sha256":work.original_sha256,"row_count":rows}, "processing":{"stages":{"sql":"done"}}, "extensions":extensions});
+        let mut files = vec![
+            ("output.md".to_owned(), b"catalog".to_vec()),
+            (
+                "metadata.json".to_owned(),
+                serde_json::to_vec(&metadata).unwrap(),
+            ),
+            (
+                "tables.json".to_owned(),
+                serde_json::to_vec(&tables).unwrap(),
+            ),
+        ];
+        for i in 0..table_count {
+            files.push((format!("datasets/{i}.parquet"), b"PAR1".to_vec()));
+        }
+        let borrowed: Vec<(&str, &[u8])> = files
+            .iter()
+            .map(|(name, bytes)| (name.as_str(), bytes.as_slice()))
+            .collect();
+        let done = commit_rows(&p, &descriptor, &borrowed, 0, Some(rows)).await;
+        assert_eq!(done.status, ProcessingStatus::Succeeded);
+        let (generation, manifest) = published(&d.e.pool, work.document_id).await;
+        assert_eq!(manifest.vectors, 0);
+        assert_eq!(manifest.rows, Some(rows));
+        let retrievable: bool = sqlx::query_scalar("select retrievable from document where id=$1")
+            .bind(work.document_id)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+        assert!(retrievable);
+        let (_, listed) = d
+            .json("reader", "GET", &attachments(space, session), Value::Null)
+            .await;
+        let row = listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|a| a["document_id"] == work.document_id.to_string())
+            .unwrap();
+        assert_eq!(row["ready"], true);
+        assert_eq!(row["processing"]["vectors"], 0);
+        // A succeeded attempt alone does not confer binding eligibility.
+        for (retrievable, pending, publication) in [
+            (false, false, Some(generation.id)),
+            (true, true, Some(generation.id)),
+            (true, false, None),
+        ] {
+            sqlx::query("update document set retrievable=$2, retrieval_id=$5, retrieval_actor='reader', retrieval_target=true, retrieval_phase='ready', retrieval_confirmed=not $3, published_generation=$4 where id=$1")
+                .bind(work.document_id).bind(retrievable).bind(pending).bind(publication).bind(Uuid::new_v4())
+                .execute(&d.e.pool).await.unwrap();
+            let (_, listed) = d
+                .json("reader", "GET", &attachments(space, session), Value::Null)
+                .await;
+            let row = listed
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|a| a["document_id"] == work.document_id.to_string())
+                .unwrap();
+            assert_eq!(row["processing"]["status"], "succeeded");
+            assert_eq!(row["ready"], false);
+        }
+        sqlx::query("update document set retrievable=true, retrieval_id=null, retrieval_actor=null, retrieval_target=null, retrieval_phase=null, retrieval_confirmed=null, published_generation=$2 where id=$1")
+            .bind(work.document_id).bind(generation.id).execute(&d.e.pool).await.unwrap();
+        let (code, retired) = json_response(
+            d.request(
+                "reader",
+                "DELETE",
+                &format!("{}/{}", attachments(space, session), work.document_id),
+                Body::empty(),
+                "",
+                None,
+            )
+            .await,
+        )
+        .await;
+        assert_eq!(code, 202, "{retired}");
+        let deletion_id = retired["id"].as_str().unwrap().parse().unwrap();
+        expire_generations(&d.e.pool, operation).await;
+        let candidate = p
+            .cleanup_candidates()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|c| c.work.document_id == work.document_id)
+            .unwrap();
+        assert!(candidate.purge_document);
+        let objects = p
+            .derived
+            .list(&candidate.output_prefix, None, 1000)
+            .await
+            .unwrap();
+        for table in &tables {
+            let key = format!(
+                "{}{}",
+                generation.prefix,
+                table["object_key"].as_str().unwrap()
+            );
+            assert!(objects.objects.iter().any(|(name, _, _)| name == &key));
+        }
+        for (key, _, _) in objects.objects {
+            p.derived.delete(&key).await.unwrap();
+        }
+        p.cleaned(control_plane::processing::cleanup::Cleaned {
+            work: candidate.work,
+            generation: candidate.generation,
+            cursor: 0,
+            next_cursor: 0,
+            objects_empty: true,
+            purge_document: true,
+        })
+        .await
+        .unwrap();
+        cleanup::batch(&d.e.pool, &d.e.fga, deletion_id)
+            .await
+            .unwrap();
+        let remaining: i64 =
+            sqlx::query_scalar("select count(*) from artifact where generation_id=$1")
+                .bind(generation.id)
+                .fetch_one(&d.e.pool)
+                .await
+                .unwrap();
+        assert_eq!(remaining, 0);
+        assert!(
+            p.derived
+                .list(&candidate.output_prefix, None, 1000)
+                .await
+                .unwrap()
+                .objects
+                .is_empty()
+        );
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+async fn reader_attachment_is_processed_and_published_in_its_conversation() {
+    let (d, p) = Box::pin(setup()).await;
+    let space = d.folder.space_id;
+    let session = conversation(&d, "reader", space).await;
+    let (code, receipt) = attach(&d, "reader", space, session, "note.txt", b"private").await;
+    assert_eq!(code, 201, "{receipt}");
+    let operation = receipt["processing"]["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let work = store::row(&d.e.pool, operation)
+        .await
+        .unwrap()
+        .work(p.installation);
+    assert_eq!(work.profile, Profile::Fast);
+
+    for stage in [Stage::Preparation, Stage::Extraction, Stage::Indexing] {
+        let descriptor = p
+            .claim(claim(&work, stage, Uuid::new_v4(), 1))
+            .await
+            .unwrap();
+        assert_eq!(descriptor.space_id, space);
+        assert_eq!(descriptor.session_id, Some(session));
+        assert_eq!(descriptor.folder_id, None);
+        assert_eq!(descriptor.folder_path, None);
+        assert_eq!(descriptor.actor, "reader");
+        let wire = serde_json::to_value(&descriptor).unwrap();
+        assert_eq!(wire["session_id"], session.to_string());
+        assert!(wire["folder_id"].is_null() && wire["folder_path"].is_null());
+        match stage {
+            Stage::Preparation => {
+                commit(&p, &descriptor, &[("policy.json", b"{}")], 0).await;
+            }
+            Stage::Extraction => {
+                commit(&p, &descriptor, &[("output.md", b"private")], 0).await;
+            }
+            Stage::Indexing => {
+                p.plan_vectors(control_plane::processing::cleanup::VectorPlan {
+                    work: work.clone(),
+                    generation: descriptor.generation,
+                    count: 1,
+                })
+                .await
+                .unwrap();
+                let done = commit(
+                    &p,
+                    &descriptor,
+                    &[
+                        ("output.md", b"private"),
+                        ("metadata.json", b"{}"),
+                        ("chunks.jsonl", b"{}\n"),
+                    ],
+                    1,
+                )
+                .await;
+                assert_eq!(done.status, ProcessingStatus::Succeeded);
+                assert_eq!(
+                    published(&d.e.pool, work.document_id).await.0.id,
+                    descriptor.generation
+                );
+            }
+            _ => unreachable!(),
+        }
+    }
+    let (retrievable, command): (bool, Option<Uuid>) =
+        sqlx::query_as("select retrievable, retrieval_id from document where id=$1")
+            .bind(work.document_id)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    assert!(retrievable);
+    assert_eq!(command, None);
+    assert!(matches!(
+        p.set_retrievable(
+            "writer",
+            work.document_id,
+            control_plane::processing::retrievable::SetRetrievable { retrievable: false },
+        )
+        .await,
+        Err(control_plane::error::AppError::NotFound)
+    ));
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+async fn deleted_conversation_refuses_attachment_claim() {
+    let (d, p) = Box::pin(setup_with_lifecycle(deletion())).await;
+    let space = d.folder.space_id;
+    let session = conversation(&d, "reader", space).await;
+    let (code, receipt) = attach(&d, "reader", space, session, "note.txt", b"private").await;
+    assert_eq!(code, 201, "{receipt}");
+    let operation = receipt["processing"]["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let work = store::row(&d.e.pool, operation)
+        .await
+        .unwrap()
+        .work(p.installation);
+    assert_eq!(
+        status(
+            &d,
+            "reader",
+            "DELETE",
+            &format!("/spaces/{space}/sessions/{session}")
+        )
+        .await,
+        202
+    );
+    assert!(matches!(
+        p.claim(claim(&work, Stage::Preparation, Uuid::new_v4(), 1))
+            .await,
+        Err(control_plane::error::AppError::NotFound)
+    ));
+    assert!(
+        store::generations(&d.e.pool, operation)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -108,6 +592,7 @@ async fn reader_attaches_privately_to_own_conversation() {
     assert_eq!(listed.as_array().unwrap().len(), 1);
     assert_eq!(listed[0]["document_id"], document.to_string());
     assert_eq!(listed[0]["name"], "notes.txt");
+    assert_eq!(listed[0]["ready"], false);
 
     // Names are unique per conversation, not per space.
     assert_eq!(

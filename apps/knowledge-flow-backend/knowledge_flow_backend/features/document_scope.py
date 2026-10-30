@@ -35,9 +35,13 @@ def declare_document_context_openapi(app: FastAPI) -> None:
     selection = schemas["DocumentSelection"]["properties"]
     selection["folder_ids"]["description"] = "Union of direct folder contents; not recursive. Omitted means no folders in this clause."
     selection["document_ids"]["description"] = "Explicit document UUIDs, unioned with this clause's folder contents. Omitted means no explicit documents. A clause with neither selects nothing."
-    context_schema["description"] = "Server-bound space and document selection, accepted only from an authenticated delegated caller. Never inferred from model arguments."
+    context_schema["description"] = (
+        "Server-bound space, corpus selection and explicit conversation attachments, accepted only from an authenticated delegated caller. Never inferred from model arguments."
+    )
     context_schema["properties"]["space_id"]["description"] = "Admitted turn's space UUID; KF checks the represented person's read permission."
-    context_schema["properties"]["document_scope"]["description"] = "Intersection of selection clauses. Zero clauses add no filter; one empty clause selects nothing."
+    context_schema["properties"]["document_scope"]["description"] = (
+        "Corpus-only intersection of selection clauses. Zero clauses add no filter; one empty clause selects no corpus documents. Attachments are selected separately."
+    )
     schemas["DocumentAccessContext"] = context_schema
     schemas["KnowledgeFlowError"] = {
         "type": "object",
@@ -52,6 +56,12 @@ def declare_document_context_openapi(app: FastAPI) -> None:
         for operation in path.values():
             if not isinstance(operation, dict):
                 continue
+            if "Tabular" in operation.get("tags", []):
+                operation["description"] = operation.get("description", "") + (
+                    " Sources are the union of the selected corpus and explicitly authorized conversation attachments, "
+                    "further narrowed by requested dataset/document IDs. Published Parquet artifacts do not require vector chunks. "
+                    "All sheets/tables keep their existing aliases; no dataset outside this union is mounted."
+                )
             for parameter in operation.get("parameters", []):
                 if parameter.get("in") == "query" and parameter.get("name") in {"person", "run", "agent"}:
                     parameter["description"] = (
@@ -66,7 +76,7 @@ def declare_document_context_openapi(app: FastAPI) -> None:
                             "One JSON object encoded directly as the header value (no base64 or URL encoding). "
                             "Required after delegated authentication: absent -> 403; invalid -> 400. "
                             "An explicit document_scope with no selections adds no filter to authorized published documents; "
-                            "one empty selection admits no documents. Body and query cannot supply this context. "
+                            "one empty selection admits no corpus documents. Attachments require conversation_id and an explicit nonempty attachment_ids list; neither alone grants access. SQL verifies conversation owner, exact space, live state and each published retrievable document. Body and query cannot supply this context. "
                             "No Fred-specific byte cap; server/proxy limits can reject the request before these handlers."
                         ),
                         content={

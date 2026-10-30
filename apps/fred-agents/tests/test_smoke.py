@@ -136,6 +136,7 @@ def _runtime_binding(request: httpx.Request, template_id: str) -> WeaverRuntimeB
     return WeaverRuntimeBinding.model_validate(
         {
             "subject_id": "smoke-user",
+            "attachments": [],
             "run_id": request.url.params["run"],
             "conversation_id": request.url.params["conversation"],
             "space": {

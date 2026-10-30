@@ -247,8 +247,7 @@ def narrow_scope_ids(
 
 # Legacy keys parse like the fields they replace: "false" must stay false.
 _LEGACY_BOOL = TypeAdapter(bool)
-# Back to True once session attachments are served on Weaver.
-_ATTACHMENTS_DEFAULT = False
+_ATTACHMENTS_DEFAULT = True
 
 
 class DocumentAccessConfig(BaseModel):
@@ -536,11 +535,9 @@ class DocumentAccessCapability(
         uploads: Mapping[str, list[UploadedFile]],
         ctx: SaveContext,
     ) -> DocumentAccessConfig:
-        """Validate Weaver selections; session attachments remain unavailable."""
+        """Validate Weaver corpus selections and independent attachment access."""
 
         del uploads, ctx
-        if config.attachments:
-            raise ValueError("Session attachments are not available on this platform.")
         return config
 
     def chat_controls(self, config: DocumentAccessConfig) -> list[ChatControlSpec]:

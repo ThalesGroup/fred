@@ -259,18 +259,14 @@ impl Storage {
         space: Uuid,
     ) -> AppResult<Transaction<'static, Postgres>> {
         token_current(user)?;
-        let mut tx = match destination {
-            Destination::Folder(_) => {
-                spaces::authorized_write(&self.pool, &self.fga, &user.uid, space).await
-            }
-            Destination::Conversation {
-                space_id,
-                session_id,
-            } => {
-                crate::sessions::lock_owner(&self.pool, &self.fga, &user.uid, space_id, session_id)
-                    .await
-            }
-        }
+        let mut tx = super::authorized_mutation(
+            &self.pool,
+            &self.fga,
+            &user.uid,
+            space,
+            destination.columns().1,
+        )
+        .await
         .map_err(super::dependency_error)?;
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), &user.uid).await?;
         token_current(user)?;
@@ -380,6 +376,35 @@ impl Storage {
                 "name_conflict",
                 "A document with this name already exists or is being uploaded",
             ));
+        }
+        if let Some(session) = session_id {
+            // The existing session lock serializes admissions. Stored receipts are represented
+            // by their document; only pending uploads add a separate reservation.
+            let (files, bytes): (i64, i64) = sqlx::query_as(
+                "select count(*), coalesce(sum(size), 0)::bigint from (
+                    select size from document where space_id=$1 and session_id=$2 and deletion_id is null
+                    union all
+                    select size from document_upload where space_id=$1 and folder_id is null and session_id=$2 and status='pending'
+                ) as occupied",
+            )
+            .bind(space.id)
+            .bind(session)
+            .fetch_one(&mut *tx)
+            .await?;
+            if files >= i64::from(self.config.limits.conversation_files) {
+                return Err(AppError::problem(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "conversation_files_exceeded",
+                    "The conversation file limit is exhausted",
+                ));
+            }
+            if file.size > self.config.limits.conversation_bytes.saturating_sub(bytes) {
+                return Err(AppError::problem(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "conversation_bytes_exceeded",
+                    "The conversation source byte limit is exhausted",
+                ));
+            }
         }
         let (owner, limit) = self.quota(space)?;
         let usage: i64 = sqlx::query_scalar("select coalesce((select sum(size) from document where deletion_id is null and quota_owner=$1),0)::bigint + coalesce((select sum(size) from document_upload where quota_owner=$1 and status='pending'),0)::bigint")

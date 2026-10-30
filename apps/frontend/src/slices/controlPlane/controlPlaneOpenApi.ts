@@ -461,6 +461,30 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.updateSessionRequest,
       }),
     }),
+    listAttachments: build.query<ListAttachmentsApiResponse, ListAttachmentsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/attachments`,
+      }),
+    }),
+    uploadAttachment: build.mutation<UploadAttachmentApiResponse, UploadAttachmentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/attachments`,
+        method: "POST",
+        body: queryArg.fileUpload,
+        headers: {
+          "Idempotency-Key": queryArg["Idempotency-Key"],
+        },
+        params: {
+          retry_of: queryArg.retryOf,
+        },
+      }),
+    }),
+    deleteAttachment: build.mutation<DeleteAttachmentApiResponse, DeleteAttachmentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/attachments/${queryArg.documentId}`,
+        method: "DELETE",
+      }),
+    }),
     getMyPreferences: build.query<GetMyPreferencesApiResponse, GetMyPreferencesApiArg>({
       query: () => ({ url: `/control-plane/v1/users/me/preferences` }),
     }),
@@ -879,6 +903,30 @@ export type UpdateSessionApiArg = {
   sessionId: string;
   updateSessionRequest: UpdateSessionRequest;
 };
+export type ListAttachmentsApiResponse = /** status 200 undefined */ Attachment[];
+export type ListAttachmentsApiArg = {
+  spaceId: string;
+  sessionId: string;
+};
+export type UploadAttachmentApiResponse = /** status 200 Replay of a stored request key */
+  | UploadReceipt
+  | /** status 201 Stored */ UploadReceipt;
+export type UploadAttachmentApiArg = {
+  spaceId: string;
+  /** The caller's conversation */
+  sessionId: string;
+  /** Caller-chosen request UUID; replaying it is safe */
+  "Idempotency-Key": string;
+  /** Request key of a failed upload of the same file to the same conversation */
+  retryOf?: string;
+  fileUpload: FileUpload;
+};
+export type DeleteAttachmentApiResponse = /** status 200 undefined */ Receipt | /** status 202 undefined */ Receipt;
+export type DeleteAttachmentApiArg = {
+  spaceId: string;
+  sessionId: string;
+  documentId: string;
+};
 export type GetMyPreferencesApiResponse = /** status 200 undefined */ UserPreferences;
 export type GetMyPreferencesApiArg = void;
 export type PatchMyPreferencesApiResponse = /** status 200 undefined */ UserPreferences;
@@ -1148,8 +1196,8 @@ export type Descriptor = {
   committed?: Manifest | null;
   expires_at: string;
   file: any;
-  folder_id: string;
-  folder_path: string;
+  folder_id: string | null;
+  folder_path: string | null;
   generation: string;
   max_artifacts: number;
   max_chunks: number;
@@ -1160,6 +1208,7 @@ export type Descriptor = {
   output_prefix: string;
   predecessor?: Predecessor | null;
   profile_settings: any;
+  session_id: string | null;
   size: number;
   space_id: string;
   stage: Stage;
@@ -1193,7 +1242,8 @@ export type UploadReceipt = {
   document_id?: string | null;
   /** Failure code when `failed`. */
   error_code?: string | null;
-  folder_id: string;
+  /** Destination folder; null for a conversation attachment. */
+  folder_id: string | null;
   /** MIME type reported by the client; metadata, not verified. */
   mime: string;
   /** NFC-normalized filename. */
@@ -1202,6 +1252,8 @@ export type UploadReceipt = {
   processing_profile?: Profile | null;
   /** The `Idempotency-Key` that identifies this receipt. */
   request_key: string;
+  /** Destination conversation; null for a drive upload. */
+  session_id: string | null;
   /** Hex SHA-256 of the received bytes. */
   sha256: string;
   /** Bytes received. */
@@ -1818,6 +1870,11 @@ export type RuntimeAgent = {
   template_id: string;
   template_key: string;
 };
+export type RuntimeAttachment = {
+  document_id: string;
+  mime: string;
+  name: string;
+};
 export type ModelConnection = {
   api_root: string;
   /** Platform-approved reference to pod-local inference provisioning, never a secret value. */
@@ -1856,6 +1913,7 @@ export type RuntimeSpace = {
 };
 export type RuntimeBinding = {
   agent: RuntimeAgent;
+  attachments: RuntimeAttachment[];
   conversation_id: string | null;
   models: RuntimeModels;
   run_id: string | null;
@@ -1926,6 +1984,18 @@ export type UpdateSessionRequest = {
   title?: string | null;
   /** Last observed activity. Monotonic, capped at server time; omission keeps activity. */
   updated_at?: string | null;
+};
+export type Attachment = {
+  created_at: string;
+  document_id: string;
+  /** MIME type reported by the client; metadata, not verified. */
+  mime: string;
+  /** NFC-normalized filename, unique within the conversation. */
+  name: string;
+  processing: Summary | null;
+  /** Documentary eligibility at read time, independent of capability enablement or a running turn. */
+  ready: boolean;
+  size: number;
 };
 export type AgentSort = "name" | "created_at:desc" | "updated_at:desc";
 export type Language = "en" | "fr";
@@ -2063,6 +2133,10 @@ export const {
   useLazyGetSessionQuery,
   useDeleteSessionMutation,
   useUpdateSessionMutation,
+  useListAttachmentsQuery,
+  useLazyListAttachmentsQuery,
+  useUploadAttachmentMutation,
+  useDeleteAttachmentMutation,
   useGetMyPreferencesQuery,
   useLazyGetMyPreferencesQuery,
   usePatchMyPreferencesMutation,

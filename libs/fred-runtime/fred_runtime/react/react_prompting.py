@@ -181,112 +181,61 @@ def build_platform_instructions_prefix() -> str:
     return text.strip()
 
 
-# Matches only a real filename extension — the extension must be followed by
-# the attachment line's own terminator (" [uid]", ": description", or
-# end-of-string), not just any non-word character. A plain `\b` would also
-# match e.g. "export.csv.bak" (word boundary between "v" and "."), annotating
-# a line the tabular-build extension gate in `fast_ingest` would never match.
-_FILENAME_TERMINATOR = r"(?=[\s:\[]|$)"
-_CSV_ATTACHMENT_RE = re.compile(rf"\.csv{_FILENAME_TERMINATOR}", re.IGNORECASE)
-_SPREADSHEET_ATTACHMENT_NOTE = (
-    " (use tabular/SQL tools first; Excel schema results include an output.md "
-    "roadmap of sheets and tables. Older attachments may have only a partial "
-    "searchable text preview)"
-)
-_SPREADSHEET_ATTACHMENT_NOTE_NO_TOOLS = (
-    " (no tabular/SQL tool is enabled; a newly uploaded spreadsheet cannot "
-    "be queried. Older attachments may have only a partial searchable text preview)"
-)
-_EXCEL_ATTACHMENT_RE = re.compile(rf"\.xls[xm]?{_FILENAME_TERMINATOR}", re.IGNORECASE)
-
-
 def build_attachment_context_suffix(
     binding: BoundRuntimeContext, *, tabular_tools_available: bool
 ) -> str:
-    """
-    Render current conversation attachments as a per-turn system-prompt suffix.
+    """Describe only usable server-bound files, with guidance for bound tools."""
+    from fred_runtime.model_routing.turn import current_turn
+    from fred_runtime.runtime_support.run_scope import RunScope
 
-    The frontend rebuilds ``attachments_markdown`` from current attachment state.
-    Deriving this suffix on every invocation means deleting the final attachment
-    removes the notice instead of leaving a checkpointed system message behind.
-
-    ``tabular_tools_available`` (see `react_tool_binding.tabular_tools_bound`)
-    must reflect whether the *calling agent instance* actually has the
-    tabular MCP server bound — the general-purpose agent template ships with
-    no default capabilities, so a spreadsheet's SQL dataset can exist
-    while this agent has no tool to query it. Telling the model to use a tool
-    it doesn't have would just produce a tool-not-found error instead of a
-    straight answer to the user.
-    """
-
-    attachments_markdown = binding.runtime_context.attachments_markdown
-    if not attachments_markdown or not attachments_markdown.strip():
+    scope = RunScope.current()
+    if scope is None or scope.turn_authority is None:
         return ""
-    safe_attachment_lines = [
-        line
-        for line in attachments_markdown.splitlines()
-        if not line.lstrip().startswith("data:")
+    authority = current_turn()
+    allowed = frozenset(
+        authority.document_context(binding.runtime_context).attachment_ids
+    )
+    files = [
+        item for item in authority.binding.attachments if item.document_id in allowed
     ]
-
-    # Put spreadsheet guidance beside each uid so the model chooses the
-    # tabular path before trying a document search on a new attachment.
-    def _annotate(line: str) -> str:
-        if not line.lstrip().startswith("-"):
-            return line
-        if _CSV_ATTACHMENT_RE.search(line) or _EXCEL_ATTACHMENT_RE.search(line):
-            note = (
-                _SPREADSHEET_ATTACHMENT_NOTE
-                if tabular_tools_available
-                else _SPREADSHEET_ATTACHMENT_NOTE_NO_TOOLS
-            )
-            return f"{line}{note}"
-        return line
-
-    safe_attachment_lines = [_annotate(line) for line in safe_attachment_lines]
-    safe_attachments_markdown = escape_reserved_prompt_tags(
-        "\n".join(safe_attachment_lines).strip()
-    )
-    if not safe_attachments_markdown:
+    if not files:
         return ""
-    spreadsheet_capability_sentence = (
-        "For CSV and Excel data, call list_tabular_documents to discover enabled "
-        "corpus documents and current-conversation attachments together, then "
-        "describe_tabular_documents with the selected uids. An Excel schema includes "
-        "output.md, the roadmap of "
-        "sheets, table names and aliases; use those aliases in tabular/SQL "
-        "queries for exact counts, filters and values. If a tabular dataset "
-        "is unavailable, an older attachment may still have a text preview: "
-        "search this conversation and use only actual hits, noting that a "
-        "preview can omit rows or columns."
-        if tabular_tools_available
-        else "No tabular/SQL tool is enabled for this assistant, so newly "
-        "uploaded CSV and Excel attachments cannot be queried. Older "
-        "attachments may have a partial text preview available through "
-        "conversation search; do not claim it contains the complete file."
-    )
+    lines = []
+    for item in files:
+        name = escape_reserved_prompt_tags(" ".join(item.name.splitlines()))
+        # File names are data, not Markdown structure or reserved prompt tags.
+        name = re.sub(r"([\\`*_{\[\]}])", r"\\\1", name)
+        tabular = item.mime in {
+            "text/csv",
+            "application/csv",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.ms-excel.sheet.macroenabled.12",
+        } or item.name.lower().endswith((".csv", ".xls", ".xlsx", ".xlsm"))
+        guidance = (
+            "use tabular discovery, description and SQL queries"
+            if tabular and tabular_tools_available
+            else "tabular processing unavailable: no tabular tool is bound"
+            if tabular
+            else "use the available document reading and search tools"
+        )
+        lines.append(f"- {name} [{item.document_id}]: {guidance}")
     return (
-        "\n\nThe user has attached one or more files to this conversation. "
-        "Treat them as scoped to the current conversation and the current user's "
-        "authorized access only. Every attached file except newly ingested "
-        "spreadsheets - documents AND images - has been ingested and indexed "
-        "for retrieval: its text (for an image, an extracted vision description) "
-        "is searchable through your knowledge/document search tool, scoped "
-        "to this conversation. For a request to read, show, or display a "
-        "specific attached text document's content, use read_document with "
-        "that file's uid. For factual questions, comparisons, or lookups "
-        "across text attachments, first call the search tool to retrieve "
-        "relevant content. The raw image bytes are NOT included in this prompt, "
-        "so do not claim you cannot see or analyze an attachment before "
-        "searching for it. New CSV and Excel attachments are tabular datasets, "
-        "not vector-indexed text. Document reading tools cannot provide a "
-        "complete verbatim or exhaustive read of those datasets. "
-        f"{spreadsheet_capability_sentence} "
-        "When a file line below shows a bracketed identifier, that is the "
-        "file's internal document uid: pass exactly that value - never the "
-        "file name - to document tools that take a document_uid. These "
-        "identifiers are internal working ids: NEVER repeat them in your "
-        "answers - always refer to files by their display name.\n\n"
-        f"{safe_attachments_markdown}"
+        "\n\n## Attached files\n"
+        "These files are available within this turn's conversation scope. "
+        "For text documents, use the available document tools. "
+        "CSV and Excel are tabular datasets; do not assume they are vector-indexed "
+        "or that document search can read all rows. "
+        + (
+            "Use list_tabular_documents, then describe_tabular_documents and the "
+            "returned table aliases for SQL queries. "
+            if tabular_tools_available
+            else "No tabular/SQL tool is enabled for this assistant; CSV and Excel "
+            "data cannot be queried in this turn. "
+        )
+        + "Pass the bracketed document uid to tools, never the filename. "
+        "Keep these internal identifiers out of answers; refer to files by name.\n\n"
+        + escape_reserved_prompt_tags("\n".join(lines))
     )
 
 

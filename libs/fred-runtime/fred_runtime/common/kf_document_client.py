@@ -32,10 +32,8 @@ import logging
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence
-from uuid import UUID
 
 from fred_core.common import OwnerFilter
-from fred_core.documents.selection import DocumentScope
 from fred_core.documents.transport import DOCUMENT_CONTEXT_HEADER, DocumentAccessContext
 from pydantic import BaseModel
 
@@ -172,8 +170,7 @@ class KfDocumentClient(KfBaseClient):
         self,
         *,
         document_uid: str,
-        space_id: str,
-        document_scope: DocumentScope = DocumentScope(),
+        document_context: DocumentAccessContext,
     ) -> str:
         """Fetch a document's FULL parsed markdown (``output.md``) by uid.
 
@@ -189,11 +186,7 @@ class KfDocumentClient(KfBaseClient):
             method="GET",
             path=f"/documents/{document_uid}/markdown",
             phase_name="kf_document_markdown_fetch",
-            headers={
-                DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(
-                    space_id=UUID(space_id), document_scope=document_scope
-                ).model_dump_json()
-            },
+            headers={DOCUMENT_CONTEXT_HEADER: document_context.model_dump_json()},
             # Only a single document segment may opt in: model-supplied path
             # syntax must not extend recovery to another endpoint.
             recover_permission_refusal=(
@@ -288,8 +281,7 @@ class KfDocumentClient(KfBaseClient):
         self,
         *,
         document_uid: str,
-        space_id: str,
-        document_scope: DocumentScope = DocumentScope(),
+        document_context: DocumentAccessContext,
         instruction: Optional[str] = None,
         max_chars: int = 2000,
     ) -> SummarizeDocumentResult:
@@ -314,11 +306,7 @@ class KfDocumentClient(KfBaseClient):
             method="POST",
             path=f"/documents/{document_uid}/summarize",
             phase_name="kf_document_summarize",
-            headers={
-                DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(
-                    space_id=UUID(space_id), document_scope=document_scope
-                ).model_dump_json()
-            },
+            headers={DOCUMENT_CONTEXT_HEADER: document_context.model_dump_json()},
             json=payload,
             read_timeout=self._summarize_read_timeout,
         )
@@ -329,8 +317,7 @@ class KfDocumentClient(KfBaseClient):
         self,
         *,
         document_uid: str,
-        space_id: str,
-        document_scope: DocumentScope = DocumentScope(),
+        document_context: DocumentAccessContext,
         instruction: str,
     ) -> ExtractDocumentResult:
         """
@@ -345,11 +332,7 @@ class KfDocumentClient(KfBaseClient):
             method="POST",
             path=f"/documents/{document_uid}/extract",
             phase_name="kf_document_extract",
-            headers={
-                DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(
-                    space_id=UUID(space_id), document_scope=document_scope
-                ).model_dump_json()
-            },
+            headers={DOCUMENT_CONTEXT_HEADER: document_context.model_dump_json()},
             json={
                 "instruction": instruction,
             },

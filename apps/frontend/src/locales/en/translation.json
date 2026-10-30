@@ -460,7 +460,8 @@
       "image": "Image",
       "processing": "Processing",
       "removeAria": "Remove {{name}}",
-      "uploading": "Uploading"
+      "uploading": "Uploading",
+      "ready": "Ready"
     },
     "fullReasoning": {
       "title": "Full reasoning",
@@ -490,7 +491,27 @@
       "processingFast": "Fast processing",
       "processingPrepare": "Preparing processing",
       "uploadWarningConfirm": "I understand",
-      "uploadWarningTitle": "Before attaching files"
+      "uploadWarningTitle": "Before attaching files",
+      "waiting": "Sending waits for file upload and processing. A file ready after a turn starts is available from the next turn.",
+      "listFailed": "Unable to verify attachments. Retry before sending your message.",
+      "retryUpload": "Retry upload (select the same file)",
+      "processingUnavailable": "This file cannot be used by the agent. Delete it and upload it again to retry processing.",
+      "errors": {
+        "upload_in_progress": "Upload is still in progress. Its receipt will be checked.",
+        "retry_superseded": "Another attempt replaced this upload. Its receipt will be checked.",
+        "name_conflict": "This name already exists in the conversation. Rename the local file or delete the existing document.",
+        "quota_exceeded": "The storage quota has been reached.",
+        "conversation_files_exceeded": "The conversation file limit has been reached.",
+        "conversation_bytes_exceeded": "The conversation total file size limit has been reached.",
+        "file_too_large": "This file exceeds the size limit.",
+        "transfer_capacity": "The upload service is busy. Wait for the specified delay before retrying.",
+        "processing_active": "Processing is still active: deletion was refused. Wait for processing to finish.",
+        "not_ready": "This file cannot be used. Delete it and upload it again.",
+        "storage_unavailable": "The service is unavailable. The upload outcome still needs verification.",
+        "interrupted_before_send": "No receipt found. Select the same file to retry the upload.",
+        "wrong_file": "Select the original file with the same name and size."
+      },
+      "readyHint": "Ready files are considered at the start of the next turn, according to the agent’s enabled capabilities."
     },
     "composerActions": {
       "dialogAria": "Chat actions",

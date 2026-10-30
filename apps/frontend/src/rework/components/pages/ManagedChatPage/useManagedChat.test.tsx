@@ -182,13 +182,14 @@ const chatAttachmentsValue = {
   attachments: [] as unknown[],
   persistedAttachments: [] as unknown[],
   isHydratingAttachments: false,
-  attachmentsMarkdown: null as string | null,
+  hasReadyAttachments: false,
   hasUploadingAttachments: false,
   addFiles: vi.fn(),
   removeAttachment: vi.fn(),
   deletePersistedAttachment: vi.fn(),
-  clearReadyAttachments: vi.fn(),
-  clearLocalAttachments: vi.fn(),
+  retryUpload: vi.fn(),
+  refreshAttachments: vi.fn(),
+  listError: undefined,
 };
 vi.mock("./useChatAttachments", () => ({
   useChatAttachments: () => chatAttachmentsValue,
@@ -335,7 +336,6 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.input).toBe("");
     expect(composerValue.discardDraft).toHaveBeenCalled();
     expect(composerResetMock).toHaveBeenCalledWith(null, []);
-    expect(chatAttachmentsValue.clearLocalAttachments).toHaveBeenCalled();
     expect(chatAttachmentsValue.deletePersistedAttachment).not.toHaveBeenCalled();
     expect(latest.agentConfigurationChanged).toBe(false);
   });
@@ -349,6 +349,7 @@ describe("useManagedChat — session write reliability", () => {
     composerValue.reasoning = false;
     composerValue.chatProfileId = null;
     chatSseChatControls = [];
+    chatAttachmentsValue.hasUploadingAttachments = false;
     hostModels = undefined;
     preparedModelChoice = null;
     clearSessionHistoryCache();
@@ -388,8 +389,7 @@ describe("useManagedChat — session write reliability", () => {
       composerBindSessionMock,
       showErrorMock,
       notifyApiErrorMock,
-      chatAttachmentsValue.clearReadyAttachments,
-      chatAttachmentsValue.clearLocalAttachments,
+      chatAttachmentsValue.retryUpload,
       chatAttachmentsValue.deletePersistedAttachment,
       composerValue.discardDraft,
       composerValue.acceptPreparation,
@@ -412,6 +412,100 @@ describe("useManagedChat — session write reliability", () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  it("waits for one confirmed session before two rapid attachment additions", async () => {
+    chatSseChatControls = [{ widget: "attach_files", key: "attachments" }];
+    let confirm!: (value: unknown) => void;
+    registerSessionImpl = () =>
+      new Promise((resolve) => {
+        confirm = resolve;
+      });
+    mount();
+    let first!: Promise<void>;
+    let second!: Promise<void>;
+    const a = new File(["a"], "a.csv");
+    const b = new File(["b"], "b.xlsx");
+    act(() => {
+      first = latest.handleAddAttachments([a], "picker");
+      second = latest.handleAddAttachments([b], "drop");
+    });
+    await tick();
+    expect(registerSessionCalls).toHaveLength(1);
+    expect(chatAttachmentsValue.addFiles).not.toHaveBeenCalled();
+    expect(latest.attachmentsUploading).toBe(true);
+    expect(composerBindSessionMock).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      confirm({});
+      await Promise.all([first, second]);
+    });
+    expect(chatAttachmentsValue.addFiles).toHaveBeenCalledTimes(2);
+    expect(chatAttachmentsValue.addFiles.mock.calls[0][2]).toBe(chatAttachmentsValue.addFiles.mock.calls[1][2]);
+    expect(registerSessionCalls[0]).toMatchObject({ spaceId: "space-1" });
+  });
+
+  it("does not upload after failed session creation and retains composer choices", async () => {
+    chatSseChatControls = [{ widget: "attach_files", key: "attachments" }];
+    registerSessionImpl = async () => {
+      throw new Error("create failed");
+    };
+    mount();
+    await act(async () => {
+      await latest.handleAddAttachments([new File(["a"], "a.csv")], "picker");
+    });
+    expect(chatAttachmentsValue.addFiles).not.toHaveBeenCalled();
+    expect(notifyApiErrorMock).toHaveBeenCalled();
+    expect(composerBindSessionMock).toHaveBeenCalledTimes(1);
+    expect(latest.attachmentsUploading).toBe(false);
+  });
+
+  it("does not upload after navigating away while session creation is pending", async () => {
+    chatSseChatControls = [{ widget: "attach_files", key: "attachments" }];
+    let confirm!: (value: unknown) => void;
+    registerSessionImpl = () =>
+      new Promise((resolve) => {
+        confirm = resolve;
+      });
+    mount();
+    let adding!: Promise<void>;
+    act(() => {
+      adding = latest.handleAddAttachments([new File(["a"], "a.csv")], "picker");
+    });
+    await tick();
+    act(() => {
+      capturedSetSearchParams?.(new URLSearchParams("session=other"));
+    });
+    await act(async () => {
+      confirm({});
+      await adding;
+    });
+    expect(chatAttachmentsValue.addFiles).not.toHaveBeenCalled();
+  });
+
+  it("does not create or upload without the attach_files control (attachments=false)", async () => {
+    chatSseChatControls = [];
+    mount();
+    await act(async () => {
+      await latest.handleAddAttachments([new File(["a"], "a.csv")], "paste");
+    });
+    expect(registerSessionCalls).toEqual([]);
+    expect(chatAttachmentsValue.addFiles).not.toHaveBeenCalled();
+  });
+
+  it("blocks message send during processing and permits it after readiness", async () => {
+    chatAttachmentsValue.hasUploadingAttachments = true;
+    mount();
+    act(() => latest.setInput("Read the table"));
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+    chatAttachmentsValue.hasUploadingAttachments = false;
+    rerender();
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).toHaveBeenCalledTimes(1);
   });
 
   // #2221: ConversationThread is React.memo'd to stop it re-rendering (and
@@ -742,6 +836,10 @@ describe("useManagedChat — session write reliability", () => {
       });
       expect(call[2]).not.toHaveProperty("selected_document_libraries_ids");
       expect(call[2]).not.toHaveProperty("selected_document_uids");
+      expect(call[2]).not.toHaveProperty("attachments_markdown");
+      expect(call[2]).not.toHaveProperty("attachment_ids");
+      expect(call[3]).not.toHaveProperty("attachments_markdown");
+      expect(call[3]).not.toHaveProperty("attachment_ids");
     }
   });
 
@@ -1038,7 +1136,7 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock).toHaveBeenCalledTimes(1);
   });
 
-  it("échec de préparation: onTurnStarted clears input and ready attachments only once actually invoked", async () => {
+  it("échec de préparation: onTurnStarted clears input only when the turn actually starts", async () => {
     mount();
     act(() => {
       latest.setInput("typed text");
@@ -1049,7 +1147,6 @@ describe("useManagedChat — session write reliability", () => {
     // Simulates useChatSse aborting BEFORE the turn starts (flush or
     // prepare-execution failure) — onTurnStarted is simply never called;
     // nothing here should have touched input or attachments.
-    expect(chatAttachmentsValue.clearReadyAttachments).not.toHaveBeenCalled();
     expect(latest.input).toBe("typed text");
 
     // Only once the turn genuinely starts does the composer clear.
@@ -1059,7 +1156,7 @@ describe("useManagedChat — session write reliability", () => {
     rerender();
 
     expect(latest.input).toBe("");
-    expect(chatAttachmentsValue.clearReadyAttachments).toHaveBeenCalledTimes(1);
+    expect(chatAttachmentsValue.deletePersistedAttachment).not.toHaveBeenCalled();
   });
 
   it("does not let a failed session-creation from a previous session contaminate a newly navigated-to session", async () => {
@@ -1191,7 +1288,7 @@ describe("useManagedChat — session write reliability", () => {
 
   it("queues text when files already belong to the conversation", async () => {
     chatSseWaitResponse = true;
-    chatAttachmentsValue.attachmentsMarkdown = "## Attached files for this conversation\n- report.txt";
+    chatAttachmentsValue.hasReadyAttachments = true;
     try {
       mount();
       bindSession("session-1");
@@ -1200,7 +1297,7 @@ describe("useManagedChat — session write reliability", () => {
       expect(latest.pendingMessages.map((message) => message.text)).toEqual(["focus on Marseille"]);
       expect(sendMock).not.toHaveBeenCalled();
     } finally {
-      chatAttachmentsValue.attachmentsMarkdown = null;
+      chatAttachmentsValue.hasReadyAttachments = false;
     }
   });
 
@@ -1251,6 +1348,38 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock).toHaveBeenCalledTimes(1);
     expect(sendMock.mock.calls[0][0]).toBe("next");
     expect(latest.pendingMessages).toEqual([]);
+  });
+  it.each(["ready", "failed"])("keeps queued text waiting until a new attachment is %s", async (status) => {
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("first"));
+    await act(async () => latest.handleSend());
+    const firstTurn = structuredClone(sendMock.mock.calls[0]);
+    act(() => capturedOnTurnStarted?.());
+    chatSseWaitResponse = true;
+    rerender();
+    act(() => latest.setInput("next"));
+    await act(async () => latest.handleSend());
+    chatAttachmentsValue.hasUploadingAttachments = true;
+    rerender();
+    expect(sendMock.mock.calls[0]).toEqual(firstTurn);
+    sendMock.mockImplementationOnce(async () => {
+      capturedOnTurnStarted?.();
+      return true;
+    });
+    chatSseWaitResponse = false;
+    await act(async () => rerender());
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(latest.pendingMessages).toEqual([expect.objectContaining({ text: "next", status: "waiting" })]);
+    chatAttachmentsValue.hasUploadingAttachments = false;
+    chatAttachmentsValue.hasReadyAttachments = status === "ready";
+    await act(async () => rerender());
+    await act(async () => rerender());
+    expect(sendMock).toHaveBeenCalledTimes(2);
+    expect(sendMock.mock.calls[1][0]).toBe("next");
+    expect(sendMock.mock.calls[0]).toEqual(firstTurn);
+    expect(latest.pendingMessages).toEqual([]);
+    chatAttachmentsValue.hasReadyAttachments = false;
   });
 
   it("holds queued text while a human-input prompt is pending", async () => {

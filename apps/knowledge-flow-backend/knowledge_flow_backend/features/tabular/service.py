@@ -30,7 +30,7 @@ import duckdb
 import pandas as pd
 from fred_core.documents.access import PublishedArtifact, SpaceNotFoundError, SpacePendingDeletionError, published_tabular_documents, resolve_scope
 from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
-from fred_core.documents.selection import DocumentScope
+from fred_core.documents.transport import DocumentAccessContext
 from fred_core.security.delegation import AssertedUser
 
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -249,13 +249,12 @@ class TabularService:
       exposing schema or data.
     """
 
-    def __init__(self, *, space_id: UUID, document_scope: DocumentScope):
-        context = ApplicationContext.get_instance()
-        self.engine = context.get_pg_async_engine()
-        self.artifact_reader = context.get_published_artifact_reader()
-        self.space_id = space_id
-        self.document_scope = document_scope
-        self.tabular_config = context.get_config().storage.tabular_store
+    def __init__(self, *, context: DocumentAccessContext):
+        self.context = context
+        application = ApplicationContext.get_instance()
+        self.engine = application.get_pg_async_engine()
+        self.artifact_reader = application.get_published_artifact_reader()
+        self.tabular_config = application.get_config().storage.tabular_store
 
     async def list_datasets(
         self,
@@ -808,14 +807,14 @@ class TabularService:
         *,
         document_uids: list[str] | None = None,
     ) -> list[ResolvedDataset]:
-        await require_space_read(user, self.space_id)
+        await require_space_read(user, self.context.space_id)
         try:
             ids = [UUID(uid) for uid in document_uids] if document_uids is not None else None
         except ValueError:
             raise PermissionError(forbidden_datasets_message(document_uids or [])) from None
         try:
             async with self.engine.connect() as conn:
-                scope = await resolve_scope(conn, self.space_id, self.document_scope)
+                scope = await resolve_scope(conn, self.context, user_id=user.uid)
             cursor = UUID(int=0)
             resolved = []
             while True:
@@ -877,6 +876,7 @@ class TabularService:
                     artifact=table.model_copy(update={"object_key": stored.prefix + table.object_key}),
                     query_alias=table.query_alias if isinstance(table, TabularTableArtifactV1) else build_default_query_alias(uid, document.name),
                     catalog=manifest.get("output.md"),
+                    source_kind="conversation_attachment" if document.session_id is not None else "corpus",
                 )
             )
         return result

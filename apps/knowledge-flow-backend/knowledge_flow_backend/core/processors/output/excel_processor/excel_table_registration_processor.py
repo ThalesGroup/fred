@@ -53,44 +53,31 @@ class ExcelTableRegistrationProcessor(BaseOutputProcessor):
         output_dir = Path(file_path).parent  # file_path = .../output/output.md
         entries = self._read_sidecar(output_dir / "tables.json", document_uid=metadata.document_uid)
 
-        registered_entries = [entry for entry in entries if entry.get("object_key")]
-        unregistered = len(entries) - len(registered_entries)
-        if unregistered:
-            logger.warning(
-                "[PROCESSOR][EXCEL] %d table(s) of document %s have no object_key and will not be SQL-exposed",
-                unregistered,
-                metadata.document_uid,
-            )
+        if not entries:
+            raise TabularProcessingError(f"No queryable tables for document {metadata.document_uid}")
 
         try:
-            tables = [TabularTableArtifactV1.model_validate(entry) for entry in registered_entries]
+            tables = [TabularTableArtifactV1.model_validate(entry) for entry in entries]
+            if any(not table.object_key or table.format != "parquet" for table in tables):
+                raise ValueError("Every extracted table needs a Parquet artifact")
         except Exception as exc:  # noqa: BLE001
             raise TabularProcessingError(f"Invalid tables.json entry for document {metadata.document_uid}") from exc
 
-        if tables:
-            write_tabular_multi_artifact(metadata, TabularMultiArtifactV1(tables=tables))
-            metadata.file.row_count = sum(table.row_count for table in tables)
-            logger.info(
-                "[PROCESSOR][EXCEL] Registered %d table(s) for document %s: %s",
-                len(tables),
-                metadata.document_uid,
-                [table.query_alias for table in tables],
-            )
-        else:
-            logger.info("[PROCESSOR][EXCEL] No registered table for document %s; marking SQL_INDEXED with no dataset", metadata.document_uid)
+        write_tabular_multi_artifact(metadata, TabularMultiArtifactV1(tables=tables))
+        metadata.file.row_count = sum(table.row_count for table in tables)
+        logger.info(
+            "Registered %d table(s) for document %s: %s",
+            len(tables),
+            metadata.document_uid,
+            [table.query_alias for table in tables],
+        )
 
         metadata.mark_stage_done(ProcessingStage.SQL_INDEXED)
         return metadata
 
     @staticmethod
     def _read_sidecar(sidecar_path: Path, *, document_uid: str) -> list[dict]:
-        """Return the catalog entries from `tables.json`, or an empty list when
-        the sidecar is missing (e.g. a workbook with no extractable table that
-        predates the sidecar). A malformed sidecar raises: better a visible
-        error stage than silently losing every table."""
-        if not sidecar_path.is_file():
-            logger.warning("[PROCESSOR][EXCEL] No tables.json sidecar for document %s at %s", document_uid, sidecar_path)
-            return []
+        """Require the complete extraction catalog before reporting SQL success."""
         try:
             entries = json.loads(sidecar_path.read_text(encoding="utf-8"))
         except Exception as exc:  # noqa: BLE001

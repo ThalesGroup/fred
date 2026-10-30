@@ -8,9 +8,10 @@ from uuid import UUID, uuid4, uuid5
 
 import pytest
 from langchain_core.documents import Document
+from pydantic import ValidationError
 
 from knowledge_flow_backend.features.manager_processing.contracts import Descriptor, Work
-from knowledge_flow_backend.features.manager_processing.persistence import ScopedVectors
+from knowledge_flow_backend.features.manager_processing.persistence import ScopedVectors, _placement
 from knowledge_flow_backend.features.scheduler.scheduler_structures import PipelineDefinition
 
 
@@ -22,6 +23,7 @@ def descriptor():
         space_id=uuid4(),
         folder_id=uuid4(),
         folder_path="/folder",
+        session_id=None,
         name="test.txt",
         mime="text/plain",
         size=10,
@@ -112,11 +114,14 @@ def test_adaptive_retry_ids_are_fenced_before_writes(descriptor, tmp_path, journ
     assert vector_write_observer.get() is None
 
 
-def test_descriptor_placement_overrides_extractor_values_on_every_chunk(descriptor, tmp_path, journal):
+@pytest.mark.parametrize("attachment", [False, True])
+def test_descriptor_placement_overrides_extractor_values_on_every_chunk(descriptor, tmp_path, journal, attachment):
     from knowledge_flow_backend.core.stores.vector.base_vector_store import vector_write_observer
 
-    forged = {"organization_id": "forged", "space_id": "forged", "folder_path": "/forged/"}
-    placement = {"organization_id": str(descriptor.organization_id), "space_id": str(descriptor.space_id), "folder_path": descriptor.folder_path}
+    if attachment:
+        descriptor = Descriptor.model_validate({**descriptor.model_dump(), "folder_id": None, "folder_path": None, "session_id": uuid4()})
+    forged = {"organization_id": "forged", "space_id": "forged", "folder_path": "/forged/", "session_id": "forged"}
+    placement = _placement(descriptor)
     store = SimpleNamespace()
 
     def add(documents, ids):
@@ -134,6 +139,40 @@ def test_descriptor_placement_overrides_extractor_values_on_every_chunk(descript
     assert [{key: doc.metadata[key] for key in placement} for doc in store.saved.values()] == [placement, placement]
     records = [json.loads(line) for line in (tmp_path / "chunks.jsonl").read_text().splitlines()]
     assert [{key: record["metadata"][key] for key in placement} for record in records] == [placement, placement]
+    if attachment:
+        assert all("folder_path" not in doc.metadata for doc in store.saved.values())
+        assert all("folder_path" not in record["metadata"] for record in records)
+
+
+def test_placement_distinguishes_drive_and_conversation(descriptor):
+    assert _placement(descriptor) == {
+        "organization_id": str(descriptor.organization_id),
+        "space_id": str(descriptor.space_id),
+        "folder_path": descriptor.folder_path,
+        "session_id": "",
+    }
+    session = uuid4()
+    attachment = Descriptor.model_validate({**descriptor.model_dump(), "folder_id": None, "folder_path": None, "session_id": session})
+    assert _placement(attachment) == {
+        "organization_id": str(descriptor.organization_id),
+        "space_id": str(descriptor.space_id),
+        "session_id": str(session),
+    }
+
+
+@pytest.mark.parametrize(
+    "placement",
+    [
+        {"session_id": uuid4()},
+        {"folder_id": None, "folder_path": None},
+        {"folder_path": None},
+        {"folder_id": None, "session_id": uuid4()},
+    ],
+    ids=["both-containers", "no-container", "drive-without-path", "attachment-with-path"],
+)
+def test_descriptor_refuses_ambiguous_placement(descriptor, placement):
+    with pytest.raises(ValidationError):
+        Descriptor.model_validate({**descriptor.model_dump(), **placement})
 
 
 def test_stored_chunk_with_another_space_fails_indexing(descriptor, tmp_path, journal):
@@ -153,7 +192,7 @@ def test_stored_chunk_with_another_space_fails_indexing(descriptor, tmp_path, jo
 def test_placement_fields_are_opensearch_keywords():
     from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import VECTOR_METADATA_PROPERTIES
 
-    for field in ("organization_id", "space_id", "folder_path"):
+    for field in ("organization_id", "space_id", "folder_path", "session_id"):
         assert VECTOR_METADATA_PROPERTIES[field] == {"type": "keyword"}
 
 
@@ -834,9 +873,142 @@ def test_indexing_publishes_tabular_inclusion_without_vectors(monkeypatch, descr
 
     monkeypatch.setattr(module, "ManagerClient", Client)
     instance = module.ManagedIngestionService.__new__(module.ManagedIngestionService)
+    descriptor.name = "table.xlsx" if kind == "multi" else "table.csv"
     instance.descriptor, instance.settings, instance.vectors = descriptor, object(), None
     instance.artifacts = SimpleNamespace(publish=publish)
+    if not expected:
+        with pytest.raises(module.ManagerError, match="indexing_failed"):
+            instance._commit(tmp_path, metadata)
+        assert not published and not commits
+        return
     instance._commit(tmp_path, metadata)
     assert published[0]["source"]["retrievable"] is expected
     assert commits[0].manifest.vectors == 0
     assert commits[0].manifest.rows == 2
+
+
+@pytest.mark.parametrize("suffix", [".csv", ".xlsx"])
+def test_managed_tabular_pipeline_publishes_complete_datasets_without_vector_dependencies(monkeypatch, app_context, descriptor, tmp_path, suffix):
+    import hashlib
+
+    import duckdb
+    from fred_core.documents.document_structures import DocumentMetadata, FileInfo, Identity, SourceInfo, SourceType
+    from openpyxl import Workbook
+    from openpyxl.worksheet.table import Table
+
+    from knowledge_flow_backend.common.structures import ManagerProcessingConfig, ProcessingConfig
+    from knowledge_flow_backend.core.processors.input.excel_processor.excel_processor import ExcelProcessor
+    from knowledge_flow_backend.features.manager_processing import service as module
+    from knowledge_flow_backend.features.manager_processing.artifacts import Artifacts
+    from knowledge_flow_backend.features.manager_processing.contracts import Predecessor
+    from knowledge_flow_backend.features.manager_processing.persistence import scoped_pipeline
+    from knowledge_flow_backend.features.tabular.artifacts import read_tabular_artifact, read_tabular_multi_artifact
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Tabular attachments must not initialize vectors or shared content storage")
+
+    monkeypatch.setattr(app_context, "get_manager_vector_store", forbidden)
+    monkeypatch.setattr(app_context, "get_embedder", forbidden)
+    get_content_store = type(app_context).get_content_store
+
+    def scoped_content_store(context):
+        assert context is not app_context
+        return get_content_store(context)
+
+    monkeypatch.setattr(type(app_context), "get_content_store", scoped_content_store)
+    monkeypatch.setattr(ExcelProcessor, "recalc", False)
+    app_context.configuration.manager_processing = ManagerProcessingConfig.model_construct(enabled=True, temporary_bytes=1_048_576)
+    app_context.configuration.storage.tabular_store.pointer_chunks_enabled = True
+    profile = ProcessingConfig.ProfileConfig(
+        input_processors=[
+            ProcessingConfig.ProfileInputProcessorConfig(suffix=".csv", class_path="knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor"),
+            ProcessingConfig.ProfileInputProcessorConfig(suffix=".xlsx", class_path="knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor"),
+        ]
+    )
+    descriptor = Descriptor.model_validate(
+        {**descriptor.model_dump(), "name": f"sales{suffix}", "folder_id": None, "folder_path": None, "session_id": uuid4(), "stage": "extraction", "max_output_bytes": 1_000_000}
+    )
+    original = tmp_path / "extract" / "input" / descriptor.name
+    original.parent.mkdir(parents=True)
+    if suffix == ".csv":
+        original.write_text("city,amount\n" + "".join(f"city-{i},{i}\n" for i in range(350)))
+        expected_rows, expected_sum = 350, sum(range(350))
+    else:
+        workbook = Workbook()
+        for index, name in enumerate(["Sales", "Targets"]):
+            sheet = workbook.active if index == 0 else workbook.create_sheet()
+            sheet.title = name
+            sheet.append(["city", "amount"])
+            for i in range(10):
+                sheet.append([f"city-{i}", i])
+            sheet.add_table(Table(displayName=name, ref="A1:B11"))
+        workbook.save(original)
+        workbook.close()
+        expected_rows, expected_sum = 20, 2 * sum(range(10))
+    descriptor.work.original_sha256 = hashlib.sha256(original.read_bytes()).hexdigest()
+    descriptor.size = original.stat().st_size
+    metadata = DocumentMetadata(
+        identity=Identity(document_uid=str(descriptor.work.document_id), document_name=descriptor.name),
+        source=SourceInfo(source_type=SourceType.PUSH),
+        file=FileInfo(sha256=descriptor.work.original_sha256),
+    )
+    extracted = original.parent.parent / "output"
+    extracted.mkdir()
+    (extracted / "policy.json").write_text(profile.model_dump_json())
+    objects, commits = {}, []
+    artifacts = Artifacts.__new__(Artifacts)
+    artifacts.put = lambda prefix, path, artifact: objects.__setitem__(prefix + artifact.path, path.read_bytes())
+    artifacts.read = lambda prefix, artifact, destination: (destination.parent.mkdir(parents=True, exist_ok=True), destination.write_bytes(objects[prefix + artifact.path]))
+    pipeline, vectors = scoped_pipeline(app_context, descriptor, extracted, artifacts, include_output=False)
+    assert vectors is None
+    pipeline.run_input(input_path=original, output_dir=extracted, metadata=metadata, profile="fast")
+    extraction = artifacts.publish(descriptor, extracted)
+    # Indexing restores the generation into a different activity workspace.
+    output = tmp_path / "index" / "output"
+    source = output.parent / "input" / descriptor.name
+    source.parent.mkdir(parents=True)
+    source.write_bytes(original.read_bytes())
+    descriptor = descriptor.model_copy(
+        update={"stage": "indexing", "generation": uuid4(), "output_prefix": "index/generation/", "predecessor": Predecessor(prefix=descriptor.output_prefix, manifest=extraction)}
+    )
+    artifacts.restore(descriptor, output)
+    instance = module.ManagedIngestionService.__new__(module.ManagedIngestionService)
+    instance.context, instance.descriptor, instance.settings, instance.artifacts = app_context, descriptor, object(), artifacts
+    result = instance.process_output(SimpleNamespace(uid=descriptor.actor), descriptor.name, output, metadata, "fast")
+    assert instance.vectors is None
+
+    class Client:
+        def __init__(self, *_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def post(self, path, body):
+            commits.append(body)
+
+    monkeypatch.setattr(module, "ManagerClient", Client)
+    instance._commit(output, result)
+    manifest = commits[0].manifest
+    assert manifest.vectors == manifest.chunks == 0
+    assert manifest.rows == expected_rows
+    assert result.source.retrievable
+    single, multi = read_tabular_artifact(result), read_tabular_multi_artifact(result)
+    tables = [single] if single else multi.tables
+    paths = {artifact.path for artifact in manifest.artifacts}
+    assert all(table.object_key in paths for table in tables)
+    assert all(descriptor.output_prefix + table.object_key in objects for table in tables)
+    with duckdb.connect(":memory:") as connection:
+        counts = [connection.read_parquet(str(output / table.object_key)).aggregate("count(*), sum(amount)").fetchall()[0] for table in tables]
+    assert sum(row[0] for row in counts) == expected_rows
+    assert sum(row[1] for row in counts) == expected_sum
+    if suffix == ".xlsx":
+        assert {table.sheet for table in tables} == {"Sales", "Targets"}
+        assert "tables.json" in paths
+        catalog = json.loads(objects[descriptor.output_prefix + "tables.json"])
+        assert {entry["object_key"] for entry in catalog} == {table.object_key for table in tables}
+    else:
+        assert "city-349" not in (output / "output.md").read_text()

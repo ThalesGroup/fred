@@ -778,9 +778,29 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
           })),
         }}
         aboveTextSlot={
-          chat.attachments.length > 0 ? (
-            <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
-          ) : undefined
+          <>
+            <AttachmentChips
+              attachments={chat.attachments}
+              onRemove={chat.removeAttachment}
+              onRetry={allowChatAttachments ? chat.retryAttachmentUpload : undefined}
+            />
+            {chat.attachmentsUploading && <p role="status">{t("chatbot.attachments.waiting")}</p>}
+            {chat.attachmentListError && (
+              <div role="alert">
+                <p>{t("chatbot.attachments.listFailed")}</p>
+                <Button
+                  color="primary"
+                  variant="text"
+                  size="small"
+                  onClick={() => {
+                    void chat.refreshAttachments();
+                  }}
+                >
+                  {t("common.retry")}
+                </Button>
+              </div>
+            )}
+          </>
         }
         rightExtraSlot={
           <ReasoningChip

@@ -982,6 +982,21 @@ def _build_runtime_services(
             else None,
         )
     )
+    run = RunScope.current()
+    if run is not None and run.turn_authority is not None:
+        authority = current_turn()
+        authority.bind_documents(
+            binding.runtime_context,
+            document_scope,
+            attachments_enabled=bool(
+                document_access_config is not None
+                and document_access_config["attachments"]
+                and "document_access"
+                in _effective_capability_ids(
+                    effective_tuning, definition, capability_registry
+                )
+            ),
+        )
     base_tool_invoker = FredKnowledgeSearchToolInvoker(
         binding=binding,
         settings=settings,
@@ -4347,10 +4362,6 @@ async def _iterate_runtime_event_payloads_inner(
         # at prepare-execution and the frontend forwards it — but it was also
         # silently dropped here, so no agent ever received a selected prompt.
         context_prompt_text=ctx.get("context_prompt_text"),
-        # Rebuilt by the frontend from the attachments that currently exist.
-        # When the final file is deleted this is absent, so the per-turn runtime
-        # notice disappears without leaving a checkpointed system message behind.
-        attachments_markdown=ctx.get("attachments_markdown"),
         space_id=ctx.get("space_id"),
         model_choice=ctx.get("model_choice"),
         chat_profile_id=ctx.get("chat_profile_id"),

@@ -16,6 +16,35 @@ fn schema() -> Value {
 }
 
 #[test]
+fn attachment_readiness_is_required_and_independent_of_processing() {
+    let api = schema();
+    let attachment = &api["components"]["schemas"]["Attachment"];
+    assert!(
+        attachment["required"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("ready"))
+    );
+    assert_eq!(attachment["properties"]["ready"]["type"], "boolean");
+    assert!(attachment["properties"].get("processing").is_some());
+}
+
+#[test]
+fn processing_descriptor_requires_nullable_placement_fields() {
+    let api = schema();
+    let descriptor = &api["components"]["schemas"]["Descriptor"];
+    let required = descriptor["required"].as_array().unwrap();
+    for field in ["folder_id", "folder_path", "session_id"] {
+        assert!(required.contains(&json!(field)), "{field}");
+        let types = descriptor["properties"][field]["type"].as_array().unwrap();
+        assert!(
+            types.contains(&json!("string")) && types.contains(&json!("null")),
+            "{field}"
+        );
+    }
+}
+
+#[test]
 fn cli_help_exposes_authenticated_import_without_operator_creation() {
     let output = Command::new(env!("CARGO_BIN_EXE_control-plane"))
         .arg("--help")

@@ -3,10 +3,10 @@
 """Internal manager persistence callbacks. Temporal uses the existing scheduler models."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Profile = Literal["fast", "medium", "rich"]
 Stage = Literal["preparation", "extraction", "indexing"]
@@ -63,8 +63,9 @@ class Descriptor(Contract):
     work: Work
     organization_id: UUID
     space_id: UUID
-    folder_id: UUID
-    folder_path: str
+    folder_id: UUID | None
+    folder_path: str | None
+    session_id: UUID | None
     name: str
     mime: str
     size: int
@@ -80,6 +81,14 @@ class Descriptor(Contract):
     profile_settings: dict
     predecessor: Predecessor | None
     committed: Manifest | None
+
+    @model_validator(mode="after")
+    def validate_placement(self) -> Self:
+        if (self.folder_id is None) == (self.session_id is None):
+            raise ValueError("Exactly one folder or conversation is required")
+        if (self.folder_path is None) != (self.folder_id is None):
+            raise ValueError("A folder path is required only for a drive document")
+        return self
 
 
 class Claim(Contract):

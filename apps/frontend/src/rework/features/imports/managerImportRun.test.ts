@@ -38,6 +38,7 @@ function receipt(key: string, status: UploadReceipt["status"] = "stored"): Uploa
     request_key: key,
     space_id: "space",
     folder_id: "folder",
+    session_id: null,
     name: "original.txt",
     size: 5,
     sha256: "a".repeat(64),

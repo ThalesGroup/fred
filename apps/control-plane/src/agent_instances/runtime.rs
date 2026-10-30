@@ -132,6 +132,14 @@ pub struct RuntimeBinding {
     pub space: RuntimeSpace,
     pub agent: RuntimeAgent,
     pub models: RuntimeModels,
+    pub attachments: Vec<RuntimeAttachment>,
+}
+
+#[derive(Serialize, sqlx::FromRow, ToSchema)]
+pub struct RuntimeAttachment {
+    pub document_id: Uuid,
+    pub name: String,
+    pub mime: String,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -224,9 +232,22 @@ async fn resolve_runtime(
     let mut record = super::get_for_space(&mut *tx, space_id, instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if let Some(conversation) = &query.conversation {
+    let attachments = if let Some(conversation) = &query.conversation {
         crate::sessions::require_association(&mut *tx, subject, conversation, &record).await?;
-    }
+        sqlx::query_as::<_, RuntimeAttachment>(
+            "select d.id as document_id, d.name, d.mime from document d
+             join generation g on g.id = d.published_generation
+             where d.session_id = $1 and d.space_id = $2
+             and d.deletion_id is null and d.retrievable and not d.retrievable_pending
+             order by d.created_at, d.id",
+        )
+        .bind(Uuid::parse_str(conversation).map_err(|_| invalid_grant())?)
+        .bind(space_id)
+        .fetch_all(&mut *tx)
+        .await?
+    } else {
+        Vec::new()
+    };
     require_executable(&state, &space, &record)?;
     // Organization revocation is observed here, at the next turn, never during one.
     let policy = enablement::Policy::load(&mut *tx, space.organization).await?;
@@ -266,6 +287,7 @@ async fn resolve_runtime(
     }
     let binding = RuntimeBinding {
         models,
+        attachments,
         subject_id: subject.to_owned(),
         run_id: query.run.clone(),
         conversation_id: query.conversation.clone(),

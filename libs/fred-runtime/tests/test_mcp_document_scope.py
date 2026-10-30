@@ -180,3 +180,144 @@ async def test_ordinary_mcp_client_never_forwards_a_document_context():
             headers={DOCUMENT_CONTEXT_HEADER: "untrusted"},
         )
     assert seen == [None]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_http_and_mcp_share_fixed_attachment_ceiling(monkeypatch, enabled):
+    import httpx
+    from fred_runtime.common.kf_document_client import KfDocumentClient
+    from fred_runtime.common.kf_vectorsearch_client import VectorSearchClient
+
+    session = str(UUID(int=301))
+    attachment = dict(
+        document_id=str(UUID(int=401)), name="report.csv", mime="text/csv"
+    )
+    bound = binding([])
+    bound.runtime_context.session_id = session
+    facts = turn_binding("agent-1", session=session, attachments=[attachment])
+    authority = TurnAuthority(facts, None)
+    with RunScope.open() as run:
+        run.turn_authority = authority
+        authority.start(run)
+        authority.bind_documents(
+            bound.runtime_context, DocumentScope(), attachments_enabled=enabled
+        )
+        shim = _McpRuntimeAgentShim(binding=bound, settings=_Settings())
+        expected = authority.document_context(bound.runtime_context)
+        assert expected.document_scope.is_empty
+        assert expected.attachment_ids == ((UUID(int=401),) if enabled else ())
+        assert (
+            DocumentAccessContext.model_validate_json(shim.document_context())
+            == expected
+        )
+        seen = []
+
+        async def request(**kwargs):
+            seen.append(kwargs)
+            path = kwargs["path"]
+            data = (
+                []
+                if path.endswith(("search", "chunks"))
+                else {
+                    "document_uid": attachment["document_id"],
+                    "content": "text",
+                    "summary": "summary",
+                    "shrunk_for_budget": False,
+                }
+            )
+            return httpx.Response(
+                200, json=data, request=httpx.Request("POST", "https://kf.invalid")
+            )
+
+        vector = object.__new__(VectorSearchClient)
+        document = object.__new__(KfDocumentClient)
+        document._summarize_read_timeout = 5
+        monkeypatch.setattr(vector, "_request_with_token_refresh", request)
+        monkeypatch.setattr(document, "_request_with_token_refresh", request)
+        await vector.search(question="q", document_context=expected)
+        await vector.get_document_chunks(
+            document_uid=attachment["document_id"], limit=10, document_context=expected
+        )
+        await document.fetch_markdown(
+            document_uid=attachment["document_id"], document_context=expected
+        )
+        await document.summarize(
+            document_uid=attachment["document_id"], document_context=expected
+        )
+        await document.extract(
+            document_uid=attachment["document_id"],
+            instruction="all",
+            document_context=expected,
+        )
+        assert len(seen) == 5
+        for call in seen:
+            assert (
+                DocumentAccessContext.model_validate_json(
+                    call["headers"][DOCUMENT_CONTEXT_HEADER]
+                )
+                == expected
+            )
+            assert "attachment_ids" not in call.get("json", {})
+            assert "conversation_id" not in call.get("json", {})
+
+        # Credential retries overwrite untrusted headers with the same fixed context.
+        provider = admitted_provider(StaticWorkloadTokens())
+        contexts = []
+
+        async def receive(request):
+            contexts.append(
+                DocumentAccessContext.model_validate_json(
+                    request.headers[DOCUMENT_CONTEXT_HEADER]
+                )
+            )
+            return httpx2.Response(401 if len(contexts) == 1 else 200)
+
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(receive),
+            auth=MCPHTTPAuth(provider, document_context=shim.document_context),
+        ) as client:
+            await client.post(
+                "https://kf.invalid/mcp", headers={DOCUMENT_CONTEXT_HEADER: "injected"}
+            )
+        assert contexts == [expected, expected]
+        # A rebind/descendant cannot undo the parent's disabled source choice.
+        descendant = bound.runtime_context.model_copy(
+            update={"selected_document_uids": None, "include_session_scope": True}
+        )
+        authority.bind_documents(descendant, DocumentScope(), attachments_enabled=True)
+        assert authority.document_context(descendant) == expected
+
+
+@pytest.mark.asyncio
+async def test_newly_ready_files_wait_for_the_next_turn():
+    session = str(UUID(int=301))
+    first = dict(
+        document_id=str(UUID(int=401)), name="first.pdf", mime="application/pdf"
+    )
+    later = dict(
+        document_id=str(UUID(int=402)),
+        name="later.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    bound = binding([])
+    bound.runtime_context.session_id = session
+    data = turn_binding("agent-1", session=session, attachments=[first]).model_dump(
+        mode="json"
+    )
+    from fred_sdk.contracts.weaver import WeaverRuntimeBinding
+
+    for expected_ids in [(UUID(int=401),), (UUID(int=401), UUID(int=402))]:
+        authority = TurnAuthority(WeaverRuntimeBinding.model_validate(data), None)
+        with RunScope.open() as run:
+            run.turn_authority = authority
+            authority.start(run)
+            authority.bind_documents(
+                bound.runtime_context, DocumentScope(), attachments_enabled=True
+            )
+            data["attachments"] = [first, later]
+            for _ in range(2):
+                assert (
+                    authority.document_context(bound.runtime_context).attachment_ids
+                    == expected_ids
+                )

@@ -13,7 +13,7 @@ from fred_core.documents.document_structures import DocumentMetadata, FileInfo, 
 from fred_core.tasks.models import IngestionProcessingProfile
 from temporalio import activity, exceptions
 
-from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.application_context import EXTENSION_CATEGORY, ApplicationContext
 from knowledge_flow_backend.common.processing_profile_context import processing_profile_scope
 from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 from knowledge_flow_backend.features.manager_processing.artifacts import Artifacts
@@ -83,6 +83,11 @@ class ManagedIngestionService(IngestionService):
                 single = read_tabular_artifact(metadata)
                 multi = read_tabular_multi_artifact(metadata)
                 tabular = metadata.processing.stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE and (single is not None or bool(multi and multi.tables))
+                category = EXTENSION_CATEGORY.get(Path(d.name).suffix.lower())
+                if category in {"tabular", "spreadsheet"} and (
+                    not tabular or (category == "tabular" and (single is None or multi is not None)) or (category == "spreadsheet" and (multi is None or single is not None))
+                ):
+                    raise ManagerError("indexing_failed")
                 metadata.source.retrievable = count > 0 or tabular
             (output / "metadata.json").write_text(metadata.model_dump_json())
         manifest = self.artifacts.publish(d, output, chunks=count, vectors=count, rows=rows)
@@ -134,7 +139,7 @@ class ManagedIngestionService(IngestionService):
         with processing_profile_scope(profile):
             self.pipeline_manager, self.vectors = scoped_pipeline(self.context, self.descriptor, output_dir, self.artifacts, include_output=True)
             result = super().process_output(user, input_file_name, output_dir, input_file_metadata, profile)
-            if self.context.is_tabular_file(input_file_metadata.document_name):
+            if EXTENSION_CATEGORY.get(Path(input_file_name).suffix.lower()) == "tabular":
                 import duckdb
 
                 from knowledge_flow_backend.features.content.content_service import ContentService

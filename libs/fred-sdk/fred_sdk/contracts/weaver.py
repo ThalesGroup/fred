@@ -160,6 +160,12 @@ class RuntimeAgent(ResolverFact):
     configuration: dict[str, Any]
 
 
+class RuntimeAttachment(ResolverFact):
+    document_id: UUID
+    name: str
+    mime: str
+
+
 class WeaverRuntimeBinding(ResolverFact):
     subject_id: str
     run_id: str | None
@@ -167,9 +173,17 @@ class WeaverRuntimeBinding(ResolverFact):
     space: RuntimeSpace
     agent: RuntimeAgent
     models: RuntimeModels
+    attachments: tuple[RuntimeAttachment, ...]
 
     @model_validator(mode="after")
     def owning_organization(self) -> WeaverRuntimeBinding:
+        if self.attachments and not self.conversation_id:
+            raise ValueError("Attachments require a conversation")
+        if self.attachments:
+            UUID(self.conversation_id or "")
+        ids = [attachment.document_id for attachment in self.attachments]
+        if len(set(ids)) != len(ids):
+            raise ValueError("Duplicate attachment facts")
         if self.space.organization_id != self.models.policy.organization_id:
             raise ValueError("Model policy belongs to another organization")
         return self

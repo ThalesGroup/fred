@@ -6,9 +6,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Any
+from uuid import UUID
 
 import httpx
 import pytest
+from fred_core.documents.selection import DocumentScope
 from fred_runtime.integrations.v2_runtime import adapters as adapters_module
 from fred_runtime.model_routing.turn import TurnAuthority
 from fred_runtime.runtime_support.authority import AuthorityLostError
@@ -20,7 +22,8 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
-from fred_sdk.contracts.runtime import DocumentPortCallError, DocumentScopeRefusedError
+from fred_sdk.contracts.runtime import DocumentPortCallError
+from fred_sdk.contracts.weaver import WeaverRuntimeBinding
 from weaver_fixtures import resolved_binding
 
 
@@ -47,7 +50,11 @@ def _adapter(
     client: _Client, monkeypatch: pytest.MonkeyPatch, **fields: Any
 ) -> tuple[adapters_module.DocumentSearchAdapter, TurnAuthority]:
     monkeypatch.setattr(adapters_module, "VectorSearchClient", lambda **_kw: client)
-    binding = resolved_binding()
+    data = resolved_binding().model_dump(mode="json")
+    data["attachments"] = fields.pop("attachments", [])
+    if data["attachments"]:
+        data["conversation_id"] = str(UUID(int=301))
+    binding = WeaverRuntimeBinding.model_validate(data)
     authority = TurnAuthority(binding, None)
     context = RuntimeContext(
         user_id=binding.subject_id,
@@ -89,27 +96,9 @@ async def test_sources_bound_the_turn_scope(
     if rag_scope == "general_only" or not corpus_enabled:
         assert client.calls == []
     else:
-        assert client.calls[0]["space_id"] == str(authority.binding.space.id)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "restriction",
-    [
-        {"include_attachments": True},
-    ],
-)
-async def test_unsupported_scope_is_refused(
-    restriction: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    client = _Client()
-    adapter, authority = _adapter(client, monkeypatch)
-    with RunScope.open() as scope:
-        scope.turn_authority = authority
-        authority.start(scope)
-        with pytest.raises(DocumentScopeRefusedError):
-            await adapter.search("q", **{"include_attachments": False, **restriction})
-    assert client.calls == []
+        assert (
+            client.calls[0]["document_context"].space_id == authority.binding.space.id
+        )
 
 
 @pytest.mark.asyncio
@@ -167,6 +156,43 @@ async def test_weaver_selections_are_transmitted_without_id_list_intersection(
         run.turn_authority = authority
         authority.start(run)
         await adapter.search("q", library_tag_ids=[folder], include_attachments=False)
-    assert client.calls[0]["document_scope"] == DocumentScope.from_ids(
-        document_ids=[doc]
-    ).intersect(DocumentScope.from_ids([folder]))
+    assert client.calls[0]["document_context"].document_scope == DocumentScope.from_ids(
+        [folder]
+    ).intersect(DocumentScope.from_ids(document_ids=[doc]))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("include", [False, True])
+@pytest.mark.parametrize("general", [False, True])
+async def test_attachment_only_search_respects_all_source_ceilings(
+    monkeypatch, enabled, include, general
+):
+    client = _Client()
+    adapter, authority = _adapter(
+        client,
+        monkeypatch,
+        selected_document_uids=[],
+        include_corpus_scope=False,
+        search_rag_scope="general_only" if general else "hybrid",
+        attachments=[
+            dict(
+                document_id=str(UUID(int=401)), name="file.pdf", mime="application/pdf"
+            )
+        ],
+    )
+    with RunScope.open() as scope:
+        scope.turn_authority = authority
+        authority.start(scope)
+        authority.bind_documents(
+            adapter._binding.runtime_context,
+            DocumentScope(),
+            attachments_enabled=enabled,
+        )
+        await adapter.search("q", include_attachments=include)
+    if enabled and include and not general:
+        sent = client.calls[0]["document_context"]
+        assert sent.document_scope.is_empty
+        assert sent.attachment_ids == (UUID(int=401),)
+    else:
+        assert client.calls == []

@@ -124,6 +124,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   const queueDrainRef = useRef(false);
   const executionDisabledRef = useRef(false);
   const locallyCreatedSessionIdRef = useRef<string | null>(null);
+  const sessionCreatingIdsRef = useRef<Set<string>>(new Set());
   const sessionCreateFailedIdRef = useRef<Set<string>>(new Set());
   const confirmedSessionIdsRef = useRef<Set<string>>(new Set());
   const failedContextWriteIdsRef = useRef<Set<string>>(new Set());
@@ -248,8 +249,6 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   // Capabilities active in this session — drives the capability side-panel slot
   // (#1979, RFC §9 item 3). The host resolves each id against the plugin index.
   const capabilityIds: string[] = [];
-
-  const attachments = useChatAttachments({ teamId, sessionId, enabled: false });
 
   useEffect(() => {
     const attempt = sendAttemptRef.current;
@@ -427,8 +426,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       return;
     }
     setInput("");
-    attachments.clearReadyAttachments();
-  }, [attachments.clearReadyAttachments]);
+  }, []);
   const handleTurnRejected = useCallback((_wireDraft: string, rejectedSessionId: string) => {
     if (queuedStartRef.current) {
       const queued = { ...queuedStartRef.current, status: "uncertain" as const };
@@ -645,6 +643,12 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     [mayShowMessages, messages, waitResponse],
   );
   executionDisabledRef.current = executionDisabled;
+  const attachments = useChatAttachments({
+    spaceId,
+    sessionId,
+    enabled: !executionDisabled,
+    canUpload: chatControls.some((control) => control.widget === "attach_files"),
+  });
 
   const notifySessionSaveFailed = useCallback(
     (error: unknown) => {
@@ -668,7 +672,8 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   const createSessionRow = useCallback(
     (sid: string, title: string) => {
       const revision = composer.agentConfigurationRevision;
-      if (revision === null) return;
+      if (revision === null || sessionCreatingIdsRef.current.has(sid)) return;
+      sessionCreatingIdsRef.current.add(sid);
       locallyCreatedSessionIdRef.current = sid;
       void enqueueSessionWrite(
         sid,
@@ -688,6 +693,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
         },
         true,
       ).then((result) => {
+        sessionCreatingIdsRef.current.delete(sid);
         if (result.ok) {
           sessionCreateFailedIdRef.current.delete(sid);
           confirmedSessionIdsRef.current.add(sid);
@@ -705,31 +711,53 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     ],
   );
 
-  const ensureSessionForAttachments = useCallback((): string => {
-    let sid = sessionId;
+  const [attachmentPreparations, setAttachmentPreparations] = useState<Record<string, number>>({});
+  const attachmentPreparationsRef = useRef<Record<string, number>>({});
+  const ensureSessionForAttachments = useCallback(async (): Promise<string | null> => {
+    let sid = sessionId ?? locallyCreatedSessionIdRef.current;
     const needsCreate = !sid || sessionCreateFailedIdRef.current.has(sid);
     if (!sid) {
       sid = uuidv4();
+      locallyCreatedSessionIdRef.current = sid;
+      activeSessionIdRef.current = sid;
       skipResetOnSessionBindRef.current = true;
-      // Before bindSessionId: the composer settings the user picked while this
-      // conversation had no id are only in memory until they are written under
-      // one (#2369).
       composer.bindSession(sid);
       bindSessionId(sid);
     }
-    if (needsCreate) {
-      createSessionRow(sid, "New conversation");
-    }
-    return sid;
-  }, [bindSessionId, composer.bindSession, createSessionRow, sessionId]);
+    if (needsCreate) createSessionRow(sid, "New conversation");
+    if (!(await flushSessionWrites(sid)) || !confirmedSessionIdsRef.current.has(sid)) return null;
+    return isScopeCurrent() && activeSessionIdRef.current === sid ? sid : null;
+  }, [bindSessionId, composer.bindSession, createSessionRow, flushSessionWrites, isScopeCurrent, sessionId]);
 
   const handleAddAttachments = useCallback(
-    (files: File[], source: AttachmentSource) => {
-      if (executionDisabledRef.current || !chatControls.some((control) => control.widget === "attach_files")) return;
-      const sid = ensureSessionForAttachments();
-      void attachments.addFiles(files, source, sid);
+    async (files: File[], source: AttachmentSource) => {
+      if (executionDisabledRef.current || !chatControlsRef.current.some((control) => control.widget === "attach_files"))
+        return;
+      const confirmation = ensureSessionForAttachments();
+      const pendingSid = activeSessionIdRef.current;
+      if (!pendingSid) return;
+      const updatePending = (delta: number) => {
+        const next = {
+          ...attachmentPreparationsRef.current,
+          [pendingSid]: (attachmentPreparationsRef.current[pendingSid] ?? 0) + delta,
+        };
+        attachmentPreparationsRef.current = next;
+        setAttachmentPreparations(next);
+      };
+      updatePending(1);
+      try {
+        const sid = await confirmation;
+        if (
+          sid &&
+          !executionDisabledRef.current &&
+          chatControlsRef.current.some((control) => control.widget === "attach_files")
+        )
+          await attachments.addFiles(files, source, sid);
+      } finally {
+        updatePending(-1);
+      }
     },
-    [attachments.addFiles, ensureSessionForAttachments, chatControls],
+    [attachments.addFiles, ensureSessionForAttachments],
   );
 
   const buildTurnContext = useCallback(
@@ -765,7 +793,8 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       skills?: SkillInvocation[],
       queued?: boolean,
     ): Promise<boolean> => {
-      const attachmentContext = queued ? "" : attachments.attachmentsMarkdown;
+      const hasAttachments =
+        !queued && chatControls.some((control) => control.widget === "attach_files") && attachments.hasReadyAttachments;
       console.debug(
         `[useManagedChat] sendTurn() — inputChars=${inputCharacterCount} waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
       );
@@ -773,16 +802,17 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
         hitlHoldsComposer(pendingHitl, sessionId) || hitlHoldsComposer(hitlResumeOwnerRef.current, sessionId);
       if (
         executionDisabledRef.current ||
-        (!text && !attachmentContext) ||
+        (!text && !hasAttachments) ||
         waitResponse ||
         awaitingAgentQuestion ||
-        (!queued && attachments.hasUploadingAttachments) ||
+        attachments.hasUploadingAttachments ||
+        (attachmentPreparationsRef.current[activeSessionIdRef.current ?? ""] ?? 0) > 0 ||
         (!queued && inputTooLong) ||
         modelPreparationError ||
         modelPreparationPending
       ) {
         console.debug(
-          `[useManagedChat] sendTurn() BLOCKED — hasText=${!!text} attachments=${!!attachmentContext} waitResponse=${waitResponse} uploading=${attachments.hasUploadingAttachments} inputTooLong=${inputTooLong}`,
+          `[useManagedChat] sendTurn() BLOCKED — hasText=${!!text} attachments=${!!hasAttachments} waitResponse=${waitResponse} uploading=${attachments.hasUploadingAttachments} inputTooLong=${inputTooLong}`,
         );
         return false;
       }
@@ -902,7 +932,8 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       }
     },
     [
-      attachments.attachmentsMarkdown,
+      attachments.hasReadyAttachments,
+      chatControls,
       attachments.hasUploadingAttachments,
       input,
       inputCharacterCount,
@@ -931,7 +962,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
 
   const handleSend = useCallback(async () => {
     if (waitResponse || pendingMessages.length > 0) {
-      if (attachments.attachments.length > 0) {
+      if (attachments.hasUploadingAttachments) {
         showWarn({ summary: t("chatbot.pendingMessages.textOnly") });
         return;
       }
@@ -947,7 +978,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     input,
     waitResponse,
     pendingMessages.length,
-    attachments.attachments.length,
+    attachments.hasUploadingAttachments,
     inputTooLong,
     showWarn,
     t,
@@ -1003,6 +1034,8 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       executionDisabledRef.current ||
       pendingHitl ||
       hitlResumeOwnerRef.current?.session_id === sessionId ||
+      attachments.hasUploadingAttachments ||
+      (attachmentPreparations[sessionId] ?? 0) > 0 ||
       isLoadingHistory
     )
       return;
@@ -1030,7 +1063,16 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
         queuedStartRef.current = null;
         queueDrainRef.current = false;
       });
-  }, [waitResponse, sessionId, pendingHitl, isLoadingHistory, pendingMessages, sendTurn]);
+  }, [
+    waitResponse,
+    sessionId,
+    pendingHitl,
+    isLoadingHistory,
+    pendingMessages,
+    sendTurn,
+    attachments.hasUploadingAttachments,
+    attachmentPreparations,
+  ]);
   // Read at answer time, like buildTurnContextRef, so the card's handler keeps
   // its identity across keystrokes.
   const restartLastTurn = () => {
@@ -1303,7 +1345,6 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     reset();
     setInput("");
     setPendingMessages([]);
-    attachments.clearLocalAttachments();
     skipResetOnSessionBindRef.current = false;
     if (!sessionId) void prepareChatControls(null).catch(() => {});
     replacePendingHitls([]);
@@ -1332,7 +1373,6 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     composer.reset,
     availabilityDisabled,
     agentConfigurationChanged,
-    attachments.clearLocalAttachments,
     prepareChatControls,
   ]);
 
@@ -1433,8 +1473,16 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     attachments: attachments.attachments,
     persistedAttachments: attachments.persistedAttachments,
     isHydratingAttachments: attachments.isHydratingAttachments,
-    attachmentsUploading: attachments.hasUploadingAttachments,
+    attachmentsUploading:
+      attachments.hasUploadingAttachments ||
+      (attachmentPreparations[sessionId ?? locallyCreatedSessionIdRef.current ?? ""] ?? 0) > 0,
     handleAddAttachments,
+    retryAttachmentUpload: async (id: string, file: File) => {
+      if (!executionDisabledRef.current && chatControlsRef.current.some((control) => control.widget === "attach_files"))
+        await attachments.retryUpload(id, file);
+    },
+    attachmentListError: attachments.listError,
+    refreshAttachments: attachments.refreshAttachments,
     removeAttachment,
     deletePersistedAttachment,
     setDocumentSelection: guardedComposer.setDocumentSelection,
