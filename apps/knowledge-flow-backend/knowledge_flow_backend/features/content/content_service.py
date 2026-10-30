@@ -109,7 +109,6 @@ class ContentService:
         self.config = ApplicationContext.get_instance().get_config()
         self.rebac = ApplicationContext.get_instance().get_rebac_engine()
         self.kpi: BaseKPIWriter = ApplicationContext.get_instance().get_kpi_writer()
-        self._tabular_service = None
         # Per-document cold-render locks; see `_render_lock`.
         self._render_locks: dict[str, asyncio.Lock] = {}
 
@@ -155,36 +154,6 @@ class ContentService:
         if preview_str is None or preview_str.strip() == "":
             return "_(The CSV file is empty or has no data to display)_"
         return preview_str
-
-    def _get_tabular_service(self):
-        """A caller must provide a service already bound to its trusted scope.
-
-        Weaver serves published previews through Control Plane and the published
-        markdown controller; this unmounted Swift controller cannot construct an
-        unscoped tabular service.
-        """
-        if self._tabular_service is None:
-            raise RuntimeError("Tabular previews require a server-bound TabularService")
-        return self._tabular_service
-
-    async def _render_tabular_preview(self, user: KeycloakUser, metadata: DocumentMetadata) -> str:
-        """
-        Render one tabular preview directly from the indexed Parquet artifact.
-
-        Why this exists:
-        - The tabular runtime should not persist a second large preview copy of
-          the source CSV just for UI rendering.
-
-        How to use:
-        - Call only once `SQL_INDEXED` is done and a `tabular_v1` artifact is
-          present on the document metadata.
-        """
-        preview_frame = await self._get_tabular_service().read_dataset_preview_frame(
-            user,
-            metadata.document_uid,
-            max_rows=200,
-        )
-        return self._dataframe_to_markdown_preview(preview_frame)
 
     def _get_output_artifact(self, document_uid: str, *candidate_names: str) -> tuple[str, bytes]:
         for candidate_name in candidate_names:
@@ -314,11 +283,6 @@ class ContentService:
             if text:
                 return text
             raise
-        if self._is_tabular_document(document_metadata):
-            sql_indexed_status = document_metadata.processing.stages.get(ProcessingStage.SQL_INDEXED, ProcessingStatus.NOT_STARTED)
-            if sql_indexed_status == ProcessingStatus.DONE and read_tabular_artifact(document_metadata) is not None:
-                return await self._render_tabular_preview(user, document_metadata)
-
         preview_status = self._preview_status(document_metadata)
         if preview_status != ProcessingStatus.DONE:
             raise FileNotFoundError(f"Preview not ready for document {document_uid}. Current preview stage: {preview_status.value}.")

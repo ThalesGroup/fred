@@ -1,3 +1,5 @@
+# Every repository path this file COPYs must be listed in this image's `pr_inputs`
+# in .github/docker-images.json, or PRs touching it skip the build. Check: make docker-images-tests
 ARG PYTHON_VERSION=3.12.15
 
 # -----------------------------------------------------------------------------

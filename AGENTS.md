@@ -48,6 +48,9 @@ Formatting and local code-quality checks are part of every code increment:
   or its documented equivalent. Fix issues introduced by the lot and rerun the
   affected checks after the last relevant edit. Local compilation required by
   these checks, including Clippy, is authorized without another request.
+- A change to a Dockerfile `COPY` or to `.github/docker-images.json` also runs
+  `make docker-images-tests` (offline, under a second): each knowledge-flow `COPY`
+  source must be listed in that image's `pr_inputs`, which CI enforces.
 - Report the commands and results. If a check cannot run or fails on a pre-existing
   issue, state the blocker and do not claim quality validation. Do not widen the
   lot to fix unrelated failures or weaken checks to obtain a pass.

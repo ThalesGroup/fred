@@ -20,7 +20,7 @@ update-uv-locks: ## Update uv lock state in subprojects except frontend
 	done
 
 .PHONY: code-quality
-code-quality: migration-tests ## Run code quality checks in all submodules
+code-quality: migration-tests docker-images-tests ## Run code quality checks in all submodules
 	@set -e; \
 	for dir in $(CODE_QUALITY_DIRS); do \
 		echo "************ Running code-quality in $$dir ************"; \
@@ -396,3 +396,7 @@ release-guide: ## Generate and validate the DevOps guide: make release-guide REL
 
 migration-tests: ## Validate release migration tooling offline with synthetic Git histories
 	uv run --project libs/fred-pod --locked --no-dev python -m unittest discover -s scripts/tests -p 'test_migration_guides.py' -v
+
+.PHONY: docker-images-tests
+docker-images-tests: ## Check PR image selection, including that each knowledge-flow COPY source is in its pr_inputs
+	python3 -m unittest discover -s scripts/tests -p 'test_select_docker_images.py'
