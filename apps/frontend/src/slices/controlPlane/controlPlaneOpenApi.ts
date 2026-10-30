@@ -934,7 +934,6 @@ export type OrganizationDetail = {
   owners: UserSummary[];
 };
 export type UpdateOrganization = {
-  admin_username?: string | null;
   name?: string | null;
   owner_username?: string | null;
 };

@@ -404,10 +404,10 @@ async fn organization_console_rechecks_waiting_creator_and_serializes_attachment
 // Proves: I1, I23
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn organization_console_edit_replaces_name_owner_and_admin() {
+async fn organization_console_edit_replaces_name_and_owner_and_keeps_admins() {
     let e = env().await;
     let identity = support::IdentityServer::start().await;
-    for user in ["owner", "admin", "extra", "new-owner", "new-admin", "other"] {
+    for user in ["owner", "admin", "extra", "new-owner", "other"] {
         identity.users.lock().await.insert(user.into(), user.into());
     }
     bootstrap::grant_root(&e.pool, &e.fga, "root")
@@ -466,8 +466,8 @@ async fn organization_console_edit_replaces_name_owner_and_admin() {
         (&path, json!({"name":" "}), 422),
         (&path, json!({"name":"B"}), 409),
         (&path, json!({"owner_username":"missing"}), 422),
-        (&path, json!({"admin_username":"missing"}), 422),
-        (&path, json!({"admin_username":"other"}), 409),
+        (&path, json!({"owner_username":"other"}), 409),
+        (&path, json!({"admin_username":"admin"}), 422),
         (&path, json!({"owner":"x"}), 422),
     ] {
         assert_eq!(
@@ -483,7 +483,7 @@ async fn organization_console_edit_replaces_name_owner_and_admin() {
         fail_at: 1,
         ..Default::default()
     };
-    let rename = json!({"name":"A2", "owner_username":"new-owner", "admin_username":"new-admin"});
+    let rename = json!({"name":"A2", "owner_username":"new-owner"});
     assert_eq!(
         request(
             &app,
@@ -507,7 +507,7 @@ async fn organization_console_edit_replaces_name_owner_and_admin() {
         e.fga.direct_roles_on("owner", id).await.unwrap(),
         vec![Role::OrganizationOwner]
     );
-    // An administrator appointed inside the organization is replaced too.
+    // Admins, including one appointed inside the organization, are left to its governance.
     spaces::grant(
         &e.pool,
         &e.fga,
@@ -532,30 +532,36 @@ async fn organization_console_edit_replaces_name_owner_and_admin() {
     assert_eq!(status, 200, "{detail}");
     assert_eq!(detail["organization"]["name"], "A2");
     assert_eq!(detail["owners"][0]["username"], "new-owner");
-    assert_eq!(detail["admins"].as_array().unwrap().len(), 1);
-    assert_eq!(detail["admins"][0]["username"], "new-admin");
+    let mut admins: Vec<_> = detail["admins"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|admin| admin["username"].as_str().unwrap())
+        .collect();
+    admins.sort_unstable();
+    assert_eq!(admins, ["admin", "extra"]);
     // Two owner Checks; guard, holder and attachment Reads, none after commit; one Write.
     assert_eq!(
         proxy.fault.lock().await.calls,
-        [("check", 2), ("read", 6), ("write", 1)]
+        [("check", 2), ("read", 5), ("write", 1)]
             .map(|(k, v)| (k.to_owned(), v))
             .into_iter()
             .collect()
     );
-    for who in ["owner", "admin", "extra"] {
-        assert!(e.fga.direct_roles_on(who, id).await.unwrap().is_empty());
-        assert!(
-            spaces::organization(&e.pool, &e.fga, who)
-                .await
-                .unwrap()
-                .is_none()
+    assert!(e.fga.direct_roles_on("owner", id).await.unwrap().is_empty());
+    assert!(
+        spaces::organization(&e.pool, &e.fga, "owner")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    for who in ["admin", "extra"] {
+        assert_eq!(
+            e.fga.direct_roles_on(who, id).await.unwrap(),
+            vec![Role::Admin]
         );
     }
-    assert_eq!(
-        e.fga.direct_roles_on("new-admin", id).await.unwrap(),
-        vec![Role::Admin]
-    );
-    for who in ["root", "new-owner", "new-admin"] {
+    for who in ["root", "new-owner"] {
         assert!(!reads(&e, who, id).await);
     }
     // Replay is idempotent, and an unchanged name is not a conflict with itself.
@@ -601,7 +607,7 @@ async fn organization_console_edit_replaces_name_owner_and_admin() {
         detail["owners"],
         json!([{"id":"unavailable","username":null,"first_name":null,"last_name":null,"email":null,"avatar_image_url":null}])
     );
-    assert_eq!(detail["admins"][0]["username"], "new-admin");
+    assert_eq!(detail["admins"].as_array().unwrap().len(), 2);
     assert_eq!(
         e.fga.direct_roles_on("unavailable", id).await.unwrap(),
         vec![Role::OrganizationOwner]

@@ -1050,13 +1050,13 @@ async fn get_organization(
     Ok(Json(organization_detail(&s, organization).await?))
 }
 
-/// Absent fields stay unchanged. A named account becomes the role's sole direct holder.
+/// Absent fields stay unchanged. A named owner becomes the sole direct owner; admins
+/// are granted and revoked by the organization's own governance.
 #[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 struct UpdateOrganization {
     name: Option<String>,
     owner_username: Option<String>,
-    admin_username: Option<String>,
 }
 
 #[utoipa::path(
@@ -1090,7 +1090,6 @@ async fn update_organization(
         spaces::OrganizationChange {
             name: req.name.as_deref(),
             owner_username: req.owner_username.as_deref(),
-            admin_username: req.admin_username.as_deref(),
         },
     )
     .await?;

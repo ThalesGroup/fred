@@ -4570,7 +4570,6 @@
         "successSummary": "Organization {{name}} updated",
         "loadFailed": "Unable to load this organization. Close and try again.",
         "severalOwners": "This organization currently has several owners: {{names}}. Choosing a new owner replaces all of them.",
-        "severalAdmins": "This organization currently has several administrators: {{names}}. Choosing a new administrator replaces all of them.",
         "errors": {
           "summary": "Failed to update the organization",
           "fallbackDetail": "Could not update the organization. Please try again.",

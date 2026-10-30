@@ -1474,6 +1474,7 @@ One of: `source_guarantee`, `api_metadata`.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `agent_configuration_revision` | integer (int64) | yes |  |
 | `agent_instance_id` | string (uuid) | yes |  |
 | `session_id` | string (uuid) | yes | Frontend-generated identifier, retained verbatim. |
 | `title` | string, max length 500 or null |  |  |
@@ -1594,6 +1595,7 @@ JSON error envelope shared by application, authentication and import failures.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `agent_configuration_revision` | integer (int64) | yes |  |
 | `agent_instance_id` | string (uuid) | yes |  |
 | `chat_controls` | array of [`ChatControlDescriptor`](#chatcontroldescriptor) | yes |  |
 | `execute_stream_url` | string | yes |  |
@@ -2125,6 +2127,7 @@ One of: `member`, `editor`, `admin`, `analyst`, `organization_owner`, `personal_
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `configuration` | any | yes | Saved tuning, excluding the legacy profile reference exposed in models for diagnostics. No refresh from the catalog; fields, values and capability envelopes are preserved. |
+| `configuration_revision` | integer (int64) | yes |  |
 | `configuration_updated_at` | string (date-time) | yes |  |
 | `instance_id` | string (uuid) | yes |  |
 | `runtime_id` | string | yes |  |
@@ -2215,6 +2218,8 @@ One of:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `agent_configuration_changed` | boolean | yes |  |
+| `agent_configuration_revision` | integer (int64) | yes |  |
 | `agent_deleted` | boolean | yes |  |
 | `agent_disabled` | boolean | yes |  |
 | `agent_display_name` | string | yes | Current name, or the registration snapshot after instance removal. |
@@ -2425,11 +2430,10 @@ Type: [`TuningScalar`](#tuningscalar) or array of [`TuningScalar`](#tuningscalar
 
 ### UpdateOrganization
 
-Absent fields stay unchanged. A named account becomes the role's sole direct holder.
+Absent fields stay unchanged. A named owner becomes the sole direct owner; admins are granted and revoked by the organization's own governance.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `admin_username` | string or null |  |  |
 | `name` | string or null |  |  |
 | `owner_username` | string or null |  |  |
 

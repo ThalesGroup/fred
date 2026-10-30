@@ -449,7 +449,6 @@ pub struct OrganizationGovernance {
 pub struct OrganizationChange<'a> {
     pub name: Option<&'a str>,
     pub owner_username: Option<&'a str>,
-    pub admin_username: Option<&'a str>,
 }
 
 /// HTTP governance creates only the two explicitly selected roles, never content access.
@@ -513,9 +512,9 @@ pub async fn create_managed_organization(
     Ok(org)
 }
 
-/// Renames an organization and/or makes each named account the sole direct holder of
-/// its role, with the same authority, validation and locking as creation. Roles and
-/// the renamed row land together: SQL commits only after OpenFGA accepted the delta.
+/// Renames an organization and/or makes the named account its sole direct owner, with
+/// the same authority, validation and locking as creation. Admins stay with the
+/// organization's own governance. SQL commits only after OpenFGA accepted the delta.
 pub async fn update_managed_organization(
     pool: &PgPool,
     fga: &Fga,
@@ -526,24 +525,16 @@ pub async fn update_managed_organization(
 ) -> AppResult<OrganizationGovernance> {
     crate::platform::require_owner(fga, caller).await?;
     let name = change.name.map(validate_space_name).transpose()?;
-    if name.is_none() && change.owner_username.is_none() && change.admin_username.is_none() {
+    if name.is_none() && change.owner_username.is_none() {
         return Err(AppError::Unprocessable(
             "no organization change requested".into(),
         ));
     }
-    for username in [change.owner_username, change.admin_username]
-        .into_iter()
-        .flatten()
-    {
-        validate_username(username)?;
-    }
     let owner = match change.owner_username {
-        Some(username) => Some(resolve_account(directory, username, OWNER_NOT_FOUND).await?),
-        None => None,
-    };
-    let admin = match change.admin_username {
-        Some(username) if change.owner_username == Some(username) => owner.clone(),
-        Some(username) => Some(resolve_account(directory, username, ADMIN_NOT_FOUND).await?),
+        Some(username) => {
+            validate_username(username)?;
+            Some(resolve_account(directory, username, OWNER_NOT_FOUND).await?)
+        }
         None => None,
     };
     let (mut tx, mut guard) = lock_for(pool, fga, &load_organization(pool, id).await?).await?;
@@ -563,32 +554,23 @@ pub async fn update_managed_organization(
         fga.space_holders(id, Role::OrganizationOwner),
         fga.space_holders(id, Role::Admin),
     )?;
-    let mut holders = Vec::new();
-    for (target, role, current) in [
-        (&owner, Role::OrganizationOwner, &owners),
-        (&admin, Role::Admin, &admins),
-    ] {
-        if let Some(target) = target {
-            holders.push((target.as_str(), role, current));
-        }
-    }
     let (mut writes, mut deletes) = (Vec::new(), Vec::new());
-    for (target, role, current) in &holders {
-        if !current.iter().any(|holder| holder == target) {
+    if let Some(target) = &owner {
+        if !owners.contains(target) {
             may_attach(&mut *tx, fga, target, id).await?;
             writes.push(Tuple {
                 user: target,
-                role: *role,
+                role: Role::OrganizationOwner,
                 space: id,
             });
         }
         deletes.extend(
-            current
+            owners
                 .iter()
-                .filter(|holder| holder != target)
+                .filter(|holder| *holder != target)
                 .map(|holder| Tuple {
                     user: holder,
-                    role: *role,
+                    role: Role::OrganizationOwner,
                     space: id,
                 }),
         );
@@ -619,7 +601,7 @@ pub async fn update_managed_organization(
     Ok(OrganizationGovernance {
         organization,
         owners: owner.map_or(owners, |owner| vec![owner]),
-        admins: admin.map_or(admins, |admin| vec![admin]),
+        admins,
     })
 }
 

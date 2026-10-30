@@ -4570,7 +4570,6 @@
         "successSummary": "Organisation {{name}} modifiée",
         "loadFailed": "Impossible de charger cette organisation. Fermez et réessayez.",
         "severalOwners": "Cette organisation a actuellement plusieurs propriétaires : {{names}}. Choisir un nouveau propriétaire les remplace tous.",
-        "severalAdmins": "Cette organisation a actuellement plusieurs administrateurs : {{names}}. Choisir un nouvel administrateur les remplace tous.",
         "errors": {
           "summary": "Échec de la modification de l'organisation",
           "fallbackDetail": "Impossible de modifier l'organisation. Veuillez réessayer.",

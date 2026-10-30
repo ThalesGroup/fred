@@ -204,7 +204,9 @@ it("opens the edit pre-filled from the organization's detail, with nothing to sa
   expect(h.detailQuery).toHaveBeenLastCalledWith({ id: "a" }, expect.objectContaining({ skip: false }));
   expect(nameInput().value).toBe("Demo");
   expect(dialog()!.textContent).toContain("(olivia)");
-  expect(dialog()!.textContent).toContain("(adam)");
+  // Admins are not edited here: the organization names them itself.
+  expect(dialog()!.querySelector('input[aria-label="rework.organizations.admin"]')).toBeNull();
+  expect(dialog()!.textContent).not.toContain("(adam)");
   expect(button(SAVE)!.disabled).toBe(true);
   act(() => type(nameInput(), " Demo "));
   expect(button(SAVE)!.disabled).toBe(true);
@@ -225,14 +227,14 @@ it("sends only the changed fields, then closes without reloading the list", asyn
   openEdit();
   act(() => type(nameInput(), "Renamed"));
   act(() =>
-    [...dialog()!.querySelectorAll("button")].find((b) => b.getAttribute("aria-label")?.includes("adam"))!.click(),
+    [...dialog()!.querySelectorAll("button")].find((b) => b.getAttribute("aria-label")?.includes("olivia"))!.click(),
   );
-  act(() => type(dialog()!.querySelector<HTMLInputElement>('input[aria-label="rework.organizations.admin"]')!, "zoe"));
+  act(() => type(dialog()!.querySelector<HTMLInputElement>('input[aria-label="rework.organizations.owner"]')!, "zoe"));
   act(() => button("Select zoe")!.click());
   await act(async () => button(SAVE)!.click());
   expect(h.update).toHaveBeenCalledExactlyOnceWith({
     id: "a",
-    updateOrganization: { name: "Renamed", admin_username: "zoe" },
+    updateOrganization: { name: "Renamed", owner_username: "zoe" },
   });
   expect(h.showSuccess).toHaveBeenCalledWith({
     summary: "rework.organizations.editOrganization.successSummary Renamed",
