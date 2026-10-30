@@ -1564,7 +1564,7 @@ async function verifyProductionHostDownload(browser) {
   const mockedImports = new Set([
     "../../../../hooks/useSelectedTeam.ts",
     "../../../../app/ApplicationContextProvider.tsx",
-    "../../../../slices/controlPlane/controlPlaneOpenApi.ts",
+    "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts",
   ]);
   let vite;
   let childServer;
