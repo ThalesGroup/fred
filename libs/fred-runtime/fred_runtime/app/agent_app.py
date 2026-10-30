@@ -1752,6 +1752,8 @@ class _ResolvedAgentInstance(BaseModel):
     # composed system prompt, ahead of every agent template. `None` means no admin
     # ever saved one and the pod's shipped `config/platform_prompt.json` applies.
     platform_prompt: str | None = None
+    # Admin-chosen profile for generated conversation titles; None = no choice.
+    title_model_profile_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -1799,6 +1801,7 @@ class _ResolvedExecutionTarget:
     # two fields above and for the same reason. `None` for direct (non-managed)
     # template execution, where the pod default applies instead.
     platform_prompt: str | None = None
+    title_model_profile_id: str | None = None
     # What every outbound call of this run asks for its credentials. Built at
     # admission from the verified token, so nothing later in the turn can
     # influence who the run acts for.
@@ -2126,6 +2129,7 @@ async def _resolve_agent_instance(
         pod_chat_fallback_profile_id=resolution.pod_chat_fallback_profile_id,
         confirmed_removed_chat_profiles=resolution.confirmed_removed_chat_profiles,
         platform_prompt=resolution.platform_prompt,
+        title_model_profile_id=resolution.title_model_profile_id,
     )
 
 
@@ -3942,6 +3946,7 @@ async def _stream(
     pod_chat_fallback_profile_id: str | None = None,
     confirmed_removed_chat_profiles: dict[str, str] | None = None,
     platform_prompt: str | None = None,
+    title_model_profile_id: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
 ) -> AsyncGenerator[str, None]:
     """
@@ -4027,6 +4032,7 @@ async def _stream(
         pod_chat_fallback_profile_id=pod_chat_fallback_profile_id,
         confirmed_removed_chat_profiles=confirmed_removed_chat_profiles,
         platform_prompt=platform_prompt,
+        title_model_profile_id=title_model_profile_id,
         credential_provider=credential_provider,
         owns_run_record=True,
     )
@@ -4647,6 +4653,7 @@ async def _iterate_runtime_event_payloads(
     pod_chat_fallback_profile_id: str | None = None,
     confirmed_removed_chat_profiles: dict[str, str] | None = None,
     platform_prompt: str | None = None,
+    title_model_profile_id: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
     owns_run_record: bool = False,
 ) -> AsyncGenerator[dict[str, Any], None]:
@@ -4682,7 +4689,13 @@ async def _iterate_runtime_event_payloads(
     # Runs beside the turn and is streamed as soon as it is ready; only a
     # title still pending when `final` arrives gets a short grace period.
     title_task = (
-        asyncio.create_task(propose_session_title(request.message))
+        asyncio.create_task(
+            propose_session_title(
+                request.message,
+                profile_id=title_model_profile_id,
+                binding=platform_chat_model_binding,
+            )
+        )
         if (request.context or {}).get("auto_title") is True
         and request.resume_payload is None
         else None
@@ -7014,6 +7027,7 @@ def _build_agent_router(
             pod_chat_fallback_profile_id=target.pod_chat_fallback_profile_id,
             confirmed_removed_chat_profiles=target.confirmed_removed_chat_profiles,
             platform_prompt=target.platform_prompt,
+            title_model_profile_id=target.title_model_profile_id,
             credential_provider=provider,
         )
         return _RunStreamingResponse(

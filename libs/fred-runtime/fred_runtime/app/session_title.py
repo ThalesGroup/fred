@@ -14,14 +14,15 @@
 
 """A short conversation title, generated once from the first turn's input.
 
-One bounded call on the pod default model without reasoning; the user owns
-the title afterwards.
+One bounded call without reasoning; the user owns the title afterwards.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 
+from fred_sdk.contracts.context import ModelBinding
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..model_routing import RoutedChatModelFactory
@@ -31,6 +32,8 @@ logger = logging.getLogger(__name__)
 
 MAX_INPUT_CHARS = 600
 MAX_TITLE_CHARS = 80
+# Everything but letters, digits, spaces, apostrophes and hyphens.
+_NOISE = re.compile(r"[^\w\s'’-]|_")
 
 _SYSTEM_PROMPT = (
     "You name chat conversations. Reply with the title only: 3 to 8 words, "
@@ -39,18 +42,30 @@ _SYSTEM_PROMPT = (
 
 
 def _clean(text: str) -> str | None:
-    line = text.strip().splitlines()[0] if text.strip() else ""
-    line = line.strip().strip("\"'`«»“”").rstrip(".").strip()
-    return line[:MAX_TITLE_CHARS] or None
+    lines = text.strip().splitlines()
+    words = _NOISE.sub(" ", lines[0]).split() if lines else []
+    title = " ".join(words)[:MAX_TITLE_CHARS].strip("'’- ")
+    return title if any(char.isalpha() for char in title) else None
 
 
-async def propose_session_title(user_input: str) -> str | None:
-    """A title for the conversation, or None when no model answers usefully."""
+async def propose_session_title(
+    user_input: str,
+    *,
+    profile_id: str | None = None,
+    binding: ModelBinding | None = None,
+) -> str | None:
+    """A title for the conversation, or None when no model answers usefully.
+
+    Uses the admin's title model, else the platform chat binding, else the pod
+    default."""
     factory = get_runtime_context().config.chat_model_factory
     if not isinstance(factory, RoutedChatModelFactory) or not user_input.strip():
         return None
     try:
-        model, _name, _fallback = factory.build_chat_for_profile(None)
+        if binding is not None and profile_id is None:
+            model = factory.build_chat_for_binding(binding)
+        else:
+            model, _name, _fallback = factory.build_chat_for_profile(profile_id)
         reply = await model.ainvoke(
             [
                 SystemMessage(content=_SYSTEM_PROMPT),

@@ -36,6 +36,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 class _Model:
     def __init__(self, reply: str | Exception) -> None:
         self.reply = reply
+        self.built_from: Any = None
         self.calls: list[list[BaseMessage]] = []
 
     async def ainvoke(self, messages: list[BaseMessage]) -> AIMessage:
@@ -48,7 +49,12 @@ class _Model:
 def _install(model: _Model) -> None:
     class _Factory(RoutedChatModelFactory):
         def build_chat_for_profile(self, profile_id: str | None, **_kw: Any) -> Any:
+            model.built_from = profile_id
             return model, "chat.default", None
+
+        def build_chat_for_binding(self, binding: Any) -> Any:
+            model.built_from = binding
+            return model
 
     factory = _Factory(
         resolver=ModelRoutingResolver(
@@ -79,6 +85,38 @@ def test_title_is_cleaned_and_bounded() -> None:
     assert len(sent) == session_title.MAX_INPUT_CHARS
 
 
+@pytest.mark.parametrize(
+    ("reply", "title"),
+    [
+        ("**Analyse d'impact** #T3 : 50 % (2026)", "Analyse d'impact T3 50 2026"),
+        ("Revue_des  ventes *2026*", "Revue des ventes 2026"),
+        ("Résumé 📊 – été", "Résumé été"),
+        ("# 123 %", None),
+        ("***", None),
+        ("   ", None),
+    ],
+)
+def test_title_keeps_only_text(reply: str, title: str | None) -> None:
+    _install(_Model(reply))
+    assert asyncio.run(session_title.propose_session_title("hello")) == title
+
+
+def test_title_model_wins_over_platform_binding_then_pod_default() -> None:
+    model = _Model("Title")
+    _install(model)
+    binding = cast(Any, object())
+    asyncio.run(
+        session_title.propose_session_title(
+            "hello", profile_id="chat.small", binding=binding
+        )
+    )
+    assert model.built_from == "chat.small"
+    asyncio.run(session_title.propose_session_title("hello", binding=binding))
+    assert model.built_from is binding
+    asyncio.run(session_title.propose_session_title("hello"))
+    assert model.built_from is None
+
+
 def test_model_failure_gives_no_title() -> None:
     _install(_Model(RuntimeError("provider down")))
     assert asyncio.run(session_title.propose_session_title("hello")) is None
@@ -100,7 +138,7 @@ def _kinds(
         yield {"kind": "assistant_delta", "delta": "hi"}
         yield {"kind": "final", "content": "hi"}
 
-    async def _propose(user_input: str) -> str | None:
+    async def _propose(user_input: str, **_kwargs: Any) -> str | None:
         return title
 
     monkeypatch.setattr(
