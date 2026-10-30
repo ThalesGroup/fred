@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { DocumentMetadata, TaskSummary } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { DocumentMetadata, TaskSummary } from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { TERMINAL_STATES, type TaskViewModel } from "../../../../features/tasks/taskTypes";
 import { collectDescendantDocUids, type TagNode } from "../../../../../shared/utils/tagTree.ts";
 import { deriveDocStatus } from "@shared/molecules/StatusChip/deriveDocStatus.ts";

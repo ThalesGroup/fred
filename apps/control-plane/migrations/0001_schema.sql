@@ -73,10 +73,13 @@ create index folder_deletion_manifest on folder (deletion_id) where deletion_id 
 create unique index folder_space_id_parent_id_name_key on folder (space_id, parent_id, name)
     nulls not distinct where deletion_id is null;
 
+-- A conversation attachment has a session and no folder; only its owner reaches it,
+-- through the conversation routes. Drive reads and counters exclude it, quota does not.
 create table document (
     id          uuid primary key,
     space_id    uuid not null references space (id),
-    folder_id   uuid,             -- null means the space root
+    folder_id   uuid,             -- null means the space root, or an attachment
+    session_id  uuid,             -- the owning conversation; foreign key below
     name        text not null,
     mime        text not null,
     size        bigint not null,
@@ -105,12 +108,14 @@ create table document (
         num_nulls(retrieval_id, retrieval_actor, retrieval_target, retrieval_phase, retrieval_confirmed) in (0, 5)
     ),
     check (purged_at is null or deletion_id is not null),
-    check ((purge_after is null) = (deletion_id is null))
+    check ((purge_after is null) = (deletion_id is null)),
+    check (session_id is null or folder_id is null)
 );
 create index document_quota_owner on document (quota_owner) include (size);
 create index document_deletion_manifest on document (deletion_id) where deletion_id is not null;
 create index document_purge on document (purge_after, id) where deletion_id is not null and purged_at is null;
-create unique index document_space_id_folder_id_name_key on document (space_id, folder_id, name)
+create index document_session on document (session_id) where session_id is not null;
+create unique index document_space_id_folder_id_name_key on document (space_id, folder_id, session_id, name)
     nulls not distinct where deletion_id is null;
 
 -- Placement is immutable: chunks and storage keys copy it. Only names change.
@@ -133,7 +138,7 @@ end $$;
 
 create function forbid_document_move() returns trigger language plpgsql as $$
 begin
-    if (new.space_id, new.folder_id) is distinct from (old.space_id, old.folder_id) then
+    if (new.space_id, new.folder_id, new.session_id) is distinct from (old.space_id, old.folder_id, old.session_id) then
         raise exception 'document placement is immutable';
     end if;
     return new;
@@ -205,14 +210,15 @@ create table document_storage (
 );
 
 -- Historical target IDs deliberately survive failed uploads and target deletion.
--- A stored upload's id is its document's id.
+-- A stored upload's id is its document's id. Its destination is a folder or a conversation.
 create table document_upload (
     id uuid primary key,
     request_key uuid not null,
     actor text not null,
     organization_id uuid not null,
     space_id uuid not null,
-    folder_id uuid not null,
+    folder_id uuid,
+    session_id uuid,
     quota_owner uuid not null,
     name text not null,
     mime text not null,
@@ -232,9 +238,11 @@ create table document_upload (
     cleanup_attempts integer not null default 0,
     cleaned_at timestamptz,
     unique(actor, request_key),
-    check((status = 'pending') = (completed_at is null))
+    check((status = 'pending') = (completed_at is null)),
+    check((folder_id is null) = (session_id is not null))
 );
-create unique index document_upload_active_name on document_upload(space_id, folder_id, name) where status = 'pending';
+create unique index document_upload_active_name on document_upload(space_id, folder_id, session_id, name)
+    nulls not distinct where status = 'pending';
 create index document_upload_active_quota on document_upload(quota_owner) include(size) where status = 'pending';
 create index document_upload_receipts on document_upload(actor, space_id, created_at desc, request_key desc) where acknowledged_at is null;
 create index document_upload_cleanup on document_upload(cleanup_due_at, id) where status = 'failed' and cleaned_at is null;
@@ -499,6 +507,11 @@ create table session_metadata (
 );
 create index session_metadata_owner_activity
     on session_metadata (space_id, user_id, updated_at desc, session_id);
+
+-- An attachment lives in its conversation's space.
+alter table session_metadata add unique (session_id, space_id);
+alter table document add foreign key (session_id, space_id)
+    references session_metadata (session_id, space_id);
 
 -- A row enables one pod offer for every space of the organization; no row denies it.
 create table organization_capability (

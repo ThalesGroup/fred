@@ -21,7 +21,7 @@ import {
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
   useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation,
   useMutateDocumentLabelsMutation,
-} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+} from "../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useTranslation } from "react-i18next";
 import { downloadFile, fetchAuthedBlob } from "../../../utils/downloadUtils";

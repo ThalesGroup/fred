@@ -795,7 +795,6 @@ export type RuntimeContext = {
   agent_instance_id?: string | null;
   /** Whether this interactive conversation offers the agent's ask_user tool. True mounts it, False disables it for new turns, and None means no interactive control was offered. */
   ask_user?: boolean | null;
-  attachments_markdown?: string | null;
   /** Team-chosen default chat model profile id, resolved by control-plane from the team's TeamRoutingPolicy at prepare-execution and forwarded unchanged for the rest of the session — same channel as context_prompt_text, not re-fetched per turn. Applied by RoutedChatModelFactory only when no static models_catalog.yaml agent_profile_overrides entry matches — the static YAML override remains an ops-level override this can never beat. */
   chat_default_profile_id?: string | null;
   /** The user's per-conversation chat model choice: a chat profile id picked in the composer and sent on every turn. Client-forwarded, so the pod accepts it only if the profile is a known chat profile whose model is in `usable_model_ids` and not in `team_disabled_model_ids`; otherwise it is ignored and logged. Ranks below the platform binding and the pod's per-agent override, above the instance recommendation and the team default. */

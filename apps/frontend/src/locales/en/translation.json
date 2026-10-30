@@ -460,7 +460,8 @@
       "image": "Image",
       "processing": "Processing",
       "removeAria": "Remove {{name}}",
-      "uploading": "Uploading"
+      "uploading": "Uploading",
+      "ready": "Ready"
     },
     "fullReasoning": {
       "title": "Full reasoning",
@@ -490,7 +491,27 @@
       "processingFast": "Fast processing",
       "processingPrepare": "Preparing processing",
       "uploadWarningConfirm": "I understand",
-      "uploadWarningTitle": "Before attaching files"
+      "uploadWarningTitle": "Before attaching files",
+      "waiting": "Sending waits for file upload and processing. A file ready after a turn starts is available from the next turn.",
+      "listFailed": "Unable to verify attachments. Retry before sending your message.",
+      "retryUpload": "Retry upload (select the same file)",
+      "processingUnavailable": "This file cannot be used by the agent. Delete it and upload it again to retry processing.",
+      "errors": {
+        "upload_in_progress": "Upload is still in progress. Its receipt will be checked.",
+        "retry_superseded": "Another attempt replaced this upload. Its receipt will be checked.",
+        "name_conflict": "This name already exists in the conversation. Rename the local file or delete the existing document.",
+        "quota_exceeded": "The storage quota has been reached.",
+        "conversation_files_exceeded": "The conversation file limit has been reached.",
+        "conversation_bytes_exceeded": "The conversation total file size limit has been reached.",
+        "file_too_large": "This file exceeds the size limit.",
+        "transfer_capacity": "The upload service is busy. Wait for the specified delay before retrying.",
+        "processing_active": "Processing is still active: deletion was refused. Wait for processing to finish.",
+        "not_ready": "This file cannot be used. Delete it and upload it again.",
+        "storage_unavailable": "The service is unavailable. The upload outcome still needs verification.",
+        "interrupted_before_send": "No receipt found. Select the same file to retry the upload.",
+        "wrong_file": "Select the original file with the same name and size."
+      },
+      "readyHint": "Ready files are considered at the start of the next turn, according to the agent’s enabled capabilities."
     },
     "composerActions": {
       "dialogAria": "Chat actions",
@@ -4763,6 +4784,53 @@
         "delivery_unknown": "Processing did not start within the allowed time. You can retry.",
         "deadline_exceeded": "Processing exceeded the allowed time. You can retry.",
         "worker_failed": "Processing failed. The original is preserved and can be processed again."
+      }
+    },
+    "weaver": {
+      "title": "Weaver migration",
+      "description": "These journeys are preserved for incremental migration. They are not yet available in Weaver.",
+      "pending": "Pending migration",
+      "all": "All features",
+      "previewTitle": "Swift preview — fictional data",
+      "previewStart": "Locally, run make swift-preview in apps/frontend, then open a preview.",
+      "openPreview": "Open Swift screen (local development)",
+      "previewDisclaimer": "No real data. Audit, renaming, labels and acknowledgement use in-memory fixtures. Unmodelled interactions return an explicit error. Reload resets the examples.",
+      "dictationHint": "The microphone stays local; transcription always returns a fictional sentence without sending audio.",
+      "dictatedText": "This is a fictional transcription for revisiting dictation.",
+      "choose": "Choose a feature above.",
+      "features": {
+        "audit": {
+          "title": "Corpus audit",
+          "next": "Read anomalies first, then authorized repair in a separate increment."
+        },
+        "tasks": {
+          "title": "Tasks and activity",
+          "next": "List scoped Weaver operations and their states; then add acknowledgement and cancellation."
+        },
+        "diagnostics": {
+          "title": "Diagnostics",
+          "next": "Port one scenario at a time and verify its Weaver contracts before enabling execution."
+        },
+        "migration": {
+          "title": "Platform import and export",
+          "next": "Define export scope; port reads before write operations."
+        },
+        "knowledge-bases": {
+          "title": "Knowledge Bases",
+          "next": "Connect the catalog, then source configuration and permissions."
+        },
+        "knowledge-documents": {
+          "title": "Knowledge Base documents",
+          "next": "Connect a library to a read-only Control Plane folder."
+        },
+        "documents": {
+          "title": "Advanced document actions",
+          "next": "Separate increments: renaming, labels, ZIP, import replacement and folder totals. Control Plane browsing and imports stay active outside preview."
+        },
+        "dictation": {
+          "title": "Dictation",
+          "next": "Define and connect transcription; verify errors and cancellation."
+        }
       }
     }
   },

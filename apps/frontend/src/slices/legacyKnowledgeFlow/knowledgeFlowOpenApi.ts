@@ -1,0 +1,3075 @@
+import { knowledgeFlowApi as api } from "./knowledgeFlowApi";
+const injectedRtkApi = api.injectEndpoints({
+  endpoints: (build) => ({
+    healthzKnowledgeFlowV1HealthzGet: build.query<
+      HealthzKnowledgeFlowV1HealthzGetApiResponse,
+      HealthzKnowledgeFlowV1HealthzGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/healthz` }),
+    }),
+    readyKnowledgeFlowV1ReadyGet: build.query<
+      ReadyKnowledgeFlowV1ReadyGetApiResponse,
+      ReadyKnowledgeFlowV1ReadyGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/ready` }),
+    }),
+    listTasksKnowledgeFlowV1TasksGet: build.query<
+      ListTasksKnowledgeFlowV1TasksGetApiResponse,
+      ListTasksKnowledgeFlowV1TasksGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tasks`,
+        params: {
+          scope: queryArg.scope,
+          team_id: queryArg.teamId,
+          kind: queryArg.kind,
+          state: queryArg.state,
+          task_id: queryArg.taskId,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    getTaskKnowledgeFlowV1TasksTaskIdGet: build.query<
+      GetTaskKnowledgeFlowV1TasksTaskIdGetApiResponse,
+      GetTaskKnowledgeFlowV1TasksTaskIdGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tasks/${queryArg.taskId}`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    streamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGet: build.query<
+      StreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetApiResponse,
+      StreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tasks/${queryArg.taskId}/events`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    cancelTaskKnowledgeFlowV1TasksTaskIdCancelPost: build.mutation<
+      CancelTaskKnowledgeFlowV1TasksTaskIdCancelPostApiResponse,
+      CancelTaskKnowledgeFlowV1TasksTaskIdCancelPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tasks/${queryArg.taskId}/cancel`,
+        method: "POST",
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    acknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPost: build.mutation<
+      AcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostApiResponse,
+      AcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tasks/${queryArg.taskId}/ack`,
+        method: "POST",
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    searchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPost: build.mutation<
+      SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiResponse,
+      SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/metadata/search`,
+        method: "POST",
+        body: queryArg.filters,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    getDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGet: build.query<
+      GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetApiResponse,
+      GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/metadata/${queryArg.documentUid}`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    updateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPut: build.mutation<
+      UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiResponse,
+      UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/document/metadata/${queryArg.documentUid}`,
+        method: "PUT",
+        params: {
+          retrievable: queryArg.retrievable,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    updateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut: build.mutation<
+      UpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutApiResponse,
+      UpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/document/metadata/${queryArg.documentUid}/title`,
+        method: "PUT",
+        body: queryArg.bodyUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    renameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut: build.mutation<
+      RenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutApiResponse,
+      RenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/document/metadata/${queryArg.documentUid}/name`,
+        method: "PUT",
+        body: queryArg.bodyRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    browseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePost: build.mutation<
+      BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiResponse,
+      BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/metadata/browse`,
+        method: "POST",
+        body: queryArg.browseDocumentsByTagRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    tagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPost: build.mutation<
+      TagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostApiResponse,
+      TagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/metadata/tag-sizes`,
+        method: "POST",
+        body: queryArg.tagSizesRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    mutateDocumentLabels: build.mutation<MutateDocumentLabelsApiResponse, MutateDocumentLabelsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/labels`,
+        method: "PATCH",
+        body: queryArg.labelMutationRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    addDocumentLabel: build.mutation<AddDocumentLabelApiResponse, AddDocumentLabelApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/labels/${queryArg.label}`,
+        method: "POST",
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    removeDocumentLabel: build.mutation<RemoveDocumentLabelApiResponse, RemoveDocumentLabelApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/labels/${queryArg.label}`,
+        method: "DELETE",
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    listDocumentLabels: build.query<ListDocumentLabelsApiResponse, ListDocumentLabelsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/labels`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    listDocumentsByLabel: build.query<ListDocumentsByLabelApiResponse, ListDocumentsByLabelApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/by-label/${queryArg.label}`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    resolveDocumentsByLabel: build.query<ResolveDocumentsByLabelApiResponse, ResolveDocumentsByLabelApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/by-label`,
+        params: {
+          label: queryArg.label,
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    documentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGet: build.query<
+      DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiResponse,
+      DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/vectors`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    documentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGet: build.query<
+      DocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetApiResponse,
+      DocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/chunks`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    auditDocumentsKnowledgeFlowV1DocumentsAuditGet: build.query<
+      AuditDocumentsKnowledgeFlowV1DocumentsAuditGetApiResponse,
+      AuditDocumentsKnowledgeFlowV1DocumentsAuditGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/audit`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    fixDocumentsKnowledgeFlowV1DocumentsAuditFixPost: build.mutation<
+      FixDocumentsKnowledgeFlowV1DocumentsAuditFixPostApiResponse,
+      FixDocumentsKnowledgeFlowV1DocumentsAuditFixPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/audit/fix`,
+        method: "POST",
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    getChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdGet: build.query<
+      GetChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdGetApiResponse,
+      GetChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/chunks/${queryArg.chunkId}`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    deleteChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdDelete: build.mutation<
+      DeleteChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdDeleteApiResponse,
+      DeleteChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/chunks/${queryArg.chunkId}`,
+        method: "DELETE",
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    getMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGet: build.query<
+      GetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetApiResponse,
+      GetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/markdown/${queryArg.documentUid}`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    downloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdGet: build.query<
+      DownloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdGetApiResponse,
+      DownloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/markdown/${queryArg.documentUid}/media/${queryArg.mediaId}`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    downloadDocumentKnowledgeFlowV1RawContentDocumentUidGet: build.query<
+      DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiResponse,
+      DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/raw_content/${queryArg.documentUid}`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    downloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGet: build.query<
+      DownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetApiResponse,
+      DownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/markdown/${queryArg.documentUid}/artifact/${queryArg.artifactPath}`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    streamDocumentAsPdfKnowledgeFlowV1RawContentPdfDocumentUidGet: build.query<
+      StreamDocumentAsPdfKnowledgeFlowV1RawContentPdfDocumentUidGetApiResponse,
+      StreamDocumentAsPdfKnowledgeFlowV1RawContentPdfDocumentUidGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/raw_content/pdf/${queryArg.documentUid}`,
+        headers: {
+          Range: queryArg.range,
+        },
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    streamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGet: build.query<
+      StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiResponse,
+      StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/raw_content/stream/${queryArg.documentUid}`,
+        headers: {
+          Range: queryArg.range,
+        },
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    transcribeAudioKnowledgeFlowV1AudioTranscriptionsPost: build.mutation<
+      TranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostApiResponse,
+      TranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/audio/transcriptions`,
+        method: "POST",
+        body: queryArg.bodyTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPost,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    uploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost: build.mutation<
+      UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiResponse,
+      UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/upload-documents`,
+        method: "POST",
+        body: queryArg.bodyUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    processDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost: build.mutation<
+      ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiResponse,
+      ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/upload-process-documents`,
+        method: "POST",
+        body: queryArg.bodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    quotaPrecheckKnowledgeFlowV1QuotaPrecheckPost: build.mutation<
+      QuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostApiResponse,
+      QuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/quota/precheck`,
+        method: "POST",
+        body: queryArg.quotaPrecheckRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    importNameCheckKnowledgeFlowV1DocumentsNameCheckPost: build.mutation<
+      ImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostApiResponse,
+      ImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/name-check`,
+        method: "POST",
+        body: queryArg.importNameCheckRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    fastMarkdownKnowledgeFlowV1FastTextPost: build.mutation<
+      FastMarkdownKnowledgeFlowV1FastTextPostApiResponse,
+      FastMarkdownKnowledgeFlowV1FastTextPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fast/text`,
+        method: "POST",
+        body: queryArg.bodyFastMarkdownKnowledgeFlowV1FastTextPost,
+        params: {
+          format: queryArg.format,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    fastIngestKnowledgeFlowV1FastIngestPost: build.mutation<
+      FastIngestKnowledgeFlowV1FastIngestPostApiResponse,
+      FastIngestKnowledgeFlowV1FastIngestPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fast/ingest`,
+        method: "POST",
+        body: queryArg.bodyFastIngestKnowledgeFlowV1FastIngestPost,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    deleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDelete: build.mutation<
+      DeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteApiResponse,
+      DeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fast/delete/${queryArg.documentUid}`,
+        method: "DELETE",
+        params: {
+          session_id: queryArg.sessionId,
+          storage_key: queryArg.storageKey,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    writeDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPost: build.mutation<
+      WriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPostApiResponse,
+      WriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/libraries/${queryArg.libraryId}/documents`,
+        method: "POST",
+        body: queryArg.bodyWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPost,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    removeDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsDelete: build.mutation<
+      RemoveDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsDeleteApiResponse,
+      RemoveDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/libraries/${queryArg.libraryId}/documents`,
+        method: "DELETE",
+        params: {
+          source_key: queryArg.sourceKey,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    listDocumentsKnowledgeFlowV1LibrariesLibraryIdDocumentsGet: build.query<
+      ListDocumentsKnowledgeFlowV1LibrariesLibraryIdDocumentsGetApiResponse,
+      ListDocumentsKnowledgeFlowV1LibrariesLibraryIdDocumentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/libraries/${queryArg.libraryId}/documents`,
+        params: {
+          limit: queryArg.limit,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    readSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGet: build.query<
+      ReadSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGetApiResponse,
+      ReadSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/libraries/${queryArg.libraryId}/source-version`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    recordSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionPut: build.mutation<
+      RecordSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionPutApiResponse,
+      RecordSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/libraries/${queryArg.libraryId}/source-version`,
+        method: "PUT",
+        body: queryArg.librarySourceVersion,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    recordSynchronizedByKnowledgeFlowV1LibrariesLibraryIdSynchronizedByPut: build.mutation<
+      RecordSynchronizedByKnowledgeFlowV1LibrariesLibraryIdSynchronizedByPutApiResponse,
+      RecordSynchronizedByKnowledgeFlowV1LibrariesLibraryIdSynchronizedByPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/libraries/${queryArg.libraryId}/synchronized-by`,
+        method: "PUT",
+        body: queryArg.librarySynchronizedBy,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    listTags: build.query<ListTagsApiResponse, ListTagsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tags`,
+        params: {
+          type: queryArg["type"],
+          path_prefix: queryArg.pathPrefix,
+          limit: queryArg.limit,
+          offset: queryArg.offset,
+          owner_filter: queryArg.ownerFilter,
+          team_id: queryArg.teamId,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    createTag: build.mutation<CreateTagApiResponse, CreateTagApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tags`,
+        method: "POST",
+        body: queryArg.tagCreate,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    getTagCorpusTypeStats: build.query<GetTagCorpusTypeStatsApiResponse, GetTagCorpusTypeStatsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tags/stats`,
+        params: {
+          team_id: queryArg.teamId,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    getTag: build.query<GetTagApiResponse, GetTagApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tags/${queryArg.tagId}`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    updateTag: build.mutation<UpdateTagApiResponse, UpdateTagApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tags/${queryArg.tagId}`,
+        method: "PUT",
+        body: queryArg.tagUpdate,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    deleteTag: build.mutation<DeleteTagApiResponse, DeleteTagApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tags/${queryArg.tagId}`,
+        method: "DELETE",
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    listTagMembers: build.query<ListTagMembersApiResponse, ListTagMembersApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tags/${queryArg.tagId}/members`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    shareTag: build.mutation<ShareTagApiResponse, ShareTagApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tags/${queryArg.tagId}/share`,
+        method: "POST",
+        body: queryArg.tagShareRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    unshareTag: build.mutation<UnshareTagApiResponse, UnshareTagApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tags/${queryArg.tagId}/share/${queryArg.targetId}`,
+        method: "DELETE",
+        params: {
+          target_type: queryArg.targetType,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    echoSchemaKnowledgeFlowV1SchemasEchoPost: build.mutation<
+      EchoSchemaKnowledgeFlowV1SchemasEchoPostApiResponse,
+      EchoSchemaKnowledgeFlowV1SchemasEchoPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/schemas/echo`,
+        method: "POST",
+        body: queryArg.echoEnvelope,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    searchDocumentsUsingVectorization: build.mutation<
+      SearchDocumentsUsingVectorizationApiResponse,
+      SearchDocumentsUsingVectorizationApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/vector/search`,
+        method: "POST",
+        body: queryArg.searchRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    similaritySearch: build.mutation<SimilaritySearchApiResponse, SimilaritySearchApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/vector/similarity-search`,
+        method: "POST",
+        body: queryArg.similaritySearchRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    getVisualEvidenceArtifact: build.query<GetVisualEvidenceArtifactApiResponse, GetVisualEvidenceArtifactApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/vector/visual-evidence-artifact`,
+        params: {
+          document_uid: queryArg.documentUid,
+          artifact_path: queryArg.artifactPath,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    testPostSuccess: build.mutation<TestPostSuccessApiResponse, TestPostSuccessApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/vector/test`,
+        method: "POST",
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    getDocumentChunksOrdered: build.query<GetDocumentChunksOrderedApiResponse, GetDocumentChunksOrderedApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/vector/document-chunks`,
+        params: {
+          document_uid: queryArg.documentUid,
+          limit: queryArg.limit,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    rerankDocuments: build.mutation<RerankDocumentsApiResponse, RerankDocumentsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/vector/rerank`,
+        method: "POST",
+        body: queryArg.rerankRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    getDocumentTreeKnowledgeFlowV1DocumentsTreePost: build.mutation<
+      GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiResponse,
+      GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/tree`,
+        method: "POST",
+        body: queryArg.documentTreeRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    summarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePost: build.mutation<
+      SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApiResponse,
+      SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/summarize`,
+        method: "POST",
+        body: queryArg.summarizeDocumentRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    extractDocumentKnowledgeFlowV1DocumentsDocumentUidExtractPost: build.mutation<
+      ExtractDocumentKnowledgeFlowV1DocumentsDocumentUidExtractPostApiResponse,
+      ExtractDocumentKnowledgeFlowV1DocumentsDocumentUidExtractPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/extract`,
+        method: "POST",
+        body: queryArg.extractDocumentRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    getResourceCreationSchema: build.query<GetResourceCreationSchemaApiResponse, GetResourceCreationSchemaApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/resources/schema`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    createResource: build.mutation<CreateResourceApiResponse, CreateResourceApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/resources`,
+        method: "POST",
+        body: queryArg.resourceCreate,
+        params: {
+          library_tag_id: queryArg.libraryTagId,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    listResourcesByKind: build.query<ListResourcesByKindApiResponse, ListResourcesByKindApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/resources`,
+        params: {
+          kind: queryArg.kind,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    updateResource: build.mutation<UpdateResourceApiResponse, UpdateResourceApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/resources/${queryArg.resourceId}`,
+        method: "PUT",
+        body: queryArg.resourceUpdate,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    getResource: build.query<GetResourceApiResponse, GetResourceApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/resources/${queryArg.resourceId}`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    deleteResource: build.mutation<DeleteResourceApiResponse, DeleteResourceApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/resources/${queryArg.resourceId}`,
+        method: "DELETE",
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    ls: build.query<LsApiResponse, LsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/list`,
+        params: {
+          path: queryArg.path,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    statFileOrDirectory: build.query<StatFileOrDirectoryApiResponse, StatFileOrDirectoryApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/stat/${queryArg.path}`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    readFile: build.query<ReadFileApiResponse, ReadFileApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/cat/${queryArg.path}`,
+        params: {
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+          max_chars: queryArg.maxChars,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    readFilePage: build.query<ReadFilePageApiResponse, ReadFilePageApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/page/${queryArg.path}`,
+        params: {
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+          max_chars: queryArg.maxChars,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    deleteFile: build.mutation<DeleteFileApiResponse, DeleteFileApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/delete/${queryArg.path}`,
+        method: "DELETE",
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    uploadFile: build.mutation<UploadFileApiResponse, UploadFileApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/upload/${queryArg.path}`,
+        method: "POST",
+        body: queryArg.bodyUploadFile,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    downloadFile: build.query<DownloadFileApiResponse, DownloadFileApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/download/${queryArg.path}`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    glob: build.query<GlobApiResponse, GlobApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/glob`,
+        params: {
+          pattern: queryArg.pattern,
+          path: queryArg.path,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    grep: build.query<GrepApiResponse, GrepApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/grep`,
+        params: {
+          pattern: queryArg.pattern,
+          path: queryArg.path,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    listTabularDocuments: build.query<ListTabularDocumentsApiResponse, ListTabularDocumentsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tabular/documents`,
+        params: {
+          document_library_tags_ids: queryArg.documentLibraryTagsIds,
+          owner_filter: queryArg.ownerFilter,
+          team_id: queryArg.teamId,
+          attachment_uids: queryArg.attachmentUids,
+          include_session_scope: queryArg.includeSessionScope,
+          include_corpus_scope: queryArg.includeCorpusScope,
+          corpus_document_uids: queryArg.corpusDocumentUids,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    describeTabularDocuments: build.query<DescribeTabularDocumentsApiResponse, DescribeTabularDocumentsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tabular/documents/schemas`,
+        params: {
+          document_uids: queryArg.documentUids,
+          document_library_tags_ids: queryArg.documentLibraryTagsIds,
+          owner_filter: queryArg.ownerFilter,
+          team_id: queryArg.teamId,
+          attachment_uids: queryArg.attachmentUids,
+          include_session_scope: queryArg.includeSessionScope,
+          include_corpus_scope: queryArg.includeCorpusScope,
+          corpus_document_uids: queryArg.corpusDocumentUids,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    readQuery: build.mutation<ReadQueryApiResponse, ReadQueryApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tabular/query`,
+        method: "POST",
+        body: queryArg.tabularQueryRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    searchTabularValues: build.mutation<SearchTabularValuesApiResponse, SearchTabularValuesApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tabular/search`,
+        method: "POST",
+        body: queryArg.tabularSearchRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    prometheusQuery: build.mutation<PrometheusQueryApiResponse, PrometheusQueryApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/query`,
+        method: "POST",
+        body: queryArg.prometheusQueryRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    prometheusQueryRange: build.mutation<PrometheusQueryRangeApiResponse, PrometheusQueryRangeApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/query_range`,
+        method: "POST",
+        body: queryArg.prometheusQueryRangeRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    prometheusSeries: build.mutation<PrometheusSeriesApiResponse, PrometheusSeriesApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/series`,
+        method: "POST",
+        body: queryArg.prometheusSeriesRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    prometheusMetrics: build.query<PrometheusMetricsApiResponse, PrometheusMetricsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/metrics`,
+        params: {
+          limit: queryArg.limit,
+          search: queryArg.search,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    prometheusMetricsCatalog: build.query<PrometheusMetricsCatalogApiResponse, PrometheusMetricsCatalogApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/metrics_catalog`,
+        params: {
+          limit: queryArg.limit,
+          search: queryArg.search,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    prometheusMetadata: build.query<PrometheusMetadataApiResponse, PrometheusMetadataApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/metadata`,
+        params: {
+          metric: queryArg.metric,
+          limit: queryArg.limit,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    prometheusLabels: build.query<PrometheusLabelsApiResponse, PrometheusLabelsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/labels`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    prometheusLabelValues: build.query<PrometheusLabelValuesApiResponse, PrometheusLabelValuesApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/labels/${queryArg.labelName}/values`,
+        params: {
+          start: queryArg.start,
+          end: queryArg.end,
+          match: queryArg.match,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    prometheusTargets: build.query<PrometheusTargetsApiResponse, PrometheusTargetsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/targets`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    writeReport: build.mutation<WriteReportApiResponse, WriteReportApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/mcp/reports/write`,
+        method: "POST",
+        body: queryArg.writeReportRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    processDocumentsKnowledgeFlowV1ProcessDocumentsPost: build.mutation<
+      ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse,
+      ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/process-documents`,
+        method: "POST",
+        body: queryArg.processDocumentsRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    processLibraryKnowledgeFlowV1ProcessLibraryPost: build.mutation<
+      ProcessLibraryKnowledgeFlowV1ProcessLibraryPostApiResponse,
+      ProcessLibraryKnowledgeFlowV1ProcessLibraryPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/process-library`,
+        method: "POST",
+        body: queryArg.processLibraryRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+  }),
+  overrideExisting: false,
+});
+export { injectedRtkApi as knowledgeFlowApi };
+export type HealthzKnowledgeFlowV1HealthzGetApiResponse = /** status 200 Successful Response */ any;
+export type HealthzKnowledgeFlowV1HealthzGetApiArg = void;
+export type ReadyKnowledgeFlowV1ReadyGetApiResponse = /** status 200 Successful Response */ any;
+export type ReadyKnowledgeFlowV1ReadyGetApiArg = void;
+export type ListTasksKnowledgeFlowV1TasksGetApiResponse = /** status 200 Successful Response */ TaskListResponse;
+export type ListTasksKnowledgeFlowV1TasksGetApiArg = {
+  scope?: string;
+  teamId?: string | null;
+  kind?: string | null;
+  state?: string | null;
+  /** With scope=user: these of the caller's tasks, in any state (1 to 50). */
+  taskId?: string[] | null;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type GetTaskKnowledgeFlowV1TasksTaskIdGetApiResponse = /** status 200 Successful Response */ TaskSummary;
+export type GetTaskKnowledgeFlowV1TasksTaskIdGetApiArg = {
+  taskId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type StreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetApiResponse = /** status 200 Successful Response */ any;
+export type StreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetApiArg = {
+  taskId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type CancelTaskKnowledgeFlowV1TasksTaskIdCancelPostApiResponse = /** status 202 Successful Response */ {
+  [key: string]: any;
+};
+export type CancelTaskKnowledgeFlowV1TasksTaskIdCancelPostApiArg = {
+  taskId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type AcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostApiResponse =
+  /** status 200 Successful Response */ AcknowledgeTaskResponse;
+export type AcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostApiArg = {
+  taskId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiResponse =
+  /** status 200 Successful Response */ DocumentMetadata[];
+export type SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  filters: {
+    [key: string]: any;
+  };
+};
+export type GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetApiResponse =
+  /** status 200 Successful Response */ DocumentMetadata;
+export type GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetApiArg = {
+  documentUid: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiResponse =
+  /** status 200 Successful Response */ any;
+export type UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiArg = {
+  documentUid: string;
+  retrievable: boolean;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type UpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutApiResponse =
+  /** status 200 Successful Response */ any;
+export type UpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutApiArg = {
+  documentUid: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  bodyUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut: BodyUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut;
+};
+export type RenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutApiResponse =
+  /** status 200 Successful Response */ DocumentMetadata;
+export type RenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutApiArg = {
+  documentUid: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  bodyRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut: BodyRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut;
+};
+export type BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiResponse =
+  /** status 200 Successful Response */ BrowseDocumentsResponse;
+export type BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  browseDocumentsByTagRequest: BrowseDocumentsByTagRequest;
+};
+export type TagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostApiResponse =
+  /** status 200 Successful Response */ TagSizesResponse;
+export type TagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  tagSizesRequest: TagSizesRequest;
+};
+export type MutateDocumentLabelsApiResponse = /** status 200 Successful Response */ string[];
+export type MutateDocumentLabelsApiArg = {
+  documentUid: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  labelMutationRequest: LabelMutationRequest;
+};
+export type AddDocumentLabelApiResponse = /** status 200 Successful Response */ string[];
+export type AddDocumentLabelApiArg = {
+  documentUid: string;
+  label: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type RemoveDocumentLabelApiResponse = /** status 200 Successful Response */ string[];
+export type RemoveDocumentLabelApiArg = {
+  documentUid: string;
+  label: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type ListDocumentLabelsApiResponse = /** status 200 Successful Response */ string[];
+export type ListDocumentLabelsApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type ListDocumentsByLabelApiResponse = /** status 200 Successful Response */ BrowseDocumentsResponse;
+export type ListDocumentsByLabelApiArg = {
+  label: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type ResolveDocumentsByLabelApiResponse = /** status 200 Successful Response */ LabelDocumentsPage;
+export type ResolveDocumentsByLabelApiArg = {
+  label: string;
+  offset?: number;
+  limit?: number;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiResponse =
+  /** status 200 Successful Response */ VectorChunk[];
+export type DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiArg = {
+  documentUid: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type DocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  }[];
+export type DocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetApiArg = {
+  documentUid: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type AuditDocumentsKnowledgeFlowV1DocumentsAuditGetApiResponse =
+  /** status 200 Successful Response */ StoreAuditReport;
+export type AuditDocumentsKnowledgeFlowV1DocumentsAuditGetApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type FixDocumentsKnowledgeFlowV1DocumentsAuditFixPostApiResponse =
+  /** status 200 Successful Response */ StoreAuditFixResponse;
+export type FixDocumentsKnowledgeFlowV1DocumentsAuditFixPostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type GetChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdGetApiArg = {
+  documentUid: string;
+  chunkId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type DeleteChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdDeleteApiResponse =
+  /** status 200 Successful Response */ any;
+export type DeleteChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdDeleteApiArg = {
+  documentUid: string;
+  chunkId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type GetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetApiResponse =
+  /** status 200 Successful Response */ MarkdownContentResponse;
+export type GetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetApiArg = {
+  documentUid: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type DownloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdGetApiResponse =
+  /** status 200 Successful Response */ any;
+export type DownloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdGetApiArg = {
+  documentUid: string;
+  mediaId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiResponse =
+  /** status 200 Binary file stream */ Blob;
+export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiArg = {
+  documentUid: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type DownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetApiResponse =
+  /** status 200 Successful Response */ any;
+export type DownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetApiArg = {
+  documentUid: string;
+  artifactPath: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type StreamDocumentAsPdfKnowledgeFlowV1RawContentPdfDocumentUidGetApiResponse = unknown;
+export type StreamDocumentAsPdfKnowledgeFlowV1RawContentPdfDocumentUidGetApiArg = {
+  documentUid: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  range?: string | null;
+};
+export type StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiResponse = unknown;
+export type StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiArg = {
+  documentUid: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  range?: string | null;
+};
+export type TranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostApiResponse =
+  /** status 200 Successful Response */ AudioTranscriptionResponse;
+export type TranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  bodyTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPost: BodyTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPost;
+};
+export type UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiResponse =
+  /** status 200 Successful Response */ any;
+export type UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  bodyUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost: BodyUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost;
+};
+export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiResponse =
+  /** status 200 Successful Response */ any;
+export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  bodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost: BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost;
+};
+export type QuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostApiResponse =
+  /** status 200 Successful Response */ QuotaPrecheckResponse;
+export type QuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  quotaPrecheckRequest: QuotaPrecheckRequest;
+};
+export type ImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostApiResponse =
+  /** status 200 Successful Response */ ImportNameCheckResponse;
+export type ImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  importNameCheckRequest: ImportNameCheckRequest;
+};
+export type FastMarkdownKnowledgeFlowV1FastTextPostApiResponse = /** status 200 Successful Response */ any;
+export type FastMarkdownKnowledgeFlowV1FastTextPostApiArg = {
+  /** Response format: 'json' or 'text' */
+  format?: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  bodyFastMarkdownKnowledgeFlowV1FastTextPost: BodyFastMarkdownKnowledgeFlowV1FastTextPost;
+};
+export type FastIngestKnowledgeFlowV1FastIngestPostApiResponse =
+  /** status 200 Successful Response */ FastIngestResponse;
+export type FastIngestKnowledgeFlowV1FastIngestPostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  bodyFastIngestKnowledgeFlowV1FastIngestPost: BodyFastIngestKnowledgeFlowV1FastIngestPost;
+};
+export type DeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteApiResponse =
+  /** status 200 Successful Response */ any;
+export type DeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteApiArg = {
+  documentUid: string;
+  /** Optional session_id for scoped cleanup */
+  sessionId?: string | null;
+  /** Optional user-storage key to delete alongside the fast-ingest artifacts. */
+  storageKey?: string | null;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type WriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPostApiResponse =
+  /** status 202 Successful Response */ DocumentAccepted;
+export type WriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPostApiArg = {
+  libraryId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  bodyWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPost: BodyWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPost;
+};
+export type RemoveDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsDeleteApiResponse =
+  /** status 200 Successful Response */ DocumentRemoved;
+export type RemoveDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsDeleteApiArg = {
+  libraryId: string;
+  /** The key the document was written under. */
+  sourceKey: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type ListDocumentsKnowledgeFlowV1LibrariesLibraryIdDocumentsGetApiResponse =
+  /** status 200 Successful Response */ LibraryDocuments;
+export type ListDocumentsKnowledgeFlowV1LibrariesLibraryIdDocumentsGetApiArg = {
+  libraryId: string;
+  /** At most this many documents, in key order. */
+  limit?: number;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type ReadSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGetApiResponse =
+  /** status 200 Successful Response */ LibrarySourceVersion;
+export type ReadSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGetApiArg = {
+  libraryId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type RecordSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionPutApiResponse =
+  /** status 200 Successful Response */ LibrarySourceVersion;
+export type RecordSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionPutApiArg = {
+  libraryId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  librarySourceVersion: LibrarySourceVersion;
+};
+export type RecordSynchronizedByKnowledgeFlowV1LibrariesLibraryIdSynchronizedByPutApiResponse =
+  /** status 200 Successful Response */ LibrarySynchronizedBy;
+export type RecordSynchronizedByKnowledgeFlowV1LibrariesLibraryIdSynchronizedByPutApiArg = {
+  libraryId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  librarySynchronizedBy: LibrarySynchronizedBy;
+};
+export type ListTagsApiResponse = /** status 200 Successful Response */ TagWithPermissions[];
+export type ListTagsApiArg = {
+  /** Filter by tag type */
+  type?: TagType | null;
+  /** Filter by hierarchical path prefix, e.g. 'Sales' or 'Sales/HR' */
+  pathPrefix?: string | null;
+  /** Max items to return */
+  limit?: number;
+  /** Items to skip */
+  offset?: number;
+  /** Filter by ownership: 'personal' for user-owned tags, 'team' for team-owned tags */
+  ownerFilter?: OwnerFilter | null;
+  /** Team ID, required when owner_filter is 'team' */
+  teamId?: string | null;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type CreateTagApiResponse = /** status 201 Successful Response */ TagWithItemsId;
+export type CreateTagApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  tagCreate: TagCreate;
+};
+export type GetTagCorpusTypeStatsApiResponse = /** status 200 Successful Response */ ResourceTypeStatsResponse;
+export type GetTagCorpusTypeStatsApiArg = {
+  /** Team ID, or omit/'personal' for the caller's personal corpus */
+  teamId?: string | null;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type GetTagApiResponse = /** status 200 Successful Response */ TagWithItemsId;
+export type GetTagApiArg = {
+  tagId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type UpdateTagApiResponse = /** status 200 Successful Response */ TagWithItemsId;
+export type UpdateTagApiArg = {
+  tagId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  tagUpdate: TagUpdate;
+};
+export type DeleteTagApiResponse = unknown;
+export type DeleteTagApiArg = {
+  tagId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type ListTagMembersApiResponse = /** status 200 Successful Response */ TagMembersResponse;
+export type ListTagMembersApiArg = {
+  tagId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type ShareTagApiResponse = unknown;
+export type ShareTagApiArg = {
+  tagId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  tagShareRequest: TagShareRequest;
+};
+export type UnshareTagApiResponse = unknown;
+export type UnshareTagApiArg = {
+  tagId: string;
+  targetId: string;
+  targetType: ShareTargetResource;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ any;
+export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  echoEnvelope: EchoEnvelope;
+};
+export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
+export type SearchDocumentsUsingVectorizationApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  searchRequest: SearchRequest;
+};
+export type SimilaritySearchApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
+export type SimilaritySearchApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  similaritySearchRequest: SimilaritySearchRequest;
+};
+export type GetVisualEvidenceArtifactApiResponse = /** status 200 Successful Response */ VisualEvidenceArtifactResponse;
+export type GetVisualEvidenceArtifactApiArg = {
+  documentUid: string;
+  artifactPath: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type TestPostSuccessApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
+export type TestPostSuccessApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type GetDocumentChunksOrderedApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
+export type GetDocumentChunksOrderedApiArg = {
+  documentUid: string;
+  limit?: number;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type RerankDocumentsApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
+export type RerankDocumentsApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  rerankRequest: RerankRequest;
+};
+export type GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiResponse =
+  /** status 200 Successful Response */ DocumentTreeResponse;
+export type GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  documentTreeRequest: DocumentTreeRequest;
+};
+export type SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApiResponse =
+  /** status 200 Successful Response */ SummarizeDocumentResponse;
+export type SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApiArg = {
+  documentUid: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  summarizeDocumentRequest: SummarizeDocumentRequest;
+};
+export type ExtractDocumentKnowledgeFlowV1DocumentsDocumentUidExtractPostApiResponse =
+  /** status 200 Successful Response */ ExtractDocumentResponse;
+export type ExtractDocumentKnowledgeFlowV1DocumentsDocumentUidExtractPostApiArg = {
+  documentUid: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  extractDocumentRequest: ExtractDocumentRequest;
+};
+export type GetResourceCreationSchemaApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type GetResourceCreationSchemaApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type CreateResourceApiResponse = /** status 201 Successful Response */ Resource;
+export type CreateResourceApiArg = {
+  /** Library tag id to attach this resource to */
+  libraryTagId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  resourceCreate: ResourceCreate;
+};
+export type ListResourcesByKindApiResponse = /** status 200 Successful Response */ Resource[];
+export type ListResourcesByKindApiArg = {
+  /** prompt | template */
+  kind: ResourceKind;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type UpdateResourceApiResponse = /** status 200 Successful Response */ Resource;
+export type UpdateResourceApiArg = {
+  resourceId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  resourceUpdate: ResourceUpdate;
+};
+export type GetResourceApiResponse = /** status 200 Successful Response */ Resource;
+export type GetResourceApiArg = {
+  resourceId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type DeleteResourceApiResponse = /** status 200 Successful Response */ any;
+export type DeleteResourceApiArg = {
+  resourceId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type LsApiResponse = /** status 200 Successful Response */ any;
+export type LsApiArg = {
+  path?: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type StatFileOrDirectoryApiResponse = /** status 200 Successful Response */ any;
+export type StatFileOrDirectoryApiArg = {
+  path: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type ReadFileApiResponse = /** status 200 Successful Response */ any;
+export type ReadFileApiArg = {
+  path: string;
+  offset?: number;
+  limit?: number | null;
+  maxChars?: number | null;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type ReadFilePageApiResponse = /** status 200 Successful Response */ FileReadPage;
+export type ReadFilePageApiArg = {
+  path: string;
+  offset?: number;
+  limit?: number | null;
+  maxChars?: number | null;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type DeleteFileApiResponse = /** status 200 Successful Response */ any;
+export type DeleteFileApiArg = {
+  path: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type UploadFileApiResponse = /** status 200 Successful Response */ any;
+export type UploadFileApiArg = {
+  path: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  bodyUploadFile: BodyUploadFile;
+};
+export type DownloadFileApiResponse = /** status 200 Successful Response */ any;
+export type DownloadFileApiArg = {
+  path: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type GlobApiResponse = /** status 200 Successful Response */ any;
+export type GlobApiArg = {
+  pattern: string;
+  path?: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type GrepApiResponse = /** status 200 Successful Response */ any;
+export type GrepApiArg = {
+  pattern: string;
+  path?: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type ListTabularDocumentsApiResponse = /** status 200 Successful Response */ TabularDocumentListResponse[];
+export type ListTabularDocumentsApiArg = {
+  /** Optional library tag IDs used to keep documents inside selected libraries. */
+  documentLibraryTagsIds?: string[] | null;
+  /** Optional ownership scope: 'personal' or 'team'. */
+  ownerFilter?: OwnerFilter | null;
+  /** Team ID, required when owner_filter is 'team'. */
+  teamId?: string | null;
+  /** Explicit uploader-owned attachment UIDs. */
+  attachmentUids?: string[] | null;
+  includeSessionScope?: boolean;
+  includeCorpusScope?: boolean;
+  corpusDocumentUids?: string[] | null;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type DescribeTabularDocumentsApiResponse =
+  /** status 200 Successful Response */ TabularDocumentDescriptionResponse[];
+export type DescribeTabularDocumentsApiArg = {
+  /** Document UIDs to describe (repeat the parameter for several documents). */
+  documentUids: string[];
+  /** Optional library tag IDs used to keep documents inside selected libraries. */
+  documentLibraryTagsIds?: string[] | null;
+  /** Optional ownership scope: 'personal' or 'team'. */
+  ownerFilter?: OwnerFilter | null;
+  /** Team ID, required when owner_filter is 'team'. */
+  teamId?: string | null;
+  /** Explicit uploader-owned attachment UIDs. */
+  attachmentUids?: string[] | null;
+  includeSessionScope?: boolean;
+  includeCorpusScope?: boolean;
+  corpusDocumentUids?: string[] | null;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type ReadQueryApiResponse = /** status 200 Successful Response */ RawSqlResponse;
+export type ReadQueryApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  tabularQueryRequest: TabularQueryRequest;
+};
+export type SearchTabularValuesApiResponse = /** status 200 Successful Response */ TabularSearchResponse;
+export type SearchTabularValuesApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  tabularSearchRequest: TabularSearchRequest;
+};
+export type PrometheusQueryApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusQueryApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  prometheusQueryRequest: PrometheusQueryRequest;
+};
+export type PrometheusQueryRangeApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusQueryRangeApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  prometheusQueryRangeRequest: PrometheusQueryRangeRequest;
+};
+export type PrometheusSeriesApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusSeriesApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  prometheusSeriesRequest: PrometheusSeriesRequest;
+};
+export type PrometheusMetricsApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusMetricsApiArg = {
+  /** Maximum number of metric names to return. */
+  limit?: number;
+  /** Optional case-insensitive substring filter applied to metric names. */
+  search?: string | null;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type PrometheusMetricsCatalogApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusMetricsCatalogApiArg = {
+  /** Maximum number of catalog entries to return. */
+  limit?: number;
+  /** Optional case-insensitive substring filter applied to metric names. */
+  search?: string | null;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type PrometheusMetadataApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusMetadataApiArg = {
+  /** Optional metric name filter. */
+  metric?: string | null;
+  /** Maximum number of metadata entries returned by Prometheus. */
+  limit?: number;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type PrometheusLabelsApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusLabelsApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type PrometheusLabelValuesApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusLabelValuesApiArg = {
+  /** Prometheus label name. */
+  labelName: string;
+  /** Optional range start; defaults to a bounded discovery window. */
+  start?: string | null;
+  /** Optional range end; defaults to a bounded discovery window. */
+  end?: string | null;
+  match?: {
+    /** Optional series matchers used to scope label values. */
+    ""?: string[] | null;
+  };
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type PrometheusTargetsApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusTargetsApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type WriteReportApiResponse = /** status 200 Successful Response */ WriteReportResponse;
+export type WriteReportApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  writeReportRequest: WriteReportRequest;
+};
+export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse =
+  /** status 200 Successful Response */ ProcessDocumentsResponse;
+export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  processDocumentsRequest: ProcessDocumentsRequest;
+};
+export type ProcessLibraryKnowledgeFlowV1ProcessLibraryPostApiResponse =
+  /** status 200 Successful Response */ ProcessLibraryResponse;
+export type ProcessLibraryKnowledgeFlowV1ProcessLibraryPostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  processLibraryRequest: ProcessLibraryRequest;
+};
+export type TaskState = "pending" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled";
+export type TaskTarget = {
+  type: string;
+  id: string;
+  label: string;
+};
+export type IngestionDetail = {
+  processed: number;
+  total: number;
+  failed: number;
+  preview: number;
+  vectorized: number;
+  sql_indexed: number;
+};
+export type EvaluationDetail = {
+  campaign_id: string;
+  completed: number;
+  total: number;
+  passed: number;
+  failed: number;
+  execution_errors: number;
+  scoring_errors: number;
+};
+export type TaskLogDetail = {
+  level: "info" | "warn" | "error";
+  message: string;
+};
+export type MigrationResult = {
+  import_id: string;
+  source_platform: string;
+  identities_created?: number;
+  users_processed?: number;
+  users_skipped?: string[];
+  teams_imported?: number;
+  teams_skipped?: number;
+  teams_provisioned?: number;
+  team_roles_granted?: number;
+  team_roles_skipped?: number;
+  platform_roles_granted?: number;
+  agents_imported?: number;
+  agents_skipped?: number;
+  agents_gap?: number;
+  tags_imported?: number;
+  tags_skipped?: number;
+  docs_imported?: number;
+  docs_skipped?: number;
+  warnings?: string[];
+};
+export type MigrationDetail = {
+  step_id: string;
+  processed: number;
+  total: number;
+  failed: number;
+  result?: MigrationResult | null;
+};
+export type ErasureReason = "user_deleted" | "member_removed" | "idle_expired";
+export type ErasureDetail = {
+  reason?: ErasureReason | null;
+  stores_ok?: number;
+  stores_total?: number;
+  attempts?: number;
+};
+export type TaskSummary = {
+  task_id: string;
+  kind: string;
+  state: TaskState;
+  progress?: number | null;
+  step?: string | null;
+  error?: string | null;
+  target?: TaskTarget | null;
+  created_by?: string | null;
+  team_id?: string | null;
+  created_at: string;
+  updated_at: string;
+  scheduled_for?: string | null;
+  detail?: IngestionDetail | EvaluationDetail | TaskLogDetail | MigrationDetail | ErasureDetail | null;
+  acknowledged_at?: string | null;
+  acknowledged_by?: string | null;
+};
+export type TaskListResponse = {
+  tasks: TaskSummary[];
+};
+export type ValidationError = {
+  loc: (string | number)[];
+  msg: string;
+  type: string;
+  input?: any;
+  ctx?: object;
+};
+export type HttpValidationError = {
+  detail?: ValidationError[];
+};
+export type AcknowledgeTaskResponse = {
+  task_id: string;
+  acknowledged_at: string;
+  acknowledged_by: string | null;
+};
+export type Identity = {
+  /** Original file name incl. extension (display name) */
+  document_name: string;
+  /** Stable unique id across the system */
+  document_uid: string;
+  /** Human-friendly title for UI */
+  title?: string | null;
+  /** DESCRIPTIVE only — extracted from the file's own embedded metadata (e.g. a PDF's /Author), so it is caller-supplied and untrusted. Never use it to identify an account or to attribute storage quota. */
+  author?: string | null;
+  created?: string | null;
+  modified?: string | null;
+  last_modified_by?: string | null;
+  /** Keycloak uid of the Fred user who uploaded this document, stamped once at ingestion (ingestion_service.extract_metadata). Distinct from `author` (the file's own embedded metadata, e.g. a .docx core property) and `last_modified_by` (the acting user on later in-app mutations like rename) — neither of those reliably identifies the uploader. */
+  uploaded_by?: string | null;
+};
+export type SourceType = "push" | "pull";
+export type SourceInfo = {
+  source_type: SourceType;
+  /** Repository/connector id, e.g. 'uploads', 'github' */
+  source_tag?: string | null;
+  /** Path or URI to the original pull file */
+  pull_location?: string | null;
+  /** True if raw file can be re-fetched */
+  retrievable?: boolean;
+  /** When the document was added to the system */
+  date_added_to_kb?: string;
+  /** Web base of the repository, e.g. https://git/org/repo */
+  repository_web?: string | null;
+  /** Commit SHA or branch used when pulling */
+  repo_ref?: string | null;
+  /** Path within the repository (POSIX style) */
+  file_path?: string | null;
+  /** Library the source key is scoped to. The pair is unique, so writing a key the library already holds updates that document rather than creating a second one. */
+  source_library_id?: string | null;
+  /** The calling system's own name for this document within its library — for most sources the path relative to it. Stored and matched verbatim, never parsed, and never used to derive the document's identifier. */
+  source_key?: string | null;
+  /** The source's own version of this document: an etag, a content hash, a revision number. Opaque — stored and returned, never ordered or parsed. */
+  document_version?: string | null;
+};
+export type FileType = "pdf" | "docx" | "pptx" | "xlsx" | "csv" | "md" | "html" | "txt" | "other";
+export type FileInfo = {
+  file_type?: FileType;
+  mime_type?: string | null;
+  file_size_bytes?: number | null;
+  page_count?: number | null;
+  row_count?: number | null;
+  sha256?: string | null;
+  md5?: string | null;
+  language?: string | null;
+};
+export type DocSummary = {
+  /** Concise doc abstract for humans (UI). */
+  abstract?: string | null;
+  /** Top key terms for navigation and filters. */
+  keywords?: string[] | null;
+  /** LLM/flow used to produce this summary. */
+  model_name?: string | null;
+  /** Algorithm/flow id (e.g., 'SmartDocSummarizer@v1'). */
+  method?: string | null;
+  /** UTC when this summary was computed. */
+  created_at?: string | null;
+};
+export type Tagging = {
+  /** Stable tag IDs (UUIDs) */
+  tag_ids?: string[];
+  /** Display names for chips */
+  tag_names?: string[];
+};
+export type AccessInfo = {
+  license?: string | null;
+  confidential?: boolean;
+  acl?: string[];
+};
+export type IngestionProcessingProfile = "fast" | "medium" | "rich";
+export type ProcessingStatus = "not_started" | "in_progress" | "done" | "failed";
+export type Processing = {
+  profile?: IngestionProcessingProfile | null;
+  stages?: {
+    [key: string]: ProcessingStatus;
+  };
+  errors?: {
+    [key: string]: string;
+  };
+};
+export type DocumentMetadata = {
+  identity: Identity;
+  source: SourceInfo;
+  file?: FileInfo;
+  summary?: DocSummary | null;
+  tags?: Tagging;
+  /** Descriptive business labels; no access-control meaning. */
+  labels?: string[];
+  access?: AccessInfo;
+  processing?: Processing;
+  preview_url?: string | null;
+  viewer_url?: string | null;
+  /** Processor-specific additional attributes (namespaced keys). */
+  extensions?: {
+    [key: string]: any;
+  } | null;
+};
+export type BodyUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut = {
+  title: string;
+};
+export type BodyRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut = {
+  name: string;
+};
+export type BrowseDocumentsResponse = {
+  total: number;
+  documents: DocumentMetadata[];
+};
+export type BrowseDocumentsByTagRequest = {
+  /** Library tag identifier */
+  tag_id: string;
+  offset?: number;
+  limit?: number;
+  /** Field the whole tag is ordered by before the page is cut: `name` (the document's displayed file name, case-insensitive), `created` (date added) or `size` (file size). The order is applied store-side on purpose — only one page is returned, so a client reordering what it received would sort a page rather than the folder. Ties are broken by document uid, so paging never shows one document twice. */
+  sort_by?: "name" | "created" | "size";
+  /** Ascending or descending. Missing values sort last ascending, first descending. */
+  sort_order?: "asc" | "desc";
+};
+export type TagSizesResponse = {
+  /** Total document bytes per requested tag id (0 when unknown/empty) */
+  sizes: {
+    [key: string]: number;
+  };
+};
+export type TagSizesRequest = {
+  /** Library tag identifiers to total */
+  tag_ids: string[];
+};
+export type LabelMutationRequest = {
+  /** Labels to add. */
+  add?: string[];
+  /** Labels to remove. Wins over `add` when the same value appears in both. */
+  remove?: string[];
+};
+export type LabelDocumentReference = {
+  document_uid: string;
+  document_name: string;
+};
+export type LabelDocumentsPage = {
+  label: string;
+  documents: LabelDocumentReference[];
+  /** Total number of matching documents across all pages. */
+  total: number;
+  offset: number;
+  limit: number;
+  /** Offset to request the next page, or null when there is no more. */
+  next_offset?: number | null;
+  has_more: boolean;
+};
+export type VectorChunk = {
+  /** Unique identifier of the chunk */
+  chunk_uid: string;
+  /** Chunk embedding */
+  vector: number[];
+};
+export type StoreAuditFinding = {
+  document_uid: string;
+  document_name?: string | null;
+  source_tag?: string | null;
+  present_in_metadata: boolean;
+  present_in_vector_store: boolean;
+  present_in_content_store: boolean;
+  /** Number of chunks in vector store (when available) */
+  vector_chunks?: number | null;
+  issues?: string[];
+};
+export type StoreAuditReport = {
+  has_anomalies: boolean;
+  total_seen: number;
+  metadata_count: number;
+  vector_count: number;
+  content_count: number;
+  anomalies?: StoreAuditFinding[];
+};
+export type StoreAuditFixResponse = {
+  before: StoreAuditReport;
+  after: StoreAuditReport;
+  /** Documents whose lying processing stage (missing_content/missing_vectors) was reset to NOT_STARTED. Never deleted — see fix_store_anomalies. */
+  reset_metadata?: string[];
+};
+export type MarkdownContentResponse = {
+  content: string;
+};
+export type AudioTranscriptionResponse = {
+  /** Plain-text transcript for the uploaded audio clip. */
+  text: string;
+};
+export type BodyTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPost = {
+  /** Audio or video clip to transcribe */
+  file: string;
+  /** Optional language hint for Whisper */
+  language?: string | null;
+};
+export type BodyUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost = {
+  files: string[];
+  metadata_json: string;
+};
+export type BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost = {
+  files: string[];
+  metadata_json: string;
+};
+export type QuotaPrecheckResponse = {
+  allowed: boolean;
+  scope?: ("team" | "personal") | null;
+  owner_id?: string | null;
+  current?: number | null;
+  limit?: number | null;
+};
+export type QuotaPrecheckRequest = {
+  tags?: string[];
+  team_id?: string | null;
+  total_size: number;
+};
+export type ImportNameConflicts = {
+  tag_id: string;
+  names: string[];
+};
+export type ImportNameCheckResponse = {
+  conflicts?: ImportNameConflicts[];
+};
+export type ImportDestinationNames = {
+  tag_id: string;
+  names?: string[];
+};
+export type ImportNameCheckRequest = {
+  destinations?: ImportDestinationNames[];
+};
+export type BodyFastMarkdownKnowledgeFlowV1FastTextPost = {
+  file: string;
+  /** JSON string of FastTextOptions */
+  options_json?: string | null;
+};
+export type FastIngestResponse = {
+  document_uid: string;
+  chunks: number;
+  total_chars: number;
+  truncated: boolean;
+  scope: string;
+  summary_md: string;
+  summary_chars: number;
+  summary_truncated: boolean;
+  tabular_available: boolean;
+};
+export type BodyFastIngestKnowledgeFlowV1FastIngestPost = {
+  file: string;
+  /** JSON string of FastTextOptions */
+  options_json?: string | null;
+  /** Optional chat session id for scoping */
+  session_id?: string | null;
+  /** Logical scope label, default 'session' */
+  scope?: string;
+};
+export type DocumentAccepted = {
+  source_key: string;
+  path: string;
+  document_version?: string | null;
+  /** True when this key was new to the library, False when it updated the document already there. */
+  created: boolean;
+  /** Fred's identifier for the document this key now names. */
+  document_uid: string;
+  /** The task processing this write; follow it for the outcome. */
+  task_id: string;
+};
+export type BodyWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPost = {
+  /** The document's bytes. */
+  file: string;
+  /** Where the document goes inside the library, e.g. 'specs/api/openapi.md'. */
+  path: string;
+  /** The caller's own name for this document, unique within the library. */
+  source_key: string;
+  /** The source's version of this document. Opaque to Fred. */
+  document_version?: string | null;
+  /** Which configured document source this caller is. */
+  source_tag?: string;
+  /** Processing profile for this document; defaults to medium. */
+  profile?: IngestionProcessingProfile;
+};
+export type DocumentRemoved = {
+  source_key: string;
+  /** False when the library did not hold that key — not an error: a source that removes twice is still in sync. */
+  removed: boolean;
+};
+export type LibraryDocument = {
+  source_key: string;
+  document_uid: string;
+  document_version?: string | null;
+  /** A run reconciles against 'succeeded' and 'in_progress' alike — a version match on an in-flight key is not a second write; 'failed' is a write the next write of that key takes again. */
+  state: "succeeded" | "in_progress" | "failed";
+};
+export type LibraryDocuments = {
+  items: LibraryDocument[];
+  /** More documents exist than the caller's limit: a run reconciling against this listing is not looking at the whole library. */
+  truncated: boolean;
+};
+export type LibrarySourceVersion = {
+  source_version?: string | null;
+};
+export type LibrarySynchronizedBy = {
+  /** Qualified reference to the machine that fills this library, e.g. "knowledge_base:ab12". Opaque to Fred: only its presence is acted on. */
+  synchronized_by: string;
+};
+export type TagType = "document" | "prompt" | "template" | "chat-context";
+export type TagPermission = "read" | "update" | "delete" | "share" | "owner" | "editor" | "viewer";
+export type TagWithPermissions = {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  owner_id: string;
+  name: string;
+  path?: string | null;
+  description?: string | null;
+  type: TagType;
+  source_version?: string | null;
+  synchronized_by?: string | null;
+  item_ids: string[];
+  permissions?: TagPermission[];
+};
+export type OwnerFilter = "personal" | "team";
+export type TagWithItemsId = {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  owner_id: string;
+  name: string;
+  path?: string | null;
+  description?: string | null;
+  type: TagType;
+  source_version?: string | null;
+  synchronized_by?: string | null;
+  item_ids: string[];
+};
+export type TagCreate = {
+  name: string;
+  path?: string | null;
+  description?: string | null;
+  type: TagType;
+  team_id?: string | null;
+};
+export type ResourceTypeStatsEntry = {
+  bucket: string;
+  count: number;
+  size_bytes: number;
+};
+export type ResourceTypeStatsResponse = {
+  entries?: ResourceTypeStatsEntry[];
+};
+export type TagUpdate = {
+  name: string;
+  path?: string | null;
+  description?: string | null;
+  type: TagType;
+  item_ids?: string[];
+};
+export type UserTagRelation = "owner" | "editor" | "viewer";
+export type UserSummary = {
+  id: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  username?: string | null;
+};
+export type TagMemberUser = {
+  type?: "user";
+  relation: UserTagRelation;
+  user: UserSummary;
+};
+export type TagMembersResponse = {
+  users?: TagMemberUser[];
+};
+export type ShareTargetResource = "user";
+export type TagShareRequest = {
+  target_id: string;
+  target_type: ShareTargetResource;
+  relation: UserTagRelation;
+};
+export type SearchPolicyName = "hybrid" | "strict" | "semantic";
+export type EchoEnvelope = {
+  kind: "SearchPolicyName";
+  /** Schema payload being echoed */
+  payload: SearchPolicyName;
+};
+export type VectorSearchHit = {
+  content: string;
+  page?: number | null;
+  section?: string | null;
+  viewer_fragment?: string | null;
+  slide_id?: number | null;
+  has_visual_evidence?: boolean | null;
+  slide_image_uri?: string | null;
+  /** content (default, real ingested prose/data) or 'dataset_pointer' (a discovery pointer to a structured dataset, never citable as a source) or 'markdown_table' (a Markdown table kept whole or split on row boundaries). */
+  chunk_kind?: string | null;
+  /** Document UID */
+  uid: string;
+  title: string;
+  author?: string | null;
+  created?: string | null;
+  modified?: string | null;
+  file_name?: string | null;
+  file_path?: string | null;
+  repository?: string | null;
+  pull_location?: string | null;
+  language?: string | null;
+  mime_type?: string | null;
+  /** File type/category */
+  type?: string | null;
+  tag_ids?: string[];
+  tag_names?: string[];
+  tag_full_paths?: string[];
+  preview_url?: string | null;
+  preview_at_url?: string | null;
+  repo_url?: string | null;
+  citation_url?: string | null;
+  license?: string | null;
+  confidential?: boolean | null;
+  /** Similarity score from vector search */
+  score: number;
+  rank?: number | null;
+  /** Position of the chunk inside its source document, used to restore document order */
+  chunk_index?: number | null;
+  embedding_model?: string | null;
+  vector_index?: string | null;
+  token_count?: number | null;
+  retrieved_at?: string | null;
+  retrieval_session_id?: string | null;
+};
+export type SearchRequest = {
+  question: string;
+  /** Number of results to return. */
+  top_k?: number;
+  /** Optional list of tag names to filter documents. Only chunks in a document with at least one of these tags will be returned. */
+  document_library_tags_ids?: string[] | null;
+  /** Optional list of document UIDs to restrict results to specific documents. */
+  document_uids?: string[] | null;
+  /** Optional search policy preset. If omitted, defaults to 'hybrid'. */
+  search_policy?: SearchPolicyName | null;
+  /** Filter by ownership: 'personal' for user-owned resources, 'team' for team-owned resources. */
+  owner_filter?: OwnerFilter | null;
+  /** Team ID, required when owner_filter is 'team'. */
+  team_id?: string | null;
+  /** Optional chat session id to include session-scoped attachments (user/session filtered). */
+  session_id?: string | null;
+  /** If true and session_id is provided, also search session-scoped attachment vectors (filtered by user/session). */
+  include_session_scope?: boolean;
+  /** If true, also search corpus/library vectors (non-session scope). */
+  include_corpus_scope?: boolean;
+};
+export type SimilaritySearchRequest = {
+  /** Text/passage to find similar content for. */
+  anchor: string;
+  /** Target documents to search within. */
+  document_uids?: string[];
+  /** Target library folders to search within. */
+  document_library_tags_ids?: string[];
+  /** Number of matches to return (best-first). */
+  top_k?: number;
+  /** Re-rank matches best-first with the cross-encoder. */
+  rerank?: boolean;
+  /** Drop matches below this relevance score. */
+  min_score?: number | null;
+};
+export type VisualEvidenceArtifactResponse = {
+  document_uid: string;
+  artifact_path: string;
+  file_name: string;
+  content_type: string;
+  artifact_url: string;
+};
+export type RerankRequest = {
+  question: string;
+  documents: VectorSearchHit[];
+  /** Number of top-reranked chunks to consider */
+  top_r?: number;
+};
+export type DocumentTreeResponse = {
+  tree: string;
+  /** True if any branch was pruned or items were omitted to fit max_chars. */
+  truncated: boolean;
+};
+export type DocumentTreeRequest = {
+  /** Folder path prefix to start from, e.g. 'Sales/HR'. None lists from the root. */
+  working_directory?: string | null;
+  /** Restrict the listing to these folder tag ids (and their descendants), when set. */
+  tag_ids?: string[] | null;
+  /** Restrict the listing to these documents, dropping the folders left empty, when set. */
+  document_uids?: string[] | null;
+  /** Render budget for the returned tree text. Oversized trees are pruned, deepest branches first. */
+  max_chars?: number;
+  /** Filter by ownership: 'personal' for user-owned folders, 'team' for team-owned folders. */
+  owner_filter?: OwnerFilter | null;
+  /** Team ID, required when owner_filter is 'team'. */
+  team_id?: string | null;
+};
+export type SummarizeDocumentResponse = {
+  document_uid: string;
+  summary: string;
+  /** True if a corrective pass had to shrink the summary to fit max_chars. */
+  shrunk_for_budget: boolean;
+  keywords?: string[];
+};
+export type SummarizeDocumentRequest = {
+  /** Free-text instruction steering the summary: focus area, audience, what to look for, desired length/tone. */
+  instruction?: string | null;
+  /** Target ceiling for the returned summary length, in characters. */
+  max_chars?: number;
+};
+export type ExtractDocumentResponse = {
+  document_uid: string;
+  /** Consolidated, de-duplicated list of every extracted item (markdown bullets), in document order. */
+  extraction: string;
+  item_count: number;
+  chunks_processed: number;
+  /** True if the document exceeded the processing cap and was head/tail-windowed. */
+  truncated: boolean;
+};
+export type ExtractDocumentRequest = {
+  /** What to extract exhaustively, e.g. 'every functional requirement', 'all deadlines and their context'. */
+  instruction: string;
+};
+export type ResourceKind = "prompt" | "template" | "chat-context";
+export type Resource = {
+  id: string;
+  kind: ResourceKind;
+  version: string;
+  name?: string | null;
+  description?: string | null;
+  labels?: string[] | null;
+  author: string;
+  created_at: string;
+  updated_at: string;
+  /** Raw YAML text or other content */
+  content: string;
+  /** List of tags associated with the resource */
+  library_tags: string[];
+};
+export type ResourceCreate = {
+  kind: ResourceKind;
+  content: string;
+  name?: string | null;
+  description?: string | null;
+  labels?: string[] | null;
+};
+export type ResourceUpdate = {
+  content?: string | null;
+  name?: string | null;
+  description?: string | null;
+  labels?: string[] | null;
+};
+export type FileReadPage = {
+  path: string;
+  content: string;
+  start_line: number;
+  end_line: number | null;
+  returned_lines: number;
+  total_lines: number;
+  has_more: boolean;
+  next_offset: number | null;
+  truncated: boolean;
+};
+export type BodyUploadFile = {
+  /** Binary payload */
+  file: string;
+};
+export type TabularDocumentListTableResponse = {
+  query_alias: string;
+  sheet?: string | null;
+  title?: string | null;
+};
+export type TabularDocumentListResponse = {
+  document_uid: string;
+  document_name: string;
+  tables?: TabularDocumentListTableResponse[] | null;
+  source_kind?: "corpus" | "conversation_attachment";
+  tag_names?: string[] | null;
+};
+export type TabularColumnSchema = {
+  name: string;
+  dtype: "string" | "integer" | "float" | "boolean" | "datetime" | "unknown";
+  /** For string columns, whether the count of distinct non-null values is between 1 and max_categories(row_count), with null rows included in row_count. None for non-string or older columns without this analysis. */
+  is_categorical?: boolean | null;
+  /** For string columns, whether exactly two distinct non-null values were observed. This does not assign true/false meaning to those values. */
+  has_two_values?: boolean | null;
+  /** Every distinct non-null string value when is_categorical is true, preserving exact casing for SQL filters. None otherwise. */
+  sample_values?: string[] | null;
+  /** Smallest finite non-null value of an integer or float column. None when unavailable. */
+  min_value?: number | number | null;
+  /** Largest finite non-null value of an integer or float column. None when unavailable. */
+  max_value?: number | number | null;
+};
+export type TabularTableSchema = {
+  query_alias: string;
+  sheet?: string | null;
+  title?: string | null;
+  row_count?: number | null;
+  generated_at?: string | null;
+  columns?: TabularColumnSchema[];
+};
+export type TabularDocumentDescriptionResponse = {
+  document_uid: string;
+  document_name: string;
+  kind: "csv" | "spreadsheet";
+  markdown: string | null;
+  tables?: TabularTableSchema[];
+  source_tag?: string | null;
+};
+export type RawSqlResponse = {
+  sql_query: string;
+  rows?: {
+    [key: string]: any;
+  }[];
+  error?: string | null;
+  dataset_uids?: string[];
+  query_aliases?: string[];
+};
+export type TabularQueryRequest = {
+  sql: string;
+  dataset_uids?: string[] | null;
+  /** Explicit uploader-owned attachment UIDs; runtime supplies the authorized conversation inventory. */
+  attachment_uids?: string[] | null;
+  include_session_scope?: boolean;
+  include_corpus_scope?: boolean;
+  corpus_document_uids?: string[] | null;
+  /** Optional list of library tag IDs used to keep the query inside selected libraries. */
+  document_library_tags_ids?: string[] | null;
+  /** Optional ownership scope: 'personal' or 'team'. */
+  owner_filter?: OwnerFilter | null;
+  /** Team ID required when owner_filter is 'team'. */
+  team_id?: string | null;
+  max_rows?: number | null;
+};
+export type TabularTableMatch = {
+  document_uid: string;
+  document_name: string;
+  query_alias: string;
+  sheet?: string | null;
+  title?: string | null;
+  matched_columns?: string[];
+  rows?: {
+    [key: string]: any;
+  }[];
+  /** True when more matching rows existed than were returned (max_rows_per_table reached): other occurrences remain in this table. */
+  row_truncated?: boolean;
+};
+export type TabularSearchResponse = {
+  keyword: string;
+  normalized_keyword: string;
+  matches?: TabularTableMatch[];
+  /** True when the result is partial: either the max_matching_tables cap was reached, or the scope exceeded the number of datasets one search may scan. Other tables may also contain the value. */
+  tables_truncated?: boolean;
+  /** Documents that were in scope for this search. A document dropped by the dataset limit is omitted entirely. Note this is not proof a listed document was read exhaustively: when tables_truncated is true the scan stopped early, so a listed document may still hold the keyword in a table that was never opened. */
+  searched_dataset_uids?: string[];
+};
+export type TabularSearchRequest = {
+  /** Word or expression to locate. Use precise values only: a generic term matches too many tables and cannot disambiguate. */
+  keyword: string;
+  dataset_uids?: string[] | null;
+  /** Explicit uploader-owned attachment UIDs; runtime supplies the authorized conversation inventory. */
+  attachment_uids?: string[] | null;
+  include_session_scope?: boolean;
+  include_corpus_scope?: boolean;
+  corpus_document_uids?: string[] | null;
+  /** Optional list of library tag IDs used to keep the search inside selected libraries. */
+  document_library_tags_ids?: string[] | null;
+  /** Optional ownership scope: 'personal' or 'team'. */
+  owner_filter?: OwnerFilter | null;
+  /** Team ID required when owner_filter is 'team'. */
+  team_id?: string | null;
+  /** Maximum matching rows returned per table (ceiling). */
+  max_rows_per_table?: number;
+  /** Maximum tables with a match returned before the search stops (ceiling). */
+  max_matching_tables?: number;
+};
+export type PrometheusQueryRequest = {
+  /** PromQL expression to evaluate. */
+  query: string;
+  /** Optional evaluation timestamp accepted by the Prometheus HTTP API. */
+  time?: string | number | number | null;
+  /** Optional upstream Prometheus timeout, for example 5s. */
+  timeout?: string | null;
+};
+export type PrometheusQueryRangeRequest = {
+  /** PromQL expression to evaluate over a range. */
+  query: string;
+  /** Range start accepted by the Prometheus HTTP API. */
+  start: string | number | number;
+  /** Range end accepted by the Prometheus HTTP API. */
+  end: string | number | number;
+  /** Range step duration accepted by the Prometheus HTTP API. */
+  step: string | number | number;
+  /** Optional upstream Prometheus timeout, for example 30s. */
+  timeout?: string | null;
+};
+export type PrometheusSeriesRequest = {
+  /** Prometheus series matchers, for example up or http_requests_total{job='api'}. */
+  matchers: string[];
+  /** Optional range start used to bound series discovery. */
+  start?: string | number | number | null;
+  /** Optional range end used to bound series discovery. */
+  end?: string | number | number | null;
+};
+export type WriteReportResponse = {
+  document_uid: string;
+  md_url: string;
+  html_url?: string | null;
+  pdf_url?: string | null;
+};
+export type WriteReportRequest = {
+  /** Report title shown in UI */
+  title: string;
+  /** Canonical Markdown content (stored as-is) */
+  markdown: string;
+  /** Tag (library) this report belongs to */
+  tag_id: string;
+  /** Optional template identifier for traceability */
+  template_id?: string | null;
+  /** UI tags (chips) */
+  tags?: string[];
+  render_formats?: string[];
+};
+export type ProcessDocumentsResponse = {
+  status: string;
+  pipeline_name: string;
+  total_files: number;
+  workflow_id: string;
+  run_id?: string | null;
+  task_ids?: {
+    [key: string]: string;
+  };
+};
+export type FileToProcessWithoutUser = {
+  source_tag: string;
+  tags?: string[];
+  display_name?: string | null;
+  profile?: IngestionProcessingProfile;
+  task_id?: string | null;
+  document_uid?: string | null;
+  external_path?: string | null;
+  size?: number | null;
+  modified_time?: number | null;
+  hash?: string | null;
+};
+export type ProcessDocumentsRequest = {
+  relaunch?: boolean;
+  files: FileToProcessWithoutUser[];
+  pipeline_name: string;
+};
+export type ProcessLibraryResponse = {
+  status: string;
+  library_tag: string;
+  workflow_id: string;
+  run_id?: string | null;
+  document_count?: number | null;
+};
+export type ProcessLibraryRequest = {
+  library_tag: string;
+  processor: string;
+  document_uids?: string[] | null;
+};
+export const {
+  useHealthzKnowledgeFlowV1HealthzGetQuery,
+  useLazyHealthzKnowledgeFlowV1HealthzGetQuery,
+  useReadyKnowledgeFlowV1ReadyGetQuery,
+  useLazyReadyKnowledgeFlowV1ReadyGetQuery,
+  useListTasksKnowledgeFlowV1TasksGetQuery,
+  useLazyListTasksKnowledgeFlowV1TasksGetQuery,
+  useGetTaskKnowledgeFlowV1TasksTaskIdGetQuery,
+  useLazyGetTaskKnowledgeFlowV1TasksTaskIdGetQuery,
+  useStreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetQuery,
+  useLazyStreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetQuery,
+  useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation,
+  useAcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostMutation,
+  useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
+  useGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetQuery,
+  useLazyGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetQuery,
+  useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
+  useUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutMutation,
+  useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation,
+  useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
+  useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
+  useMutateDocumentLabelsMutation,
+  useAddDocumentLabelMutation,
+  useRemoveDocumentLabelMutation,
+  useListDocumentLabelsQuery,
+  useLazyListDocumentLabelsQuery,
+  useListDocumentsByLabelQuery,
+  useLazyListDocumentsByLabelQuery,
+  useResolveDocumentsByLabelQuery,
+  useLazyResolveDocumentsByLabelQuery,
+  useDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery,
+  useLazyDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery,
+  useDocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetQuery,
+  useLazyDocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetQuery,
+  useAuditDocumentsKnowledgeFlowV1DocumentsAuditGetQuery,
+  useLazyAuditDocumentsKnowledgeFlowV1DocumentsAuditGetQuery,
+  useFixDocumentsKnowledgeFlowV1DocumentsAuditFixPostMutation,
+  useGetChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdGetQuery,
+  useLazyGetChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdGetQuery,
+  useDeleteChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdDeleteMutation,
+  useGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery,
+  useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery,
+  useDownloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdGetQuery,
+  useLazyDownloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdGetQuery,
+  useDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
+  useLazyDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
+  useDownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetQuery,
+  useLazyDownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetQuery,
+  useStreamDocumentAsPdfKnowledgeFlowV1RawContentPdfDocumentUidGetQuery,
+  useLazyStreamDocumentAsPdfKnowledgeFlowV1RawContentPdfDocumentUidGetQuery,
+  useStreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetQuery,
+  useLazyStreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetQuery,
+  useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation,
+  useUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostMutation,
+  useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
+  useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation,
+  useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation,
+  useFastMarkdownKnowledgeFlowV1FastTextPostMutation,
+  useFastIngestKnowledgeFlowV1FastIngestPostMutation,
+  useDeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteMutation,
+  useWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPostMutation,
+  useRemoveDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsDeleteMutation,
+  useListDocumentsKnowledgeFlowV1LibrariesLibraryIdDocumentsGetQuery,
+  useLazyListDocumentsKnowledgeFlowV1LibrariesLibraryIdDocumentsGetQuery,
+  useReadSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGetQuery,
+  useLazyReadSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGetQuery,
+  useRecordSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionPutMutation,
+  useRecordSynchronizedByKnowledgeFlowV1LibrariesLibraryIdSynchronizedByPutMutation,
+  useListTagsQuery,
+  useLazyListTagsQuery,
+  useCreateTagMutation,
+  useGetTagCorpusTypeStatsQuery,
+  useLazyGetTagCorpusTypeStatsQuery,
+  useGetTagQuery,
+  useLazyGetTagQuery,
+  useUpdateTagMutation,
+  useDeleteTagMutation,
+  useListTagMembersQuery,
+  useLazyListTagMembersQuery,
+  useShareTagMutation,
+  useUnshareTagMutation,
+  useEchoSchemaKnowledgeFlowV1SchemasEchoPostMutation,
+  useSearchDocumentsUsingVectorizationMutation,
+  useSimilaritySearchMutation,
+  useGetVisualEvidenceArtifactQuery,
+  useLazyGetVisualEvidenceArtifactQuery,
+  useTestPostSuccessMutation,
+  useGetDocumentChunksOrderedQuery,
+  useLazyGetDocumentChunksOrderedQuery,
+  useRerankDocumentsMutation,
+  useGetDocumentTreeKnowledgeFlowV1DocumentsTreePostMutation,
+  useSummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostMutation,
+  useExtractDocumentKnowledgeFlowV1DocumentsDocumentUidExtractPostMutation,
+  useGetResourceCreationSchemaQuery,
+  useLazyGetResourceCreationSchemaQuery,
+  useCreateResourceMutation,
+  useListResourcesByKindQuery,
+  useLazyListResourcesByKindQuery,
+  useUpdateResourceMutation,
+  useGetResourceQuery,
+  useLazyGetResourceQuery,
+  useDeleteResourceMutation,
+  useLsQuery,
+  useLazyLsQuery,
+  useStatFileOrDirectoryQuery,
+  useLazyStatFileOrDirectoryQuery,
+  useReadFileQuery,
+  useLazyReadFileQuery,
+  useReadFilePageQuery,
+  useLazyReadFilePageQuery,
+  useDeleteFileMutation,
+  useUploadFileMutation,
+  useDownloadFileQuery,
+  useLazyDownloadFileQuery,
+  useGlobQuery,
+  useLazyGlobQuery,
+  useGrepQuery,
+  useLazyGrepQuery,
+  useListTabularDocumentsQuery,
+  useLazyListTabularDocumentsQuery,
+  useDescribeTabularDocumentsQuery,
+  useLazyDescribeTabularDocumentsQuery,
+  useReadQueryMutation,
+  useSearchTabularValuesMutation,
+  usePrometheusQueryMutation,
+  usePrometheusQueryRangeMutation,
+  usePrometheusSeriesMutation,
+  usePrometheusMetricsQuery,
+  useLazyPrometheusMetricsQuery,
+  usePrometheusMetricsCatalogQuery,
+  useLazyPrometheusMetricsCatalogQuery,
+  usePrometheusMetadataQuery,
+  useLazyPrometheusMetadataQuery,
+  usePrometheusLabelsQuery,
+  useLazyPrometheusLabelsQuery,
+  usePrometheusLabelValuesQuery,
+  useLazyPrometheusLabelValuesQuery,
+  usePrometheusTargetsQuery,
+  useLazyPrometheusTargetsQuery,
+  useWriteReportMutation,
+  useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
+  useProcessLibraryKnowledgeFlowV1ProcessLibraryPostMutation,
+} = injectedRtkApi;

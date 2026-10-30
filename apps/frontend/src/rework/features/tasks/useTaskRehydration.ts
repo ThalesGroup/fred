@@ -18,7 +18,7 @@ import { useDispatch } from "react-redux";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import { personalTeamId } from "@shared/utils/teamId";
 import { taskRegistered } from "./taskSlice";
-import type { TaskListResponse } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { TaskListResponse } from "../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 
 // Task events are served by the backend that runs the task, so rehydration is
 // multi-source: each producer exposes the same canonical `GET /tasks?scope=user`.

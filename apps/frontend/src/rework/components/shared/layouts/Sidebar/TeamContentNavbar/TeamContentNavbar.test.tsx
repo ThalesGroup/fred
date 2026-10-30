@@ -13,10 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { act, type ReactNode } from "react";
-import { createRoot } from "react-dom/client";
+import { type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   isPersonalTeam: false,
@@ -288,9 +287,9 @@ describe("TeamContentNavbar — knowledge bases and beta badges", () => {
     { currentData: undefined, isError: false },
     { currentData: undefined, isError: true },
     { currentData: [], isError: false },
-  ])("hides knowledge bases when unavailable: %j", (result) => {
+  ])("keeps the porting entry when the old catalog is unavailable: %j", (result) => {
     h.knowledgeBases = result;
-    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("/team/team-1/knowledge-bases");
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain("/team/team-1/knowledge-bases");
   });
 
   it("keeps the last known definitions when a refresh fails", () => {
@@ -308,82 +307,15 @@ describe("TeamContentNavbar — knowledge bases and beta badges", () => {
   });
 });
 
-describe("TeamContentNavbar — cross-session knowledge base availability", () => {
-  beforeEach(() => {
-    h.canUseKnowledgeBases = true;
-    h.knowledgeBases = { currentData: undefined, isError: false };
+describe("TeamContentNavbar — pending knowledge base entry", () => {
+  it("does not poll the removed Swift catalog", () => {
+    h.knowledgeBasesQuery.mockClear();
     h.refetchKnowledgeBases.mockClear();
-  });
-
-  it("polls and refreshes on focus, cleaning up when permission is removed or the menu unmounts", async () => {
-    const container = document.createElement("div");
-    const root = createRoot(container);
-    try {
-      await act(async () => root.render(<TeamContentNavbar />));
-      expect(h.knowledgeBasesQuery).toHaveBeenLastCalledWith(
-        { teamId: "team-1" },
-        { skip: false, pollingInterval: 60_000, refetchOnMountOrArgChange: 60 },
-      );
-      window.dispatchEvent(new Event("focus"));
-      expect(h.refetchKnowledgeBases).toHaveBeenCalledTimes(1);
-      h.canUseKnowledgeBases = false;
-      await act(async () => root.render(<TeamContentNavbar />));
-      expect(h.knowledgeBasesQuery).toHaveBeenLastCalledWith(
-        { teamId: "team-1" },
-        { skip: true, pollingInterval: 0, refetchOnMountOrArgChange: 60 },
-      );
-      window.dispatchEvent(new Event("focus"));
-      expect(h.refetchKnowledgeBases).toHaveBeenCalledTimes(1);
-      h.canUseKnowledgeBases = true;
-      await act(async () => root.render(<TeamContentNavbar />));
-    } finally {
-      await act(async () => root.unmount());
-    }
-    window.dispatchEvent(new Event("focus"));
-    expect(h.refetchKnowledgeBases).toHaveBeenCalledTimes(1);
-  });
-});
-
-afterEach(() => {
-  h.pathname = "/team/team-1/resources";
-  h.relations = ["team_member"];
-  h.charterEnabled = undefined;
-});
-
-describe("TeamContentNavbar Responsibilities entry", () => {
-  beforeEach(() => {
-    h.pathname = "/team/team-1/settings/members";
-    h.relations = ["team_admin"];
-  });
-
-  it("shows the entry when the charter is enabled", () => {
-    h.charterEnabled = true;
-    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/settings/responsibilities"');
-  });
-
-  it("also shows the entry to a pending admin when enabled", () => {
-    h.charterEnabled = true;
-    h.relations = ["pending_team_admin"];
-    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/settings/responsibilities"');
-  });
-
-  it("hides the entry when the charter is disabled or bootstrap is unavailable", () => {
-    h.charterEnabled = false;
-    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/settings/responsibilities"');
-
-    h.charterEnabled = undefined;
-    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/settings/responsibilities"');
-  });
-});
-
-describe("retired evaluation navigation", () => {
-  it("keeps Members but removes Evaluations for an agent editor", () => {
-    h.pathname = "/team/team-1/settings/members";
-    h.relations = ["team_editor"];
+    h.canUseKnowledgeBases = true;
     const html = renderToStaticMarkup(<TeamContentNavbar />);
-    expect(html).toContain('href="/team/team-1/settings/members"');
-    expect(html).not.toContain("/settings/evaluations");
-    expect(html).not.toContain("rework.teamSettings.navigation.evaluations");
+    expect(html).toContain("/weaver/features");
+    expect(h.knowledgeBasesQuery).not.toHaveBeenCalled();
+    expect(h.refetchKnowledgeBases).not.toHaveBeenCalled();
   });
 });
 
@@ -395,7 +327,7 @@ it("skips legacy sidebar reads and shows the Weaver chat list on agent managemen
   expect(h.flags).toHaveBeenLastCalledWith("enableApplications", true);
   expect(h.applications).toHaveBeenLastCalledWith("team-1", true);
   expect(h.wiki).toHaveBeenLastCalledWith({ teamId: "team-1" }, { skip: true });
-  expect(h.knowledgeBasesQuery).toHaveBeenLastCalledWith({ teamId: "team-1" }, expect.objectContaining({ skip: true }));
+  expect(h.knowledgeBasesQuery).not.toHaveBeenCalled();
   expect(html).toContain("data-chat-list");
   expect(html).not.toContain("rework.weaverAgents.chatUnavailable");
 });

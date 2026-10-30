@@ -82,7 +82,7 @@ vi.mock("../../../../../slices/streamDocumentUpload", () => ({
     return Promise.resolve([]);
   },
 }));
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+vi.mock("../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () => ({
   useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation: () => [probe.nameCheck],
   useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation: () => [probe.quotaPrecheck],
 }));

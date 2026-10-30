@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { TagWithItemsId, TagWithPermissions } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { TagWithItemsId, TagWithPermissions } from "../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 
 // ---------- Types ----------
 export type TagNode = {

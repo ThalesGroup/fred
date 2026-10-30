@@ -43,7 +43,7 @@ vi.mock("react-i18next", () => ({
 vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   useListTasksControlPlaneV1TasksGetQuery: mockListTasks(() => h.tasks),
 }));
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+vi.mock("../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListTasksKnowledgeFlowV1TasksGetQuery: mockListTasks(() => h.kfTasks),
 }));
 vi.mock("@shared/atoms/TaskStateBadge/TaskStateBadge", () => ({

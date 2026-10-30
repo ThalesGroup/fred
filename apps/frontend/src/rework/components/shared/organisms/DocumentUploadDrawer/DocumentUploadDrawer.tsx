@@ -34,7 +34,7 @@ import {
   useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation,
   type ImportNameConflicts,
   type QuotaPrecheckResponse,
-} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+} from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { useGetTeamQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import type { OptionModel } from "@models/Option.model";
 import { importPanelOpenRequested } from "../../../../features/tasks/taskSlice";

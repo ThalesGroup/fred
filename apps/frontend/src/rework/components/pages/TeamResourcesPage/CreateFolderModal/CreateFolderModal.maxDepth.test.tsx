@@ -38,7 +38,7 @@ vi.mock("react-i18next", () => ({
 }));
 vi.mock("@shared/utils/Portal", () => ({ Portal: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({}) }));
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+vi.mock("../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () => ({
   useCreateTagMutation: () => [probe.createTag, { isLoading: false }],
 }));
 

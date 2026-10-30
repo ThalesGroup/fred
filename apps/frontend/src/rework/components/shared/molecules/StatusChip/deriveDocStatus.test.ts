@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { DocumentMetadata } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { DocumentMetadata } from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
 import { deriveDocStatus, isTabularOnlyDoc } from "./deriveDocStatus.ts";
 

@@ -19,10 +19,24 @@ use anyhow::{Context, Result, ensure};
 use axum::http::StatusCode;
 use config::ContentConfig;
 use object_store::ObjectStore;
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Semaphore;
 use uuid::Uuid;
+
+/// Drive mutations require a space writer; attachments require their live conversation's owner.
+pub(crate) async fn authorized_mutation(
+    pool: &PgPool,
+    fga: &Fga,
+    actor: &str,
+    space_id: Uuid,
+    session_id: Option<Uuid>,
+) -> AppResult<Transaction<'static, Postgres>> {
+    match session_id {
+        Some(session) => crate::sessions::lock_owner(pool, fga, actor, space_id, session).await,
+        None => crate::spaces::authorized_write(pool, fga, actor, space_id).await,
+    }
+}
 
 pub struct Storage {
     pub(crate) pool: PgPool,

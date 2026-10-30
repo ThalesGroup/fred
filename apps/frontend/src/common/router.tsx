@@ -1,3 +1,4 @@
+import WeaverFeaturePage from "@rework/features/weaver/WeaverFeaturePage";
 import { isAgentManagementRoute } from "@core/utils/agentManagementRoute";
 import PlatformAccessPage from "@components/pages/admin/PlatformAccessPage/PlatformAccessPage";
 import PlatformAccessDeniedPage from "@components/pages/PlatformAccessPage/PlatformAccessDeniedPage";
@@ -19,15 +20,11 @@ import FreeEnrollmentPage from "@components/pages/PlatformAccessPage/FreeEnrollm
 import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
 import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
 import AnnouncementsPage from "@components/pages/admin/AnnouncementsPage/AnnouncementsPage.tsx";
-import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAuditPage.tsx";
 import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
 import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
 import UiSettingsPage from "@components/pages/admin/UiSettingsPage/UiSettingsPage.tsx";
 import MarketplacesPage from "@components/pages/admin/MarketplacesPage/MarketplacesPage.tsx";
-import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
 import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
-import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage.tsx";
-import TasksPage from "@components/pages/admin/TasksPage/TasksPage.tsx";
 import BootstrapPage from "@components/pages/BootstrapPage/BootstrapPage.tsx";
 import DocumentViewerPage from "@components/pages/DocumentViewerPage/DocumentViewerPage.tsx";
 import { GcuPageContent } from "@components/pages/GcuPage/GcuPage.tsx";
@@ -39,8 +36,6 @@ import MarketplacePrompts from "@components/pages/marketplace/MarketplacePrompts
 import MarketplaceAgents from "@components/pages/marketplace/MarketplaceAgents/MarketplaceAgents.tsx";
 import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
-import KnowledgeBaseDocumentsPage from "@components/pages/TeamKnowledgeBasesPage/KnowledgeBaseDocumentsPage.tsx";
-import TeamKnowledgeBasesPage from "@components/pages/TeamKnowledgeBasesPage/TeamKnowledgeBasesPage.tsx";
 import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
 import TeamWikiPage from "@components/pages/TeamWikiPage/TeamWikiPage.tsx";
 import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
@@ -157,6 +152,7 @@ const applicationRoutes: RouteObject[] = [
     path: "/",
     element: <MainLayout />,
     children: [
+      { path: "weaver/features", element: <WeaverFeaturePage /> },
       {
         // Bare `/` lands on the Home dashboard (#2298). The team switcher lives
         // in the Home nav panel; the personal-space agents page is reached from
@@ -189,11 +185,11 @@ const applicationRoutes: RouteObject[] = [
       },
       {
         path: "team/:teamId/knowledge-bases",
-        element: <TeamKnowledgeBasesPage />,
+        element: <WeaverFeaturePage feature="knowledge-bases" />,
       },
       {
         path: "team/:teamId/knowledge-bases/:instanceId",
-        element: <KnowledgeBaseDocumentsPage />,
+        element: <WeaverFeaturePage feature="knowledge-documents" />,
       },
       {
         path: "team/:teamId/wiki",
@@ -315,7 +311,7 @@ const applicationRoutes: RouteObject[] = [
         path: "admin/tasks",
         element: (
           <Protected requires="admin">
-            <TasksPage />
+            <WeaverFeaturePage feature="tasks" />
           </Protected>
         ),
       },
@@ -372,7 +368,7 @@ const applicationRoutes: RouteObject[] = [
         path: "admin/self-test",
         element: (
           <Protected requires="admin">
-            <SelfTestPage />
+            <WeaverFeaturePage feature="diagnostics" />
           </Protected>
         ),
       },
@@ -383,7 +379,7 @@ const applicationRoutes: RouteObject[] = [
         path: "admin/corpus-audit",
         element: (
           <Protected requires="admin">
-            <CorpusAuditPage />
+            <WeaverFeaturePage feature="audit" />
           </Protected>
         ),
       },
@@ -391,7 +387,7 @@ const applicationRoutes: RouteObject[] = [
         path: "admin/migration",
         element: (
           <Protected requires="admin">
-            <MigrationPage />
+            <WeaverFeaturePage feature="migration" />
           </Protected>
         ),
       },

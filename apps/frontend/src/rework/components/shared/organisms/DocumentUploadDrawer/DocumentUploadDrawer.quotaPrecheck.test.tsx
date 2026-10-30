@@ -55,7 +55,7 @@ vi.mock("../../../../../slices/streamDocumentUpload", () => ({
     return Promise.resolve([]);
   },
 }));
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+vi.mock("../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () => ({
   useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation: () => [
     () => ({ unwrap: () => Promise.resolve({ conflicts: [] }) }),
   ],

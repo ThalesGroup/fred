@@ -24,7 +24,7 @@ from knowledge_flow_backend.security.weaver_admission import delegated_person
 
 
 def tabular_service(context: DocumentAccessContext = Depends(document_access_context)) -> TabularService:
-    return TabularService(space_id=context.space_id, document_scope=context.document_scope)
+    return TabularService(context=context)
 
 
 @contextmanager

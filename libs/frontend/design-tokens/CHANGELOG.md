@@ -1,5 +1,10 @@
 # Design tokens changelog
 
+## 5.0.0
+
+Review: approved
+Changes: Align the package with Weaver 5.0.0 and update its homepage to the Weaver branch. Add the extra-small shadow token for light and dark themes; retain the canonical Pebble theme as the packaged token source, including its base-theme selector support.
+
 ## 0.1.1-alpha.0
 
 Review: approved

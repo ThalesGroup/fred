@@ -1667,3 +1667,124 @@ async fn conversations_pin_configuration_and_keep_history_after_agent_edits() {
         );
     }
 }
+
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn runtime_binding_lists_all_eligible_conversation_attachments() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    grant(&e, org.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Member, "bob").await;
+    let identity = support::IdentityServer::start().await;
+    let catalog = Catalog::start().await;
+    let app = app(&e, &identity, &catalog, e.fga.clone()).await;
+    let template = enable(&e, org.id, "custom", true).await;
+    let instance = create(&app, &identity, team.id, creation(template, "Files")).await;
+    let base = item(team.id, &instance);
+    let session = Uuid::new_v4();
+    let other = Uuid::new_v4();
+    for id in [session, other] {
+        let response = request(&app, &identity, Some("alice"), "POST",
+            &format!("/spaces/{}/sessions", team.id),
+            json!({"session_id":id,"agent_instance_id":instance["agent_instance_id"],"agent_configuration_revision":1})).await;
+        assert_eq!(response.0, 201, "{response:?}");
+    }
+    let ids: Vec<Uuid> = sqlx::query_scalar(
+        "insert into document(id,space_id,session_id,name,mime,size,sha256,created_by,object_key,quota_owner,retrievable)
+         select gen_random_uuid(),$1,case n when 5 then null::uuid when 6 then $3 else $2 end,'file-' || n || case n % 3 when 0 then '.csv' when 1 then '.xlsx' else '.txt' end,
+         case n % 3 when 0 then 'text/csv' when 1 then 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' else 'text/plain' end,
+         1,repeat('a',64),'alice',gen_random_uuid()::text,$1,true from generate_series(1,110) n returning id",
+    ).bind(team.id).bind(session).bind(other).fetch_all(&e.pool).await.unwrap();
+    sqlx::query(
+        "insert into document_processing(id,request_key,actor,document_id,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds)
+         select id,id,'alice',id,'fast',id::text,'{}',now()+interval '1 hour','{}',60,60,60 from document where id=any($1)",
+    ).bind(&ids).execute(&e.pool).await.unwrap();
+    // Published CSV/Excel need no vectors, just like text documents in this fixture.
+    sqlx::query(
+        "insert into generation(id,processing_id,stage,execution_id,activity_id,attempt,expires_at,prefix,committed_at,vector_ordinals,cleanup_after)
+         select id,id,'indexing',id,id,1,now()+interval '1 hour',id::text,now(),'{}',now()+interval '2 hours' from document where id=any($1)",
+    ).bind(&ids).execute(&e.pool).await.unwrap();
+    sqlx::query("update document set published_generation=id where id=any($1)")
+        .bind(&ids)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    sqlx::query("update document set published_generation=null where id=$1")
+        .bind(ids[0])
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    sqlx::query("update document set retrievable=false where id=$1")
+        .bind(ids[1])
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    sqlx::query("update document set retrieval_id=id,retrieval_actor='alice',retrieval_target=true,retrieval_phase='ready',retrieval_confirmed=false where id=$1")
+        .bind(ids[2]).execute(&e.pool).await.unwrap();
+    let deletion = Uuid::new_v4();
+    sqlx::query("insert into deletion(id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at) values ($1,$2,'document',$3,$4,'alice',now(),now())")
+        .bind(deletion).bind(ids[3]).bind(team.id).bind(org.id).execute(&e.pool).await.unwrap();
+    sqlx::query("update document set deletion_id=$2,purge_after=now() where id=$1")
+        .bind(ids[3])
+        .bind(deletion)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    let resolve = format!("{base}/runtime?conversation={session}");
+    let first = request(&app, &identity, Some("alice"), "GET", &resolve, Value::Null).await;
+    assert_eq!(first.0, 200, "{first:?}");
+    let files = first.1["attachments"].as_array().unwrap();
+    assert_eq!(files.len(), 104);
+    let mut expected = ids[6..].to_vec();
+    expected.sort();
+    assert_eq!(
+        files
+            .iter()
+            .map(|f| Uuid::parse_str(f["document_id"].as_str().unwrap()).unwrap())
+            .collect::<Vec<_>>(),
+        expected
+    );
+    assert!(
+        files
+            .iter()
+            .all(|f| f["name"].is_string() && f["mime"].is_string())
+    );
+    let repeated = request(&app, &identity, Some("alice"), "GET", &resolve, Value::Null).await;
+    assert_eq!(first.1["attachments"], repeated.1["attachments"]);
+    let no_conversation = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &format!("{base}/runtime"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(no_conversation.0, 200, "{no_conversation:?}");
+    assert_eq!(no_conversation.1["attachments"], json!([]));
+    assert_eq!(
+        request(&app, &identity, Some("bob"), "GET", &resolve, Value::Null)
+            .await
+            .0,
+        404
+    );
+    sqlx::query("update document set published_generation=id where id=$1")
+        .bind(ids[0])
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    let next = request(&app, &identity, Some("alice"), "GET", &resolve, Value::Null).await;
+    assert_eq!(next.1["attachments"].as_array().unwrap().len(), 105);
+    sqlx::query("update session_metadata set runtime_id='wrong-runtime' where session_id=$1")
+        .bind(session)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        request(&app, &identity, Some("alice"), "GET", &resolve, Value::Null)
+            .await
+            .0,
+        409
+    );
+}

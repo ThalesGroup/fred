@@ -51,7 +51,7 @@ import {
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
-} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+} from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import {
   buildTree,
   collectDescendantTagIds,

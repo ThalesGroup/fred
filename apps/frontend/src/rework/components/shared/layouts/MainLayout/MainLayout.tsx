@@ -16,15 +16,11 @@ import { type PropsWithChildren } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "@shared/layouts/Sidebar/Sidebar.tsx";
 import TeamAdminCharterGate from "@shared/organisms/TeamAdminCharterGate/TeamAdminCharterGate";
-import { useTaskPolling } from "../../../../features/tasks/useTaskPolling";
-import { useTaskRehydration } from "../../../../features/tasks/useTaskRehydration";
 import { usePlatformArea } from "@core/hooks/usePlatformArea";
 import { isAgentManagementRoute } from "@core/utils/agentManagementRoute";
 import styles from "./MainLayout.module.css";
 
 function AdmittedWorkspace() {
-  useTaskRehydration();
-  useTaskPolling();
   return (
     <TeamAdminCharterGate>
       <Outlet />

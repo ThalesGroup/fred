@@ -15,52 +15,33 @@
 import type { ChatAttachment } from "@rework/types/attachments";
 import Chip from "@shared/atoms/Chip/Chip";
 import Icon from "@shared/atoms/Icon/Icon";
-import { TaskIndicator } from "@shared/molecules/TaskIndicator/TaskIndicator";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { useSelector } from "react-redux";
-import { TERMINAL_STATES, type TaskState } from "../../../../features/tasks/taskTypes";
 import styles from "./AttachmentChips.module.css";
 
 interface AttachmentChipsProps {
   attachments: ChatAttachment[];
   onRemove: (id: string) => void;
-}
-
-interface TasksRootState {
-  tasks: {
-    byId: Record<
-      string,
-      {
-        taskId: string;
-        state: TaskState;
-      }
-    >;
-  };
+  onRetry?: (id: string, file: File) => void;
 }
 
 function fileLabel(attachment: ChatAttachment, t: (key: string, options?: Record<string, unknown>) => string): string {
-  if (attachment.status === "uploading") return t("chatbot.attachmentChip.uploading");
-  if (attachment.status === "error") return t("chatbot.attachmentChip.failed");
+  if (attachment.status === "uploading")
+    return t(attachment.canRetry ? "rework.documentStorage.uncertain" : "chatbot.attachmentChip.uploading");
+  if (attachment.status === "error")
+    return attachment.canRetry && attachment.error
+      ? t(`chatbot.attachments.errors.${attachment.error}`, { defaultValue: attachment.error })
+      : t("chatbot.attachments.processingUnavailable");
   if (attachment.status === "ingesting") return t("chatbot.attachmentChip.processing");
-  return attachment.isImage ? t("chatbot.attachmentChip.image") : t("chatbot.attachmentChip.file");
+  return t("chatbot.attachmentChip.ready");
 }
 
-function AttachmentTaskStatus({ taskIds }: { taskIds: string[] }) {
-  const displayTaskId = useSelector((state: TasksRootState) => {
-    const tasks = taskIds.map((taskId) => state.tasks.byId[taskId]).filter(Boolean);
-    const activeTask = tasks.find((task) => !TERMINAL_STATES.has(task.state));
-    const lastTask = tasks.length > 0 ? tasks[tasks.length - 1] : null;
-    return activeTask?.taskId ?? lastTask?.taskId ?? null;
-  });
-
-  if (!displayTaskId) return null;
-  return <TaskIndicator taskId={displayTaskId} size="sm" />;
-}
-
-export function AttachmentChips({ attachments, onRemove }: AttachmentChipsProps) {
+export function AttachmentChips({ attachments, onRemove, onRetry }: AttachmentChipsProps) {
   const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const retryInput = useRef<HTMLInputElement>(null);
+  const retryId = useRef<string | null>(null);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -79,15 +60,43 @@ export function AttachmentChips({ attachments, onRemove }: AttachmentChipsProps)
 
   return (
     <div ref={scrollRef} className={styles.chips} aria-label={t("chatbot.attachmentChip.ariaLabel")}>
+      <input
+        type="file"
+        hidden
+        ref={retryInput}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file && retryId.current) onRetry?.(retryId.current, file);
+          event.target.value = "";
+        }}
+      />
       {attachments.map((attachment) => (
         <Chip
           key={attachment.id}
           tone={attachment.status === "error" ? "error" : "default"}
           leading={<Icon category="outlined" type={attachment.isImage ? "image" : "attach_file"} />}
           label={attachment.name}
-          secondary={attachment.taskIds.length === 0 ? fileLabel(attachment, t) : undefined}
-          trailing={<AttachmentTaskStatus taskIds={attachment.taskIds} />}
-          onRemove={() => onRemove(attachment.id)}
+          title={
+            attachment.error
+              ? `${attachment.name}: ${t(`chatbot.attachments.errors.${attachment.error}`, { defaultValue: attachment.error })}`
+              : attachment.name
+          }
+          secondary={fileLabel(attachment, t)}
+          trailing={
+            attachment.canRetry && onRetry ? (
+              <IconButton
+                variant="icon"
+                size="2xs"
+                icon={{ category: "outlined", type: "refresh" }}
+                aria-label={t("chatbot.attachments.retryUpload")}
+                onClick={() => {
+                  retryId.current = attachment.id;
+                  retryInput.current?.click();
+                }}
+              />
+            ) : undefined
+          }
+          onRemove={attachment.canRemove === false ? undefined : () => onRemove(attachment.id)}
           removeAriaLabel={t("chatbot.attachmentChip.removeAria", { name: attachment.name })}
         />
       ))}

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { DocumentMetadata } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { DocumentMetadata } from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { pagesToRefreshOnTaskCompletion } from "./refreshOnCompletion.ts";
 
 const doc = (uid: string): DocumentMetadata => ({ identity: { document_uid: uid } }) as unknown as DocumentMetadata;

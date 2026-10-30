@@ -62,7 +62,7 @@ const doc = (uid: string, name: string, stages: Record<string, string>) => ({
   tags: { tag_ids: ["tag-cir"] },
 });
 
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+vi.mock("../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () => ({
   // `scope=team` returns in-flight tasks too, which is how a TEAMMATE's
   // running ingestion ("uid-teammate") becomes visible at all — it is absent
   // from the user-scoped SSE store below.

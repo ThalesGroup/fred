@@ -31,7 +31,7 @@ import {
   useCreateTagMutation,
   useDeleteTagMutation,
   useLazyListTagsQuery,
-} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+} from "../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { awaitIngestion, streamAgentTurn, uploadDocument } from "./actions";
 import { expectRefused } from "./scenarios/runScope";
 import type { PipelineDeps, Scenario } from "./types";

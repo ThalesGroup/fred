@@ -53,7 +53,7 @@ vi.mock("../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation: () => [h.enroll],
   usePrepareAgentExecutionMutation: () => [h.prepare],
 }));
-vi.mock("../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () =>
+vi.mock("../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () =>
   Object.fromEntries(
     ["useCreateTagMutation", "useDeleteTagMutation", "useLazyListTagsQuery"].map((name) => [name, () => [vi.fn()]]),
   ),

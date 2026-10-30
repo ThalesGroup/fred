@@ -19,7 +19,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { Portal } from "@shared/utils/Portal.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { useCreateTagMutation } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useCreateTagMutation } from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { MAX_FOLDER_DEPTH, folderPathDepth } from "@shared/organisms/DocumentUploadDrawer/droppedPaths";
 import styles from "./CreateFolderModal.module.css";
 

@@ -265,7 +265,7 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid, sourc
 
   const pdfUrl = useMemo(() => {
     if (!documentUid) return null;
-    return sourceUrl ?? `/knowledge-flow/v1/raw_content/stream/${documentUid}`;
+    return sourceUrl ?? `/control-plane/v1/documents/${encodeURIComponent(documentUid)}/preview?artifact=native`;
   }, [documentUid, sourceUrl]);
 
   const authHeader = useMemo(() => (token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : null), [token]);

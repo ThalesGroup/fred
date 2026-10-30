@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { createSelector, createSlice, type PayloadAction } from "@reduxjs/toolkit";
-import type { TaskSummary } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { TaskSummary } from "../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { TERMINAL_STATES, type AnyTaskEvent, type ImportStage, type TaskTarget, type TaskViewModel } from "./taskTypes";
 
 export interface TasksState {

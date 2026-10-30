@@ -22,7 +22,7 @@
  */
 
 import type { SortState } from "@shared/molecules/DataTable/DataTable.tsx";
-import type { BrowseDocumentsByTagRequest } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { BrowseDocumentsByTagRequest } from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 
 /** The contract's own field names — never re-declared, read off the generated client. */
 export type DocumentSortField = NonNullable<BrowseDocumentsByTagRequest["sort_by"]>;

@@ -130,6 +130,13 @@ impl Documents {
         Self::start_spool(quota, false).await
     }
     async fn start_spool(quota: i64, root_owned: bool) -> Self {
+        Self::start_with_limits(quota, root_owned, Default::default()).await
+    }
+    async fn start_with_limits(
+        quota: i64,
+        root_owned: bool,
+        limits: control_plane::documents::config::Limits,
+    ) -> Self {
         let e = crate::env().await;
         let (org, team) = crate::org_and_team(&e).await;
         for (user, role) in [
@@ -179,6 +186,7 @@ impl Documents {
             assert_eq!(std::fs::metadata(spool.path()).unwrap().uid(), 0);
         }
         let mut config = bucket.config.clone();
+        config.limits = limits;
         let proxy = S3Proxy::start(config.endpoint.clone()).await;
         config.endpoint = proxy.endpoint.clone();
         config.limits.s3_seconds = 5;

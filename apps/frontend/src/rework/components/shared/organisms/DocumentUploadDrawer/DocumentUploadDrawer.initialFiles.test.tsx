@@ -52,7 +52,7 @@ vi.mock("../../../../../slices/streamDocumentUpload", () => ({
   leafFileName: (file: File) => file.name.split("/").pop() || file.name,
   streamUploadOrProcessDocument: vi.fn(),
 }));
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+vi.mock("../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () => ({
   // Precheck answers "allowed" so saves proceed; the denial path has its own
   // coverage in DocumentUploadDrawer.quotaPrecheck.test.tsx.
   useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation: () => [

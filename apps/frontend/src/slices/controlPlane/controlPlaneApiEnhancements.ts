@@ -1,6 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
+import type { FetchBaseQueryMeta } from "@reduxjs/toolkit/query";
 import { controlPlaneApi, type OrganizationDetail } from "./controlPlaneOpenApi";
 
 // The generator types binary fields as Blob, but sends the enclosing object as
@@ -16,8 +17,34 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "AgentInstances",
     "AgentTemplates",
     "Sessions",
+    "Attachments",
   ],
   endpoints: {
+    listAttachments: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { spaceId, sessionId }) => [
+        { type: "Attachments", id: `${spaceId}:${sessionId}` },
+      ],
+    },
+    uploadAttachment(endpoint) {
+      endpoint.extraOptions = { retryUnauthorized: false };
+      const query = endpoint.query!;
+      endpoint.query = (args) => {
+        const request = query(args);
+        const body = new FormData();
+        body.append("file", args.fileUpload.file);
+        return { ...(typeof request === "string" ? { url: request } : request), body, timeout: 2_000_000 };
+      };
+      endpoint.transformErrorResponse = (error, meta) => ({
+        ...error,
+        retryAfter: (meta as FetchBaseQueryMeta | undefined)?.response?.headers.get("Retry-After"),
+      });
+    },
+    deleteAttachment: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { spaceId, sessionId }) =>
+        error ? [] : [{ type: "Attachments", id: `${spaceId}:${sessionId}` }],
+    },
     listSessions: {
       keepUnusedDataFor: 0,
       providesTags: (_result, _error, { spaceId }) => [{ type: "Sessions", id: spaceId }],
@@ -200,6 +227,8 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
 });
 
 export const {
+  useListAttachmentsQuery,
+  useDeleteAttachmentMutation,
   useListSessionsQuery,
   useGetSessionQuery,
   useCreateSessionMutation,

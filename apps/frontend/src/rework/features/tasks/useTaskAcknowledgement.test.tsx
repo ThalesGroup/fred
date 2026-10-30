@@ -32,7 +32,7 @@ vi.mock("../../../security/KeycloakService", () => ({
   KeyCloakService: { ensureFreshToken: async () => true, GetToken: () => "token", CallLogout: vi.fn() },
 }));
 
-import { knowledgeFlowApi } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { knowledgeFlowApi } from "../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { legacyControlPlaneApi } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { taskRegistered, taskSlice, taskSnapshotsReceived } from "./taskSlice";
 import { useTaskAcknowledgement } from "./useTaskAcknowledgement";

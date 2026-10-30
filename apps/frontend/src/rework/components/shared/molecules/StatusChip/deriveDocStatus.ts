@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import type { DocStatus } from "@shared/atoms/DocStatusBadge/DocStatusBadge.tsx";
-import type { DocumentMetadata } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { DocumentMetadata } from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
 
 export interface ResolvedDocStatus {

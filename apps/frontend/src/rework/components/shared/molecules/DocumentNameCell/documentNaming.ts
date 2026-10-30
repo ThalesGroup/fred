@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { DocumentMetadata } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+import { DocumentMetadata } from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi.ts";
 
 // The Name column always shows document_name: identity.title is populated
 // ingestion-time straight from the file's own embedded metadata

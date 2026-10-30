@@ -23,7 +23,11 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { DocumentMetadata, TagUpdate, TagWithItemsId } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type {
+  DocumentMetadata,
+  TagUpdate,
+  TagWithItemsId,
+} from "../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -46,7 +50,7 @@ vi.mock("react-i18next", () => ({
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showSuccess, showError, showInfo }),
 }));
-vi.mock("../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+vi.mock("../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () => ({
   useUpdateTagMutation: () => [updateTagMutation],
   useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation: () => [vi.fn()],
   useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation: () => [vi.fn()],

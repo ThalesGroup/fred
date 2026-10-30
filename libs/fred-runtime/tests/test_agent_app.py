@@ -2625,11 +2625,17 @@ def test_bound_context_cannot_supply_inference_permission() -> None:
     assert "usable_model_ids" not in BoundRuntimeContext.model_fields
 
 
-def test_build_runtime_services_uses_persisted_document_source_settings(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.asyncio
+async def test_build_runtime_services_uses_persisted_document_source_settings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any, enabled: bool
 ) -> None:
+    from uuid import UUID
+
+    from fred_runtime.react.react_prompting import build_attachment_context_suffix
     from fred_sdk.contracts.models import AgentTuning, StoredCapabilityConfig
     from pydantic import BaseModel
+    from weaver_fixtures import active_turn, local_binding
 
     class DocumentConfig(BaseModel):
         attachments: bool = True
@@ -2650,16 +2656,20 @@ def test_build_runtime_services_uses_persisted_document_source_settings(
     tuning = AgentTuning(
         role=definition.role,
         description=definition.description,
+        selected_capability_ids=["document_access"],
         capability_config={
             "document_access": StoredCapabilityConfig(
                 schema_version="0.2.0",
-                config={"attachments": True, "team_documents": False},
+                config={"attachments": enabled, "team_documents": not enabled},
             )
         },
     )
     binding = BoundRuntimeContext(
         runtime_context=RuntimeContext(
-            session_id="s", user_id="alice", team_id="fredlab"
+            session_id=str(UUID(int=301)),
+            user_id="alice",
+            team_id="fredlab",
+            selected_document_uids=[],
         ),
         portable_context=PortableContext(
             request_id="r",
@@ -2667,7 +2677,7 @@ def test_build_runtime_services_uses_persisted_document_source_settings(
             actor="alice",
             tenant="fredlab",
             environment=PortableEnvironment.DEV,
-            session_id="s",
+            session_id=str(UUID(int=301)),
             user_id="alice",
             team_id="fredlab",
         ),
@@ -2682,13 +2692,43 @@ def test_build_runtime_services_uses_persisted_document_source_settings(
     app = create_agent_app(
         registry={definition.agent_id: definition}, config=_build_test_config(tmp_path)
     )
-    with TestClient(app):
+    binding = local_binding(
+        definition.agent_id,
+        runtime_context=binding.runtime_context,
+        portable_context=binding.portable_context,
+    )
+    with (
+        TestClient(app),
+        active_turn(
+            binding,
+            attachments=[
+                dict(
+                    document_id=str(UUID(int=401)), name="private.csv", mime="text/csv"
+                )
+            ],
+        ) as authority,
+    ):
         services = agent_app_module._build_runtime_services(
             definition,
             binding,
             team_id="fredlab",
             tuning=tuning,
             capability_registry=cast(Any, Registry()),
+        )
+
+        expected = (UUID(int=401),) if enabled else ()
+        assert (
+            authority.document_context(binding.runtime_context).attachment_ids
+            == expected
+        )
+        suffix = build_attachment_context_suffix(binding, tabular_tools_available=False)
+        assert ("private.csv" in suffix) is enabled
+        assert isinstance(services.tool_provider, agent_app_module.FredMcpToolProvider)
+        sent = services.tool_provider._agent.document_context()
+        from fred_core.documents.transport import DocumentAccessContext
+
+        assert (
+            DocumentAccessContext.model_validate_json(sent).attachment_ids == expected
         )
 
     assert isinstance(services.tool_provider, agent_app_module.FredMcpToolProvider)

@@ -23,7 +23,7 @@ import type { OptionModel } from "@models/Option.model.ts";
 import {
   useListDocumentLabelsQuery,
   type DocumentMetadata,
-} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+} from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import styles from "./ManageLabelsModal.module.css";
 
 interface LabelPatch {

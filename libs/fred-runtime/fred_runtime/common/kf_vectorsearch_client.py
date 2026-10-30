@@ -18,10 +18,8 @@ import asyncio
 import logging
 import random
 from typing import Any, Dict, List, Optional, Sequence
-from uuid import UUID
 
 import httpx
-from fred_core.documents.selection import DocumentScope
 from fred_core.documents.transport import DOCUMENT_CONTEXT_HEADER, DocumentAccessContext
 from fred_core.store.vector_search import VectorSearchHit
 from pydantic import TypeAdapter
@@ -98,8 +96,7 @@ class VectorSearchClient(KfBaseClient):
         self,
         *,
         question: str,
-        space_id: str,
-        document_scope: DocumentScope = DocumentScope(),
+        document_context: DocumentAccessContext,
         top_k: int = 10,
         search_policy: Optional[str] = None,
     ) -> List[VectorSearchHit]:
@@ -108,7 +105,7 @@ class VectorSearchClient(KfBaseClient):
         Wire format (matches controller): POST /documents/search with
         {"question", "top_k", "search_policy"?} and the JSON document-context header.
         The scope is an intersection of unions, resolved against Weaver placement
-        by Knowledge Flow; session attachments remain unavailable.
+        by Knowledge Flow; attachment IDs are an independent server-bound source.
         """
         payload: Dict[str, Any] = {
             "question": question,
@@ -118,7 +115,7 @@ class VectorSearchClient(KfBaseClient):
             payload["search_policy"] = search_policy
         logger.info(
             "[VECTOR][CLIENT] space_id=%s top_k=%d search_policy=%s",
-            space_id,
+            document_context.space_id,
             top_k,
             search_policy,
         )
@@ -131,11 +128,7 @@ class VectorSearchClient(KfBaseClient):
             method="POST",
             path="/documents/search",
             phase_name="kf_vector_search",
-            headers={
-                DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(
-                    space_id=UUID(space_id), document_scope=document_scope
-                ).model_dump_json()
-            },
+            headers={DOCUMENT_CONTEXT_HEADER: document_context.model_dump_json()},
             json=payload,
         )
         r.raise_for_status()
@@ -150,8 +143,7 @@ class VectorSearchClient(KfBaseClient):
         self,
         *,
         document_uid: str,
-        space_id: str,
-        document_scope: DocumentScope = DocumentScope(),
+        document_context: DocumentAccessContext,
         limit: int,
     ) -> List[VectorSearchHit]:
         """Fetch a document's chunks in chunk_index order, capped at `limit`.
@@ -163,11 +155,7 @@ class VectorSearchClient(KfBaseClient):
             method="GET",
             path=f"/documents/{document_uid}/chunks",
             phase_name="kf_vector_document_chunks",
-            headers={
-                DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(
-                    space_id=UUID(space_id), document_scope=document_scope
-                ).model_dump_json()
-            },
+            headers={DOCUMENT_CONTEXT_HEADER: document_context.model_dump_json()},
             params={
                 "limit": limit,
             },

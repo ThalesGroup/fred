@@ -53,7 +53,7 @@ const doc = (uid: string, name: string) => ({
 
 // Two-level tree at the corpus root: "Reports" (tag-reports) with a sub-folder
 // "2024" (tag-2024). One document lives directly under each tag.
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+vi.mock("../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
   useListTagsQuery: () => ({
     data: [

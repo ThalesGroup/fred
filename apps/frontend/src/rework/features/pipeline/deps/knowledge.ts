@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import { useMemo } from "react";
-import { knowledgeFlowApi } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { knowledgeFlowApi } from "../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import type { KnowledgeDeps } from "../scenarios/knowledgeScenario";
 import type { PipelineDeps } from "../types";
 import { FRESH, useApiDispatch } from "./api";

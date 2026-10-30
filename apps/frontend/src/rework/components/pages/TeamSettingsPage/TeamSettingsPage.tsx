@@ -18,7 +18,7 @@ import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts"
 import TeamSettingsMembers from "@shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembers.tsx";
 import TeamSettingsParameters from "@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx";
 import TeamSettingsRouting from "@shared/organisms/TeamSettingsPanel/TeamSettingsRouting/TeamSettingsRouting.tsx";
-import TaskActivity from "@shared/organisms/TaskActivity/TaskActivity.tsx";
+import WeaverFeaturePage from "@rework/features/weaver/WeaverFeaturePage";
 import TeamSettingsResponsibilities from "@shared/organisms/TeamSettingsPanel/TeamSettingsResponsibilities/TeamSettingsResponsibilities.tsx";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
@@ -79,7 +79,7 @@ export default function TeamSettingsPage() {
       case "activity":
         // The exact same shared surface the platform admin sees (OPS-04 §3.4),
         // scoped to this team. Server enforces CAN_READ_MEMBERS.
-        return <TaskActivity scope="team" teamId={teamId} />;
+        return <WeaverFeaturePage feature="tasks" />;
       case "routing":
         // Team admins write the team's models; a personal space's owner holds
         // no team_admin relation but owns the space.

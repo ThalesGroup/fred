@@ -135,8 +135,12 @@ pub struct Descriptor {
     pub work: Work,
     pub organization_id: Uuid,
     pub space_id: Uuid,
-    pub folder_id: Uuid,
-    pub folder_path: String,
+    #[schema(required = true)]
+    pub folder_id: Option<Uuid>,
+    #[schema(required = true)]
+    pub folder_path: Option<String>,
+    #[schema(required = true)]
+    pub session_id: Option<Uuid>,
     pub name: String,
     pub mime: String,
     pub size: i64,

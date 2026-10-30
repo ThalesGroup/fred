@@ -52,6 +52,7 @@ const attachment: SessionAttachment = {
   mime: "text/markdown",
   sizeBytes: 1024,
   summaryMd: "# summary",
+  status: "ready",
 };
 
 let container: HTMLDivElement;

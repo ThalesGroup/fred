@@ -38,8 +38,8 @@ import { useTranslation } from "react-i18next";
 import {
   useAuditDocumentsKnowledgeFlowV1DocumentsAuditGetQuery,
   useFixDocumentsKnowledgeFlowV1DocumentsAuditFixPostMutation,
-} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import type { StoreAuditFinding } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+} from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
+import type { StoreAuditFinding } from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import styles from "./CorpusAuditPage.module.css";
 
 function PresenceIcon({ present }: { present: boolean }) {

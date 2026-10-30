@@ -20,7 +20,7 @@ import { useEffect } from "react";
 import { useDispatch, useSelector, useStore } from "react-redux";
 import type { ThunkDispatch, UnknownAction } from "@reduxjs/toolkit";
 import { legacyControlPlaneApi } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
-import { knowledgeFlowApi, type TaskSummary } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { knowledgeFlowApi, type TaskSummary } from "../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { selectActiveTasks, taskSnapshotsReceived } from "./taskSlice";
 import { taskBackendFor, type TaskBackend } from "./taskKinds";
 

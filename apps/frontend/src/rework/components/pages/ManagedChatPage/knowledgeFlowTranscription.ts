@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { AudioTranscriptionResponse } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { AudioTranscriptionResponse } from "../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 
 interface TranscribeAudioClipOptions {
   language?: string;

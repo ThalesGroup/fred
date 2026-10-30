@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { DocumentMetadata } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { DocumentMetadata } from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 
 /** A loaded document page — only the fields the refresh decision needs. */
 interface LoadedPage {

@@ -36,7 +36,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
 vi.mock("react-redux", () => ({ useDispatch: () => vi.fn(), useSelector: () => [] }));
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+vi.mock("../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
   useListTagsQuery: () => ({
     data: [

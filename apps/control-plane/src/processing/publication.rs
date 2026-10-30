@@ -5,7 +5,7 @@ use super::{
     models::*,
     store::{self, generations, latest, row},
 };
-use crate::{error::AppResult, onboarding, spaces};
+use crate::{documents, error::AppResult, onboarding};
 use chrono::Utc;
 
 impl Processing {
@@ -50,7 +50,7 @@ impl Processing {
         }
         let planned = generation.chunks as u32;
         if commit.stage == Stage::Indexing {
-            let document = crate::db::document(&self.pool, r.summary.document_id).await?;
+            let document = crate::db::pipeline_document(&self.pool, r.summary.document_id).await?;
             let names: std::collections::HashSet<&str> =
                 manifest.artifacts.iter().map(|a| a.path.as_str()).collect();
             if manifest.vectors > i64::from(planned)
@@ -68,6 +68,12 @@ impl Processing {
                 .next()
                 .unwrap_or("")
                 .to_lowercase();
+            if matches!(extension.as_str(), "csv" | "xlsx" | "xls" | "xlsm")
+                && (manifest.rows.is_none()
+                    || (extension != "csv" && !names.contains("tables.json")))
+            {
+                return Err(invalid());
+            }
             if matches!(extension.as_str(), "docx" | "doc" | "odt" | "pptx" | "ppt")
                 && !names.contains("native.pdf")
             {
@@ -83,8 +89,14 @@ impl Processing {
             None
         };
         let mut tx = if commit.stage == Stage::Indexing {
-            let mut tx =
-                spaces::authorized_write(&self.pool, &self.fga, &r.actor, r.space_id).await?;
+            let mut tx = documents::authorized_mutation(
+                &self.pool,
+                &self.fga,
+                &r.actor,
+                r.space_id,
+                r.session_id,
+            )
+            .await?;
             onboarding::require_accepted(&mut *tx, self.terms.as_deref(), &r.actor).await?;
             tx
         } else {

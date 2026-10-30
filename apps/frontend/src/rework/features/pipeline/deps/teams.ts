@@ -14,7 +14,7 @@
 
 import { useMemo } from "react";
 import { legacyControlPlaneApi } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
-import { knowledgeFlowApi } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { knowledgeFlowApi } from "../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import { personalTeamId } from "../../../components/shared/utils/teamId";
 import type { TeamsDeps } from "../scenarios/teamsScenario";

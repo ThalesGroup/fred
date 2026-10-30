@@ -51,7 +51,7 @@ import {
   type MigrationResult,
   type TaskSummary,
 } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
-import { useListTasksKnowledgeFlowV1TasksGetQuery } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useListTasksKnowledgeFlowV1TasksGetQuery } from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import styles from "./TaskActivity.module.css";
 
 // Principal counters shown in the migration result disclosure, in display

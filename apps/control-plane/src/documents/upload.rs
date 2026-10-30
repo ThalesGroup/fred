@@ -11,13 +11,13 @@ use uuid::Uuid;
 
 use super::{
     Storage, conflict, dependency_error, invalid,
-    models::{UploadQuery, UploadReceipt, UploadRow, UploadStatus},
+    models::{Destination, UploadQuery, UploadReceipt, UploadRow, UploadStatus},
     unavailable,
 };
 use crate::{
     auth::CurrentUser,
     db,
-    domain::{Folder, Permission, Space},
+    domain::{Permission, Space},
     error::{AppError, AppResult},
     onboarding, spaces,
 };
@@ -94,7 +94,7 @@ impl Storage {
     pub async fn upload(
         &self,
         user: &CurrentUser,
-        folder_id: Uuid,
+        destination: Destination,
         key: Uuid,
         choices: UploadQuery,
         multipart: Multipart,
@@ -114,15 +114,28 @@ impl Storage {
                 "All document transfer slots are busy",
             )
         })?;
-        let folder = db::folder(&self.pool, folder_id).await?;
-        let space = spaces::authorize(
-            &self.pool,
-            &self.fga,
-            &user.uid,
-            folder.space_id,
-            Permission::Write,
-        )
-        .await
+        let space = match destination {
+            Destination::Folder(id) => {
+                let folder = db::folder(&self.pool, id).await?;
+                spaces::authorize(
+                    &self.pool,
+                    &self.fga,
+                    &user.uid,
+                    folder.space_id,
+                    Permission::Write,
+                )
+                .await
+            }
+            Destination::Conversation {
+                space_id,
+                session_id,
+            } => {
+                crate::sessions::require_owner(
+                    &self.pool, &self.fga, &user.uid, space_id, session_id,
+                )
+                .await
+            }
+        }
         .map_err(dependency_error)?;
         if profile.is_some() {
             Box::pin(
@@ -144,7 +157,7 @@ impl Storage {
                 )
             })??;
         let (fresh, row) = self
-            .reserve(user, &space, &folder, key, &spool, choices)
+            .reserve(user, &space, destination, key, &spool, choices)
             .await?;
         if !fresh {
             return Ok((false, row.receipt));
@@ -154,7 +167,7 @@ impl Storage {
                 .put_verified(&row.object_key, &spool.path, spool.size, &spool.digest)
                 .await
                 .map_err(|_| unavailable())?;
-            self.publish(user, &row, processing).await
+            self.publish(user, destination, &row, processing).await
         }
         .await;
         match outcome {
@@ -238,15 +251,23 @@ impl Storage {
         })
     }
 
+    /// A folder needs write access to its space; a conversation, only its live ownership.
     async fn writer(
         &self,
         user: &CurrentUser,
+        destination: Destination,
         space: Uuid,
     ) -> AppResult<Transaction<'static, Postgres>> {
         token_current(user)?;
-        let mut tx = spaces::authorized_write(&self.pool, &self.fga, &user.uid, space)
-            .await
-            .map_err(super::dependency_error)?;
+        let mut tx = super::authorized_mutation(
+            &self.pool,
+            &self.fga,
+            &user.uid,
+            space,
+            destination.columns().1,
+        )
+        .await
+        .map_err(super::dependency_error)?;
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), &user.uid).await?;
         token_current(user)?;
         Ok(tx)
@@ -256,17 +277,22 @@ impl Storage {
         &self,
         user: &CurrentUser,
         space: &Space,
-        folder: &Folder,
+        destination: Destination,
         key: Uuid,
         file: &Spool,
         choices: UploadQuery,
     ) -> AppResult<(bool, UploadRow)> {
         let UploadQuery { retry_of, profile } = choices;
-        let mut tx = self.writer(user, space.id).await?;
-        let current = db::folder(&mut *tx, folder.id).await?;
-        if current.space_id != space.id {
+        let mut tx = self.writer(user, destination, space.id).await?;
+        if let Destination::Folder(id) = destination
+            && db::folder(&mut *tx, id).await?.space_id != space.id
+        {
             return Err(AppError::NotFound);
         }
+        let (folder_id, session_id) = destination.columns();
+        let placed = |r: &UploadReceipt| {
+            r.space_id == space.id && r.folder_id == folder_id && r.session_id == session_id
+        };
         let digest = file.sha256();
         let existing: Option<UploadRow> =
             sqlx::query_as("select *, case when status='stored' then id end as document_id from document_upload where actor=$1 and request_key=$2")
@@ -275,7 +301,7 @@ impl Storage {
                 .fetch_optional(&mut *tx)
                 .await?;
         if let Some(row) = existing {
-            if row.receipt.folder_id != folder.id
+            if !placed(&row.receipt)
                 || row.receipt.name != file.name
                 || row.receipt.size != file.size
                 || row.receipt.sha256 != digest
@@ -307,7 +333,7 @@ impl Storage {
             .fetch_one(&mut *tx)
             .await?;
             if previous.receipt.status != UploadStatus::Failed
-                || previous.receipt.folder_id != folder.id
+                || !placed(&previous.receipt)
                 || previous.receipt.name != file.name
                 || previous.receipt.sha256 != digest
                 || previous.receipt.size != file.size
@@ -328,13 +354,57 @@ impl Storage {
         } else {
             None
         };
-        let name_taken: bool = sqlx::query_scalar("select exists(select 1 from document where deletion_id is null and space_id=$1 and folder_id=$2 and name=$3) or exists(select 1 from document_upload where space_id=$1 and folder_id=$2 and name=$3 and status='pending')")
-            .bind(space.id).bind(folder.id).bind(&file.name).fetch_one(&mut *tx).await?;
+        // Names are unique per folder or per conversation; each predicate matches the unique indexes.
+        let (scope, target) = match destination {
+            Destination::Folder(id) => (
+                "select exists(select 1 from document where deletion_id is null and space_id=$1 and folder_id=$2 and session_id is null and name=$3) or exists(select 1 from document_upload where space_id=$1 and folder_id=$2 and session_id is null and name=$3 and status='pending')",
+                id,
+            ),
+            Destination::Conversation { session_id, .. } => (
+                "select exists(select 1 from document where deletion_id is null and space_id=$1 and folder_id is null and session_id=$2 and name=$3) or exists(select 1 from document_upload where space_id=$1 and folder_id is null and session_id=$2 and name=$3 and status='pending')",
+                session_id,
+            ),
+        };
+        let name_taken: bool = sqlx::query_scalar(scope)
+            .bind(space.id)
+            .bind(target)
+            .bind(&file.name)
+            .fetch_one(&mut *tx)
+            .await?;
         if name_taken {
             return Err(conflict(
                 "name_conflict",
                 "A document with this name already exists or is being uploaded",
             ));
+        }
+        if let Some(session) = session_id {
+            // The existing session lock serializes admissions. Stored receipts are represented
+            // by their document; only pending uploads add a separate reservation.
+            let (files, bytes): (i64, i64) = sqlx::query_as(
+                "select count(*), coalesce(sum(size), 0)::bigint from (
+                    select size from document where space_id=$1 and session_id=$2 and deletion_id is null
+                    union all
+                    select size from document_upload where space_id=$1 and folder_id is null and session_id=$2 and status='pending'
+                ) as occupied",
+            )
+            .bind(space.id)
+            .bind(session)
+            .fetch_one(&mut *tx)
+            .await?;
+            if files >= i64::from(self.config.limits.conversation_files) {
+                return Err(AppError::problem(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "conversation_files_exceeded",
+                    "The conversation file limit is exhausted",
+                ));
+            }
+            if file.size > self.config.limits.conversation_bytes.saturating_sub(bytes) {
+                return Err(AppError::problem(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "conversation_bytes_exceeded",
+                    "The conversation source byte limit is exhausted",
+                ));
+            }
         }
         let (owner, limit) = self.quota(space)?;
         let usage: i64 = sqlx::query_scalar("select coalesce((select sum(size) from document where deletion_id is null and quota_owner=$1),0)::bigint + coalesce((select sum(size) from document_upload where quota_owner=$1 and status='pending'),0)::bigint")
@@ -357,8 +427,8 @@ impl Storage {
                 "The encoded document path exceeds the object-store key limit",
             ));
         }
-        let row: UploadRow = sqlx::query_as("insert into document_upload (id,request_key,actor,organization_id,space_id,folder_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,retry_of,processing_profile) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'pending',clock_timestamp()+make_interval(secs=>$13),$14,$15) returning *, null::uuid as document_id")
-            .bind(id).bind(key).bind(&user.uid).bind(space.organization).bind(space.id).bind(folder.id).bind(owner)
+        let row: UploadRow = sqlx::query_as("insert into document_upload (id,request_key,actor,organization_id,space_id,folder_id,session_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,retry_of,processing_profile) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'pending',clock_timestamp()+make_interval(secs=>$14),$15,$16) returning *, null::uuid as document_id")
+            .bind(id).bind(key).bind(&user.uid).bind(space.organization).bind(space.id).bind(folder_id).bind(session_id).bind(owner)
             .bind(&file.name).bind(&file.mime).bind(file.size).bind(&digest).bind(object_key)
             .bind(self.config.limits.lease_seconds() as f64).bind(predecessor.as_ref().map(|p|p.id)).bind(profile).fetch_one(&mut *tx).await?;
         if let Some(previous) = predecessor {
@@ -372,10 +442,13 @@ impl Storage {
     async fn publish(
         &self,
         user: &CurrentUser,
+        destination: Destination,
         upload: &UploadRow,
         processing: Option<&crate::processing::Processing>,
     ) -> AppResult<UploadReceipt> {
-        let mut tx = self.writer(user, upload.receipt.space_id).await?;
+        let mut tx = self
+            .writer(user, destination, upload.receipt.space_id)
+            .await?;
         let row: UploadRow = sqlx::query_as("select *, case when status='stored' then id end as document_id from document_upload where id=$1 for update")
             .bind(upload.id)
             .fetch_one(&mut *tx)
@@ -386,9 +459,11 @@ impl Storage {
                 "This upload can no longer be published",
             ));
         }
-        db::folder(&mut *tx, row.receipt.folder_id).await?;
-        sqlx::query("insert into document (id,space_id,folder_id,name,mime,size,sha256,created_by,object_key,quota_owner) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)")
-            .bind(row.id).bind(row.receipt.space_id).bind(row.receipt.folder_id).bind(&row.receipt.name).bind(&row.receipt.mime).bind(row.receipt.size).bind(&row.receipt.sha256).bind(&row.actor).bind(&row.object_key).bind(row.quota_owner).execute(&mut *tx).await?;
+        if let Destination::Folder(id) = destination {
+            db::folder(&mut *tx, id).await?;
+        }
+        sqlx::query("insert into document (id,space_id,folder_id,session_id,name,mime,size,sha256,created_by,object_key,quota_owner) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
+            .bind(row.id).bind(row.receipt.space_id).bind(row.receipt.folder_id).bind(row.receipt.session_id).bind(&row.receipt.name).bind(&row.receipt.mime).bind(row.receipt.size).bind(&row.receipt.sha256).bind(&row.actor).bind(&row.object_key).bind(row.quota_owner).execute(&mut *tx).await?;
         let receipt = sqlx::query_as("update document_upload set status='stored',completed_at=clock_timestamp() where id=$1 and status='pending' and expires_at>clock_timestamp() returning *, id as document_id")
             .bind(row.id).fetch_one(&mut *tx).await?;
         if let Some(profile) = row.receipt.processing_profile {

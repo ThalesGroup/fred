@@ -53,7 +53,7 @@ vi.mock("../../../../../slices/streamDocumentUpload", () => ({
   leafFileName: (file: File) => file.name.split("/").pop() || file.name,
   streamUploadOrProcessDocument: () => Promise.resolve([]),
 }));
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+vi.mock("../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () => ({
   useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation: () => [
     () => ({ unwrap: () => Promise.resolve({ conflicts: [] }) }),
   ],

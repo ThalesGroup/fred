@@ -20,7 +20,7 @@
 import { describe, expect, it } from "vitest";
 import { buildFolderRollups, indexFoldersByDocUid, resolveDocOutcomes, type FailedDoc } from "./folderRollups";
 import { buildTree } from "../../../../../shared/utils/tagTree";
-import type { TaskSummary } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { TaskSummary } from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
 
 const history = (uid: string, state: string, updatedAt: string, label = `${uid}.pdf`) =>

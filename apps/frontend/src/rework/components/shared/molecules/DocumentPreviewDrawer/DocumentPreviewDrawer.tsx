@@ -14,7 +14,10 @@
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { DocumentPreviewTarget } from "../../../../../components/documents/common/useDocumentCommands";
+export interface DocumentPreviewTarget {
+  documentUid: string;
+  fileName?: string;
+}
 import {
   DocumentViewer,
   DocumentViewerModeToggle,
@@ -53,14 +56,7 @@ export default function DocumentPreviewDrawer({ target, onClose }: DocumentPrevi
         hasNativePreview(target?.fileName) ? <DocumentViewerModeToggle view={view} onChange={setView} /> : undefined
       }
     >
-      {target && (
-        <DocumentViewer
-          documentUid={target.documentUid}
-          fileName={target.fileName}
-          manager={target.manager}
-          view={view}
-        />
-      )}
+      {target && <DocumentViewer documentUid={target.documentUid} fileName={target.fileName} view={view} />}
     </InlineDrawer>
   );
 }

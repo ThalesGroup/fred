@@ -97,26 +97,30 @@ def test_promotes_sidecar_into_tabular_multi_extension(tmp_path):
     assert metadata.processing.stages.get(ProcessingStage.VECTORIZED, ProcessingStatus.NOT_STARTED) == ProcessingStatus.NOT_STARTED
 
 
-def test_unregistered_entries_are_skipped(tmp_path):
+@pytest.mark.parametrize("partial", [False, True])
+def test_unregistered_entries_fail_the_whole_catalog(tmp_path, partial):
     unregistered = {key: value for key, value in _registered_entry().items() if key not in {"object_key", "query_alias", "source_revision", "generated_at", "dataset_uid", "file_size_bytes"}}
-    md_path = _write_sidecar(tmp_path / "output", [unregistered])
+    md_path = _write_sidecar(tmp_path / "output", ([_registered_entry()] if partial else []) + [unregistered])
+    metadata = _metadata()
+    with pytest.raises(TabularProcessingError, match="Invalid tables.json entry"):
+        ExcelTableRegistrationProcessor().process(md_path, metadata)
+    assert ProcessingStage.SQL_INDEXED not in metadata.processing.stages
 
-    metadata = ExcelTableRegistrationProcessor().process(md_path, _metadata())
 
-    assert read_tabular_multi_artifact(metadata) is None
-    assert metadata.processing.stages[ProcessingStage.SQL_INDEXED] == ProcessingStatus.DONE
-
-
-def test_missing_sidecar_still_marks_sql_indexed(tmp_path):
+def test_missing_sidecar_fails(tmp_path):
     output_dir = tmp_path / "output"
     output_dir.mkdir(parents=True)
     md_path = output_dir / "output.md"
     md_path.write_text("# Extraction summary\n", encoding="utf-8")
 
-    metadata = ExcelTableRegistrationProcessor().process(str(md_path), _metadata())
+    with pytest.raises(TabularProcessingError, match="Unreadable tables.json"):
+        ExcelTableRegistrationProcessor().process(str(md_path), _metadata())
 
-    assert read_tabular_multi_artifact(metadata) is None
-    assert metadata.processing.stages[ProcessingStage.SQL_INDEXED] == ProcessingStatus.DONE
+
+def test_empty_catalog_fails(tmp_path):
+    md_path = _write_sidecar(tmp_path / "output", [])
+    with pytest.raises(TabularProcessingError, match="No queryable tables"):
+        ExcelTableRegistrationProcessor().process(md_path, _metadata())
 
 
 def test_malformed_sidecar_raises(tmp_path):

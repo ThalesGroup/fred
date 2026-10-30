@@ -68,7 +68,7 @@ vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettings
 vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsRouting/TeamSettingsRouting.tsx", () => ({
   default: ({ canWrite }: { canWrite: boolean }) => `routing-section:${canWrite}`,
 }));
-vi.mock("@shared/organisms/TaskActivity/TaskActivity.tsx", () => ({ default: () => "activity-section" }));
+vi.mock("@rework/features/weaver/WeaverFeaturePage", () => ({ default: () => "activity-section" }));
 vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsResponsibilities/TeamSettingsResponsibilities.tsx", () => ({
   default: ({ canAccept }: { canAccept: boolean }) => `responsibilities-section:${canAccept}`,
 }));

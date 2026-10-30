@@ -21,7 +21,18 @@ from langchain_community.embeddings import FakeEmbeddings
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, SearchFilter
-from knowledge_flow_backend.core.stores.vector.chromadb_vector_store import ChromaDBVectorStore
+from knowledge_flow_backend.core.stores.vector.chromadb_vector_store import ChromaDBVectorStore, _build_where
+
+
+def test_selection_filter_preserves_union_intersection_and_direct_folder_semantics():
+    search_filter = SearchFilter(metadata_any=({"folder_path": ("/folder/",), "document_uid": ("other-document",)}, {"document_uid": ("document",)}))
+
+    assert _build_where(search_filter) == {
+        "$and": [
+            {"$or": [{"folder_path": {"$in": ["/folder/"]}}, {"document_uid": {"$in": ["other-document"]}}]},
+            {"document_uid": {"$in": ["document"]}},
+        ]
+    }
 
 
 def _make_store(tmp_path) -> ChromaDBVectorStore:

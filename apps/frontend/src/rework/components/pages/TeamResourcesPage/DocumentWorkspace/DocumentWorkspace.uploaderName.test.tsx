@@ -46,7 +46,7 @@ const doc = (uid: string, name: string, uploadedBy: string | null) => ({
   tags: { tag_ids: ["tag-cir"] },
 });
 
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+vi.mock("../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () => ({
   // The rollup reads the team's terminal ingestion history (#2384); no
   // history in these fixtures, so it falls back to the live task feed.
   useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),

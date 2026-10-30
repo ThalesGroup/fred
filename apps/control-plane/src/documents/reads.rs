@@ -48,7 +48,7 @@ impl Storage {
         if query.before.is_some() != query.before_key.is_some() {
             return Err(invalid("Both receipt cursor fields are required"));
         }
-        let mut receipts:Vec<UploadReceipt>=sqlx::query_as("select *, case when status='stored' then id end as document_id from document_upload u where actor=$1 and space_id=$2 and (acknowledged_at is null or exists(select 1 from document_processing p where p.document_id=u.id and p.status in ('pending','running'))) and successor_key is null and ($3::timestamptz is null or (created_at,request_key)<($3,$4)) order by created_at desc,request_key desc limit $5")
+        let mut receipts:Vec<UploadReceipt>=sqlx::query_as("select *, case when status='stored' then id end as document_id from document_upload u where actor=$1 and space_id=$2 and session_id is null and (acknowledged_at is null or exists(select 1 from document_processing p where p.document_id=u.id and p.status in ('pending','running'))) and successor_key is null and ($3::timestamptz is null or (created_at,request_key)<($3,$4)) order by created_at desc,request_key desc limit $5")
             .bind(actor).bind(space).bind(query.before).bind(query.before_key).bind(query.limit.unwrap_or(50).clamp(1,200)).fetch_all(&self.pool).await?;
         let ids: Vec<Uuid> = receipts.iter().filter_map(|r| r.document_id).collect();
         let mut summaries = crate::processing::store::summaries(&self.pool, &ids).await?;
@@ -96,9 +96,10 @@ impl Storage {
         sqlx::query("set transaction isolation level repeatable read, read only")
             .execute(&mut *tx)
             .await?;
-        let (used_bytes,reserved_bytes,documents,bytes): (i64,i64,i64,i64) = sqlx::query_as("select coalesce((select sum(size) from document where quota_owner=$1 and deletion_id is null),0)::bigint, coalesce((select sum(size) from document_upload where quota_owner=$1 and status='pending'),0)::bigint, (select count(*) from document where space_id=$2 and deletion_id is null), coalesce((select sum(size) from document where space_id=$2 and deletion_id is null),0)::bigint")
+        // The quota counts attachments; the space's own document figures do not.
+        let (used_bytes,reserved_bytes,documents,bytes): (i64,i64,i64,i64) = sqlx::query_as("select coalesce((select sum(size) from document where quota_owner=$1 and deletion_id is null),0)::bigint, coalesce((select sum(size) from document_upload where quota_owner=$1 and status='pending'),0)::bigint, (select count(*) from document where space_id=$2 and deletion_id is null and session_id is null), coalesce((select sum(size) from document where space_id=$2 and deletion_id is null and session_id is null),0)::bigint")
             .bind(owner).bind(space.id).fetch_one(&mut *tx).await?;
-        let types = sqlx::query_as("with grouped as (select mime,count(*)::bigint as documents,sum(size)::bigint as bytes from document where space_id=$1 and deletion_id is null group by mime), ranked as (select *,row_number() over(order by bytes desc,mime) as rank from grouped) select case when rank<=20 then mime else 'other' end as mime,sum(documents)::bigint as documents,sum(bytes)::bigint as bytes from ranked group by 1 order by bytes desc,mime")
+        let types = sqlx::query_as("with grouped as (select mime,count(*)::bigint as documents,sum(size)::bigint as bytes from document where space_id=$1 and deletion_id is null and session_id is null group by mime), ranked as (select *,row_number() over(order by bytes desc,mime) as rank from grouped) select case when rank<=20 then mime else 'other' end as mime,sum(documents)::bigint as documents,sum(bytes)::bigint as bytes from ranked group by 1 order by bytes desc,mime")
             .bind(space.id).fetch_all(&mut *tx).await?;
         tx.commit().await?;
         Ok(StorageSummary {
@@ -372,13 +373,20 @@ fn directory_selection(
 ) -> sqlx::QueryBuilder<sqlx::Postgres> {
     let mut sql = sqlx::QueryBuilder::new(select);
     sql.push(" from (");
-    for (index, (projection, table, parent)) in [
+    // Attachments have no folder, so the root would list them without their exclusion.
+    for (index, (projection, table, live, parent)) in [
         (
             "0 as kind,id,name,created_at,null::bigint as size",
             "folder",
+            "deletion_id is null",
             "parent_id",
         ),
-        ("1 as kind,id,name,created_at,size", "document", "folder_id"),
+        (
+            "1 as kind,id,name,created_at,size",
+            "document",
+            "deletion_id is null and session_id is null",
+            "folder_id",
+        ),
     ]
     .into_iter()
     .enumerate()
@@ -390,7 +398,9 @@ fn directory_selection(
             .push(projection)
             .push(" from ")
             .push(table)
-            .push(" where deletion_id is null and space_id=")
+            .push(" where ")
+            .push(live)
+            .push(" and space_id=")
             .push_bind(space)
             .push(" and ")
             .push(parent);

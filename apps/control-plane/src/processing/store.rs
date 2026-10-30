@@ -21,7 +21,7 @@ macro_rules! summary_from {
 }
 macro_rules! row {
     () => {
-        "select p.*, p.submission->'files'->0 as file, d.sha256 as original_sha256, d.space_id, s.organization_id, d.published_generation, d.deletion_id is not null as retired, coalesce(cardinality(g.vector_ordinals), 0)::bigint as chunks, coalesce(cardinality(g.vector_ordinals), 0)::bigint as vectors, g.rows from document_processing p join document d on d.id = p.document_id join space s on s.id = d.space_id left join generation g on g.id = d.published_generation and g.processing_id = p.id"
+        "select p.*, p.submission->'files'->0 as file, d.sha256 as original_sha256, d.space_id, d.session_id, s.organization_id, d.published_generation, d.deletion_id is not null as retired, coalesce(cardinality(g.vector_ordinals), 0)::bigint as chunks, coalesce(cardinality(g.vector_ordinals), 0)::bigint as vectors, g.rows from document_processing p join document d on d.id = p.document_id join space s on s.id = d.space_id left join generation g on g.id = d.published_generation and g.processing_id = p.id"
     };
 }
 
@@ -53,6 +53,7 @@ pub struct Row {
     pub actor: String,
     pub original_sha256: String,
     pub space_id: Uuid,
+    pub session_id: Option<Uuid>,
     pub organization_id: Uuid,
     pub workflow_id: String,
     pub run_id: Option<String>,
@@ -201,7 +202,7 @@ impl Processing {
             .bind(document_id.to_string())
             .execute(&mut **tx)
             .await?;
-        db::document(&mut **tx, document_id).await?;
+        db::pipeline_document(&mut **tx, document_id).await?;
         // Serializes admissions so the pending-attempt cap stays exact.
         sqlx::query("select singleton from document_storage where singleton for update")
             .execute(&mut **tx)
@@ -307,15 +308,16 @@ impl Processing {
     }
     pub(crate) async fn authorize_actor(&self, r: &Row) -> AppResult<()> {
         onboarding::require_accepted(&self.pool, self.terms.as_deref(), &r.actor).await?;
-        crate::spaces::authorize(
+        let tx = crate::documents::authorized_mutation(
             &self.pool,
             &self.fga,
             &r.actor,
             r.space_id,
-            Permission::Write,
+            r.session_id,
         )
         .await
         .map_err(crate::documents::dependency_error)?;
+        tx.commit().await?;
         Ok(())
     }
     pub async fn history(
@@ -417,8 +419,12 @@ impl Processing {
         generations: &[Generation],
         g: &Generation,
     ) -> AppResult<Descriptor> {
-        let d = db::document(&self.pool, r.summary.document_id).await?;
-        let folder = db::folder(&self.pool, d.folder_id.ok_or_else(invalid)?).await?;
+        let d = db::pipeline_document(&self.pool, r.summary.document_id).await?;
+        let folder = match (d.folder_id, r.session_id) {
+            (Some(id), None) => Some(db::folder(&self.pool, id).await?),
+            (None, Some(_)) => None,
+            _ => return Err(invalid()),
+        };
         let predecessor = match generations
             .iter()
             .rev()
@@ -438,8 +444,9 @@ impl Processing {
             work: r.work(self.installation),
             organization_id: r.organization_id,
             space_id: r.space_id,
-            folder_id: folder.id,
-            folder_path: folder.path,
+            folder_id: d.folder_id,
+            folder_path: folder.map(|f| f.path),
+            session_id: r.session_id,
             name: d.name,
             mime: d.mime,
             size: d.size,

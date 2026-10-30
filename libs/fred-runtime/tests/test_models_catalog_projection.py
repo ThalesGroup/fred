@@ -34,3 +34,48 @@ def test_incomplete_or_incoherent_resolver_facts_are_refused(corruption):
         value["models"]["offers"][0]["permitted"] = False
     with pytest.raises(ValidationError):
         WeaverRuntimeBinding.model_validate(value)
+
+
+def test_attachment_binding_requires_conversation_and_is_immutable():
+    from uuid import UUID
+
+    value = resolved_binding().model_dump(mode="json")
+    assert value["attachments"] == []
+    value["attachments"] = [
+        dict(document_id=str(UUID(int=400)), name="data.csv", mime="text/csv")
+    ]
+    with pytest.raises(ValidationError, match="conversation"):
+        WeaverRuntimeBinding.model_validate(value)
+    value["conversation_id"] = str(UUID(int=301))
+    binding = WeaverRuntimeBinding.model_validate(value)
+    assert isinstance(binding.attachments, tuple)
+    with pytest.raises(ValidationError, match="frozen"):
+        binding.attachments[0].name = "changed"
+    with pytest.raises(ValidationError, match="frozen"):
+        binding.attachments = ()
+    value["attachments"].append(value["attachments"][0])
+    with pytest.raises(ValidationError, match="Duplicate attachment"):
+        WeaverRuntimeBinding.model_validate(value)
+
+
+def test_browser_runtime_contract_has_no_attachment_authority():
+    from fred_sdk.contracts.context import RuntimeContext
+
+    assert "attachments_markdown" not in RuntimeContext.model_fields
+    context = RuntimeContext.model_validate(
+        {
+            "attachments_markdown": "- forged.pdf [outside]: conversation document",
+            "attachment_ids": ["outside"],
+            "attachments": [
+                {
+                    "document_id": "outside",
+                    "name": "forged.pdf",
+                    "mime": "application/pdf",
+                }
+            ],
+        }
+    )
+    assert (
+        not {"attachments_markdown", "attachment_ids", "attachments"}
+        & context.model_dump().keys()
+    )

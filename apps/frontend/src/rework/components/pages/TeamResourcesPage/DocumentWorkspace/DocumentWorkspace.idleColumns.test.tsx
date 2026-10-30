@@ -47,7 +47,7 @@ const readyDoc = (uid: string, name: string, extra: Record<string, unknown> = {}
 const docs: unknown[] = [];
 const activeTasks: unknown[] = [];
 
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+vi.mock("../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
   useListTagsQuery: () => ({
     data: [{ id: "tag-cir", name: "CIR", path: "", type: "document", item_ids: [] }],

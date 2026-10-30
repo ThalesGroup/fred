@@ -56,7 +56,7 @@ const browse = vi.hoisted(() =>
   })),
 );
 
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+vi.mock("../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
   useListTagsQuery: () => ({
     data: [{ id: "tag-cir", name: "CIR", path: "", type: "document", item_ids: [] }],

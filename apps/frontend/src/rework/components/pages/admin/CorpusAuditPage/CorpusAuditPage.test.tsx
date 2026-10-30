@@ -24,7 +24,10 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { StoreAuditFinding, StoreAuditReport } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type {
+  StoreAuditFinding,
+  StoreAuditReport,
+} from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -53,7 +56,7 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+vi.mock("../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () => ({
   useAuditDocumentsKnowledgeFlowV1DocumentsAuditGetQuery: () => h.audit,
   useFixDocumentsKnowledgeFlowV1DocumentsAuditFixPostMutation: () => [h.fixAnomalies, { isLoading: h.isFixing }],
 }));

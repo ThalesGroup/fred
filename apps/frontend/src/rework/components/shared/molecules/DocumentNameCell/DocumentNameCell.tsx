@@ -16,7 +16,7 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { useTranslation } from "react-i18next";
 import { fileIconSpec } from "../../../../utils/fileIconSpec.ts";
-import { DocumentMetadata } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+import { DocumentMetadata } from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi.ts";
 import { documentDisplayName, embeddedTitle } from "./documentNaming.ts";
 import styles from "./DocumentNameCell.module.css";
 

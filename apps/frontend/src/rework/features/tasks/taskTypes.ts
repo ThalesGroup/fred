@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { TaskState, TaskTarget } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { TaskState, TaskTarget } from "../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import type { MigrationResult } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 export type { TaskState, TaskTarget };
 

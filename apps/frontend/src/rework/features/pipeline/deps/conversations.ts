@@ -14,7 +14,7 @@
 
 import { useMemo } from "react";
 import { legacyControlPlaneApi } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
-import { knowledgeFlowApi } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { knowledgeFlowApi } from "../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import type { ConversationsDeps } from "../scenarios/conversationsScenario";
 import type { PipelineDeps } from "../types";
 import { FRESH, useApiDispatch } from "./api";

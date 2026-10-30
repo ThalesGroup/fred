@@ -5,6 +5,8 @@
 //! or synchronized here, and deleting an instance never deletes this index.
 //! A deleted session is retired at once and absent from every read below.
 
+mod attachments;
+
 use axum::{
     Json,
     extract::State,
@@ -13,15 +15,17 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::{PgPool, Postgres, Transaction};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{
     agent_instances::{self, AgentInstance},
     api::AppState,
-    domain::Permission,
+    domain::{Permission, Space},
     error::{AppError, AppResult},
     extract::{ApiJson, ApiPath},
+    fga::Fga,
     onboarding::{self, AdmittedUser},
     spaces,
 };
@@ -122,6 +126,42 @@ async fn owned<'e>(
         .ok_or(AppError::NotFound)
 }
 
+/// The caller's live conversation in a space they can read; write access is not required.
+pub(crate) async fn require_owner(
+    pool: &PgPool,
+    fga: &Fga,
+    actor: &str,
+    space_id: Uuid,
+    session_id: Uuid,
+) -> AppResult<Space> {
+    let space = spaces::authorize(pool, fga, actor, space_id, Permission::Read).await?;
+    owned(pool, space_id, actor, session_id).await?;
+    Ok(space)
+}
+
+/// The same rule under the organization lock, holding the session row: an attachment
+/// mutation serializes with the conversation's deletion, which locks that row too.
+pub(crate) async fn lock_owner(
+    pool: &PgPool,
+    fga: &Fga,
+    actor: &str,
+    space_id: Uuid,
+    session_id: Uuid,
+) -> AppResult<Transaction<'static, Postgres>> {
+    let mut tx = spaces::authorized_mutation(pool, fga, actor, space_id, Permission::Read).await?;
+    sqlx::query_scalar::<_, Uuid>(
+        "select session_id from session_metadata where session_id = $1 and space_id = $2
+         and user_id = $3 and deletion_id is null for update",
+    )
+    .bind(session_id)
+    .bind(space_id)
+    .bind(actor)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(AppError::NotFound)?;
+    Ok(tx)
+}
+
 /// Called inside the existing resolver request, before runtime can pin or load
 /// its local checkpoint association. No per-LLM-call or cross-store lookup.
 pub(crate) async fn require_association<'e>(
@@ -184,6 +224,7 @@ pub fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(get_session))
         .routes(utoipa_axum::routes!(update_session))
         .routes(utoipa_axum::routes!(delete_session))
+        .merge(attachments::routes())
 }
 
 #[utoipa::path(post, path = "/spaces/{space_id}/sessions",

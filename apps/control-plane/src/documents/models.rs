@@ -25,7 +25,12 @@ pub struct UploadReceipt {
     /// The `Idempotency-Key` that identifies this receipt.
     pub request_key: Uuid,
     pub space_id: Uuid,
-    pub folder_id: Uuid,
+    /// Destination folder; null for a conversation attachment.
+    #[schema(required = true)]
+    pub folder_id: Option<Uuid>,
+    /// Destination conversation; null for a drive upload.
+    #[schema(required = true)]
+    pub session_id: Option<Uuid>,
     /// NFC-normalized filename.
     pub name: String,
     /// MIME type reported by the client; metadata, not verified.
@@ -51,6 +56,22 @@ pub struct UploadReceipt {
     /// Latest processing attempt of the stored document.
     #[sqlx(skip)]
     pub processing: Option<crate::processing::models::Summary>,
+}
+
+/// Where an upload lands: a drive folder, or a conversation of its owner.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Destination {
+    Folder(Uuid),
+    Conversation { space_id: Uuid, session_id: Uuid },
+}
+impl Destination {
+    /// The `(folder_id, session_id)` columns of a document or upload placed here.
+    pub(super) fn columns(self) -> (Option<Uuid>, Option<Uuid>) {
+        match self {
+            Self::Folder(id) => (Some(id), None),
+            Self::Conversation { session_id, .. } => (None, Some(session_id)),
+        }
+    }
 }
 
 #[derive(Clone, sqlx::FromRow)]

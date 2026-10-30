@@ -1,7 +1,10 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 import type { Document, FailureCode, StorageSummary, Summary } from "../../../slices/controlPlane/controlPlaneOpenApi";
-import type { DocumentMetadata, ResourceTypeStatsEntry } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type {
+  DocumentMetadata,
+  ResourceTypeStatsEntry,
+} from "../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import { handlePlatformAccessResponse } from "../../../common/platformAccess";
 import { downloadFile } from "../../../utils/downloadUtils";

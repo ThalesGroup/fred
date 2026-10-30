@@ -49,23 +49,18 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-const pending = new Map<string, ReturnType<typeof deferred<{ content: string }>>>();
-const fetchPreview = vi.fn((arg: { documentUid: string }) => {
-  let entry = pending.get(arg.documentUid);
+const pending = new Map<string, ReturnType<typeof deferred<string>>>();
+const fetchPreview = vi.fn((arg: { id: string; artifact: string }) => {
+  let entry = pending.get(arg.id);
   if (!entry) {
-    entry = deferred<{ content: string }>();
-    pending.set(arg.documentUid, entry);
+    entry = deferred<string>();
+    pending.set(arg.id, entry);
   }
   return { unwrap: () => entry.promise };
 });
 
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
-  useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery: () => [fetchPreview],
-}));
-
-const fetchManagerPreview = vi.hoisted(() => vi.fn(() => ({ unwrap: () => Promise.resolve("manager markdown") })));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useLazyPreviewQuery: () => [fetchManagerPreview],
+  useLazyPreviewQuery: () => [fetchPreview],
 }));
 
 vi.mock("react-i18next", () => ({
@@ -111,16 +106,16 @@ describe("DocumentViewer — stale fetch race (out-of-order resolution)", () => 
 
     // 1. Open document A — its fetch is now in flight.
     renderViewer("doc-A", onLoaded);
-    expect(fetchPreview).toHaveBeenCalledWith({ documentUid: "doc-A" });
+    expect(fetchPreview).toHaveBeenCalledWith({ id: "doc-A", artifact: "raw" });
 
     // 2. Before A resolves, switch to document B — A's effect cleanup should
     // mark it cancelled; B's fetch is now in flight too.
     renderViewer("doc-B", onLoaded);
-    expect(fetchPreview).toHaveBeenCalledWith({ documentUid: "doc-B" });
+    expect(fetchPreview).toHaveBeenCalledWith({ id: "doc-B", artifact: "raw" });
 
     // 3. B resolves first (plausible: smaller payload / warm cache).
     await act(async () => {
-      pending.get("doc-B")!.resolve({ content: "content-B" });
+      pending.get("doc-B")!.resolve("content-B");
       await pending.get("doc-B")!.promise;
     });
     expect(container.querySelector('[data-testid="content"]')?.textContent).toBe("content-B");
@@ -128,7 +123,7 @@ describe("DocumentViewer — stale fetch race (out-of-order resolution)", () => 
     // 4. A resolves after B, despite being requested first. Without the
     // cancellation guard this used to overwrite B's already-committed content.
     await act(async () => {
-      pending.get("doc-A")!.resolve({ content: "content-A" });
+      pending.get("doc-A")!.resolve("content-A");
       await pending.get("doc-A")!.promise;
     });
 
@@ -160,10 +155,10 @@ describe("DocumentViewer — markdown mode for a natively-rendered file", () => 
   it("renders the markdown extraction for that same .pdf when view is raw", async () => {
     render(<DocumentViewer documentUid="doc-pdf" fileName="facture.pdf" view="raw" />);
     expect(container.querySelector('[data-testid="pdf"]')).toBeNull();
-    expect(fetchPreview).toHaveBeenCalledWith({ documentUid: "doc-pdf" });
+    expect(fetchPreview).toHaveBeenCalledWith({ id: "doc-pdf", artifact: "raw" });
 
     await act(async () => {
-      pending.get("doc-pdf")!.resolve({ content: "# Facture" });
+      pending.get("doc-pdf")!.resolve("# Facture");
       await pending.get("doc-pdf")!.promise;
     });
     expect(container.querySelector('[data-testid="content"]')?.textContent).toBe("# Facture");

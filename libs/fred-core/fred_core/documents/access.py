@@ -31,6 +31,7 @@ from sqlalchemy import ARRAY, Uuid, bindparam, text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from fred_core.documents.selection import DocumentScope
+from fred_core.documents.transport import DocumentAccessContext
 
 logger = logging.getLogger(__name__)
 
@@ -38,22 +39,36 @@ _SPACE = text(
     "SELECT id, parent_id, organization_id, deletion_id FROM space WHERE id = :space_id"
 ).bindparams(bindparam("space_id", type_=Uuid))
 
+_CONVERSATION = text(
+    "SELECT session_id FROM session_metadata"
+    " WHERE session_id = :conversation_id AND space_id = :space_id"
+    " AND user_id = :user_id AND deletion_id IS NULL"
+).bindparams(
+    bindparam("conversation_id", type_=Uuid), bindparam("space_id", type_=Uuid)
+)
+
 _DOCUMENTS = text(
-    "SELECT d.id, d.folder_id, d.space_id, d.deletion_id, s.deletion_id AS space_deletion_id,"
+    "SELECT d.id, d.folder_id, d.space_id, d.session_id, d.deletion_id, s.deletion_id AS space_deletion_id,"
+    " sm.user_id AS session_user_id, sm.deletion_id AS session_deletion_id,"
     " d.retrievable, d.retrievable_pending,"
     " g.id AS generation_id, g.vector_ordinals"
     " FROM document d"
     " JOIN space s ON s.id = d.space_id"
+    " LEFT JOIN session_metadata sm ON sm.session_id = d.session_id"
+    " AND sm.space_id = d.space_id"
     " LEFT JOIN generation g ON g.id = d.published_generation"
     " WHERE d.id = ANY(:document_ids)"
 ).bindparams(bindparam("document_ids", type_=ARRAY(Uuid)))
 
 
 _PUBLISHED_ARTIFACT = text(
-    "SELECT d.id, d.folder_id, d.space_id, d.deletion_id, s.deletion_id AS space_deletion_id,"
+    "SELECT d.id, d.folder_id, d.space_id, d.session_id, d.deletion_id, s.deletion_id AS space_deletion_id,"
+    " sm.user_id AS session_user_id, sm.deletion_id AS session_deletion_id,"
     " d.retrievable, d.retrievable_pending, g.prefix, a.size, a.sha256"
     " FROM document d"
     " JOIN space s ON s.id = d.space_id"
+    " LEFT JOIN session_metadata sm ON sm.session_id = d.session_id"
+    " AND sm.space_id = d.space_id"
     " JOIN generation g ON g.id = d.published_generation"
     " JOIN artifact a ON a.generation_id = g.id AND a.path = :path"
     " WHERE d.id = :document_id"
@@ -89,6 +104,9 @@ class SearchScope:
     space_ids: tuple[UUID, ...]
     document_scope: DocumentScope = field(default_factory=DocumentScope)
     folder_paths: Mapping[UUID, str] = field(default_factory=dict)
+    conversation_id: UUID | None = None
+    attachment_ids: tuple[UUID, ...] = ()
+    user_id: str | None = None
 
     @property
     def selection_terms(self) -> tuple[dict[str, list[str]], ...]:
@@ -149,14 +167,40 @@ def _published_chunks(
     return found
 
 
-def is_live_document(row: Mapping[Any, Any], allowed: Container[UUID]) -> bool:
-    """In scope, not retired, in an active space, retrievable with no pending inclusion."""
+def _is_retrievable(row: Mapping[Any, Any]) -> bool:
     return (
-        row["space_id"] in allowed
-        and row["deletion_id"] is None
+        row["deletion_id"] is None
         and row["space_deletion_id"] is None
         and bool(row["retrievable"])
         and row["retrievable_pending"] is False
+    )
+
+
+def is_live_document(row: Mapping[Any, Any], allowed: Container[UUID]) -> bool:
+    """A live corpus document in scope, retrievable with no pending inclusion."""
+    return (
+        row["space_id"] in allowed
+        and row["session_id"] is None
+        and _is_retrievable(row)
+    )
+
+
+def is_visible_document(scope: SearchScope, row: Mapping[Any, Any]) -> bool:
+    """One union policy for chunks, Markdown and tabular published artifacts."""
+    if row["session_id"] is None:
+        return is_live_document(row, scope.space_ids) and (
+            not scope.document_scope.selections
+            or scope.document_scope.covers(row["id"], row["folder_id"])
+        )
+    return (
+        scope.conversation_id is not None
+        and scope.user_id is not None
+        and row["session_id"] == scope.conversation_id
+        and row["space_id"] == scope.space_ids[-1]
+        and row["id"] in scope.attachment_ids
+        and row["session_user_id"] == scope.user_id
+        and row["session_deletion_id"] is None
+        and _is_retrievable(row)
     )
 
 
@@ -166,16 +210,10 @@ def filter_candidates(
     documents: Iterable[Mapping[Any, Any]],
 ) -> list[Candidate]:
     """Keep published, live, in-scope chunks in their original order; drop the rest."""
-    allowed = set(scope.space_ids)
     visible: dict[UUID, Mapping[Any, Any]] = {
         row["id"]: row
         for row in documents
-        if is_live_document(row, allowed)
-        and row["generation_id"] is not None
-        and (
-            not scope.document_scope.selections
-            or scope.document_scope.covers(row["id"], row["folder_id"])
-        )
+        if is_visible_document(scope, row) and row["generation_id"] is not None
     }
     wanted: dict[UUID, set[str]] = {}
     for candidate in candidates:
@@ -217,11 +255,12 @@ def filter_candidates(
 
 
 async def resolve_scope(
-    conn: AsyncConnection, space_id: UUID, document_scope: DocumentScope | None = None
+    conn: AsyncConnection, context: DocumentAccessContext, *, user_id: str
 ) -> SearchScope:
+    space_id = context.space_id
     row = (await conn.execute(_SPACE, {"space_id": space_id})).mappings().first()
     scope = scope_from_space(space_id, row)
-    selection = document_scope or DocumentScope()
+    selection = context.document_scope
     folder_ids = list({id for item in selection.selections for id in item.folder_ids})
     paths = {}
     if folder_ids:
@@ -249,7 +288,50 @@ async def resolve_scope(
             )
         }
     )
-    return replace(scope, document_scope=selection, folder_paths=paths)
+    scope = replace(scope, document_scope=selection, folder_paths=paths)
+    if context.conversation_id is not None:
+        conversation = (
+            (
+                await conn.execute(
+                    _CONVERSATION,
+                    {
+                        "conversation_id": context.conversation_id,
+                        "space_id": space_id,
+                        "user_id": user_id,
+                    },
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if conversation is not None:
+            scope = replace(
+                scope,
+                conversation_id=context.conversation_id,
+                attachment_ids=context.attachment_ids,
+                user_id=user_id,
+            )
+            if scope.attachment_ids:
+                rows = (
+                    (
+                        await conn.execute(
+                            _DOCUMENTS, {"document_ids": list(scope.attachment_ids)}
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+                scope = replace(
+                    scope,
+                    attachment_ids=tuple(
+                        row["id"]
+                        for row in rows
+                        if row["session_id"] is not None
+                        and is_visible_document(scope, row)
+                        and row["generation_id"] is not None
+                    ),
+                )
+    return scope
 
 
 async def verify_candidates(
@@ -280,6 +362,8 @@ async def verify_candidates(
     # Aggregate facts only; no document content or additional database reads.
     rejected: Counter[str] = Counter()
     for row in documents:
+        if row["session_id"] is not None and not is_visible_document(scope, row):
+            rejected["attachment"] += 1
         if row["space_id"] not in scope.space_ids:
             rejected["out_of_scope"] += 1
         if row["deletion_id"] is not None:
@@ -315,14 +399,7 @@ async def published_artifact(
         _PUBLISHED_ARTIFACT, {"document_id": document_id, "path": path}
     )
     row = result.mappings().first()
-    if (
-        row is None
-        or not is_live_document(row, scope.space_ids)
-        or (
-            scope.document_scope.selections
-            and not scope.document_scope.covers(document_id, row["folder_id"])
-        )
-    ):
+    if row is None or not is_visible_document(scope, row):
         return None
     return PublishedArtifact(
         prefix=row["prefix"], size=row["size"], sha256=row["sha256"]
@@ -335,15 +412,21 @@ class PublishedDocument:
     name: str
     source_revision: str
     artifacts: dict[str, PublishedArtifact]
+    session_id: UUID | None
 
 
 _TABULAR_DOCUMENTS = text(
-    "WITH page AS (SELECT d.id, d.name, d.sha256, d.folder_id, d.space_id,"
+    "WITH page AS (SELECT d.id, d.name, d.sha256, d.folder_id, d.space_id, d.session_id,"
     " d.deletion_id, s.deletion_id AS space_deletion_id,"
+    " sm.user_id AS session_user_id, sm.deletion_id AS session_deletion_id,"
     " d.retrievable, d.retrievable_pending, g.id AS generation_id, g.prefix"
     " FROM document d JOIN space s ON s.id = d.space_id"
+    " LEFT JOIN session_metadata sm ON sm.session_id = d.session_id"
+    " AND sm.space_id = d.space_id"
     " JOIN generation g ON g.id = d.published_generation"
     " WHERE d.space_id = ANY(:space_ids) AND d.id > :after"
+    " AND ((:include_corpus AND d.session_id IS NULL) OR (d.session_id = :conversation_id"
+    " AND d.space_id = :space_id AND d.id = ANY(:attachment_ids)))"
     " AND (:all_documents OR d.id = ANY(:document_ids))"
     " AND EXISTS (SELECT 1 FROM artifact a WHERE a.generation_id = g.id"
     " AND a.path LIKE 'datasets/%.parquet')"
@@ -355,6 +438,9 @@ _TABULAR_DOCUMENTS = text(
     bindparam("space_ids", type_=ARRAY(Uuid)),
     bindparam("document_ids", type_=ARRAY(Uuid)),
     bindparam("after", type_=Uuid),
+    bindparam("conversation_id", type_=Uuid),
+    bindparam("space_id", type_=Uuid),
+    bindparam("attachment_ids", type_=ARRAY(Uuid)),
 )
 
 
@@ -370,7 +456,9 @@ async def published_tabular_documents(
     Return the cursor of the scanned page, including refused rows. Artifacts are
     joined to one published generation in one statement, never mixed across reads.
     """
-    if scope.document_scope.is_empty or document_ids == []:
+    if (
+        scope.document_scope.is_empty and not scope.attachment_ids
+    ) or document_ids == []:
         return [], None
     rows = (
         (
@@ -379,6 +467,10 @@ async def published_tabular_documents(
                 {
                     "space_ids": list(scope.space_ids),
                     "after": after,
+                    "include_corpus": not scope.document_scope.is_empty,
+                    "conversation_id": scope.conversation_id,
+                    "space_id": scope.space_ids[-1],
+                    "attachment_ids": list(scope.attachment_ids),
                     "all_documents": document_ids is None,
                     "document_ids": list(document_ids or ()),
                 },
@@ -389,15 +481,14 @@ async def published_tabular_documents(
     )
     documents: dict[UUID, PublishedDocument] = {}
     for row in rows:
-        if not is_live_document(
-            row, scope.space_ids
-        ) or not scope.document_scope.covers(row["id"], row["folder_id"]):
+        if not is_visible_document(scope, row):
             continue
         document = documents.setdefault(
             row["id"],
             PublishedDocument(
                 document_id=row["id"],
                 name=row["name"],
+                session_id=row["session_id"],
                 source_revision=row["sha256"],
                 artifacts={},
             ),

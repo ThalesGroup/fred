@@ -132,13 +132,17 @@ pub(crate) async fn reserved<'e>(
     .await?)
 }
 impl Lifecycle {
+    /// `conversation` is `(space_id, session_id)` for an attachment, which only its
+    /// conversation owner deletes; each route answers 404 for the other kind of document.
     pub async fn accept_document(
         &self,
         pool: &PgPool,
         fga: &Fga,
         actor: &str,
         document_id: Uuid,
+        conversation: Option<(Uuid, Uuid)>,
     ) -> AppResult<Receipt> {
+        let session = conversation.map(|(_, session)| session);
         if let Some(receipt) = sqlx::query_as::<_, Receipt>(
             "select * from deletion where target_id = $1 and target_kind = 'document'",
         )
@@ -149,7 +153,24 @@ impl Lifecycle {
             let space_id = receipt
                 .target_parent_id
                 .ok_or_else(|| anyhow::anyhow!("document deletion has no parent"))?;
-            let tx = spaces::authorized_write(pool, fga, actor, space_id).await?;
+            // Until purge the route must match the placement; after it, only the deleter replays.
+            let placed: Option<Option<Uuid>> =
+                sqlx::query_scalar("select session_id from document where id = $1")
+                    .bind(document_id)
+                    .fetch_optional(pool)
+                    .await?;
+            let visible = match placed {
+                Some(placed) => placed == session,
+                None => receipt.actor_subject == actor,
+            };
+            if !visible {
+                return Err(AppError::NotFound);
+            }
+            if conversation.is_some_and(|(space, _)| space != space_id) {
+                return Err(AppError::NotFound);
+            }
+            let tx =
+                crate::documents::authorized_mutation(pool, fga, actor, space_id, session).await?;
             tx.commit().await?;
             return Ok(receipt);
         }
@@ -159,12 +180,17 @@ impl Lifecycle {
             ));
         }
         let space_id: Uuid = sqlx::query_scalar(
-            "select space_id from document where id = $1 and deletion_id is null",
+            "select space_id from document where id = $1 and deletion_id is null and session_id is not distinct from $2",
         )
         .bind(document_id)
+        .bind(session)
         .fetch_one(pool)
         .await?;
-        let mut tx = spaces::authorized_write(pool, fga, actor, space_id).await?;
+        if conversation.is_some_and(|(space, _)| space != space_id) {
+            return Err(AppError::NotFound);
+        }
+        let mut tx =
+            crate::documents::authorized_mutation(pool, fga, actor, space_id, session).await?;
         let document: Option<Uuid> = sqlx::query_scalar(
             "select id from document where id = $1 and deletion_id is null for update",
         )
@@ -257,6 +283,13 @@ impl Lifecycle {
             .bind(operation).bind(session_id).bind(TargetKind::Session).bind(space_id).bind(space.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).fetch_one(&mut *tx).await?;
         sqlx::query("update session_metadata set deletion_id = $2 where session_id = $1")
             .bind(session_id)
+            .bind(operation)
+            .execute(&mut *tx)
+            .await?;
+        // Its attachments retire with it and free their quota; cleanup purges them as documents.
+        sqlx::query("update document set deletion_id = $3, purge_after = clock_timestamp() where session_id = $1 and space_id = $2 and deletion_id is null")
+            .bind(session_id)
+            .bind(space_id)
             .bind(operation)
             .execute(&mut *tx)
             .await?;

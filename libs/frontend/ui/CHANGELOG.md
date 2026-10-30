@@ -1,5 +1,10 @@
 # UI changelog
 
+## 5.0.0
+
+Review: approved
+Changes: Align the package and its design-token peer dependency with Weaver 5.0.0. Expand Dialog layout, action, focus and dismissal options; preserve keyboard focus across menus, drawers and dialogs; add accessible TextArea descriptions and error associations, and use shared design tokens for component sizing. Update the package homepage to the Weaver branch.
+
 ## 0.1.1-alpha.0
 
 Review: approved

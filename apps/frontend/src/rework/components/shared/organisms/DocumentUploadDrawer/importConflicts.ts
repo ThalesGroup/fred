@@ -15,7 +15,7 @@
 import type {
   ImportDestinationNames,
   ImportNameConflicts,
-} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+} from "../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { leafFileName } from "../../../../../slices/streamDocumentUpload";
 
 /** Replace the document already there, or skip the file and import nothing. */

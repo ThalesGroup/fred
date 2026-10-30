@@ -138,16 +138,10 @@ export function hasNativePreview(fileName: string | null | undefined): boolean {
  * - call only for a file `hasNativePreview` accepts; the result is the viewer's `sourceUrl`
  *
  * Example:
- * - `documentPdfSourceUrl("abc", "rapport.docx") // "/knowledge-flow/v1/raw_content/pdf/abc"`
+ * - `documentPdfSourceUrl("abc") // "/control-plane/v1/documents/abc/preview?artifact=native"`
  */
-export function documentPdfSourceUrl(
-  documentUid: string,
-  fileName: string | null | undefined,
-  manager = false,
-): string {
-  if (manager) return `/control-plane/v1/documents/${encodeURIComponent(documentUid)}/preview?artifact=native`;
-  const route = isPdfFile(fileName) ? "stream" : "pdf";
-  return `/knowledge-flow/v1/raw_content/${route}/${documentUid}`;
+export function documentPdfSourceUrl(documentUid: string): string {
+  return `/control-plane/v1/documents/${encodeURIComponent(documentUid)}/preview?artifact=native`;
 }
 
 /**

@@ -88,8 +88,6 @@ import { resolveAgentIcon } from "@shared/utils/agentIcon";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { KeyCloakService } from "../../../../security/KeycloakService";
-import { useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { transcribeAudioClip } from "./knowledgeFlowTranscription";
 import styles from "./ManagedChatPage.module.scss";
 
 const WELCOME_VARIANT_KEYS = [
@@ -174,7 +172,7 @@ export default function ManagedChatPage() {
 function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentInstanceId: string }) {
   const pendingListId = useId();
   const [pendingExpanded, setPendingExpanded] = useState(true);
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
   const teamId = space.id;
   const { showError } = useToast();
@@ -330,7 +328,6 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
     recordedPanelKeyRef.current = activeCapabilityKey;
   }, [chat.sessionId, activeCapabilityKey]);
 
-  const [transcribeAudio] = useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation();
   // Re-resolved every render from the live messages so the open drawer streams.
   const selectedTraceEntry = selectedTraceKey ? findTraceEntry(chat.messages, selectedTraceKey) : null;
   const fileTraceEntry =
@@ -520,17 +517,6 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
       summary: t("chatbot.voiceInputErrorSummary"),
       detail: message,
     });
-  };
-
-  const handleTranscribeAudio = async (file: File): Promise<string> => {
-    if (executionDisabledRef.current) return "";
-    const language = i18n.language?.split("-")[0] || undefined;
-    return transcribeAudioClip(
-      (formData) =>
-        transcribeAudio({ bodyTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPost: formData as never }).unwrap(),
-      file,
-      { language },
-    );
   };
 
   // First-file gate: while the deployer-configured upload warning is
@@ -763,7 +749,6 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
         characterCount={chat.inputCharacterCount}
         characterLimit={chat.maxChatInputChars}
         enableVoiceInput={false}
-        onTranscribeAudio={handleTranscribeAudio}
         voiceInputDisabled={composerControlsDisabled}
         onVoiceInputError={reportVoiceInputError}
         focusEndRequestId={focusEndRequestId}
@@ -778,9 +763,29 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
           })),
         }}
         aboveTextSlot={
-          chat.attachments.length > 0 ? (
-            <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
-          ) : undefined
+          <>
+            <AttachmentChips
+              attachments={chat.attachments}
+              onRemove={chat.removeAttachment}
+              onRetry={allowChatAttachments ? chat.retryAttachmentUpload : undefined}
+            />
+            {chat.attachmentsUploading && <p role="status">{t("chatbot.attachments.waiting")}</p>}
+            {chat.attachmentListError && (
+              <div role="alert">
+                <p>{t("chatbot.attachments.listFailed")}</p>
+                <Button
+                  color="primary"
+                  variant="text"
+                  size="small"
+                  onClick={() => {
+                    void chat.refreshAttachments();
+                  }}
+                >
+                  {t("common.retry")}
+                </Button>
+              </div>
+            )}
+          </>
         }
         rightExtraSlot={
           <ReasoningChip

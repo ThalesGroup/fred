@@ -109,7 +109,7 @@ pub(super) async fn load(
              from document_processing p join document d on d.id=p.document_id
              join space s on s.id=d.space_id
              where s.organization_id=$1 and s.deletion_id is null and d.deletion_id is null
-               and ($2::uuid is null or s.id=$2 or s.parent_id=$2)
+               and d.session_id is null and ($2::uuid is null or s.id=$2 or s.parent_id=$2)
              order by p.document_id, p.created_at desc, p.id desc
          ) select space_id, status, stage, count(*) as documents
            from latest where status in ('pending','running','failed')

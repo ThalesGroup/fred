@@ -50,7 +50,7 @@ class ExtractService:
 
     async def extract_document(self, user: AssertedUser, document_uid: str, request: ExtractDocumentRequest, context: DocumentAccessContext) -> ExtractDocumentResponse:
         started = time.monotonic()
-        text = await published_markdown(user, context.space_id, document_uid, context.document_scope)
+        text = await published_markdown(user, document_uid, context)
         extractor = self._build_extractor()
         result = await extractor.extract(text=text, instruction=request.instruction)
         logger.info(

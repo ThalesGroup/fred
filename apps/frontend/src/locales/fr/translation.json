@@ -460,7 +460,8 @@
       "image": "Image",
       "processing": "Traitement",
       "removeAria": "Retirer {{name}}",
-      "uploading": "Téléversement"
+      "uploading": "Téléversement",
+      "ready": "Prêt"
     },
     "fullReasoning": {
       "title": "Raisonnement complet",
@@ -490,7 +491,27 @@
       "processingFast": "Traitement rapide",
       "processingPrepare": "Préparation du traitement",
       "uploadWarningConfirm": "J'ai compris",
-      "uploadWarningTitle": "Avant d'ajouter des fichiers"
+      "uploadWarningTitle": "Avant d'ajouter des fichiers",
+      "waiting": "L’envoi attend le dépôt et le traitement des fichiers. Un fichier prêt après le démarrage d’un tour sera disponible au suivant.",
+      "listFailed": "Impossible de vérifier les pièces jointes. Réessayez pour pouvoir envoyer votre message.",
+      "retryUpload": "Réessayer le dépôt (sélectionner le même fichier)",
+      "processingUnavailable": "Ce fichier n’est pas exploitable par l’agent. Supprimez-le puis déposez-le à nouveau pour relancer le traitement.",
+      "errors": {
+        "upload_in_progress": "Le dépôt est encore en cours. Son reçu sera vérifié.",
+        "retry_superseded": "Une autre tentative a remplacé ce dépôt. Son reçu sera vérifié.",
+        "name_conflict": "Ce nom existe déjà dans la conversation. Renommez le fichier local ou supprimez le document existant.",
+        "quota_exceeded": "Le quota de stockage est atteint.",
+        "conversation_files_exceeded": "Le nombre maximal de fichiers de cette conversation est atteint.",
+        "conversation_bytes_exceeded": "La taille totale maximale des fichiers de cette conversation est atteinte.",
+        "file_too_large": "Ce fichier dépasse la taille autorisée.",
+        "transfer_capacity": "Le service de dépôt est occupé. Respectez le délai indiqué avant de réessayer.",
+        "processing_active": "Le traitement est encore actif : la suppression est refusée. Attendez sa fin.",
+        "not_ready": "Ce fichier n’est pas exploitable. Supprimez-le puis déposez-le à nouveau.",
+        "storage_unavailable": "Le service est indisponible. L’issue du dépôt reste à vérifier.",
+        "interrupted_before_send": "Aucun reçu trouvé. Sélectionnez le même fichier pour réessayer le dépôt.",
+        "wrong_file": "Sélectionnez le fichier original avec le même nom et la même taille."
+      },
+      "readyHint": "Les fichiers prêts sont pris en compte au début du prochain tour, selon les capacités activées de l’agent."
     },
     "composerActions": {
       "dialogAria": "Actions de conversation",
@@ -4763,6 +4784,53 @@
         "delivery_unknown": "Le traitement n'a pas démarré dans le délai prévu. Vous pouvez le relancer.",
         "deadline_exceeded": "Le traitement a dépassé le délai autorisé. Vous pouvez le relancer.",
         "worker_failed": "Le traitement a échoué. L'original est conservé et peut être retraité."
+      }
+    },
+    "weaver": {
+      "title": "Portage Weaver",
+      "description": "Les parcours ci-dessous sont conservés pour être raccordés par petits lots. Ils ne sont pas encore disponibles dans Weaver.",
+      "pending": "À porter",
+      "all": "Toutes les fonctionnalités",
+      "previewTitle": "Aperçu Swift — données fictives",
+      "previewStart": "En local, lancez make swift-preview dans apps/frontend, puis ouvrez un aperçu.",
+      "openPreview": "Ouvrir l’écran Swift (développement local)",
+      "previewDisclaimer": "Aucune donnée réelle. Audit, renommage, étiquettes et acquittement sont simulés en mémoire. Les interactions non simulées renvoient une erreur explicite. Recharger réinitialise les exemples.",
+      "dictationHint": "Le micro est local ; la transcription renvoie toujours une phrase fictive, sans envoyer le son.",
+      "dictatedText": "Ceci est une transcription fictive pour revisiter la dictée.",
+      "choose": "Choisissez une fonctionnalité ci-dessus.",
+      "features": {
+        "audit": {
+          "title": "Audit du corpus",
+          "next": "Lecture des anomalies, puis réparation autorisée dans un lot distinct."
+        },
+        "tasks": {
+          "title": "Tâches et activité",
+          "next": "Lister les opérations Weaver avec leur portée et leurs états ; ajouter ensuite acquittement et annulation."
+        },
+        "diagnostics": {
+          "title": "Diagnostics",
+          "next": "Reprendre un scénario à la fois et vérifier ses contrats Weaver avant de permettre son exécution."
+        },
+        "migration": {
+          "title": "Import et export de plateforme",
+          "next": "Définir le périmètre exportable ; porter la lecture avant les opérations qui écrivent."
+        },
+        "knowledge-bases": {
+          "title": "Knowledge Bases",
+          "next": "Raccorder le catalogue, puis la configuration d’une source et ses permissions."
+        },
+        "knowledge-documents": {
+          "title": "Documents des Knowledge Bases",
+          "next": "Relier une bibliothèque à un dossier Control Plane en lecture seule."
+        },
+        "documents": {
+          "title": "Actions avancées sur les documents",
+          "next": "Lots séparés : renommage, étiquettes, ZIP, remplacement à l’import, agrégats des dossiers. Navigation et imports Control Plane restent actifs hors aperçu."
+        },
+        "dictation": {
+          "title": "Dictée",
+          "next": "Définir et raccorder le service de transcription ; vérifier les erreurs et l’annulation."
+        }
       }
     }
   },

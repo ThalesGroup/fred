@@ -127,7 +127,7 @@ const snapshotPage = (stage: string) => ({
   tags: { tag_ids: ["tag-broken"] },
 });
 
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+vi.mock("../../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi", () => ({
   // The team's terminal ingestion history (#2384) — what survives a page
   // reload. ONE unfiltered call: a team-scoped query already returns every
   // state, so the args are asserted rather than used to filter.

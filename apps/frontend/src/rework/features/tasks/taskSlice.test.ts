@@ -38,7 +38,7 @@ import {
 } from "./taskSlice";
 import type { TasksState } from "./taskSlice";
 import type { ErasureTaskEvent, IngestionTaskEvent, TaskTarget, TaskViewModel } from "./taskTypes";
-import type { TaskSummary } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { TaskSummary } from "../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 
 const { reducer } = taskSlice;
 

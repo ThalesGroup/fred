@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import type { SearchPolicyName } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { SearchPolicyName } from "../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { runStep, SkipStep } from "../step";
 import type { PipelineDeps, Scenario } from "../types";
 import { ALPHA, BETA, BETA_MARKER, fileOf, MARKER, PROBE, SELF_TEST_AGENT_ID } from "./corpus";
