@@ -60,6 +60,7 @@ class SelectionTest(unittest.TestCase):
     def test_knowledge_flow_inputs_build_everything(self):
         for path in (
             "apps/knowledge-flow-backend/app/main.py",
+            "apps/control-plane/openfga/model.json",
             "libs/fred-core/fred_core/a.py",
             "libs/fred-pod/pyproject.toml",
             "scripts/download_models.py",
