@@ -603,6 +603,23 @@ describe("ManagedChatPage new conversation action", () => {
     expect(container.querySelector('[class*="topBar"]')).toBeNull();
     expect(container.querySelector('[data-testid="composer"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="chatbot.newConversation"]')).toBeNull();
+    expect(container.querySelector("[data-chat-welcome-agent-description]")).toBeNull();
+
+    chatValue = {
+      ...chatValue,
+      agentInstance: {
+        display_name: "Contract Reviewer",
+        role: "Reviews supplier contracts",
+        description: "Attach the contract as a PDF before asking.",
+      },
+    };
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+    const description = container.querySelector("[data-chat-welcome-agent-description]");
+    expect(description?.textContent).toBe("Attach the contract as a PDF before asking.");
+    expect(description?.parentElement).toBe(container.querySelector("[data-chat-welcome-agent]"));
+    expect(container.querySelector("[data-chat-welcome-agent] button[aria-expanded]")).toBeNull();
 
     act(() => {
       root.unmount();

@@ -130,6 +130,11 @@ function ManagedChatWelcome({ agent }: { agent?: ManagedAgentInstanceSummary }) 
               {agent.role}
             </span>
           </span>
+          {agent.description && (
+            <span className={styles.welcomeAgentDescription} data-chat-welcome-agent-description tabIndex={0}>
+              {agent.description}
+            </span>
+          )}
         </div>
       )}
       <p className={styles.welcomeTitle}>{t(WELCOME_VARIANT_KEYS[variantIndex], { username: welcomeName })}</p>

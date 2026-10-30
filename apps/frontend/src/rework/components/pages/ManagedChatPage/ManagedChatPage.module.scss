@@ -460,19 +460,17 @@
   text-align: center;
 }
 
-/* Agent identity above the greeting, stacked and centred: round icon, name,
-   role. Palette follows Home's recent-agent tiles. */
+// Three columns that hug their content: icon, identity, then the description.
 .welcomeAgent {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
   align-items: center;
-  gap: var(--spacing-s);
+  gap: var(--spacing-m);
+  box-sizing: border-box;
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-m);
   padding: var(--spacing-m);
-  width: min(200px, 100%);
-  min-height: 144px;
+  max-width: min(560px, 100%);
+  text-align: left;
 }
 
 .welcomeAgentIcon {
@@ -490,28 +488,47 @@
 
 .welcomeAgentIdentity {
   display: flex;
+  flex: none;
   flex-direction: column;
-  align-items: center;
-  max-width: 100%;
-}
-
-.welcomeAgentName,
-.welcomeAgentRole {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  max-width: 13rem;
+  overflow-wrap: anywhere;
 }
 
 .welcomeAgentName {
-  max-width: 100%;
   color: var(--secondary);
   font: var(--font-title-medium);
+  line-height: 1.2;
 }
 
 .welcomeAgentRole {
-  max-width: 100%;
   color: var(--on-surface);
   font: var(--font-body-medium);
+  line-height: 1.2;
+}
+
+// Keep the composer reachable even with a very long description.
+.welcomeAgentDescription {
+  min-width: 0;
+  max-height: 12rem;
+  overflow-y: auto;
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
+  white-space: pre-line;
+}
+
+.welcomeAgentDescription:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .welcomeAgent {
+    flex-wrap: wrap;
+  }
+
+  .welcomeAgentDescription {
+    flex-basis: 100%;
+  }
 }
 
 .welcomeTitle {
@@ -519,7 +536,7 @@
   color: var(--on-surface);
   font: var(--font-headline-small);
   line-height: 1.1;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* ── Error state ───────────────────────────────────────────────────────── */

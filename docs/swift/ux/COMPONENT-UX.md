@@ -3678,6 +3678,11 @@ Page-local composition that maps `ThreadMessage[]` to `UserTurn` / `AssistantTur
   state until then. A chat with no session id is settled on the spot — it has no history to
   resolve, and making it wait would put a spinner in front of the one screen that is empty by
   nature.
+- **Welcome agent card hid the description (2026-10-29)** - the card showed only the name and a
+  one-line truncated role, so the agent's capabilities and prerequisites were invisible. The card
+  hugs its content, up to 560px wide, in three columns: icon, name and role (13rem max), then the
+  visible description. Text wraps, and descriptions scroll past 12rem with keyboard access. Below
+  600px of viewport width, the description moves under the icon and identity.
 
 ---
 
