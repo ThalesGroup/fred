@@ -1,5 +1,10 @@
 # Iframe SDK changelog
 
+## 5.0.0
+
+Review: approved
+Changes: Align the package version and homepage with Weaver 5.0.0. The SDK implementation and application protocol are unchanged since 0.1.1-alpha.1; retain protocol "1" and the previously introduced binary request and response body support.
+
 ## 0.1.1-alpha.1
 
 Review: approved
