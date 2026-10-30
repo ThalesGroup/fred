@@ -39,6 +39,7 @@ from fred_sdk.contracts.capability.manifest import model_capability_id
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     ChatProfileOrigin,
+    ModelBinding,
     resolve_effective_chat_profile,
 )
 from fred_sdk.contracts.models import AgentDefinition
@@ -448,6 +449,16 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         settings = {**(config.settings or {}), "reasoning_effort": effort}
         reasoning = self._build_chat(config.model_copy(update={"settings": settings}))
         return reasoning, config.name, plain
+
+    def build_chat_for_binding(self, binding: ModelBinding) -> BaseChatModel:
+        """The platform-bound chat model without reasoning, for platform helpers
+        outside any agent turn."""
+        config = ModelConfiguration(
+            provider=binding.provider,
+            name=binding.name,
+            settings=binding.settings.model_dump(mode="json", exclude_none=True),
+        )
+        return self._build_chat(without_reasoning_settings(config))
 
     def _build_chat(self, config: ModelConfiguration) -> BaseChatModel:
         model = self._provider.build_model(config, capability=ModelCapability.CHAT)
