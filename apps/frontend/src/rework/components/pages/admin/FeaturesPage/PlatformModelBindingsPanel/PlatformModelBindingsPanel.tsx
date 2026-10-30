@@ -32,6 +32,7 @@ import {
 import type { ModelBinding, ModelBindingSettings } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./PlatformModelBindingsPanel.module.css";
 import { PodChatDefaultsTab } from "./PodChatDefaultsTab";
+import { TitleModelSelect } from "./TitleModelSelect";
 
 interface PlatformModelBindingsPanelProps {
   open: boolean;
@@ -234,6 +235,7 @@ export function PlatformModelBindingsPanel({ open, onClose, initialTab = "pods" 
                 )}
               </div>
             )}
+            <TitleModelSelect />
           </div>
         )}
       </div>

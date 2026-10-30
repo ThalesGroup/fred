@@ -3720,6 +3720,9 @@ async def get_runtime_binding_for_team(
             session=session
         )
         prompt = await resolve_platform_prompt_text(deps, session=session)
+        assistant = await deps.get_creation_assistant_settings_store().get(
+            session=session
+        )
         return (
             reasoning,
             binding,
@@ -3727,6 +3730,7 @@ async def get_runtime_binding_for_team(
             pod_fallbacks,
             discovery_states,
             prompt,
+            assistant.title_model_profile_id if assistant else None,
         )
 
     team_result, platform_result = await asyncio.gather(
@@ -3743,6 +3747,7 @@ async def get_runtime_binding_for_team(
         pod_fallbacks,
         discovery_states,
         platform_prompt,
+        title_model_profile_id,
     ) = platform_result
     confirmed_removed_chat_profiles = {
         profile_id: item["id"]
@@ -3784,6 +3789,7 @@ async def get_runtime_binding_for_team(
         },
         confirmed_removed_chat_profiles=confirmed_removed_chat_profiles,
         platform_prompt=platform_prompt,
+        title_model_profile_id=title_model_profile_id,
     )
 
 

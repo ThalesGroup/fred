@@ -1333,6 +1333,13 @@
         "emptyKnowledgeBases": "Aucune définition de base de connaissances n'a encore été publiée dans ce déploiement."
       },
       "platformModelBindings": {
+        "titleModel": {
+          "label": "Modèle des titres de conversation",
+          "default": "Modèle par défaut de la plateforme",
+          "saved": "Modèle des titres enregistré.",
+          "saveError": "Impossible d'enregistrer le modèle des titres.",
+          "loadError": "Le modèle des titres de conversation demande le droit de modifier le prompt plateforme."
+        },
         "openButton": "Modèles par défaut",
         "title": "Modèles par défaut",
         "tabAria": "Portée des modèles par défaut",

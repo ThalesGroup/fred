@@ -2846,6 +2846,7 @@ async def test_runtime_binding_carries_selected_team_settings() -> None:
         ),
         get_model_discovery_state_store=_FakeEmptyDiscoveryStateStore,
         get_platform_prompt_store=_FakeNoPlatformPromptStore,
+        get_creation_assistant_settings_store=_FakeNoPlatformPromptStore,
         get_sql_session_factory=None,
         get_team_routing_policy_store=_FakeRoutingPolicyStore,
     )
@@ -2881,6 +2882,7 @@ async def test_runtime_binding_carries_fresh_reasoning_enabled_snapshot() -> Non
         get_pod_chat_default_store=_FakeEmptyPodChatDefaultStore,
         get_model_discovery_state_store=_FakeEmptyDiscoveryStateStore,
         get_platform_prompt_store=_FakeNoPlatformPromptStore,
+        get_creation_assistant_settings_store=_FakeNoPlatformPromptStore,
         get_sql_session_factory=None,
         get_team_routing_policy_store=_FakeRoutingPolicyStore,
     )
@@ -2928,6 +2930,7 @@ async def test_runtime_binding_carries_team_disabled_models_from_one_gather(
         get_pod_chat_default_store=_FakeEmptyPodChatDefaultStore,
         get_model_discovery_state_store=_FakeEmptyDiscoveryStateStore,
         get_platform_prompt_store=_FakeNoPlatformPromptStore,
+        get_creation_assistant_settings_store=_FakeNoPlatformPromptStore,
         get_sql_session_factory=None,
         get_team_routing_policy_store=lambda: policy_store,
     )

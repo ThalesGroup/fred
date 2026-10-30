@@ -1333,6 +1333,13 @@
         "emptyKnowledgeBases": "No Knowledge Base definition has been published into this deployment yet."
       },
       "platformModelBindings": {
+        "titleModel": {
+          "label": "Conversation title model",
+          "default": "Platform default model",
+          "saved": "Title model saved.",
+          "saveError": "Could not save the title model.",
+          "loadError": "The conversation title model requires the right to edit the platform prompt."
+        },
         "openButton": "Model defaults",
         "title": "Model defaults",
         "tabAria": "Model default scope",

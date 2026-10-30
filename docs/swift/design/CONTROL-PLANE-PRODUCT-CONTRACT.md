@@ -5175,3 +5175,13 @@ personal localStorage values do not seed the row or serve as a fallback; the
 frontend applies the database response or defaults to in-memory controls and
 does not mirror database-backed choices to localStorage. Before login, theme boot uses only public
 platform settings and the OS color mode. Resizable pane widths and trace expansion remain local.
+
+### Conversation title model (2026-10-30)
+
+`GET`/`PUT /admin/platform/creation-assistant` carry an optional
+`title_model_profile_id`, stored on `creation_assistant_settings` and validated
+against `model_options`. `ManagedAgentRuntimeBinding.title_model_profile_id`
+delivers it on the per-turn runtime binding, because the team settings endpoint
+requires `CAN_UPDATE_AGENTS` and a plain member must get the same title model.
+`None` follows the platform chat binding, then the pod default; a profile unknown
+to the pod falls back to the pod default.
