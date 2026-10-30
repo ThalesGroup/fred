@@ -15,6 +15,7 @@
 import { memo, useEffect, useId, useRef, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
+import { skillTooltip } from "@rework/utils/skillPresentation";
 import styles from "./CommandMenu.module.css";
 
 /** A library prompt command or a platform skill suggestion. */
@@ -138,7 +139,11 @@ export const CommandMenu = memo(function CommandMenu({
               role="option"
               aria-selected={index === activeIndex}
               data-active={index === activeIndex}
-              title={entry.description?.trim() || entry.name}
+              title={
+                entry.kind === "skill"
+                  ? skillTooltip(entry.name, entry.description)
+                  : entry.description?.trim() || entry.name
+              }
               onMouseMove={() => onFocusEntry(index)}
               onMouseDown={activate(index)}
             >
@@ -150,7 +155,13 @@ export const CommandMenu = memo(function CommandMenu({
                 )}
               </span>
               <span className={styles.rowText}>
-                <span className={styles.rowLabel}>/{entry.kind === "skill" ? entry.name : entry.command}</span>
+                <span className={styles.rowLabel}>
+                  {entry.kind === "skill"
+                    ? entry.name !== entry.command
+                      ? `${entry.name} (${entry.command})`
+                      : entry.command
+                    : `/${entry.command}`}
+                </span>
                 <em className={styles.rowDescription}>{entry.description?.trim() || entry.name}</em>
               </span>
             </div>

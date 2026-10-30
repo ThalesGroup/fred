@@ -2,6 +2,8 @@
 # Licensed under the Apache License, Version 2.0.
 """Attribute successful native Deep skill reads at the existing tool boundary."""
 
+import re
+
 from deepagents.backends.utils import validate_path
 from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
@@ -12,6 +14,22 @@ from langchain_core.messages import ToolMessage
 from langgraph.config import get_stream_writer
 
 from .tools import model_skill_context, record_skill_load
+
+_COMPLETE_READ_HEADER = re.compile(r"@@ lines 1-([1-9][0-9]{0,9}) of \1 @@")
+
+
+def _partial_skill_read(content: str) -> bool:
+    """Inspect only the native result envelope; unknown coverage stays partial.
+
+    Pass the actual tool result, before escaping its file content.
+    """
+    for line in content[:2048].splitlines():
+        if line.startswith("[") and line.endswith("]"):
+            if "truncat" in line.lower():
+                return True
+            continue
+        return _COMPLETE_READ_HEADER.fullmatch(line) is None
+    return True
 
 
 def observe_skill_read(
@@ -51,17 +69,17 @@ def observe_skill_read(
             load_id, agent_id, child, child_id = model_skill_context(
                 binding, message.tool_call_id
             )
-            selections = binding.runtime_context.selected_skills
             attribution = record_skill_load(
                 skills,
                 name,
                 origin="user"
-                if any(selection.name == name for selection in selections)
+                if any(s.name == name for s in binding.runtime_context.selected_skills)
                 else "agent",
                 load_id=load_id,
                 agent_id=agent_id,
                 child=child,
                 child_id=child_id,
+                partial=_partial_skill_read(message.content),
                 kpi=kpi,
                 binding=binding,
             )

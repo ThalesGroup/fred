@@ -21,6 +21,8 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
+from typing import Any
+from uuid import UUID
 
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.kpi.kpi_writer_structures import Dims, MetricNames
@@ -64,6 +66,53 @@ from ..react_model_adapter import (
 logger = logging.getLogger(__name__)
 
 
+class _ModelInputCallback(LlmProgressCallback):
+    """Capture post-middleware model input on this invocation's existing span."""
+
+    def __init__(
+        self, observation: LlmObservation, span: SpanPort, *, captures_content: bool
+    ) -> None:
+        super().__init__(observation)
+        self._span = span
+        self._captures_content = captures_content
+
+    def on_chat_model_start(
+        self,
+        serialized: dict[str, Any],  # opaque: LangChain callback metadata
+        messages: list[list[BaseMessage]],
+        *,
+        run_id: UUID,
+        parent_run_id: UUID | None = None,
+        **kwargs: Any,  # opaque: provider invocation parameters from LangChain
+    ) -> None:
+        """Record final messages/tools while preserving progress and model timings."""
+
+        super().on_chat_model_start(
+            serialized, messages, run_id=run_id, parent_run_id=parent_run_id, **kwargs
+        )
+        # Downstream middleware can still replace the request; callbacks see
+        # the final messages and bound tools without retaining their content.
+        started = time.monotonic()
+        try:
+            with suppress(Exception):
+                final_messages = messages[0]
+                tools = (kwargs.get("invocation_params") or {}).get("tools") or []
+                sizes = model_request_char_sizes(final_messages, tools=tools)
+                sizes["chars_system"] = model_request_char_sizes(
+                    [message for message in final_messages if message.type == "system"]
+                )["chars_messages"]
+                sizes["chars_messages"] -= sizes["chars_system"]
+                for key, value in sizes.items():
+                    self._span.set_attribute(key, value)
+                if self._captures_content:
+                    self._span.set_io(
+                        input=serialize_model_request(final_messages, tools=tools)
+                    )
+        finally:
+            # Keep trace preparation outside the measured model-call interval.
+            self.observation.http.started += time.monotonic() - started
+
+
 class TracingKpiMiddleware(AgentMiddleware):
     """Measure the shared model boundary without capturing streaming content."""
 
@@ -100,6 +149,7 @@ class TracingKpiMiddleware(AgentMiddleware):
         observation.http.allow_request_ids = not delegation_enabled()
         token = active_model_http.set(observation.http)
         span: SpanPort | None = None
+        captures_content = False
         outcome = "ok"
         error_fields: dict[str, Scalar] = {"error_code": "none"}
         response_fields: dict[str, Scalar] = {}
@@ -155,17 +205,17 @@ class TracingKpiMiddleware(AgentMiddleware):
                     )
                     for key, value in sizes.items():
                         span.set_attribute(key, value)
-                    if self._tracer.captures_content:
-                        span.set_io(
-                            input=serialize_model_request(
-                                list(request.messages),
-                                system_prompt=request.system_prompt,
-                                tools=request.tools,
-                            )
-                        )
-            config = merge_configs(
-                ensure_config(), {"callbacks": [LlmProgressCallback(observation)]}
+                    captures_content = self._tracer.captures_content
+            callback = (
+                _ModelInputCallback(
+                    observation,
+                    span,
+                    captures_content=captures_content,
+                )
+                if span is not None
+                else LlmProgressCallback(observation)
             )
+            config = merge_configs(ensure_config(), {"callbacks": [callback]})
 
             async def invoke_model() -> ModelResponse:
                 nonlocal handler_ended

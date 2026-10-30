@@ -3720,6 +3720,11 @@ async def get_runtime_binding_for_team(
             session=session
         )
         prompt = await resolve_platform_prompt_text(deps, session=session)
+        disabled_skills = (
+            await deps.get_platform_skill_policy_store().list_disabled_skill_names(
+                session=session
+            )
+        )
         return (
             reasoning,
             binding,
@@ -3727,6 +3732,7 @@ async def get_runtime_binding_for_team(
             pod_fallbacks,
             discovery_states,
             prompt,
+            disabled_skills,
         )
 
     team_result, platform_result = await asyncio.gather(
@@ -3743,6 +3749,7 @@ async def get_runtime_binding_for_team(
         pod_fallbacks,
         discovery_states,
         platform_prompt,
+        disabled_skills,
     ) = platform_result
     confirmed_removed_chat_profiles = {
         profile_id: item["id"]
@@ -3784,6 +3791,7 @@ async def get_runtime_binding_for_team(
         },
         confirmed_removed_chat_profiles=confirmed_removed_chat_profiles,
         platform_prompt=platform_prompt,
+        disabled_platform_skills=sorted(disabled_skills),
     )
 
 

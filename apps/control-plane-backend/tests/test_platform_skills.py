@@ -74,12 +74,19 @@ async def test_catalog_uses_only_selected_source_and_forwards_identity(
         assert len(requests) == 1
         assert (
             str(requests[0].url)
-            == "https://selected.invalid/runtime/v1/agents/skills?agent_instance_id=instance&team_id=team"
+            == "https://selected.invalid/runtime/v1/agents/skills?agent_instance_id=instance&team_id=team&metadata_version=1"
         )
         assert requests[0].headers["Authorization"] == "Bearer verified"
         store.get_for_team.assert_awaited_once_with("instance", TeamId("team"))
         assert catalog.model_dump()["skills"] == (
-            {"name": "minutes", "description": "Write minutes", "argument_hint": hint},
+            {
+                "name": "minutes",
+                "description": "Write minutes",
+                "argument_hint": hint,
+                "builtin": False,
+                "user_invocable": True,
+                "disable_model_invocation": False,
+            },
         )
 
 
@@ -235,6 +242,7 @@ async def test_skill_detail_selected_source_identity_and_validation(
         assert dict(requests[0].url.params) == {
             "agent_instance_id": "instance",
             "team_id": "team",
+            "metadata_version": "1",
         }
         assert requests[0].headers["Authorization"] == "Bearer verified"
         with pytest.raises(ExecutionPreparationError) as exc:

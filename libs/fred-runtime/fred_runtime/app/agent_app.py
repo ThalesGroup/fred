@@ -62,7 +62,7 @@ from uuid import uuid4
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from fred_core.common.config_loader import get_config
 from fred_core.common.fastapi_handlers import (
     ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
@@ -239,6 +239,7 @@ from fred_runtime.runtime_support.hitl_batch import (
 )
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 from fred_runtime.runtime_support.turn_steering import turn_steering_mailbox
+from fred_runtime.skills.catalog import PlatformSkills
 
 from ..common.structures import AgentSettingsLike
 from ..integrations.v2_runtime.adapters import (
@@ -778,6 +779,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         pod_chat_fallback_profile_id: str | None = None,
         confirmed_removed_chat_profiles: dict[str, str] | None = None,
         platform_prompt: str | None = None,
+        disabled_platform_skills: tuple[str, ...] = (),
         credentials: OutboundCredentialProvider | None = None,
     ) -> None:
         self._registry = registry
@@ -805,6 +807,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         # including when an admin deliberately saved `""` to suppress the
         # block, which is precisely the state that must not be undone.
         self._platform_prompt = platform_prompt
+        self._disabled_platform_skills = disabled_platform_skills
 
     async def invoke(self, request: AgentInvocationRequest) -> AgentInvocationResult:
         definition = self._registry.get(request.agent_id)
@@ -904,6 +907,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             pod_chat_fallback_profile_id=self._pod_chat_fallback_profile_id,
             confirmed_removed_chat_profiles=self._confirmed_removed_chat_profiles,
             platform_prompt=self._platform_prompt,
+            disabled_platform_skills=self._disabled_platform_skills,
         ):
             kind = payload.get("kind")
             if kind == "final":
@@ -984,15 +988,22 @@ def _build_runtime_services(
     """
 
     runtime_config = get_runtime_context().config
+    skills = runtime_config.skills
+    if isinstance(skills, PlatformSkills):
+        skills = skills.for_execution(
+            tuple(
+                selection.name for selection in binding.runtime_context.selected_skills
+            ),
+            binding.disabled_platform_skills,
+            resuming=binding.is_resuming,
+        )
     if conversation_filesystem is None:
         conversation_filesystem = _build_conversation_filesystem(binding)
     conversation_port = None
     if conversation_filesystem is not None:
         backend, permissions = build_conversation_filesystem(
             conversation_filesystem,
-            skills=runtime_config.skills
-            if isinstance(definition, DeepAgentDefinition)
-            else None,
+            skills=skills if isinstance(definition, DeepAgentDefinition) else None,
         )
         conversation_port = DeepConversationFilesystemPort(backend, permissions)
     settings = _build_agent_settings(definition, team_id=team_id)
@@ -1117,6 +1128,7 @@ def _build_runtime_services(
             pod_chat_fallback_profile_id=binding.pod_chat_fallback_profile_id,
             confirmed_removed_chat_profiles=binding.confirmed_removed_chat_profiles,
             platform_prompt=binding.platform_prompt,
+            disabled_platform_skills=binding.disabled_platform_skills,
         )
         if registry is not None
         else None
@@ -1168,7 +1180,7 @@ def _build_runtime_services(
             credentials=credential_provider,
         ),
         conversation_filesystem=conversation_port,
-        skills=runtime_config.skills,
+        skills=skills,
     )
 
 
@@ -1731,6 +1743,7 @@ class _ResolvedAgentInstance(BaseModel):
     # Models the team disabled, resolved on this same call. Defaults empty so
     # an older control plane that does not send it stays compatible.
     team_disabled_model_ids: list[str] = Field(default_factory=list)
+    disabled_platform_skills: list[str] = Field(default_factory=list)
     # Platform-operator `chat` model binding, resolved fresh by control-plane
     # on this same call — see
     # `_ResolvedExecutionTarget.platform_chat_model_binding` for why this is
@@ -1777,6 +1790,7 @@ class _ResolvedExecutionTarget:
     # Models the team disabled, resolved on the same per-turn call and for the
     # same reason: the pod must not trust a client-forwarded copy.
     team_disabled_model_ids: tuple[str, ...] = field(default_factory=tuple)
+    disabled_platform_skills: tuple[str, ...] = field(default_factory=tuple)
     # Platform-operator `chat` model binding (V1 platform-binding hardening).
     # Resolved by control-plane on the SAME per-turn call as
     # `reasoning_enabled_model_ids` above, for the same reason — never read
@@ -1994,11 +2008,21 @@ async def _resolve_agent_instance(
         # template's MCP servers as capabilities and delivers their
         # `agent_instructions` prompt fragments (#1978 — otherwise the
         # non-negotiable grounding contract would be lost on this path).
+        from fred_runtime.skills.policy import resolve_direct_skill_policy
+
+        disabled_platform_skills = await resolve_direct_skill_policy(
+            control_plane_url=control_plane_url,
+            http_client=http_client,
+            access_token=access_token,
+            credentials=credentials,
+            request_id=request_id,
+        )
         return _ResolvedExecutionTarget(
             definition=definition,
             effective_agent_id=definition.agent_id,
             team_id=team_id,
             tuning=_definition_to_agent_tuning(definition),
+            disabled_platform_skills=disabled_platform_skills,
         )
 
     if control_plane_url is None:
@@ -2027,7 +2051,7 @@ async def _resolve_agent_instance(
     )
     provider = credentials or static_person_provider(access_token)
     call_credentials = await provider.credentials()
-    headers: dict[str, str] = {}
+    headers: dict[str, str] = {"X-Fred-Skill-Policy": "1"}
     if call_credentials.authorization:
         headers["Authorization"] = call_credentials.authorization
     if request_id:
@@ -2115,6 +2139,7 @@ async def _resolve_agent_instance(
         team_settings=resolution.team_capability_settings,
         reasoning_enabled_model_ids=tuple(resolution.reasoning_enabled_model_ids),
         team_disabled_model_ids=tuple(resolution.team_disabled_model_ids),
+        disabled_platform_skills=tuple(resolution.disabled_platform_skills),
         platform_chat_model_binding=resolution.platform_chat_model_binding,
         pod_chat_default_profile_id=resolution.pod_chat_default_profile_id,
         platform_chat_model_fallback=resolution.platform_chat_model_fallback,
@@ -2701,12 +2726,17 @@ async def _authorize_and_resolve(
                 raise HTTPException(
                     status_code=422, detail="Platform skills unavailable for this agent"
                 )
-            if not isinstance(target.definition, DeepAgentDefinition):
-                try:
+            try:
+                if isinstance(skills, PlatformSkills):
+                    skills.for_execution(
+                        tuple(selection.name for selection in selections),
+                        target.disabled_platform_skills,
+                    )
+                else:
                     for selection in selections:
                         skills.read(selection.name)
-                except ValueError as exc:
-                    raise HTTPException(status_code=422, detail=str(exc)) from None
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from None
     except BaseException as exc:
         # Nothing past admission got as far as starting the run, so the record
         # it wrote has no owner left to release it.
@@ -3931,6 +3961,7 @@ async def _stream(
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
+    disabled_platform_skills: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
     pod_chat_default_profile_id: str | None = None,
     platform_chat_model_fallback: ModelBinding | None = None,
@@ -4016,6 +4047,7 @@ async def _stream(
         team_settings=team_settings,
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
         team_disabled_model_ids=team_disabled_model_ids,
+        disabled_platform_skills=disabled_platform_skills,
         platform_chat_model_binding=platform_chat_model_binding,
         pod_chat_default_profile_id=pod_chat_default_profile_id,
         platform_chat_model_fallback=platform_chat_model_fallback,
@@ -4636,6 +4668,7 @@ async def _iterate_runtime_event_payloads(
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
+    disabled_platform_skills: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
     pod_chat_default_profile_id: str | None = None,
     platform_chat_model_fallback: ModelBinding | None = None,
@@ -4663,6 +4696,7 @@ async def _iterate_runtime_event_payloads(
         team_settings=team_settings,
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
         team_disabled_model_ids=team_disabled_model_ids,
+        disabled_platform_skills=disabled_platform_skills,
         platform_chat_model_binding=platform_chat_model_binding,
         pod_chat_default_profile_id=pod_chat_default_profile_id,
         platform_chat_model_fallback=platform_chat_model_fallback,
@@ -4755,6 +4789,7 @@ async def _iterate_runtime_event_payloads_inner(
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
+    disabled_platform_skills: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
     pod_chat_default_profile_id: str | None = None,
     platform_chat_model_fallback: ModelBinding | None = None,
@@ -4950,6 +4985,8 @@ async def _iterate_runtime_event_payloads_inner(
         confirmed_removed_chat_profiles=confirmed_removed_chat_profiles or {},
         # TRUSTED, same channel: no ctx.get(...) exists for either field.
         team_disabled_model_ids=tuple(team_disabled_model_ids),
+        disabled_platform_skills=disabled_platform_skills,
+        is_resuming=request.resume_payload is not None,
         recommended_chat_profile_id=(
             tuning.recommended_chat_profile_id if tuning is not None else None
         ),
@@ -5512,6 +5549,36 @@ def _build_agent_router(
         ]
 
     @router.get(
+        "/platform-skills",
+        response_model=SkillCatalog,
+        operation_id="get_runtime_platform_skills",
+    )
+    async def get_platform_skills(
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> SkillCatalog:
+        """Operator inventory of packaged metadata, including disabled entries."""
+        config = get_runtime_context().config
+        rebac = config.rebac_engine
+        if security_enabled:
+            if caller is None or rebac is None or not rebac.enabled:
+                raise HTTPException(
+                    status_code=403, detail="platform_skills_access_denied"
+                )
+            await rebac.check_user_permission_or_raise(
+                caller, OrganizationPermission.CAN_MANAGE_CAPABILITIES, ORGANIZATION_ID
+            )
+        skills = config.skills
+        if skills is None:
+            return SkillCatalog(policy_supported=True)
+        catalog = skills.catalog
+        return catalog.model_copy(
+            update={
+                "skills": tuple(s for s in catalog.skills if s.builtin),
+                "policy_supported": True,
+            }
+        )
+
+    @router.get(
         "/skills",
         response_model=SkillCatalog,
         operation_id="get_runtime_instance_skills",
@@ -5520,19 +5587,24 @@ def _build_agent_router(
         http_request: Request,
         agent_instance_id: str,
         team_id: str,
+        metadata_version: int = Query(default=0, ge=0, le=1),
         container: PodApplicationContext = Depends(get_pod_container),
         caller: KeycloakUser | None = Depends(_authenticated_user),
-    ) -> SkillCatalog:
+    ) -> Response:
         """List metadata after the same team-use and target checks as execution."""
         from fred_runtime.skills.api import get_instance_skills
+        from fred_runtime.skills.policy import legacy_skill_metadata_response
 
-        return await get_instance_skills(
+        catalog = await get_instance_skills(
             agent_instance_id,
             team_id,
             caller,
             http_request.headers.get("Authorization"),
             container,
             registry,
+        )
+        return legacy_skill_metadata_response(
+            catalog, metadata_version=metadata_version
         )
 
     @router.get(
@@ -5545,12 +5617,14 @@ def _build_agent_router(
         skill_name: str,
         agent_instance_id: str,
         team_id: str,
+        metadata_version: int = Query(default=0, ge=0, le=1),
         container: PodApplicationContext = Depends(get_pod_container),
         caller: KeycloakUser | None = Depends(_authenticated_user),
-    ) -> SkillDetail:
+    ) -> Response:
         from fred_runtime.skills.api import get_instance_skill_detail
+        from fred_runtime.skills.policy import legacy_skill_metadata_response
 
-        return await get_instance_skill_detail(
+        detail = await get_instance_skill_detail(
             skill_name,
             agent_instance_id,
             team_id,
@@ -5559,6 +5633,7 @@ def _build_agent_router(
             container,
             registry,
         )
+        return legacy_skill_metadata_response(detail, metadata_version=metadata_version)
 
     @router.get("/mcp-catalog")
     async def get_mcp_catalog() -> _McpCatalogResponse:
@@ -6692,6 +6767,7 @@ def _build_agent_router(
                 team_settings=target.team_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 team_disabled_model_ids=target.team_disabled_model_ids,
+                disabled_platform_skills=target.disabled_platform_skills,
                 platform_chat_model_binding=target.platform_chat_model_binding,
                 pod_chat_default_profile_id=target.pod_chat_default_profile_id,
                 platform_chat_model_fallback=target.platform_chat_model_fallback,
@@ -6804,6 +6880,7 @@ def _build_agent_router(
                 team_settings=target.team_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 team_disabled_model_ids=target.team_disabled_model_ids,
+                disabled_platform_skills=target.disabled_platform_skills,
                 platform_chat_model_binding=target.platform_chat_model_binding,
                 pod_chat_default_profile_id=target.pod_chat_default_profile_id,
                 platform_chat_model_fallback=target.platform_chat_model_fallback,
@@ -6980,6 +7057,7 @@ def _build_agent_router(
             team_settings=target.team_settings,
             reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
             team_disabled_model_ids=target.team_disabled_model_ids,
+            disabled_platform_skills=target.disabled_platform_skills,
             platform_chat_model_binding=target.platform_chat_model_binding,
             pod_chat_default_profile_id=target.pod_chat_default_profile_id,
             platform_chat_model_fallback=target.platform_chat_model_fallback,

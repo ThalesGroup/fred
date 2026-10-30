@@ -25,6 +25,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assemblePromptTurn, selectedSkillText } from "@rework/utils/skillInvocation";
 import { useAssistantCopyInterception } from "@hooks/useAssistantCopyInterception";
 import { UserTurn } from "./UserTurn";
+import { SkillBadge } from "@shared/molecules/SkillBadge/SkillBadge";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -33,7 +34,12 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, options?: { defaultValue?: string }) =>
+      key === "chatbot.skills.catalog.meeting-minutes.title"
+        ? "Compte rendu de réunion"
+        : (options?.defaultValue ?? key),
+  }),
 }));
 
 const writeText = vi.fn<(text: string) => Promise<void>>();
@@ -98,6 +104,72 @@ afterEach(() => {
 });
 
 describe("UserTurn copy affordance (#2359)", () => {
+  it.each(["forward", "backward"])(
+    "copies a %s selection across user and assistant messages with native separators and canonical skills",
+    (direction) => {
+      render(
+        <>
+          <UserTurn
+            text="Before /meeting-minutes after"
+            skillName="meeting-minutes"
+            builtinSkillNames={["meeting-minutes"]}
+          />
+          <div data-copyable-content>
+            <p>Compte rendu de réunion is a heading</p>
+          </div>
+          <div data-skill-message>
+            <SkillBadge name="meeting-minutes" builtin /> More
+          </div>
+        </>,
+      );
+      const bodies = container.querySelectorAll("[data-skill-message]");
+      const selection = document.getSelection()!;
+      const range = document.createRange();
+      range.setStart(bodies[0].firstChild!, 0);
+      range.setEnd(bodies[1].lastChild!, 5);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      if (direction === "backward")
+        selection.setBaseAndExtent(range.endContainer, range.endOffset, range.startContainer, range.startOffset);
+      const { anchorNode, anchorOffset, focusNode, focusOffset } = selection;
+      const nativeText = new Map([
+        [
+          "Before Compte rendu de réunion afterCompte rendu de réunion is a headingCompte rendu de réunion More",
+          "Before Compte rendu de réunion after\n\nCompte rendu de réunion is a heading\n\nCompte rendu de réunion More",
+        ],
+        ["Before ", "Before "],
+        ["Compte rendu de réunion", "Compte rendu de réunion"],
+        [
+          "Before Compte rendu de réunion afterCompte rendu de réunion is a heading",
+          "Before Compte rendu de réunion after\n\nCompte rendu de réunion is a heading\n\n",
+        ],
+      ]);
+      const serialize = vi.spyOn(selection, "toString").mockImplementation(() => {
+        const raw = selection.getRangeAt(0).toString();
+        const native = nativeText.get(raw);
+        if (native === undefined) throw new Error(`Unexpected native selection: ${raw}`);
+        return native;
+      });
+      try {
+        const setData = vi.fn();
+        const copy = new Event("copy", { bubbles: true, cancelable: true });
+        Object.defineProperty(copy, "clipboardData", { value: { setData } });
+        bodies[0].dispatchEvent(copy);
+        expect(copy.defaultPrevented).toBe(true);
+        expect(setData).toHaveBeenCalledWith(
+          "text/plain",
+          "Before /meeting-minutes after\n\nCompte rendu de réunion is a heading\n\n/meeting-minutes More",
+        );
+        expect(selection.anchorNode).toBe(anchorNode);
+        expect(selection.anchorOffset).toBe(anchorOffset);
+        expect(selection.focusNode).toBe(focusNode);
+        expect(selection.focusOffset).toBe(focusOffset);
+      } finally {
+        serialize.mockRestore();
+        selection.removeAllRanges();
+      }
+    },
+  );
   it.each(["summary", "mermaid"])(
     "restores mixed legacy /%s history without exposing the expanded prompt",
     async (command) => {
@@ -121,7 +193,7 @@ describe("UserTurn copy affordance (#2359)", () => {
         />,
       );
       const body = container.querySelector("[data-skill-message]")!;
-      expect(body.textContent).toBe(`edit_note/${command} Before /mermaid middle /verify-answer after`);
+      expect(body.textContent).toBe(`edit_note/${command} Before mermaid middle verify-answer after`);
       expect(container.textContent).not.toContain("PRIVATE EXPANDED PROMPT");
       expect(body.querySelectorAll("[data-skill-name]")).toHaveLength(2);
       expect(
@@ -146,7 +218,7 @@ describe("UserTurn copy affordance (#2359)", () => {
   it("renders a skill badge with the request and copies a reusable invocation", async () => {
     render(<UserTurn text={"Notes\nAction"} skillName="meeting-minutes" />);
     expect(container.querySelector('[role="group"]')?.textContent).toContain("meeting-minutes");
-    expect(container.querySelector("[class*=skillTurn]")?.textContent).toBe("/meeting-minutes Notes\nAction");
+    expect(container.querySelector("[class*=skillTurn]")?.textContent).toBe("meeting-minutes Notes\nAction");
     expect(container.querySelector('[aria-label="chatbot.skills.remove"]')).toBeNull();
     await click(copyButton());
     expect(writeText).toHaveBeenCalledWith("/meeting-minutes Notes\nAction");
@@ -165,14 +237,14 @@ describe("UserTurn copy affordance (#2359)", () => {
     const onEdit = vi.fn();
     render(<UserTurn text={"Before /meeting-minutes after\nAction"} skillName="meeting-minutes" onEdit={onEdit} />);
     const body = container.querySelector("[class*=skillTurn]")!;
-    expect(body.textContent).toBe("Before /meeting-minutes after\nAction");
+    expect(body.textContent).toBe("Before meeting-minutes after\nAction");
     expect(body.firstChild?.textContent).toBe("Before ");
     const selection = document.getSelection()!;
     const range = document.createRange();
     range.selectNodeContents(body.querySelector('[role="group"]')!);
     selection.removeAllRanges();
     selection.addRange(range);
-    expect(selection.toString()).toBe("/meeting-minutes");
+    expect(selection.toString()).toBe("meeting-minutes");
     expect(selectedSkillText(range, container)).toBe("/meeting-minutes");
     const setData = vi.fn();
     const copy = new Event("copy", { bubbles: true, cancelable: true });
@@ -182,7 +254,7 @@ describe("UserTurn copy affordance (#2359)", () => {
     expect(setData).toHaveBeenCalledWith("text/plain", "/meeting-minutes");
     range.selectNodeContents(body);
     expect(selectedSkillText(range, container)).toBe("Before /meeting-minutes after\nAction");
-    // The slash is part of the badge's text: it is never added a second time.
+    // Copy restores the canonical command independently of its displayed label.
     range.selectNodeContents(body.querySelector("[data-skill-name]")!);
     expect(selectedSkillText(range, container)).toBe("/meeting-minutes");
     range.selectNodeContents(body.firstChild!);
@@ -215,7 +287,7 @@ describe("UserTurn copy affordance (#2359)", () => {
         />,
       );
       const body = container.querySelector("[data-skill-message]")!;
-      expect(body.textContent).toBe(`Before /review middle edit_note/${command} after /mermaid Notes`);
+      expect(body.textContent).toBe(`Before review middle edit_note/${command} after mermaid Notes`);
       expect(body.querySelectorAll("[data-skill-name]")).toHaveLength(2);
       const prompt = body.querySelector("button[class*=command]") as HTMLButtonElement;
       await click(prompt);
@@ -249,7 +321,7 @@ describe("UserTurn copy affordance (#2359)", () => {
     it("shows one badge per prompt at its position, with the skill badge, and never the prompt text", () => {
       render(<UserTurn text={sent.text} command={sent.command} skillNames={["verify-answer"]} />);
       const body = container.querySelector("[data-skill-message]")!;
-      expect(body.textContent).toBe("First edit_note/summary then edit_note/tone please /verify-answer");
+      expect(body.textContent).toBe("First edit_note/summary then edit_note/tone please verify-answer");
       expect(
         Array.from(body.querySelectorAll<HTMLElement>("[data-surface=bubble]")).map((badge) => badge.dataset.kind),
       ).toEqual(["prompt", "prompt", "skill"]);
@@ -336,12 +408,12 @@ describe("UserTurn copy affordance (#2359)", () => {
       />,
     );
     expect(container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]')!.title).toBe(
-      "chatbot.skills.platformProvided\nPrepare meeting minutes",
+      "meeting-minutes: Prepare meeting minutes",
     );
     await click(container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]')!);
     expect(onOpenSkill).toHaveBeenCalledOnce();
     expect(onOpenSkill).toHaveBeenCalledWith("meeting-minutes");
-    expect(container.querySelector("[class*=skillTurn]")?.textContent).toBe("/meeting-minutes Notes");
+    expect(container.querySelector("[class*=skillTurn]")?.textContent).toBe("meeting-minutes Notes");
     expect(writeText).not.toHaveBeenCalled();
   });
 

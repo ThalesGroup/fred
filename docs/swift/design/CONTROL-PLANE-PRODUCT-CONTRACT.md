@@ -702,6 +702,32 @@ Control-plane  (target state)
 - [ ] `agent.llm_call` KPI event emitted per model invocation via `KPIWriter.log_llm()` (currently defined but never called)
 - [ ] CLI `/kpi session <session_id>` command renders per-turn KPI table
 
+### Global platform skills
+
+`GET /platform/skills` and `PUT /platform/skills/{name}` require
+`organization#can_manage_capabilities`. The global Features > Skills tab and
+CLI `/platform-skills` and `/platform-skills <name> on|off` use these contracts.
+Inventory aggregates metadata-only packaged entries from configured runtime
+sources concurrently with bounded timeouts. It identifies source runtime IDs,
+invocation controls, effective enablement, unavailable and unsupported sources,
+and persisted disabled names even when no source currently advertises them.
+Custom-directory skills are excluded using runtime-provided provenance.
+
+All skills default to enabled. Atomic per-name upserts store operator identity
+and time in the control-plane database, shared by replicas; runtime pods never
+write local policy. Disabling requires a known packaged name and verified runtime
+sources (unsupported returns 409, unavailable returns 503). Re-enabling a stored
+disabled name is possible during a complete source outage. Successful changes
+use the existing audit mechanism.
+
+Authenticated `GET /platform/skills/policy` returns only disabled names for direct
+runtime executions. Managed runtime bindings carry fresh `disabled_platform_skills`
+from the same shared store on every turn. When opt-outs exist, managed resolution
+requires `X-Fred-Skill-Policy: 1`. New runtimes filter discovery and all new reads
+at the next turn/resume. Ongoing turns and already-read context are retained.
+See the [rollout note](../ops/migrations/platform-skills-evolution.md) for mixed
+version deployment ordering and its raw-template limitation.
+
 ### 3.6 Prompt library
 
 Freeze prompt management as a first-class control-plane contract separate from

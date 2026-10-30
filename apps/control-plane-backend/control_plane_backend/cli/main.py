@@ -51,6 +51,7 @@ from control_plane_backend.cli.client import (
     ControlPlaneUserDetails,
     ControlPlaneWorkflowStartResponse,
 )
+from control_plane_backend.cli.platform_skills import run_platform_skills_command
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
     ExecutionPreparation,
@@ -79,6 +80,7 @@ _COMMANDS: tuple[str, ...] = (
     "/login-password",
     "/logout",
     "/policy",
+    "/platform-skills",
     "/prompt",
     "/prompt-create",
     "/prompt-delete",
@@ -336,6 +338,9 @@ def print_help() -> None:
     print("  /templates [team_id|team_name] List agent templates for a team")
     print("  /instances [team_id|team_name] List managed agent instances for a team")
     print("  /prompts [team_id|team_name]   List saved prompts for a team")
+    print(
+        "  /platform-skills [<name> on|off] Inspect/change global skills (feature manager)"
+    )
     print(
         "  /prompt <prompt_id>            Inspect one saved prompt from the current team"
     )
@@ -1104,6 +1109,10 @@ def run_command(
 
     if command == "/help":
         print_help()
+        return True
+
+    if command == "/platform-skills":
+        run_platform_skills_command(args, ctx.client)
         return True
 
     if command in {"/quit", "/exit"}:

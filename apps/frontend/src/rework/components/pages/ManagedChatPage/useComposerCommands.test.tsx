@@ -34,8 +34,13 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+const presentationTranslations = vi.hoisted(() => ({}) as Record<string, string>);
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+  useTranslation: () => ({
+    t: (key: string, options?: { defaultValue?: string }) =>
+      presentationTranslations[key] ?? options?.defaultValue ?? key,
+    i18n: { language: "en" },
+  }),
 }));
 
 // The shape of `GET /teams/{id}/prompt-commands`: only invocable prompts, and
@@ -88,7 +93,10 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
 }));
 
 let skillCatalog:
-  | { supported: boolean; skills: { name: string; description: string; argument_hint?: string | null }[] }
+  | {
+      supported: boolean;
+      skills: { name: string; description: string; builtin?: boolean; argument_hint?: string | null }[];
+    }
   | undefined;
 const onRunSkill = vi.fn();
 const onSkillError = vi.fn();
@@ -136,7 +144,11 @@ function Host({
         inlineEditor
           ? {
               promptTokens: commands.selectedPrompts,
-              tokens: commands.selectedSkills.map((token) => ({ ...token, onOpen: () => {} })),
+              tokens: commands.selectedSkills.map((token) => ({
+                ...token,
+                ...commands.skillSummaries.get(token.name),
+                onOpen: () => {},
+              })),
             }
           : undefined
       }
@@ -154,6 +166,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  for (const key of Object.keys(presentationTranslations)) delete presentationTranslations[key];
   skillCatalog = undefined;
   listResult = { data: PROMPTS };
   personalResult = { data: [] };
@@ -343,7 +356,7 @@ describe("the command menu", () => {
     expect(sections()).toEqual([
       ["chatbot.commandMenu.sections.teamFallback", ["/pre-sum", "/big-sum"]],
       ["chatbot.commandMenu.sections.personal", ["/sum-up", "/sum", "/my-sum"]],
-      ["chatbot.commandMenu.sections.platform", ["/summarize", "/resume"]],
+      ["chatbot.commandMenu.sections.platform", ["summarize", "resume"]],
     ]);
     // The first row keeps the focus even though a later section starts with the text.
     expect(focusedLabel()).toBe("/pre-sum");
@@ -735,7 +748,7 @@ describe("platform skills", () => {
         selection: { anchor: prefix.length },
       }),
     );
-    expect(labels()).toEqual(["/review"]);
+    expect(labels()).toEqual(["review"]);
     if (method === "click")
       act(() => options()[0].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })));
     else cmPress(method);
@@ -988,7 +1001,7 @@ describe("platform skills", () => {
 
     // A new slash further on is a new command: the menu is for it alone.
     cmTypeByHand(" /re");
-    expect(labels()).toEqual(["/review"]);
+    expect(labels()).toEqual(["review"]);
     expect(promptShown()).toBe(true);
   });
   it("deletes one of two adjacent tokens without touching the other", () => {
@@ -1047,9 +1060,9 @@ describe("platform skills", () => {
   it("lists all runtime skills with descriptions and platform identity, without their argument hint", () => {
     activateSkills();
     type("/");
-    expect(labels()).toEqual(["/search", "/summary", "/meeting-minutes", "/review"]);
+    expect(labels()).toEqual(["/search", "/summary", "meeting-minutes", "review"]);
     // The native tooltip gives the full description, which the row may cut.
-    expect(options()[2].title).toBe("Meeting minutes");
+    expect(options()[2].title).toBe("meeting-minutes: Meeting minutes");
     expect(options()[2].querySelector("[class*=customIcon]")).not.toBeNull();
     expect(options()[2].querySelector("em")?.textContent).toContain("Meeting minutes");
   });
@@ -1157,7 +1170,7 @@ describe("platform skills", () => {
     expect(onRunCommand).toHaveBeenCalledOnce();
     expect(onRunSkill).not.toHaveBeenCalled();
     type("/rev");
-    expect(labels()).toEqual(["/review", "/review"]);
+    expect(labels()).toEqual(["/review", "review"]);
     press("ArrowDown");
     press("Tab");
     expect(selected()).toEqual({ name: "review" });
@@ -1184,7 +1197,7 @@ describe("platform skills", () => {
     skillCatalog = { supported: true, skills: [...skillCatalog!.skills, { name: "skillet", description: "Cooking" }] };
     act(() => root.render(<Host />));
     type("/ski");
-    expect(labels()).toEqual(["/skillet"]);
+    expect(labels()).toEqual(["skillet"]);
     press("Tab");
     expect(selected()).toEqual({ name: "skillet" });
   });
@@ -1211,7 +1224,7 @@ describe("platform skills", () => {
   it("keeps named legacy completion available without a dispatcher row", () => {
     activateSkills();
     type("/skill");
-    expect(labels()).toEqual(["/meeting-minutes", "/review"]);
+    expect(labels()).toEqual(["meeting-minutes", "review"]);
     press("Tab");
     expect(textarea().value).toBe("/meeting-minutes ");
     expect(selected()).toEqual({ name: "meeting-minutes" });
@@ -1414,7 +1427,7 @@ describe("platform skills", () => {
     activateSkills(true);
     cmType("/s existing notes");
     act(() => cm().dispatch({ selection: { anchor: 2 } }));
-    expect(labels()).toEqual(["/search", "/summary", "/meeting-minutes"]);
+    expect(labels()).toEqual(["/search", "/summary", "meeting-minutes"]);
     cmPress("Tab");
     expect(cm().state.doc.toString()).toBe("/search existing notes");
     expect(cm().state.selection.main.head).toBe(8);
@@ -1514,7 +1527,7 @@ describe("personal and team prompt commands", () => {
     skillCatalog = { supported: true, skills: [{ name: "review", description: "Review" }] };
     mountReact();
     type("/");
-    expect(labels()).toEqual(["/search", "/summary", "/summary", "/review"]);
+    expect(labels()).toEqual(["/search", "/summary", "/summary", "review"]);
     expect(options()[0].querySelector("[class*=rowIcon]")?.textContent).toBe("edit_note");
     expect(options()[0].querySelector("em")?.textContent).toBe("Chercher");
     expect(options()[3].querySelector("[class*=rowIcon]")?.textContent).not.toBe("edit_note");
@@ -1522,7 +1535,7 @@ describe("personal and team prompt commands", () => {
     expect(sections()).toEqual([
       ["chatbot.commandMenu.sections.teamFallback", ["/search", "/summary"]],
       ["chatbot.commandMenu.sections.personal", ["/summary"]],
-      ["chatbot.commandMenu.sections.platform", ["/review"]],
+      ["chatbot.commandMenu.sections.platform", ["review"]],
     ]);
     expect(container.textContent).not.toContain("chatbot.commandMenu.sources.");
     type("/sea");
@@ -1530,7 +1543,7 @@ describe("personal and team prompt commands", () => {
     // The arrows cross section boundaries and stop on the last row.
     type("/");
     for (let step = 0; step < 4; step += 1) press("ArrowDown");
-    expect(focusedLabel()).toBe("/review");
+    expect(focusedLabel()).toBe("review");
     press("ArrowUp");
     expect(options()[2].getAttribute("aria-selected")).toBe("true");
   });
@@ -1902,7 +1915,7 @@ describe("sending while a catalog has not answered", () => {
       skillCatalog = { supported: true, skills: [{ name: "review", description: "Review" }] };
       act(() => root.render(<Host />));
       type("/");
-      expect(labels()).toEqual(["/review"]);
+      expect(labels()).toEqual(["review"]);
       expect(container.textContent).not.toContain("chatbot.commandMenu.error");
     });
   });
@@ -2040,7 +2053,7 @@ describe("several prompt commands in one message", () => {
     expect(sections().filter(([heading]) => heading)).toEqual([
       ["chatbot.commandMenu.sections.teamFallback", ["/search", "/summary"]],
       ["chatbot.commandMenu.sections.personal", ["/tone"]],
-      ["chatbot.commandMenu.sections.platform", ["/verify-answer"]],
+      ["chatbot.commandMenu.sections.platform", ["verify-answer"]],
     ]);
   });
 
@@ -2318,6 +2331,56 @@ describe("several prompt commands in one message", () => {
     expect(onRunCommand.mock.calls[0][0]).not.toHaveProperty("skills");
   });
 
+  it.each([0, 2])(
+    "keeps a picked prompt's identity through consecutive edits before rendering (second edit at %i)",
+    async (secondAt) => {
+      mount([{ ...TONE, prompt_id: "p-review", command: "review", name: "Review prompt" }], ["review"]);
+      cmAppend("/rev");
+      cmPress("Tab");
+      cmAppend("Notes");
+      expect(latest().selectedPrompts.map((prompt) => prompt.promptId)).toEqual(["p-review"]);
+      act(() => cm().dispatch({ selection: { anchor: 0 } }));
+      act(() => {
+        cm().dispatch({ changes: { from: 0, insert: "a " }, userEvent: "input.type" });
+        cm().dispatch({ changes: { from: secondAt, insert: "b " }, userEvent: "input.type" });
+      });
+      const draft = `${secondAt === 0 ? "b a" : "a b"} /review Notes`;
+      expect(cm().state.doc.toString()).toBe(draft);
+      expect(latest().selectedPrompts.map((prompt) => [prompt.promptId, prompt.from])).toEqual([["p-review", 4]]);
+      expect(latest().selectedSkills).toEqual([]);
+      await submit();
+      expect(onRunCommand.mock.calls[0][0].command).toMatchObject({
+        prompt_id: "p-review",
+        draft_text: draft,
+        draft_command_offset: 4,
+      });
+      expect(onRunCommand.mock.calls[0][0]).not.toHaveProperty("skills");
+      expect(onRunSkill).not.toHaveBeenCalled();
+      act(() => undo(cm()));
+      expect(latest().selectedPrompts.map((prompt) => [prompt.promptId, prompt.from])).toEqual([["p-review", 0]]);
+      act(() => redo(cm()));
+      expect(latest().selectedPrompts.map((prompt) => [prompt.promptId, prompt.from])).toEqual([["p-review", 4]]);
+    },
+  );
+
+  it("submits the latest draft and prompt identity before the controlled parent renders", async () => {
+    mount([{ ...TONE, prompt_id: "p-review", command: "review", name: "Review prompt" }], ["review"]);
+    cmAppend("/rev");
+    cmPress("Tab");
+    cmAppend("Notes");
+    await act(async () => {
+      cm().dispatch({ changes: { from: 0, insert: "a " }, userEvent: "input.type" });
+      cm().dispatch({ changes: { from: 0, insert: "b " }, userEvent: "input.type" });
+      latest().submit();
+    });
+    expect(onRunCommand.mock.calls[0][0].command).toMatchObject({
+      prompt_id: "p-review",
+      draft_text: "b a /review Notes",
+      draft_command_offset: 4,
+    });
+    expect(onRunSkill).not.toHaveBeenCalled();
+  });
+
   it("keeps hand-typed tokens while the text around them is edited", () => {
     mount();
     cmAppend("/summary and /tone now");
@@ -2563,4 +2626,43 @@ describe("several prompt commands in one message", () => {
       ]);
     });
   });
+});
+
+it("shows a translated packaged skill while completing and sending its canonical command", async () => {
+  presentationTranslations["chatbot.skills.catalog.meeting-minutes.title"] = "Compte rendu de réunion";
+  presentationTranslations["chatbot.skills.catalog.meeting-minutes.description"] = "Préparer un compte rendu.";
+  skillCatalog = {
+    supported: true,
+    skills: [{ name: "meeting-minutes", description: "English model metadata", builtin: true }],
+  };
+  act(() => root.render(<Host />));
+  type("/meeting");
+  expect(labels()).toEqual(["Compte rendu de réunion (meeting-minutes)"]);
+  expect(options()[0].textContent).toContain("Préparer un compte rendu.");
+  expect(options()[0].title).toBe("Compte rendu de réunion: Préparer un compte rendu.");
+  press("Tab");
+  expect(textarea().value).toBe("/meeting-minutes ");
+  await pressAsync("Enter");
+  expect(onRunSkill).toHaveBeenCalledWith({ skills: [{ name: "meeting-minutes" }], text: "/meeting-minutes " });
+});
+
+it("renders a translated composer token while keeping its editor text and invocation canonical", async () => {
+  presentationTranslations["chatbot.skills.catalog.meeting-minutes.title"] = "Compte rendu de réunion";
+  skillCatalog = {
+    supported: true,
+    skills: [{ name: "meeting-minutes", description: "English model metadata", builtin: true }],
+  };
+  act(() => root.render(<Host inlineEditor />));
+  const editor = EditorView.findFromDOM(container.querySelector(".cm-content")!)!;
+  act(() => {
+    editor.focus();
+    editor.dispatch({ changes: { from: 0, insert: "/meet" }, selection: { anchor: 5 } });
+  });
+  act(() =>
+    editor.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })),
+  );
+  expect(editor.state.doc.toString()).toBe("/meeting-minutes ");
+  expect(container.querySelector('[data-kind="skill"]')?.textContent).toBe("Compte rendu de réunion");
+  await act(async () => renders[renders.length - 1].submit());
+  expect(onRunSkill).toHaveBeenCalledWith({ skills: [{ name: "meeting-minutes" }], text: "/meeting-minutes " });
 });

@@ -16,7 +16,7 @@ from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.runtime_context import get_runtime_context
 
 
-async def get_instance_skills(
+async def _get_instance_skill_catalog(
     agent_instance_id: str,
     team_id: str,
     caller: KeycloakUser | None,
@@ -53,7 +53,32 @@ async def get_instance_skills(
     if isinstance(target.definition, GraphAgentDefinition):
         return SkillCatalog(supported=False)
     skills = get_runtime_context().config.skills
-    return skills.catalog if skills is not None else SkillCatalog()
+    if skills is None:
+        return SkillCatalog(policy_supported=True)
+    from fred_runtime.skills.catalog import PlatformSkills
+
+    return (
+        skills.for_catalog(target.disabled_platform_skills).catalog
+        if isinstance(skills, PlatformSkills)
+        else skills.catalog
+    )
+
+
+async def get_instance_skills(
+    agent_instance_id: str,
+    team_id: str,
+    caller: KeycloakUser | None,
+    authorization: str | None,
+    container: PodApplicationContext,
+    registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
+) -> SkillCatalog:
+    """List only user-selectable skills after resolving instance access and policy."""
+    catalog = await _get_instance_skill_catalog(
+        agent_instance_id, team_id, caller, authorization, container, registry
+    )
+    return catalog.model_copy(
+        update={"skills": tuple(s for s in catalog.skills if s.user_invocable)}
+    )
 
 
 async def get_instance_skill_detail(
@@ -66,7 +91,7 @@ async def get_instance_skill_detail(
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
 ) -> SkillDetail:
     """Authorize through the catalog before reading its immutable snapshot."""
-    catalog = await get_instance_skills(
+    catalog = await _get_instance_skill_catalog(
         agent_instance_id, team_id, caller, authorization, container, registry
     )
     try:

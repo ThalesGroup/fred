@@ -84,6 +84,7 @@ from control_plane_backend.platform_prompt.store import (
     CreationAssistantSettingsStore,
     PlatformPromptStore,
 )
+from control_plane_backend.platform_skills.store import PlatformSkillPolicyStore
 from control_plane_backend.platform_ui_settings.store import PlatformUiSettingsStore
 from control_plane_backend.prompts.category_store import PromptCategoryStore
 from control_plane_backend.prompts.store import PromptStore
@@ -134,6 +135,7 @@ class ApplicationContext:
             CreationAssistantSettingsStore | None
         ) = None
         self._platform_ui_settings_store: PlatformUiSettingsStore | None = None
+        self._platform_skill_policy_store: PlatformSkillPolicyStore | None = None
         self._marketplace_settings_store: PlatformMarketplaceSettingsStore | None = None
         self._agent_marketplace_store: AgentMarketplaceStore | None = None
         self._announcement_store: AnnouncementStore | None = None
@@ -469,6 +471,14 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._platform_ui_settings_store
+
+    def get_platform_skill_policy_store(self) -> PlatformSkillPolicyStore:
+        """Reuse one store backed by the configured shared database pool."""
+        if self._platform_skill_policy_store is None:
+            self._platform_skill_policy_store = PlatformSkillPolicyStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._platform_skill_policy_store
 
     def get_marketplace_settings_store(self) -> PlatformMarketplaceSettingsStore:
         if self._marketplace_settings_store is None:

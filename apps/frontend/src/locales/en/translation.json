@@ -645,12 +645,12 @@
     },
     "skills": {
       "badge": "Skill: {{name}}",
-      "platformProvided": "Skill provided by the platform",
       "requestPlaceholder": "Your request (optional)",
       "usage": "Use /<skill-name> [request]. Select a skill; the request is optional.",
       "errorTitle": "Skill could not be used",
       "unavailable": "This skill’s content is unavailable.",
       "loaded": "Skill loaded",
+      "partiallyLoaded": "Skill partially loaded",
       "originUser": "Requested by you",
       "originAgent": "Selected by the agent",
       "originChild": "Selected by a sub-agent",
@@ -661,12 +661,51 @@
       "loading": "Loading skill…",
       "retry": "Try again",
       "description": "Description:",
-      "arguments": "Arguments:"
+      "arguments": "Arguments:",
+      "catalog": {
+        "summarize-document": {
+          "title": "Summarize a document",
+          "description": "Summarize documents faithfully, preserving critical conditions, figures and uncertainties."
+        },
+        "grounded-research": {
+          "title": "Source-based research",
+          "description": "Research a question using traceable evidence and explain conflicting or incomplete sources."
+        },
+        "meeting-minutes": {
+          "title": "Meeting minutes",
+          "description": "Prepare meeting minutes with confirmed decisions, actions and missing information."
+        },
+        "compare-options": {
+          "title": "Compare options",
+          "description": "Compare alternatives using explicit criteria, evidence and visible trade-offs."
+        },
+        "verify-answer": {
+          "title": "Verify an answer",
+          "description": "Check an answer against available evidence, correct unsupported claims and explain verification limits."
+        },
+        "graph": {
+          "title": "Graphs",
+          "description": "Create or repair diagrams and charts suited to the question, with a clear and reliable result."
+        },
+        "grill-me": {
+          "title": "Challenge my thinking",
+          "description": "Clarify an idea or decision through a guided interview with concrete recommendations and explicit trade-offs."
+        },
+        "analyze-data": {
+          "title": "Analyze data",
+          "description": "Analyze accessible data, check calculations and explain assumptions and limitations."
+        },
+        "data-visualization": {
+          "title": "Visualize data",
+          "description": "Choose a useful representation of data and create it using available tools."
+        }
+      }
     }
   },
   "mermaid": {
     "title": "Diagram",
-    "diagram": "Mermaid diagram",
+    "diagram": "Diagram",
+    "generating": "Generating diagram...",
     "copySource": "Copy diagram source",
     "download": "Download diagram as SVG",
     "downloadError": "The diagram could not be downloaded. Please try again.",
@@ -1146,7 +1185,8 @@
           "model": "Models",
           "app": "Apps",
           "knowledge_base": "Knowledge Bases",
-          "aria": "Filter by feature kind"
+          "aria": "Filter by feature kind",
+          "skill": "Skills"
         },
         "emptyAgents": "No agent templates are registered by any runtime pod yet.",
         "emptyModels": "No models are advertised by any runtime pod yet.",
@@ -1476,6 +1516,35 @@
           "confirm": "Turn off",
           "cancel": "Cancel"
         }
+      },
+      "skills": {
+        "title": "Platform skills",
+        "scope": "Skills provided by Fred, shared by all users and agents.",
+        "skill": "Skill",
+        "description": "Description",
+        "invocation": "Invocation",
+        "sources": "Sources",
+        "enabled": "Enabled",
+        "on": "Enabled",
+        "off": "Disabled",
+        "userInvocable": "User",
+        "modelInvocable": "Agent",
+        "noInvocation": "No direct invocation",
+        "refresh": "Refresh",
+        "loading": "Loading platform skills...",
+        "loadError": "Could not load platform skills.",
+        "empty": "No packaged skills are currently advertised.",
+        "unavailableSources": "Unavailable sources: {{runtimes}}. Global enforcement cannot be verified for these sources.",
+        "unsupportedSources": "Sources requiring an update: {{runtimes}}. Global skill controls are not supported by these sources.",
+        "toggle": "Enable {{name}} for everyone",
+        "disableBlocked": "Restore all sources and update older runtimes before disabling a skill.",
+        "effect": "Changes apply to new loads from the next turn, including existing conversations. Instructions already loaded remain in the conversation.",
+        "saveUnsupported": "This skill could not be disabled because a source does not support global skill controls. Refresh and update the affected source.",
+        "saveUnavailable": "This skill could not be disabled because a source is unavailable. Restore the source and refresh.",
+        "saveError": "The global skill setting could not be saved. Refresh and try again.",
+        "refreshAfterSaveError": "The setting was saved, but the catalog could not be refreshed. Refresh to confirm its current state.",
+        "absentDisabled": "These globally disabled skills are no longer advertised by a responding source. You can restore their availability for future loads.",
+        "restore": "Re-enable {{name}}"
       }
     },
     "agentCard": {

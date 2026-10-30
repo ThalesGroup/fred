@@ -761,7 +761,7 @@ export default function ManagedChatPage() {
         onOpenPrompt: openPromptPreview,
         tokens: commands.selectedSkills.map((token) => ({
           ...token,
-          description: commands.skillDescriptions.get(token.name),
+          ...commands.skillSummaries.get(token.name),
           onOpen: openSkill,
         })),
       }}
@@ -1002,7 +1002,7 @@ export default function ManagedChatPage() {
                         onHitlFreeTextChange={chat.setHitlFreeText}
                         onOpenCommandPrompt={openCommandPrompt}
                         onOpenSkill={openSkill}
-                        skillDescriptions={commands.skillDescriptions}
+                        skillSummaries={commands.skillSummaries}
                       />
                     )}
                   </div>

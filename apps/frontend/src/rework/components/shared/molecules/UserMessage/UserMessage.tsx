@@ -18,6 +18,7 @@ import { MessageBubble } from "@shared/atoms/MessageBubble/MessageBubble";
 import { CommandTurn } from "@shared/molecules/CommandTurn/CommandTurn";
 import { SkillBadge } from "@shared/molecules/SkillBadge/SkillBadge";
 import type { CommandDescriptor, SkillInvocation } from "../../../../../slices/runtime/runtimeOpenApi";
+import type { SkillSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./UserMessage.module.css";
 
 interface UserMessageProps {
@@ -27,7 +28,8 @@ interface UserMessageProps {
   command?: CommandDescriptor | null;
   skillName?: SkillInvocation["name"] | null;
   skillNames?: SkillInvocation["name"][];
-  skillDescriptions?: ReadonlyMap<string, string>;
+  builtinSkillNames?: string[];
+  skillSummaries?: ReadonlyMap<string, SkillSummary>;
   skillDescription?: string | null;
   onOpenSkill?: (name: string) => void;
   /** `promptIndex` is the entry of the turn's prompt list that was activated;
@@ -40,7 +42,8 @@ export function UserMessage({
   command,
   skillName,
   skillNames,
-  skillDescriptions,
+  builtinSkillNames,
+  skillSummaries,
   skillDescription,
   onOpenSkill,
   onOpenCommand,
@@ -90,7 +93,8 @@ export function UserMessage({
               ) : (
                 <SkillBadge
                   name={token.name}
-                  description={skillDescriptions?.get(token.name) ?? skillDescription ?? undefined}
+                  builtin={builtinSkillNames?.includes(token.name)}
+                  description={skillSummaries?.get(token.name)?.description ?? skillDescription ?? undefined}
                   onOpen={onOpenSkill}
                 />
               )}

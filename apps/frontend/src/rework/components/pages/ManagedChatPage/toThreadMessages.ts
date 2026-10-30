@@ -337,6 +337,10 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         command: userMsg.metadata?.command ?? null,
         skillName: skillNames[0] ?? null,
         skillNames,
+        builtinSkillNames: msgs.flatMap((message) => {
+          const load = skillLoadOf(message);
+          return load?.origin === "user" && !load.child && load.builtin ? [load.name] : [];
+        }),
       });
     }
 
