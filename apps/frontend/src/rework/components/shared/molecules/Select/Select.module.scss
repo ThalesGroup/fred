@@ -49,6 +49,27 @@
   }
 }
 
+/* Disabled reads as disabled, with the same state tokens as Button. */
+.select-container[data-disabled="true"] {
+  --border-color: var(--state-on-surface-disabled);
+  --bg-color: transparent;
+  cursor: default;
+
+  &:hover {
+    --border-color: var(--state-on-surface-disabled);
+  }
+
+  .trigger {
+    cursor: default;
+  }
+
+  .value,
+  .icon,
+  .label {
+    color: var(--state-text-disabled);
+  }
+}
+
 .state-layer {
   display: flex;
   justify-content: space-between;
