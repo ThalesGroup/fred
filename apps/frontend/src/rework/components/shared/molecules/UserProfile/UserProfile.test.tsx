@@ -74,7 +74,11 @@ function mount(admitted = false) {
   act(() => root!.render(<UserProfile admitted={admitted} />));
   const trigger = container!.querySelector<HTMLButtonElement>("button[aria-haspopup]")!;
   trigger.focus();
-  act(() => trigger.click());
+  act(() => {
+    // The browser turns Enter on a focused button into a click.
+    trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    trigger.click();
+  });
 }
 
 afterEach(() => {
