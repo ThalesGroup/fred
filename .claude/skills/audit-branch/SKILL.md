@@ -29,9 +29,11 @@ repository's AGENTS.md and relevant nested instructions.
 
 ## Inspect behavior and contracts
 
-Read the applicable existing specs/contracts, then compare them with the actual
-implementation and representative consumers. Load runtime/product contracts
-only for changes touching those boundaries; use package contracts for SDK work.
+Read the agreed business decisions and relevant arc42/source references, then
+compare implementation and representative consumers. For domain changes, inspect
+schema and transaction invariants before API/UI. A selected OpenSpec increment
+can supply acceptance criteria; no historical contract corpus is required.
+Apply the reuse/replacement/reduction acceptance rule in `AGENTS.md`.
 
 Before following implementation details, state the observable invariants from
 user requirements, existing valid usages and the contract. Do not infer the
@@ -78,7 +80,8 @@ Use the relevant questions below, not a mandatory matrix for unrelated work:
 For backend and repository integrity, also inspect relevant paths for dead or
 commented-out code, duplicate declarations/validators, missing imports hidden
 by type suppressions, and temporary artifacts. For migration changes, verify
-linear Alembic ancestry and the repository's required migration checks. For
+immutable SQLx sequence or the owning Python component's Alembic ancestry,
+and the repository's scoped migration checks. For
 merges within the reviewed range, use the relevant merge-review procedure.
 Do not expand a targeted review into unrelated cleanup or speculative hardening.
 
@@ -107,14 +110,15 @@ bug is fixed. Document it as such and check it against the authorized scope.
   package consumers. Do not create a parallel test harness by default.
 - Reuse relevant current verification evidence. Rerun affected checks after
   corrections; do not repeatedly run unrelated suites without a concrete reason.
-  When a broad quality check is required, run it from the repository root.
+  Honor the agreed scope for quality, tests and reproduction; do not launch a
+  broader campaign solely because this skill is loaded.
 - Consult relevant specialist review skills when available. If unavailable,
   apply the corresponding checks here and declare any remaining limitation;
   do not claim the specialist review occurred.
 
 ## Independent review handoff
 
-For the non-trivial changes covered by AGENTS.md's review rule, use a separate
+When independent review is requested or authorized for this review, use a separate
 reviewer with fresh context when available. Give it the task requirements,
 base/head, full diff or an explicitly bounded responsibility, relevant contracts
 and raw verification artifacts. Do not supply a list of expected bugs or ask it
@@ -152,7 +156,7 @@ could reject is a wrong disposition.
 
 An unreachable case never justifies new runtime logic. Reply with the chosen
 disposition instead of patching. Fix one review round as a batch, verify it,
-and push once; do not push per finding, since every push invites a new round.
+and publish only when authorized; do not push per finding.
 
 ## Report and completion
 

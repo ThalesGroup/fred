@@ -1,4 +1,4 @@
 interface:
   display_name: "FRED Performance Campaign Runner"
-  short_description: "Run guarded local FRED load campaigns"
-  default_prompt: "Use $fred-performance-campaign-runner to run a guarded local managed-SSE consolidation campaign and produce a redacted performance report."
+  short_description: "Guarded campaigns for the legacy Swift protocol"
+  default_prompt: "Use $fred-performance-campaign-runner for a requested local legacy Swift managed-SSE campaign after verifying protocol compatibility and agreed load limits."

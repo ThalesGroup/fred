@@ -64,7 +64,8 @@ explanations belong in the dossier.
 
 ## Contributions and releases
 
-Describe the problem, changed behavior and validation in the pull request.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before implementation. Explain what the
+change reuses, extends, replaces or removes, then its behavior and validation.
 Update the relevant architecture explanation when behavior changes. Record
 operator impact using the [release-note workflow](deploy/release-notes/README.md).
 Follow the [Code of Conduct](CODE_OF_CONDUCT.md).

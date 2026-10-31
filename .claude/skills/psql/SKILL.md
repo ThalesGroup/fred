@@ -1,79 +1,38 @@
 ---
 name: psql
-description: Query PostgreSQL databases running in the app-postgres Docker container
-user-invocable: true
-argument-hint: <query or intent>
+description: Inspect a requested Fred PostgreSQL schema, query or execution plan using the configured database connection. Read-only by default; does not assume a container, credentials or authorize live schema/data changes.
 ---
 
-# PostgreSQL CLI Skill
+# Inspect PostgreSQL for a Fred increment
 
-You help the user query and inspect the PostgreSQL databases running in the local dev stack.
+Follow `AGENTS.md` and `fred-reconstruction-method`. Establish the business
+invariant before inspecting schema; do not infer the intended domain from tables.
+Identify the actual checkout, target environment and database from the user's
+request and current configuration/deployment instructions. Do not hardcode a
+personal container, database name, password or production connection.
 
-## Connection
+For Control Plane, start with `apps/control-plane/migrations/` and the generated
+SQL reference in `docs/architecture/A2-manager-contracts.md`. Python components
+may own Alembic histories; inspect their actual ownership. Applied migrations and
+the live schema can differ from the checkout, so inspect history when relevant.
 
-PostgreSQL runs in the **`app-postgres`** Docker container (image: `pgvector/pgvector:pg15`, port `5432`).
+Use the configured client or container's `psql` without interactive TTY flags for
+automation. Keep credentials out of chat, command arguments and captured output.
+For read-only inspection, use a read-only transaction with bounded statement/lock
+timeouts. Inspect catalog metadata first: tables, columns, keys, constraints,
+indexes and migration versions. Do not dump user rows or documents unnecessarily.
 
-Always connect via `docker exec` to avoid host `psql` version mismatches:
+For queries, identify row counts, selectivity, usable indexes, batching, lock
+behavior and maintenance costs. Plain `EXPLAIN` is a plan estimate. `EXPLAIN
+ANALYZE` executes the query; even reads can load the installation. Run it only
+within an authorized experiment on an appropriate target. Prefer disposable
+fixtures for experiments; a plan on them does not demonstrate production capacity.
 
-```bash
-docker exec -it app-postgres psql -U admin -d <database>
-```
+A request to inspect a schema does not authorize writes, DDL, data resets,
+constraint disabling or checksum changes. For requested mutations, establish the
+specific scope, applied history, backup needs and transaction effects first.
+Preserve existing guards and current concurrent work.
 
-**Default dev credentials** (used internally by the container — no password prompt needed with `docker exec`):
-- User: `admin`
-- Password: `Azerty123_`
-
-## Available databases
-
-| Database             | Owner            | Notes                        |
-|----------------------|------------------|------------------------------|
-| `fred`               | fred             | Main application database    |
-| `data`               | tabular          | Tabular data                 |
-| `keycloak`           | keycloak_db_user | Auth / identity              |
-| `langfuse`           | langfuse         | LLM observability            |
-| `temporal`           | temporal         | Workflow engine              |
-| `temporal_visibility`| temporal         | Temporal visibility store    |
-| `postgres`           | admin            | Default admin database       |
-
-## Quick reference
-
-```bash
-# List all databases
-docker exec app-postgres psql -U admin -l
-
-# List tables in a database
-docker exec app-postgres psql -U admin -d fred -c "\dt"
-
-# Describe a table
-docker exec app-postgres psql -U admin -d fred -c "\d <table_name>"
-
-# Run a query
-docker exec app-postgres psql -U admin -d fred -c "SELECT * FROM <table> LIMIT 10;"
-```
-
-## Handling `$ARGUMENTS`
-
-Parse the user's intent from `$ARGUMENTS`. When no database is specified, default to `fred`. Examples:
-
-- `/psql list tables` → `docker exec app-postgres psql -U admin -d fred -c "\dt"`
-- `/psql show users` → query the users/accounts table in the `fred` database
-- `/psql SELECT * FROM agents LIMIT 5` → run that query against `fred`
-- `/psql list tables in langfuse` → `docker exec app-postgres psql -U admin -d langfuse -c "\dt"`
-
-Always use `docker exec app-postgres psql -U admin` (no `-it` flag in non-interactive mode).
-
-For multi-line or complex queries, pass them via `--command` or pipe through `echo`:
-
-```bash
-docker exec app-postgres psql -U admin -d fred --command "
-  SELECT id, name, created_at
-  FROM agents
-  ORDER BY created_at DESC
-  LIMIT 20;
-"
-```
-
-## Notes
-
-- The container image includes `pgvector` — vector columns (`embedding vector(...)`) are normal.
-- For schema context, check migration files under `apps/<backend-name>/alembic/versions/`
+Report schema facts, assumptions, target environment, commands actually run and
+what the evidence does or does not establish. Resolve ordinary SQL details without
+asking the user to choose between technically equivalent options.

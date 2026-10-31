@@ -1,7 +1,7 @@
 # Complexity rubric → slide budget
 
 Score the spec on six axes (0–4 each, max 24). Count from the spec *and* from
-the Step 2 grounding — a short RFC that touches five sub-projects is not short.
+the Step 2 grounding — a short brief that touches five sub-projects is not short.
 
 | Axis | 0 | 1 | 2 | 3 | 4 |
 |------|---|---|---|---|---|
@@ -17,7 +17,7 @@ the Step 2 grounding — a short RFC that touches five sub-projects is not short
 | Tier | Score | Budget | Talk (≈ 1.5 min/slide) | Notes |
 |------|-------|--------|-------------------------|-------|
 | **S** | 0–6 | 9–13 | 14–20 min | Context in 2 slides; one slicing pair (one lot vs two). |
-| **M** | 7–12 | 14–22 | 20–33 min | The common RFC. Full skeleton. |
+| **M** | 7–12 | 14–22 | 20–33 min | The common brief. Full skeleton. |
 | **L** | 13–18 | 22–32 | 33–48 min | Section 5 has one touch map per sub-project; before/after sequences. |
 | **XL** | 19–24 | 32–45 | 48–70 min | Propose two sessions (design walkthrough / slicing workshop); section 5 grouped by domain with a divider each. |
 

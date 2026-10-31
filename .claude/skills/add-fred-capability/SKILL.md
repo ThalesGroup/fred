@@ -1,244 +1,63 @@
 ---
 name: add-fred-capability
-description: Author a new Fred agent capability (manifest + tools/middleware) built on fred-sdk, execution-model-agnostic (ReAct and Graph agents). Picks the right authoring lane, maps each runtime need to tools() or a middleware hook, wires entry-point registration, and enforces the capability boundary (never hand-edit union/registry hotspots, no capability code in control-plane, no runtime info in LLM tool signatures).
-user-invocable: true
+description: Integrate or extend a Fred capability through the shared SDK/runtime and existing capability libraries. Use for capability tooling, configuration or registration work; first determine what to reuse, extend, replace or remove rather than creating a parallel feature.
 ---
 
-Add a new Fred **capability** — one modular agent feature carried end to end by one
-object (declaration + `tools()`, its execution-model-agnostic runtime), not a feature
-scattered across the codebase.
+# Integrate a capability into Fred
 
-**The code is the spec; you are the map.** Read the live types and the in-tree pilot
-before writing anything; never restate a manifest field from memory — it drifts.
-Companion doc: `docs/swift/capabilities/AUTHORING.md`.
+Follow `AGENTS.md`. Start with the business use and existing capability surface.
+Identify which capability or shared primitive can express it, which old behavior
+it supersedes, and which code can disappear. A separate package, tool, hook or
+configuration concept needs a concrete gap; a new feature name is not a reason.
+For persisted domain changes, apply `fred-reconstruction-method` before API/UI.
 
-Tier tags `[T0]…[T4]` mark which tier a mechanism lands in (RFC §6). Unmarked = live
-today. **Do not use a `[T2]`/`[T3]` mechanism as if it were live** unless the caller has
-confirmed that tier is implemented on their branch — check the imports actually exist.
+## Inspect the actual extension points
 
----
+Read current definitions and consumers, not old contract documents:
 
-## Step 0 — Read the reference surface first (mandatory)
+- `libs/fred-sdk/fred_sdk/contracts/capability/` for capability base classes,
+  manifests, context, configuration scoping and human-interaction declarations;
+- `libs/fred-sdk/fred_sdk/contracts/runtime.py` for runtime service ports;
+- `libs/fred-runtime/fred_runtime/capabilities/` for registration and assembly;
+- the nearest existing implementation under `libs/capabilities/`, particularly
+  `fred-capability-document-access` for calls through knowledge service ports;
+- the owning pod's installed distributions and entry points for actual discovery.
 
-Do not skip this. Open and skim:
+Verify APIs and supported execution models in this checkout. Imports or a manifest
+alone do not prove a capability works in an integrated Weaver journey. Compare
+current users before replacing a mechanism. An MCP integration may reuse the
+catalog surface; do not create a second capability wrapper if it adds no behavior.
+Model-call settings are not automatically tool capabilities.
 
-- **SDK contracts** — `libs/fred-sdk/fred_sdk/contracts/capability/`:
-  `base.py` (`AgentCapability`, the four ClassVar models, `tools()`, `middleware()`),
-  `manifest.py` (`CapabilityManifest`, `AssetSlot`, `ChatControlSpec`, `SidePanelSpec`,
-  `TeamScopePolicy`, `UploadedFile`; `FieldSpec` lives in `fred_sdk.contracts.models`),
-  `context.py` (`CapabilityContext`, `CapabilityIdentity`, `SaveContext`, `EmptyModel`),
-  `hitl.py` (`HitlSpec`). Platform ports: `fred_sdk/contracts/runtime.py`
-  (`RuntimeServices`, `DocumentSearchPort`, `DocumentTreePort`,
-  `DocumentSummarizePort`, `DocumentPortCallError` — adapters map transport
-  failures onto that typed error so capability tools can render `is_error`
-  results without importing any HTTP stack).
-  **Implement `tools()` — it is the primary authoring surface, execution-model-agnostic
-  (works on ReAct, Deep and Graph agents).** `middleware()` has a default that wraps
-  `tools()`; only override it directly for a hook `tools()` cannot express (see Step 3).
-- **The canonical worked example** — `libs/capabilities/fred-capability-document-access/fred_capability_document_access/capability.py`
-  (`DocumentAccessCapability`, #1906): a real tool wired to a platform service through a
-  typed port, config-field scoping, one computed chat control, implemented via `tools()`.
-  **Copy its shape.**
-- **Not everything is a capability** — if the thing adjusts *how the model is
-  called* rather than *what the model can call*, stop and reconsider. Reasoning
-  was built as a full capability and then withdrawn
-  (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33): an agent does not *use* reasoning
-  the way it uses document search, so the Tools tab was the wrong home for it.
-  It ships instead as a plain agent field (`AgentTuning.reasoning_enabled`,
-  rendered in the Capabilities tab through the generic `CapabilityCard`) plus a
-  platform-emitted chat control. Model-call parameters and per-turn platform
-  options belong outside this system.
-- **Registration + boot rules** — any `libs/capabilities/*/pyproject.toml`
-  (`[project.entry-points."fred.capabilities"]`; `fred-capability-documents` shows
-  several entry points in one package) and
-  `libs/fred-runtime/fred_runtime/capabilities/registry.py` (`boot_capability_registry`).
-  MCP catalog packages use `fred.mcp_catalogs` instead: a loader accepting
-  `fred_sdk.contracts.services.ServiceEndpointsPort` and returning
-  `fred_sdk.resources.mcp.McpCatalog`. Pass the port as `services` to the SDK
-  loaders. Internal HTTP entries declare a typed `service` and relative `path`;
-  the runtime supplies the configured base URL (port and API prefix included).
-  Only remote MCP transports are supported; concrete external `url` values
-  remain supported.
-  Follow
-  `libs/capabilities/fred-capability-mcp/` for the loader and entry-point declaration;
-  use the SDK catalog loaders to resolve packaged YAML and `prompt_file` references.
-  New packages go under `libs/capabilities/fred-capability-<name>/` — the directory
-  name is the distribution name.
+## Keep responsibility in the owning library
 
----
+Configuration models, `validate_config`, tools, service ports and capability UI
+packs belong to the library/pod. Control Plane checks authority and forwards to
+the owner; it does not contain per-capability schemas or business branches.
+Use existing `tools()` or middleware extension points according to their actual
+runtime support. Do not invent a hook or duplicate an execution path.
 
-## Step 1 — Pick the authoring lane (RFC §7)
+LLM tool arguments must not carry credentials or trusted identity/scope. Use typed
+runtime services and server-bound context. Preserve resource access boundaries,
+conversation attachment ownership, replay/idempotency and the turn admission
+lifetime. Use the shared human-approval declarations instead of a private gate.
 
-| Caller need | Lane | Fred code |
-| --- | --- | --- |
-| Tools + config + prompt fragment, nothing bespoke | **MCP server** registered in the catalog → it *is* a capability, id == the catalog server id, no `mcp:` prefix (#1988) | **zero** `[T1]` — do not write a capability class; register the MCP server |
-| Full vertical: `validate_config`, middleware, `router`, `tables`, team settings | **Capability package** built on `fred-sdk` | the package only |
-| First-party / default | Same package model, installed in the shared `fred-agents` pod (`fred-capabilities-core`) | in-tree |
+Inspect configuration-copy and validation consumers before introducing a scoped
+reference or changing persisted configuration. Keep blobs in the owning storage
+service, not configuration JSON. Do not add generalized versioning or a migration
+layer without a real compatibility requirement.
 
-If the request is "just some tools + a prompt," steer to the **MCP lane** — it needs zero
-Fred code and federates across pods. Only write a capability class when the request needs
-save-time validation, owned tables, a router, a chat control, or a custom chat part.
+Register through the existing distribution entry point. Do not hand-edit central
+unions or registries that discovery generates. Reuse design-system components,
+existing panels and controls; extend the shared primitive when genuinely necessary.
+Regenerate affected API clients through their existing commands.
 
----
+## Deliver
 
-## Step 2 — Declare the four typed models (RFC §3.2, §3.5, §8.2)
-
-Declare as ClassVars on the subclass (`base.py` is authoritative):
-
-- `ConfigModel` — what the user sends at agent creation → drives `manifest.config_fields`.
-  A `FieldSpec` may set `ui=UIHints(widget="document_libraries")` to render the
-  library/document tree picker in the agent form instead of the type-derived default
-  input (#2023); unknown widget ids fall back gracefully. `ui.visible_when="<sibling_key>"`
-  hides the field while that sibling is falsy (display-only — handle the value anyway).
-- `StoredConfigModel` — what is persisted after `validate_config`; **defaults to
-  `ConfigModel`**, so omit it unless save-time enrichment derives extra state.
-- `TurnOptionsModel` — typed chat-time values from a chat control; `EmptyModel` if none. `[T0]`
-- `TeamSettingsModel` — typed per-team enablement settings; `EmptyModel` until Tier 3. `[T3]`
-
-**The hard split (never violate):** a tool signature exposes ONLY LLM arguments. Identity,
-config, turn options, and services reach the tool through the middleware closure over
-`CapabilityContext` — never the tool schema. The per-turn binding and raw access token
-**never** enter `CapabilityContext`; platform access is only through typed
-`RuntimeServices` ports. `document_access` is the reference for all of this.
-For conversation files, use `ctx.services.conversation_filesystem` with absolute virtual paths.
-Pass `origin="agent"` for model-supplied paths and `origin="system"` for trusted internal artifacts;
-see `AUTHORING.md` for the permission and mount contract.
-
-**Classify every setting by scope.** A setting that points to an item the agent's scope
-owns (library, folder, document, tag id) is `ScopePrivate[...]` and must have a default; a
-field holding a configuration-file key is `Annotated[str, AssetKey("<slot>")]`; an
-identifier-like field safe to copy is `Public[...]`. A copy to another scope resets the
-first, re-submits the second through `validate_config`, keeps the rest. Classify against
-the scope, never the team. MCP catalog fields use `scope_private: true|false`. The guard
-`apps/fred-agents/tests/test_capability_scope_classification.py` fails on an unclassified
-reference. See AUTHORING.md "Scope-private settings".
-
-**Adding a field to an already-shipped `ConfigModel`?** If it's optional with a default,
-you're done — no version bump, no migration code, old stored configs just get the default.
-Only a removed/renamed/retyped field needs `manifest.version` bumped plus an
-`upgrade_config()` override. See AUTHORING.md's "Evolving a capability's config" section
-for the full rule and the `GreeterCapability` test pattern to copy.
-
----
-
-## Step 3 — Map each runtime need to a hook (RFC §5.1)
-
-Do not invent a hook; use the primitive. **Start with `tools()`** — it is the primary
-authoring surface and the only row below that runs on both ReAct and Graph agents. Every
-other row is a `middleware()` override — reachable from ReAct agents only; a Graph agent
-never sees it. If your capability needs both plain tools AND one of these ReAct-only
-hooks, implement `tools()` for the former and override `middleware()` for the latter —
-do not fold tools into the `middleware()` override, or they vanish for Graph agents.
-
-| Need | Hook |
-| --- | --- |
-| Add tools | `tools(ctx)` — execution-model-agnostic, works on ReAct, Deep and Graph |
-| Tool built at chat time | `middleware()` override, `wrap_model_call` editing `request.tools` `[T2]` — ReAct only |
-| Runtime context split from LLM args | `CapabilityContext` via the closure (either surface) |
-| Edit conversation state | `middleware()` override, `before_model` returning a state-update dict `[T2]` — ReAct only |
-| System-prompt fragment | `middleware()` override, `wrap_model_call` / `modify_model_request` — ReAct only |
-| Guardrails / summarization / PII / retries | prebuilt LangChain middleware — free (ReAct only) |
-| Tool approval (HITL) | declare `HitlSpec`s from `hitl_specs()` — the single platform gate merges them; **capabilities never ship interrupt middleware** (RFC §5.4) |
-
-Tools keep their original LangChain objects across runtimes. Use native `ainvoke`
-semantics and `content_and_artifact` for structured Fred results; no Graph wrapper
-or runtime-specific tool implementation is needed. `HitlSpec` works on all three
-parent runtimes; Deep children cannot open a human wait. See `AUTHORING.md` for
-Graph replay and idempotency constraints.
-
-Chat-time controls → return `ChatControlSpec`s from `chat_controls(config)` (computed at
-prep, never persisted). Stock widget params (`DocumentScopeControlParams`,
-`SearchPolicyControlParams`, `RagScopeControlParams`) are SDK models in
-`contracts/models.py` — import, never re-declare; they carry the default only, the
-user's pick travels on `RuntimeContext`. Custom chat card → a `BaseModel` with a `Literal` `type`
-discriminator in `manifest.chat_parts` (the registry extends the `UiPart` union at boot;
-you do **not** edit the union).
-
-**Used any ReAct-only row above (and not `tools()`)?** Declare
-`manifest.execution_models = ("react",)` — exactly that value, not just "something". A
-Graph agent selecting a `middleware()`-only capability whose `execution_models` contains
-`"graph"` fails loudly at assembly with a `CapabilityError`, rather than silently getting
-no tools. You don't even have to remember this rule to be safe: pod boot itself refuses
-registration (`InvalidExecutionModelError`) for ANY `middleware()`-only capability whose
-`execution_models` contains `"graph"` — never mentioned (kept the default) or written
-out explicitly, both fail the same way.
-
-A separate, earlier gate sits on the agent side: `GraphAgentDefinition.supports_capabilities`
-defaults `False`, so a Graph agent's picker offers no capability at all — yours included —
-until that specific agent definition opts in. `execution_models` above only decides
-compatibility once the picker is shown; it does not make one appear.
-
----
-
-## Step 4 — Register + boot invariants (RFC §4, §7.1)
-
-- Add one `[project.entry-points."fred.capabilities"]` line in the owning package's
-  `pyproject.toml` pointing at the subclass (e.g.
-  `my_cap = "acme_cap.capability:MyCapability"`). Installing the package IS the
-  registration — there is no central list.
-- **Register exactly once.** Entry point *or* a manual `registry.register(...)` in a
-  test, never both — duplicate ids fail boot (`DuplicateCapabilityIdError`).
-- Boot fails loudly (each a named error) on: duplicate id, duplicate chat-part
-  discriminator, missing required env, and `default_on` + a required team-settings field.
-- Owns tables? Own `DeclarativeBase`, `cap_<id>_*` names, no core foreign keys, an Alembic
-  tree beside the package, and `migrations_location()` returning its path. See
-  `fred-capability-writable-document`: `store.py` + `writable_document_migrations/`.
-- Team scope: `TeamScopePolicy.DEFAULT_ON` (no admin gate; incompatible with a *required*
-  team-settings field) or `ADMIN_GATED` (default). MCP catalog servers use the same enum
-  via `MCPServerConfiguration.team_scope` in `mcp_catalog.yaml` — default `admin_gated`.
-- Manifest id must match `^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$` (URL-safe, #1988) —
-  no `:` or other separator. This is also why MCP capability ids are the bare catalog
-  server id, not `mcp:<server>`; `mcp_ids.py`/`is_mcp_capability_id` are retired.
-- Manifest `icon` is a **snake_case Material Symbols name** (`graphic_eq`, not
-  `GraphicEq` — the frontend renders it as a font ligature, so a wrong name shows as raw
-  text). Pick from the `materialIcons` list in
-  `apps/frontend/src/rework/components/shared/utils/Type.ts`; to adopt a new glyph, add
-  its name there first. Unknown names fall back to a generic icon in the admin catalog.
-
----
-
-## Step 5 — Ships a router? Regenerate its API slice (#1979)
-
-If the manifest declares a `router`, its client is generated per-capability:
-
-```
-cd apps/frontend && make update-<id>-capability-api
-```
-
-The generated slice + dumped schema (under
-`apps/frontend/src/rework/features/capabilities/<id>/api/`) are `.prettierignore`d — never
-hand-edit them. See `apps/frontend/Makefile` (`update-demo-echo-capability-api`).
-
----
-
-## Step 6 — Verify (RFC §4)
-
-- Unit test in isolation (pattern: `libs/fred-runtime/tests/test_capability_*`): register
-  the capability and call `registry.validate()` to prove it passes the boot invariant;
-  exercise `validate_config`, `chat_controls`, and each tool with a stubbed
-  `RuntimeServices` port. A missing port must **fail loud**, not silently return nothing.
-- Run `make test` + `make code-quality` in `libs/fred-runtime` (and `libs/fred-sdk` if you
-  touched the contract surface). Green before claiming done.
-
----
-
-## Hard should-nots (refuse these — the abstraction exists to prevent them)
-
-- **Never hand-edit the central `UiPart` union or the registry hotspots** (RFC §1.1).
-  Contribute a chat part by *declaring* it; the registry extends the union at boot.
-- **Never put capability runtime code in control-plane** (RFC §7) — it stays the
-  proxy/registry/team-policy authority. No "capability pod."
-- **Never persist asset blobs in `tuning_json`** — store binaries through a service in
-  `validate_config`, keep only their keys (RFC §3.8).
-- **Never leak runtime info into an LLM-exposed tool signature** (RFC §3.5) — config,
-  identity, scope, and services flow through the middleware closure only.
-- **Never restate SDK fields from memory** — import the models, link the pilot.
-
----
-
-## Close-out
-
-Report: lane chosen; the capability class + entry-point line; which typed models declared;
-which hooks/controls/parts used; router slice regenerated (if any); tests added +
-`make test`/`make code-quality` result; and confirmation the boot invariant passes
-(`registry.validate()` green).
+Remove replaced paths and unused configuration within the accepted scope, after
+checking consumers. Explain the shared mechanisms reused and the net change in
+owned production code; separate tests, generated code and documentation. Do not
+shrink checks or hide code in generated/minified blobs to claim a reduction.
+Run scoped formatting/code-quality checks under `AGENTS.md`; run functional or
+runtime tests only within the requested validation scope. Report remaining wiring
+gaps without describing a prepared library as a working user feature.

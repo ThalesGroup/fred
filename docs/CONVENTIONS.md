@@ -1,7 +1,7 @@
 # docs/CONVENTIONS.md
 
 Coding style, typing, and testing rules for this repository. Applies to all
-contributors and AI assistants. Source of truth for `CLAUDE.md §Step 4`.
+contributors and AI assistants under the workflow and scope in `AGENTS.md`.
 
 ---
 
@@ -35,14 +35,12 @@ contributors and AI assistants. Source of truth for `CLAUDE.md §Step 4`.
 ## Performance & concurrency
 
 Applies to `fred-runtime`, `fred-core`, and any backend serving concurrent
-requests. Production shape to design against: ~200 users hitting one
-`fred-agents` instance at once, up to 4 replicas running concurrently, and
-every agent turn calling a remote LLM API gateway — that call path is the
-top priority; tool invocation is the second. This section carries the same
-weight as code quality — a change that passes `make code-quality` but stalls
-the event loop or goes dark in Grafana is not done. See the
-`fred-performance-reviewer` skill for the full review checklist; the rules
-below are what to follow while writing the code, not just at review time.
+requests. Use the design targets in
+[fred-reconstruction-method](../.agents/skills/fred-reconstruction-method/SKILL.md);
+they are not measured capacity. Separate sessions, HTTP requests, active turns,
+model calls and document workers. Prioritize model latency and tool latency for
+agent paths, and concrete row/index/locking costs for SQL paths. Apply these rules
+while writing code; a specialist review or campaign is not automatically required.
 
 - **No blocking I/O inside `async def`.** No sync `requests`/`psycopg2`/`boto3`/
   sync SDK call made inline inside a coroutine on a request path. Offload via a
@@ -110,8 +108,7 @@ below are what to follow while writing the code, not just at review time.
 - **Never hand-edit generated files.** `openapi.json` — regenerate from source and
   document the regeneration command when you run it.
 - **Alembic table ownership is declared, never derived.** A backend whose
-  Alembic metadata includes the shared CoreBase (knowledge-flow,
-  control-plane) passes an explicit `owned_tables` set (exported by its
+  Alembic metadata includes the shared CoreBase passes an explicit `owned_tables` set (exported by its
   `models/table_ownership.py`) to `make_alembic_env`; fred-runtime reaches the
   same scoping with a dedicated `MetaData`. No startup path runs
   `create_all` — DDL belongs to the owning Alembic tree alone, and a process
@@ -162,7 +159,8 @@ below are what to follow while writing the code, not just at review time.
   already-tested behavior reuses the existing test file's fixtures/fakes; stand up a
   new test file or a parallel fixture set only when the thing under test genuinely
   has no existing home yet.
-- **`make code-quality && make test` must pass** before reporting any task done.
+- **Follow the scoped validation in `AGENTS.md`.** Run component code quality;
+  run tests within the requested validation scope and report unexecuted checks.
 
 ---
 
@@ -183,7 +181,7 @@ below are what to follow while writing the code, not just at review time.
   can use `unknown` with a guard; never `as any` at a prop or hook boundary.
 - **Never hand-edit generated slices.** `runtimeOpenApi.ts`, `controlPlaneOpenApi.ts`,
   `knowledgeFlowOpenApi.ts` — regenerate from OpenAPI spec.
-- **`make code-quality && make test` (in `apps/frontend`) must pass** before
-  reporting any frontend task done: type-check, Prettier, ESLint, then the unit
-  tests, the same checks CI runs. Follow the existing shared components under
-  `apps/frontend/src/rework/` for the current frontend patterns.
+- **Run `make code-quality` in affected frontend components.** Run tests within
+  the requested validation scope. Reuse or extend shared design-system elements
+  under `apps/frontend/src/rework/` and `libs/frontend`; do not duplicate a control
+  or state model to implement a standalone feature.

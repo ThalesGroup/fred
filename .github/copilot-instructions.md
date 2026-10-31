@@ -1,30 +1,8 @@
-# Fred Copilot Instructions
+# Fred: GitHub Copilot
 
-## Mandatory Read Order
-
-1. [`docs/DEVELOPER_CONTRACT.md`](../docs/swift/DEVELOPER_CONTRACT.md)
-2. [`docs/PLATFORM_RUNTIME_MAP.md`](../docs/swift/PLATFORM_RUNTIME_MAP.md)
-3. [`docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md`](../docs/swift/CONFIGURATION_AND_POLICY_CONVENTIONS.md)
-4. [`docs/REBAC.md`](../docs/swift/REBAC.md) for team/access work
-
-## Non-Negotiable Defaults
-
-- Keep implementation minimal and direct.
-- Do not over-engineer.
-- Run `make code-quality` and `make test` in every touched project.
-- Default tests must stay offline.
-- Tests requiring external services must be marked `integration`.
-- Assume no third-party services are running for default validation (no MinIO/OpenSearch/Postgres/Keycloak/Temporal, etc.).
-- Every new or modified function must explain:
-  - why it exists
-  - how to use it
-  - and include a short usage example for shared/public helper functions.
-- Avoid conceptual/design-pattern explanation docs; write concrete operational docs developers can apply immediately.
-- Keep function count and helper layers under control: business function or strictly necessary shared helper only.
-- Prefer changes that shrink and simplify the codebase (reuse/remove) instead of growing parallel logic.
-
-## Fred Runtime Topology
-
-Canonical source:
-
-- [`docs/PLATFORM_RUNTIME_MAP.md`](../docs/swift/PLATFORM_RUNTIME_MAP.md)
+Follow [AGENTS.md](../AGENTS.md) and the nearest nested instructions. They define
+the shared development order, business decisions, validation and delivery scope.
+For domain/persistence changes, read
+[fred-reconstruction-method](../.agents/skills/fred-reconstruction-method/SKILL.md).
+Use [arc42](../docs/architecture/README.md) for the current architectural explanation.
+This adapter adds no separate workflow.

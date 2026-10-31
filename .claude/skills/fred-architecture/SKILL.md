@@ -13,13 +13,13 @@ older instructions to put feature plans or proposed decisions in that dossier.
 ## Weaver validation boundary
 
 The dossier follows the integrated Weaver scope validated end to end, not the
-union of features found in the repository, Swift documentation or SDKs. Code
+union of tables, routes and SDK features found in the repository. Code
 presence, isolated CLI discovery and runtime documentation do not prove that the
 feature is wired into Weaver or validated end to end.
 
 The documented scope is the set of journeys a lot owner validated end to end, on
 local k3d and the integration platform, as recorded in the lot's PR
-(AGENTS.md, "Weaver: lots"). Update the existing chapters in that PR; an
+(see the validation scope in `AGENTS.md`). Update the existing chapters in that PR; an
 implemented but unvalidated journey stays out. Additional Knowledge Bases and
 application extensions remain outside until integrated and validated. Do not
 expand an overview or fill empty chapters from SDK features. Keep the same
@@ -49,7 +49,7 @@ runbook. A reader should understand Fred without reading source code.
   when it explains something more clearly, not as decoration.
 - Describe Fred's actual state. Exclude target architecture, roadmap, backlog,
   reconstruction history, progress reports and proposed features. Keep these in
-  RFCs, OpenSpec or work tracking outside the dossier. Do not disguise a planned
+  the current task/issue or an explicitly selected OpenSpec increment outside the dossier. Do not disguise a planned
   behavior as current by deleting the word "planned". Resolve the factual gap
   with the user when it affects a requested explanation.
 - Build understanding in order: purpose, concepts, responsibilities, interactions,
@@ -57,7 +57,7 @@ runbook. A reader should understand Fred without reading source code.
   Re-read the surrounding section after every insertion; an accurate paragraph
   in the wrong place is still a bad change.
 - Write connected explanations answering a reader's question. Use tables for
-  genuine comparisons and diagrams for relationships or journeys. Avoid RFC-like
+  genuine comparisons and diagrams for relationships or journeys. Avoid planning
   templates, arbitrary IDs, acceptance criteria and accumulation of disconnected
   facts. Add detail only if it improves understanding or precision.
 - Explain current design reasons and meaningful limitations where relevant,
@@ -131,9 +131,9 @@ one diagram merely to save space.
   Distinguish requests, processing and data access with meaningful arrow labels.
 - **Do not invent endpoints from functional actions.** In Fred's document path,
   both UI uploads and application submissions go through Control Plane. It exposes
-  the drive and coordinates ingestion through Temporal. Knowledge Flow is a Temporal
-  worker, not an API service called by the UI or a Knowledge Base. Agent Pod is an
-  API service used by the UI; agents access knowledge through capabilities.
+  the drive and coordinates ingestion through Temporal. Knowledge Flow processes documents through Temporal workers and exposes the
+  knowledge API used by capabilities. Trace the actual caller and route in the
+  current checkout before drawing either path. Agent Pod serves agent execution.
 - Hypothetical representations (for example ontology graphs) help discuss extension
   principles but must not become claims of existing product functionality. Do not
   include speculative examples in a current-state diagram.
@@ -162,6 +162,11 @@ security rules, journeys and extension principles. Every reference to source cod
 belongs in technical annexes: file paths, symbols, handlers, tests, generated API
 inventories, SQL schema details and source maps. Explain necessary domain concepts
 in the main chapters without requiring the reader to inspect their implementation.
+
+Generated schema references may include prepared structures. Label that preparation
+without claiming an integrated journey; keep future consumer obligations in the
+current task/issue and appropriate migration comments. Do not turn the dossier into
+a plan or reproduce the agreed design brief there.
 
 Annexes serve Fred developers and coding assistants. Maintain useful traceability
 in both directions: architectural explanation to implementation, and changed code

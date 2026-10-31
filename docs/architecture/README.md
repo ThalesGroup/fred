@@ -89,7 +89,7 @@ current issue, with a focused OpenSpec change only when an increment requires it
 - Previous RFCs, Swift docs and OpenSpec records remain in Git history. They do
   not define the current architecture or authorize restoring retired behavior.
 
-The [branch workflow](../../AGENTS.md#control-plane-reconstruction-on-weaver)
+The [shared development workflow](../../AGENTS.md#validation-and-reporting)
 sets review and commit requirements. Only documented behavior belongs in the reading path.
 
 For a repeatable independent review of the Rust reconstruction, use

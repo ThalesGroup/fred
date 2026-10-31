@@ -1,7 +1,6 @@
-# CLAUDE.md (Knowledge Flow Backend Workspace)
+# Knowledge Flow assistant instructions
 
-When this folder is opened as the workspace root, apply repository-wide instructions from:
-
-- [`../CLAUDE.md`](../CLAUDE.md)
-- [`../docs/swift/DEVELOPER_CONTRACT.md`](../docs/swift/DEVELOPER_CONTRACT.md)
-- [`../docs/swift/PLATFORM_RUNTIME_MAP.md`](../docs/swift/PLATFORM_RUNTIME_MAP.md)
+Follow the repository's [AGENTS.md](../../AGENTS.md). The same team rules
+apply when this component is opened as the workspace root. Use its
+[README](README.md) for local commands and the
+[architecture dossier](../../docs/architecture/README.md) for current boundaries.

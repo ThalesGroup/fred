@@ -1,8 +1,8 @@
 ---
 name: spec-to-slides
-description: Turn a spec, RFC, or OpenSpec change into a technical slide deck for the dev team — agenda first, a context section before any code, concrete code-level changes per sub-project (impact map, touch maps, before/after, generated flow and sequence diagrams), implications, and 2-3 implementation-slicing proposals with pros/cons. Output is an ad hoc HTML deck (Artifact or temp file), never committed.
+description: Turn an agreed development brief, current arc42 explanation, or selected OpenSpec change into a technical slide deck for the dev team — agenda first, a context section before any code, concrete code-level changes per sub-project (impact map, touch maps, before/after, generated flow and sequence diagrams), implications, and 2-3 implementation-slicing proposals with pros/cons. Output is an ad hoc HTML deck (Artifact or temp file), never committed.
 user-invocable: true
-argument-hint: "<path to RFC / spec / openspec change dir> [--lang fr|en] [--duration 30m] [--audience backend|frontend|full-stack]"
+argument-hint: "<path to brief / arc42 chapter / selected change> [--lang fr|en] [--duration 30m] [--audience backend|frontend|full-stack]"
 ---
 
 # Spec → Technical Slides
@@ -30,8 +30,8 @@ work. It is a bridge between the document and the codebase, not a summary.
 - **Never commit the deck**; write it to the scratchpad, publish as an
   Artifact when available, or hand over the path. Read-only on the repo.
 - **Do not invent**: what the spec does not say is marked "not specified";
-  where spec and code diverge, the code and the frozen contract docs win and
-  the divergence gets its own row.
+  distinguish agreed intent, observed behavior and prepared structure. Report
+  discrepancies without treating either existing code or old prose as intent.
 - **Use the frame, don't write layout CSS.** Copy `references/deck-frame.html`
   verbatim at the top of the deck and write slides with the patterns in
   `references/patterns.md`. Do not add your own CSS beyond overriding tokens in
@@ -64,7 +64,7 @@ work. It is a bridge between the document and the codebase, not a summary.
 
 ## Inputs
 
-`$ARGUMENTS`: the source (RFC in `docs/swift/rfc/`, an OpenSpec change dir,
+`$ARGUMENTS`: the source (an agreed brief, arc42 chapter, selected OpenSpec change,
 a PR/issue number, or any markdown file) and optional `--lang` (default: the
 language of the request), `--duration` (caps the slide count at ≈ 1.5 min per
 presented slide), `--audience` (`backend` folds frontend detail into one
@@ -77,10 +77,10 @@ slide, and vice versa). No source → ask for it and stop.
 slides. Print the line `Tier … (score n/24) Budget … Talk …` in the reply.
 
 **2. Ground in the code.** For every component the spec names: locate it
-(`grep -rln`), read enough to state its current shape in one sentence, check
-the frozen contracts (`docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`,
-`CONTROL-PLANE-PRODUCT-CONTRACT.md`), the work in flight (`gh issue list
---search`, `openspec/changes/`), the Alembic head if a table changes. Collect
+(`rg`), read enough to state its current shape in one sentence. Follow the
+Weaver method: need/invariants, schema/transactions, then actual usages/API/UI.
+Inspect relevant arc42 and the current issue or selected increment; inspect
+SQLx/Alembic ownership if a table changes. Explain reuse and removal. Collect
 one concrete before/after example per visible change (the YAML, the prompt,
 the screen). Build the touchpoint table: sub-project (chip) → file → today →
 after → new/modified/removed. Assign chips here.

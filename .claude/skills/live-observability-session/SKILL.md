@@ -1,220 +1,45 @@
 ---
 name: live-observability-session
-description: Start Fred's backends and watch their logs/metrics/audit trail live while the developer drives the frontend/chat by hand. Use for manual observability or KPI test campaigns, or to diagnose a "does X actually log/emit/audit correctly" question against the three-stream model in OBSERVABILITY-AND-AUDIT.md.
-user-invocable: true
-argument-hint: [optional: which backends — default 3 core APIs + 2 Temporal workers; add fred-evaluation-backend (+worker) when the session involves agent evaluation]
+description: Observe Fred logs, audit events and metrics while the developer reproduces a local scenario. Use for an explicitly requested live observability session; ordinary development does not start services or a campaign.
 ---
 
-# Live Observability Session
+# Live observability session
 
-A **collaborative** working mode, not an automated test run: the developer drives the UI (chat,
-admin console, whatever's under test) by hand; you start the backends, tail their stdout, poll
-OpenSearch/KPIs, and report what you see. You never click through the frontend or hit
-business endpoints yourself — see "The protocol" below. This mirrors how a real observability
-review is done: the developer reproduces a scenario, you read the resulting signal across all
-three streams and say what's there, what's missing, and what's wrong.
+Read the active checkout's `AGENTS.md`, current component READMEs and the relevant
+arc42 operations references. Establish the developer's scenario, environment and
+expected evidence. Do not assume a Swift stack, fixed ports, a Python Control
+Plane, OpenFGA or the presence/absence of a central Prometheus.
 
-**Scope: this skill targets the `fred-deployment-factory` local dev stack on the `swift` branch**
-(Postgres/Keycloak/OpenSearch/Temporal via `docker compose` + backends run natively with `make
-run`). It does not apply as-is to a k3d/Kubernetes deployment or other branches/deployment
-targets — port numbers, the absence of a standalone Prometheus, and the `make run`-based backend
-startup are all specific to this stack. If the developer is on a different deployment target, ask
-before assuming any of the below still holds.
+Use the repository `fred` skill for requested startup, process ownership, logs
+and shutdown. Existing authorization applies to its stated scope. Observe running
+services when startup is unnecessary. Infrastructure remains developer-managed;
+do not start, reset or reconfigure it implicitly. Never replace an unknown process
+because its port is occupied.
 
-## Preconditions — infra is the developer's job, not yours
+The developer drives the UI. Do not invoke business actions or mutate data to
+manufacture evidence unless explicitly requested. Inspect actual configuration
+and source emitters to locate the signals needed for this scenario:
 
-Postgres, Keycloak, OpenSearch, Temporal (and optionally Grafana/Langfuse) run via docker compose
-files in `~/Fred/fred-deployment-factory/docker/docker-compose-<service>.yml`, orchestrated by
-that repo's own `Makefile` (`DOCKER_COMPOSE_BASE`, `make docker-up`). **Do not start, stop, or
-wipe this infra yourself** — confirm with the developer that it's up (they may be mid-"wipe and
-up" cycle) before starting any backend. Known ports, for when you need to query a stream directly:
+- stdout/stderr and structured audit events, including their actual routing;
+- application metrics, exporter endpoints and any configured Prometheus targets;
+- configured log/search sinks and dashboard queries, when relevant.
 
-| Service | Port | Notes |
-|---|---|---|
-| Keycloak | 8080 | |
-| OpenSearch | 9200 | **HTTPS only, with basic auth** — a plain `http://localhost:9200` gets no reply at all (curl exit 52), it is not merely "not up". Use `curl -sk -u admin:<pass> https://localhost:9200/...` (`-k` because the compose stack's cert is self-signed). Default creds come from `docker-compose-opensearch.yml`'s `OPENSEARCH_ADMIN`/`OPENSEARCH_ADMIN_PASSWORD` env vars (falls back to `admin` / `Azerty123_` if unset in `fred-deployment-factory/docker/.env`) — check that file rather than assuming the fallback still holds. Dashboards UI on 5601. |
-| Temporal | 7233 (gRPC) | Web UI on 8233 |
-| Grafana | 3002 | if the developer has it up — not part of `make docker-up` by default |
+Retain unfiltered local logs for owned processes and read new lines with cursors.
+Use a streaming monitor only if the current tool supports one; otherwise poll
+bounded batches during active turns and on developer signals. Do not claim
+continuous observation when inactive. Query only the required time window and
+aggregation, with bounded result sizes. Keep tokens, credentials, personal data
+and document contents out of messages and shared artifacts.
 
-**No Prometheus in this stack.** `make docker-up` does not bring up a standalone Prometheus or
-Grafana — there is no central `localhost:9090` to query. KPIs must be read by curling each
-backend's own `/metrics` endpoint directly once it's running (see "The three streams" below).
-Don't assume a central Prometheus exists just because other Fred docs/skills mention one — verify
-per session.
+Correlate timestamps and existing request/task/run identifiers across relevant
+components. Distinguish an absent event from an unavailable exporter, failed scrape,
+wrong label, wrong time window or a path the developer did not execute. A healthy
+HTTP response does not prove the metric, audit event or authorization behavior.
+Likewise a synthetic observation does not prove production capacity.
 
-If any of the services in the table above isn't reachable, say so and ask the developer to bring
-it up — don't guess or skip the check.
-
-## Starting the backends
-
-**Check the `.env` first.** Each backend's `config/.env` must point `CONFIG_FILE` at
-`configuration_prod.yaml` (not the default `configuration.yaml`) for `make run` to target this
-shared docker-compose infra correctly. Confirm with the developer rather than assuming — if
-`.env` points elsewhere, backends may start against the wrong config silently.
-
-Run each from its own app directory at the monorepo root (`~/Fred/fred`), each in the background
-(`run_in_background: true`) so you can keep working while they serve:
-
-| App | Command | Port | Has a Temporal worker? |
-|---|---|---|---|
-| `apps/control-plane-backend` | `make run` | 8222 | yes — `make run-worker` |
-| `apps/knowledge-flow-backend` | `make run` | 8111 | yes — `make run-worker` |
-| `apps/fred-agents` | `make run` | 8000 | no |
-| `apps/frontend` | `make run` | 5173 (Vite) | no |
-
-Start the frontend by default alongside the three backends — a plain `make run` (`vite`, HMR) with
-no `.env` to check first: `vite.config.ts`'s dev-server proxy already defaults
-`VITE_BACKEND_URL_FRED_AGENTS`/`_KNOWLEDGE`/`_CONTROL_PLANE`/`_EVALUATION` to
-`localhost:8000`/`8111`/`8222`/`8336` — exactly this stack's ports — so nothing needs pointing at
-anything. This is what makes the developer's "just start everything" ask a single uniform step
-instead of three backends plus a separately-reasoned-about frontend.
-
-**Agent evaluation adds a fourth app, in a separate sibling repo** —
-`~/Fred/fred-agent-evaluator/apps/fred-evaluation-backend` (not under `~/Fred/fred`). Include it
-whenever the session involves running or checking an agent evaluation/scoring campaign:
-
-| App | Command | Port | Has a Temporal worker? |
-|---|---|---|---|
-| `fred-agent-evaluator/apps/fred-evaluation-backend` | `make run` | 8336 | yes — `make run-worker-prod` (not plain `run-worker`: this target exports `CONFIG_FILE=configuration_prod.yaml` explicitly and enables M2M against Keycloak, matching how the other three backends run in this stack) |
-
-Its `config/.env` already pins `CONFIG_FILE` to `configuration_prod.yaml` by default (check it
-like the others, don't assume). **This backend's prod config disables both `prometheus` and
-`opensearch` in its logging/metrics block** (`configuration_prod.yaml` → `logging.prometheus.enabled:
-false`, `logging.opensearch.enabled: false`) — its `/metrics` route 404s and it does not feed the
-shared `app-logs-index`. Don't report either as broken; it's the app's own config, not a bug. Its
-only live signal in this stack is its own stdout (Monitor it the same way as the other three) plus
-whatever it writes to Postgres/Temporal directly.
-
-That's up to 8 background processes when evaluation is in scope (4 APIs + 3 workers + frontend),
-or 6 when it isn't (3 APIs + 2 workers + frontend). Launch whichever set is in scope in parallel —
-independent Bash calls in one message — not sequentially. If the developer only cares about one
-slice (e.g. "just check ingestion KPIs"), ask which subset before launching all of them; don't pay
-the startup cost of backends that aren't part of this session's question. The frontend is the one
-exception worth starting by default even for a narrow ask, since the developer needs it open to
-drive anything at all.
-
-`make run` installs deps first if needed (`run: dev run-local`) — the first launch after a
-`make clean` will be slower; don't mistake that startup delay for a hang.
-
-## Watching, don't polling
-
-Use the **Monitor** tool against each backend's background shell to stream stdout live — every
-line becomes a notification — rather than periodically re-reading a log file or sleep-looping.
-This is the same distinction the harness itself calls out: polling wastes turns and misses the
-moment; Monitor surfaces each line as it's written, which is what lets you correlate "developer
-just clicked X" with the log line it produced in near real time.
-
-## The three streams — what "checking observability" actually means
-
-Ground every finding in `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md` (read it once per
-session if it's been a while — it's the target spec, not always the current diff). In short:
-
-1. **stdout** — every backend's console handler; also where the **audit logger**
-   (`fred.security.audit`) writes exclusively, as structured JSON, `propagate=False`. Audit
-   records must appear here and **only** here — if you see one land in OpenSearch's generic
-   log index, that's a bug (`StoreEmitHandler` is supposed to hard-drop `AUDIT_LOGGER_NAME`
-   records).
-2. **OpenSearch** (`curl -sk -u admin:<pass> https://localhost:9200/app-logs-index/_search`, or Dashboards on 5601) — the
-   generic durable app-log store, fed by the same root logger as stdout via `StoreEmitHandler`.
-   Fine for anything except audit content and raw prompt/response/tool-argument text (never
-   supposed to appear in either stream — check for it if you're chasing a content-leak report).
-3. **KPIs / metrics** — operational KPIs only, never prompt/response content. This stack has no
-   standalone Prometheus (see Preconditions), so read them by curling each backend's own metrics
-   endpoint directly. **The metrics port is not always the API port — check each app's own
-   `configuration_prod.yaml` (`observability.kpi.prometheus.port`), never assume it equals the API
-   port. An app that declares no `kpi:` block still exports: `KpiPrometheusSinkConfig` defaults to
-   `enabled=True, port=9000`, so absence of config means port 9000, not "no metrics".**
-
-   | App | API port | Metrics port | Source |
-   |---|---|---|---|
-   | control-plane-backend | 8222 | **9222** | `configuration_prod.yaml` → `observability.kpi.prometheus.port` |
-   | knowledge-flow-backend | 8111 | **9111** | same |
-   | fred-agents | 8000 | **9000** | no `kpi:` block, so it inherits the schema default — confirm with the startup line `[fred-runtime] Prometheus metrics exporter ready at 127.0.0.1:9000` |
-   | fred-evaluation-backend | 8336 | none | `observability.kpi.prometheus.enabled: false` (see above) |
-
-   e.g. `curl localhost:9222/metrics` (control-plane), `curl localhost:9111/metrics`
-   (knowledge-flow), `curl localhost:9000/metrics` (fred-agents) — grep the raw Prometheus-exposition
-   text output for the metric name you care about. Only `fred-evaluation-backend` has no `/metrics`
-   route, because its config disables the sink outright. If the developer's
-   session *does* have a real Prometheus reachable (a different, non-default setup), `curl
-   localhost:9090/api/v1/query?query=...` works the same way — don't assume either way, check the
-   port first. Every label actually reaching the KPI store is filtered through
-   `PROMETHEUS_ALLOWED_LABELS` in `libs/fred-core/fred_core/kpi/prometheus_kpi_store.py` — if a
-   finding claims a label is missing or present, check that allow-list before concluding anything;
-   it's an enforced allow-list, not a convention callers might violate.
-
-Metric name note: dots are sanitized to underscores on the wire (`llm.call_latency_ms` in code →
-`llm_call_latency_ms` both in the raw `/metrics` exposition text and in a PromQL query, if one is
-available).
-
-## Watching KPI hygiene and completeness, not just a one-shot curl
-
-A single `curl .../metrics` only tells you the KPI state at the instant you ran it — it won't tell
-you whether an action the developer just took in the UI actually produced the expected metric, or
-whether an unexpected label slipped past `PROMETHEUS_ALLOWED_LABELS`. Treat metrics as a third live
-stream to watch continuously via **Monitor**, the same way stdout is — not as an on-demand lookup
-done once at session start and never revisited.
-
-Diff-poll each exposing app's metrics endpoint (correct port — see table above) and emit only what
-changed, the same "poll external state, emit one line per new thing" pattern Monitor uses for
-polling a GitHub PR for new comments:
-
-    prev=""
-    while true; do
-      cur=$(curl -s --max-time 3 http://localhost:9222/metrics | grep -v '^#')
-      diff <(echo "$prev") <(echo "$cur") | grep -E '^[<>]' || true
-      prev="$cur"
-      sleep 5
-    done
-
-Run one such loop per app that actually exposes `/metrics` (control-plane, knowledge-flow and
-fred-agents in this stack — not fred-evaluation-backend). Use it to confirm, in near-real time as the
-developer drives the UI: a new metric family appears the first time an action fires it
-(completeness — did this action actually emit a KPI at all), a counter/histogram that should
-increment on a given action actually does (correctness), and no label value shows up that isn't in
-`PROMETHEUS_ALLOWED_LABELS` (hygiene). Report a finding the same way as any other — reproduction,
-extract (the diff line), channel (`KPIs`), classification — don't just note "metrics look fine"
-without a concrete diff to back it.
-
-## The protocol
-
-- The developer drives the frontend/chat/admin UI. You do not open a browser, curl a business
-  endpoint, or run an automated end-to-end test against the live stack yourself — that's the
-  standing rule for this kind of session (live testing is collaborative, not something you do
-  autonomously). If you think a specific action would help diagnose something, propose it and
-  let the developer perform it, or ask before running it yourself.
-- When the developer reports something ("it didn't search the RAG", "the latency looks wrong"),
-  diagnose from the logs **first** — don't guess at a root cause before reading what actually
-  happened. Only form a hypothesis about code after the log evidence points somewhere.
-- Report every finding with all four of: **reproduction** (what the developer just did),
-  **extract** (the actual log line(s)/metric/query result — quote it, don't paraphrase),
-  **channel** (stdout / OpenSearch / KPIs / audit), and **classification** (bug, config
-  gap, expected-but-underdocumented behavior, or false alarm). A finding missing any of these
-  four isn't ready to report yet.
-- If a fix is warranted, follow this repo's normal rule from `CLAUDE.md`: fix the root cause,
-  never a patch over the symptom, and use the correct generic hook/abstraction rather than a
-  point patch — if the fix is non-trivial and you're deep into a large context already, it's
-  fine to hand it to a fresh background agent with a precise, self-contained prompt rather than
-  cram it into this session.
-
-## Ending the session
-
-Stop whichever background processes this session started (6 without evaluation in scope, 8 with
-`fred-evaluation-backend` included) when the developer is done — or when they start a `make clean`
-/ infra wipe cycle (those invalidate the running `.venv`s and containers respectively) either in
-`~/Fred/fred` or, separately, in `~/Fred/fred-agent-evaluator`. Don't leave them running silently
-across an unrelated task.
-
-## Before starting anything — check for stale processes from a prior session
-
-Backends left running by an earlier session (this one or another Claude Code window) hold their
-ports and make `make run` fail with `OSError: [Errno 98] Address already in use` on the metrics
-port, or a similar bind failure on the API port. Before launching, check:
-
-    ss -ltnp | grep -E ':8222|:9222|:8111|:9111|:8000|:9000|:5173'
-
-If a port is already held, find the owning PID (`lsof -i :<port>` or the `ss` output's
-`users:((...,pid=...))`) and check whether its parent is a **still-running** Claude Code process
-(`ps -p <ppid> -o cmd`) before touching it — that could be another active session/window, not a
-leftover. Only kill (`kill -TERM`) processes confirmed stale (parent long-exited, or the developer
-confirms it's an abandoned run) rather than assuming every bound port is safe to clear.
+Report observed facts, missing evidence, plausible explanation and the next
+bounded check. Use current component behavior as evidence; do not turn historical
+metric names into requirements. Code/configuration fixes, independent reviews,
+tests and load campaigns require that work to be in the authorized scope.
+Finish with the observed result, evidence limits and which owned processes remain
+running; stop only those covered by a shutdown request.

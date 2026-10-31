@@ -31,89 +31,36 @@ que ces chemins désignent le checkout choisi.
 
 | Composant | Répertoire relatif à Fred | Commande |
 |---|---|---|
-| Control Plane API | `apps/control-plane-backend` | `make run` |
-| Control Plane worker | `apps/control-plane-backend` | `make run-worker` |
+| Control Plane API et tâches de fond | `apps/control-plane` | `make run` |
 | Knowledge Flow API | `apps/knowledge-flow-backend` | `make run` |
 | Knowledge Flow worker | `apps/knowledge-flow-backend` | `make run-worker` |
 | Fred Agents API | `apps/fred-agents` | `make run` |
 | Frontend | `apps/frontend` | `make run` |
 
-Les « cinq backends » sont les trois API et les deux workers ; le frontend est
-un sixième processus. Respecter le choix de la conversation ; s’il est inconnu,
-clarifier une seule fois si le frontend doit aussi démarrer.
+Ce sont des commandes disponibles, pas une liste de processus obligatoires.
+Respecter le profil et les composants demandés ; vérifier leurs dépendances dans
+le checkout actuel.
 
-## Configuration commune avec délégation
+## Configuration et authentification
 
-La source versionnée de ce skill est `.claude/skills/fred/SKILL.md`, également
-accessible via `.agents/skills/fred/SKILL.md`. Une copie personnelle doit rester
-alignée sur le checkout utilisé. Lire `scripts/README-local-delegation.md` depuis
-la racine du checkout pour la procédure complète et les diagnostics.
+Lire `AGENTS.md`, les README et Makefiles actuels des composants avant le lancement.
+Le Control Plane Rust sert l'API et ses tâches de fond dans le même processus ;
+ne pas chercher un ancien worker Python séparé. Le profil réellement choisi
+détermine quels services Python sont utiles. Ne pas démarrer un composant seulement
+parce qu'il apparaît dans un ancien scénario Swift.
 
-- Après le `make docker-up` du développeur, les trois API utilisent
-  `CONFIG_FILE=./config/configuration_prod.yaml` dans leur `config/.env`.
-- Préparer la délégation avec `make delegation` à la racine de Fred, sans
-  modifier les YAML. Le helper utilise le secret M2M agentic existant, sans accès
-  administrateur, et vérifie le jeton émis : rôle `delegation_caller` du client
-  `fred-delegation` (claim `resource_access.fred-delegation.roles`), audience
-  `fred-delegation` et issuer du realm. Aucun identifiant de compte de service
-  n’est à recopier. `make delegation ARGS=--dry-run` diagnostique sans écrire.
-- Si le rôle ou l’audience manque, relancer le post-install Keycloak de
-  deployment-factory, qui crée `fred-delegation` et accorde le rôle à `agentic`,
-  puis `make delegation`. Ne jamais assouplir les contrôles pour passer.
-- Les fichiers ignorés `config/.delegation.local.json` activent seulement le bloc
-  `security.delegation` du YAML de chaque application ; les autres réglages
-  viennent du YAML. Chargés uniquement par `make run` / `make run-worker`. Les
-  régénérer après recréation du realm (puis post-install), après modification
-  de l’audience, du rôle ou du chemin de claim, ou si le chargement refuse un
-  ancien fichier ; puis redémarrer les applications.
-- Pour ce profil local, issuer utilisateur et M2M sont tous deux
-  `http://localhost:8080/realms/app` ; C3 accepte l’une ou l’autre adresse de realm
-  configurée. Ne pas contourner un refus C3 en désactivant les contrôles.
-  L’audience utilisateur doit inclure `app` ; `azp=app` ne suffit pas. Le jeton
-  agentic n’a pas besoin des audiences des récepteurs : `fred-delegation` et le
-  rôle suffisent. Le post-install configure ces audiences.
-- Les workers utilisent le même CONFIG_FILE que leur API. Le worker Knowledge
-  Flow expose ses métriques locales sur 9112, l'API sur 9111.
-- Ne pas confondre un échange court réussi avec un test de renouvellement de
-  jeton. Sur les échanges, rechercher `delegated_run_admitted` côté Fred Agents
-  et `delegation.grant.accepted` côté récepteurs. Refus : `delegation.grant.rejected`
-  avec `caller_not_trusted` (jeton sans le rôle), `caller_not_allowed` (rôle
-  présent mais audience, issuer ou client refusé) ou `invalid_parameters` (grant
-  incomplet) ; 403 `delegated_person_required` ou `workload_caller_not_allowed` ;
-  401 pour un jeton adressé seulement à `fred-delegation` sans le rôle.
-- Évaluateur, samples et serveurs MCP externes ne font pas partie des six
-  composants par défaut. Signaler leurs indisponibilités sans les démarrer
-  implicitement. Exécuter `make validation-report` seulement sur demande.
+Inspecter la configuration effective et les prérequis sans afficher les secrets.
+Pour Control Plane, suivre `apps/control-plane/README.md` ; une migration de base
+n'est pas un effet annexe autorisé par une demande de lecture de logs. Pour les
+composants Python, vérifier leurs mécanismes actuels de délégation et d'identité.
+Ne jamais assouplir audience, issuer, isolation ou contrôle d'accès pour démarrer.
+Un refus d'authentification est à diagnostiquer, pas à contourner.
 
-## Observation de l’authentification, sur demande
-
-Lire la section « Authentication operational signals » de
-`docs/swift/platform/OBSERVABILITY-AND-AUDIT.md`. Après redémarrage des API,
-les séries `fred_auth_m2m_*` et `fred_auth_delegation_decisions_total` sont sur
-leurs endpoints Prometheus. Le compteur IAM distingue operation=initial/renewal.
-La seconde reprend les raisons d’acceptation et de refus ci-dessus
-(`grant_validated` pour une acceptation).
-Docker et GCP partagent le dashboard Application KPIs ; vérifier les Targets
-Prometheus avant de conclure à zéro erreur. `make check-auth-dashboard` dans
-deployment-factory vérifie les noms/labels contre le checkout Fred. Le développeur
-lance `make grafana-up` pour l’infrastructure locale.
-Ne pas confondre cache miss et appel IAM : plusieurs
-appelants peuvent partager un renouvellement. La console navigateur émet
-`browser_token_refresh` sans secret ; ce n’est pas de la télémétrie centralisée.
-Ne pas prétendre prouver un refresh navigateur avec les seuls logs backend.
-
-## Test de renouvellement rapide, sur demande
-
-Dans deployment-factory : `make keycloak-token-status`, puis
-`make keycloak-token-short` (app 60 s, agentic M2M 120 s) ou
-`make keycloak-token-normal` (300 s pour les deux).
-Ces commandes modifient uniquement la durée des nouveaux jetons des clients
-`app` et `agentic` dans le Docker local. Demander une reconnexion avant le test ;
-attendre 90 s sans rechargement. Pour le M2M, redémarrer Fred Agents ou attendre
-l’expiration du jeton déjà en cache, puis tester plus de deux minutes avec un
-appel protégé après ce délai. Les sessions/grants ne sont pas modifiés. Garder trace du mode appliqué et restaurer explicitement
-le mode normal en fin de campagne ; un redémarrage de Fred ne le restaure pas.
-Voir le guide commun pour les limites et les preuves à observer.
+La collecte de KPI et les tests de renouvellement ne font pas partie du démarrage.
+Sur demande, utiliser `live-observability-session` avec les émetteurs/exporteurs
+actuels et les références d'exploitation arc42. Ne pas réactiver d'anciens réglages
+ou scripts Swift sans vérifier leur compatibilité. Les modifications de durée de
+jeton, publications, migrations et campagnes doivent appartenir au périmètre demandé.
 
 ## Avant de lancer
 

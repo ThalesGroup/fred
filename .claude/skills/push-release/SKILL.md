@@ -1,330 +1,97 @@
 ---
 name: push-release
-description: Prepare a Fred release in a PR targeting swift, validate Python versions and uv.lock files in PR CI, then tag the merged release after explicit approval.
+description: Prepare a reviewable Fred release PR, validate versions and operator notes, then publish paired code/chart tags only when explicitly authorized. Resolve the current release branch instead of assuming Swift.
 ---
 
-# Push Release Skill
-
-Prepare a release on a topic branch targeting `swift`, then tag the merged commit
-on `swift`. A Fred release is **two annotated Git tags on the same commit** —
-`code/vX.Y.Z` and `chart/vX.Y.Z` — each
-driving its own CI workflow. This skill opens a PR ready for review with the release inputs and
-**waits for explicit developer approval before placing or pushing any tag.**
-
-Ground truth for the mechanics: `docs/swift/RELEASE-STRATEGY.md`. Read it if anything below
-is ambiguous.
-
-## Guided interaction (Codex and Claude Code)
-
-The integrator may simply ask: "Use $push-release to prepare the next release."
-Run the tools yourself; do not hand them Python commands to execute. Use the root
-Make targets below for preparation. Ask only for missing choices or unresolved
-operational facts after inspecting the checkout and notes; reuse answers already
-given. Propose the minimum eligible version instead of asking the integrator to
-calculate it. Do not guess missing migration procedures to clear a coverage check.
-
-Prepare one reviewable PR before tag approval: the proposed version, Python package
-versions and synchronized locks, user-facing notes and the complete consolidated
-DevOps guide. Explain required upgrade actions separately from optional activation
-and user re-ingestion. For an
-all-none release, explicitly say that normal deployment needs no additional action.
-Reconcile duplicate or conflicting instructions in source notes and regenerate;
-do not hand-edit the generated guide or claim automatic generation resolves these
-interactions. PR review and CI precede merge; Step 6 is the approval gate before
-tags or publication.
-
-## Hard rules
-
-- **Use a release-preparation PR.** Commit and push release inputs on a topic branch,
-  then open a PR ready for review targeting `swift`. Never commit or push release preparation
-  directly to `swift`. Wait for PR CI and developer review before merge.
-- **Never tag or push tags without explicit approval.** Step 6 is a mandatory stop
-  after merge. Pushing the topic branch for PR CI does not authorize release tags.
-- **The two tags are a pair on one commit.** `code/vX.Y.Z` builds and pushes the Docker images;
-  `chart/vX.Y.Z` packages and pushes the Helm chart. A bare `vX.Y.Z` (no prefix) publishes
-  **nothing** — never tag that way.
-- **UI notes are user-facing.** Write for someone using Fred, not building it. No `ports`,
-  `adapters`, `vectors`, `map-reduce`, `SSE`, class names, or file paths in the summary/bullets.
-  Describe what the user can now *do* or what stopped breaking. Match the voice of the existing
-  entries in `apps/frontend/public/release.md`.
-- **Release inputs are reviewed, merged, then tagged.** The tag must point at the
-  approved commit on `swift` that already contains the new `release.md` entry,
-  source migration notes, generated operator guide, prepared Python
-  versions, affected capability manifest versions and synchronized locks. Order: edit,
-  commit on topic branch, PR CI and review, merge, verify, approve tags, push tags.
-- **Python package publication is separate.** Tag approval does not authorize PyPI uploads.
-- **No pre-release Trivy scan.** Do not run `vulnerability-scan` as part of release
-  preparation. Run it separately only when explicitly requested.
-- Tags are **annotated** (`git tag -a`), created on `HEAD` of the release branch. No promotion to
-  `main` — tags live on the branch they were cut from.
-
-## Step 1 — establish the release base and topic branch
-
-```bash
-git symbolic-ref --short HEAD                  # inspect the current branch
-git status --short                            # inspect before installation, fetch or edits
-git fetch origin swift --tags
-```
-
-Confirm that `swift` is the intended release branch. Create or reuse a dedicated
-release-preparation topic branch based on it before committing any release inputs.
-If release-related edits already exist on `swift`, preserve them when creating the
-topic branch. Keep unrelated edits out of the PR, using a separate worktree when
-needed. Never create release tags from the topic branch.
-
-Once the topic branch is suitable:
-
-```bash
-make release-plan                            # ancestry-based baseline and impact
-```
-
-Read `docs/swift/ops/MIGRATION-GUIDES.md`. Use the helper's reported baseline;
-never choose a repository-wide maximum tag. If coverage is blocked, inspect the
-reported range and add accurate migration declarations before proceeding. A legacy
-audit must describe the reviewed changes; do not invent an acknowledgement just
-to clear the check. No-op declarations remain necessary for internal changes even
-when those changes are omitted from UI notes.
-
-## Step 2 — collect every change since the last tag
-
-```bash
-LAST=code/v2.1.10                               # substitute the tag from Step 1
-git rev-list --count "$LAST"..HEAD              # 0 → nothing to release; stop
-git log --oneline "$LAST"..HEAD
-```
-
-For **each** commit, read the full message body — the subject line is not enough to write a good
-user-facing note:
-
-```bash
-git show -s --format='%H%n%s%n%n%b' <sha>
-```
-
-Squashed PRs bury several sub-changes in one body (see the PPT-filler and document-access commits
-for the pattern). Mine the body for the user-visible ones. Group findings into the standard
-sections: **Features**, **Improvements**, **Bug Fixes**, **Security**, and — only when an operator
-must act on upgrade — **Deployment note**.
-
-**One release window, one entry per subject (mandatory).** Work on the same subject inside a
-single release window — the feature commit plus every fix, follow-up and polish commit that
-landed on it before the tag — is written as **one bullet describing the shipped behaviour**. Do
-not list the intermediate bug fixes: users never saw the broken intermediate state, so a "fixed
-X" bullet for a defect that only ever existed between two of our own commits describes a
-regression they never lived through. The same holds for a feature released earlier whose
-follow-ups land now: those *are* real fixes and stay in **Bug Fixes**, because users did see the
-broken behaviour.
-
-Test: would a user upgrading from the previous tag ever have hit this bug? Yes → **Bug Fixes**.
-No, it only existed mid-window → fold it into the feature's own bullet and say nothing about it.
-
-Skip purely internal commits from the notes (Docker build fixes, lockfile relocks, code-quality
-passes, schema regen) — they ship, but they are not release-note material. When in doubt about
-whether a change is user-visible, keep it out of the summary and ask.
-
-## Step 3 — decide the version
-
-Use the migration helper's maximum impact and minimum version: none -> patch,
-minor -> minor, major -> major. Optional feature activation requiring operations
-counts as minor even when default-off upgrades need none. Validate a requested
-version through `plan --version X.Y.Z`; do not accept a version below the minimum.
-A deliberately larger version must be explicit at sign-off. For release candidates,
-compare to the preceding stable tag and preserve the eligible core on promotion.
-
-### Prepare Python package and capability versions
-
-Use the same stable `code/vX.Y.Z` baseline reported by `make release-plan`:
-
-```bash
-make python-release-plan BASE_TAG=code/vX.Y.Z
-```
-
-Review the changed paths for each candidate package. `fred-core`, `fred-sdk` and
-`fred-runtime` each take one patch increment independent of the Fred code/chart
-version. Select every changed capability distribution, but only its affected
-`CapabilityManifest` files. A package containing several manifests may change
-only one. A changed package with no manifest still takes a package patch.
-Select `fred-pod` only if its own package changed. New manifests keep their
-initial declared version. The preparation command refuses an omitted changed
-package or unexplained version drift:
-
-```bash
-make prepare-python-release BASE_TAG=code/vX.Y.Z \
-  CAPABILITY_PACKAGES="fred-capability-documents" \
-  CAPABILITY_MANIFESTS="libs/capabilities/fred-capability-documents/fred_capability_documents/document_summarize/capability.py"
-```
-
-Use the actual reviewed selections; leave either list empty when appropriate.
-Set `POD_CHANGED=true` when `fred-pod` changed. For every bumped manifest,
-exercise config saved under its previous version through `resolve_stored_config`.
-The default `upgrade_config` validates compatible shapes; a breaking shape needs
-a tested upgrade path before release. Review the resulting package/manifest map,
-dependency floors, chart `appVersion` values and all changed `uv.lock` files.
-Unexpected lock dependency churn needs an explanation or correction.
-
-Build and validate the package artifacts without uploading:
-
-```bash
-make publish-libs-dry-run BASE_TAG=code/vX.Y.Z
-```
-
-The dry run builds every package, including unchanged ones. `make publish-libs`
-later validates and uploads only coordinates absent from PyPI, in dependency order,
-after a separate publication authorization. Do not publish during tag preparation.
-
-## Step 4 — write the release notes
-
-Prepend a new entry to the top of **`apps/frontend/public/release.md`** (the only canonical
-copy — `frontend/dist/release.md` is a build artifact, never edit it). Use today's date from the
-session context. Follow the exact shape of the existing entries:
-
-```markdown
-**vX.Y.Z** — YYYY-MM-DD
-
-- **Summary**
-
-  <2–3 sentences, ~60 words max. User-focused, lead with what the user can now do.>
-
-- **Features**
-
-  - <one capability per bullet, phrased as user benefit, with (#issue) refs at the end>
-
-- **Bug Fixes**
-
-  - <what used to go wrong, from the user's seat, with (#issue) refs>
-```
-
-Writing guidance, distilled from the existing notes:
-
-- **Keep it short.** One line per bullet, one benefit. Trim caveats and mechanism — the developer
-  has said the notes must stay concise. If a bullet needs a second clause to breathe, it's too long.
-- **The Summary is the shortest part of the entry, not a digest of it.** Two or three sentences,
-  ~60 words. Name the two or three things that matter and stop — the bullets carry the detail, so
-  a Summary that walks every section is redundant by construction. Do not restate a bullet's
-  mechanism, figures or caveats there; the developer will ask for it shorter, every time.
-- **Summary first, benefit first.** "Agents can now browse your document library and summarize any
-  file on demand" — not "adds DocumentTreePort and a summarize adapter".
-- Keep the section set that applies; omit empty sections. Order: Summary → Features → Improvements →
-  Security → Bug Fixes → Deployment note (match neighbours).
-- Keep `(#1234)` issue/PR refs — they are part of the house style. Library version bumps
-  (`fred-core 3.4.7`) are fine **inside a bullet** when they matter to an operator, but never in the
-  Summary.
-- A **Deployment note** is required when the upgrade needs a config change, a new required value, or
-  a migration. Say plainly whether existing deployments need to do anything ("additive only, no
-  action needed" is a valid and useful note).
-
-### Prepare the operator guide
-
-Add a new migration note for the release-preparation contribution itself (normally
-none with its rationale). Reconcile ordering and conflicting operations across all
-in-range notes. If necessary set `after` dependencies or add a correction note;
-never rewrite a note already published in an earlier release. Do not request private
-customer values. Fred chart values are the production reference; configuration_prod.yaml
-is local Docker Compose only.
-
-```bash
-make release-guide RELEASE_VERSION=X.Y.Z
-```
-
-Review `docs/swift/ops/releases/vX.Y.Z/migration.md` and the source notes. Keep
-operator steps out of the UI document; fix sources and regenerate if the guide
-needs changes. Resolve all coverage blockers before requesting tag approval.
-
-## Step 5 — commit and open a PR for review
-
-Verify the worktree guide, then stage only reviewed release inputs by explicit
-path: `release.md`, source migration notes, generated guide, Python `pyproject.toml`
-and manifest versions, synchronized `uv.lock` files and affected pod `Chart.yaml`
-files. Commit on the topic branch and open a PR targeting `swift`:
-Write the reviewed PR description to a temporary file and set `PR_BODY_FILE` to
-its path. Replace `<issue>` in the title with the primary tracking issue number.
-
-```bash
-BRANCH=$(git symbolic-ref --short HEAD)         # must be the topic branch
-V=X.Y.Z                                        # proposed version
-uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py verify --worktree --version "$V"
-git add -- apps/frontend/public/release.md "docs/swift/ops/releases/v$V/migration.md"
-# Stage the other reviewed release paths explicitly before committing.
-git commit -m "chore: prepare Fred v$V release"
-make migration-check
-uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py verify --version "$V"
-git push -u origin "$BRANCH"
-gh pr create --base swift --head "$BRANCH" --title "chore(#<issue>): prepare Fred v$V release" --body-file "$PR_BODY_FILE"
-```
-
-Show the developer the PR link and **full new `release.md` entry** verbatim, plus:
-
-- the branch, the ancestry-based baseline, maximum migration impact and proposed version,
-- the generated operator guide, its ordered procedures and remaining deployment limitations,
-- the prepared shared-library versions, changed and unchanged capability packages,
-  selected manifest versions, saved-config compatibility evidence, chart `appVersion`
-  values, lockfile diff and Python artifact validation result,
-- the PR CI status, including locked dependency installation for affected Python
-  modules and any changed `uv.lock` file not exercised by CI,
-- the two tags that will later be created (`code/vX.Y.Z`, `chart/vX.Y.Z`) and what
-  each publishes.
-
-Wait for relevant PR checks to pass and for developer review before merge. The
-local `publish-libs-dry-run` validates package artifacts; do not claim PR CI ran
-that target unless it actually did. If a changed lockfile has no selected CI job,
-run `uv sync --locked` in its project and report that gap. If the developer edits
-the wording or version, update the PR and rerun affected checks.
-
-The developer may also edit `release.md` **directly in their editor** while reviewing — expect it.
-Re-read the file before any further edit and keep their changes; never revert them.
-
-## Step 6 — verify the merge and STOP for tag approval
-
-After developer approval and PR merge, use a clean `swift` checkout or worktree.
-Fetch `origin/swift`, fast-forward to the merged commit, and verify that the
-approved release inputs are present. Rerun `make release-plan` and the committed
-guide verification for the proposed version. If the merge result or release range
-changed the version, guide, Python versions or locks, update through a follow-up
-PR and repeat review and CI. Present the merged commit and exact version, then
-**stop for explicit go / no-go on the two tags**.
-
-## Step 7 — tag and push (only after tag approval)
-
-```bash
-V=X.Y.Z                                          # approved version
-git tag -a "code/v$V"  -m "Release v$V"
-git tag -a "chart/v$V" -m "Helm Charts Release $V"
-uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py verify --version "$V" --require-tags
-git push origin "code/v$V" "chart/v$V"
-```
-
-Both tags land on the reviewed merge commit on `swift`. Push the two tags **by name** —
-**never `git push --tags`**: it pushes every local tag missing on the remote, and GitHub
-**silently skips push events when more than three tags arrive in one push**, so neither release
-workflow fires (this bit the v2.1.11 cut — ~17 stale local tags rode along and both workflows
-stayed silent). It also litters the remote with stale local tags.
-
-Tag-title convention (deliberate — do not "normalize"): the **code** tag reads `Release vX.Y.Z`
-(with the `v`), the **chart** tag reads `Helm Charts Release X.Y.Z` (no `v`). Same version on both.
-
-## Step 8 — confirm the release is building (mandatory)
-
-Verify that **both tag-triggered runs actually started** — do not report success on the push
-alone:
-
-```bash
-gh run list --limit 8
-```
-
-You must see two runs whose ref column shows the **tag names**:
-
-- `code/vX.Y.Z` → `.github/workflows/Build-and-push-docker.yml` (images to
-  `ghcr.io/thalesgroup/fred-agent/*`).
-- `chart/vX.Y.Z` → `.github/workflows/Package-and-push-charts.yml` (chart to
-  `oci://ghcr.io/thalesgroup/fred-helm/fred`).
-
-Beware the decoy: merging the PR also fires "Build and Push Docker Images" with ref
-`swift` — that is **not** the release build. Tag runs can lag the push by ~30–60 s; re-check before
-concluding they are missing.
-
-Do **not** touch `deploy/charts/fred/Chart.yaml` — the chart workflow injects `version`/`appVersion`
-at build time; the value committed in the file is not used.
-
-Wait for both full tag-triggered publication workflows to finish successfully,
-including migration validation, before reporting publication complete. Verify
-each GitHub release contains migration.md. A missing/stale
-guide, insufficient version or missing paired tag blocks artifact publication.
+# Prepare and publish a Fred release
+
+Read `AGENTS.md`, `deploy/release-notes/README.md`, the root release Make targets
+and current CI workflows. Preserve this operational release-note workflow; it is
+not the retired RFC or architecture documentation process. A request to prepare a
+release authorizes preparing its release PR, not release tags or PyPI publication.
+Existing explicit authorization for a precise publication remains valid.
+
+## Establish the release
+
+Inspect branch, status and selected remote. Resolve the intended release branch
+from the user and current workflow, asking only if it remains ambiguous. Fetch its
+ref and tags when possible. Use a suitable topic branch/worktree and preserve
+unrelated work. Never commit preparation directly to the release branch or tag a
+preparation branch.
+
+Run `make release-plan` and use its ancestry-based baseline, maximum impact and
+minimum eligible version; never choose the largest repository-wide tag. No new
+commits means nothing to release. Resolve missing declarations with accurate
+in-range notes. A historical coverage review must actually inspect the reported
+range; do not invent acknowledgements to bypass it.
+
+Inspect commit bodies, affected code and merged PR context across that range.
+Group all intermediate changes to one subject into its final shipped behavior.
+A bug that existed only between unpublished commits is not a user regression.
+Keep internal changes out of user-facing notes, while declaring their operator
+impact in the retained workflow.
+
+Use the helper's minimum version (none -> patch, minor -> minor, major -> major).
+Optional activation that needs operator work still affects impact. Validate an
+explicit version through the helper; explain a deliberately larger version at
+sign-off. Release candidates compare to the prior stable baseline and preserve
+the eligible core version on promotion.
+
+## Prepare coherent release inputs
+
+Use the current Make targets rather than manually drifting package versions:
+
+- `make python-release-plan BASE_TAG=<reported-stable-tag>` identifies changed
+  shared packages, capabilities and manifests.
+- `make prepare-python-release BASE_TAG=<reported-stable-tag>` with the reviewed
+  `CAPABILITY_PACKAGES`, `CAPABILITY_MANIFESTS` and `POD_CHANGED` selections applies
+  the independent package patches and relocks affected projects. Inspect target
+  arguments before use. Select only affected manifests; retain initial versions
+  for new manifests. Do not blindly set every Python package to the Fred version.
+- Check stored configuration compatibility for bumped manifests and any necessary
+  upgrade path. Review dependency floors, chart appVersions and lockfile churn.
+- `make publish-libs-dry-run BASE_TAG=<reported-stable-tag>` builds and validates
+  package artifacts without uploading. Actual `publish-libs` needs separate
+  publication authorization and its own checks against PyPI.
+
+Prepend the verified release entry to `apps/frontend/public/release.md`, preserving
+its current shape and using the actual date/version. Write concise user outcomes;
+combine related changes and omit implementation trivia. Never edit dist copies.
+Keep operator procedures in source notes under `deploy/release-notes/changes/`,
+including a declaration for release preparation itself. Distinguish mandatory
+upgrade, optional activation and user re-ingestion. Do not request private values.
+
+Reconcile ordering/conflicting source notes and preserve already published notes.
+Use `after` dependencies or correction notes as needed. Run
+`make release-guide RELEASE_VERSION=<version>` and inspect the generated
+`deploy/release-notes/releases/v<version>/migration.md`. Fix sources and regenerate;
+do not hand-edit the generated guide. An all-none guide must clearly say that
+normal deployment requires no extra action. Resolve coverage blockers first.
+
+## Review and publication
+
+Validate the worktree guide with `scripts/migration_guides.py verify --worktree
+--version <version>` through the repository's configured Python environment.
+Stage explicit release-input paths only, commit on the topic branch, then run
+`make migration-check` and verify the committed guide. Push that topic and open
+the release PR against the resolved target, using the PR template and a body file.
+Attach the created PR to the chat when the tool supports it.
+
+Report the proposed version and baseline, full new UI note, ordered operator
+procedures, changed package/manifest versions, actual checks and limitations.
+Wait for required PR CI and developer review; merge only when authorized. No
+implicit vulnerability or load campaign belongs to preparation.
+
+After merge, verify the exact target commit, release inputs and required checks.
+Present that commit, version and publication effects for tag authorization unless
+already explicitly authorized. Publish two annotated tags on the same reviewed
+commit: `code/v<version>` for images and `chart/v<version>` for Helm charts.
+A bare `v<version>` does not trigger these workflows. Never overwrite an existing
+tag; inspect its target if it already exists. Push only these two named tags,
+never `git push --tags`. Do not promote to another branch implicitly.
+
+Check the actual tag-triggered runs in `Build-and-push-docker.yml` and
+`Package-and-push-charts.yml`; a branch CI run is not a release build. Report the
+tag commit, run/release links and pending or failed publication stages honestly.
+Tag authorization does not authorize package uploads, deployment or bypassing
+branch protection.

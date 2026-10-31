@@ -1,6 +1,6 @@
 ---
 name: fred-performance-campaign-runner
-description: Run guarded, repeatable local performance campaigns against FRED's Swift managed-SSE question/answer path using the canonical mock OpenAI server. Use after instrumentation or hot-path changes, when consolidating a simple agent exchange, comparing a branch to a baseline, checking concurrency from 1 to 50 clients, or explicitly probing overload and recovery. Produces durable redacted artifacts and a fact-versus-hypothesis report. Do not use against shared, staging, or production endpoints.
+description: Run guarded, repeatable local performance campaigns against FRED's Swift managed-SSE question/answer path using the canonical mock OpenAI server. Use only for an explicitly requested local campaign against that supported legacy protocol; never select it automatically for a Weaver change. Produces durable redacted artifacts and a fact-versus-hypothesis report. Do not use against shared, staging, or production endpoints.
 ---
 
 # FRED Performance Campaign Runner
@@ -12,8 +12,9 @@ findings. It never claims a performance gain from instrumentation alone.
 
 ## Preconditions
 
-1. Read the repository `CLAUDE.md`, applicable `AGENTS.md`, and
-   `docs/swift/platform/BENCHMARKS.md`.
+1. Read the active checkout's `AGENTS.md`, applicable nested instructions and
+   the current endpoint/model configuration. Check the script's protocol against
+   the actual target before any traffic; it is not automatically Weaver-compatible.
 2. Verify that the target is the local Swift managed SSE endpoint and that the
    selected personal-space agent instance routes to `mock-openai-chat`.
 3. Require `AGENTIC_TOKEN` in the environment. Never request it in chat, pass
@@ -31,6 +32,12 @@ token-by-token streaming, rate limiting, or production capacity.
 
 ## Mandatory confirmation flow
 
+Resolve the actual Fred and mock checkouts and a scratch artifact destination.
+Pass `--fred-root`, `--mock-root`, `--results-root` and the verified endpoint/metrics
+arguments explicitly in both plan and execution. The script's historical personal
+paths and port defaults are not configuration authority. Use the script path
+relative to this skill directory, not an assumed repository-root script.
+
 First show the plan without executing:
 
 ```bash
@@ -38,8 +45,8 @@ python3 scripts/run_campaign.py --plan
 ```
 
 Before any requests, tell the user the exact target, maximum concurrency,
-request count, expected duration, mock delay, and artifact directory. Obtain an
-explicit confirmation, then run with both matching confirmation values:
+request count, expected duration, mock delay, and artifact directory. Use existing explicit authorization when it already covers those limits; otherwise
+obtain confirmation before traffic. Then run with both matching confirmation values:
 
 ```bash
 AGENTIC_TOKEN="$AGENTIC_TOKEN" python3 scripts/run_campaign.py \
@@ -55,7 +62,8 @@ script starts only that process and stops only the process it owns. If another
 mock is alive with a different profile, abort; never kill or reconfigure it.
 
 Overload is a separate experiment. Explain that it adds 75 concurrent requests
-plus a 1x3 recovery probe, obtain a second explicit confirmation, then add:
+plus a 1x3 recovery probe. Obtain authorization for that larger plan unless the
+user already explicitly authorized it, then add:
 
 ```text
 --allow-overload --confirm-overload-max-clients 75 --confirm-total-requests 344
@@ -107,10 +115,8 @@ Separate:
 - hypotheses requiring code inspection or another controlled experiment.
 
 Prioritize LLM latency, tool latency, then runtime/binding/authz/persistence.
-For every finding, create one durable file in the branch's existing performance
-findings directory (or `docs/performance/findings/` if none exists). Include
-evidence, impact, proposed validation, acceptance threshold, and status. Do not
-mix unrelated findings in one file.
+Report findings with evidence, impact and limits in the requested artifacts or
+current task/issue. Do not create a standing documentation/finding corpus.
 
 End with one of:
 

@@ -1,19 +1,29 @@
-## Problem and behavior
+## Need and integration
 
-<!-- Link the issue when applicable. Describe the problem and the resulting behavior. -->
+<!-- Read CONTRIBUTING.md. What user need is addressed, and where does it belong
+in the existing domain? Link the agreed scope/issue when applicable. -->
 
-## Validation
+## Reuse, replacement and reduction
 
-<!-- List checks actually run, their results, and any limits or remaining risks. -->
+<!-- Which shared libraries and design-system elements are reused or extended?
+Which existing behavior, paths or concepts does this replace or remove?
+Report owned production-code additions/removals separately from tests, generated
+files and docs. Explain any unavoidable net increase and the agreed exception.
+A standalone new feature or passing tests alone does not establish acceptability. -->
 
-## Architecture
+## Invariants and behavior
 
-<!-- Link affected arc42 chapters and generated references, or explain why no update is needed.
-For persistent domain changes, describe schema, ownership, constraints and transaction impact.
-Link a focused OpenSpec change only if this increment required one. -->
+<!-- Describe the resulting behavior. For domain/persistence work, explain lifecycle,
+schema/transaction effects, authorization and external projections before API/UI.
+Distinguish currently used behavior from schema preparation and remaining work. -->
+
+## Validation and architecture
+
+<!-- List checks actually run, results and limits. Link affected arc42 chapters and
+generated references, or explain why unchanged. OpenSpec only if this increment uses it. -->
 
 ## Operator impact
 
-<!-- Link the new deploy/release-notes/changes/<unique-slug>.md note.
-Declare none / minor / major and describe any configuration, data or rollout effects.
-See deploy/release-notes/README.md. Dependabot PRs are exempt from the note requirement. -->
+<!-- Link deploy/release-notes/changes/<unique-slug>.md; declare none/minor/major
+and configuration/data/rollout effects. See deploy/release-notes/README.md.
+Dependabot PRs are exempt from the note requirement. -->

@@ -58,12 +58,13 @@ Then pick the integration branch and refresh refs:
 
 ```bash
 git fetch --all --prune --tags
-git rev-parse --verify origin/swift >/dev/null 2>&1 && echo swift || echo main   # target branch
+git branch -vv
+git symbolic-ref --quiet refs/remotes/origin/HEAD
 ```
 
-`swift` is this repo's integration/release branch (see `docs/swift/RELEASE-STRATEGY.md`); fall
-back to `origin/main` only if `origin/swift` does not exist. State the resolved window and branch
-in the output header — an off-by-one window silently hides a week of work.
+Use the user-selected branch, or establish the relevant branch from project and
+remote metadata. Do not assume Swift is the current integration branch. Ask if
+the intended history remains ambiguous. State the resolved window and branch.
 
 ## Step 2 — collect what actually landed
 
@@ -71,7 +72,7 @@ Use `--first-parent`: it yields exactly one entry per landed change (squash-merg
 merge commit) and skips the intermediate commits of each feature branch.
 
 ```bash
-SINCE="2026-07-28"; BR=origin/swift                       # substitute from Step 1
+SINCE="2026-07-28"; BR="<resolved-ref>"                    # substitute from Step 1
 git log --first-parent "$BR" --since="$SINCE" --date=short \
         --pretty=format:'%h|%ad|%an|%s' | cat
 git log --first-parent "$BR" --since="$SINCE" --oneline | wc -l   # total, for the header
@@ -179,10 +180,10 @@ Whole block ≈ 25 lines. If it does not fit on one screen, it is too long — c
 ### ⚠️ À regarder en priorité
 - 10 releases pendant ton absence : v2.1.25 → v2.1.34   ← une seule ligne, jamais la liste des tags
 - 1 nouvelle migration Alembic (session_history) → schéma modifié
-- CLAUDE.md modifié le 2026-08-01 (règle RFC vs doc)
+- AGENTS.md modifié (méthode métier et schéma)
 - Ta branche feat/2360-quota-precheck a 37 commits de retard sur swift
 - 2 PR à toi ouvertes, 1 review qui t'attend (#2361)
 ```
 
-Close with the standard `## Task close-out` block from `CLAUDE.md`
-(`Code: none — read-only digest`).
+End with a concise read-only digest and its date/branch limits; no mandatory
+close-out template or separate tracking document.

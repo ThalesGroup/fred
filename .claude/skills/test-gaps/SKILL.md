@@ -1,91 +1,28 @@
 ---
 name: test-gaps
-description: Identify new code paths added in the current branch that have no test coverage. Reports gaps; does not write tests.
-user-invocable: true
-argument-hint: [optional: module name, e.g. "control-plane-backend" | "fred-core"]
+description: Review missing regression evidence for changed Fred behavior in the requested branch or files. Read-only; do not generate stubs, run tests or infer coverage from symbol-name matches.
 ---
 
-# Test Gaps Skill
+# Review regression evidence
 
-Find public functions, methods, and classes added or significantly changed in this branch that have
-no corresponding test. This skill reports gaps — it does **not** write tests. Writing tests is a
-separate, intentional act that requires the developer's judgment.
+Read `AGENTS.md` and establish the requested scope, actual base/head and local
+changes. Resolve the base from the request or repository metadata, never a fixed
+historical branch. Include Rust, Python or TypeScript according to the change.
 
-> **Open team decision — whether to generate stubs:**
-> Some teams find it useful for this skill to optionally produce empty test stubs (functions with
-> `pass` bodies) so the developer can fill them in. Others prefer a clean report only.
-> Agree on this before the first team-wide rollout — the argument would be `/test-gaps --stubs`.
+For domain changes, start with the business invariant and schema/transaction
+responsibilities in `fred-reconstruction-method`. Identify changed behavior,
+replaced paths and credible regressions. Search existing shared tests and follow
+their setup, execution and assertions before recommending another test.
 
-## Step 1 — establish scope
+A function-name reference is not proof of coverage; no direct reference is not
+proof of a gap. Integration tests and indirect callers may already exercise the
+contract. Do not require one test per callable or generate empty test stubs.
+Prefer extending existing behavior checks to adding parallel suites. Do not
+require tests for reversible presentation or instruction-only edits without a
+concrete behavioral risk.
 
-```bash
-git diff --name-only origin/develop...HEAD
-```
-
-Filter to Python files only. If `$ARGUMENTS` names a module, restrict to that module's files.
-
-## Step 2 — identify new or changed callables
-
-For each changed Python file:
-- Run `git diff origin/develop...HEAD -- <file>` and extract added lines (`+` prefix).
-- From those lines, identify:
-  - New `def` and `async def` functions at module level.
-  - New `def` and `async def` methods inside classes (public only — skip names starting with `_`).
-  - New class definitions.
-- Note which of these are **net new** (didn't exist in `origin/develop`) vs **modified**.
-
-Ignore private helpers (`_name`) and dunder methods (`__name__`) — they are tested indirectly.
-
-## Step 3 — find test files
-
-For each source file, locate its test counterpart using these conventions (in order):
-
-1. `tests/test_<module_name>.py` in the same app root.
-2. `tests/<subpath>/test_<filename>.py` mirroring the source path.
-3. Any file in `tests/` that imports the source module.
-
-If no test file exists: the entire module is untested — flag as a gap.
-
-## Step 4 — cross-reference
-
-For each new callable found in Step 2, grep the test files for any reference to that callable's
-name:
-```bash
-grep -rn "<callable_name>" tests/
-```
-
-If no test file references the callable: flag it as untested.
-
-> **Open team decision — integration tests:**
-> Do tests that hit a real database (e.g. store-layer tests using a live Postgres engine) count
-> toward coverage? Or only isolated unit tests with mocks?
-> This affects whether `test_task_store.py` satisfies coverage for the store layer.
-> The team should align on this — it changes how many gaps this skill reports.
-
-## Step 5 — report
-
-```
-## Test gaps — <branch> — <date>
-
-### Untested modules (no test file found)
-- `apps/control-plane-backend/control_plane_backend/tasks/service.py`
-
-### Untested callables
-| File | Callable | Type | Status |
-|------|----------|------|--------|
-| `tasks/service.py` | `TaskService.create_run` | method | no test reference found |
-| `tasks/store.py` | `TaskStore.append_event` | method | no test reference found |
-
-### Partially covered
-| File | Callable | Covered by |
-|------|----------|------------|
-| `tasks/api.py` | `get_task_run` | `test_task_store.py` (indirect) |
-
-### ✅ Well covered
-- `fred_core/tasks/bus.py` — all public methods referenced in tests
-```
-
-> **Open team decision — coverage threshold:**
-> Should this skill flag a gap only when 0 tests exist, or when coverage falls below a threshold
-> (e.g. 70%)? A threshold requires integrating `pytest-cov` output; zero-reference detection works
-> without any test runner. Decide which model the team wants before adding this to the PR checklist.
+Report actionable gaps with the invariant, failure example, relevant file and
+smallest meaningful regression check. Distinguish missing evidence from proven
+missing coverage. Do not claim coverage percentages without measurements or
+propose a broad campaign. Writing or running tests requires that work to be in
+the requested scope; this review alone does not authorize it.
