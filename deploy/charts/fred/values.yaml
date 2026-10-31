@@ -219,8 +219,8 @@ x-profile-rich-worker: &profile-rich-worker
 
 x-kf-security: &kf-security
   # ── Classification posture (RUNTIME-07 rev. 2) ────────────────────────────────
-  # `profile: c3` makes knowledge-flow refuse to boot unless user + m2m + rebac are
-  # all enabled, and forces strict JWT issuer/audience validation (fail-closed).
+  # `profile: c3` makes knowledge-flow refuse to boot unless user + m2m are both
+  # enabled, and forces strict JWT issuer/audience validation (fail-closed).
   # Enforced at startup by the knowledge-flow backend; the knowledge-flow-worker shares
   # this block but serves no auth'd requests, so the gate is a no-op there.
   # Leave unset for C1/C2 (dev / baseline). See deploy/README.md.

@@ -7,15 +7,4 @@ control-plane configuration can be dropped: values.yaml.gotmpl owns that configu
     {{- $_ := unset . "configuration" -}}
   {{- end -}}
 {{- end -}}
-{{- /* The checkout's permission authority is Control Plane/PostgreSQL. */ -}}
-{{- range $app := $secondary.applications -}}
-  {{- with (index $app "configuration") -}}
-    {{- with (index . "security") -}}{{- $_ := unset . "rebac" -}}{{- end -}}
-  {{- end -}}
-  {{- $env := list -}}
-  {{- range (index $app "extraEnvVars" | default (list)) -}}
-    {{- if ne .name "OPENFGA_API_TOKEN" -}}{{- $env = append $env . -}}{{- end -}}
-  {{- end -}}
-  {{- if hasKey $app "extraEnvVars" -}}{{- $_ := set $app "extraEnvVars" $env -}}{{- end -}}
-{{- end -}}
 {{ $secondary | toYaml }}
