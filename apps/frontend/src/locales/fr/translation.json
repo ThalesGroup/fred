@@ -3745,9 +3745,18 @@
       }
     },
     "userSettings": {
-      "organizationRoles": "Rôles dans l'organisation : {{roles}}",
+      "spaceColumn": "Espace",
+      "rolesColumn": "Rôles",
+      "accessTitle": "Mes rôles et espaces",
+      "spaceKinds": {
+        "organization": "Organisation",
+        "team": "Équipe",
+        "project": "Projet",
+        "personal": "Espace personnel"
+      },
+      "personalSpace": "Mon espace personnel",
+      "noSpaces": "Aucun espace associé à votre compte.",
       "privacyTitle": "Protection des données personnelles",
-      "organization": "Organisation : {{name}}",
       "platformRoles": "Rôles plateforme : {{roles}}",
       "noPlatformRoles": "Aucun",
       "accessGcu": "Accéder aux CGU",

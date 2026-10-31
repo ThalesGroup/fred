@@ -85,7 +85,7 @@ not bypass content or ordinary space-administration checks.
 
 Upgrade all manager role writers together; an old writer can still create conflicting
 data. There is no SQL schema migration for this rule. Deployment and rollback
-steps are in the [migration note](../swift/ops/migrations/rust-control-plane.md).
+commands are in the [local deployment guide](../../deploy/k3d/README.md).
 
 ## Configuration
 
@@ -554,8 +554,7 @@ set both `uploads_enabled: false` and `cleanup_enabled: false`; uploads cannot b
 active with cleanup suspended. Re-enable after validating namespace and originals.
 Restoring only SQL can lose bytes; restoring only objects lets cleanup remove keys
 without matching metadata. The ordinary local reset does not migrate content.
-Migration and rollback constraints are in the
-[migration note](../swift/ops/migrations/rust-control-plane.md).
+SQL migration and recovery rules are described under [SQLx schema evolution](#sqlx-schema-evolution).
 
 
 ## Document processing
@@ -566,8 +565,7 @@ S3 documents bucket. `manager_processing` configures KF callbacks, credentials,
 separate durable vectors and per-activity temporary capacity. Settings are validated
 at API and worker startup, including when new admissions are disabled. The existing
 worker image supplies LibreOffice. The [processing overlay](../../deploy/charts/fred/examples/document-processing.yaml)
-and [migration procedure](../swift/ops/migrations/rust-control-plane.md#optional-document-processing)
-define provisioning, export, rollout and draining.
+and [local deployment guide](../../deploy/k3d/README.md) describe provisioning and deployment.
 
 The dispatcher uses bounded batches and leases, with no Temporal RPC under a SQL
 lock. Each admission notifies it on commit; `limits.poll_seconds` is the safety-net

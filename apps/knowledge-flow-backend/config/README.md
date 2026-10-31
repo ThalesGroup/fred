@@ -1,7 +1,7 @@
 # Configuration Guide for Knowledge Flow Backend
 
 This folder contains the Knowledge Flow runtime configurations.
-The [ingestion architecture](../../../docs/swift/design/INGESTION.md) defines the
+The [ingestion architecture](../../../docs/architecture/A9-documents.md) defines the
 worker roles, queue routing and shared-storage requirements.
 
 ## Choose the execution mode

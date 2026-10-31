@@ -26,10 +26,7 @@ Markers split across runs in one paragraph are supported in text boxes, table
 text, and grouped shapes. Images use the containing shape's placement box;
 table cells remain invalid image locations. Chart text and SmartArt are unsupported.
 
-## Spec
-
-The current template contract is in
-[`openspec/specs/ppt-filler/spec.md`](../../../openspec/specs/ppt-filler/spec.md).
+## Template help
 Author help: [English](../../../apps/frontend/public/ppt-filler-help.md) and
 [French](../../../apps/frontend/public/ppt-filler-help.fr.md).
 

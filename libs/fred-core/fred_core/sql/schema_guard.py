@@ -50,7 +50,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 logger = logging.getLogger(__name__)
 
-MIGRATIONS_DOC = "docs/swift/ops/DATABASE_MIGRATIONS.md"
+MIGRATIONS_DOC = "libs/fred-core/README.md#schema-migrations"
 
 
 class SchemaNotMigratedError(RuntimeError):

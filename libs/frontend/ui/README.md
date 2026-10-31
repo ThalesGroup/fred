@@ -87,8 +87,7 @@ installs both archives and dependencies only from that cache, type-checks and bu
 and runs browser smoke tests without installing anything. Missing cache or browser
 prerequisites are errors.
 
-Canonical ownership, package boundaries, and future work are described by the existing
-[frontend packaging RFC](https://github.com/ThalesGroup/fred/blob/swift/docs/swift/FRED-FRONTEND-PACKAGING-RFC.md). Rounded,
+Package validation and publication follow the [release tooling](../RELEASE.md). Rounded,
 Sharp, custom SVG icons, domain-specific components, iframe SDK work, and
 adopter migrations are outside this extension milestone.
 

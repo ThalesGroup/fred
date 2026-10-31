@@ -41,7 +41,7 @@ the annexes. Validation records live in each lot's PR; remaining work in GitHub 
 | Upload/process a PDF | [Document journey](02.2-document-journey.md), [Documents](05-documents.md) | Source map section beyond folder creation |
 | Assistant answering from a space's documents | [Journey](02.3-agent-administration.md#bobs-assistant-answers-from-researchs-documents), [Security](03-security.md#36-documents-used-by-an-assistant) | [Document search annex](A6-security.md#document-search-within-a-turn) |
 
-Follow this map before searching historical OpenSpec changes or Swift documentation.
+Follow this map to locate current behavior and its implementation.
 For an audit, trace the named UI consumer through the handler, authorization and
 persistence; record discrepancies rather than treating prose or a test name as proof.
 
@@ -69,24 +69,25 @@ handwritten API specification.
 
 ## Convergence with the implementation
 
-The dossier converges with the implementation through current journeys, schemas
-and key design decisions. Implementation plans belong in GitHub issues, RFCs or
-OpenSpec, outside this dossier. Superseded RFC/OpenSpec prose leaves the active
-corpus only after its useful information and consumers are reconciled.
+The dossier explains implemented behavior and its key design decisions. Code,
+migrations and executable checks provide the implementation evidence; generated
+extracts keep technical references tied to their sources. Plans belong in the
+current issue, with a focused OpenSpec change only when an increment requires it.
 
 ## Keeping one useful account
 
 - Explain current behavior and the reason for its boundaries, in the present tense.
   Describe a rule in its domain chapter; journeys illustrate it and link back.
-- RFCs hold unresolved choices; active OpenSpec changes hold proposed deltas;
-  capability specs hold acceptance contracts; issues track work. Link to those
-  sources when needed, without importing their plans or histories here.
+- Start persistent domain changes from the business invariant and database schema,
+  then trace transactions, permissions, API contracts and user interactions.
 - Component READMEs contain developer commands. This dossier explains how Fred's
   parts fit together. An implementation change updates its relevant chapters.
 - Define each invariant once in chapter 9. Tests cite `// Proves: I<n>`; the proof
   table, route tables, SQL diagram, model and configuration are generated.
 - Run `make -C docs/architecture generate` after source changes and
   `make -C docs/architecture check` to verify sources, proofs and diagrams.
+- Previous RFCs, Swift docs and OpenSpec records remain in Git history. They do
+  not define the current architecture or authorize restoring retired behavior.
 
 The [branch workflow](../../AGENTS.md#control-plane-reconstruction-on-weaver)
 sets review and commit requirements. Only documented behavior belongs in the reading path.

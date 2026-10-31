@@ -2,8 +2,8 @@
 
 This private npm workspace builds distributable frontend packages from canonical
 FRED sources. It produces the implemented `@fred-oss/design-tokens`, bounded `@fred-oss/ui`, and
-framework-independent `@fred-oss/iframe-sdk` archive foundations; the broader package architecture and sequencing remain in the
-[frontend packaging RFC](../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md).
+framework-independent `@fred-oss/iframe-sdk` archive foundations.
+See [release tooling](RELEASE.md) for package validation and publication.
 
 ## Workspace and publication boundary
 

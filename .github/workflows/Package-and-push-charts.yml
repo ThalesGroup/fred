@@ -164,7 +164,7 @@ jobs:
             helm show readme oci://ghcr.io/thalesgroup/fred-helm/agent-pod --version ${{ steps.meta.outputs.version }}
             helm show readme oci://ghcr.io/thalesgroup/fred-helm/knowledge-base --version ${{ steps.meta.outputs.version }}
             ```
-          files: docs/swift/ops/releases/v${{ steps.meta.outputs.version }}/migration.md
+          files: deploy/release-notes/releases/v${{ steps.meta.outputs.version }}/migration.md
           fail_on_unmatched_files: true
           draft: false
           prerelease: ${{ contains(steps.meta.outputs.version, '-') }}

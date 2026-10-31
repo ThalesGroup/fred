@@ -1102,7 +1102,7 @@ async fn instances_store_tuning_opaquely() {
     let org = org.id;
     let mut conn = e.pool.acquire().await.unwrap();
     for (n,tuning) in [Value::Null,json!({"unknown":{"nested":[null,{},[]]},"selected_capability_ids":null,"capability_config":{"tool":{"schema_version":2,"config":{"nested":{"list":[1,false]}}}}}),json!({"selected_capability_ids":[]})].into_iter().enumerate() {
-        let record=storage::create(&mut *conn,&storage::NewAgentInstance{agent_instance_id:Uuid::new_v4(),space_id:org,template_id:Uuid::new_v4(),source_runtime_id:"fixture".into(),source_agent_id:"opaque".into(),display_name:format!("  Opaque {n}  "),description:None,enabled:false,created_by:None,updated_by:None,tuning:tuning.clone()}).await.unwrap();
+        let record=storage::create(&mut *conn,&storage::NewAgentInstance{agent_instance_id:Uuid::new_v4(),space_id:org,template_id:Uuid::new_v4(),source_runtime_id:"fixture".into(),source_agent_id:"opaque".into(),display_name:format!("  Opaque {n}  "),description:None,enabled:false,created_by:Some("fixture-author".into()),updated_by:None,tuning:tuning.clone()}).await.unwrap();
         assert_eq!(record.tuning.0,tuning);assert_eq!(record.display_name,format!("Opaque {n}"));
         assert_eq!(storage::get_for_space(&mut *conn,org,record.agent_instance_id).await.unwrap().unwrap().tuning.0,tuning);
     }
@@ -1608,15 +1608,20 @@ async fn runtime_binding_lists_all_eligible_conversation_attachments() {
         .unwrap();
     let next = request(&app, &identity, Some("alice"), "GET", &resolve, Value::Null).await;
     assert_eq!(next.1["attachments"].as_array().unwrap().len(), 105);
-    sqlx::query("update session_metadata set runtime_id='wrong-runtime' where session_id=$1")
-        .bind(session)
-        .execute(&e.pool)
-        .await
-        .unwrap();
+    let error =
+        sqlx::query("update session_metadata set runtime_id='wrong-runtime' where session_id=$1")
+            .bind(session)
+            .execute(&e.pool)
+            .await
+            .unwrap_err();
+    assert_eq!(
+        error.as_database_error().unwrap().code().as_deref(),
+        Some("23514")
+    );
     assert_eq!(
         request(&app, &identity, Some("alice"), "GET", &resolve, Value::Null)
             .await
             .0,
-        409
+        200
     );
 }

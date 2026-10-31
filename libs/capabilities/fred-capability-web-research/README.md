@@ -11,4 +11,5 @@ server, local certificate or service token. Without `proxy_url`, outbound access
 is direct. An explicitly configured HTTP(S) forward proxy routes all research
 traffic; its operator enforces the final DNS/destination policy.
 
-See [activation, proxy and retention instructions](../../../docs/swift/ops/migrations/2980-native-web-research.md).
+See the package configuration and capability implementation in
+[`fred_capability_web_research`](fred_capability_web_research/).

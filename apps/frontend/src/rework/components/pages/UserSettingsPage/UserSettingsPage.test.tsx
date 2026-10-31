@@ -168,7 +168,9 @@ describe("shared UserSettingsPage", () => {
     render();
     expect(container.textContent).toContain("Ada Lovelace");
     expect(container.textContent).toContain("ada@example.com");
-    expect(container.textContent).toContain("rework.userSettings.platformRoles: platform_admin");
+    expect(container.textContent).toContain(
+      "rework.userSettings.platformRoles: rework.platformRoles.roles.platform_admin",
+    );
     expect(container.querySelector('input[type="file"]')).toBeNull();
     expect(container.textContent).not.toContain("rework.userSettings.picture");
     expect([...container.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
@@ -237,7 +239,9 @@ describe("shared UserSettingsPage", () => {
     state.data = { user_id: "admin", username: "admin", platform_roles: ["platform_admin"] };
     render();
     expect(container.querySelector('[role="alert"]')).toBeNull();
-    expect(container.textContent).toContain("rework.userSettings.platformRoles: platform_admin");
+    expect(container.textContent).toContain(
+      "rework.userSettings.platformRoles: rework.platformRoles.roles.platform_admin",
+    );
   });
   it("retains the offered themes and existing mode/language preference handlers", () => {
     render(["cobalt", "cloud"]);
@@ -276,10 +280,8 @@ it.each(["member", "owner", "organization_admin"] as const)(
       },
     ];
     render();
-    expect(container.textContent).toContain("rework.userSettings.organization: Demo");
-    expect(container.textContent).toContain(
-      `rework.userSettings.organizationRoles: rework.supervision.roleNames.${role}`,
-    );
+    expect(container.textContent).toContain("rework.userSettings.spaceKinds.organization : Demo");
+    expect(container.textContent).toContain(`rework.supervision.roleNames.${role}`);
     state.spacesFetching = true;
     render();
     expect(container.textContent).not.toContain("Demo");

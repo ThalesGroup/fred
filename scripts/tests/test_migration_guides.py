@@ -16,8 +16,8 @@ m = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = m
 spec.loader.exec_module(m)
 
-NOTES = "docs/swift/ops/migrations"
-RELEASES = "docs/swift/ops/releases"
+NOTES = "deploy/release-notes/changes"
+RELEASES = "deploy/release-notes/releases"
 
 
 def note(impact="none", **fields):
@@ -82,14 +82,16 @@ class ParserTests(unittest.TestCase):
         b.meta["after"] = ["a"]
         with self.assertRaises(m.Invalid):
             m.ordered([a, b])
-        a.body += "\n[rotation](../WORKLOAD_SECRET_ROTATION.md#procedure)\n[here](#upgrade)\n[ref]: ../../platform/REBAC.md\n"
+        a.body += "\n[rotation](../../../docs/architecture/A3-manager-operations.md#sqlx-schema-evolution)\n[here](#upgrade)\n[ref]: ../../../docs/architecture/03-security.md\n"
         text = m.exported_body(a, "https://github.com/org/repo", "2.3.0")
         self.assertIn(
-            "blob/code/v2.3.0/docs/swift/ops/WORKLOAD_SECRET_ROTATION.md#procedure",
+            "blob/code/v2.3.0/docs/architecture/A3-manager-operations.md#sqlx-schema-evolution",
             text,
         )
-        self.assertIn("blob/code/v2.3.0/docs/swift/ops/migrations/a.md#upgrade", text)
-        self.assertIn("blob/code/v2.3.0/docs/swift/platform/REBAC.md", text)
+        self.assertIn(
+            "blob/code/v2.3.0/deploy/release-notes/changes/a.md#upgrade", text
+        )
+        self.assertIn("blob/code/v2.3.0/docs/architecture/03-security.md", text)
 
 
 class GitTests(unittest.TestCase):

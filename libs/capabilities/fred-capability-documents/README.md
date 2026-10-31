@@ -27,4 +27,4 @@ Installing this package *is* the registration: the fred-agents pod
 auto-discovers each capability at boot via the `fred.capabilities` entry
 points declared in `pyproject.toml`. Nothing else to wire.
 
-Authoring guide: `docs/swift/capabilities/AUTHORING.md`.
+Agent contracts: [fred-sdk](../../fred-sdk/README.md).

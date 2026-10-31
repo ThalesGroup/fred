@@ -15,7 +15,7 @@ MCP (Model Composition and Prompting) endpoints to serve structured knowledge to
 ---
 
 For Temporal roles, queues and the document lifecycle, see the
-[ingestion architecture](../../docs/swift/design/INGESTION.md).
+[ingestion architecture](../../docs/architecture/A9-documents.md).
 
 ## What It Does
 
@@ -60,7 +60,7 @@ To learn how to:
 
 For shared startup config and policy conventions across all Fred backends, read:
 
-- [`docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md`](../../docs/swift/platform/CONFIGURATION_AND_POLICY_CONVENTIONS.md)
+- [Knowledge Flow configuration](config/README.md)
 
 Key point: Knowledge Flow uses the same `ENV_FILE` + `CONFIG_FILE` contract as Agentic and Control Plane.
 
@@ -257,6 +257,11 @@ even when they are not the current default. An optional selection without its
 extra fails with the installation/build remedy before ingestion starts.
 
 The extra includes `pymupdf`, `pymupdf4llm` and `pymupdf-layout`. Their terms differ;
-see the [license inventory](../../docs/swift/COPYLEFT-DEPENDENCIES.md#license-01---optional-pymupdf-family).
-See the [migration note](../../docs/swift/ops/migrations/3159-optional-pymupdf.md)
-for draining workers, rollback and re-ingestion effects.
+retain and review the license notices supplied with each selected package.
+
+Drain in-flight ingestion before changing processor images or configuration,
+and update API and worker images together. Existing indexed text and embeddings
+remain unchanged; re-ingest documents only when the new extraction is desired.
+For rollback, drain ingestion and restore matching images and configuration.
+Keep database and storage volumes; already re-ingested chunks remain until the
+document is explicitly re-ingested again.

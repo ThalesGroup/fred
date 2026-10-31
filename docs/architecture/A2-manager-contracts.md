@@ -236,6 +236,66 @@ facts and a browser preparation diagnostic; final selection and invocation remai
 in the Python pod. [Component semantics](../../apps/control-plane/README.md#instance-recommendations-and-resolver-data-m3)
 define omission/null, known limits, candidate diagnostics and connection visibility.
 
+### Resource identity and conversation placement
+
+The resource schema distinguishes three names with different responsibilities:
+
+| Field | Meaning | Stability |
+| --- | --- | --- |
+| UUID (`agent_instance_id` or `prompt_id`) | Technical identity of one resource; used by stored associations. | Immutable. A promotion creates a different UUID. |
+| `logical_name` | Readable reference within one resource type and deployment space, such as `bid-assistant` or `resume`. A prompt's command is `/` followed by this name. | Immutable once assigned. Unique on `(space_id, logical_name)` in each table. |
+| `display_name` | Human-facing label, such as "Bid assistant". It carries no authority. | Editable without changing identity. |
+
+The agreed role of the logical name is stable references, including future
+agent-to-agent calls, not a globally unique agent address or a permission. A
+reference must still be resolved in an authorized space and converted to its UUID.
+The database accepts exactly 1 to 64 lowercase ASCII characters from `a-z`,
+`0-9`, `_`, `-`, under `C` collation. It rejects noncanonical input rather than
+silently trimming, lowercasing or adding a suffix. The same name can exist in two
+spaces or in the agent and prompt tables. Prompt name `skill` remains reserved
+for the existing slash-command convention. This does not introduce a skill table.
+
+**Schema-only boundary.**
+[`0008_resource_identity.sql`](../../apps/control-plane/migrations/0008_resource_identity.sql)
+implements these constraints. Prompts require a logical name. The existing agent
+writer does not supply it: the agent column remains nullable, with one assignment
+permitted before immutability applies. The old unique index on agent display names
+also remains. Making the logical name mandatory and removing that old index belong
+to the application activation step; the current API does not resolve logical names.
+No prompt library, agent-to-agent call or skill journey is claimed as integrated
+by this schema change. Automatic name suggestions in the creation UI are likewise
+outside this SQL lot.
+
+Each table holds one current definition. Promoting it means inserting an independent
+row in another space, not maintaining a source link or synchronizing later edits.
+Prompts store current text verbatim, with no template interpretation in SQL.
+Creation initializes the last-edit timestamp and author from creation metadata.
+A changed definition receives a database timestamp and the authenticated author
+supplied by the writer; no-op updates preserve both. SQL cannot authenticate that
+author. Subject strings do not reference the observed `user_identity` cache.
+Unknown historical agent authors remain null; new agent creation and edits require
+an author. Prompt deletion follows definitive space purge; agent deletion remains
+explicit in the existing lifecycle cleanup.
+
+`session_metadata.space_id` is the conversation's immutable space.
+`agent_space_id` records the associated agent's deployment space, independently.
+At insertion the agent must exist, its template/runtime must match, and both spaces
+must belong to the same organization. Shared row locks hold those facts through
+the inserting transaction. The session owner and association cannot subsequently
+change. There is deliberately no permanent foreign key to the agent or deployment
+space: their deletion preserves the conversation and its association facts.
+For an old session whose agent is already gone, `agent_space_id` stays unknown.
+The attachment foreign key `(session_id, space_id)` continues to refer to the
+conversation space.
+
+The current session/runtime handlers still use the conversation space to look up
+the agent. They require adaptation before cross-space use is exposed. Existing
+revision columns and revision-mismatch refusal also remain; removing that refusal
+and reading the current definition at each new turn is a separate application
+change. An already admitted turn keeps its fixed context.
+[`resource_schema.rs`](../../apps/control-plane/tests/resource_schema.rs) verifies
+the SQL guarantees; it does not establish end-to-end validation of those journeys.
+
 ### Chat model preparation and turn admission
 
 Companion to [Bob's first exchange](02.3-agent-administration.md). Model identity is
@@ -372,6 +432,7 @@ erDiagram
 "space" }o--o| "deletion" : "deletion_id"
 "space" }o--|| "space" : "organization_id"
 "space" }o--o| "space" : "parent_id"
+"space" }o--|| "space" : "parent_id, organization_id"
 "folder" }o--o| "deletion" : "deletion_id"
 "folder" }o--|| "space" : "space_id"
 "folder" }o--|| "folder" : "parent_id, space_id"
@@ -379,12 +440,12 @@ erDiagram
 "document" }o--|| "space" : "quota_owner"
 "document" }o--|| "space" : "space_id"
 "document" }o--|| "folder" : "folder_id, space_id"
-"document" }o--o| "generation" : "published_generation"
 "document" }o--|| "session_metadata" : "session_id, space_id"
+"document" }o--|| "generation" : "published_generation, id"
 "document_upload" |o--o| "document_upload" : "retry_of"
 "document_processing" }o--|| "document" : "document_id"
 "document_processing" |o--o| "document_processing" : "retry_of"
-"generation" }o--|| "document_processing" : "processing_id"
+"generation" }o--|| "document_processing" : "processing_id, document_id"
 "artifact" }o--|| "generation" : "generation_id"
 "agent_instance" }o--|| "space" : "space_id"
 "runtime_capability" }o--|| "runtime_catalog" : "runtime_id"
@@ -400,6 +461,10 @@ erDiagram
 "organization_capability" }o--|| "runtime_capability" : "runtime_id, capability_id"
 "space_role_grant" }o--|| "space" : "space_id"
 "agent_template_policy" }o--|| "space" : "organization_id"
+"space_invitation" }o--|| "space" : "space_id"
+"space_invitation_role" }o--|| "space_invitation" : "invitation_id"
+"storage_budget" }o--|| "space" : "space_id"
+"prompt" }o--|| "space" : "space_id"
 
 "deletion" {
   uuid id
@@ -439,7 +504,7 @@ erDiagram
   uuid deletion_id FK
 }
 "document" {
-  uuid id
+  uuid id FK
   uuid space_id FK
   uuid folder_id FK
   uuid session_id FK
@@ -570,6 +635,7 @@ erDiagram
   integer cleanup_cursor
   timestamp_with_time_zone cleanup_after
   timestamp_with_time_zone cleaned_at
+  uuid document_id FK
 }
 "artifact" {
   uuid generation_id FK
@@ -592,6 +658,7 @@ erDiagram
   timestamp_with_time_zone created_at
   timestamp_with_time_zone updated_at
   bigint configuration_revision
+  text logical_name
 }
 "users_preferences" {
   text user_id
@@ -673,6 +740,7 @@ erDiagram
   timestamp_with_time_zone updated_at
   uuid deletion_id FK
   bigint agent_configuration_revision
+  uuid agent_space_id
 }
 "organization_capability" {
   uuid organization_id FK
@@ -693,6 +761,39 @@ erDiagram
 "agent_template_policy" {
   uuid organization_id FK
   uuid template_id
+}
+"space_invitation" {
+  uuid id
+  uuid space_id FK
+  text subject
+  text invited_by
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone expires_at
+  timestamp_with_time_zone revoked_at
+  text revoked_by
+}
+"space_invitation_role" {
+  uuid invitation_id FK
+  text role
+}
+"storage_budget" {
+  uuid space_id FK
+  text scope
+  bigint limit_bytes
+  bigint used_bytes
+  bigint reserved_bytes
+}
+"prompt" {
+  uuid prompt_id
+  uuid space_id FK
+  text logical_name
+  varchar_255_ display_name
+  text description
+  text text
+  timestamp_with_time_zone created_at
+  text created_by
+  timestamp_with_time_zone updated_at
+  text updated_by
 }
 ```
 <!-- end generated -->

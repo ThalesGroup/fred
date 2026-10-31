@@ -4,8 +4,6 @@ A Fred agent capability (`html_artifact`) that lets an agent produce a **static
 HTML/CSS artifact** rendered live in a **sandboxed viewer beside the chat** —
 the "artifact" experience, scoped to static markup (no JavaScript) for v1.
 
-Design: `docs/swift/rfc/HTML-ARTIFACT-CAPABILITY-RFC.md` (issue #2478).
-
 ## What it ships
 
 - **Tool** `render_html_artifact(title, html, css, artifact_id?)` — HTML and CSS

@@ -134,7 +134,7 @@ testing. Run the agent for more than two minutes with a protected call afterward
 Observe fresh browser token issuance
 in the browser network panel without copying token contents into logs or reports.
 
-For backend authentication dashboards and troubleshooting, use the
-[operator guide](../docs/swift/platform/OBSERVABILITY-AND-AUDIT.md#using-the-dashboard).
-It covers local Grafana startup, scrape targets and distinguishing initial token
-acquisition from renewal. Browser console events are not central Grafana metrics.
+For backend authentication and troubleshooting, start with the
+[security mechanisms](../docs/architecture/A6-security.md) and
+[operations reference](../docs/architecture/A3-manager-operations.md).
+Browser console events are not central Grafana metrics.

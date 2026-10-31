@@ -3,6 +3,7 @@ erDiagram
 "space" }o--o| "deletion" : "deletion_id"
 "space" }o--|| "space" : "organization_id"
 "space" }o--o| "space" : "parent_id"
+"space" }o--|| "space" : "parent_id, organization_id"
 "folder" }o--o| "deletion" : "deletion_id"
 "folder" }o--|| "space" : "space_id"
 "folder" }o--|| "folder" : "parent_id, space_id"
@@ -10,12 +11,12 @@ erDiagram
 "document" }o--|| "space" : "quota_owner"
 "document" }o--|| "space" : "space_id"
 "document" }o--|| "folder" : "folder_id, space_id"
-"document" }o--o| "generation" : "published_generation"
 "document" }o--|| "session_metadata" : "session_id, space_id"
+"document" }o--|| "generation" : "published_generation, id"
 "document_upload" |o--o| "document_upload" : "retry_of"
 "document_processing" }o--|| "document" : "document_id"
 "document_processing" |o--o| "document_processing" : "retry_of"
-"generation" }o--|| "document_processing" : "processing_id"
+"generation" }o--|| "document_processing" : "processing_id, document_id"
 "artifact" }o--|| "generation" : "generation_id"
 "agent_instance" }o--|| "space" : "space_id"
 "runtime_capability" }o--|| "runtime_catalog" : "runtime_id"
@@ -31,6 +32,10 @@ erDiagram
 "organization_capability" }o--|| "runtime_capability" : "runtime_id, capability_id"
 "space_role_grant" }o--|| "space" : "space_id"
 "agent_template_policy" }o--|| "space" : "organization_id"
+"space_invitation" }o--|| "space" : "space_id"
+"space_invitation_role" }o--|| "space_invitation" : "invitation_id"
+"storage_budget" }o--|| "space" : "space_id"
+"prompt" }o--|| "space" : "space_id"
 
 "deletion" {
   uuid id
@@ -70,7 +75,7 @@ erDiagram
   uuid deletion_id FK
 }
 "document" {
-  uuid id
+  uuid id FK
   uuid space_id FK
   uuid folder_id FK
   uuid session_id FK
@@ -201,6 +206,7 @@ erDiagram
   integer cleanup_cursor
   timestamp_with_time_zone cleanup_after
   timestamp_with_time_zone cleaned_at
+  uuid document_id FK
 }
 "artifact" {
   uuid generation_id FK
@@ -223,6 +229,7 @@ erDiagram
   timestamp_with_time_zone created_at
   timestamp_with_time_zone updated_at
   bigint configuration_revision
+  text logical_name
 }
 "users_preferences" {
   text user_id
@@ -304,6 +311,7 @@ erDiagram
   timestamp_with_time_zone updated_at
   uuid deletion_id FK
   bigint agent_configuration_revision
+  uuid agent_space_id
 }
 "organization_capability" {
   uuid organization_id FK
@@ -324,4 +332,37 @@ erDiagram
 "agent_template_policy" {
   uuid organization_id FK
   uuid template_id
+}
+"space_invitation" {
+  uuid id
+  uuid space_id FK
+  text subject
+  text invited_by
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone expires_at
+  timestamp_with_time_zone revoked_at
+  text revoked_by
+}
+"space_invitation_role" {
+  uuid invitation_id FK
+  text role
+}
+"storage_budget" {
+  uuid space_id FK
+  text scope
+  bigint limit_bytes
+  bigint used_bytes
+  bigint reserved_bytes
+}
+"prompt" {
+  uuid prompt_id
+  uuid space_id FK
+  text logical_name
+  varchar_255_ display_name
+  text description
+  text text
+  timestamp_with_time_zone created_at
+  text created_by
+  timestamp_with_time_zone updated_at
+  text updated_by
 }

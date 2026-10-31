@@ -244,7 +244,6 @@ export const RELEASE_TOOLING_INPUTS = [
   "libs/frontend/tests/registry-metadata.test.mjs",
   "libs/frontend/fixtures/release-fourth-package.json",
   "libs/frontend/RELEASE.md",
-  "docs/swift/FRED-FRONTEND-PACKAGING-RFC.md",
 ];
 
 export const CI_EXACT_INPUTS = [

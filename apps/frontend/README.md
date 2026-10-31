@@ -56,9 +56,8 @@ API response reference headers retain their own service identity.
 Native nginx error/startup events and entrypoint theme/configuration messages
 remain text on their existing streams. Native errors can contain request lines
 and filesystem/upstream details; the access-log exclusions do not sanitize them.
-Collector parsing and severity/timestamp promotion require a deployment canary;
-see [observability guidance](../../docs/swift/platform/OBSERVABILITY-AND-AUDIT.md#63-frontend-pod-logs)
-and the [migration guide](../../docs/swift/ops/migrations/structured-logging-frontend.md).
+Collector parsing and severity/timestamp promotion require a deployment canary.
+The emitted access-log fields are configured in [production Dockerfile](dockerfiles/Dockerfile-prod).
 No browser telemetry or collector sidecar is introduced.
 
 Applications are not built into Fred. Each one is an independently built and

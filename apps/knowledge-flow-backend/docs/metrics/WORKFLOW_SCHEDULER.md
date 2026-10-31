@@ -1,6 +1,6 @@
 # Ingestion metrics: what is available
 
-For worker roles and bottleneck examples, see [INGESTION.md](../../../../docs/swift/design/INGESTION.md).
+For worker roles and bottleneck examples, see [Document processing reference](../../../../docs/architecture/A9-documents.md).
 This page describes current instrumentation, not a completed per-profile dashboard.
 
 ## Metrics and coverage
@@ -50,4 +50,3 @@ Bucket quantiles are useful only if the configured buckets cover ingestion durat
 
 - [KPI helpers](../../knowledge_flow_backend/features/scheduler/kpi_utils.py)
 - [Prometheus label policy](../../../../libs/fred-core/fred_core/kpi/prometheus_kpi_store.py)
-- [Remaining observability work](../../../../openspec/changes/isolate-ingestion-extraction-queues/tasks.md)

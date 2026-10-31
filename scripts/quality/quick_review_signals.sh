@@ -142,7 +142,7 @@ fi
 
 section "Docs And Tracking Files Touched"
 printf '%s\n' "${touched_files[@]}" \
-  | rg -n '(^docs/swift/(rfc|backlog|data|tracks|platform)/|^docs/swift/(STATUS|WORKPLAN|README)\.md$|CLAUDE\.md$|AGENTS\.md$)' \
+  | rg -n '(^docs/architecture/|^deploy/release-notes/|(^|/)README\.md$|CLAUDE\.md$|AGENTS\.md$)' \
   || printf 'No docs, tracking, or assistant-governance files detected in touched paths.\n'
 
 section "Rework Hand-Rolled Fetches Against Generated-Client Prefixes"
@@ -166,6 +166,6 @@ fi
 section "Reviewer Reminder"
 printf '%s\n' \
   'This script prints signals only. It does not replace the semantic review in:' \
-  'docs/swift/platform/QUALITY_REVIEW_PROTOCOL.md'
+  'AGENTS.md'
 
 exit "$status_code"

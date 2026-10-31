@@ -143,7 +143,6 @@ jobs:
               - '.github/workflows/Check-pending-requests.yml'
               - '.github/workflows/Publish-frontend-packages.yml'
               - '.github/scripts/frontend-release-workflow.mjs'
-              - 'docs/swift/FRED-FRONTEND-PACKAGING-RFC.md'
             agentic:
               - 'agentic-backend/**'
             deploy-chart:

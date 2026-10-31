@@ -188,8 +188,8 @@ test("shared release tooling and compatibility inputs select CI", () => {
   );
 });
 
-test("the governing frontend packaging RFC selects release validation", () => {
-  assert(selectsPackageJob(["docs/swift/FRED-FRONTEND-PACKAGING-RFC.md"]));
+test("the package release guide selects release validation", () => {
+  assert(selectsPackageJob(["libs/frontend/RELEASE.md"]));
 });
 
 test("release-readiness CI provisions isolated consumers before tests", () => {

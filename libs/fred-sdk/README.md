@@ -409,8 +409,8 @@ terminal). To count something of your own, use `prometheus_client` as usual: the
 same endpoint serves it. Never label a series with a team, an instance or a
 document. Issue totals are computed automatically before warning/error details
 are limited to 50 per severity; `issue_counts` preserves these totals when a
-result is serialized and reconstructed. The contract, and the questions it answers, are in
-[KNOWLEDGE-BASE.md §8](https://github.com/ThalesGroup/fred/blob/swift/docs/swift/design/KNOWLEDGE-BASE.md#8-operational-metrics).
+result is serialized and reconstructed. Metric definitions are implemented in
+[`fred_sdk/knowledge_base/telemetry.py`](fred_sdk/knowledge_base/telemetry.py).
 
 **This surface is beta: pin your `fred-sdk` version, as it may change between beta
 releases.** Known limits today:

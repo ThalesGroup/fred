@@ -89,6 +89,18 @@ package before its editable installation. Installed code reads only the package
 resource through `importlib.resources`, without walking up the checkout. Docker
 builds and Python packaging do not require a separately maintained model copy.
 
+## Schema migrations
+
+Python services call `fred_core.sql.require_tables` at startup to check required
+SQL tables. A missing table raises `SchemaNotMigratedError`; its message names
+the owning component and the exact migration command to run. If a version table
+is supplied but has no revision, the guard warns that the schema is unmanaged.
+Inspect the owning component's Alembic migrations before resolving that state;
+do not create tables or stamp a revision merely to silence the guard.
+
+The Rust Control Plane uses its own
+[SQLx migration procedure](../../docs/architecture/A3-manager-operations.md#sqlx-schema-evolution).
+
 ## Development validation
 
 - `make test` runs the default offline test suite.

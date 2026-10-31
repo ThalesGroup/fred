@@ -301,7 +301,7 @@ class Repo:
         self.releases_dir = self.policy["releases_dir"]
         for path in (self.notes_dir, self.releases_dir):
             require(
-                re.fullmatch(r"docs/[a-z0-9_-]+/ops/[a-z0-9_-]+", path),
+                re.fullmatch(r"deploy/release-notes/(?:changes|releases)", path),
                 f"Unsafe policy path: {path}",
             )
         require(

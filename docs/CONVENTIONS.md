@@ -15,7 +15,8 @@ contributors and AI assistants. Source of truth for `CLAUDE.md §Step 4`.
 - **Fewer lines over more lines.** If two approaches produce the same result, choose
   the shorter one.
 - **No new architecture.** Do not invent a new endpoint family, service boundary, or
-  migration direction without an RFC (see `docs/swift/rfc/`).
+  migration direction without an agreed scope. Explain implemented boundaries
+  in the existing arc42 dossier; use OpenSpec only when the increment needs it.
 - **No over-engineering.** No factory for a single implementation, no plugin system
   for a single case. Three similar lines is correct; premature abstraction is a bug.
 - **Converge on the existing pattern before adding a new one.** Before writing a new
@@ -66,8 +67,7 @@ below are what to follow while writing the code, not just at review time.
 - **A new KPI dimension must be in `PROMETHEUS_ALLOWED_LABELS`**
   (`libs/fred-core/fred_core/kpi/prometheus_kpi_store.py`) to reach Grafana at
   all. Adding a label is a deliberate decision, not automatic — user, session,
-  and team identity must never become a Prometheus label (see
-  `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md` §3).
+  and team identity must never become a Prometheus label.
 - **Every outbound call to the remote LLM gateway or any external service has an
   explicit, bounded timeout.** An unbounded call under concurrent load can pin a
   shared connection-pool slot and stall unrelated requests.
@@ -116,9 +116,8 @@ below are what to follow while writing the code, not just at review time.
   same scoping with a dedicated `MetaData`. No startup path runs
   `create_all` — DDL belongs to the owning Alembic tree alone, and a process
   that queries tables (knowledge-flow API and worker, fred-runtime) fails
-  boot on a missing schema via `fred_core.sql.require_tables`. Who owns what
-  and why: `docs/swift/ops/DATABASE_MIGRATIONS.md` §"Table ownership across
-  trees" (#2314).
+  boot on a missing schema via `fred_core.sql.require_tables`. The Rust Control
+  Plane uses [SQLx migrations](architecture/A3-manager-operations.md#sqlx-schema-evolution).
 - **Wrap bare `for x in SomeEnum:` in `list(...)`.** `EnumMeta.__iter__` makes an
   `Enum` class itself iterable, but CodeQL's Python analysis doesn't model that and
   flags `for x in SomeEnum:` as "non-iterable used in for loop" — a false positive,
@@ -186,5 +185,5 @@ below are what to follow while writing the code, not just at review time.
   `knowledgeFlowOpenApi.ts` — regenerate from OpenAPI spec.
 - **`make code-quality && make test` (in `apps/frontend`) must pass** before
   reporting any frontend task done: type-check, Prettier, ESLint, then the unit
-  tests, the same checks CI runs. For files under `apps/frontend/src/rework/`, also read
-  `docs/swift/platform/FRONTEND_CODING_GUIDELINES.md`.
+  tests, the same checks CI runs. Follow the existing shared components under
+  `apps/frontend/src/rework/` for the current frontend patterns.

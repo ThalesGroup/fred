@@ -10,7 +10,7 @@ folder `Papers`, file `paper.pdf` and processing profile `fast`.
 
 Use an installation with manager original storage, processing, its dispatcher,
 Temporal and the KF workers configured according to the
-[activation guide](../swift/ops/migrations/rust-control-plane.md#optional-document-processing).
+[local deployment guide](../../deploy/k3d/README.md).
 For the OpenSearch checkpoints, the KF `manager_processing.vector_store` must
 select OpenSearch and its dedicated index. Another configured vector backend
 does not write these chunks to OpenSearch.

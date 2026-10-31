@@ -9,6 +9,5 @@
   "enableExperimentalFeatures": true,
   "reportMissingTypeStubs": false,
   "reportUnreachable": "warning",
-  "extraPaths": ["../fred-pod"],
-  "stubPath": "stubs"
+  "extraPaths": ["../fred-pod"]
 }

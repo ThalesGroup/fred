@@ -60,7 +60,7 @@ jobs:
             oci://${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/control-plane-backend:${{ steps.meta.outputs.version }}
             oci://${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/frontend:${{ steps.meta.outputs.version }}
             ```
-          files: docs/swift/ops/releases/${{ steps.meta.outputs.version }}/migration.md
+          files: deploy/release-notes/releases/${{ steps.meta.outputs.version }}/migration.md
           fail_on_unmatched_files: true
           draft: false
           prerelease: ${{ contains(steps.meta.outputs.version, '-') }}
